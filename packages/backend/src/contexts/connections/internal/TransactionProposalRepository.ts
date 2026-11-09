@@ -34,6 +34,7 @@ import type {
   StoredProposalPlayer,
   StoredProposalStaleness,
   StoredProposalTrade,
+  StoredProposalTradePick,
   StoredReserveMove,
 } from "./TransactionProposalRecord.ts";
 import { isSettledItem } from "./TransactionProposalRecord.ts";
@@ -54,6 +55,7 @@ export type ProposalItemCommand = {
   readonly kind: ProposalItemKind;
   readonly adds: ReadonlyArray<StoredProposalPlayer>;
   readonly drops: ReadonlyArray<StoredProposalPlayer>;
+  readonly picks: ReadonlyArray<StoredProposalTradePick>;
   readonly slotMove: StoredSlotMove | undefined;
   readonly intent: StoredProposalIntent | undefined;
   readonly counterpartyKey: string | undefined;
@@ -951,6 +953,7 @@ function storeRow(
     kind: command.kind,
     addPlayers: command.adds,
     dropPlayers: command.drops,
+    picks: command.picks,
     slotMove: command.slotMove ?? null,
     reserveMove: item.reserveMove ?? null,
     intent: command.intent ?? null,

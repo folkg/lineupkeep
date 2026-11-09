@@ -84,6 +84,8 @@ export const ProposalStaleCode = Schema.Literals([
   "trade_window_closed",
   "trade_counterparty_missing",
   "trade_player_not_rostered",
+  "trade_draft_pick_not_allowed",
+  "trade_draft_pick_unavailable",
 ]);
 export type ProposalStaleCode = typeof ProposalStaleCode.Type;
 
@@ -182,6 +184,25 @@ const ProposalCounterparty = Schema.Struct({
 });
 type ProposalCounterparty = typeof ProposalCounterparty.Type;
 
+const ProposalTradeParty = Schema.Struct({
+  ref: Schema.NonEmptyString,
+  name: Schema.NonEmptyString,
+});
+type ProposalTradeParty = typeof ProposalTradeParty.Type;
+
+const ProposalTradePick = Schema.Struct({
+  round: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  from: ProposalTradeParty,
+  to: ProposalTradeParty,
+});
+type ProposalTradePick = typeof ProposalTradePick.Type;
+
+const ProposalTradeSupport = Schema.Struct({
+  assets: Schema.Array(Schema.Literals(["player", "draft_pick"])),
+  detail: Schema.NonEmptyString,
+});
+type ProposalTradeSupport = typeof ProposalTradeSupport.Type;
+
 const ProposalTrade = Schema.Struct({
   state: ProposalTradeState,
   requestedAt: Schema.DateTimeUtc,
@@ -200,6 +221,7 @@ export const ProposalItem = Schema.Struct({
   kind: ProposalItemKind,
   adds: Schema.Array(ProposalPlayer),
   drops: Schema.Array(ProposalPlayer),
+  picks: Schema.Array(ProposalTradePick).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   bid: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   reason: Schema.NonEmptyString,
   state: ProposalItemState,
@@ -363,6 +385,7 @@ type ProposalTradeRules = typeof ProposalTradeRules.Type;
 export const ProposalTeam = Schema.Struct({
   team: QueryTeam,
   budget: Schema.optional(ProposalBudget),
+  tradeProposal: Schema.optional(ProposalTradeSupport),
   tradeRules: Schema.optional(ProposalTradeRules),
   order: Schema.optional(ProposalOrderDecision),
   lineup: Schema.optional(ProposalTeamLineup),
@@ -433,6 +456,25 @@ const ProposalBid = Schema.Int.check(
   Schema.isLessThanOrEqualTo(1_000_000),
 );
 
+const ProposalTradePickDraft = Schema.Struct({
+  round: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).annotate({
+    description: "Counted from 1.",
+  }),
+  from: Schema.NonEmptyString.annotate({
+    description: "The item's team id or its counterparty reference.",
+  }),
+  to: Schema.NonEmptyString.annotate({
+    description: "The item's team id or its counterparty reference.",
+  }),
+});
+
+const ProposalItemDraftPicks = Schema.optional(
+  Schema.NullOr(Schema.Array(ProposalTradePickDraft).pipe(Schema.check(Schema.isMaxLength(10)))),
+).annotate({
+  description:
+    "Draft picks in a trade: round, from, to. The league switch and the sender's rounds decide.",
+});
+
 const ProposalSlotMoveDraft = Schema.Struct({
   player: PlayerRef,
   toSlot: Schema.NonEmptyString,
@@ -440,13 +482,6 @@ const ProposalSlotMoveDraft = Schema.Struct({
 
 const ProposalActiveOrReserve = Schema.Literals(["active", "reserve"]);
 type ProposalActiveOrReserve = typeof ProposalActiveOrReserve.Type;
-
-const ProposalItemDraftPicks = Schema.optional(
-  Schema.NullOr(Schema.Array(Schema.Unknown)),
-).annotate({
-  description:
-    "Refused when non-empty. A trade item carries players only: the site publishes picks on its website, not in the transaction request.",
-});
 
 export const ProposalItemDraft = Schema.Struct({
   team: TeamId,
@@ -501,11 +536,14 @@ export const ProposalItemRefusal = Schema.Literals([
   "reference_invalid",
   "kind_invalid",
   "bid_invalid",
-  "draft_pick_included",
   "player_in_both",
   "duplicate_item",
   "trade_counterparty_invalid",
   "trade_player_not_rostered",
+  "trade_pick_team_not_party",
+  "trade_draft_pick_not_allowed",
+  "trade_draft_pick_unavailable",
+  "trade_draft_pick_duplicate",
   "trade_window_closed",
   "trade_state_unavailable",
   "player_unavailable",

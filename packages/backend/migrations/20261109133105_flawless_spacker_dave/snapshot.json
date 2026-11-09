@@ -1,0 +1,37 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "204d8002-f4e2-445f-bc56-7fce99bde1ef",
+  "prevIds": ["ea94c0a5-11c6-489b-a766-4760a54775a3"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_proposal_items", "picks"],
+      "writes": [
+        "s|col|public.transaction_proposal_items.picks",
+        "n|col|public.transaction_proposal_items.picks",
+        "e|col|public.transaction_proposal_items.picks"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_items", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_items",
+        "name": "picks",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'[]'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

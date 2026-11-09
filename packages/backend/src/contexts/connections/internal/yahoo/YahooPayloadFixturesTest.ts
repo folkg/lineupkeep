@@ -2585,6 +2585,74 @@ export const yahooNflLeagueTeamsForAnotherLeague = {
   },
 };
 
+export const yahooNhlAvailableDraftPicks = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: [
+      {
+        league_key: "466.l.4001",
+        league_id: "4001",
+        name: "Synthetic NHL League",
+        url: "https://hockey.fantasysports.yahoo.com/hockey/4001",
+      },
+      {
+        teams: {
+          "0": {
+            team: [
+              [{ team_key: "466.l.4001.t.1" }, { team_id: "1" }, { name: "Synthetic Team" }],
+              {
+                available_draft_picks: {
+                  picks: [1, 2, 3].map((round) => ({ pick: { round } })),
+                },
+              },
+            ],
+          },
+          "1": {
+            team: [
+              [{ team_key: "466.l.4001.t.2" }, { team_id: "2" }, { name: "Synthetic Rival" }],
+              {
+                available_draft_picks: {
+                  picks: [1, 2].map((round) => ({ pick: { round } })),
+                },
+              },
+            ],
+          },
+          count: 2,
+        },
+      },
+    ],
+  },
+};
+
+export const yahooNhlAvailableDraftPicksWithoutOneTeam = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: [
+      {
+        league_key: "466.l.4001",
+        league_id: "4001",
+        name: "Synthetic NHL League",
+        url: "https://hockey.fantasysports.yahoo.com/hockey/4001",
+      },
+      {
+        teams: {
+          "0": {
+            team: [
+              [{ team_key: "466.l.4001.t.1" }, { team_id: "1" }, { name: "Synthetic Team" }],
+              {
+                available_draft_picks: {
+                  picks: [{ pick: { round: 1 } }],
+                },
+              },
+            ],
+          },
+          count: 1,
+        },
+      },
+    ],
+  },
+};
+
 export const yahooNflRosterWeekMismatch = {
   fantasy_content: {
     team: [

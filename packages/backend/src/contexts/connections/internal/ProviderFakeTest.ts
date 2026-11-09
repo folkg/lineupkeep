@@ -12,6 +12,7 @@ import {
 } from "#contexts/connections/Provider.ts";
 import type {
   ProviderAvailabilityTier,
+  ProviderAvailableDraftPick,
   ProviderCapabilities,
   ProviderDraftPick,
   ProviderGamesPlayed,
@@ -103,6 +104,7 @@ type FakeProviderState = {
   readonly transactions: ReadonlyArray<ProviderTransaction>;
   readonly pendingTrades: ReadonlyArray<ProviderPendingTrade>;
   readonly draftResults: ReadonlyArray<ProviderDraftPick>;
+  readonly availableDraftPicks: ReadonlyArray<ProviderAvailableDraftPick>;
   readonly leagueTeams: ReadonlyArray<ProviderLeagueTeam>;
   readonly leagueRosters: ReadonlyArray<ProviderLeagueRoster> | undefined;
   readonly unsupported: ReadonlySet<ProviderOperation>;
@@ -177,6 +179,9 @@ export type FakeProviderWorldShape = {
   ) => Effect.Effect<void>;
   readonly setPendingTrades: (trades: ReadonlyArray<ProviderPendingTrade>) => Effect.Effect<void>;
   readonly setDraftResults: (picks: ReadonlyArray<ProviderDraftPick>) => Effect.Effect<void>;
+  readonly setAvailableDraftPicks: (
+    picks: ReadonlyArray<ProviderAvailableDraftPick>,
+  ) => Effect.Effect<void>;
   readonly setLeagueTeams: (teams: ReadonlyArray<ProviderLeagueTeam>) => Effect.Effect<void>;
   readonly setLeagueRosters: (
     rosters: ReadonlyArray<ProviderLeagueRoster> | undefined,
@@ -263,6 +268,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         transactions: [],
         pendingTrades: [],
         draftResults: [],
+        availableDraftPicks: [],
         leagueTeams: [],
         leagueRosters: undefined,
         unsupported: new Set(),
@@ -361,6 +367,8 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         setTransactions: (transactions) => modify((current) => ({ ...current, transactions })),
         setPendingTrades: (pendingTrades) => modify((current) => ({ ...current, pendingTrades })),
         setDraftResults: (draftResults) => modify((current) => ({ ...current, draftResults })),
+        setAvailableDraftPicks: (availableDraftPicks) =>
+          modify((current) => ({ ...current, availableDraftPicks })),
         setLeagueTeams: (leagueTeams) => modify((current) => ({ ...current, leagueTeams })),
         setLeagueRosters: (leagueRosters) => modify((current) => ({ ...current, leagueRosters })),
         unsupportedOperations: (operations) =>
@@ -972,6 +980,15 @@ const providerFake = Effect.gen(function* () {
         pick.providerTeamKey.startsWith(`${input.providerLeagueKey}.t.`),
       );
     }),
+    readAvailableDraftPicks: Effect.fn("FakeProvider.readAvailableDraftPicks")(function* (input) {
+      const current = yield* prepare(input, "read_available_draft_picks");
+      const requested = new Set(input.providerTeamKeys);
+      return current.availableDraftPicks.filter(
+        (pick) =>
+          pick.providerTeamKey.startsWith(`${input.providerLeagueKey}.t.`) &&
+          requested.has(pick.providerTeamKey),
+      );
+    }),
     readLeagueTeams: Effect.fn("FakeProvider.readLeagueTeams")(function* (input) {
       const current = yield* prepare(input, "read_league_teams");
       return current.leagueTeams.filter(
@@ -1027,6 +1044,7 @@ const readOperations: ReadonlySet<ProviderOperation> = new Set<ProviderOperation
   "read_completed_trades",
   "read_pending_trades",
   "read_draft_results",
+  "read_available_draft_picks",
   "read_league_teams",
 ]);
 
@@ -1088,7 +1106,7 @@ const fakeCapabilities: ProviderCapabilities = {
   tradeProposal: {
     assets: ["player"],
     detail:
-      "The fake provider's trade proposal request names players only and publishes no element for a draft pick.",
+      "The fake provider's trade request accepts players only, and this connection cannot send a draft pick. Picks are read and reviewed, never offered.",
   },
   transactionRequest: { maximumAdds: 1, maximumDrops: 1 },
   limitations: [

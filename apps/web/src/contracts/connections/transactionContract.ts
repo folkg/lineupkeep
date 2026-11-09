@@ -80,6 +80,22 @@ type TransactionReviewCounterpartyView = {
   readonly managerName?: string;
 };
 
+type TransactionReviewTradePartyView = {
+  readonly ref: string;
+  readonly name: string;
+};
+
+export type TransactionReviewTradePickView = {
+  readonly round: number;
+  readonly from: TransactionReviewTradePartyView;
+  readonly to: TransactionReviewTradePartyView;
+};
+
+type TransactionReviewTradeSupportView = {
+  readonly assets: ReadonlyArray<"player" | "draft_pick">;
+  readonly detail: string;
+};
+
 export type TransactionReviewTradeView = {
   readonly state: "pending" | "accepted" | "withdrawn" | "expired";
   readonly requestedAt: string;
@@ -126,6 +142,7 @@ export type TransactionReviewItemView = {
   readonly kind: ProposalItemKind;
   readonly adds: ReadonlyArray<TransactionReviewPlayerView>;
   readonly drops: ReadonlyArray<TransactionReviewPlayerView>;
+  readonly picks: ReadonlyArray<TransactionReviewTradePickView>;
   readonly bid?: number;
   readonly reason: string;
   readonly state: ProposalItemState;
@@ -193,6 +210,7 @@ export type TransactionReviewTeamView = {
   readonly budget?:
     | { readonly status: "published"; readonly remaining: number }
     | { readonly status: "not_published"; readonly detail: string };
+  readonly tradeProposal?: TransactionReviewTradeSupportView;
   readonly tradeRules?: TransactionReviewTradeRulesView;
   readonly order?: TransactionReviewOrderView;
   readonly lineup?: TransactionReviewLineupView;

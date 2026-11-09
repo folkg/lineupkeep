@@ -149,6 +149,7 @@ export const secondProvider: ProviderShape = {
   readCompletedTrades: () => unsupported("read_completed_trades"),
   readPendingTrades: () => unsupported("read_pending_trades"),
   readDraftResults: () => unsupported("read_draft_results"),
+  readAvailableDraftPicks: () => unsupported("read_available_draft_picks"),
   readStandings: () => unsupported("read_standings"),
   readLeagueTeams: () => unsupported("read_league_teams"),
   applyNativeAction: () => notSent,

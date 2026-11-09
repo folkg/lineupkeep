@@ -37,6 +37,7 @@ import {
   StoredSlotMove,
   StoredProposalPlayer,
   StoredProposalStaleReason,
+  StoredProposalTradePick,
 } from "./TransactionProposalRecord.ts";
 
 export const transactionProposalSets = pgTable(
@@ -98,6 +99,7 @@ export const transactionProposalItems = pgTable(
     }).notNull(),
     addPlayers: jsonb("add_players").notNull(),
     dropPlayers: jsonb("drop_players").notNull(),
+    picks: jsonb("picks").notNull().default([]),
     slotMove: jsonb("slot_move"),
     reserveMove: jsonb("reserve_move"),
     intent: jsonb("intent"),
@@ -261,6 +263,7 @@ const ProposalItemSelect = createSelectSchema(transactionProposalItems, {
   kind: ProposalItemKind,
   addPlayers: Schema.Unknown,
   dropPlayers: Schema.Unknown,
+  picks: Schema.Unknown,
   slotMove: Schema.Unknown,
   reserveMove: Schema.Unknown,
   intent: Schema.Unknown,
@@ -300,6 +303,9 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
           const drops = yield* SchemaParser.decodeUnknownEffect(Schema.Array(StoredProposalPlayer))(
             row.dropPlayers,
           );
+          const picks = yield* SchemaParser.decodeUnknownEffect(
+            Schema.Array(StoredProposalTradePick),
+          )(row.picks);
           const reasons = yield* SchemaParser.decodeUnknownEffect(
             Schema.Array(StoredProposalStaleReason),
           )(row.staleReasons);
@@ -332,6 +338,9 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             return yield* Effect.die(
               new Error("Only a trade proposal item can carry a counterparty"),
             );
+          }
+          if (row.kind !== "trade" && picks.length > 0) {
+            return yield* Effect.die(new Error("Only a trade proposal item can carry draft picks"));
           }
           if (row.kind === "slot_move" && slotMove === null) {
             return yield* Effect.die(
@@ -368,6 +377,7 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             kind: row.kind,
             adds,
             drops,
+            picks,
             ...(slotMove === null ? {} : { slotMove }),
             ...(reserveMove === null ? {} : { reserveMove }),
             ...(intent === null ? {} : { intent }),
@@ -413,6 +423,9 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
           const drops = yield* SchemaParser.encodeEffect(Schema.Array(StoredProposalPlayer))(
             record.drops,
           );
+          const picks = yield* SchemaParser.encodeEffect(Schema.Array(StoredProposalTradePick))(
+            record.picks,
+          );
           const reasons = yield* SchemaParser.encodeEffect(Schema.Array(StoredProposalStaleReason))(
             record.staleness.reasons,
           );
@@ -426,6 +439,7 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             kind: record.kind,
             addPlayers: adds,
             dropPlayers: drops,
+            picks,
             slotMove: record.slotMove ?? null,
             reserveMove: record.reserveMove ?? null,
             intent: record.intent ?? null,

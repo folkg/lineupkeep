@@ -3767,7 +3767,7 @@ function draftHistoryData(
     status: "available",
     ...(draftStatus === undefined ? {} : { draftStatus }),
     detailNote:
-      "These are the picks your league publishes for this league's draft. Each pick carries your league's inline player name where it publishes one, beside the private player reference. This is draft history, not current or future pick ownership: your league publishes no pick-ownership read, and a traded pick appears on the trade transaction that moved it.",
+      "These are the picks your league publishes for this league's draft. Each pick carries your league's inline player name where it publishes one, beside the private player reference. This is draft history, not current or future pick ownership: a traded pick appears on the trade transaction that moved it, and a team's tradeable rounds are checked when a trade proposes one.",
     picks: [...picks],
   };
 }

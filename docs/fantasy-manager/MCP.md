@@ -747,17 +747,23 @@ reason. A slot move names one rostered player and one slot the league declares, 
 or back out of one; it adds and drops nobody and carries no bid. The client declares intent per team;
 the server owns the order of that team's moves, the effective date, and the timing, and validates the
 items against the roster projected through that order. A trade names
-`counterparty` from the league's teams read, the players going out in `drops`, and the players coming
-back in `adds`; it carries players only in this version, no bid, and no draft pick. The linked provider
-declares the assets its own trade proposal request can name, and a draft pick it cannot name is
-refused with that provider's declared reason rather than a bare "unsupported"; a trade item that
-carries `picks` is refused, never silently ignored. For Yahoo, that reason is that its published
-proposal request names a trader team, a tradee team, a trade note and players, with no element for a
-draft pick, while its web trade hub does trade picks: the limit is the request shape, not the
-product.
-Staging a trade reads the league settings, both rosters, and the league's teams, and refuses the item
-when the counterparty is not another team in the same league, a player is not on the roster they
-would leave, or the trade window has closed. A free-agent add carries no bid, a waiver claim carries one of 0 or more, and a
+`counterparty` from the league's teams read, the players going out in `drops`, the players coming
+back in `adds`, and the draft picks it moves in `picks`; it carries no bid. Each pick names its
+`round` and the two teams it moves between, written as the item's own `team` id or its
+`counterparty` reference; any other team is refused. A league's own switch decides whether picks are
+allowed: `false` refuses with that reason, an unpublished switch refuses because the pick cannot be
+checked, and a round the sending team's available picks do not list is refused with that reason.
+A trade may carry picks on both sides, including a trade of picks only. The linked provider declares
+the assets its own trade request can name, and the review publishes that declaration as
+`tradeProposal` (`assets` and a plain `detail`) on each team. A pick the request cannot carry is
+accepted, validated, and shown on the review with both sides named, then skipped with that true
+reason when the set is submitted; nothing is sent for it, and it is never silently dropped. For
+Yahoo, its web trade request accepts players only and refused a draft pick with "Invalid XML POSTed.
+Error code 25", while its app trade request does accept a pick: the limit is the write host we have
+not shown our stored sign-in can reach, not the product.
+Staging a trade reads the league settings, both rosters, the league's teams, and the available
+draft picks for both teams, and refuses the item when the counterparty is not another team in the
+same league, a player is not on the roster they would leave, or the trade window has closed. A free-agent add carries no bid, a waiver claim carries one of 0 or more, and a
 drop item only drops. The result carries the set id, the review link
 (`https://{origin}/transactions/{setId}`), the surface (`mcp`) and acting client, and each item's
 outcome by position: accepted with its stored state, or refused with a code and a sentence that

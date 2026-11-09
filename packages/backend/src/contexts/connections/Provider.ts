@@ -24,6 +24,7 @@ const ProviderOperation = Schema.Literals([
   "read_completed_trades",
   "read_pending_trades",
   "read_draft_results",
+  "read_available_draft_picks",
   "read_league_teams",
   "apply_native_action",
   "apply_explicit_assignments",
@@ -372,6 +373,13 @@ export type ProviderShape = {
   readonly readDraftResults: (
     input: ProviderSessionMaterial & { readonly providerLeagueKey: string },
   ) => Effect.Effect<ReadonlyArray<ProviderDraftPick>, ProviderReadFailure>;
+
+  readonly readAvailableDraftPicks: (
+    input: ProviderSessionMaterial & {
+      readonly providerLeagueKey: string;
+      readonly providerTeamKeys: ReadonlyArray<string>;
+    },
+  ) => Effect.Effect<ReadonlyArray<ProviderAvailableDraftPick>, ProviderReadFailure>;
 
   readonly readStandings: (
     input: ProviderSessionMaterial & { readonly providerLeagueKey: string },
@@ -863,6 +871,11 @@ export type ProviderDraftPick = {
   readonly providerTeamKey: string;
   readonly providerPlayerKey: string;
   readonly name?: string;
+};
+
+export type ProviderAvailableDraftPick = {
+  readonly providerTeamKey: string;
+  readonly round: number;
 };
 
 export type ProviderAcquisitionUsage = {

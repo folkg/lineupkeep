@@ -147,7 +147,9 @@ Read as evidence, not imported:
   table with prior seasons. These are layouts over the same league-scored statistics, not a distinct
   role feed.
 - The draft-pick trade builder exposes `available_draft_picks.picks[].pick` as `{ round, cost, pick }`
-  with no original-team field; the write body itself sends only a round and a source team.
+  with no original-team field; the write body itself sends only a round and a source team. Our own
+  read of that output returns only `round` on the app read host; the app's `cost` and `pick` were not
+  reproduced with the trade-builder query shape we used.
 - No captured endpoint carried a line, pair, depth chart, shift count, or time-on-ice field for a
   player. "Minutes remaining" is a live-scoring game clock, not time on ice.
 

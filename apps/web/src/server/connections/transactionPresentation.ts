@@ -58,6 +58,14 @@ function toTeamView(team: ProposalSetReview["teams"][number]): TransactionReview
       : team.budget.status === "published"
         ? { budget: { status: "published" as const, remaining: team.budget.remaining } }
         : { budget: { status: "not_published" as const, detail: team.budget.detail } }),
+    ...(team.tradeProposal === undefined
+      ? {}
+      : {
+          tradeProposal: {
+            assets: [...team.tradeProposal.assets],
+            detail: team.tradeProposal.detail,
+          },
+        }),
     ...(team.tradeRules === undefined
       ? {}
       : {
@@ -132,6 +140,11 @@ function toItemView(
     kind: item.kind,
     adds: item.adds.map(toPlayerView),
     drops: item.drops.map(toPlayerView),
+    picks: item.picks.map((pick) => ({
+      round: pick.round,
+      from: { ref: pick.from.ref, name: pick.from.name },
+      to: { ref: pick.to.ref, name: pick.to.name },
+    })),
     ...(item.bid === undefined ? {} : { bid: item.bid }),
     reason: item.reason,
     state: item.state,

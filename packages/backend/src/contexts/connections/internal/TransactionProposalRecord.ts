@@ -176,6 +176,15 @@ export const StoredProposalPlacement = Schema.Struct({
 });
 export type StoredProposalPlacement = typeof StoredProposalPlacement.Type;
 
+export const StoredProposalTradePick = Schema.Struct({
+  round: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  sourceTeamKey: Schema.NonEmptyString,
+  destinationTeamKey: Schema.NonEmptyString,
+  sourceName: Schema.NonEmptyString,
+  destinationName: Schema.NonEmptyString,
+}).pipe(Schema.toType);
+export type StoredProposalTradePick = typeof StoredProposalTradePick.Type;
+
 export const ProposalItemRecord = Schema.Struct({
   id: ProposalItemId,
   setId: ProposalSetId,
@@ -186,6 +195,7 @@ export const ProposalItemRecord = Schema.Struct({
   kind: ProposalItemKind,
   adds: Schema.Array(StoredProposalPlayer),
   drops: Schema.Array(StoredProposalPlayer),
+  picks: Schema.Array(StoredProposalTradePick),
   slotMove: Schema.optional(StoredSlotMove),
   reserveMove: Schema.optional(StoredReserveMove),
   intent: Schema.optional(StoredProposalIntent),

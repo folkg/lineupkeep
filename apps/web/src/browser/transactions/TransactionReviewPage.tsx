@@ -35,6 +35,7 @@ import type {
   TransactionReviewPlayerView,
   TransactionReviewStepView,
   TransactionReviewTeamView,
+  TransactionReviewTradePickView,
   TransactionReviewTradeRulesView,
   TransactionReviewTradeView,
   TransactionReviewView,
@@ -545,6 +546,7 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
               submitting={props.submitting}
               included={props.isItemIncluded(item)}
               item={item}
+              tradeProposal={props.team.tradeProposal}
               tradeRules={props.team.tradeRules}
               withdrawing={props.withdrawing === item.id}
               onToggle={(includedNow) => props.onToggle(item.id, includedNow)}
@@ -567,6 +569,10 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
     return props.item.kind === "trade" && execution?.outcome === "pending" ? undefined : execution;
   };
   const trade = (): TransactionReviewTradeView | undefined => props.item.trade;
+  const incomingPicks = (): ReadonlyArray<TransactionReviewTradePickView> =>
+    props.item.picks.filter((pick) => pick.from.ref === props.item.counterparty?.ref);
+  const outgoingPicks = (): ReadonlyArray<TransactionReviewTradePickView> =>
+    props.item.picks.filter((pick) => pick.to.ref === props.item.counterparty?.ref);
   const slotIssues = (): ReadonlyArray<string> =>
     props.item.staleness.reasons
       .filter((reason) => reason.code === "slot_illegal")
@@ -667,20 +673,44 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
           )}
         </Show>
 
-        <Split columns={props.item.adds.length > 0 && props.item.drops.length > 0 ? 2 : undefined}>
-          <Show when={props.item.adds.length > 0}>
+        <Split
+          columns={
+            props.item.adds.length + incomingPicks().length > 0 &&
+            props.item.drops.length + outgoingPicks().length > 0
+              ? 2
+              : undefined
+          }
+        >
+          <Show when={props.item.adds.length + incomingPicks().length > 0}>
             <PlayerColumn
               label={props.item.kind === "trade" ? "You receive" : "Add"}
               players={props.item.adds}
+              picks={incomingPicks()}
             />
           </Show>
-          <Show when={props.item.drops.length > 0}>
+          <Show when={props.item.drops.length + outgoingPicks().length > 0}>
             <PlayerColumn
               label={props.item.kind === "trade" ? "You send" : "Drop"}
               players={props.item.drops}
+              picks={outgoingPicks()}
             />
           </Show>
         </Split>
+
+        <Show
+          when={
+            props.item.picks.length > 0 &&
+            props.tradeProposal !== undefined &&
+            !props.tradeProposal.assets.includes("draft_pick")
+          }
+        >
+          <Notice tone="neutral" title="Draft picks cannot be sent yet">
+            <Text size="caption" tone="muted">
+              {props.tradeProposal?.detail ??
+                "This connection's trade request cannot carry a draft pick."}
+            </Text>
+          </Notice>
+        </Show>
 
         <Show
           when={
@@ -967,6 +997,13 @@ function PlayerColumn(props: PlayerColumnProps): JSX.Element {
           </Stack>
         )}
       </For>
+      <For each={props.picks}>
+        {(pick) => (
+          <Text size="caption" tone="muted" wrap="words">
+            {tradePickLine(pick)}
+          </Text>
+        )}
+      </For>
     </Stack>
   );
 }
@@ -1177,8 +1214,22 @@ function moveSummary(item: TransactionReviewItemView): string {
   }
   const adds = playerNames(item.adds);
   const drops = playerNames(item.drops);
-  if (item.kind === "trade" && adds !== undefined && drops !== undefined) {
-    return `Send ${drops} to ${item.counterparty?.name ?? "the counterparty"} for ${adds}`;
+  if (item.kind === "trade") {
+    const outgoing = [
+      ...(drops === undefined ? [] : [drops]),
+      ...item.picks
+        .filter((pick) => pick.to.ref === item.counterparty?.ref)
+        .map((pick) => `a round ${String(pick.round)} pick`),
+    ];
+    const incoming = [
+      ...(adds === undefined ? [] : [adds]),
+      ...item.picks
+        .filter((pick) => pick.from.ref === item.counterparty?.ref)
+        .map((pick) => `a round ${String(pick.round)} pick`),
+    ];
+    if (outgoing.length > 0 && incoming.length > 0) {
+      return `Send ${outgoing.join(", ")} to ${item.counterparty?.name ?? "the counterparty"} for ${incoming.join(", ")}`;
+    }
   }
   if (adds !== undefined && drops !== undefined) {
     return `Add ${adds} and drop ${drops}`;
@@ -1201,6 +1252,10 @@ function playerNames(players: ReadonlyArray<TransactionReviewPlayerView>): strin
     return names[0];
   }
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+function tradePickLine(pick: TransactionReviewTradePickView): string {
+  return `Round ${String(pick.round)} pick from ${pick.from.name} to ${pick.to.name}`;
 }
 
 function playerDetailLine(player: TransactionReviewPlayerView): string | undefined {
@@ -1467,6 +1522,7 @@ type ExecutedOrderProps = {
 
 type ProposalItemProps = {
   readonly item: TransactionReviewItemView;
+  readonly tradeProposal: TransactionReviewTeamView["tradeProposal"];
   readonly tradeRules: TransactionReviewTradeRulesView | undefined;
   readonly expired: boolean;
   readonly submitting: boolean;
@@ -1479,6 +1535,7 @@ type ProposalItemProps = {
 type PlayerColumnProps = {
   readonly label: string;
   readonly players: ReadonlyArray<TransactionReviewPlayerView>;
+  readonly picks: ReadonlyArray<TransactionReviewTradePickView>;
 };
 
 type QuietTeamsProps = {

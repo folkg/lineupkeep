@@ -18,6 +18,7 @@ import type {
   ProposalPlacementResult,
 } from "#contexts/connections/ProposalOrder.ts";
 import type {
+  ProviderAvailableDraftPick,
   ProviderCapabilities,
   ProviderLeagueSettings,
   ProviderLeagueTeam,
@@ -111,6 +112,7 @@ import {
   type StoredProposalStaleness,
   type StoredProposalSubmission,
   type StoredProposalTrade,
+  type StoredProposalTradePick,
   type StoredReserveMove,
 } from "./TransactionProposalRecord.ts";
 import { TransactionProposalRepository } from "./TransactionProposalRepository.ts";
@@ -122,7 +124,7 @@ import type {
 } from "./TransactionProposalRepository.ts";
 
 const contentInvalidDetail =
-  "A proposal set needs one to twenty items. Each item names an owned team, a kind, the players to add or drop, an optional destination of `active` or `reserve` for an add, an optional player for an activate or stash, an optional FAAB bid of 0 or more, and a reason of at most 500 characters. A drop item adds nobody, a free-agent add carries no bid, a waiver claim requires a bid, a trade names a counterparty with at least one player going out and one coming back, an activate or stash names one rostered player without adding or dropping anyone, and a slot move names one rostered player and one destination slot without adding or dropping anyone. A trade carries no bid and no draft picks.";
+  "A proposal set needs one to twenty items. Each item names an owned team, a kind, the players to add or drop, the draft picks a trade moves, an optional destination of `active` or `reserve` for an add, an optional player for an activate or stash, an optional FAAB bid of 0 or more, and a reason of at most 500 characters. A drop item adds nobody, a free-agent add carries no bid, a waiver claim requires a bid, a trade names a counterparty with at least one asset going out and one coming back, an activate or stash names one rostered player without adding or dropping anyone, and a slot move names one rostered player and one destination slot without adding or dropping anyone. A trade carries no bid. Only a trade carries draft picks, and each pick names its round plus the two teams it moves between.";
 
 const submitInvalidDetail =
   "A submission names one proposal set and one to twenty of its move ids. Reload the review and submit again.";
@@ -171,6 +173,7 @@ type StagedTrade =
       readonly counterpartyName: string | undefined;
       readonly adds: ReadonlyArray<StoredProposalPlayer>;
       readonly drops: ReadonlyArray<StoredProposalPlayer>;
+      readonly picks: ReadonlyArray<StoredProposalTradePick>;
     }
   | {
       readonly outcome: "refused";
@@ -181,6 +184,7 @@ type TeamFacts = {
   readonly league: ProviderLeagueSettings;
   readonly roster: ProviderRoster;
   readonly leagueTeams: ReadonlyArray<ProviderLeagueTeam>;
+  readonly availableDraftPicks: ReadonlyMap<string, ReadonlyArray<number>> | undefined;
   readonly providerTeamKey: string;
   readonly players: ReadonlyMap<string, ProviderPlayerDetail>;
   readonly weeks: ReadonlyMap<string, ProviderPlayerWeekFact>;
@@ -231,6 +235,15 @@ export const TransactionProposalsLive = Layer.effect(
     const tokens = yield* QueryTokens;
     const lineups = yield* LineupRuns;
 
+    const tradeProposalsOf = (
+      teams: ReadonlyArray<ProposalTeamRecord>,
+    ): ReadonlyMap<ProposalTeamRecord["provider"], ProviderCapabilities["tradeProposal"]> =>
+      new Map(
+        registry
+          .capabilitiesOf([...new Set(teams.map((team) => team.provider))])
+          .map((entry) => [entry.key, entry.capabilities.tradeProposal] as const),
+      );
+
     const propose: TransactionProposals["Service"]["propose"] = Effect.fn(
       "TransactionProposals.propose",
     )(function* (userId: UserId, proposer: ProposalSetProvenance, input) {
@@ -273,23 +286,6 @@ export const TransactionProposalsLive = Layer.effect(
             : [],
         ),
       );
-      const pickProviderKeys = [
-        ...new Set(
-          decoded.items.flatMap((draft) => {
-            if ((draft.picks ?? []).length === 0) {
-              return [];
-            }
-            const team = teamsById.get(draft.team);
-            return team === undefined ? [] : [team.provider];
-          }),
-        ),
-      ];
-      const tradeProposalByProvider = new Map(
-        registry
-          .capabilitiesOf(pickProviderKeys)
-          .map((entry) => [entry.key, entry.capabilities.tradeProposal] as const),
-      );
-
       const prepared: Array<PreparedDraft> = [];
       for (const [index, draft] of decoded.items.entries()) {
         const team = teamsById.get(draft.team);
@@ -304,24 +300,21 @@ export const TransactionProposalsLive = Layer.effect(
           );
           continue;
         }
-        if ((draft.picks ?? []).length > 0) {
-          const tradeProposal = tradeProposalByProvider.get(team.provider);
-          if (tradeProposal === undefined) {
-            throw new Error(`Team ${team.id} references an unregistered provider`);
-          }
-          if (tradeProposal.assets.includes("draft_pick")) {
-            throw new Error(
-              "Your league accepts draft picks in a trade proposal, but a proposal item cannot carry one",
-            );
-          }
+        const picks = draft.picks ?? [];
+        if (picks.length > 0 && draft.kind !== "trade") {
           refusals.push(
             refusedItem(
               index,
-              "draft_pick_included",
-              tradeProposal.detail,
-              "Remove `picks`. A transaction item carries players only because your league publishes pick trades only on its website.",
+              "kind_invalid",
+              `Item ${String(index + 1)} carries draft picks on a ${draft.kind.replaceAll("_", " ")} item.`,
+              "Move the picks onto a trade item, or remove them.",
             ),
           );
+          continue;
+        }
+        const pickIssue = draft.kind === "trade" ? draftPickIssue(draft, picks) : undefined;
+        if (pickIssue !== undefined) {
+          refusals.push(refusedItem(index, pickIssue.refusal, pickIssue.detail, pickIssue.fix));
           continue;
         }
         const shape = proposalShape(draft);
@@ -333,7 +326,7 @@ export const TransactionProposalsLive = Layer.effect(
               shape.detail,
               shape.refusal === "bid_invalid"
                 ? "Remove the bid for this kind, or use a waiver claim to spend a FAAB bid."
-                : "Declare a kind whose players match the item: a drop drops only, an add adds only, a trade names players both ways, and a slot move names one player and one destination slot.",
+                : "Declare a kind whose assets match the item: a drop drops only, an add adds only, a trade sends at least one asset and brings at least one back, and a slot move names one player and one destination slot.",
             ),
           );
           continue;
@@ -547,12 +540,18 @@ export const TransactionProposalsLive = Layer.effect(
             : draft.kind === "free_agent_add" || draft.kind === "waiver_claim"
               ? { kind: "add" as const, to: draft.to ?? "active" }
               : undefined;
+        const pickSides = draftPicks(draft).map((pick) => ({
+          round: pick.round,
+          from: pick.from === draft.team ? "team" : "counterparty",
+          to: pick.to === draft.team ? "team" : "counterparty",
+        }));
         const key = proposalItemKey({
           team: draft.team,
           kind: draft.kind,
           counterpartyKey,
           adds,
           drops,
+          picks: pickSides,
           slotMove,
           intent,
           bid: draft.bid ?? undefined,
@@ -564,6 +563,7 @@ export const TransactionProposalsLive = Layer.effect(
           counterpartyKey,
           adds,
           drops,
+          pickSides,
           slotMove,
           intent,
           draft.bid ?? undefined,
@@ -586,8 +586,8 @@ export const TransactionProposalsLive = Layer.effect(
             refusedItem(
               index,
               "duplicate_item",
-              `Item ${String(index + 1)} repeats item ${String(firstIndex + 1)} for the same team and players.`,
-              "Keep one of them, or change the players or bid so the moves differ.",
+              `Item ${String(index + 1)} repeats item ${String(firstIndex + 1)} for the same team and assets.`,
+              "Keep one of them, or change the players, picks, or bid so the moves differ.",
             ),
           );
           continue;
@@ -604,6 +604,7 @@ export const TransactionProposalsLive = Layer.effect(
             adds: staged?.outcome === "staged" ? staged.adds : adds.map((add) => ({ key: add })),
             drops:
               staged?.outcome === "staged" ? staged.drops : drops.map((drop) => ({ key: drop })),
+            picks: staged?.outcome === "staged" ? staged.picks : [],
             intent,
             counterpartyKey,
             counterpartyName: staged?.outcome === "staged" ? staged.counterpartyName : undefined,
@@ -880,6 +881,9 @@ export const TransactionProposalsLive = Layer.effect(
           loaded.items,
           loaded.steps,
           now,
+          undefined,
+          undefined,
+          tradeProposalsOf(teams),
         );
       },
     );
@@ -947,6 +951,7 @@ export const TransactionProposalsLive = Layer.effect(
         now,
         checkedByTeam,
         offersByTeam,
+        tradeProposalsOf(teams),
       );
     });
 
@@ -1045,6 +1050,8 @@ export const TransactionProposalsLive = Layer.effect(
         loaded.steps,
         now,
         checkedByTeam,
+        undefined,
+        tradeProposalsOf(teams),
       );
     });
 
@@ -1206,10 +1213,7 @@ export const TransactionProposalsLive = Layer.effect(
             );
             continue;
           }
-          const refusal = executableRefusal(
-            current,
-            check.context.provider.capabilities.transactionRequest,
-          );
+          const refusal = executableRefusal(current, check.context.provider.capabilities);
           if (refusal !== undefined) {
             outcomes.push(skippedOutcome(current, refusal, decidedAt, position, true));
             stopped.set(
@@ -1300,6 +1304,9 @@ export const TransactionProposalsLive = Layer.effect(
         final.items,
         final.steps,
         completedAt,
+        undefined,
+        undefined,
+        tradeProposalsOf(teams),
       );
     });
 
@@ -2328,6 +2335,31 @@ export const TransactionProposalsLive = Layer.effect(
         );
         const opponentByKey = new Map(opponentRosters);
         const windowClosed = tradeWindowClosed(league);
+        const draftPickTeamKeys = [owned.owned.team.providerTeamKey, ...counterpartyKeys];
+        const availablePicksResult =
+          league.tradeDraftPicks === true &&
+          candidates.some((candidate) => draftPicks(candidate.draft).length > 0)
+            ? yield* Effect.result(
+                owned.provider.readAvailableDraftPicks({
+                  ...identity,
+                  providerLeagueKey: leagueKey,
+                  providerTeamKeys: draftPickTeamKeys,
+                }),
+              )
+            : undefined;
+        if (availablePicksResult?._tag === "Failure") {
+          if (availablePicksResult.failure._tag === "provider.session_rejected") {
+            yield* queries.recordSessionRejected(userId, owned.owned);
+          }
+        }
+        const availablePicks =
+          availablePicksResult?._tag === "Success"
+            ? roundsByTeam(availablePicksResult.success)
+            : undefined;
+        const teamName = (teamKey: string): string | undefined =>
+          teamKey === owned.owned.team.providerTeamKey
+            ? owned.owned.team.name
+            : teamByKey.get(teamKey)?.name;
         for (const candidate of candidates) {
           const counterpartyKey = candidate.counterpartyKey;
           if (
@@ -2426,6 +2458,35 @@ export const TransactionProposalsLive = Layer.effect(
             });
             continue;
           }
+          const ownedKey = owned.owned.team.providerTeamKey;
+          const picks = draftPicks(candidate.draft).map((pick) => ({
+            round: pick.round,
+            sourceTeamKey: pick.from === candidate.team.id ? ownedKey : counterpartyKey,
+            destinationTeamKey: pick.to === candidate.team.id ? ownedKey : counterpartyKey,
+            sourceName:
+              teamName(pick.from === candidate.team.id ? ownedKey : counterpartyKey) ?? "that team",
+            destinationName:
+              teamName(pick.to === candidate.team.id ? ownedKey : counterpartyKey) ?? "that team",
+          }));
+          const pickIssues = tradePickIssues({
+            picks,
+            league,
+            available: availablePicks,
+            teamName,
+          });
+          if (pickIssues.length > 0) {
+            refused.set(candidate.index, {
+              outcome: "refused",
+              refusal: tradeRefusal(
+                candidate.index,
+                pickIssues[0]?.code ?? "trade_state_unavailable",
+                `Item ${String(candidate.index + 1)} ` +
+                  pickIssues.map((issue) => issue.detail).join(" "),
+                "Read the league's available draft picks again and name a round the sending team can trade.",
+              ),
+            });
+            continue;
+          }
           refused.set(candidate.index, {
             outcome: "staged",
             counterpartyKey,
@@ -2444,6 +2505,7 @@ export const TransactionProposalsLive = Layer.effect(
               }
               return proposalPlayerOf(player);
             }),
+            picks,
           });
         }
         return refused;
@@ -2504,6 +2566,9 @@ export const TransactionProposalsLive = Layer.effect(
         ];
         const needsBudget = items.some((item) => item.bid !== undefined);
         const needsTrade = items.some((item) => item.kind === "trade");
+        const needsDraftPicks =
+          settings.tradeDraftPicks === true &&
+          items.some((item) => item.kind === "trade" && item.picks.length > 0);
         const counterpartyKeys = [
           ...new Set(
             items.flatMap((item) =>
@@ -2628,13 +2693,42 @@ export const TransactionProposalsLive = Layer.effect(
                 completedUnavailable: completed._tag === "Failure",
               } satisfies TradeFeed;
             });
-        const [rosterResult, teamsResult, detailsResult, weeksResult, tradeRostersResult, feed] =
-          yield* Effect.all(
-            [roster, leagueTeams, details, weeks, tradeRosters, tradeFeed] as const,
-            {
-              concurrency: "unbounded",
-            },
-          );
+        const [
+          rosterResult,
+          teamsResult,
+          detailsResult,
+          weeksResult,
+          tradeRostersResult,
+          feed,
+          picksResult,
+        ] = yield* Effect.all(
+          [
+            roster,
+            leagueTeams,
+            details,
+            weeks,
+            tradeRosters,
+            tradeFeed,
+            needsDraftPicks
+              ? Effect.result(
+                  context.provider.readAvailableDraftPicks({
+                    ...providerIdentity(context),
+                    providerLeagueKey: context.owned.team.providerLeagueKey,
+                    providerTeamKeys: [context.owned.team.providerTeamKey, ...counterpartyKeys],
+                  }),
+                )
+              : Effect.succeed(Result.succeed<ReadonlyArray<ProviderAvailableDraftPick>>([])),
+          ] as const,
+          {
+            concurrency: "unbounded",
+          },
+        );
+        if (
+          picksResult._tag === "Failure" &&
+          picksResult.failure._tag === "provider.session_rejected"
+        ) {
+          yield* queries.recordSessionRejected(userId, context.owned);
+        }
         if (rosterResult._tag === "Failure") {
           return {
             status: "failed",
@@ -2657,6 +2751,10 @@ export const TransactionProposalsLive = Layer.effect(
           league: settings,
           roster: rosterResult.success,
           leagueTeams: teamsResult.success,
+          availableDraftPicks:
+            needsDraftPicks && picksResult._tag === "Success"
+              ? roundsByTeam(picksResult.success)
+              : undefined,
           providerTeamKey: context.owned.team.providerTeamKey,
           players: new Map(
             detailsResult.success.map((detail) => [detail.providerPlayerKey, detail] as const),
@@ -3205,6 +3303,10 @@ function buildReview(
   now: DateTime.Utc,
   checks?: ReadonlyMap<TeamId, TeamCheck>,
   offersByTeam?: ReadonlyMap<TeamId, ReadonlyArray<PendingTradeOffer>>,
+  tradeProposalByProvider?: ReadonlyMap<
+    ProposalTeamRecord["provider"],
+    ProviderCapabilities["tradeProposal"]
+  >,
 ): Effect.Effect<ProposalSetReview, ProposalPersistenceFailed> {
   return Effect.gen(function* () {
     const teamsById = new Map(teams.map((team) => [team.id, team] as const));
@@ -3247,6 +3349,9 @@ function buildReview(
         yield* Schema.decodeEffect(ProposalTeamSchema)({
           team: teamView(team),
           ...(check?.budget === undefined ? {} : { budget: check.budget }),
+          ...(tradeProposalByProvider?.get(team.provider) === undefined
+            ? {}
+            : { tradeProposal: tradeProposalByProvider.get(team.provider) }),
           ...(check?.facts === undefined
             ? {}
             : {
@@ -3627,6 +3732,16 @@ function evaluateTradeItem(
       add.availability = availability;
     }
   }
+  const pickTeamName = (teamKey: string): string | undefined =>
+    facts.leagueTeams.find((team) => team.providerTeamKey === teamKey)?.name;
+  for (const issue of tradePickIssues({
+    picks: item.picks,
+    league: facts.league,
+    available: facts.availableDraftPicks,
+    teamName: pickTeamName,
+  })) {
+    reasons.push({ code: issue.code, detail: issue.detail });
+  }
   const capacity = facts.league.rosterPositions.reduce(
     (total, position) => (position.kind === "reserve" ? total : total + position.count),
     0,
@@ -3881,6 +3996,118 @@ function failedCheck(
   };
 }
 
+function draftPickIssue(
+  draft: ProposalItemDraft,
+  picks: ReadonlyArray<NonNullable<ProposalItemDraft["picks"]>[number]>,
+):
+  | { readonly refusal: ProposalItemRefusal; readonly detail: string; readonly fix: string }
+  | undefined {
+  const parties = new Set([draft.team, draft.counterparty ?? ""]);
+  const seen = new Set<string>();
+  for (const pick of picks) {
+    if (pick.from === pick.to) {
+      return {
+        refusal: "trade_pick_team_not_party",
+        detail: `A round ${String(pick.round)} pick cannot leave and join the same team.`,
+        fix: "Name the team the pick leaves and the other team it joins.",
+      };
+    }
+    if (!parties.has(pick.from) || !parties.has(pick.to)) {
+      return {
+        refusal: "trade_pick_team_not_party",
+        detail: `A round ${String(pick.round)} pick names a team that is not part of this trade.`,
+        fix: "Name only this item's team and its counterparty as a pick's two teams.",
+      };
+    }
+    const key = `${String(pick.round)}:${pick.from}`;
+    if (seen.has(key)) {
+      return {
+        refusal: "trade_draft_pick_duplicate",
+        detail: `This trade names the same round ${String(pick.round)} pick from the same team twice.`,
+        fix: "Keep one pick for each round a team sends.",
+      };
+    }
+    seen.add(key);
+  }
+  return undefined;
+}
+
+function draftPicks(
+  draft: ProposalItemDraft,
+): ReadonlyArray<NonNullable<ProposalItemDraft["picks"]>[number]> {
+  return draft.picks ?? [];
+}
+
+function roundsByTeam(
+  picks: ReadonlyArray<ProviderAvailableDraftPick>,
+): ReadonlyMap<string, ReadonlyArray<number>> {
+  const byTeam = new Map<string, Array<number>>();
+  for (const pick of picks) {
+    const rounds = byTeam.get(pick.providerTeamKey) ?? [];
+    rounds.push(pick.round);
+    byTeam.set(pick.providerTeamKey, rounds);
+  }
+  return byTeam;
+}
+
+type TradePickIssue = {
+  readonly code:
+    | "trade_draft_pick_not_allowed"
+    | "trade_draft_pick_unavailable"
+    | "state_unavailable";
+  readonly detail: string;
+};
+
+function tradePickIssues(input: {
+  readonly picks: ReadonlyArray<StoredProposalTradePick>;
+  readonly league: ProviderLeagueSettings;
+  readonly available: ReadonlyMap<string, ReadonlyArray<number>> | undefined;
+  readonly teamName: (teamKey: string) => string | undefined;
+}): ReadonlyArray<TradePickIssue> {
+  if (input.picks.length === 0) {
+    return [];
+  }
+  if (input.league.tradeDraftPicks === false) {
+    return [
+      {
+        code: "trade_draft_pick_not_allowed",
+        detail: "This league does not allow draft picks in a trade.",
+      },
+    ];
+  }
+  if (input.league.tradeDraftPicks === undefined) {
+    return [
+      {
+        code: "trade_draft_pick_not_allowed",
+        detail:
+          "Your league does not publish whether it allows draft picks in a trade, so a pick cannot be checked.",
+      },
+    ];
+  }
+  if (input.available === undefined) {
+    return [
+      {
+        code: "state_unavailable",
+        detail:
+          "The league's available draft picks could not be read, so this trade's picks cannot be checked.",
+      },
+    ];
+  }
+  return input.picks.flatMap((pick) => {
+    const rounds = input.available?.get(pick.sourceTeamKey) ?? [];
+    if (rounds.includes(pick.round)) {
+      return [];
+    }
+    const name = input.teamName(pick.sourceTeamKey) ?? pick.sourceName;
+    return [
+      {
+        code: "trade_draft_pick_unavailable" as const,
+        detail: `${name} cannot send a round ${String(pick.round)} pick; your league does not list that pick as available to that team.`,
+      },
+    ];
+  });
+}
+
 function proposalShape(
   draft: ProposalItemDraft,
 ): { readonly refusal: "kind_invalid" | "bid_invalid"; readonly detail: string } | undefined {
@@ -4055,12 +4282,14 @@ function proposalShape(
         ? { refusal: "bid_invalid", detail: "A waiver claim requires a FAAB bid." }
         : undefined;
     }
-    case "trade":
-      if (draft.adds.length === 0 || draft.drops.length === 0) {
+    case "trade": {
+      const picks = draft.picks ?? [];
+      const outgoingPicks = picks.filter((pick) => pick.from === draft.team).length;
+      const incomingPicks = picks.filter((pick) => pick.to === draft.team).length;
+      if (draft.drops.length + outgoingPicks === 0 || draft.adds.length + incomingPicks === 0) {
         return {
           refusal: "kind_invalid",
-          detail:
-            "A trade names at least one player going out and at least one player coming back.",
+          detail: "A trade names at least one asset going out and at least one asset coming back.",
         };
       }
       {
@@ -4087,6 +4316,7 @@ function proposalShape(
             refusal: "bid_invalid",
             detail: "A trade carries no FAAB bid. Use a waiver claim to spend a bid.",
           };
+    }
   }
 }
 function proposalItemKey(input: {
@@ -4095,6 +4325,11 @@ function proposalItemKey(input: {
   readonly counterpartyKey: string | undefined;
   readonly adds: ReadonlyArray<string>;
   readonly drops: ReadonlyArray<string>;
+  readonly picks: ReadonlyArray<{
+    readonly round: number;
+    readonly from: string;
+    readonly to: string;
+  }>;
   readonly slotMove: { readonly player: string; readonly toSlot: string } | undefined;
   readonly intent: StoredProposalIntent | undefined;
   readonly bid: number | undefined;
@@ -4106,6 +4341,7 @@ function proposalItemKey(input: {
     input.counterpartyKey ?? null,
     [...input.adds].sort(),
     [...input.drops].sort(),
+    pickKey(input.picks),
     input.slotMove?.player ?? null,
     input.slotMove?.toSlot ?? null,
     intentKey(input.intent),
@@ -4120,6 +4356,7 @@ function proposalMoveKey(
   counterpartyKey: string | undefined,
   adds: ReadonlyArray<string>,
   drops: ReadonlyArray<string>,
+  picks: ReadonlyArray<{ readonly round: number; readonly from: string; readonly to: string }>,
   slotMove: { readonly player: string; readonly toSlot: string } | undefined,
   intent: StoredProposalIntent | undefined,
   bid: number | undefined,
@@ -4130,11 +4367,20 @@ function proposalMoveKey(
     counterpartyKey ?? null,
     [...adds].sort(),
     [...drops].sort(),
+    pickKey(picks),
     slotMove?.player ?? null,
     slotMove?.toSlot ?? null,
     intentKey(intent),
     bid ?? null,
   ]);
+}
+
+function pickKey(
+  picks: ReadonlyArray<{ readonly round: number; readonly from: string; readonly to: string }>,
+): ReadonlyArray<string> {
+  return picks
+    .map((pick) => `${String(pick.round)}:${pick.from}:${pick.to}`)
+    .toSorted((left, right) => left.localeCompare(right));
 }
 
 function intentKey(intent: StoredProposalIntent | undefined): ReadonlyArray<string | null> | null {
@@ -4148,6 +4394,7 @@ function recordItemKey(item: ProposalItemRecord): string {
     counterpartyKey: item.counterpartyKey,
     adds: item.adds.map((add) => add.key),
     drops: item.drops.map((drop) => drop.key),
+    picks: recordPickKey(item),
     slotMove:
       item.slotMove === undefined
         ? undefined
@@ -4165,12 +4412,25 @@ function recordMoveKey(item: ProposalItemRecord): string {
     item.counterpartyKey,
     item.adds.map((add) => add.key),
     item.drops.map((drop) => drop.key),
+    recordPickKey(item),
     item.slotMove === undefined
       ? undefined
       : { player: item.slotMove.playerKey, toSlot: item.slotMove.toSlot },
     item.intent,
     item.bid,
   );
+}
+
+function recordPickKey(
+  item: ProposalItemRecord,
+): ReadonlyArray<{ readonly round: number; readonly from: string; readonly to: string }> {
+  const side = (teamKey: string): string =>
+    teamKey === item.counterpartyKey ? "counterparty" : "team";
+  return item.picks.map((pick) => ({
+    round: pick.round,
+    from: side(pick.sourceTeamKey),
+    to: side(pick.destinationTeamKey),
+  }));
 }
 
 function refusedItem(
@@ -4238,6 +4498,10 @@ function staleFix(code: ProposalStaleCode): string {
       return "Read the league's teams again and name a counterparty that is still in the league.";
     case "trade_player_not_rostered":
       return "Read both rosters again and name only players your league still lists on the team they would leave.";
+    case "trade_draft_pick_not_allowed":
+      return "Remove the draft pick; this league does not allow picks in a trade.";
+    case "trade_draft_pick_unavailable":
+      return "Read your league's available draft picks again and name a round the sending team can trade.";
   }
 }
 
@@ -4285,6 +4549,7 @@ function commandRecord(input: {
     kind: command.kind,
     adds: command.adds,
     drops: command.drops,
+    picks: command.picks,
     ...(command.slotMove === undefined ? {} : { slotMove: command.slotMove }),
     ...(command.intent === undefined ? {} : { intent: command.intent }),
     ...(command.counterpartyKey === undefined ? {} : { counterpartyKey: command.counterpartyKey }),
@@ -4434,6 +4699,25 @@ function toItem(
             leagueKey,
             teamKey: record.counterpartyKey,
           });
+    const pickParty = (
+      teamKey: string,
+      storedName: string,
+    ): ProposalItem["picks"][number]["from"] => {
+      if (teamKey !== record.counterpartyKey) {
+        return { ref: record.team, name: partyName(teamKey, storedName) };
+      }
+      if (counterpartyRef === undefined) {
+        throw new Error("A stored draft pick needs a counterparty reference");
+      }
+      return { ref: counterpartyRef, name: partyName(teamKey, storedName) };
+    };
+    const partyName = (teamKey: string, storedName: string): string =>
+      facts?.leagueTeams.find((entry) => entry.providerTeamKey === teamKey)?.name ?? storedName;
+    const picks = record.picks.map((pick) => ({
+      round: pick.round,
+      from: pickParty(pick.sourceTeamKey, pick.sourceName),
+      to: pickParty(pick.destinationTeamKey, pick.destinationName),
+    }));
     let reasonOffset = 0;
     const execution: ProposalItem["execution"] =
       record.outcome === undefined
@@ -4521,6 +4805,7 @@ function toItem(
           ...(availability === undefined ? {} : { availability }),
         };
       }),
+      picks,
       ...(record.bid === undefined ? {} : { bid: record.bid }),
       reason: record.reason,
       state: record.state,
@@ -4643,7 +4928,7 @@ function executionSequence(
 
 function executableRefusal(
   item: ProposalItemRecord,
-  transaction: ProviderCapabilities["transactionRequest"],
+  capabilities: ProviderCapabilities,
 ): string | undefined {
   if (item.kind === "slot_move") {
     return item.slotMove === undefined
@@ -4655,18 +4940,28 @@ function executableRefusal(
       ? "This move names no place for the player, so there is nothing to send."
       : undefined;
   }
-  if (item.adds.length + item.drops.length === 0) {
-    return "This move names no player to add or drop, so there is nothing to send.";
-  }
   if (item.kind === "trade") {
     if (item.counterpartyKey === undefined) {
       return "This trade names no counterparty, so there is nobody to make the offer to.";
     }
-    if (item.adds.length === 0 || item.drops.length === 0) {
-      return "A trade needs at least one player going out and one coming back before it can be sent.";
+    if (item.picks.length > 0 && !capabilities.tradeProposal.assets.includes("draft_pick")) {
+      return capabilities.tradeProposal.detail;
+    }
+    const outgoing =
+      item.drops.length +
+      item.picks.filter((pick) => pick.sourceTeamKey !== item.counterpartyKey).length;
+    const incoming =
+      item.adds.length +
+      item.picks.filter((pick) => pick.sourceTeamKey === item.counterpartyKey).length;
+    if (outgoing === 0 || incoming === 0) {
+      return "A trade needs at least one asset going out and one coming back before it can be sent.";
     }
     return undefined;
   }
+  if (item.adds.length + item.drops.length === 0) {
+    return "This move names no player to add or drop, so there is nothing to send.";
+  }
+  const transaction = capabilities.transactionRequest;
   if (item.adds.length > transaction.maximumAdds || item.drops.length > transaction.maximumDrops) {
     return `A transaction request to your league carries at most ${String(transaction.maximumAdds)} ${transaction.maximumAdds === 1 ? "add" : "adds"} and ${String(transaction.maximumDrops)} ${transaction.maximumDrops === 1 ? "drop" : "drops"}, and this move names ${String(item.adds.length)} to add and ${String(item.drops.length)} to drop. Split it into separate items and propose a fresh set.`;
   }
@@ -4765,8 +5060,18 @@ function moveLabel(item: ProposalItemRecord): string {
   }
   const adds = item.adds.flatMap((add) => (add.name === undefined ? [] : [add.name]));
   const drops = item.drops.flatMap((drop) => (drop.name === undefined ? [] : [drop.name]));
-  if (item.kind === "trade" && adds.length > 0 && drops.length > 0) {
-    return `Trading ${drops.join(", ")} to ${item.counterpartyName ?? "the counterparty"} for ${adds.join(", ")}`;
+  if (item.kind === "trade") {
+    const outgoingPicks = item.picks
+      .filter((pick) => pick.sourceTeamKey !== item.counterpartyKey)
+      .map((pick) => `a round ${String(pick.round)} pick`);
+    const incomingPicks = item.picks
+      .filter((pick) => pick.sourceTeamKey === item.counterpartyKey)
+      .map((pick) => `a round ${String(pick.round)} pick`);
+    const sent = [...drops, ...outgoingPicks];
+    const received = [...adds, ...incomingPicks];
+    if (sent.length > 0 && received.length > 0) {
+      return `Trading ${sent.join(", ")} to ${item.counterpartyName ?? "the counterparty"} for ${received.join(", ")}`;
+    }
   }
   if (adds.length > 0 && drops.length > 0) {
     return `Adding ${adds.join(", ")} and dropping ${drops.join(", ")}`;

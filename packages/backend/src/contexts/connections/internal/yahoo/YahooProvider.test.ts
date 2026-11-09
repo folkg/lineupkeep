@@ -42,6 +42,8 @@ import {
   yahooNflLeagueRostersForAnotherLeague,
   yahooNflLeagueTeams,
   yahooNflLeagueTeamsWithFaab,
+  yahooNhlAvailableDraftPicks,
+  yahooNhlAvailableDraftPicksWithoutOneTeam,
   yahooNflPlayerDetailsWithMismatchedStartedCoverage,
   yahooNflPlayerDetailsWithDefaultRanks,
   yahooNflPlayerDetailsWithPopulatedCut,
@@ -4181,6 +4183,49 @@ it.effect("reads league team membership", () => {
         acquisitionUsage: { seasonMoves: undefined, weeklyAdds: undefined },
       },
     ]);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("reads a team's available draft picks from the app read host", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNhlAvailableDraftPicks));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const picks = yield* provider.readAvailableDraftPicks({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4001",
+      providerTeamKeys: ["466.l.4001.t.1", "466.l.4001.t.2"],
+    });
+
+    assert.strictEqual(internet.calls.length, 1);
+    assert.strictEqual(
+      internet.calls[0]?.url.href,
+      "https://pub-api-android-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4001/teams;team_keys=466.l.4001.t.1,466.l.4001.t.2;out=available_draft_picks?format=json",
+    );
+    assert.deepStrictEqual(picks, [
+      { providerTeamKey: "466.l.4001.t.1", round: 1 },
+      { providerTeamKey: "466.l.4001.t.1", round: 2 },
+      { providerTeamKey: "466.l.4001.t.1", round: 3 },
+      { providerTeamKey: "466.l.4001.t.2", round: 1 },
+      { providerTeamKey: "466.l.4001.t.2", round: 2 },
+    ]);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("refuses an available draft pick read that omits a requested team", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNhlAvailableDraftPicksWithoutOneTeam));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.readAvailableDraftPicks({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4001",
+        providerTeamKeys: ["466.l.4001.t.1", "466.l.4001.t.2"],
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 

@@ -98,6 +98,18 @@ it("starts an illegal move excluded and names the player, slot, and choice", asy
   await expect.element(page.getByText(/choosing which player to drop is yours/u)).toBeVisible();
 });
 
+it("names both sides of every draft pick and says it cannot be sent", async () => {
+  using _app = setupReviewPage({
+    ...reviewFixture(),
+    teams: [tradeTeam(pickTradeItem())],
+  });
+
+  await expect.element(page.getByText("Round 1 pick from Alpha to Beta")).toBeVisible();
+  await expect.element(page.getByText("Round 2 pick from Beta to Alpha")).toBeVisible();
+  await expect.element(page.getByText("Draft picks cannot be sent yet")).toBeVisible();
+  await expect.element(page.getByText(/accepts players only/u)).toBeVisible();
+});
+
 it("shows the provider's exact refusal wording on a failed move", async () => {
   const providerRefusal =
     "The provider rejected the transaction with HTTP 400. It said: Player Travis Konecny is in a IR position on your roster, but is no longer on the real-life IR. Please edit your lineup to activate this player from your IR and then attempt your transaction again.";
@@ -236,6 +248,7 @@ function tradeItem(state: "proposed" | "pending" | "withdrawn"): TransactionRevi
     kind: "trade",
     adds: [player("Marco Diaz", "RW", "NYR", "Healthy")],
     drops: [player("Elias Ford", "C", "BOS", "Healthy")],
+    picks: [],
     counterparty: { ref: "r1.counterparty", name: "Beta", managerName: "Dana Ruiz" },
     reason: "Swap a center for a wing.",
     state,
@@ -255,9 +268,39 @@ function tradeItem(state: "proposed" | "pending" | "withdrawn"): TransactionRevi
   };
 }
 
+function pickTradeItem(): TransactionReviewItemView {
+  return {
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c9",
+    kind: "trade",
+    adds: [],
+    drops: [],
+    picks: [
+      {
+        round: 1,
+        from: { ref: alphaId, name: "Alpha" },
+        to: { ref: "r1.counterparty", name: "Beta" },
+      },
+      {
+        round: 2,
+        from: { ref: "r1.counterparty", name: "Beta" },
+        to: { ref: alphaId, name: "Alpha" },
+      },
+    ],
+    counterparty: { ref: "r1.counterparty", name: "Beta", managerName: "Dana Ruiz" },
+    reason: "Trade a first for a second.",
+    state: "proposed",
+    staleness: { status: "current", checkedAt: now, reasons: [] },
+  };
+}
+
 function tradeTeam(item: TransactionReviewItemView): TransactionReviewTeamView {
   return {
     team: { id: alphaId, name: "Alpha", league: "nfl", sport: "football", season: 2026 },
+    tradeProposal: {
+      assets: ["player"],
+      detail:
+        "The provider's trade request accepts players only, and this connection cannot send a draft pick.",
+    },
     tradeRules: { endDate: "2026-11-28", ratification: "vote", objectionDays: 2 },
     items: [item],
     pendingOffers: [],
@@ -373,6 +416,7 @@ function waiverItem(): TransactionReviewItemView {
     kind: "waiver_claim",
     adds: [player("Sam Rivers", "WR", "SEA", "Questionable")],
     drops: [player("Alex Vance", "RB", "SF", "Out")],
+    picks: [],
     bid: 25,
     reason: "Cover the receiver spot before Sunday.",
     state: "proposed",
@@ -386,6 +430,7 @@ function staleItem(): TransactionReviewItemView {
     kind: "free_agent_add",
     adds: [player("Jordan Lee", "C", "BOS", "Free agent")],
     drops: [],
+    picks: [],
     reason: "Add a center for the light night.",
     state: "proposed",
     staleness: {
@@ -408,6 +453,7 @@ function illegalItem(): TransactionReviewItemView {
     kind: "drop",
     adds: [],
     drops: [player("Riley Chen", "LW", "NYR")],
+    picks: [],
     reason: "Open a roster spot.",
     state: "proposed",
     staleness: {
@@ -430,6 +476,7 @@ function freeAgentItem(): TransactionReviewItemView {
     kind: "free_agent_add",
     adds: [player("Mika Olsen", "LW", "NYR", "Free agent")],
     drops: [player("Tomas Berg", "RW", "BOS")],
+    picks: [],
     reason: "Take the better wing before the weekend.",
     state: "proposed",
     staleness: { status: "current", checkedAt: now, reasons: [] },
@@ -442,6 +489,7 @@ function slotMoveItem(): TransactionReviewItemView {
     kind: "slot_move",
     adds: [],
     drops: [],
+    picks: [],
     slotMove: { playerName: "Casey Moss", fromSlot: "IR", toSlot: "BN" },
     reason: "Move the reserve center to the bench.",
     state: "proposed",
@@ -455,6 +503,7 @@ function dropItem(): TransactionReviewItemView {
     kind: "drop",
     adds: [],
     drops: [player("Riley Chen", "LW", "NYR")],
+    picks: [],
     reason: "Open a roster spot.",
     state: "proposed",
     staleness: { status: "current", checkedAt: now, reasons: [] },
@@ -1142,6 +1191,7 @@ function unknownDropItem(): TransactionReviewItemView {
     kind: "drop",
     adds: [],
     drops: [player("Owen Park", "D", "TOR")],
+    picks: [],
     reason: "This response was lost.",
     state: "unknown",
     staleness: { status: "current", checkedAt: now, reasons: [] },
@@ -1170,6 +1220,7 @@ function excludedDropItem(): TransactionReviewItemView {
     kind: "drop",
     adds: [],
     drops: [player("Nate Cole", "G", "VGK")],
+    picks: [],
     reason: "Left out on purpose.",
     state: "skipped",
     staleness: { status: "current", checkedAt: now, reasons: [] },

@@ -496,23 +496,33 @@ removes an entry from the table.
 ## F3. Draft picks in trades (owner's next main-line item)
 
 The league switch is published and the SDK's Android capture proved the write: a Round 1 for Round 1 pending trade
-returned 201 and was cancelled with a 204, while the same proposal on the web write host is refused. What stands
-between us and the feature is the write host, a pick asset type, validation against the league's available picks,
-and the review line.
+returned 201 and was cancelled with a 204, while the same proposal on the web write host is refused. Our own read
+now reaches the Android v2 read host with the stored connection; the write there is still unproven, so a pick is
+validated and reviewed but never offered.
 
-- [ ] Prove, read-only, that our stored connection authenticates the Android v2 read host for
-      `available_draft_picks`, before promising the feature.
-- [ ] If it does, add a pick asset to the provider port: round, source team, destination team, with the league's
+- [x] Prove, read-only, that our stored connection authenticates the Android v2 read host for
+      `available_draft_picks`, before promising the feature. The stored Yahoo connection (`ready`) read
+      `https://pub-api-android-ro.fantasysports.yahoo.com/fantasy/v2/league/{leagueKey}/teams;team_keys={teamKey};out=available_draft_picks?format=json`
+      with HTTP 200, `application/json; charset=utf-8`. A hockey league whose settings say
+      `can_trade_draft_picks = 1` returned a per-team `available_draft_picks.picks` array of `{ pick: { round } }`
+      with rounds 1-19 and no `cost`, `pick`, or original-team field on this host with this query. Two team keys in one
+      request returned both teams' lists. The adapter's own read, given the decrypted stored cookie, returned the same
+      rounds through `readAvailableDraftPicks`, so the host, path, and payload shape are proven end to end. No crumb was
+      needed for the read.
+- [x] Add a pick asset to the provider port: round, source team, destination team, with the league's
       `tradeDraftPicks` capability gating it.
-- [ ] Validate a pick against the league's available picks and the team that owns it; refuse a pick the league does
+- [x] Validate a pick against the league's available picks and the team that owns it; refuse a pick the league does
       not allow with the reason, never silently ignore it.
-- [ ] Carry picks through a proposal item, the order, submission and the reads, in league terms: a first-round
+- [x] Carry picks through a proposal item, the order, submission and the reads, in league terms: a first-round
       pick, from whom, to whom.
-- [ ] Report whether our own writes reach the Android host with our stored credential, and record the evidence
-      either way; if they do not, say so rather than shipping a feature that cannot execute.
+- [ ] Prove whether our own writes reach the Android host with our stored credential; if they do not, say so rather
+      than shipping a feature that cannot execute. This change forbade a live write, so execution is unproven: the
+      review publishes `tradeProposal` with `assets: [player]` and a plain reason, and submitting a pick trade skips
+      it with that reason and sends nothing.
 
 **Verify**: a pick proposal is accepted by validation, appears on the review with both sides named, and either
-executes through a proven host or is refused with the true reason. `M`
+executes through a proven host or is refused with the true reason. `M` — accepted and reviewed; execution is
+refused with the true reason until the app write host is proven.
 
 ## G. Provider boundary and simplification
 
