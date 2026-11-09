@@ -45,6 +45,8 @@ it.effect(
       assert.strictEqual(groups[0]?.leagueKey, leagueKey);
       assert.strictEqual(groups[0]?.players.length, 3);
       assert.match(groups[0]?.players[0]?.playerKey ?? "", /^[0-9]+\.p\.[0-9]+$/u);
+      assert.strictEqual(groups[0]?.players[0]?.proTeamKey, "nfl.t.2");
+      assert.strictEqual(groups[0]?.players[0]?.proTeamAbbreviation, "Buf");
     }).pipe(Effect.provide(testLayer(recording.client)));
   },
 );

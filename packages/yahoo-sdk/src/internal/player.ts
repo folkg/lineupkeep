@@ -91,6 +91,7 @@ function summariesOf(
         displayPosition: player.display_position,
         eligiblePositions: (player.eligible_positions ?? []).map(({ position }) => position),
         proTeamAbbreviation: optionalNonEmpty(player.editorial_team_abbr),
+        proTeamKey: optionalNonEmpty(player.editorial_team_key),
         ownershipType: player.ownership?.ownership_type,
         percentOwned: yield* percentOf(player.percent_owned, operation, "percent_owned"),
         percentStarted: yield* percentOf(player.percent_started, operation, "percent_started"),
@@ -336,6 +337,7 @@ export type YahooPlayerSummary = {
   readonly displayPosition: string;
   readonly eligiblePositions: ReadonlyArray<string>;
   readonly proTeamAbbreviation?: string;
+  readonly proTeamKey?: string;
   readonly ownershipType?: string;
   readonly percentOwned?: YahooPercent;
   readonly percentStarted?: YahooPercent;
@@ -478,6 +480,7 @@ const SearchPlayerPayload = Schema.Struct({
   display_position: Schema.NonEmptyString,
   eligible_positions: Schema.optional(Schema.Array(Schema.Struct({ position: Schema.String }))),
   editorial_team_abbr: Schema.optional(Schema.String),
+  editorial_team_key: Schema.optional(Schema.String),
   ownership: Schema.optional(Schema.Struct({ ownership_type: Schema.optional(Schema.String) })),
   percent_owned: Schema.optional(PercentOwned),
   percent_started: Schema.optional(PercentOwned),

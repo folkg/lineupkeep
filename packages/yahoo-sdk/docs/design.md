@@ -116,7 +116,8 @@ GET https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_
   responses place the league directly in `leagues[]`; the decoder accepts both
   forms and the recorded payload is a package fixture. The SDK implements this
   shape as `players.search`, which takes several league keys and returns grouped
-  results.
+  results. Each summary carries the provider's `editorial_team_key` as
+  `proTeamKey` beside its abbreviation.
 
 #### 4. Game-wide player pool with paging and position expansion
 
