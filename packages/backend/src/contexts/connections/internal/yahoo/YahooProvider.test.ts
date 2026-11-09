@@ -4499,6 +4499,117 @@ it.effect("refuses a league team redirect through PublicInternet", () => {
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
+it.effect("reads a week roster through the SDK transport", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflRoster));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    yield* provider.readRoster({
+      ...sessionInput,
+      providerTeamKey: "466.l.4000.t.1",
+      period: { type: "week", week: 6 },
+    });
+
+    const call = internet.calls[0];
+    if (call === undefined) {
+      return yield* Effect.die("expected a roster request");
+    }
+    assert.strictEqual(
+      call.url.href,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4000.t.1/roster;week=6/players;out=opponent,starting_status,transactions?format=json",
+    );
+    assert.strictEqual(call.method, "GET");
+    assert.deepStrictEqual(Object.keys(call.headers).sort(), ["accept", "cookie"]);
+    assert.strictEqual(call.headers["accept"], "application/json");
+    assert.strictEqual(call.headers["cookie"], Redacted.value(sessionInput.session));
+    assert.isNull(call.body);
+    assert.deepStrictEqual(call.options, {
+      timeoutMs: 30_000,
+      maxResponseBytes: 4_194_304,
+    });
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect(
+  "maps an SDK session rejection during a roster read into the provider's session vocabulary",
+  () => {
+    const internet = recordingInternet(
+      () =>
+        new Response(JSON.stringify({ error: { description: "Invalid cookie" } }), { status: 401 }),
+    );
+    return Effect.gen(function* () {
+      const provider = yield* testProvider;
+
+      const failure = yield* Effect.flip(
+        provider.readRoster({
+          ...sessionInput,
+          providerTeamKey: "466.l.4000.t.1",
+          period: { type: "week", week: 6 },
+        }),
+      );
+
+      if (failure._tag !== "provider.session_rejected") {
+        return assert.fail(`expected a session rejection, got ${failure._tag}`);
+      }
+      assert.strictEqual(failure.status, 401);
+      assert.strictEqual(failure.detail, "Invalid cookie");
+    }).pipe(Effect.provide(yahooLayer(internet)));
+  },
+);
+
+it.effect(
+  "maps an SDK server failure during a roster read into the provider's request vocabulary",
+  () => {
+    const internet = recordingInternet(
+      () =>
+        new Response(JSON.stringify({ error: { description: "Upstream failed" } }), {
+          status: 500,
+        }),
+    );
+    return Effect.gen(function* () {
+      const provider = yield* testProvider;
+
+      const failure = yield* Effect.flip(
+        provider.readRoster({
+          ...sessionInput,
+          providerTeamKey: "466.l.4000.t.1",
+          period: { type: "week", week: 6 },
+        }),
+      );
+
+      if (failure._tag !== "provider.request_failed") {
+        return assert.fail(`expected a request failure, got ${failure._tag}`);
+      }
+      assert.strictEqual(failure.status, 500);
+    }).pipe(Effect.provide(yahooLayer(internet)));
+  },
+);
+
+it.effect("treats an unscoped roster rejection as a request failure, not a period mismatch", () => {
+  const internet = recordingInternet(
+    () =>
+      new Response(JSON.stringify({ error: { description: "Synthetic provider rejection" } }), {
+        status: 400,
+      }),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const failure = yield* Effect.flip(
+      provider.readRoster({
+        ...sessionInput,
+        providerTeamKey: "466.l.4000.t.1",
+        period: undefined,
+      }),
+    );
+
+    if (failure._tag !== "provider.request_failed") {
+      return assert.fail(`expected a request failure, got ${failure._tag}`);
+    }
+    assert.strictEqual(failure.status, 400);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
 type RecordedRequest = {
   readonly url: URL;
   readonly method: string;

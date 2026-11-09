@@ -13,14 +13,21 @@ import {
   ProviderSessionRejected,
 } from "#contexts/connections/Provider.ts";
 import type {
+  PlayerWeekOpponent,
   ProviderFailure,
   ProviderLeagueTeam,
   ProviderOperation,
   ProviderReadFailure,
+  ProviderRoster,
+  ProviderRosterPlayer,
+  ProviderRosterSlot,
+  ProviderStartingLineup,
+  ProviderTransactionTrend,
 } from "#contexts/connections/Provider.ts";
 import type { PublicInternet } from "#runtime/PublicInternet.ts";
 
 import { yahooReadDeadlineMillis, yahooReadResponseLimitBytes } from "./YahooLimits.ts";
+import { yahooPlayerStatus } from "./YahooLineup.ts";
 
 export const yahooSdkContext = (
   internet: PublicInternet["Service"],
@@ -51,6 +58,28 @@ export const readLeagueTeamsThroughSdk = (
       Effect.mapError((error) => providerReadFailureOf(operation, error)),
     );
     return teams.map(providerLeagueTeamOf);
+  });
+
+export const readRosterThroughSdk = (
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  teamKey: string,
+  coverage: ProviderRosterCoverage | undefined,
+): Effect.Effect<ProviderRoster, ProviderReadFailure> =>
+  Effect.gen(function* () {
+    const session = yield* Yahoo.makeSession(cookie).pipe(
+      Effect.mapError(() => ProviderSessionRejected.make({ operation })),
+    );
+    const roster = yield* Yahoo.rosters
+      .forTeam({ teamKey, ...(coverage === undefined ? {} : { coverage }) })
+      .pipe(
+        Yahoo.Retry.none,
+        Effect.provideContext(Context.add(context, Yahoo.Credentials, Effect.succeed(session))),
+        Effect.provideService(Tracer.DisablePropagation, true),
+        Effect.mapError((error) => rosterFailureOf(operation, coverage, error)),
+      );
+    return providerRosterOf(teamKey, roster);
   });
 
 export const validateSessionThroughSdk = (
@@ -86,6 +115,98 @@ function providerLeagueTeamOf(team: Yahoo.YahooLeagueTeam): ProviderLeagueTeam {
   };
 }
 
+function providerRosterOf(teamKey: string, roster: Yahoo.YahooRoster): ProviderRoster {
+  return {
+    providerTeamKey: teamKey,
+    providerLeagueKey: roster.leagueKey,
+    coverage: roster.coverage,
+    players: roster.players.map(providerRosterPlayerOf),
+  };
+}
+
+function providerRosterPlayerOf(player: Yahoo.YahooRosterPlayer): ProviderRosterPlayer {
+  const opponent = scheduledOpponent(player.opponent);
+  return {
+    providerPlayerKey: player.playerKey,
+    name: player.name,
+    displayPosition: player.displayPosition,
+    primaryPosition: player.primaryPosition,
+    positionType: player.positionType,
+    proTeamAbbreviation: player.proTeamAbbreviation,
+    eligiblePositions: player.eligiblePositions,
+    slot: rosterSlotOf(player.selectedPosition.position),
+    isEditable: player.editable ?? null,
+    injuryCode: player.statusCode,
+    injuryDetail: player.statusDetail,
+    status: yahooPlayerStatus(player.statusCode),
+    byeWeek: player.byeWeek ?? null,
+    scheduled: opponent !== undefined,
+    opponent,
+    startingLineup: startingLineupOf(player.startingStatus?.starting),
+    undroppable: player.undroppable ?? null,
+    transactionTrend: transactionTrendOf(player.transactions),
+  };
+}
+
+export function rosterSlotOf(rawValue: string): ProviderRosterSlot {
+  return rawValue === ""
+    ? {
+        status: "unverified",
+        rawValue,
+        reason:
+          "Your league published an empty lineup slot for this player, so the slot and the position eligibility it would establish are unverified.",
+      }
+    : { status: "verified", slot: rawValue };
+}
+
+export function scheduledOpponent(
+  opponent: string | null | undefined,
+): PlayerWeekOpponent | undefined {
+  const named =
+    opponent === undefined || opponent === null || opponent.trim() === "" ? undefined : opponent;
+  if (named === undefined || named === "Bye") {
+    return undefined;
+  }
+  return named.startsWith("@")
+    ? { opponent: named.slice(1), home: false }
+    : { opponent: named, home: true };
+}
+
+export function startingLineupOf(starting: boolean | undefined): ProviderStartingLineup {
+  return starting === undefined
+    ? "unconfirmed"
+    : starting
+      ? "confirmed-starting"
+      : "confirmed-not-starting";
+}
+
+type TransactionCounts = {
+  readonly adds?: number;
+  readonly drops?: number;
+};
+
+function isReadonlyArray<A>(value: ReadonlyArray<A> | A): value is ReadonlyArray<A> {
+  return Array.isArray(value);
+}
+
+export function transactionTrendOf(
+  value: TransactionCounts | ReadonlyArray<TransactionCounts> | undefined,
+): ProviderTransactionTrend {
+  const counts = isReadonlyArray(value) ? value[0] : value;
+  if (counts?.adds === undefined || counts.drops === undefined) {
+    return {
+      status: "not_published",
+      reason: "Your league published no add and drop counts for this player.",
+    };
+  }
+  return {
+    status: "published",
+    adds: counts.adds,
+    drops: counts.drops,
+    window: "provider_current_day",
+  };
+}
+
 function yahooSdkHttpClient(internet: PublicInternet["Service"]): HttpClient.HttpClient {
   return HttpClient.make((request, _url, signal) =>
     Effect.gen(function* () {
@@ -117,6 +238,22 @@ function yahooSdkHttpClient(internet: PublicInternet["Service"]): HttpClient.Htt
       ),
     ),
   );
+}
+
+function rosterFailureOf(
+  operation: ProviderOperation,
+  coverage: ProviderRosterCoverage | undefined,
+  error: Yahoo.YahooReadError,
+): ProviderReadFailure {
+  const failure = providerReadFailureOf(operation, error);
+  if (
+    failure._tag !== "provider.request_failed" ||
+    failure.status !== 400 ||
+    coverage === undefined
+  ) {
+    return failure;
+  }
+  return ProviderPeriodMismatch.make({ operation, requested: coverage, covered: null });
 }
 
 function sessionFailureOf(

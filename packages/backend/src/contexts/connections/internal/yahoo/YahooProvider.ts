@@ -54,13 +54,11 @@ import type {
   ProviderPlayerWeekFact,
   ProviderReadFailure,
   ProviderRemainingGames,
-  ProviderRoster,
   ProviderRosterChange,
   ProviderRosterConstraints,
   ProviderRosterCoverage,
   ProviderRosterPlayer,
   ProviderRosterPosition,
-  ProviderRosterSlot,
   ProviderSchedulePeriod,
   ProviderSchedulePlayer,
   ProviderScheduledGame,
@@ -76,7 +74,6 @@ import type {
   ProviderTransactionParty,
   ProviderTransactionPlayer,
   ProviderTransactionTeam,
-  ProviderTransactionTrend,
   ProviderShape,
   ProviderWriteResult,
 } from "#contexts/connections/Provider.ts";
@@ -95,6 +92,11 @@ import { scoreYahooRoster, yahooCapabilities, yahooPlayerStatus } from "./YahooL
 import type { YahooPlayerFacts, YahooStartRateCut, YahooStartRateSummary } from "./YahooLineup.ts";
 import {
   readLeagueTeamsThroughSdk,
+  readRosterThroughSdk,
+  rosterSlotOf,
+  scheduledOpponent,
+  startingLineupOf,
+  transactionTrendOf,
   validateSessionThroughSdk,
   yahooSdkContext,
 } from "./YahooSdk.ts";
@@ -301,32 +303,11 @@ export const yahooProvider = Effect.gen(function* () {
     yield* Effect.annotateCurrentSpan("provider.operation", "read_roster");
     const cookie = yield* sessionCookie(input, "read_roster");
     const teamKey = yield* ValidTeamKey(input.providerTeamKey, "read_roster");
-    const week = input.period?.type === "week" ? yield* ValidWeek(input.period.week) : undefined;
-    const date = input.period?.type === "date" ? input.period.date : undefined;
-    const periodSuffix =
-      week === undefined ? (date === undefined ? "" : `;date=${date}`) : `;week=${String(week)}`;
-    const payload = yield* readJson(internet, {
-      operation: "read_roster",
-      origin: readOrigin,
-      path: `/fantasy/v2/team/${teamKey}/roster${periodSuffix}/players;out=opponent,starting_status,transactions`,
-      query: { format: "json" },
-      cookie,
-      normalize: true,
-    }).pipe(
-      Effect.catchTag("provider.request_failed", (error) =>
-        Effect.fail(
-          error.status === 400 && input.period !== undefined
-            ? ProviderPeriodMismatch.make({
-                operation: "read_roster",
-                requested: input.period,
-                covered: null,
-              })
-            : error,
-        ),
-      ),
-    );
-    const decoded = yield* decodePayload(TeamRosterPayload, payload, "read_roster");
-    const roster = yield* rosterFromPayload(decoded, input.providerTeamKey, input.period);
+    const period =
+      input.period?.type === "week"
+        ? { type: "week" as const, week: yield* ValidWeek(input.period.week) }
+        : input.period;
+    const roster = yield* readRosterThroughSdk(sdk, "read_roster", cookie, teamKey, period);
     yield* Effect.annotateCurrentSpan("provider.player_count", roster.players.length);
     return roster;
   });
@@ -2249,90 +2230,6 @@ function weekWindow(
   });
 }
 
-function rosterFromPayload(
-  payload: typeof TeamRosterPayload.Type,
-  requestedTeamKey: string,
-  requestedPeriod: ProviderRosterCoverage | undefined,
-): Effect.Effect<ProviderRoster, ProviderResponseInvalid | ProviderPeriodMismatch> {
-  return Effect.gen(function* () {
-    const rows = yield* rosterPayloadRows(payload, requestedTeamKey);
-    const declaredWeek = rows.declared?.week;
-    const declaredDate = rows.declared?.date;
-    const leagueKey = providerLeagueKey(requestedTeamKey);
-    if (rows.coverageType === "week") {
-      const weeks = new Set(
-        rows.players.flatMap((player) =>
-          player.selected_position.week === undefined ? [] : [player.selected_position.week],
-        ),
-      );
-      if (weeks.size > 1) {
-        return yield* responseMismatch({ operation: "read_roster" });
-      }
-      const playerWeek = [...weeks][0];
-      if (declaredWeek !== undefined && playerWeek !== undefined && declaredWeek !== playerWeek) {
-        return yield* responseMismatch({ operation: "read_roster" });
-      }
-      const week = declaredWeek ?? playerWeek;
-      if (week === undefined) {
-        return yield* responseMismatch({ operation: "read_roster" });
-      }
-      const coverage = { type: "week" as const, week };
-      if (
-        requestedPeriod !== undefined &&
-        (requestedPeriod.type !== "week" || requestedPeriod.week !== week)
-      ) {
-        return yield* ProviderPeriodMismatch.make({
-          operation: "read_roster",
-          requested: requestedPeriod,
-          covered: coverage,
-        });
-      }
-      return {
-        providerTeamKey: requestedTeamKey,
-        providerLeagueKey: leagueKey,
-        coverage,
-        players: rows.players.map(toRosterPlayer),
-      };
-    }
-    if (rows.coverageType === "date") {
-      const dates = new Set(
-        rows.players.flatMap((player) =>
-          player.selected_position.date === undefined ? [] : [player.selected_position.date],
-        ),
-      );
-      if (dates.size > 1) {
-        return yield* responseMismatch({ operation: "read_roster" });
-      }
-      const playerDate = [...dates][0];
-      if (declaredDate !== undefined && playerDate !== undefined && declaredDate !== playerDate) {
-        return yield* responseMismatch({ operation: "read_roster" });
-      }
-      const date = declaredDate ?? playerDate;
-      if (date === undefined) {
-        return yield* responseMismatch({ operation: "read_roster" });
-      }
-      const coverage = { type: "date" as const, date };
-      if (
-        requestedPeriod !== undefined &&
-        (requestedPeriod.type !== "date" || requestedPeriod.date !== date)
-      ) {
-        return yield* ProviderPeriodMismatch.make({
-          operation: "read_roster",
-          requested: requestedPeriod,
-          covered: coverage,
-        });
-      }
-      return {
-        providerTeamKey: requestedTeamKey,
-        providerLeagueKey: leagueKey,
-        coverage,
-        players: rows.players.map(toRosterPlayer),
-      };
-    }
-    return yield* responseMismatch({ operation: "read_roster" });
-  });
-}
-
 function leagueRosterFromPayload(
   team: (typeof LeagueRostersPayload.Type)["league"]["teams"][number],
   requestedLeagueKey: string,
@@ -2586,7 +2483,7 @@ function scheduleDates(period: {
 }
 
 function toRosterPlayer(player: typeof LeagueRosterPlayerPayload.Type): ProviderRosterPlayer {
-  const eligiblePositions = (player.eligible_positions ?? []).map(({ position }) => position);
+  const opponent = scheduledOpponent(player.opponent);
   return {
     providerPlayerKey: player.player_key,
     name: player.name.full,
@@ -2594,57 +2491,26 @@ function toRosterPlayer(player: typeof LeagueRosterPlayerPayload.Type): Provider
     primaryPosition: player.primary_position,
     positionType: optionalNonEmpty(player.position_type),
     proTeamAbbreviation: optionalNonEmpty(player.editorial_team_abbr ?? ""),
-    eligiblePositions,
+    eligiblePositions: (player.eligible_positions ?? []).map(({ position }) => position),
     slot: rosterSlotOf(player.selected_position.position),
     isEditable: player.is_editable ?? null,
     injuryCode: optionalNonEmpty(player.status),
     injuryDetail: optionalNonEmpty(player.injury_note) ?? optionalNonEmpty(player.status_full),
     status: yahooPlayerStatus(optionalNonEmpty(player.status)),
     byeWeek: player.bye_weeks?.week ?? null,
-    scheduled: scheduledIn(player.opponent),
-    opponent: scheduledOpponent(player.opponent),
-    startingLineup: startingLineupIn(player.starting_status),
+    scheduled: opponent !== undefined,
+    opponent,
+    startingLineup: startingLineupOf(startingFlagOf(player.starting_status)),
     undroppable: player.is_undroppable ?? null,
     transactionTrend: transactionTrendOf(player.transactions),
   };
 }
 
-function scheduledIn(opponent: string | null | undefined): boolean {
-  return scheduledOpponent(opponent) !== undefined;
-}
-
-function rosterSlotOf(rawValue: string): ProviderRosterSlot {
-  return rawValue === ""
-    ? {
-        status: "unverified",
-        rawValue,
-        reason:
-          "Your league published an empty lineup slot for this player, so the slot and the position eligibility it would establish are unverified.",
-      }
-    : { status: "verified", slot: rawValue };
-}
-
-function scheduledOpponent(
-  opponent: string | null | undefined,
-): { readonly opponent: string; readonly home: boolean } | undefined {
-  const named = optionalNonEmpty(opponent ?? "");
-  if (named === undefined || named === "Bye") {
-    return undefined;
-  }
-  return named.startsWith("@")
-    ? { opponent: named.slice(1), home: false }
-    : { opponent: named, home: true };
-}
-
-function startingLineupIn(
+function startingFlagOf(
   status: ReadonlyArray<typeof StartingStatus.Type> | undefined,
-): ProviderRosterPlayer["startingLineup"] {
-  if (status?.some((entry) => entry.is_starting === 1) === true) {
-    return "confirmed-starting";
-  }
-  return status?.some((entry) => entry.is_starting === 0) === true
-    ? "confirmed-not-starting"
-    : "unconfirmed";
+): boolean | undefined {
+  const starting = status?.find((entry) => entry.is_starting === 0 || entry.is_starting === 1);
+  return starting === undefined ? undefined : starting.is_starting === 1;
 }
 
 function pitcherSlotOf(league: ProviderLeagueSettings): string | undefined {
@@ -3274,24 +3140,6 @@ function toSearchPlayer(
     overallRank: searchRank(player.player_ranks, "OR", season),
     statValue: statId === undefined ? null : searchStatValue(player.player_stats, statId),
     transactionTrend: transactionTrendOf(player.transactions),
-  };
-}
-
-function transactionTrendOf(
-  value: typeof PlayerTransactions.Type | undefined,
-): ProviderTransactionTrend {
-  const counts = value === undefined ? undefined : singleEntry(value);
-  if (counts?.adds === undefined || counts.drops === undefined) {
-    return {
-      status: "not_published",
-      reason: "Your league published no add and drop counts for this player.",
-    };
-  }
-  return {
-    status: "published",
-    adds: counts.adds,
-    drops: counts.drops,
-    window: "provider_current_day",
   };
 }
 
