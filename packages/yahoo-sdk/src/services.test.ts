@@ -484,13 +484,11 @@ it.effect("reads transactions with instant timestamps and both movement sides", 
     assert.strictEqual(transaction.players.length, 2);
     assert.deepStrictEqual(transaction.players[0]?.movement, {
       kind: "add",
-      rawType: "add",
       from: undefined,
       to: { teamKey: "466.l.4000.t.1", name: "Synthetic Team" },
     });
     assert.deepStrictEqual(transaction.players[1]?.movement, {
       kind: "drop",
-      rawType: "drop",
       from: { teamKey: "466.l.4000.t.1", name: "Synthetic Team" },
       to: undefined,
     });
@@ -577,7 +575,6 @@ it.effect("reads pending trade offers with parties, note, and pick movement", ()
       },
     ]);
     assert.strictEqual(offer.players[0]?.movement.kind, "pending_trade");
-    assert.strictEqual(offer.players[0]?.movement.rawType, "pending_trade");
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
 

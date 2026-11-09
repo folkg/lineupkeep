@@ -92,7 +92,7 @@ The multi-league roster read is owned-team scoped because Yahoo's `users;use_log
 
 Request schemas and response types are public. Wire payloads are not: every decoder takes `unknown`, validates the provider's positional JSON shape, and returns the named response type. Unknown or absent fields are documented where they matter; missing statistics stay `null`, never zero. The package does not export raw wire schemas.
 
-A transaction player's movement carries the SDK's normalised `kind` and the provider's own `rawType`. `kind` is one of `add`, `drop`, `trade`, or `pending_trade`, with `other` for a movement type the SDK does not know; `rawType` keeps the provider's exact word.
+A transaction player's movement kind is one of `add`, `drop`, `trade`, or `pending_trade`, with `other` for a movement type the SDK does not know.
 
 ## Writes and outcomes
 

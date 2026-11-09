@@ -561,12 +561,13 @@ fallback. The same review found and reworked one more, and kept the deliberate d
 - **Changed — zero acquisition limits.** The SDK no longer drops a declared zero `max_weekly_adds` or
   `max_adds`; the port publishes the declared number. The games-played and innings-pitched caps keep
   the adapter's zero-means-no-cap policy.
-- **Kept — the SDK's raw movement type.** `rawType` remains beside `kind` so a caller can read the
-  provider's exact word, including a movement type the SDK does not know. The port publishes the kind.
+- **Removed — redundant raw movement type.** `kind` now carries every known provider movement type, so
+  the extra `rawType` field is gone.
 - **Kept — `canRespond` number-to-boolean.** The SDK reports the provider's number; the port's question
   is a boolean.
-- **Kept — unknown kinds and transaction types.** `other` is the forward-compatible catch-all. The SDK
-  keeps the raw movement type; the port does not invent a category it does not know.
+- **Kept — unknown kinds and transaction types.** `other` is the forward-compatible catch-all for a
+  movement or transaction type the SDK does not know; the port publishes the same `other` rather than
+  invent a category.
 - **Kept — league formats, roster coverage, and roster change.** The adapter derives these from the
   published scoring type, modifiers, weekly deadline, edit key, and slot names. No provider value is
   discarded.

@@ -108,7 +108,6 @@ function playerOf(player: typeof TransactionPlayerPayload.Type): YahooTransactio
         : player.eligible_positions.map(({ position }) => position),
     movement: {
       kind: movementKindOf(player.transaction_data.type),
-      rawType: player.transaction_data.type,
       from: teamOf(
         player.transaction_data.source_team_key,
         player.transaction_data.source_team_name,
@@ -208,7 +207,6 @@ export type YahooTransactionTeam = {
 
 export type YahooTransactionMovement = {
   readonly kind: "add" | "drop" | "trade" | "pending_trade" | "other";
-  readonly rawType: string;
   readonly from?: YahooTransactionTeam;
   readonly to?: YahooTransactionTeam;
 };
