@@ -71,6 +71,9 @@ export default ({ production }: { readonly production?: boolean }): KnipConfig =
       includeEntryExports: true,
       project: ["src/**/*.ts!", "scripts/**/*.ts", "!scripts/**/*.ts!", "!src/**/*Test.ts!"],
     },
+    "packages/yahoo-sdk": {
+      project: ["src/**/*.ts!", "!src/**/*Test.ts!"],
+    },
   },
 });
 

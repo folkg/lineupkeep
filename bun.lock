@@ -112,6 +112,7 @@
         "@electric-sql/pglite": "catalog:",
         "@lineupkeep/brand": "workspace:*",
         "@lineupkeep/lineup-solver": "workspace:*",
+        "@lineupkeep/yahoo-sdk": "workspace:*",
         "@xstate/effect": "catalog:",
         "better-auth": "catalog:",
         "drizzle-orm": "catalog:",
@@ -138,6 +139,15 @@
       },
       "devDependencies": {
         "fast-check": "4.10.2",
+      },
+    },
+    "packages/yahoo-sdk": {
+      "name": "@lineupkeep/yahoo-sdk",
+      "dependencies": {
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@effect/vitest": "catalog:",
       },
     },
     "tools": {
@@ -607,6 +617,8 @@
     "@lineupkeep/tools": ["@lineupkeep/tools@workspace:tools"],
 
     "@lineupkeep/web": ["@lineupkeep/web@workspace:apps/web"],
+
+    "@lineupkeep/yahoo-sdk": ["@lineupkeep/yahoo-sdk@workspace:packages/yahoo-sdk"],
 
     "@mrleebo/prisma-ast": ["@mrleebo/prisma-ast@0.13.1", "", { "dependencies": { "chevrotain": "^10.5.0", "lilconfig": "^2.1.0" } }, "sha512-XyroGQXcHrZdvmrGJvsA9KNeOOgGMg1Vg9OlheUsBOSKznLMDl+YChxbkboRHvtFYJEMRYmlV3uoo/njCw05iw=="],
 

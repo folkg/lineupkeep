@@ -100,6 +100,15 @@ export default {
       },
     ),
     forbid(
+      "yahoo-sdk-is-self-contained",
+      "The Yahoo SDK owns the provider boundary; keep application, package, runtime, and transport-client code out of it so the provider wire vocabulary cannot depend on how the app is assembled.",
+      { path: "^packages/yahoo-sdk/src/" },
+      {
+        path: ["^packages/", "^apps/", "^infra/", "^e2e/", "^tools/"],
+        pathNot: ["^packages/yahoo-sdk/"],
+      },
+    ),
+    forbid(
       "database-utilities-only-used-by-repositories",
       "SQL utilities outside persistence bypass owned queries; gather domain commands in services and call the repository's atomic batch operation.",
       {

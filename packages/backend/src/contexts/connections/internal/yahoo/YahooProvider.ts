@@ -93,6 +93,7 @@ import {
 } from "./YahooLimits.ts";
 import { scoreYahooRoster, yahooCapabilities, yahooPlayerStatus } from "./YahooLineup.ts";
 import type { YahooPlayerFacts, YahooStartRateCut, YahooStartRateSummary } from "./YahooLineup.ts";
+import { readLeagueTeamsThroughSdk, yahooSdkContext } from "./YahooSdk.ts";
 
 const readOrigin = new URL("https://pub-api-ro.fantasysports.yahoo.com");
 const androidReadOrigin = new URL("https://pub-api-android-ro.fantasysports.yahoo.com");
@@ -156,6 +157,7 @@ type WriteOperation =
 
 export const yahooProvider = Effect.gen(function* () {
   const internet = yield* PublicInternet;
+  const sdk = yield* yahooSdkContext(internet);
 
   const validateSession = Effect.fn("YahooProvider.validateSession")(function* (
     input: ProviderSessionMaterial,
@@ -1238,28 +1240,7 @@ export const yahooProvider = Effect.gen(function* () {
     yield* Effect.annotateCurrentSpan("provider.operation", "read_league_teams");
     const cookie = yield* sessionCookie(input, "read_league_teams");
     const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_league_teams");
-    const payload = yield* readJson(internet, {
-      operation: "read_league_teams",
-      origin: readOrigin,
-      path: `/fantasy/v2/league/${leagueKey}/teams`,
-      query: { format: "json" },
-      cookie,
-      normalize: true,
-    });
-    const decoded = yield* decodePayload(LeagueTeamsPayload, payload, "read_league_teams");
-    if (
-      decoded.league.league_key !== leagueKey ||
-      decoded.league.teams.some((team) => providerLeagueKey(team.team_key) !== leagueKey)
-    ) {
-      return yield* responseMismatch({ operation: "read_league_teams" });
-    }
-    return decoded.league.teams.map((team) => ({
-      providerTeamKey: team.team_key,
-      providerLeagueKey: leagueKey,
-      name: team.name,
-      acquisitionUsage: acquisitionUsageOf(team.number_of_moves, team.roster_adds),
-      ...(team.faab_balance === undefined ? {} : { remainingBudget: team.faab_balance }),
-    }));
+    return yield* readLeagueTeamsThroughSdk(sdk, "read_league_teams", cookie, leagueKey);
   });
 
   const readAvailableDraftPicks = Effect.fn("YahooProvider.readAvailableDraftPicks")(function* (
@@ -4811,12 +4792,5 @@ const StandingsPayload = Schema.Struct({
         teams: Schema.Array(StandingsTeamPayload),
       }),
     ),
-  }),
-});
-
-const LeagueTeamsPayload = Schema.Struct({
-  league: Schema.Struct({
-    league_key: LeagueKey,
-    teams: Schema.Array(TeamPayload),
   }),
 });

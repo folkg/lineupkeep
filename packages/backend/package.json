@@ -33,6 +33,7 @@
     "@electric-sql/pglite": "catalog:",
     "@lineupkeep/brand": "workspace:*",
     "@lineupkeep/lineup-solver": "workspace:*",
+    "@lineupkeep/yahoo-sdk": "workspace:*",
     "@xstate/effect": "catalog:",
     "better-auth": "catalog:",
     "drizzle-orm": "catalog:",

@@ -1,0 +1,18 @@
+{
+  "name": "@lineupkeep/yahoo-sdk",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "imports": {
+    "#yahoo/*": "./src/*"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:"
+  }
+}

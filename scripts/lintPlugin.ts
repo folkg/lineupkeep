@@ -1074,13 +1074,14 @@ const providerTransactionVocabulary: ReadonlyArray<string> = [
 const sportOrLeagueComparison =
   /\b(?:sport|league)\s*[!=]==?\s*["'](?:football|hockey|baseball|basketball|nfl|nhl|mlb|nba)["']/gu;
 
-const providerScoringOwners = [
+const providerImplementationOwners = [
   "/contexts/connections/internal/yahoo/",
   "/contexts/connections/internal/provider-scoring/",
+  "/packages/yahoo-sdk/src/",
 ];
 
 const providerIdentityOwners = [
-  ...providerScoringOwners,
+  ...providerImplementationOwners,
   "/runtime/ApplicationLayer.ts",
   "/contracts/connections/providerLabels.ts",
   "/hosted-browser/src/provider.ts",
@@ -1095,7 +1096,7 @@ function isGenericSourceModule(filename: string): boolean {
   ) {
     return false;
   }
-  return !providerScoringOwners.some((owner) => normalized.includes(owner));
+  return !providerImplementationOwners.some((owner) => normalized.includes(owner));
 }
 
 function normalizedPath(filename: string): string {

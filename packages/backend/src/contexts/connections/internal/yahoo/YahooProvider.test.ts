@@ -4361,6 +4361,144 @@ it.effect("rejects league membership that names another league", () => {
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
+it.effect("reads league team membership through the SDK transport", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflLeagueTeams));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    yield* provider.readLeagueTeams({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+    });
+
+    const call = internet.calls[0];
+    if (call === undefined) {
+      return yield* Effect.die("expected a league team request");
+    }
+    assert.strictEqual(
+      call.url.href,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/teams?format=json",
+    );
+    assert.strictEqual(call.method, "GET");
+    assert.deepStrictEqual(Object.keys(call.headers).sort(), ["accept", "cookie"]);
+    assert.strictEqual(call.headers["accept"], "application/json");
+    assert.strictEqual(call.headers["cookie"], Redacted.value(sessionInput.session));
+    assert.isNull(call.body);
+    assert.deepStrictEqual(call.options, {
+      timeoutMs: 30_000,
+      maxResponseBytes: 4_194_304,
+    });
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("maps an SDK session rejection into the provider's session vocabulary", () => {
+  const internet = recordingInternet(
+    () =>
+      new Response(JSON.stringify({ error: { description: "Invalid cookie" } }), { status: 401 }),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const failure = yield* Effect.flip(
+      provider.readLeagueTeams({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+      }),
+    );
+
+    if (failure._tag !== "provider.session_rejected") {
+      return assert.fail(`expected a session rejection, got ${failure._tag}`);
+    }
+    assert.strictEqual(failure.status, 401);
+    assert.strictEqual(failure.detail, "Invalid cookie");
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("maps an SDK forbidden response into the provider's session vocabulary", () => {
+  const internet = recordingInternet(
+    () =>
+      new Response(JSON.stringify({ error: { description: "Access denied" } }), { status: 403 }),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const failure = yield* Effect.flip(
+      provider.readLeagueTeams({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+      }),
+    );
+
+    if (failure._tag !== "provider.session_rejected") {
+      return assert.fail(`expected a session rejection, got ${failure._tag}`);
+    }
+    assert.strictEqual(failure.status, 403);
+    assert.strictEqual(failure.detail, "Access denied");
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("maps an SDK server failure into the provider's request vocabulary", () => {
+  const internet = recordingInternet(
+    () =>
+      new Response(JSON.stringify({ error: { description: "Upstream failed" } }), { status: 500 }),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const failure = yield* Effect.flip(
+      provider.readLeagueTeams({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+      }),
+    );
+
+    if (failure._tag !== "provider.request_failed") {
+      return assert.fail(`expected a request failure, got ${failure._tag}`);
+    }
+    assert.strictEqual(failure.status, 500);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("maps an SDK parse failure into the provider's response vocabulary", () => {
+  const internet = recordingInternet(() => new Response("not-json", { status: 200 }));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const failure = yield* Effect.flip(
+      provider.readLeagueTeams({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+      }),
+    );
+
+    if (failure._tag !== "provider.response_invalid") {
+      return assert.fail(`expected a response rejection, got ${failure._tag}`);
+    }
+    assert.strictEqual(failure.field, "body");
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("refuses a league team redirect through PublicInternet", () => {
+  const internet = PublicInternet.fromTransport(() =>
+    Promise.resolve(
+      new Response(null, { status: 302, headers: { location: "https://evil.test" } }),
+    ),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const failure = yield* Effect.flip(
+      provider.readLeagueTeams({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+      }),
+    );
+
+    assert.instanceOf(failure, ProviderRequestFailed);
+    assert.isUndefined(failure.status);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
 type RecordedRequest = {
   readonly url: URL;
   readonly method: string;
