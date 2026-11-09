@@ -91,6 +91,7 @@ import {
   yahooNflTradeWithPicks,
   yahooNflPickOnlyTrade,
   yahooNflPendingTrades,
+  yahooNflPendingTradeTransaction,
   yahooNflEmptyTradeTransaction,
   yahooNflDraftResults,
   yahooNflRoster,
@@ -1160,6 +1161,33 @@ it.effect("reads the league's declared acquisition, trade, and games-cap rules",
     assert.strictEqual(league.tradeRatification, "vote");
     assert.strictEqual(league.tradeEndDate, "2026-11-20");
     assert.strictEqual(league.tradeObjectionDays, 2);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("keeps declared zero acquisition limits and treats a zero cap as absent", () => {
+  const internet = recordingInternet(() =>
+    jsonResponse(
+      yahooNflLeagueSettingsWithSettings({
+        max_weekly_adds: "0",
+        max_adds: "0",
+        max_games_played: "0",
+        max_innings_pitched: "0",
+      }),
+    ),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const league = yield* provider.readLeague({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      sport: "football",
+    });
+
+    assert.strictEqual(league.maxWeeklyAcquisitions, 0);
+    assert.strictEqual(league.maxSeasonAcquisitions, 0);
+    assert.strictEqual(league.maxGamesPlayed, undefined);
+    assert.strictEqual(league.maxInningsPitched, undefined);
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
@@ -3701,7 +3729,7 @@ it.effect("reads the owner's pending trade offers from the typed feed", () => {
           {
             providerPlayerKey: "466.p.20003",
             movement: {
-              kind: "other",
+              kind: "pending_trade",
               from: { providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival" },
               to: { providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" },
             },
@@ -3714,7 +3742,7 @@ it.effect("reads the owner's pending trade offers from the typed feed", () => {
           {
             providerPlayerKey: "466.p.20004",
             movement: {
-              kind: "other",
+              kind: "pending_trade",
               from: { providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" },
               to: { providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival" },
             },
@@ -3736,6 +3764,25 @@ it.effect("reads the owner's pending trade offers from the typed feed", () => {
         incomplete: undefined,
       },
     ]);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("publishes a pending trade transaction with its own type and movement", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflPendingTradeTransaction));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const transactions = yield* provider.readTransactions({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      providerTeamKey: undefined,
+      limit: 25,
+    });
+
+    const transaction = Array.getUnsafe(transactions, 0);
+    assert.strictEqual(transaction.type, "pending_trade");
+    assert.strictEqual(transaction.players[0]?.movement.kind, "pending_trade");
+    assert.isUndefined(transaction.incomplete);
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 

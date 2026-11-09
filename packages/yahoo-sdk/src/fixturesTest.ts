@@ -92,6 +92,41 @@ function leaguePayload(
 
 export const leagueSettingsPayload = leaguePayload(leagueAttributes, leagueSettings);
 
+export const leagueSettingsWithZeroLimits = leaguePayload(leagueAttributes, {
+  ...leagueSettings,
+  max_weekly_adds: "0",
+  max_adds: "0",
+  max_games_played: "0",
+  max_innings_pitched: "0",
+});
+
+export const pendingTradeAsTransactionPayload = {
+  fantasy_content: {
+    league: [
+      leagueAttributes,
+      {
+        transactions: {
+          "0": {
+            transaction: [
+              {
+                transaction_key: "466.l.4000.pt.7",
+                type: "pending_trade",
+                status: "proposed",
+                timestamp: "1791000000",
+                trader_team_key: "466.l.4000.t.2",
+                trader_team_name: "Synthetic Rival",
+                tradee_team_key: "466.l.4000.t.1",
+                tradee_team_name: "Synthetic Team",
+              },
+            ],
+          },
+          count: 1,
+        },
+      },
+    ],
+  },
+};
+
 export const leagueSettingsWithPartialWeekWindow = leaguePayload(
   { ...leagueAttributes, end_week: undefined },
   leagueSettings,

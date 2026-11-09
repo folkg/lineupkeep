@@ -53,8 +53,8 @@ export function decodeLeagueSettings(
         tradeRatifyType: optionalNonEmpty(settings.trade_ratify_type),
         tradeRejectTime: settings.trade_reject_time,
         canTradeDraftPicks: settings.can_trade_draft_picks,
-        maxWeeklyAdds: positiveLimit(settings.max_weekly_adds),
-        maxAdds: positiveLimit(settings.max_adds),
+        maxWeeklyAdds: settings.max_weekly_adds,
+        maxAdds: settings.max_adds,
         maxGamesPlayed: positiveLimit(settings.max_games_played),
         maxInningsPitched: positiveLimit(settings.max_innings_pitched),
         rosterPositions: settings.roster_positions.map(({ roster_position }) => ({

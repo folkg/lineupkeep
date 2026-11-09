@@ -1866,8 +1866,8 @@ function leagueSettings(
       draftStatus: settings.draftStatus,
       periodWindow,
       rosterCoverage,
-      maxGamesPlayed: settings.settings.maxGamesPlayed,
-      maxInningsPitched: settings.settings.maxInningsPitched,
+      maxGamesPlayed: declaredLimit(settings.settings.maxGamesPlayed),
+      maxInningsPitched: declaredLimit(settings.settings.maxInningsPitched),
       rosterConstraints: yahooRosterConstraints(rosterPositions),
       rosterPositions,
       statCategories: settings.settings.statCategories,
@@ -1877,6 +1877,10 @@ function leagueSettings(
       })),
     };
   });
+}
+
+function declaredLimit(limit: number | undefined): number | undefined {
+  return limit !== undefined && limit > 0 ? limit : undefined;
 }
 
 function tradeRatification(type: string | undefined): ProviderTradeRatification | undefined {
@@ -3141,7 +3145,7 @@ function providerTransactionPlayerOf(player: YahooTransactionPlayer): ProviderTr
   return {
     providerPlayerKey: player.playerKey,
     movement: {
-      kind: movementKind(player.movement.rawType),
+      kind: player.movement.kind,
       from: providerTransactionTeamOf(player.movement.from),
       to: providerTransactionTeamOf(player.movement.to),
     },
@@ -3220,6 +3224,8 @@ function transactionType(type: string): ProviderTransaction["type"] {
       return "add_drop";
     case "trade":
       return "trade";
+    case "pending_trade":
+      return "pending_trade";
     default:
       return type.startsWith("commish") ? "commissioner" : "other";
   }
@@ -3243,6 +3249,8 @@ function movementKind(type: string): ProviderTransactionMovement["kind"] {
       return "drop";
     case "trade":
       return "trade";
+    case "pending_trade":
+      return "pending_trade";
     default:
       return "other";
   }
@@ -3348,7 +3356,12 @@ function incompleteTransaction(
   }
   for (const player of players) {
     const movement = player.movement;
-    if (type === "trade" || movement.kind === "trade") {
+    if (
+      type === "trade" ||
+      type === "pending_trade" ||
+      movement.kind === "trade" ||
+      movement.kind === "pending_trade"
+    ) {
       if (
         movement.from === undefined ||
         movement.to === undefined ||
@@ -3394,11 +3407,10 @@ function incompleteTransaction(
       ...picks.map((pick) => pick.from?.providerTeamKey),
     ].filter((providerTeamKey): providerTeamKey is string => providerTeamKey !== undefined),
   );
-  if (type === "trade" && sendingTeams.size === 1) {
+  if ((type === "trade" || type === "pending_trade") && sendingTeams.size === 1) {
     return {
       code: "trade_return_unpublished",
-      detail:
-        "Your league published no returning player and no traded draft pick for this trade, so the return side cannot be reconstructed; do not treat this as a one-for-nothing trade.",
+      detail: `Your league published no returning player and no traded draft pick for this ${type === "pending_trade" ? "offer" : "trade"}, so the return side cannot be reconstructed; do not treat this as a one-for-nothing trade.`,
     };
   }
   return undefined;

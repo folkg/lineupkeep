@@ -1389,7 +1389,7 @@ const TransactionTeam = Schema.Struct({
 });
 
 const TransactionMovement = Schema.Struct({
-  kind: Schema.Literals(["add", "drop", "trade", "other"]),
+  kind: Schema.Literals(["add", "drop", "trade", "pending_trade", "other"]),
   from: Schema.NullOr(TransactionTeam),
   to: Schema.NullOr(TransactionTeam),
 });
@@ -1437,7 +1437,15 @@ const TransactionCompleteness = Schema.Union([
 
 const Transaction = Schema.Struct({
   occurredAt: Schema.String,
-  type: Schema.Literals(["add", "drop", "add_drop", "trade", "commissioner", "other"]),
+  type: Schema.Literals([
+    "add",
+    "drop",
+    "add_drop",
+    "trade",
+    "pending_trade",
+    "commissioner",
+    "other",
+  ]),
   status: Schema.optional(Schema.String),
   completeness: TransactionCompleteness,
   parties: Schema.optional(TransactionParties),

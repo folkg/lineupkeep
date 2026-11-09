@@ -147,6 +147,8 @@ function transactionTypeOf(type: string): YahooTransactionType {
       return "add_drop";
     case "trade":
       return "trade";
+    case "pending_trade":
+      return "pending_trade";
     default:
       return type.startsWith("commish") ? "commissioner" : "other";
   }
@@ -159,8 +161,9 @@ function movementKindOf(type: string): YahooTransactionMovement["kind"] {
     case "drop":
       return "drop";
     case "trade":
-    case "pending_trade":
       return "trade";
+    case "pending_trade":
+      return "pending_trade";
     default:
       return "other";
   }
@@ -189,7 +192,14 @@ export type YahooPendingTrade = {
   readonly picks: ReadonlyArray<YahooTransactionPick>;
 };
 
-export type YahooTransactionType = "add" | "drop" | "add_drop" | "trade" | "commissioner" | "other";
+export type YahooTransactionType =
+  | "add"
+  | "drop"
+  | "add_drop"
+  | "trade"
+  | "pending_trade"
+  | "commissioner"
+  | "other";
 
 export type YahooTransactionTeam = {
   readonly teamKey: string;
@@ -197,7 +207,7 @@ export type YahooTransactionTeam = {
 };
 
 export type YahooTransactionMovement = {
-  readonly kind: "add" | "drop" | "trade" | "other";
+  readonly kind: "add" | "drop" | "trade" | "pending_trade" | "other";
   readonly rawType: string;
   readonly from?: YahooTransactionTeam;
   readonly to?: YahooTransactionTeam;

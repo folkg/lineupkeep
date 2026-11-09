@@ -9,7 +9,9 @@ import {
   draftResultsPayload,
   leagueSettingsPayload,
   leagueSettingsWithPartialWeekWindow,
+  leagueSettingsWithZeroLimits,
   matchupsPayload,
+  pendingTradeAsTransactionPayload,
   pendingTradesPayload,
   rosterPayload,
   seasonPlayerDetailsPayload,
@@ -114,6 +116,18 @@ it.effect("reads league settings into named slots, categories, and modifiers", (
     ]);
     assert.strictEqual(league.settings.usesFaab, false);
     assert.strictEqual(league.settings.tradeRatifyType, "commish");
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("keeps declared zero acquisition limits and leaves zero caps absent", () => {
+  const recording = recordingClient(() => jsonResponse(leagueSettingsWithZeroLimits));
+  return Effect.gen(function* () {
+    const league = yield* client.readLeagueSettings({ session, leagueKey: "466.l.4000" });
+
+    assert.strictEqual(league.settings.maxWeeklyAdds, 0);
+    assert.strictEqual(league.settings.maxAdds, 0);
+    assert.isUndefined(league.settings.maxGamesPlayed);
+    assert.isUndefined(league.settings.maxInningsPitched);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
 
@@ -483,6 +497,21 @@ it.effect("reads transactions with instant timestamps and both movement sides", 
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
 
+it.effect("publishes pending_trade as its own transaction type", () => {
+  const recording = recordingClient(() => jsonResponse(pendingTradeAsTransactionPayload));
+  return Effect.gen(function* () {
+    const transactions = yield* client.readTransactions({
+      session,
+      leagueKey: "466.l.4000",
+      teamKey: undefined,
+      limit: 50,
+      offset: undefined,
+    });
+
+    assert.strictEqual(transactions[0]?.type, "pending_trade");
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
 it.effect("filters transactions by an owned team and paginates with start", () => {
   const recording = recordingClient(() => jsonResponse(transactionsPayload));
   return Effect.gen(function* () {
@@ -547,7 +576,7 @@ it.effect("reads pending trade offers with parties, note, and pick movement", ()
         original: { teamKey: "466.l.4000.t.1", name: "Synthetic Team" },
       },
     ]);
-    assert.strictEqual(offer.players[0]?.movement.kind, "trade");
+    assert.strictEqual(offer.players[0]?.movement.kind, "pending_trade");
     assert.strictEqual(offer.players[0]?.movement.rawType, "pending_trade");
   }).pipe(Effect.provide(testLayer(recording.client)));
 });

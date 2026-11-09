@@ -387,11 +387,11 @@ reads keep byte-identical requests:
 `GET /fantasy/v2/league/{leagueKey}/transactions;count={limit}[;start={offset}][;team_key={teamKey}]`,
 `GET /fantasy/v2/league/{leagueKey}/transactions;type=pending_trade;team_key={teamKey}`,
 and `GET /fantasy/v2/league/{leagueKey}/draftresults;out=players`, all with `?format=json`.
-`readPendingTrades` uses the SDK's `transactions.pendingTrades`, which keeps the provider's raw
-movement type beside its normalised kind, so a live `pending_trade` movement still publishes `other`.
-The two aggregate reads change their requests by construction; their
-published rows, ordering, limits, and failure vocabulary do not change. The measured saving is recorded
-below. The SDK transport replaces the adapter's `readJson` for these operations; the adapter path
+`readPendingTrades` uses the SDK's `transactions.pendingTrades`; its movement kind keeps the
+provider's `pending_trade` value as its own kind rather than folding it into `trade`. The two
+aggregate reads change their requests by construction; their published rows, ordering, limits, and
+failure vocabulary do not change. The measured saving is recorded below. The SDK transport replaces
+the adapter's `readJson` for these operations; the adapter path
 remains for every other read. `Yahoo.Retry.none` is installed at the port because the existing adapter
 has no read retry; enabling the SDK's transient retry would be a product decision, not a transport swap.
 
@@ -413,7 +413,7 @@ Yahoo's sentence as `detail` only when Yahoo actually supplied one.
 | `readPlayerHistory`        | `players.details`            | Clean per period, with the same period-resolution boundary.                                                                                                                                                                                                                                             |
 | `readMatchups`             | `matchups.week`              | **Migrated.** Same request and week handling; the SDK's week-coverage check publishes the same `ProviderPeriodMismatch`.                                                                                                                                                                                |
 | `readTransactions`         | `transactions.list`          | **Migrated.** Same request, limit, offset, and team filter; the adapter rebuilds parties and teams from the SDK's transaction shape.                                                                                                                                                                    |
-| `readPendingTrades`        | `transactions.pendingTrades` | **Migrated.** Same request; `canRespond` maps from the SDK's number to the port's boolean, and the adapter maps the SDK's raw movement type so a live `pending_trade` movement still publishes `other`.                                                                                                 |
+| `readPendingTrades`        | `transactions.pendingTrades` | **Migrated.** Same request; `canRespond` maps from the SDK's number to the port's boolean, and the SDK's `pending_trade` movement kind is published as `pending_trade`.                                                                                                                                 |
 | `readDraftResults`         | `draft.results`              | **Migrated.** Same request, direct shape mapping.                                                                                                                                                                                                                                                       |
 | `discoverTeams`            | `leagues.discover`           | **Migrated.** One aggregate read for both games replaces two per-game team reads and one settings read per league. Five live leagues: 7 requests → 1, median 1,709 ms → 311 ms, published rows byte-identical. `gameKey` maps to `league`/`sport`, and `provider` comes from the registry.              |
 | `readLeagueRosters`        | `rosters.forLeagues`         | **Not a swap.** The aggregate `users;use_login` read returns the signed-in manager's team only (1 against 10–13 live). A root league-scoped read returns every team, but its five-league response is 19.5 MB against the 4 MiB read bound, so the adapter keeps its per-league `teams;out=roster` read. |
@@ -435,7 +435,8 @@ enabled. `trades.propose` also accepts draft picks, which the port does not carr
 3. `rosters.forTeam` — done, with the date-scoped read, the roster field shape, and the 400-to-period-mismatch rule unchanged.
 4. `leagues.settings`, `matchups.week`, `transactions.list`, `transactions.pendingTrades`, and
    `draft.results` — done, with the league policy mapping, matchup week coverage, transaction parties
-   and teams, the pending-trade `canRespond` and raw movement kind, and the draft shape unchanged.
+   and teams, the pending-trade `canRespond`, its own `pending_trade` movement kind, and the draft
+   shape unchanged.
 5. `players.details` and `readPlayerHistory` — request-identical once period resolution is lifted
    above the port.
 6. Live-verify the aggregate reads (`leagues.discover`, `rosters.forLeagues`, `players.search`) before
@@ -523,12 +524,12 @@ enabled. `trades.propose` also accepts draft picks, which the port does not carr
 - **Transaction fields:** transaction key, occurrence time, type, status, trade parties, the teams the
   movements involve, players and their two ends, traded picks, and the incompleteness codes are
   unchanged. The adapter rebuilds the port's parties and team union from the SDK's `proposer`,
-  `receiver`, players, and picks, and maps movement `kind` from the SDK's raw movement type. A
-  transaction answer for another league is still `ProviderResponseInvalid`.
+  `receiver`, players, and picks, and publishes the SDK's movement kind directly. A transaction answer
+  for another league is still `ProviderResponseInvalid`.
 - **Pending-trade fields:** transaction key, proposed time, note, `canRespond`, proposer, receiver,
   unused roster spots, players and movements, traded picks, and incompleteness are unchanged. The SDK's
-  number becomes the port's boolean, and the SDK's raw `pending_trade` movement type becomes the
-  port's `other`. A pending-trade answer for another league is still `ProviderResponseInvalid`.
+  number becomes the port's boolean, and the SDK's `pending_trade` movement kind is published as
+  `pending_trade`. A pending-trade answer for another league is still `ProviderResponseInvalid`.
 - **Draft fields:** round, pick, team key, player key, and the optional player name are unchanged. A
   draft answer for another league is still `ProviderResponseInvalid`, now with field
   `league.draft_results.team_key`.
@@ -536,13 +537,44 @@ enabled. `trades.propose` also accepts draft picks, which the port does not carr
   the SDK marks the statement structured, the provider's sentence; a server status stays
   `ProviderRequestFailed`; a parse, shape, or identity failure stays `ProviderResponseInvalid`; a
   matchups week mismatch stays `ProviderPeriodMismatch`.
-- **Shape differences:** the SDK normalises a zero `max_weekly_adds` or `max_adds` to undefined where
-  the old adapter published `0`; it rejects a non-https league URL and a non-numeric matchup total where
-  the old decoder published a string URL or `null`; it also rejects a `team_remaining_games.week` that
-  disagrees with the request even when `total` is absent, where the old decoder ignored it. No recorded
-  live payload exercises any of these shapes. A matchup week above 99 is refused by the SDK's input
-  schema before the request; the old adapter forwarded it. The SDK keeps the raw movement type beside
-  its kind, so both transaction reads publish the same movement kinds as before.
+- **Shape differences:** the SDK exposes the league's declared acquisition numbers unchanged, so a
+  declared zero publishes zero; the adapter still treats a zero games-played or innings-pitched cap as
+  absent, because those fields mean a cap and zero means no cap. The SDK rejects a non-https league URL
+  and a non-numeric matchup total where the old decoder published a string URL or `null`; it also
+  rejects a `team_remaining_games.week` that disagrees with the request even when `total` is absent,
+  where the old decoder ignored it. No recorded live payload exercises any of these shapes. A matchup
+  week above 99 is refused by the SDK's input schema before the request; the old adapter forwarded it.
+  The SDK and the port both publish `pending_trade` as its own transaction type and movement kind, so
+  the offer's own vocabulary survives instead of falling into `other`.
+
+### Provider-vocabulary sweep
+
+The `pending_trade` collapse was not the only place a known provider value was falling through a
+fallback. The same review found and reworked one more, and kept the deliberate domain mappings:
+
+- **Changed — pending-trade movement kind.** The SDK's `YahooTransactionMovement.kind` and the port's
+  `ProviderTransactionMovement.kind` both include `pending_trade`; the live offer publishes
+  `pending_trade`.
+- **Changed — pending-trade transaction type.** The SDK's `YahooTransactionType` and the port's
+  `ProviderTransaction.type` both include `pending_trade`; a pending-trade row no longer reports
+  `other`.
+- **Changed — zero acquisition limits.** The SDK no longer drops a declared zero `max_weekly_adds` or
+  `max_adds`; the port publishes the declared number. The games-played and innings-pitched caps keep
+  the adapter's zero-means-no-cap policy.
+- **Kept — the SDK's raw movement type.** `rawType` remains beside `kind` so a caller can read the
+  provider's exact word, including a movement type the SDK does not know. The port publishes the kind.
+- **Kept — `canRespond` number-to-boolean.** The SDK reports the provider's number; the port's question
+  is a boolean.
+- **Kept — unknown kinds and transaction types.** `other` is the forward-compatible catch-all. The SDK
+  keeps the raw movement type; the port does not invent a category it does not know.
+- **Kept — league formats, roster coverage, and roster change.** The adapter derives these from the
+  published scoring type, modifiers, weekly deadline, edit key, and slot names. No provider value is
+  discarded.
+- **Kept — trade ratification and player status.** Known values map to the port's vocabulary; a value
+  the adapter was not taught is `unknown` rather than a guessed category. Player status also publishes
+  the provider's raw injury code.
+- **Kept — strict decoding.** A malformed total, a mismatched remaining-games week, a non-https league
+  URL, or a matchup week above 99 is refused rather than published as a guessed value.
 
 ### Aggregate reads against live leagues
 

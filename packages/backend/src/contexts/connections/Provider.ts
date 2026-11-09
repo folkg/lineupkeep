@@ -799,7 +799,7 @@ export type ProviderTransactionTeam = {
 };
 
 export type ProviderTransactionMovement = {
-  readonly kind: "add" | "drop" | "trade" | "other";
+  readonly kind: "add" | "drop" | "trade" | "pending_trade" | "other";
   readonly from: ProviderTransactionTeam | undefined;
   readonly to: ProviderTransactionTeam | undefined;
 };
@@ -843,7 +843,7 @@ type ProviderTransactionPick = {
 export type ProviderTransaction = {
   readonly transactionKey: string | undefined;
   readonly occurredAt: string;
-  readonly type: "add" | "drop" | "add_drop" | "trade" | "commissioner" | "other";
+  readonly type: "add" | "drop" | "add_drop" | "trade" | "pending_trade" | "commissioner" | "other";
   readonly status: string | undefined;
   readonly parties: ProviderTransactionParties | undefined;
   readonly teams: ReadonlyArray<ProviderTransactionTeam>;

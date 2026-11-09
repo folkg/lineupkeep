@@ -1934,6 +1934,82 @@ export const yahooNflPendingTrades = {
   },
 };
 
+export const yahooNflPendingTradeTransaction = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: [
+      {
+        league_key: "466.l.4000",
+        league_id: "4000",
+        name: "Synthetic NFL League",
+        url: "https://football.fantasysports.yahoo.com/f1/4000",
+      },
+      {
+        transactions: {
+          "0": {
+            transaction: [
+              {
+                transaction_key: "466.l.4000.pt.9",
+                type: "pending_trade",
+                status: "proposed",
+                timestamp: "1791000000",
+                trader_team_key: "466.l.4000.t.2",
+                trader_team_name: "Synthetic Rival",
+                tradee_team_key: "466.l.4000.t.1",
+                tradee_team_name: "Synthetic Team",
+              },
+              {
+                players: {
+                  "0": {
+                    player: [
+                      [
+                        { player_key: "466.p.20003" },
+                        { name: { full: "Synthetic Incoming" } },
+                        { editorial_team_abbr: "SYN" },
+                        { display_position: "WR" },
+                      ],
+                      {
+                        transaction_data: {
+                          type: "pending_trade",
+                          source_team_key: "466.l.4000.t.2",
+                          source_team_name: "Synthetic Rival",
+                          destination_team_key: "466.l.4000.t.1",
+                          destination_team_name: "Synthetic Team",
+                        },
+                      },
+                    ],
+                  },
+                  "1": {
+                    player: [
+                      [
+                        { player_key: "466.p.20004" },
+                        { name: { full: "Synthetic Outgoing" } },
+                        { editorial_team_abbr: "SYN" },
+                        { display_position: "RB" },
+                      ],
+                      {
+                        transaction_data: {
+                          type: "pending_trade",
+                          source_team_key: "466.l.4000.t.1",
+                          source_team_name: "Synthetic Team",
+                          destination_team_key: "466.l.4000.t.2",
+                          destination_team_name: "Synthetic Rival",
+                        },
+                      },
+                    ],
+                  },
+                  count: 2,
+                },
+              },
+            ],
+          },
+          count: 1,
+        },
+      },
+    ],
+  },
+};
+
 export const yahooNflPickOnlyTrade = {
   fantasy_content: {
     league: [
