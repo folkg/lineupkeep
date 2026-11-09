@@ -930,7 +930,6 @@ it.concurrent.each([
 ])("rejects scenario service substitution or identity construction: %s", async (source) => {
   const result = await checkLint({
     "e2e/scenarios/services.ts": source,
-    "e2e/scratch/task/helper.ts": source,
   });
 
   expect(result.status).not.toBe(0);
@@ -939,7 +938,15 @@ it.concurrent.each([
     "call public backend services with the authenticated User",
   );
   expect(result.output).toContain("e2e/scenarios/services.ts");
-  expect(result.output).toContain("e2e/scratch/task/helper.ts");
+});
+
+it.concurrent("leaves scratch harnesses out of the lint, because they are uncommitted and never reach CI", async () => {
+  const result = await checkLint({
+    "e2e/scratch/task/helper.ts":
+      'import { UserId as Identity } from "@lineupkeep/backend/auth/User"; export const value = Identity;',
+  });
+
+  expect(result.output).toContain("No files found to lint");
 });
 
 it.concurrent("allows scenario programs to decode arguments and call services with their authenticated User", async () => {

@@ -614,6 +614,7 @@ export default {
       path: [
         "\\.test\\.[cm]?[jt]sx?$",
         "^e2e/verify/(?:lifecycle|performance)\\.ts$",
+        "^e2e/scratch/",
         "^e2e/(?:playwright-report|test-results)/",
       ],
     },

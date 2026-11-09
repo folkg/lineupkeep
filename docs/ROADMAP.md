@@ -515,10 +515,10 @@ validated and reviewed but never offered.
       not allow with the reason, never silently ignore it.
 - [x] Carry picks through a proposal item, the order, submission and the reads, in league terms: a first-round
       pick, from whom, to whom.
-- [ ] Prove whether our own writes reach the Android host with our stored credential; if they do not, say so rather
-      than shipping a feature that cannot execute. This change forbade a live write, so execution is unproven: the
-      review publishes `tradeProposal` with `assets: [player]` and a plain reason, and submitting a pick trade skips
-      it with that reason and sends nothing.
+- [x] Say what execution can and cannot honour. The review publishes `tradeProposal` with `assets: [player]` and a
+      plain reason, and submitting a pick trade skips it with that reason and sends nothing.
+- [ ] Owner declined a live write proof on 9 November: picks stay review-only until a quiet way exists to prove the
+      app write host with our stored credential. Nothing is promised beyond what validation and review honour.
 
 **Verify**: a pick proposal is accepted by validation, appears on the review with both sides named, and either
 executes through a proven host or is refused with the true reason. `M` — accepted and reviewed; execution is

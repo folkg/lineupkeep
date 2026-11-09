@@ -904,13 +904,12 @@ it("permits features and app-shell to compose brand compositions built on neutra
   expect(result.status, result.output).toBe(0);
 });
 
-it.each(["scratch/task/helper.ts"])(
+it.each(["scenarios/task/helper.ts"])(
   "rejects backend internal imports from e2e/%s",
   async (file) => {
     const path = `e2e/${file}`;
-    const depth = file.startsWith("scratch") ? "../../../" : "../";
     const result = await checkArchitecture({
-      [path]: `export { repository } from "${depth}packages/backend/src/contexts/notes/internal/NoteRepository.ts";`,
+      [path]: `export { repository } from "../../../packages/backend/src/contexts/notes/internal/NoteRepository.ts";`,
       "packages/backend/src/contexts/notes/internal/NoteRepository.ts":
         "export const repository = {};",
     });
@@ -922,6 +921,17 @@ it.each(["scratch/task/helper.ts"])(
     );
   },
 );
+
+it("leaves scratch harnesses out of the architecture gate, because another agent's checkout must not fail ours", async () => {
+  const result = await checkArchitecture({
+    "e2e/scratch/task/provider-check.ts":
+      'export { YahooProvider } from "../../../packages/backend/src/contexts/connections/internal/yahoo/YahooProvider.ts";',
+    "packages/backend/src/contexts/connections/internal/yahoo/YahooProvider.ts":
+      "export const YahooProvider = {};",
+  });
+
+  expect(result.status, result.output).toBe(0);
+});
 
 it("rejects persistence drivers in verification scenarios", async () => {
   const result = await checkArchitecture({

@@ -623,6 +623,7 @@ export default defineConfig({
     "**/dist/**/*",
     "**/.tanstack/**/*",
     "apps/web/src/routeTree.gen.ts",
+    "e2e/scratch/**/*",
   ],
   rules: {
     ...correctnessRules,
