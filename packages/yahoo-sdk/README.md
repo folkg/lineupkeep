@@ -111,6 +111,8 @@ Yahoo has no separate counter-offer action. `trades.counter` takes the incoming 
 
 All errors are `Schema.TaggedError` classes. When Yahoo supplies a sentence, it is carried verbatim in `message`: no paraphrase, no truncation, and no whitespace normalisation. Only crumb values are redacted.
 
+Status errors carry the provider's HTTP `status`. `GatewayTimeout` omits it only when the SDK's own deadline fired, so a caller can tell a 408 or 504 from a local timeout. `Unauthorized` and `Forbidden` also carry `structured`: `true` when `message` came from a provider JSON or XML envelope, and `false` when it is raw body text. A caller that publishes refusal detail should use `structured` rather than echo an arbitrary body.
+
 | Error                                                                                    | Meaning                                                       |
 | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | `ConfigError`                                                                            | The cookie or provider configuration is missing or malformed  |

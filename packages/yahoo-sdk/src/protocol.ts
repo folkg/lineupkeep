@@ -203,17 +203,22 @@ function readCrumb(
           }),
       ),
     );
+    const crumbStatement = providerMessage(text);
     if (response.status === 401) {
       return yield* Effect.fail(
         new Unauthorized({
-          message: providerMessage(text) ?? "Yahoo rejected the session.",
+          message: crumbStatement?.text ?? "Yahoo rejected the session.",
+          status: 401,
+          structured: crumbStatement?.structured ?? false,
         }),
       );
     }
     if (response.status === 403) {
       return yield* Effect.fail(
         new Forbidden({
-          message: providerMessage(text) ?? "Yahoo refused access to the crumb.",
+          message: crumbStatement?.text ?? "Yahoo refused access to the crumb.",
+          status: 403,
+          structured: crumbStatement?.structured ?? false,
         }),
       );
     }
@@ -223,7 +228,7 @@ function readCrumb(
           operation: "read_crumb",
           reason: "request_failed",
           status: response.status,
-          ...(providerMessage(text) === undefined ? {} : { message: providerMessage(text) }),
+          ...(crumbStatement === undefined ? {} : { message: crumbStatement.text }),
         }),
       );
     }
@@ -270,15 +275,24 @@ function decode(
           : payload;
       return yield* args.decode(normalized, args.input);
     }
-    const message = providerMessage(text);
+    const statement = providerMessage(text);
+    const message = statement?.text;
     if (args.response.status === 401) {
       return yield* Effect.fail(
-        new Unauthorized({ message: message ?? "Yahoo rejected the session." }),
+        new Unauthorized({
+          message: message ?? "Yahoo rejected the session.",
+          status: 401,
+          structured: statement?.structured ?? false,
+        }),
       );
     }
     if (args.response.status === 403) {
       return yield* Effect.fail(
-        new Forbidden({ message: message ?? "Yahoo refused this request." }),
+        new Forbidden({
+          message: message ?? "Yahoo refused this request.",
+          status: 403,
+          structured: statement?.structured ?? false,
+        }),
       );
     }
     if (message !== undefined && /premium/iu.test(message)) {
@@ -424,57 +438,70 @@ function statusFailure(status: number, message: string | undefined): StatusError
     case 400:
       return new BadRequest({
         message: message ?? "Yahoo rejected the request.",
+        status,
       });
     case 404:
       return new NotFound({
         message: message ?? "Yahoo could not find the requested resource.",
+        status,
       });
     case 408:
       return new GatewayTimeout({
         message: message ?? "Yahoo did not answer in time.",
+        status,
       });
     case 409:
       return new Conflict({
         message: message ?? "Yahoo reported a conflicting change.",
+        status,
       });
     case 422:
       return new UnprocessableEntity({
         message: message ?? "Yahoo could not process the request.",
+        status,
       });
     case 423:
       return new Locked({
         message: message ?? "Yahoo locked the requested resource.",
+        status,
       });
     case 429:
       return new TooManyRequests({
         message: message ?? "Yahoo rate-limited the request.",
+        status,
       });
     case 500:
       return new InternalServerError({
         message: message ?? "Yahoo failed to answer the request.",
+        status,
       });
     case 502:
       return new BadGateway({
         message: message ?? "Yahoo returned an invalid upstream response.",
+        status,
       });
     case 503:
       return new ServiceUnavailable({
         message: message ?? "Yahoo is temporarily unavailable.",
+        status,
       });
     case 504:
       return new GatewayTimeout({
         message: message ?? "Yahoo did not answer in time.",
+        status,
       });
     default:
       return undefined;
   }
 }
 
-function providerMessage(text: string): string | undefined {
+function providerMessage(
+  text: string,
+): { readonly text: string; readonly structured: boolean } | undefined {
   const payload = parseJson(text);
   const fromJson = jsonMessage(payload);
   if (fromJson !== undefined) {
-    return withoutProviderSecrets(fromJson);
+    return { text: withoutProviderSecrets(fromJson), structured: true };
   }
   const xml =
     /<(?:description|message)>([\s\S]*?)<\/(?:description|message)>/iu.exec(text)?.[1] ??
@@ -482,11 +509,13 @@ function providerMessage(text: string): string | undefined {
   if (xml !== undefined) {
     const statement = statementText(xml);
     if (statement !== undefined) {
-      return withoutProviderSecrets(statement);
+      return { text: withoutProviderSecrets(statement), structured: true };
     }
   }
   const statement = statementText(text);
-  return statement === undefined ? undefined : withoutProviderSecrets(statement);
+  return statement === undefined
+    ? undefined
+    : { text: withoutProviderSecrets(statement), structured: false };
 }
 
 function jsonMessage(payload: unknown): string | undefined {

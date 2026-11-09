@@ -6,12 +6,16 @@ export class Unauthorized extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()("Unauthorized", {
   message: Schema.String,
+  status: Schema.optional(Schema.Number),
+  structured: Schema.Boolean,
 }) {}
 
 export class Forbidden extends Schema.TaggedError<Forbidden, { readonly brand: unique symbol }>()(
   "Forbidden",
   {
     message: Schema.String,
+    status: Schema.optional(Schema.Number),
+    structured: Schema.Boolean,
   },
 ) {}
 
@@ -19,6 +23,7 @@ export class BadRequest extends Schema.TaggedError<BadRequest, { readonly brand:
   "BadRequest",
   {
     message: Schema.String,
+    status: Schema.optional(Schema.Number),
   },
 ) {}
 
@@ -26,6 +31,7 @@ export class NotFound extends Schema.TaggedError<NotFound, { readonly brand: uni
   "NotFound",
   {
     message: Schema.String,
+    status: Schema.optional(Schema.Number),
   },
 ) {}
 
@@ -33,18 +39,23 @@ export class Conflict extends Schema.TaggedError<Conflict, { readonly brand: uni
   "Conflict",
   {
     message: Schema.String,
+    status: Schema.optional(Schema.Number),
   },
 ) {}
 
 export class UnprocessableEntity extends Schema.TaggedError<
   UnprocessableEntity,
   { readonly brand: unique symbol }
->()("UnprocessableEntity", { message: Schema.String }) {}
+>()("UnprocessableEntity", {
+  message: Schema.String,
+  status: Schema.optional(Schema.Number),
+}) {}
 
 export class Locked extends Schema.TaggedError<Locked, { readonly brand: unique symbol }>()(
   "Locked",
   {
     message: Schema.String,
+    status: Schema.optional(Schema.Number),
   },
 ) {}
 
@@ -53,30 +64,39 @@ export class TooManyRequests extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()("TooManyRequests", {
   message: Schema.String,
+  status: Schema.optional(Schema.Number),
 }) {}
 
 export class InternalServerError extends Schema.TaggedError<
   InternalServerError,
   { readonly brand: unique symbol }
->()("InternalServerError", { message: Schema.String }) {}
+>()("InternalServerError", {
+  message: Schema.String,
+  status: Schema.optional(Schema.Number),
+}) {}
 
 export class BadGateway extends Schema.TaggedError<BadGateway, { readonly brand: unique symbol }>()(
   "BadGateway",
   {
     message: Schema.String,
+    status: Schema.optional(Schema.Number),
   },
 ) {}
 
 export class ServiceUnavailable extends Schema.TaggedError<
   ServiceUnavailable,
   { readonly brand: unique symbol }
->()("ServiceUnavailable", { message: Schema.String }) {}
+>()("ServiceUnavailable", {
+  message: Schema.String,
+  status: Schema.optional(Schema.Number),
+}) {}
 
 export class GatewayTimeout extends Schema.TaggedError<
   GatewayTimeout,
   { readonly brand: unique symbol }
 >()("GatewayTimeout", {
   message: Schema.String,
+  status: Schema.optional(Schema.Number),
 }) {}
 
 export class ConfigError extends Schema.TaggedError<

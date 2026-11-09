@@ -93,7 +93,11 @@ import {
 } from "./YahooLimits.ts";
 import { scoreYahooRoster, yahooCapabilities, yahooPlayerStatus } from "./YahooLineup.ts";
 import type { YahooPlayerFacts, YahooStartRateCut, YahooStartRateSummary } from "./YahooLineup.ts";
-import { readLeagueTeamsThroughSdk, yahooSdkContext } from "./YahooSdk.ts";
+import {
+  readLeagueTeamsThroughSdk,
+  validateSessionThroughSdk,
+  yahooSdkContext,
+} from "./YahooSdk.ts";
 
 const readOrigin = new URL("https://pub-api-ro.fantasysports.yahoo.com");
 const androidReadOrigin = new URL("https://pub-api-android-ro.fantasysports.yahoo.com");
@@ -164,18 +168,7 @@ export const yahooProvider = Effect.gen(function* () {
   ) {
     yield* Effect.annotateCurrentSpan("provider.operation", "validate_session");
     const cookie = yield* sessionCookie(input, "validate_session");
-    const payload = yield* readJson(internet, {
-      operation: "validate_session",
-      origin: readOrigin,
-      path: "/fantasy/v2/users;use_login=1",
-      query: { format: "json" },
-      cookie,
-      normalize: true,
-    });
-    const session = yield* decodePayload(SessionPayload, payload, "validate_session");
-    if (session.users.length === 0) {
-      return yield* ProviderSessionRejected.make({ operation: "validate_session" });
-    }
+    yield* validateSessionThroughSdk(sdk, "validate_session", cookie);
   });
 
   const discoverTeams = Effect.fn("YahooProvider.discoverTeams")(function* (
@@ -4164,14 +4157,6 @@ const Flag: Schema.Codec<boolean, boolean | number | string> = Schema.Union([
     }),
   ),
 );
-
-const SessionPayload = Schema.Struct({
-  users: Schema.Array(
-    Schema.Struct({
-      guid: Schema.Union([Schema.String, Schema.Finite]),
-    }),
-  ),
-});
 
 const AcquisitionPayload = Schema.Struct({
   coverage_type: Schema.Literals(["week", "date"]),

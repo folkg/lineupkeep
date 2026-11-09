@@ -23,6 +23,7 @@ export function decodeSession(
       return yield* new Unauthorized({
         message:
           "Yahoo did not return a signed-in user for this session. Sign in again through the hosted browser.",
+        structured: false,
       });
     }
   });
@@ -223,6 +224,7 @@ export function decodeDiscoveredLeagues(
       return yield* new Unauthorized({
         message:
           "Yahoo did not return a signed-in user for this session. Sign in again through the hosted browser.",
+        structured: false,
       });
     }
     const leagues: Array<YahooDiscoveredLeague> = [];

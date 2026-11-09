@@ -6,6 +6,7 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
 
 import { Credentials, CredentialsFromSession } from "./credentials.ts";
+import type { YahooReadError } from "./errors.ts";
 import { Protocol, YahooProtocol } from "./protocol.ts";
 import { jsonResponse, recordingClient } from "./testSupportTest.ts";
 
@@ -157,4 +158,77 @@ it.effect("stops a write response above its byte bound", () => {
 
     assert.strictEqual(error._tag, "YahooWriteUnknown");
   }).pipe(Effect.provide(layer(recordingClient(() => jsonResponse({})).client)));
+});
+
+it.effect("keeps the provider's HTTP status on a status failure", () => {
+  const recording = recordingClient(() => jsonResponse({}));
+  const decode = (response: Response): Effect.Effect<void, YahooReadError> =>
+    Effect.gen(function* () {
+      const protocol = yield* Protocol;
+      return yield* protocol.decode({
+        operation: "validate_session",
+        response: HttpClientResponse.fromWeb(
+          HttpClientRequest.get("https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users"),
+          response,
+        ),
+        input: undefined,
+        decode: () => Effect.succeed(undefined),
+        write: false,
+      });
+    }).pipe(Effect.provide(layer(recording.client)));
+
+  return Effect.gen(function* () {
+    const timeout = yield* Effect.flip(decode(new Response("unavailable", { status: 504 })));
+    const rejected = yield* Effect.flip(decode(new Response("rejected", { status: 400 })));
+
+    if (timeout._tag !== "GatewayTimeout") {
+      return assert.fail(`expected a gateway timeout, got ${timeout._tag}`);
+    }
+    assert.strictEqual(timeout.status, 504);
+    if (rejected._tag !== "BadRequest") {
+      return assert.fail(`expected a bad request, got ${rejected._tag}`);
+    }
+    assert.strictEqual(rejected.status, 400);
+  });
+});
+
+it.effect("marks whether a refusal sentence came from a structured provider envelope", () => {
+  const recording = recordingClient(() => jsonResponse({}));
+  const decode = (response: Response): Effect.Effect<void, YahooReadError> =>
+    Effect.gen(function* () {
+      const protocol = yield* Protocol;
+      return yield* protocol.decode({
+        operation: "validate_session",
+        response: HttpClientResponse.fromWeb(
+          HttpClientRequest.get("https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users"),
+          response,
+        ),
+        input: undefined,
+        decode: () => Effect.succeed(undefined),
+        write: false,
+      });
+    }).pipe(Effect.provide(layer(recording.client)));
+
+  return Effect.gen(function* () {
+    const structured = yield* Effect.flip(
+      decode(
+        new Response(JSON.stringify({ error: { description: "Invalid cookie" } }), {
+          status: 401,
+        }),
+      ),
+    );
+    const raw = yield* Effect.flip(decode(new Response("private-provider-body", { status: 403 })));
+
+    if (structured._tag !== "Unauthorized") {
+      return assert.fail(`expected an unauthorized refusal, got ${structured._tag}`);
+    }
+    assert.strictEqual(structured.status, 401);
+    assert.strictEqual(structured.structured, true);
+    assert.strictEqual(structured.message, "Invalid cookie");
+    if (raw._tag !== "Forbidden") {
+      return assert.fail(`expected a forbidden refusal, got ${raw._tag}`);
+    }
+    assert.strictEqual(raw.status, 403);
+    assert.strictEqual(raw.structured, false);
+  });
 });

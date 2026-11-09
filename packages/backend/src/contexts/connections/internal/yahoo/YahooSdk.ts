@@ -13,6 +13,7 @@ import {
   ProviderSessionRejected,
 } from "#contexts/connections/Provider.ts";
 import type {
+  ProviderFailure,
   ProviderLeagueTeam,
   ProviderOperation,
   ProviderReadFailure,
@@ -50,6 +51,23 @@ export const readLeagueTeamsThroughSdk = (
       Effect.mapError((error) => providerReadFailureOf(operation, error)),
     );
     return teams.map(providerLeagueTeamOf);
+  });
+
+export const validateSessionThroughSdk = (
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+): Effect.Effect<void, ProviderFailure> =>
+  Effect.gen(function* () {
+    const session = yield* Yahoo.makeSession(cookie).pipe(
+      Effect.mapError(() => ProviderSessionRejected.make({ operation })),
+    );
+    yield* Yahoo.session.validate({}).pipe(
+      Yahoo.Retry.none,
+      Effect.provideContext(Context.add(context, Yahoo.Credentials, Effect.succeed(session))),
+      Effect.provideService(Tracer.DisablePropagation, true),
+      Effect.mapError((error) => sessionFailureOf(operation, error)),
+    );
   });
 
 function providerLeagueTeamOf(team: Yahoo.YahooLeagueTeam): ProviderLeagueTeam {
@@ -101,22 +119,36 @@ function yahooSdkHttpClient(internet: PublicInternet["Service"]): HttpClient.Htt
   );
 }
 
+function sessionFailureOf(
+  operation: ProviderOperation,
+  error: Yahoo.YahooReadError,
+): ProviderFailure {
+  const failure = providerReadFailureOf(operation, error);
+  switch (failure._tag) {
+    case "provider.session_rejected":
+    case "provider.request_failed":
+    case "provider.response_invalid":
+      return failure;
+    case "provider.operation_unsupported":
+    case "provider.period_mismatch":
+    case "provider.period_unsupported":
+      return ProviderResponseInvalid.make({ operation });
+  }
+}
+
 function providerReadFailureOf(
   operation: ProviderOperation,
   error: Yahoo.YahooReadError,
 ): ProviderReadFailure {
   switch (error._tag) {
     case "ConfigError":
+      return ProviderSessionRejected.make({ operation });
     case "Unauthorized":
     case "Forbidden":
       return ProviderSessionRejected.make({
         operation,
-        ...(error._tag === "ConfigError"
-          ? {}
-          : {
-              status: error._tag === "Unauthorized" ? 401 : 403,
-              detail: error.message,
-            }),
+        ...(error.status === undefined ? {} : { status: error.status }),
+        ...(error.structured ? { detail: error.message } : {}),
       });
     case "YahooRequestInvalid":
     case "YahooParseError":
@@ -134,8 +166,8 @@ function providerReadFailureOf(
         ...(error.status === undefined ? {} : { status: error.status }),
       });
     case "HttpClientError":
-    case "GatewayTimeout":
       return ProviderRequestFailed.make({ operation });
+    case "GatewayTimeout":
     case "BadRequest":
     case "NotFound":
     case "Conflict":
@@ -147,7 +179,7 @@ function providerReadFailureOf(
     case "ServiceUnavailable":
       return ProviderRequestFailed.make({
         operation,
-        status: httpStatusOf(error._tag),
+        ...(error.status === undefined ? {} : { status: error.status }),
       });
   }
 }
@@ -167,37 +199,3 @@ function periodMismatchOf(
     covered: Option.getOrNull(covered),
   });
 }
-
-function httpStatusOf(tag: HttpStatusTag): number {
-  switch (tag) {
-    case "BadRequest":
-      return 400;
-    case "NotFound":
-      return 404;
-    case "Conflict":
-      return 409;
-    case "UnprocessableEntity":
-      return 422;
-    case "Locked":
-      return 423;
-    case "TooManyRequests":
-      return 429;
-    case "InternalServerError":
-      return 500;
-    case "BadGateway":
-      return 502;
-    case "ServiceUnavailable":
-      return 503;
-  }
-}
-
-type HttpStatusTag =
-  | "BadRequest"
-  | "NotFound"
-  | "Conflict"
-  | "UnprocessableEntity"
-  | "Locked"
-  | "TooManyRequests"
-  | "InternalServerError"
-  | "BadGateway"
-  | "ServiceUnavailable";

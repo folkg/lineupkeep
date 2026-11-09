@@ -288,7 +288,9 @@ package, and no application code imports the SDK yet.
 3. **Errors.** Map the SDK's tagged errors into the adapter's
    `ProviderReadFailure` and `ProviderWriteResult` unions. Preserve Yahoo's
    sentence in `detail` and keep the existing accepted/refused/not-sent/unknown
-   distinction.
+   distinction. `Unauthorized` and `Forbidden` mark whether the sentence came
+   from a structured provider envelope, so an adapter that withholds raw body
+   text can keep doing so.
 4. **Session material.** Decrypt the owner-scoped hosted-browser session at the
    adapter boundary and pass it to `Yahoo.makeSession`. The SDK does not store,
    refresh, or persist the session.

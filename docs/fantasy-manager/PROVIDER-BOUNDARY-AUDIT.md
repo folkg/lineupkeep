@@ -368,22 +368,28 @@ keeps behavior and does not add a provider, a sport, or a new optimization.
 
 `packages/yahoo-sdk` is now a workspace package. It imports only `effect` and its own `#yahoo/*`
 modules, and its tests run in the Node project under the same single-worker-per-file policy as the rest
-of the suite. Its seven source changes remain unmerged outside this repository; only the code moved.
+of the suite. Its original seven source changes remain unmerged outside this repository; the package
+moved here with one additional upstream change to the error fields.
 
-The first migrated read is `ProviderShape.readLeagueTeams`, backed by the SDK's `Yahoo.teams.list`.
-It is the smallest read that publishes fields the client already sees (team names in draft history,
-`acquisitionUsage`, `remainingBudget`), and its request is byte-identical to the adapter's:
-`GET https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/{leagueKey}/teams?format=json`.
-The SDK transport replaces the adapter's `readJson` for this one operation; the adapter path remains
-for every other read. `Yahoo.Retry.none` is installed at the port because the existing adapter has no
-read retry; enabling the SDK's transient retry would be a product decision, not a transport swap.
+The first two migrated reads are `ProviderShape.readLeagueTeams`, backed by `Yahoo.teams.list`, and
+`ProviderShape.validateSession`, backed by `Yahoo.session.validate`. Both keep their byte-identical
+requests: `GET https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/{leagueKey}/teams?format=json`
+and `GET https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1?format=json`. The SDK
+transport replaces the adapter's `readJson` for these operations; the adapter path remains for every
+other read. `Yahoo.Retry.none` is installed at the port because the existing adapter has no read
+retry; enabling the SDK's transient retry would be a product decision, not a transport swap.
+
+The upstream SDK now carries the provider's HTTP `status` on every status error and marks whether an
+`Unauthorized` or `Forbidden` message came from a structured provider envelope. A `GatewayTimeout`
+without a status is the SDK's own deadline; 408 and 504 keep their status. That lets the port publish
+Yahoo's sentence as `detail` only when Yahoo actually supplied one.
 
 ### Operation map
 
 | Port read                  | SDK operation                | Verdict                                                                                                                                              |
 | -------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `readLeagueTeams`          | `teams.list`                 | **Migrated.** Same request, same published fields.                                                                                                   |
-| `validateSession`          | `session.validate`           | Clean request and shape; the refusal-detail caveat below applies.                                                                                    |
+| `validateSession`          | `session.validate`           | **Migrated.** Same request, same session outcome; refusal detail is gated by the SDK's `structured` mark.                                            |
 | `readLeague`               | `leagues.settings`           | Clean request; the adapter keeps `format`, `rosterChange`, `rosterCoverage`, `rosterConstraints`, and `webUrl` policy.                               |
 | `readRoster`               | `rosters.forTeam`            | Clean request; mapping needed for the raw `opponent` string, transaction counts, and starting status.                                                |
 | `readRosterSchedule`       | `rosters.forTeam`            | Clean per week or date; the range fan-out and game merge stay in the adapter.                                                                        |
@@ -409,9 +415,7 @@ enabled. `trades.propose` also accepts draft picks, which the port does not carr
 ### Migration order
 
 1. `teams.list` — done in this change, with request, shape, and error parity tests.
-2. `validateSession` — the next request-identical read. Decide whether the broadened refusal
-   `detail` below is acceptable, or wait for the SDK to distinguish a structured provider statement
-   from an unstructured body in `Unauthorized`/`Forbidden`.
+2. `validateSession` — done in this change, after the upstream SDK error fields landed.
 3. `leagues.settings`, `rosters.forTeam`, `matchups.week`, `transactions.list`,
    `transactions.pendingTrades`, `draft.results` — request-identical reads that need mapping tables,
    not new evidence.
@@ -423,7 +427,7 @@ enabled. `trades.propose` also accepts draft picks, which the port does not carr
    available-draft-pick host.
 7. Writes last, one operation at a time, each with a recorded acceptance or refusal.
 
-### Parity findings from the migrated read
+### Parity findings from the migrated reads
 
 - **Request:** identical URL, method, `accept` and `cookie` headers, empty body, and the same
   `30_000` ms / `4_194_304` byte bounds. Effect's HTTP client normally injects `b3` and `traceparent`
@@ -431,20 +435,16 @@ enabled. `trades.propose` also accepts draft picks, which the port does not carr
 - **Fields:** `name`, `acquisitionUsage.seasonMoves`, `acquisitionUsage.weeklyAdds.used`,
   `acquisitionUsage.weeklyAdds.coverage`, and `remainingBudget` are unchanged. The three existing
   `readLeagueTeams` tests pass without edits.
-- **Session failures:** 401 and 403 become `ProviderSessionRejected` with the same status. The SDK
-  carries only a message, not a status, so the port derives 401 or 403 from the error tag.
-- **Provider failures:** status errors become `ProviderRequestFailed` with the status reconstructed
-  from the tag. `GatewayTimeout` does not distinguish a 408, a 504, and the SDK's own deadline, so the
-  port omits `status` there rather than guessing.
+- **Session failures:** 401 and 403 become `ProviderSessionRejected` with the provider's own status.
+  An empty user list becomes `ProviderSessionRejected` without a status, because Yahoo answered 200.
+- **Provider failures:** status errors become `ProviderRequestFailed` with the provider's status. A
+  `GatewayTimeout` without a status is the SDK's own deadline; a 408 or 504 keeps its status.
 - **Parse failures:** `YahooParseError` becomes `ProviderResponseInvalid`; `field` can now be populated
   (`body`, `league.teams.team_key`) where the old path left it undefined. The field is optional and no
   client reads it, but it is a shape difference.
-- **Refusal detail:** the SDK flattens a structured provider statement and raw body text into one
-  `message`. `ProviderSessionRejected.detail` therefore carries Yahoo's sentence exactly for structured
-  refusals, and can carry unstructured body text where the old adapter published nothing. `detail` is
-  operator evidence only; no client field changes. The SDK should expose whether the sentence came
-  from a structured provider envelope, or the port should accept the broader evidence, before
-  `validateSession` migrates.
+- **Refusal detail:** `ProviderSessionRejected.detail` carries Yahoo's sentence only when the SDK
+  marks the message as structured. Raw body text stays out of the port, exactly as the old adapter
+  withheld it; the existing 401/403 privacy tests pass unchanged.
 - **Malformed acquisition usage:** the SDK decodes `number_of_moves` and `roster_adds` strictly. A
   non-numeric or fractional `number_of_moves`, a non-numeric add count, a non-date coverage value, or
   a non-integer week now fails the whole read with `ProviderResponseInvalid`; the old adapter dropped
