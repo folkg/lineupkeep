@@ -17,6 +17,7 @@ import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
 import type {
+  TransactionReviewData,
   TransactionReviewItemView,
   TransactionReviewPlayerView,
   TransactionReviewTeamView,
@@ -159,6 +160,119 @@ it("updates the tally when a person leaves out a current move", async () => {
   await expect
     .element(page.getByRole("button", { name: "Submit 3 moves" }))
     .not.toHaveAttribute("aria-disabled");
+});
+
+it("sends the bids raised at review for two claims proposed at 0", async () => {
+  const review = twoBidReview();
+  const first = review.teams[0]?.items[0];
+  const second = review.teams[0]?.items[1];
+  if (first === undefined || second === undefined) {
+    throw new Error("the two-claim fixture has both claims");
+  }
+  const submissions: Array<{
+    readonly set: string;
+    readonly include: ReadonlyArray<string>;
+    readonly bids: ReadonlyArray<{ readonly item: string; readonly bid: number }>;
+  }> = [];
+  using _app = setupReviewPage(review, {
+    submit: (input) => {
+      submissions.push(input);
+      return Promise.resolve({
+        review: pendingReviewFrom(review),
+        submittedBids: [
+          { item: first.id, bid: 12 },
+          { item: second.id, bid: 3 },
+        ],
+      });
+    },
+  });
+
+  const firstBid = page.getByLabelText("FAAB bid for Sam Rivers");
+  const secondBid = page.getByLabelText("FAAB bid for Owen Park");
+  await expect.element(firstBid).toHaveValue(0);
+  await expect.element(secondBid).toHaveValue(0);
+
+  await firstBid.fill("12");
+  await secondBid.fill("3");
+  await expect
+    .element(page.getByText("2 of 2 moves included. 2 waiver claims spend 15 FAAB."))
+    .toBeVisible();
+
+  await page.getByRole("button", { name: "Submit 2 moves" }).click();
+  expect(submissions).toStrictEqual([
+    {
+      set: review.set.id,
+      include: [first.id, second.id],
+      bids: [
+        { item: first.id, bid: 12 },
+        { item: second.id, bid: 3 },
+      ],
+    },
+  ]);
+  await expect.element(page.getByText("Bid 12 FAAB sent; proposed at 0 FAAB.")).toBeVisible();
+  await expect.element(page.getByText("Bid 3 FAAB sent; proposed at 0 FAAB.")).toBeVisible();
+});
+
+it("shows a bid above the remaining budget before submitting and sends nothing", async () => {
+  let submissions = 0;
+  using _app = setupReviewPage(twoBidReview(), {
+    submit: () => {
+      submissions += 1;
+      return Promise.resolve({ review: twoBidReview() });
+    },
+  });
+
+  await page.getByLabelText("FAAB bid for Sam Rivers").fill("60");
+  const refusal =
+    "The bid of 60 exceeds this team's remaining FAAB budget of 50. Lower the bid to 50 or less, then submit again.";
+  await expect.element(page.getByText(refusal)).toBeVisible();
+
+  await page.getByRole("button", { name: "Submit 2 moves" }).click();
+  expect(submissions).toBe(0);
+  await expect.element(page.getByText(refusal).first()).toBeVisible();
+});
+
+it("says what a FAAB bid is when it is not whole or below the league minimum", async () => {
+  let submissions = 0;
+  using _app = setupReviewPage(twoBidReview(), {
+    submit: () => {
+      submissions += 1;
+      return Promise.resolve({ review: twoBidReview() });
+    },
+  });
+
+  const bid = page.getByLabelText("FAAB bid for Sam Rivers");
+  await bid.fill("2.5");
+  await expect
+    .element(
+      page.getByText("A FAAB bid is a whole number of FAAB from 0 upward, so 2.5 cannot be sent."),
+    )
+    .toBeVisible();
+
+  await bid.fill("-1");
+  await expect
+    .element(
+      page.getByText("The league's minimum FAAB bid is 0, so -1 cannot be sent. Enter 0 or more."),
+    )
+    .toBeVisible();
+
+  await page.getByRole("button", { name: "Submit 2 moves" }).click();
+  expect(submissions).toBe(0);
+});
+
+it("shows a settled claim's bid as fact and offers no input", async () => {
+  const pending = pendingWaiverItem();
+  using _app = setupReviewPage({
+    ...reviewFixture(),
+    set: {
+      ...reviewFixture().set,
+      submissions: [{ submittedAt: now, completedAt: now }],
+    },
+    teams: [teamFixture(alphaId, "Alpha", "nfl", "football", [pending])],
+  });
+
+  expect(page.getByLabelText("FAAB bid for Sam Rivers").elements()).toHaveLength(0);
+  await expect.element(page.getByText("Proposed at 25 FAAB.", { exact: true })).toBeVisible();
 });
 
 it("toggles a move from the keyboard", async () => {
@@ -421,6 +535,50 @@ function waiverItem(): TransactionReviewItemView {
     reason: "Cover the receiver spot before Sunday.",
     state: "proposed",
     staleness: { status: "current", checkedAt: now, reasons: [] },
+  };
+}
+
+function twoBidReview(): TransactionReviewView {
+  const first: TransactionReviewItemView = {
+    ...waiverItem(),
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c1",
+    bid: 0,
+    reason: "Claim the first wing.",
+  };
+  const second: TransactionReviewItemView = {
+    ...waiverItem(),
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c2",
+    adds: [player("Owen Park", "D", "TOR", "Free agent")],
+    drops: [],
+    bid: 0,
+    reason: "Claim the second wing.",
+  };
+  return {
+    ...reviewFixture(),
+    teams: [teamFixture(alphaId, "Alpha", "nfl", "football", [first, second])],
+  };
+}
+
+function pendingReviewFrom(review: TransactionReviewView): TransactionReviewView {
+  return {
+    ...review,
+    set: {
+      ...review.set,
+      submissions: [{ submittedAt: now, completedAt: now }],
+    },
+    teams: review.teams.map((team) => ({
+      ...team,
+      items: team.items.map((item) => ({
+        ...item,
+        state: "pending" as const,
+        execution: {
+          outcome: "pending" as const,
+          detail: "Waivers run later.",
+          decidedAt: now,
+          steps: [],
+        },
+      })),
+    })),
   };
 }
 
@@ -755,18 +913,28 @@ it("shows a roster move after the transaction that frees its destination", async
 });
 
 it("submits the included moves once, keeps the action visible on a phone, and shows every result in place", async () => {
-  let resolveSubmit: ((review: TransactionReviewView) => void) | undefined;
-  const pendingSubmission = new Promise<TransactionReviewView>((resolve) => {
+  let resolveSubmit: ((data: TransactionReviewData) => void) | undefined;
+  const pendingSubmission = new Promise<TransactionReviewData>((resolve) => {
     resolveSubmit = resolve;
   });
+  const submittedInputs: Array<{
+    readonly set: string;
+    readonly include: ReadonlyArray<string>;
+    readonly bids: ReadonlyArray<{ readonly item: string; readonly bid: number }>;
+  }> = [];
   using _app = setupReviewPage(reviewFixture(), {
-    submit: () => pendingSubmission,
+    submit: (input) => {
+      submittedInputs.push(input);
+      return pendingSubmission;
+    },
   });
 
   await page.viewport(390, 844);
   try {
     await page.getByRole("button", { name: "Submit 3 moves" }).click();
 
+    expect(submittedInputs).toHaveLength(1);
+    expect(submittedInputs[0]?.bids).toStrictEqual([{ item: waiverItem().id, bid: 25 }]);
     await expect
       .element(page.getByRole("button", { name: "Submit 3 moves" }))
       .toHaveAttribute("aria-busy", "true");
@@ -788,7 +956,7 @@ it("submits the included moves once, keeps the action visible on a phone, and sh
     await captureViewport("submitting-390-dark");
     document.documentElement.classList.remove("dark");
 
-    resolveSubmit?.(resultFixture());
+    resolveSubmit?.({ review: resultFixture(), submittedBids: [] });
 
     await expect.element(page.getByRole("heading", { name: "Submitted" })).toBeVisible();
     await expect
@@ -848,7 +1016,7 @@ it("offers another submission for a move that has not run while an earlier outco
     {
       submit: (input) => {
         includes.push(input.include);
-        return Promise.resolve(base);
+        return Promise.resolve({ review: base });
       },
     },
   );
@@ -913,7 +1081,7 @@ it("does not send a submission when every move is left out", async () => {
   using _app = setupReviewPage(reviewFixture(), {
     submit: () => {
       submissions += 1;
-      return Promise.resolve(resultFixture());
+      return Promise.resolve({ review: resultFixture() });
     },
   });
 
@@ -1262,7 +1430,7 @@ function setupReviewPage(
   const queryClient = createQueryClient();
   const remote: TransactionRemote = {
     read: () => Promise.resolve(review),
-    submit: options.submit ?? (() => Promise.resolve(review)),
+    submit: options.submit ?? (() => Promise.resolve({ review })),
     withdraw:
       options.withdraw ??
       (() =>

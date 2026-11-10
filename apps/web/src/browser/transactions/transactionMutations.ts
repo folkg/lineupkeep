@@ -2,7 +2,8 @@ import { mutationOptions } from "@tanstack/solid-query";
 import type { MutationFunctionContext } from "@tanstack/solid-query";
 
 import type {
-  TransactionReviewView,
+  SubmitTransactionReviewRequest,
+  TransactionReviewData,
   WithdrawTradeData,
   WithdrawTradeRequest,
 } from "#contracts/connections/transactionContract.ts";
@@ -14,8 +15,7 @@ export const transactionMutations = {
   submit: (remote: Pick<TransactionRemote, "submit">) =>
     mutationOptions({
       mutationKey: ["transactions", "submit"],
-      mutationFn: (input: { readonly set: string; readonly include: ReadonlyArray<string> }) =>
-        remote.submit(input),
+      mutationFn: (input: SubmitTransactionReviewRequest) => remote.submit(input),
       onSuccess: storeSubmittedReview,
     }),
   withdraw: (remote: Pick<TransactionRemote, "withdraw">) =>
@@ -35,10 +35,10 @@ export const transactionMutations = {
 };
 
 function storeSubmittedReview(
-  review: TransactionReviewView,
+  data: TransactionReviewData,
   _variables: unknown,
   _onMutateResult: unknown,
   context: MutationFunctionContext,
 ): void {
-  void context.client.setQueryData(transactionQueries.reviewKey(review.set.id), review);
+  void context.client.setQueryData(transactionQueries.reviewKey(data.review.set.id), data.review);
 }

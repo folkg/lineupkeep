@@ -131,7 +131,7 @@ const contentInvalidDetail =
   "A proposal set needs one to twenty items. Each item names an owned team, a kind, the players to add or drop, the draft picks a trade moves, an optional destination of `active` or `reserve` for an add, an optional player for an activate or stash, an optional FAAB bid of 0 or more, and a reason of at most 500 characters. A drop item adds nobody, a free-agent add carries no bid, a waiver claim requires a bid, a trade names a counterparty with at least one asset going out and one coming back, an activate or stash names one rostered player without adding or dropping anyone, and a slot move names one rostered player and one destination slot without adding or dropping anyone. A trade carries no bid. Only a trade carries draft picks, and each pick names its round plus the two teams it moves between.";
 
 const submitInvalidDetail =
-  "A submission names one proposal set and one to twenty of its move ids. Reload the review and submit again.";
+  "A submission names one proposal set, one to twenty of its move ids, and an optional FAAB bid for each selected waiver claim. A bid is a whole number of FAAB from 0 upward. Reload the review and submit again.";
 const withdrawInvalidDetail =
   "A withdrawal names one proposal set and one to twenty of its move ids. Reload the set and withdraw again.";
 const skippedMovementDetail =
@@ -226,6 +226,7 @@ type ItemExecution = {
   readonly detail?: string;
   readonly steps: ReadonlyArray<ProposalStepCommand>;
   readonly settled: boolean;
+  readonly submittedBid?: number;
   readonly trade?: StoredProposalTrade;
 };
 
@@ -1096,6 +1097,31 @@ export const TransactionProposalsLive = Layer.effect(
             "A selected move does not belong to this proposal set. Reload the review and submit again.",
         });
       }
+      const loadedById = new Map(loaded.items.map((item) => [item.id, item] as const));
+      const bidByItem = new Map<ProposalItemId, number>();
+      for (const entry of decoded.bids ?? []) {
+        const item = loadedById.get(entry.item);
+        if (item === undefined || bidByItem.has(entry.item) || !include.has(entry.item)) {
+          return yield* ProposalContentInvalid.make({ detail: submitInvalidDetail });
+        }
+        if (item.kind !== "waiver_claim") {
+          return yield* ProposalContentInvalid.make({
+            detail:
+              "A FAAB bid can be sent only for a waiver claim. Reload the review and submit again.",
+          });
+        }
+        const problem = submittedBidProblem(entry.bid);
+        if (problem !== undefined) {
+          return yield* ProposalContentInvalid.make({ detail: problem });
+        }
+        bidByItem.set(entry.item, entry.bid);
+      }
+      const effectiveById = new Map(
+        loaded.items.map((item) => {
+          const bid = bidByItem.get(item.id);
+          return [item.id, bid === undefined ? item : { ...item, bid }] as const;
+        }),
+      );
       const sendable = selected.filter((item) => isOpen(item.state));
       if (sendable.length === 0) {
         return yield* ProposalNothingIncluded.make({
@@ -1112,9 +1138,10 @@ export const TransactionProposalsLive = Layer.effect(
       for (const item of loaded.items.filter(
         (entry) => entry.state === "proposed" && sendableTeams.has(entry.team),
       )) {
-        const current = itemsByTeam.get(item.team) ?? [];
-        current.push(item);
-        itemsByTeam.set(item.team, current);
+        const current = effectiveById.get(item.id) ?? item;
+        const teamItems = itemsByTeam.get(current.team) ?? [];
+        teamItems.push(current);
+        itemsByTeam.set(current.team, teamItems);
       }
       const checks = yield* Effect.forEach(
         [...itemsByTeam.entries()],
@@ -1151,7 +1178,11 @@ export const TransactionProposalsLive = Layer.effect(
       });
       const savedById = new Map(saved.map((item) => [item.id, item] as const));
       const itemById = new Map(
-        loaded.items.map((item) => [item.id, savedById.get(item.id) ?? item] as const),
+        loaded.items.map((item) => {
+          const savedItem = savedById.get(item.id) ?? item;
+          const bid = bidByItem.get(item.id);
+          return [item.id, bid === undefined ? savedItem : { ...savedItem, bid }] as const;
+        }),
       );
       const changeById = new Map(changes.map((change) => [change.id, change] as const));
       const checkByTeam = new Map(checks.map((check) => [check.team, check] as const));
@@ -1171,6 +1202,7 @@ export const TransactionProposalsLive = Layer.effect(
       }
 
       const outcomes: Array<ProposalOutcomeCommand> = [];
+      const submittedBids: Array<{ readonly item: ProposalItemId; readonly bid: number }> = [];
 
       for (const item of sendable) {
         const current = itemById.get(item.id) ?? item;
@@ -1244,6 +1276,7 @@ export const TransactionProposalsLive = Layer.effect(
           const execution = yield* executeItem({
             userId,
             item: current,
+            proposedBid: loadedById.get(current.id)?.bid,
             change,
             facts: check.facts,
             context: check.context,
@@ -1258,6 +1291,9 @@ export const TransactionProposalsLive = Layer.effect(
             settled: execution.settled,
             ...(execution.trade === undefined ? {} : { trade: execution.trade }),
           });
+          if (execution.submittedBid !== undefined) {
+            submittedBids.push({ item: current.id, bid: execution.submittedBid });
+          }
           if (execution.outcome === "executed") {
             applySeats(current, change, run.seats);
           } else {
@@ -1318,24 +1354,28 @@ export const TransactionProposalsLive = Layer.effect(
         "proposal.items_unknown": final.items.filter((item) => item.outcome === "unknown").length,
         "proposal.items_held": held,
       });
-      return yield* buildReview(
-        tokens,
-        userId,
-        teams,
-        final.set,
-        final.submissions,
-        final.items,
-        final.steps,
-        completedAt,
-        undefined,
-        undefined,
-        tradeProposalsOf(teams),
-      );
+      return {
+        ...(yield* buildReview(
+          tokens,
+          userId,
+          teams,
+          final.set,
+          final.submissions,
+          final.items,
+          final.steps,
+          completedAt,
+          undefined,
+          undefined,
+          tradeProposalsOf(teams),
+        )),
+        submittedBids,
+      };
     });
 
     function executeItem(input: {
       readonly userId: UserId;
       readonly item: ProposalItemRecord;
+      readonly proposedBid: number | undefined;
       readonly change: ProposalItemChange;
       readonly facts: TeamFacts;
       readonly context: TeamContext;
@@ -1590,6 +1630,7 @@ export const TransactionProposalsLive = Layer.effect(
       input: {
         readonly userId: UserId;
         readonly item: ProposalItemRecord;
+        readonly proposedBid: number | undefined;
         readonly change: ProposalItemChange;
         readonly facts: TeamFacts;
         readonly context: TeamContext;
@@ -1597,6 +1638,7 @@ export const TransactionProposalsLive = Layer.effect(
       steps: ReadonlyArray<ProposalStepCommand>,
     ): Effect.Effect<ItemExecution> {
       return Effect.gen(function* () {
+        const bid = input.item.kind === "waiver_claim" ? input.item.bid : undefined;
         const transaction = yield* Effect.result(
           input.context.provider.applyTransaction({
             ...providerIdentity(input.context),
@@ -1604,7 +1646,7 @@ export const TransactionProposalsLive = Layer.effect(
             providerTeamKey: input.facts.providerTeamKey,
             adds: input.change.adds.map((add) => add.key),
             drops: input.change.drops.map((drop) => drop.key),
-            faabBid: input.item.kind === "waiver_claim" ? input.item.bid : undefined,
+            faabBid: bid,
           }),
         );
         const stepAt = yield* DateTime.now;
@@ -1624,6 +1666,11 @@ export const TransactionProposalsLive = Layer.effect(
             settled: false,
           };
         }
+        const submittedBid = transaction.success.status === "not_sent" ? undefined : bid;
+        const withSentBid = (detail: string | undefined): string | undefined =>
+          submittedBid === undefined || submittedBid === input.proposedBid
+            ? detail
+            : `Bid ${String(submittedBid)} FAAB sent.${detail === undefined ? "" : ` ${detail}`}`;
         const outcome = writeOutcome(transaction.success);
         if (outcome === "executed") {
           const pending =
@@ -1633,19 +1680,23 @@ export const TransactionProposalsLive = Layer.effect(
             );
           const movementOutcome = pending ? "pending" : "executed";
           const detail = pending ? waiverPendingDetail : undefined;
+          const outcomeDetail = withSentBid(detail);
           return {
             outcome: movementOutcome,
-            ...(detail === undefined ? {} : { detail }),
+            ...(outcomeDetail === undefined ? {} : { detail: outcomeDetail }),
             steps: [...steps, ...movementStepsOf(input.change, movementOutcome, detail, stepAt)],
             settled: movementOutcome === "executed",
+            ...(submittedBid === undefined ? {} : { submittedBid }),
           };
         }
         const detail = writeDetail(transaction.success, "transaction");
+        const outcomeDetail = withSentBid(detail);
         return {
           outcome,
-          ...(detail === undefined ? {} : { detail }),
+          ...(outcomeDetail === undefined ? {} : { detail: outcomeDetail }),
           steps: [...steps, ...movementStepsOf(input.change, outcome, detail, stepAt)],
           settled: false,
+          ...(submittedBid === undefined ? {} : { submittedBid }),
         };
       });
     }
@@ -4934,10 +4985,30 @@ function checkOutcomeDetail(staleness: StoredProposalStaleness | undefined): str
   if (staleness === undefined) {
     return "This move could not be checked against current state, so it was not attempted.";
   }
-  return staleness.reasons
-    .map((reason) => reason.detail)
-    .join(" ")
-    .slice(0, 800);
+  const reasons = staleness.reasons.map((reason) => reason.detail).join(" ");
+  const fixes = [
+    ...new Set(
+      staleness.reasons.flatMap((reason) =>
+        reason.code === "bid_exceeds_budget" || reason.code === "bid_not_available"
+          ? [staleFix(reason.code)]
+          : [],
+      ),
+    ),
+  ];
+  return [reasons, ...fixes].join(" ").slice(0, 800);
+}
+
+function submittedBidProblem(bid: number): string | undefined {
+  if (!Number.isFinite(bid) || !Number.isInteger(bid)) {
+    return `A FAAB bid is a whole number of FAAB from 0 upward, so ${String(bid)} cannot be sent.`;
+  }
+  if (bid < 0) {
+    return `The league's minimum FAAB bid is 0, so ${String(bid)} cannot be sent. Enter 0 or more.`;
+  }
+  if (bid > 1_000_000) {
+    return `A FAAB bid can be at most 1,000,000, so ${String(bid)} cannot be sent.`;
+  }
+  return undefined;
 }
 
 function executionSequence(

@@ -3825,6 +3825,358 @@ it.effect("sends a waiver claim beside another claim that does not depend on it"
   }).pipe(Effect.provide(TestLayer)),
 );
 
+it.effect("sends bids changed at review and keeps the proposed bid as history", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      league: leagueFixture({
+        rosterPositions: [
+          { position: "C", positionType: "O", count: 2, kind: "starting", eligibility: ["C"] },
+          { position: "BN", positionType: "B", count: 2, kind: "bench", eligibility: [] },
+        ],
+      }),
+      roster: rosterWithSlots("nhl.l.1.t.1", [
+        { slot: "C", eligible: ["C"] },
+        { slot: "C", eligible: ["C"] },
+        { slot: "BN", eligible: ["C"] },
+        { slot: "BN", eligible: ["C"] },
+      ]),
+      playerDetails: [...playerDetails, detail("nhl.p.90009", "Waiver Tight End", "waiver")],
+      leagueTeams: [
+        {
+          providerTeamKey: "nhl.l.1.t.1",
+          providerLeagueKey: "nhl.l.1",
+          name: "Red Line",
+          acquisitionUsage: { seasonMoves: undefined, weeklyAdds: undefined },
+          remainingBudget: 50,
+        },
+      ],
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const result = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "waiver_claim",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90006"]),
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          bid: 0,
+          reason: "Claim the waiver wing.",
+        },
+        {
+          team: redLine,
+          kind: "waiver_claim",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90009"]),
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          bid: 0,
+          reason: "Claim the waiver tight end.",
+        },
+      ],
+    });
+    const preview = yield* proposals.revalidate(owner, { set: result.set.id });
+    const wing = itemByReason(preview, "Claim the waiver wing.");
+    const tightEnd = itemByReason(preview, "Claim the waiver tight end.");
+    const submitted = yield* proposals.submit(owner, {
+      set: result.set.id,
+      include: [wing.id, tightEnd.id],
+      bids: [
+        { item: wing.id, bid: 12 },
+        { item: tightEnd.id, bid: 3 },
+      ],
+    });
+    assert.deepStrictEqual(
+      (yield* fake.transactionRequests).map((request) => request.faabBid),
+      [12, 3],
+    );
+    for (const item of itemsOf(submitted)) {
+      assert.strictEqual(item.bid, 0);
+      assert.strictEqual(item.state, "pending");
+    }
+    assert.deepStrictEqual(submitted.submittedBids, [
+      { item: wing.id, bid: 12 },
+      { item: tightEnd.id, bid: 3 },
+    ]);
+    const reread = yield* proposals.read(owner, { set: result.set.id });
+    assert.strictEqual(itemByReason(reread, "Claim the waiver wing.").bid, 0);
+    assert.include(
+      itemByReason(reread, "Claim the waiver wing.").execution?.detail ?? "",
+      "Bid 12 FAAB sent.",
+    );
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("sends the proposed bid when the review leaves the bid unchanged", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      league: leagueFixture({
+        rosterPositions: [
+          { position: "C", positionType: "O", count: 2, kind: "starting", eligibility: ["C"] },
+          { position: "BN", positionType: "B", count: 2, kind: "bench", eligibility: [] },
+        ],
+      }),
+      roster: rosterWithSlots("nhl.l.1.t.1", [
+        { slot: "C", eligible: ["C"] },
+        { slot: "C", eligible: ["C"] },
+        { slot: "BN", eligible: ["C"] },
+        { slot: "BN", eligible: ["C"] },
+      ]),
+      playerDetails: [...playerDetails, detail("nhl.p.90009", "Waiver Tight End", "waiver")],
+      leagueTeams: [
+        {
+          providerTeamKey: "nhl.l.1.t.1",
+          providerLeagueKey: "nhl.l.1",
+          name: "Red Line",
+          acquisitionUsage: { seasonMoves: undefined, weeklyAdds: undefined },
+          remainingBudget: 50,
+        },
+      ],
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const result = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "waiver_claim",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90006"]),
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          bid: 7,
+          reason: "Claim the waiver wing.",
+        },
+      ],
+    });
+    const preview = yield* proposals.revalidate(owner, { set: result.set.id });
+    const submitted = yield* proposals.submit(owner, {
+      set: result.set.id,
+      include: [itemByReason(preview, "Claim the waiver wing.").id],
+      bids: [{ item: itemByReason(preview, "Claim the waiver wing.").id, bid: 7 }],
+    });
+    assert.deepStrictEqual(
+      (yield* fake.transactionRequests).map((request) => request.faabBid),
+      [7],
+    );
+    assert.deepStrictEqual(submitted.submittedBids, [
+      { item: itemByReason(preview, "Claim the waiver wing.").id, bid: 7 },
+    ]);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("skips a review bid above the remaining budget and names the budget and the fix", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      league: leagueFixture({
+        rosterPositions: [
+          { position: "C", positionType: "O", count: 2, kind: "starting", eligibility: ["C"] },
+          { position: "BN", positionType: "B", count: 2, kind: "bench", eligibility: [] },
+        ],
+      }),
+      roster: rosterWithSlots("nhl.l.1.t.1", [
+        { slot: "C", eligible: ["C"] },
+        { slot: "C", eligible: ["C"] },
+        { slot: "BN", eligible: ["C"] },
+        { slot: "BN", eligible: ["C"] },
+      ]),
+      playerDetails: [...playerDetails, detail("nhl.p.90009", "Waiver Tight End", "waiver")],
+      leagueTeams: [
+        {
+          providerTeamKey: "nhl.l.1.t.1",
+          providerLeagueKey: "nhl.l.1",
+          name: "Red Line",
+          acquisitionUsage: { seasonMoves: undefined, weeklyAdds: undefined },
+          remainingBudget: 50,
+        },
+      ],
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const result = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "waiver_claim",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90006"]),
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          bid: 0,
+          reason: "Claim the waiver wing.",
+        },
+      ],
+    });
+    const preview = yield* proposals.revalidate(owner, { set: result.set.id });
+    const wing = itemByReason(preview, "Claim the waiver wing.");
+    const submitted = yield* proposals.submit(owner, {
+      set: result.set.id,
+      include: [wing.id],
+      bids: [{ item: wing.id, bid: 60 }],
+    });
+    const refused = itemByReason(submitted, "Claim the waiver wing.");
+    assert.strictEqual(refused.state, "skipped");
+    assert.strictEqual(refused.bid, 0);
+    assert.include(
+      refused.execution?.detail ?? "",
+      "The bid of 60 exceeds this team's remaining FAAB budget of 50.",
+    );
+    assert.include(
+      refused.execution?.detail ?? "",
+      "Lower the bid to the team's remaining FAAB balance or less, then propose again.",
+    );
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("skips a review bid when the league does not use a FAAB budget", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      league: leagueFixture({
+        rosterPositions: [
+          { position: "C", positionType: "O", count: 2, kind: "starting", eligibility: ["C"] },
+          { position: "BN", positionType: "B", count: 2, kind: "bench", eligibility: [] },
+        ],
+      }),
+      roster: rosterWithSlots("nhl.l.1.t.1", [
+        { slot: "C", eligible: ["C"] },
+        { slot: "C", eligible: ["C"] },
+        { slot: "BN", eligible: ["C"] },
+        { slot: "BN", eligible: ["C"] },
+      ]),
+      playerDetails: [...playerDetails, detail("nhl.p.90009", "Waiver Tight End", "waiver")],
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const result = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "waiver_claim",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90006"]),
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          bid: 0,
+          reason: "Claim the waiver wing.",
+        },
+      ],
+    });
+    const preview = yield* proposals.revalidate(owner, { set: result.set.id });
+    const wing = itemByReason(preview, "Claim the waiver wing.");
+    yield* fake.setLeague(leagueFixture({ usesFaab: false }));
+    const submitted = yield* proposals.submit(owner, {
+      set: result.set.id,
+      include: [wing.id],
+      bids: [{ item: wing.id, bid: 5 }],
+    });
+    const refused = itemByReason(submitted, "Claim the waiver wing.");
+    assert.strictEqual(refused.state, "skipped");
+    assert.include(
+      refused.execution?.detail ?? "",
+      "This league does not use a FAAB waiver budget, so a bid cannot be made.",
+    );
+    assert.include(
+      refused.execution?.detail ?? "",
+      "Remove the bid; this league does not use a FAAB budget.",
+    );
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("refuses a review bid on a move that is not a waiver claim", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      league: leagueFixture({}),
+      playerDetails,
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const result = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "free_agent_add",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          reason: "Swap one center for another.",
+        },
+      ],
+    });
+    const preview = yield* proposals.revalidate(owner, { set: result.set.id });
+    const add = itemByReason(preview, "Swap one center for another.");
+    const refused = yield* Effect.flip(
+      proposals.submit(owner, {
+        set: result.set.id,
+        include: [add.id],
+        bids: [{ item: add.id, bid: 5 }],
+      }),
+    );
+    assert.instanceOf(refused, ProposalContentInvalid);
+    assert.include(refused.detail, "A FAAB bid can be sent only for a waiver claim");
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("refuses a bid that is not a whole number or is below the league minimum", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      league: leagueFixture({
+        rosterPositions: [
+          { position: "C", positionType: "O", count: 2, kind: "starting", eligibility: ["C"] },
+          { position: "BN", positionType: "B", count: 2, kind: "bench", eligibility: [] },
+        ],
+      }),
+      roster: rosterWithSlots("nhl.l.1.t.1", [
+        { slot: "C", eligible: ["C"] },
+        { slot: "C", eligible: ["C"] },
+        { slot: "BN", eligible: ["C"] },
+        { slot: "BN", eligible: ["C"] },
+      ]),
+      playerDetails: [...playerDetails, detail("nhl.p.90009", "Waiver Tight End", "waiver")],
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const result = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "waiver_claim",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90006"]),
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          bid: 0,
+          reason: "Claim the waiver wing.",
+        },
+      ],
+    });
+    const preview = yield* proposals.revalidate(owner, { set: result.set.id });
+    const wing = itemByReason(preview, "Claim the waiver wing.");
+    const fractional = yield* Effect.flip(
+      proposals.submit(owner, {
+        set: result.set.id,
+        include: [wing.id],
+        bids: [{ item: wing.id, bid: 2.5 }],
+      }),
+    );
+    assert.instanceOf(fractional, ProposalContentInvalid);
+    assert.include(fractional.detail, "A FAAB bid is a whole number of FAAB from 0 upward");
+    const negative = yield* Effect.flip(
+      proposals.submit(owner, {
+        set: result.set.id,
+        include: [wing.id],
+        bids: [{ item: wing.id, bid: -1 }],
+      }),
+    );
+    assert.instanceOf(negative, ProposalContentInvalid);
+    assert.include(negative.detail, "The league's minimum FAAB bid is 0");
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
 it.effect("holds a later claim that names the player an earlier pending claim may add", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;

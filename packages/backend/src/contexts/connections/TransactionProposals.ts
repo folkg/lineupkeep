@@ -110,6 +110,11 @@ const ProposalStepPlayer = Schema.Struct({
 });
 type ProposalStepPlayer = typeof ProposalStepPlayer.Type;
 
+const ProposalBid = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(0),
+  Schema.isLessThanOrEqualTo(1_000_000),
+);
+
 const ProposalExecutionStep = Schema.Struct({
   kind: Schema.Literals(["reserve_move", "slot_move", "add", "drop"]),
   player: ProposalStepPlayer,
@@ -443,6 +448,19 @@ export const ProposalSetReview = Schema.Struct({
 });
 export type ProposalSetReview = typeof ProposalSetReview.Type;
 
+const SubmittedProposalBid = Schema.Struct({
+  item: ProposalItemId,
+  bid: ProposalBid,
+}).annotate({
+  description:
+    "A FAAB bid sent for one move in this submission, which can differ from the bid the set proposed.",
+});
+type SubmittedProposalBid = typeof SubmittedProposalBid.Type;
+
+type SubmitTransactionProposalResult = ProposalSetReview & {
+  readonly submittedBids: ReadonlyArray<SubmittedProposalBid>;
+};
+
 const ProposalReason = Schema.Trim.pipe(
   Schema.check(Schema.isMinLength(1), Schema.isMaxLength(500)),
 );
@@ -450,11 +468,6 @@ type ProposalReason = typeof ProposalReason.Type;
 
 const ProposalClientLabel = Schema.Trim.pipe(Schema.check(Schema.isMaxLength(60)));
 type ProposalClientLabel = typeof ProposalClientLabel.Type;
-
-const ProposalBid = Schema.Int.check(
-  Schema.isGreaterThanOrEqualTo(0),
-  Schema.isLessThanOrEqualTo(1_000_000),
-);
 
 const ProposalTradePickDraft = Schema.Struct({
   round: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).annotate({
@@ -624,10 +637,21 @@ export const ProposalItemWithdrawalRefusal = Schema.Struct({
 });
 export type ProposalItemWithdrawalRefusal = typeof ProposalItemWithdrawalRefusal.Type;
 
+const ProposalBidSubmission = Schema.Struct({
+  item: ProposalItemId,
+  bid: Schema.Finite.annotate({
+    description:
+      "The FAAB bid the owner set at review. A whole number from 0 upward, checked against the league and the team's remaining budget.",
+  }),
+});
+
 export const SubmitTransactionProposalInput = Schema.Struct({
   set: ProposalSetId,
   include: Schema.Array(ProposalItemId).pipe(
     Schema.check(Schema.isMinLength(1), Schema.isMaxLength(20)),
+  ),
+  bids: Schema.optional(
+    Schema.Array(ProposalBidSubmission).pipe(Schema.check(Schema.isMaxLength(20))),
   ),
 });
 export type SubmitTransactionProposalInput = typeof SubmitTransactionProposalInput.Type;
@@ -698,7 +722,7 @@ export type TransactionProposalsShape = {
   readonly submit: (
     userId: UserId,
     input: SubmitTransactionProposalInput,
-  ) => Effect.Effect<ProposalSetReview, ProposalError>;
+  ) => Effect.Effect<SubmitTransactionProposalResult, ProposalError>;
 
   readonly readPendingOffers: (
     userId: UserId,

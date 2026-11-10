@@ -1,4 +1,6 @@
 import type {
+  SubmitTransactionReviewRequest,
+  TransactionReviewData,
   TransactionReviewView,
   WithdrawTradeData,
   WithdrawTradeRequest,
@@ -17,8 +19,8 @@ export const transactionRemote: TransactionRemote = {
       (result) => requireTransactionSuccess(result).review,
     ),
   submit: (input, options) =>
-    submitTransactionReviewServerFn({ data: input, signal: options?.signal }).then(
-      (result) => requireTransactionSuccess(result).review,
+    submitTransactionReviewServerFn({ data: input, signal: options?.signal }).then((result) =>
+      requireTransactionSuccess(result),
     ),
   withdraw: (input, options) =>
     withdrawTradeServerFn({ data: input, signal: options?.signal }).then((result) =>
@@ -32,9 +34,9 @@ export type TransactionRemote = {
     options?: { readonly signal?: AbortSignal },
   ) => Promise<TransactionReviewView>;
   readonly submit: (
-    input: { readonly set: string; readonly include: ReadonlyArray<string> },
+    input: SubmitTransactionReviewRequest,
     options?: { readonly signal?: AbortSignal },
-  ) => Promise<TransactionReviewView>;
+  ) => Promise<TransactionReviewData>;
   readonly withdraw: (
     input: WithdrawTradeRequest,
     options?: { readonly signal?: AbortSignal },

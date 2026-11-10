@@ -240,6 +240,13 @@ export type TransactionReviewView = {
 
 export type TransactionReviewData = {
   readonly review: TransactionReviewView;
+  readonly submittedBids?: ReadonlyArray<{ readonly item: string; readonly bid: number }>;
+};
+
+export type SubmitTransactionReviewRequest = {
+  readonly set: string;
+  readonly include: ReadonlyArray<string>;
+  readonly bids: ReadonlyArray<{ readonly item: string; readonly bid: number }>;
 };
 
 export type WithdrawTradeData = {

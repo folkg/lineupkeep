@@ -24,6 +24,7 @@ import { createSettle } from "#browser/shared-ui/settle.ts";
 import { Split } from "#browser/shared-ui/Split.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
+import { TextField } from "#browser/shared-ui/TextField.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
 import { Time } from "#browser/shared-ui/Time.tsx";
 import { leagueDisplayName, sportDisplayName } from "#contracts/connections/teamVocabulary.ts";
@@ -41,6 +42,7 @@ import type {
   TransactionReviewView,
 } from "#contracts/connections/transactionContract.ts";
 
+import { readWaiverBid } from "./transactionBids";
 import {
   TransactionReviewAuthenticationFailure,
   TransactionReviewFailure,
@@ -49,6 +51,7 @@ import type { TransactionReviewQueryOptions } from "./transactionQueries";
 import type { TransactionRemote } from "./transactionRemote";
 import { resultSummaryId, useTransactionReviewPage } from "./useTransactionReviewPage";
 import type {
+  TransactionReviewBidField,
   TransactionReviewModel,
   TransactionReviewModelOutcome,
 } from "./useTransactionReviewPage";
@@ -75,8 +78,10 @@ export function TransactionReviewPage(props: TransactionReviewPageProps): JSX.El
             {(model) => (
               <Review
                 feedback={page.feedback()}
+                bidFor={page.bidFor}
                 isItemIncluded={page.isItemIncluded}
                 model={model()}
+                onBid={page.setBid}
                 onSubmit={page.submit}
                 onToggle={page.toggleItem}
                 submitting={page.submitting()}
@@ -200,6 +205,7 @@ function Review(props: ReviewProps): JSX.Element {
             <For each={props.model.teamsWithItems}>
               {(team) => (
                 <TeamProposal
+                  bidFor={props.bidFor}
                   expired={props.model.review.set.expired}
                   submitted={submitted()}
                   settled={settled()}
@@ -207,6 +213,7 @@ function Review(props: ReviewProps): JSX.Element {
                   isItemIncluded={props.isItemIncluded}
                   team={team}
                   withdrawing={props.withdrawing}
+                  onBid={props.onBid}
                   onToggle={props.onToggle}
                   onWithdraw={props.withdrawItem}
                 />
@@ -542,6 +549,7 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
         <For each={props.team.items}>
           {(item) => (
             <ProposalItem
+              bid={props.bidFor(item)}
               expired={props.expired}
               submitting={props.submitting}
               included={props.isItemIncluded(item)}
@@ -549,6 +557,7 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
               tradeProposal={props.team.tradeProposal}
               tradeRules={props.team.tradeRules}
               withdrawing={props.withdrawing === item.id}
+              onBid={(value) => props.onBid(item.id, value)}
               onToggle={(includedNow) => props.onToggle(item.id, includedNow)}
               onWithdraw={() => props.onWithdraw(props.team.team.id, item.id)}
             />
@@ -645,7 +654,7 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
             )}
           </Show>
           <Text as="span" size="caption" tone="muted">
-            {consequenceLine(props.item)}
+            {consequenceLine(props.item, props.bid)}
           </Text>
         </Inline>
 
@@ -696,6 +705,28 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
             />
           </Show>
         </Split>
+
+        <Show when={props.bid}>
+          {(bid) => (
+            <Show
+              when={bid().editable}
+              fallback={<BidFact proposed={bid().proposed} sentBid={bid().sentBid} />}
+            >
+              <TextField
+                label={`FAAB bid for ${playerNames(props.item.adds) ?? "this claim"}`}
+                description={`Proposed at ${String(bid().proposed)} FAAB. Your bid applies to this submission.`}
+                error={bid().error}
+                type="number"
+                min="0"
+                step="1"
+                inputmode="numeric"
+                value={bid().value}
+                disabled={props.submitting}
+                onInput={(event) => props.onBid(event.currentTarget.value)}
+              />
+            </Show>
+          )}
+        </Show>
 
         <Show
           when={
@@ -972,6 +1003,20 @@ function ExecutionResult(props: {
         </Notice>
       </Show>
     </Stack>
+  );
+}
+
+function BidFact(props: BidFactProps): JSX.Element {
+  return (
+    <Text size="caption" tone="muted">
+      <Show fallback={`Proposed at ${String(props.proposed)} FAAB.`} when={props.sentBid}>
+        {(bid) =>
+          bid() === props.proposed
+            ? `Bid ${String(bid())} FAAB sent.`
+            : `Bid ${String(bid())} FAAB sent; proposed at ${String(props.proposed)} FAAB.`
+        }
+      </Show>
+    </Text>
   );
 }
 
@@ -1287,7 +1332,10 @@ function kindLabel(kind: TransactionReviewItemView["kind"]): string {
   }
 }
 
-function consequenceLine(item: TransactionReviewItemView): string {
+function consequenceLine(
+  item: TransactionReviewItemView,
+  bid: TransactionReviewBidField | undefined,
+): string {
   if (item.kind === "slot_move") {
     return "Same roster. Reversible while the player is editable.";
   }
@@ -1307,8 +1355,10 @@ function consequenceLine(item: TransactionReviewItemView): string {
   if (item.kind !== "waiver_claim") {
     return "No FAAB. Usually reversible.";
   }
-  const bid = item.bid ?? 0;
-  return `Spends ${String(bid)} FAAB and cannot be undone.`;
+  const amount = bid !== undefined && bid.editable ? readWaiverBid(bid.value).bid : bid?.sentBid;
+  return amount === undefined
+    ? "Spends FAAB and cannot be undone."
+    : `Spends ${String(amount)} FAAB and cannot be undone.`;
 }
 
 function tradeStateLabel(state: TransactionReviewTradeView["state"]): string {
@@ -1457,7 +1507,9 @@ type TransactionReviewPageProps = {
 
 type ReviewProps = {
   readonly model: TransactionReviewModel;
+  readonly bidFor: (item: TransactionReviewItemView) => TransactionReviewBidField | undefined;
   readonly isItemIncluded: (item: TransactionReviewItemView) => boolean;
+  readonly onBid: (item: string, value: string) => void;
   readonly onToggle: (item: string, included: boolean) => void;
   readonly onSubmit: () => void;
   readonly submitting: boolean;
@@ -1502,8 +1554,10 @@ type TeamProposalProps = {
   readonly submitted: boolean;
   readonly settled: boolean;
   readonly submitting: boolean;
+  readonly bidFor: (item: TransactionReviewItemView) => TransactionReviewBidField | undefined;
   readonly isItemIncluded: (item: TransactionReviewItemView) => boolean;
   readonly withdrawing: string | undefined;
+  readonly onBid: (item: string, value: string) => void;
   readonly onToggle: (item: string, included: boolean) => void;
   readonly onWithdraw: (team: string, item: string) => void;
 };
@@ -1522,14 +1576,21 @@ type ExecutedOrderProps = {
 
 type ProposalItemProps = {
   readonly item: TransactionReviewItemView;
+  readonly bid: TransactionReviewBidField | undefined;
   readonly tradeProposal: TransactionReviewTeamView["tradeProposal"];
   readonly tradeRules: TransactionReviewTradeRulesView | undefined;
   readonly expired: boolean;
   readonly submitting: boolean;
   readonly included: boolean;
   readonly withdrawing: boolean;
+  readonly onBid: (value: string) => void;
   readonly onToggle: (included: boolean) => void;
   readonly onWithdraw: () => void;
+};
+
+type BidFactProps = {
+  readonly proposed: number;
+  readonly sentBid: number | undefined;
 };
 
 type PlayerColumnProps = {

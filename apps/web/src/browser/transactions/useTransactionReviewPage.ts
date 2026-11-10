@@ -5,6 +5,7 @@ import type { Accessor } from "solid-js";
 import { useSignInRecovery } from "#browser/session/signInRecovery.ts";
 import type { ActionFeedbackState, RecoveryAction } from "#browser/shared-ui/ActionFeedback.tsx";
 import type {
+  TransactionReviewData,
   TransactionReviewItemView,
   TransactionReviewTeamView,
   TransactionReviewView,
@@ -12,6 +13,7 @@ import type {
   WithdrawTradeRequest,
 } from "#contracts/connections/transactionContract.ts";
 
+import { readWaiverBid, waiverBidBudgetError } from "./transactionBids";
 import {
   describeTradeWithdrawalFailure,
   describeTransactionSubmissionFailure,
@@ -28,6 +30,8 @@ export function useTransactionReviewPage(
   const review = useQuery(() => props.reviewQuery());
   const signIn = useSignInRecovery();
   const [excluded, setExcluded] = createSignal<ReadonlySet<string>>(new Set());
+  const [bidDrafts, setBidDrafts] = createSignal<ReadonlyMap<string, string>>(new Map());
+  const [sentBids, setSentBids] = createSignal<ReadonlyMap<string, number>>(new Map());
   const [feedback, setFeedback] = createSignal<ActionFeedbackState>();
   const [justSubmitted, setJustSubmitted] = createSignal(false);
   const [withdrawingKey, setWithdrawingKey] = createSignal<string>();
@@ -53,12 +57,26 @@ export function useTransactionReviewPage(
     return {
       ...options,
       onSuccess: (
-        data: TransactionReviewView,
-        variables: { readonly set: string; readonly include: ReadonlyArray<string> },
+        data: TransactionReviewData,
+        variables: {
+          readonly set: string;
+          readonly include: ReadonlyArray<string>;
+          readonly bids: ReadonlyArray<{ readonly item: string; readonly bid: number }>;
+        },
         onMutateResult: unknown,
         context: Parameters<NonNullable<typeof options.onSuccess>>[3],
       ) => {
         options.onSuccess?.(data, variables, onMutateResult, context);
+        const submittedBids = data.submittedBids ?? [];
+        if (submittedBids.length > 0) {
+          setSentBids((current) => {
+            const next = new Map(current);
+            for (const entry of submittedBids) {
+              next.set(entry.item, entry.bid);
+            }
+            return next;
+          });
+        }
         setFeedback(undefined);
         setJustSubmitted(true);
       },
@@ -130,6 +148,62 @@ export function useTransactionReviewPage(
     item.staleness.status !== "illegal" &&
     !excluded().has(item.id);
 
+  const bidReadings = createMemo<ReadonlyMap<string, TransactionReviewBidReading>>(() => {
+    const data = review.data;
+    const drafts = bidDrafts();
+    const sent = sentBids();
+    const readings = new Map<string, TransactionReviewBidReading>();
+    for (const team of data.teams) {
+      const remaining = team.budget?.status === "published" ? team.budget.remaining : undefined;
+      for (const item of team.items) {
+        if (item.kind !== "waiver_claim") {
+          continue;
+        }
+        const proposed = item.bid ?? 0;
+        const value = drafts.get(item.id) ?? String(proposed);
+        const sentBid = sent.get(item.id);
+        const editable = item.state === "proposed" && !data.set.expired && !data.set.settled;
+        if (!editable) {
+          readings.set(item.id, {
+            field: { value, proposed, editable, ...(sentBid === undefined ? {} : { sentBid }) },
+            bid: proposed,
+          });
+          continue;
+        }
+        const read = readWaiverBid(value);
+        if (read.error !== undefined) {
+          readings.set(item.id, { field: { value, proposed, editable, error: read.error } });
+          continue;
+        }
+        const budgetError = waiverBidBudgetError(read.bid, remaining);
+        readings.set(item.id, {
+          field: {
+            value,
+            proposed,
+            editable,
+            ...(budgetError === undefined ? {} : { error: budgetError }),
+          },
+          bid: read.bid,
+        });
+      }
+    }
+    return readings;
+  });
+
+  const bidFor = (item: TransactionReviewItemView): TransactionReviewBidField | undefined => {
+    if (item.kind !== "waiver_claim") {
+      return undefined;
+    }
+    return bidReadings().get(item.id)?.field;
+  };
+
+  const setBid = (item: string, value: string): void => {
+    if (submit.isPending) {
+      return;
+    }
+    setBidDrafts((current) => new Map(current).set(item, value));
+  };
+
   const toggleItem = (item: string, included: boolean): void => {
     if (submit.isPending) {
       return;
@@ -150,6 +224,7 @@ export function useTransactionReviewPage(
       return undefined;
     }
     const data = review.data;
+    const readings = bidReadings();
     const items = data.teams.flatMap((team) => team.items);
     const included = items.filter(isItemIncluded);
     const checkedTimes = items.flatMap((item) =>
@@ -171,9 +246,14 @@ export function useTransactionReviewPage(
       includedCount: included.length,
       includedWaivers: included.filter((item) => item.kind === "waiver_claim").length,
       includedFaab: included.reduce(
-        (total, item) => total + (item.kind === "waiver_claim" ? (item.bid ?? 0) : 0),
+        (total, item) =>
+          total + (item.kind === "waiver_claim" ? (readings.get(item.id)?.bid ?? 0) : 0),
         0,
       ),
+      includedBids: included.flatMap((item) => {
+        const bid = readings.get(item.id)?.bid;
+        return bid === undefined ? [] : [{ item: item.id, bid }];
+      }),
       submitted: data.set.submissions.length > 0,
       settled: data.set.settled,
       submissions: data.set.submissions,
@@ -198,13 +278,27 @@ export function useTransactionReviewPage(
       });
       return;
     }
+    const bidError = current.includedItems.flatMap((item) => {
+      const error = bidFor(item)?.error;
+      return error === undefined ? [] : [error];
+    })[0];
+    if (bidError !== undefined) {
+      setFeedback({ type: "attention", message: bidError });
+      return;
+    }
     setFeedback(undefined);
-    void submit.mutate({ set: current.review.set.id, include: current.includedIds });
+    void submit.mutate({
+      set: current.review.set.id,
+      include: current.includedIds,
+      bids: current.includedBids,
+    });
   };
 
   return {
     model,
     isItemIncluded,
+    bidFor,
+    setBid,
     toggleItem,
     isLoading: () => review.isPending,
     failure: () => review.error,
@@ -242,6 +336,8 @@ export type TransactionReviewModelOutcome =
 export type TransactionReviewPageController = {
   readonly model: Accessor<TransactionReviewModel | undefined>;
   readonly isItemIncluded: (item: TransactionReviewItemView) => boolean;
+  readonly bidFor: (item: TransactionReviewItemView) => TransactionReviewBidField | undefined;
+  readonly setBid: (item: string, value: string) => void;
   readonly toggleItem: (item: string, included: boolean) => void;
   readonly isLoading: Accessor<boolean>;
   readonly failure: Accessor<Error | null>;
@@ -272,6 +368,7 @@ export type TransactionReviewModel = {
   readonly includedCount: number;
   readonly includedWaivers: number;
   readonly includedFaab: number;
+  readonly includedBids: ReadonlyArray<{ readonly item: string; readonly bid: number }>;
   readonly submitted: boolean;
   readonly settled: boolean;
   readonly submissions: TransactionReviewView["set"]["submissions"];
@@ -289,4 +386,17 @@ export type TransactionReviewModel = {
 type TransactionReviewPageOptions = {
   readonly reviewQuery: Accessor<TransactionReviewQueryOptions>;
   readonly remote: Accessor<TransactionRemote>;
+};
+
+export type TransactionReviewBidField = {
+  readonly value: string;
+  readonly proposed: number;
+  readonly editable: boolean;
+  readonly sentBid?: number;
+  readonly error?: string;
+};
+
+type TransactionReviewBidReading = {
+  readonly field: TransactionReviewBidField;
+  readonly bid?: number;
 };
