@@ -139,6 +139,7 @@ function playerFragments(input: {
   readonly primaryPosition: string;
   readonly eligiblePositions: ReadonlyArray<string>;
   readonly proTeam?: string;
+  readonly proTeamKey?: string;
   readonly status?: string;
   readonly statusFull?: string;
   readonly injuryNote?: string;
@@ -150,6 +151,7 @@ function playerFragments(input: {
     { player_id: input.key.split(".").at(-1) },
     { name: { full: input.name } },
     ...(input.proTeam === undefined ? [] : [{ editorial_team_abbr: input.proTeam }]),
+    ...(input.proTeamKey === undefined ? [] : [{ editorial_team_key: input.proTeamKey }]),
     { display_position: input.displayPosition },
     { position_type: "O" },
     { primary_position: input.primaryPosition },
@@ -184,6 +186,7 @@ export const rosterPayload = {
                     primaryPosition: "QB",
                     eligiblePositions: ["QB"],
                     proTeam: "SYN",
+                    proTeamKey: "nfl.t.2",
                     byeWeek: "7",
                     undroppable: "0",
                   }),
@@ -279,6 +282,7 @@ export const datedRosterPayload = {
                     primaryPosition: "C",
                     eligiblePositions: ["C", "LW"],
                     proTeam: "SYN",
+                    proTeamKey: "nhl.t.17",
                   }),
                   {
                     selected_position: [

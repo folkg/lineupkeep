@@ -26,6 +26,7 @@ import type {
   ProviderRoster,
   ProviderRosterPlayer,
   ProviderRosterSlot,
+  ProviderSchedulePlayer,
   ProviderStartingLineup,
   ProviderStatBasis,
   ProviderTransactionTrend,
@@ -204,6 +205,43 @@ export const readRosterThroughSdk = (
       );
     return providerRosterOf(teamKey, roster);
   });
+
+export const readRosterScheduleThroughSdk = (
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  teamKey: string,
+  coverage: ProviderRosterCoverage,
+): Effect.Effect<ReadonlyArray<ProviderSchedulePlayer>, ProviderReadFailure> =>
+  Effect.gen(function* () {
+    const session = yield* Yahoo.makeSession(cookie).pipe(
+      Effect.mapError(() => ProviderSessionRejected.make({ operation })),
+    );
+    const roster = yield* Yahoo.rosters.forTeam({ teamKey, coverage }).pipe(
+      Yahoo.Retry.none,
+      Effect.provideContext(Context.add(context, Yahoo.Credentials, Effect.succeed(session))),
+      Effect.provideService(Tracer.DisablePropagation, true),
+      Effect.mapError((error) => providerReadFailureOf(operation, error)),
+    );
+    return roster.players.map((player) => providerSchedulePlayerOf(player, coverage));
+  });
+
+function providerSchedulePlayerOf(
+  player: Yahoo.YahooRosterPlayer,
+  coverage: ProviderRosterCoverage,
+): ProviderSchedulePlayer {
+  const opponent = scheduledOpponent(player.opponent);
+  return {
+    providerPlayerKey: player.playerKey,
+    name: player.name,
+    proTeamKey: player.proTeamKey,
+    proTeamAbbreviation: player.proTeamAbbreviation,
+    games:
+      opponent === undefined
+        ? []
+        : [{ date: coverage.type === "date" ? coverage.date : undefined, ...opponent }],
+  };
+}
 
 export const readPlayerDetailsThroughSdk = (
   context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,

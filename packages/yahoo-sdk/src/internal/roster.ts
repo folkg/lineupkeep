@@ -160,6 +160,7 @@ function rosterPlayerOf(player: typeof LeagueRosterPlayerPayload.Type): YahooRos
     primaryPosition: player.primary_position,
     positionType: optionalNonEmpty(player.position_type),
     proTeamAbbreviation: optionalNonEmpty(player.editorial_team_abbr),
+    proTeamKey: optionalNonEmpty(player.editorial_team_key),
     eligiblePositions: (player.eligible_positions ?? []).map(({ position }) => position),
     selectedPosition: selectedPositionOf(player.selected_position),
     editable: player.is_editable,
@@ -262,6 +263,7 @@ export type YahooRosterPlayer = {
   readonly primaryPosition: string;
   readonly positionType?: string;
   readonly proTeamAbbreviation?: string;
+  readonly proTeamKey?: string;
   readonly eligiblePositions: ReadonlyArray<string>;
   readonly selectedPosition: YahooSelectedPosition;
   readonly editable?: boolean;
@@ -403,6 +405,7 @@ const RosterPlayerFields = Schema.Struct({
   position_type: Schema.optional(Schema.String),
   eligible_positions: Schema.optional(Schema.Array(Schema.Struct({ position: Schema.String }))),
   editorial_team_abbr: Schema.optional(Schema.String),
+  editorial_team_key: Schema.optional(Schema.String),
   selected_position: SelectedPosition,
   is_editable: Schema.optional(Flag),
   status: Schema.optional(Schema.String),

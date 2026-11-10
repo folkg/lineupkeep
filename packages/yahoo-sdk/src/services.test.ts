@@ -175,6 +175,8 @@ it.effect("reads a week roster with coverage, starting status, and injury facts"
     }
     assert.strictEqual(starter.playerKey, "466.p.20001");
     assert.strictEqual(starter.selectedPosition.position, "QB");
+    assert.strictEqual(starter.proTeamAbbreviation, "SYN");
+    assert.strictEqual(starter.proTeamKey, "nfl.t.2");
     assert.deepStrictEqual(starter.startingStatus, {
       coverage: { type: "week", week: 6 },
       starting: true,
@@ -240,6 +242,8 @@ it.effect("reads a date roster and keeps the provider's date coverage", () => {
       type: "date",
       date: "2026-10-17",
     });
+    assert.strictEqual(roster.players[0]?.proTeamAbbreviation, "SYN");
+    assert.strictEqual(roster.players[0]?.proTeamKey, "nhl.t.17");
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
 

@@ -58,7 +58,6 @@ import type {
   ProviderRosterPosition,
   ProviderSchedulePeriod,
   ProviderSchedulePlayer,
-  ProviderScheduledGame,
   ProviderStanding,
   ProviderStandings,
   ProviderStatValue,
@@ -106,6 +105,7 @@ import {
   readMatchupsThroughSdk,
   readPendingTradesThroughSdk,
   readPlayerDetailsThroughSdk,
+  readRosterScheduleThroughSdk,
   readRosterThroughSdk,
   readTransactionsThroughSdk,
   rosterSlotOf,
@@ -357,14 +357,13 @@ export const yahooProvider = Effect.gen(function* () {
     if (input.period.type === "week") {
       const week = yield* ValidWeek(input.period.week);
       const requested = { type: "week" as const, week };
-      const payload = yield* readJson(internet, {
-        operation: "read_roster_schedule",
-        origin: readOrigin,
-        path: `/fantasy/v2/team/${teamKey}/roster;week=${String(week)}/players;out=opponent`,
-        query: { format: "json" },
+      const players = yield* readRosterScheduleThroughSdk(
+        sdk,
+        "read_roster_schedule",
         cookie,
-        normalize: true,
-      }).pipe(
+        teamKey,
+        requested,
+      ).pipe(
         Effect.catchTag("provider.request_failed", (error) =>
           Effect.fail(
             error.status === 400
@@ -377,25 +376,15 @@ export const yahooProvider = Effect.gen(function* () {
           ),
         ),
       );
-      const decoded = yield* decodePayload(TeamRosterPayload, payload, "read_roster_schedule");
-      const players = yield* scheduleFromPayload(decoded, teamKey, requested);
       return { providerTeamKey: teamKey, period: input.period, dates: [], players };
     }
     const dates = yield* scheduleDates(input.period);
     const daily = yield* Effect.forEach(
       dates,
       (date) =>
-        Effect.gen(function* () {
-          const payload = yield* readJson(internet, {
-            operation: "read_roster_schedule",
-            origin: readOrigin,
-            path: `/fantasy/v2/team/${teamKey}/roster;date=${date}/players;out=opponent`,
-            query: { format: "json" },
-            cookie,
-            normalize: true,
-          });
-          const decoded = yield* decodePayload(TeamRosterPayload, payload, "read_roster_schedule");
-          return yield* scheduleFromPayload(decoded, teamKey, { type: "date", date });
+        readRosterScheduleThroughSdk(sdk, "read_roster_schedule", cookie, teamKey, {
+          type: "date",
+          date,
         }),
       { concurrency: maximumDayReadConcurrency },
     );
@@ -2176,123 +2165,6 @@ function sameRosterCoverage(left: ProviderRosterCoverage, right: ProviderRosterC
       : false;
 }
 
-function rosterPayloadRows(
-  payload: typeof TeamRosterPayload.Type,
-  requestedTeamKey: string,
-): Effect.Effect<
-  {
-    readonly declared: typeof RosterCoverage.Type | undefined;
-    readonly coverageType: string;
-    readonly players: ReadonlyArray<typeof RosterPlayerPayload.Type>;
-  },
-  ProviderResponseInvalid
-> {
-  return Effect.gen(function* () {
-    if (payload.team.team_key !== requestedTeamKey) {
-      return yield* responseMismatch({ operation: "read_roster", field: "team.team_key" });
-    }
-    const roster = payload.team.roster;
-    const entries = isReadonlyArray(roster)
-      ? roster
-      : "entries" in roster
-        ? roster.entries
-        : [roster];
-    const players = entries.flatMap((entry) => entry.players);
-    if (players.length === 0) {
-      return yield* responseMismatch({ operation: "read_roster" });
-    }
-    const coverageTypes = new Set(players.map((player) => player.selected_position.coverage_type));
-    const coverageType = [...coverageTypes][0];
-    if (coverageTypes.size !== 1 || coverageType === undefined) {
-      return yield* responseMismatch({ operation: "read_roster" });
-    }
-    return {
-      declared: isReadonlyArray(roster) ? undefined : roster,
-      coverageType,
-      players,
-    };
-  });
-}
-
-function scheduleFromPayload(
-  payload: typeof TeamRosterPayload.Type,
-  requestedTeamKey: string,
-  requested: ProviderRosterCoverage,
-): Effect.Effect<
-  ReadonlyArray<ProviderSchedulePlayer>,
-  ProviderResponseInvalid | ProviderPeriodMismatch
-> {
-  return Effect.gen(function* () {
-    const rows = yield* rosterPayloadRows(payload, requestedTeamKey);
-    if (requested.type === "week") {
-      const weeks = new Set(
-        rows.players.flatMap((player) =>
-          player.selected_position.week === undefined ? [] : [player.selected_position.week],
-        ),
-      );
-      const playerWeek = [...weeks][0];
-      const declaredWeek = rows.declared?.week;
-      const week = declaredWeek ?? playerWeek;
-      if (
-        rows.coverageType !== "week" ||
-        weeks.size > 1 ||
-        (declaredWeek !== undefined && playerWeek !== undefined && declaredWeek !== playerWeek) ||
-        week !== requested.week
-      ) {
-        return yield* ProviderPeriodMismatch.make({
-          operation: "read_roster_schedule",
-          requested,
-          covered:
-            rows.coverageType === "week" && week !== undefined ? { type: "week", week } : null,
-        });
-      }
-      return rows.players.map((player) => toSchedulePlayer(player, gamesIn(player, undefined)));
-    }
-    const dates = new Set(
-      rows.players.flatMap((player) =>
-        player.selected_position.date === undefined ? [] : [player.selected_position.date],
-      ),
-    );
-    const playerDate = [...dates][0];
-    const declaredDate = rows.declared?.date;
-    const date = declaredDate ?? playerDate;
-    if (
-      rows.coverageType !== "date" ||
-      dates.size > 1 ||
-      (declaredDate !== undefined && playerDate !== undefined && declaredDate !== playerDate) ||
-      date !== requested.date
-    ) {
-      return yield* ProviderPeriodMismatch.make({
-        operation: "read_roster_schedule",
-        requested,
-        covered: rows.coverageType === "date" && date !== undefined ? { type: "date", date } : null,
-      });
-    }
-    return rows.players.map((player) => toSchedulePlayer(player, gamesIn(player, requested.date)));
-  });
-}
-
-function toSchedulePlayer(
-  player: typeof RosterPlayerPayload.Type,
-  games: ReadonlyArray<ProviderScheduledGame>,
-): ProviderSchedulePlayer {
-  return {
-    providerPlayerKey: player.player_key,
-    name: player.name.full,
-    proTeamKey: optionalNonEmpty(player.editorial_team_key ?? ""),
-    proTeamAbbreviation: optionalNonEmpty(player.editorial_team_abbr ?? ""),
-    games,
-  };
-}
-
-function gamesIn(
-  player: typeof RosterPlayerPayload.Type,
-  date: string | undefined,
-): ReadonlyArray<ProviderScheduledGame> {
-  const opponent = scheduledOpponent(player.opponent);
-  return opponent === undefined ? [] : [{ date, ...opponent }];
-}
-
 function mergeDailySchedules(
   days: ReadonlyArray<ReadonlyArray<ProviderSchedulePlayer>>,
 ): ReadonlyArray<ProviderSchedulePlayer> {
@@ -3625,13 +3497,6 @@ const RosterPlayerFields = Schema.Struct({
   is_undroppable: Schema.optional(Flag),
 });
 
-const RosterPlayerPayload = Schema.Struct({
-  ...RosterPlayerFields.fields,
-  opponent: Schema.NullOr(Schema.String),
-  starting_status: Schema.optional(Schema.Array(StartingStatus)),
-  transactions: Schema.optional(PlayerTransactions),
-});
-
 const LeagueRosterPlayerPayload = Schema.Struct({
   ...RosterPlayerFields.fields,
   opponent: Schema.optional(Schema.NullOr(Schema.String)),
@@ -3645,25 +3510,9 @@ const RosterCoverage = Schema.Struct({
   date: Schema.optional(Schema.String),
 });
 
-const RosterEntry = Schema.Struct({
-  ...RosterCoverage.fields,
-  players: Schema.Array(RosterPlayerPayload),
-});
-
 const LeagueRosterEntry = Schema.Struct({
   ...RosterCoverage.fields,
   players: Schema.Array(LeagueRosterPlayerPayload),
-});
-
-const TeamRosterPayload = Schema.Struct({
-  team: Schema.Struct({
-    team_key: Schema.String.pipe(Schema.check(Schema.isPattern(/^[0-9]+\.l\.[0-9]+\.t\.[0-9]+$/u))),
-    roster: Schema.Union([
-      Schema.Array(RosterEntry),
-      Schema.Struct({ ...RosterCoverage.fields, entries: Schema.Array(RosterEntry) }),
-      RosterEntry,
-    ]),
-  }),
 });
 
 const LeagueKey = Schema.String.pipe(Schema.check(Schema.isPattern(/^[0-9]+\.l\.[0-9]+$/u)));
