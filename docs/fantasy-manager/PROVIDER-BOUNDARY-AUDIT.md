@@ -577,9 +577,10 @@ not the request body. No proposal was created, so there was nothing to cancel.
 The pick shape is the captured one, and the earlier refusal is recorded in the roadmap: the same shape
 on the website write host answered 400 "Invalid XML POSTed. Error code 25", a parse failure, while a
 player-only body on that host reaches semantic validation. The product sends the app host the capture
-proved rather than treating the website's parse refusal as the product's answer. The live write is
-unproven with our stored sign-in; the fixtures prove the body, the host choice, the sentence, and the
-stored key.
+proved rather than treating the website's parse refusal as the product's answer. The live pick-trade
+write was unproven with the 9 November sign-in; the refreshed connection proved the no-op lineup write
+on 10 November, as recorded below, and the fixtures still prove the pick body, the host choice, the
+sentence, and the stored key.
 
 ### Migration order
 
@@ -603,8 +604,9 @@ stored key.
    player-week facts, scorer facts, games-played facts, and available picks unchanged.
 8. Writes last, one operation at a time — done for `lineups.setNative`, `lineups.assign`,
    `lineups.reserve`, `transactions.apply`, `trades.propose`, and `trades.withdraw`, with the body,
-   host, and every published outcome unchanged. The live write proof stays the 9 November pick trade;
-   none was needed for the swap, because the shape was already proved and recorded.
+   host, and every published outcome unchanged. The 9 November pick trade was the live write proof at
+   the time of the swap; on 10 November the refreshed connection also proved `lineups.assign` with a
+   no-op lineup write and a refused write, as recorded below.
 
 ### Write parity
 
@@ -642,6 +644,46 @@ Nothing remains outside the SDK. The only two things the adapter still names are
 review page URLs it publishes for a team (`football.fantasysports.yahoo.com` and its siblings), and the
 `PublicInternet` transport it hands to the SDK as the HTTP client, which is the application's
 public-destination guard rather than a provider request.
+
+### Live regression proof, 10 November 2026
+
+`e2e/scratch/provider-regression/check.ts` reads the owner's stored connection and exercises the port
+against hockey league `477.l.58487`, team `477.l.58487.t.2` (Bread Roller). Its output is
+`e2e/scratch/provider-regression/report.json`, with a readable summary in
+`e2e/scratch/provider-regression/evidence.md`. The stored credential was created at
+`2026-11-10T02:17:47Z`; the run started at `2026-11-10T17:46:35Z`. No cookie, crumb, header, or
+account identifier is written to either file. No production code changed for this proof.
+
+| Path                        | Live answer                                                                                                                        | Verdict  |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `readLeague`                | 200; settings published, including format, period window 7 of 1–26, date roster coverage, constraints, roster positions, and stats | Proved   |
+| `readLeagueRosters`         | 200; 10 teams, 210 players, coverage `2026-11-10`; owner roster 21 players                                                         | Proved   |
+| `readAvailableDraftPicks`   | 200; 19 rounds (1–19) under the owner team                                                                                         | Proved   |
+| `readStandings`             | 200; 10 teams with record, rank, playoff seed, points, and category totals                                                         | Proved   |
+| `readPlayerWeeks`           | 200; 21 facts for week 7, with `plays` and the opponent where a game exists                                                        | Proved   |
+| `applyExplicitAssignments`  | PUT 200; accepted; read-back identical                                                                                             | Proved   |
+| Refused write on a bad date | PUT 400; port `rejected`/`invalid_request`; read-back identical                                                                    | Refusing |
+
+The no-op write sent the 14 currently starting players back in their current slots for the current
+date, `2026-11-10`. The provider accepted it with a 200. The immediate read-back published the same 21
+players in the same order and the same slots, with no field change on any player. Nothing was added,
+dropped, traded, benched, reordered, or accepted.
+
+The refusal used the same explicit-assignment write with no real decision attached: the target was
+the impossible date `0000-00-00` and the only player was a non-existent key. The provider answered
+400 with its own sentence, "You cannot make changes to your roster for 0000-00-00.", and the port
+published it as `detail` on a `rejected`/`invalid_request` result. The read-back was identical to the
+lineup before the request.
+
+Fields the provider did not publish are left absent rather than filled in. The league settings omit
+`maxSeasonAcquisitions`, `maxGamesPlayed`, and `maxInningsPitched` because this league publishes no
+such limits. On the owner roster the two injury fields are absent for the 19 healthy players and the
+opponent is absent for players with no game. Standings leave streak, games back, points back, points
+for, and points against absent for all 10 teams because this provider publishes none of them for this
+league. The weekly rank read leaves `projectedRank` absent for all 21 players because Yahoo publishes
+no projected week rank for this NHL league; `plays` and the opponent are still published. Every read
+above answered 200; the report keeps the full returned rows and the request log (method, host, path,
+status, no query string).
 
 ### Parity findings from the migrated reads
 
