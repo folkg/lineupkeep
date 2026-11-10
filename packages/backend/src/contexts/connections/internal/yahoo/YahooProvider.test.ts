@@ -586,7 +586,7 @@ it.effect("sends a draft-pick trade to the app write host and keeps the captured
     assert.strictEqual(write.url.pathname, "/fantasy/v2/league/461.l.1000/transactions");
     assert.strictEqual(
       write.body,
-      '<?xml version="1.0" encoding="UTF-8"?><fantasy_content><transaction><type>pending_trade</type><trader_team_key>461.l.1000.t.1</trader_team_key><tradee_team_key>461.l.1000.t.2</tradee_team_key><picks><pick><source_team_key>461.l.1000.t.1</source_team_key><destination_team_key>461.l.1000.t.2</destination_team_key><round>1</round></pick><pick><source_team_key>461.l.1000.t.2</source_team_key><destination_team_key>461.l.1000.t.1</destination_team_key><round>1</round></pick></picks></transaction></fantasy_content>',
+      '<?xml version="1.0" encoding="UTF-8"?><fantasy_content><transaction><type>pending_trade</type><trader_team_key>461.l.1000.t.1</trader_team_key><tradee_team_key>461.l.1000.t.2</tradee_team_key><trade_note></trade_note><picks><pick><source_team_key>461.l.1000.t.1</source_team_key><destination_team_key>461.l.1000.t.2</destination_team_key><round>1</round></pick><pick><source_team_key>461.l.1000.t.2</source_team_key><destination_team_key>461.l.1000.t.1</destination_team_key><round>1</round></pick></picks></transaction></fantasy_content>',
     );
   }).pipe(Effect.provide(yahooLayer(layer)));
 });

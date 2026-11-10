@@ -364,6 +364,22 @@ and [ADR 0009](adr/0009-provider-score-ownership.md#deferred): widening the prod
 category-aware or rotisserie optimization inside the adapter, and baseball pitcher policy. This chunk
 keeps behavior and does not add a provider, a sport, or a new optimization.
 
+## Draft picks in a trade, proved live
+
+A pick trade is host-specific and shape-specific, both settled against league `477.l.58487` on 9 November:
+
+- The website write host parses the body and answers "You must select at least one player or pick."; a pick never
+  reaches it. The app write host accepts the same body.
+- The working body is `<trade_note></trade_note>` followed by `<picks>`, with no `<players>` element when only
+  picks move. A missing note is read as an empty selection, and an empty `<players>` element fails the parser with
+  error 25.
+- A Round 1 for Round 1 proposal returned 201 with pending trade `477.l.58487.pt.13` and was cancelled with 204.
+- Players and picks parse together on the app host: a mixed body carrying an unknown player was refused with
+  "Player --empty-- is not on team Bread Roller.", which proves both parts were read.
+
+The adapter now always writes the trade note, sends a pick-bearing proposal to the app host, and keeps player-only
+trades on the website host. The live record lives in `e2e/scratch/pick-send/evidence.md`.
+
 ## Yahoo SDK read migration
 
 `packages/yahoo-sdk` is now a workspace package. It imports only `effect` and its own `#yahoo/*`

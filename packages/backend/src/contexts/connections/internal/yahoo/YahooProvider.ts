@@ -1535,10 +1535,7 @@ function tradeProposalBody(input: {
   );
   const playersBody = players.length === 0 ? "" : `<players>${players.join("")}</players>`;
   const picksBody = picks.length === 0 ? "" : `<picks>${picks.join("")}</picks>`;
-  const noteBody =
-    input.note === undefined && picks.length > 0
-      ? ""
-      : `<trade_note>${xmlText(input.note ?? "")}</trade_note>`;
+  const noteBody = `<trade_note>${xmlText(input.note ?? "")}</trade_note>`;
   return `<?xml version="1.0" encoding="UTF-8"?><fantasy_content><transaction><type>pending_trade</type><trader_team_key>${input.providerTeamKey}</trader_team_key><tradee_team_key>${input.counterpartyTeamKey}</tradee_team_key>${noteBody}${playersBody}${picksBody}</transaction></fantasy_content>`;
 }
 
