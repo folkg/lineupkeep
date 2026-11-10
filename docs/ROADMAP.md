@@ -1081,12 +1081,12 @@ why anything is declined. Currently zero open.
 | D2  | ~~Cloudflare split~~ settled: stay on Cloud Run, the waking shell covers the cold start                                | —      |
 | D3  | ~~Schedule cache source: derived from our reads, or external~~ settled: cache our reads, NHL API external, no graphite | F1     |
 | D4  | Retention, RPO/RTO and recovery owner                                                                                  | N1     |
-| D5  | Rename to lineupgrade, and when                                                                                        | O1     |
+| D5  | ~~Rename to lineupgrade~~ settled: product-visible strings renamed; infra identities keep their names                  | —      |
 | D6  | ~~Solver direction~~ settled: keep current behaviour, revisit only on a wrong lineup                                   | —      |
 | D7  | ~~Transactions read-only or executed~~ settled: group I owns it                                                        | —      |
 | D8  | Reserve-slot eligibility: per-player, or per reserve position                                                          | A7     |
 | D9  | Passkeys as a sign-in option                                                                                           | future |
-| D10 | Sign-in email delivery: Gmail relay for now, so a second address can sign in and the erasure proof can run             | J3     |
+| D10 | ~~Sign-in email delivery~~ settled: SMTP relay, proved live by the erasure run                                         | —      |
 | D11 | ~~Grant revocation on replay~~ settled: keep RFC 9700 family revocation                                                | —      |
 | D12 | ~~Roster spots on an offer; per-player ranking on a run~~ settled: neither publishes; neither changes a decision       | —      |
 
