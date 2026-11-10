@@ -12,6 +12,7 @@ import { eq } from "drizzle-orm";
 import {
   Cause,
   Config,
+  Crypto,
   Data,
   ConfigProvider,
   Context,
@@ -25,6 +26,7 @@ import {
   Schema,
 } from "effect";
 import type { Scope } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { appEnvironmentConfig } from "#config/AppEnvironment.ts";
 import { AuthenticationInvalidResponse, AuthenticationUnavailable } from "#contexts/auth/Auth.ts";
@@ -48,7 +50,7 @@ import * as authSchema from "./AuthTables.ts";
 import { user as authUser } from "./AuthTables.ts";
 import { OAuthClientRepository } from "./OAuthClientRepository.ts";
 import * as oauthSchema from "./OAuthTables.ts";
-import { oauthClient } from "./OAuthTables.ts";
+import { oauthClient, oauthRefreshToken } from "./OAuthTables.ts";
 import { SignInCodeQuotaRepository } from "./SignInCodeQuotaRepository.ts";
 
 export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
@@ -56,6 +58,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
   {
     make: Effect.gen(function* () {
       const database = yield* AuthDatabase;
+      const crypto = yield* Crypto.Crypto;
       const background = yield* BackgroundWork;
       const internet = yield* PublicInternet;
       const emailDelivery = yield* EmailDelivery;
@@ -195,8 +198,9 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
         }
 
         const exchange = yield* defaultTokenExchangeResource(request, tokenPath, oauthResource);
+        const exchangeFacts = yield* describeTokenExchange(exchange, tokenPath, database, crypto);
         const response = yield* runAuthHandler(exchange);
-        yield* annotateRefusedTokenExchange(exchange, response, tokenPath);
+        yield* annotateTokenExchange(exchangeFacts, response);
 
         const code = requestedCodes.get(request);
         if (code === undefined) {
@@ -472,30 +476,135 @@ function defaultTokenExchangeResource(
   });
 }
 
-function annotateRefusedTokenExchange(
+function describeTokenExchange(
   request: Request,
-  response: Response,
   tokenPath: string,
-): Effect.Effect<void> {
+  database: AuthDatabase["Service"],
+  crypto: Crypto.Crypto,
+): Effect.Effect<TokenExchangeFacts> {
   return Effect.gen(function* () {
-    if (!isFormPost(request, tokenPath) || response.status < 400 || response.status >= 500) {
-      return;
+    const notATokenExchange: TokenExchangeFacts = {
+      grantType: "unknown",
+      clientId: "unknown",
+      refreshToken: undefined,
+    };
+    if (!isFormPost(request, tokenPath)) {
+      return notATokenExchange;
     }
     const form = yield* readForm(request);
     if (Option.isNone(form)) {
-      return;
+      return notATokenExchange;
     }
     const params = new URLSearchParams(form.value);
     const grantType = params.get("grant_type");
-    const error = yield* oauthErrorCode(response);
-    yield* Effect.annotateCurrentSpan({
-      "oauth.grant_type":
+    const facts: Pick<TokenExchangeFacts, "grantType" | "clientId"> = {
+      grantType:
         grantType === "authorization_code" || grantType === "refresh_token" ? grantType : "unknown",
-      "oauth.client_id": tokenExchangeClientId(request.headers, params) ?? "unknown",
-      "oauth.refresh_token_presented": (params.get("refresh_token") ?? "") !== "",
+      clientId: tokenExchangeClientId(request.headers, params) ?? "unknown",
+    };
+    if (grantType !== "refresh_token") {
+      return { ...facts, refreshToken: undefined };
+    }
+    const presented = params.get("refresh_token");
+    return {
+      ...facts,
+      refreshToken:
+        presented === null || presented === ""
+          ? "absent"
+          : yield* describeRefreshToken(database, crypto, presented),
+    };
+  });
+}
+
+function describeRefreshToken(
+  database: AuthDatabase["Service"],
+  crypto: Crypto.Crypto,
+  presented: string,
+): Effect.Effect<RefreshTokenPresentation | "missing" | "unavailable"> {
+  return Effect.gen(function* () {
+    const now = DateTime.nowUnsafe().epochMilliseconds;
+    const tokenHash = yield* providerRefreshTokenHash(crypto, presented);
+    const stored = yield* Effect.tryPromise(() =>
+      database
+        .select({
+          id: oauthRefreshToken.id,
+          revoked: oauthRefreshToken.revoked,
+          rotatedAt: oauthRefreshToken.rotatedAt,
+          rotationReplayExpiresAt: oauthRefreshToken.rotationReplayExpiresAt,
+          rotationReplayResponse: oauthRefreshToken.rotationReplayResponse,
+          expiresAt: oauthRefreshToken.expiresAt,
+        })
+        .from(oauthRefreshToken)
+        .where(eq(oauthRefreshToken.token, tokenHash))
+        .limit(1),
+    ).pipe(Effect.option);
+    if (Option.isNone(stored)) {
+      return "unavailable";
+    }
+    const row = stored.value[0];
+    if (row === undefined) {
+      return "missing";
+    }
+    return {
+      id: row.id,
+      state: row.revoked === null ? "active" : row.rotatedAt === null ? "revoked" : "rotated",
+      reuseWindow:
+        row.rotatedAt === null || row.rotationReplayExpiresAt === null
+          ? "none"
+          : row.rotationReplayExpiresAt.getTime() >= now
+            ? "inside"
+            : "outside",
+      replayStored: row.rotationReplayResponse !== null,
+      expired: row.expiresAt.getTime() < now,
+    };
+  });
+}
+
+function annotateTokenExchange(facts: TokenExchangeFacts, response: Response): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    const refused = response.status >= 400 && response.status < 500;
+    if (facts.grantType !== "refresh_token" && !refused) {
+      return;
+    }
+    const error = refused ? yield* oauthErrorCode(response) : undefined;
+    const presentation = facts.refreshToken;
+    const refreshToken =
+      presentation === undefined || presentation === "absent"
+        ? { "oauth.refresh_token.state": presentation ?? "absent" }
+        : presentation === "missing" || presentation === "unavailable"
+          ? { "oauth.refresh_token.state": presentation }
+          : {
+              "oauth.refresh_token.id": presentation.id,
+              "oauth.refresh_token.state": presentation.state,
+              "oauth.refresh_token.reuse_window": presentation.reuseWindow,
+              "oauth.refresh_token.replay_stored": presentation.replayStored,
+              "oauth.refresh_token.expired": presentation.expired,
+            };
+    const outcome = refused
+      ? "refused"
+      : presentation !== undefined &&
+          presentation !== "absent" &&
+          presentation !== "missing" &&
+          presentation !== "unavailable" &&
+          presentation.state === "rotated"
+        ? "replayed"
+        : "issued";
+    yield* Effect.annotateCurrentSpan({
+      "oauth.grant_type": facts.grantType,
+      "oauth.client_id": facts.clientId,
+      "oauth.refresh_token_presented": presentation !== undefined && presentation !== "absent",
+      ...refreshToken,
       ...(error === undefined ? {} : { "oauth.error": error }),
+      "oauth.outcome": outcome,
     });
   });
+}
+
+function providerRefreshTokenHash(crypto: Crypto.Crypto, token: string): Effect.Effect<string> {
+  return crypto.digest("SHA-256", new TextEncoder().encode(token)).pipe(
+    Effect.orDie,
+    Effect.map((digest) => Base64Url.encode(digest)),
+  );
 }
 
 function isFormPost(request: Request, path: string): boolean {
@@ -878,6 +987,25 @@ const AccessTokenClaims = Schema.Struct({
 });
 
 const OAuthErrorBody = Schema.Struct({ error: Schema.String });
+
+type TokenExchangeFacts = {
+  readonly grantType: "authorization_code" | "refresh_token" | "unknown";
+  readonly clientId: string;
+  readonly refreshToken:
+    | RefreshTokenPresentation
+    | "absent"
+    | "missing"
+    | "unavailable"
+    | undefined;
+};
+
+type RefreshTokenPresentation = {
+  readonly id: string;
+  readonly state: "active" | "rotated" | "revoked";
+  readonly reuseWindow: "inside" | "outside" | "none";
+  readonly replayStored: boolean;
+  readonly expired: boolean;
+};
 
 type ApplicationAuthOptions = import("better-auth").BetterAuthOptions & {
   plugins: [

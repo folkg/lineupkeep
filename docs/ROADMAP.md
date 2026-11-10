@@ -827,12 +827,17 @@ with a retired name. `M`, done.
 The client reports reconnecting after every deployment. That should not be necessary: signing keys are
 persisted, so access tokens survive a revision change.
 
-- [ ] Instrument refresh-token use around a deploy and find whether the strict rotation plus a cold-start
+- [x] Instrument refresh-token use around a deploy and find whether the strict rotation plus a cold-start
       failure is what ends the grant.
-- [ ] If so, widen the reuse window and document the behaviour instead of leaving clients to rediscover it.
-- [ ] Prove it by holding a grant across a deploy with a client that retries.
+- [x] If so, widen the reuse window and document the behaviour instead of leaving clients to rediscover it.
+- [x] Prove it by holding a grant across a deploy with a client that retries.
 
-**Verify**: the same grant serves requests before and after a deploy with no re-authorization. `M`
+**Verify**: the same grant serves requests before and after a deploy with no re-authorization. Held a grant
+through web revisions `…-00128-lld` to `…-00129-87w` on 2026-11-10: 20 refreshes returned 200 across the
+change, `/mcp` served on both sides, and a retried rotated token replayed instead of revoking; a cold-start
+refresh abandoned after 1.5 seconds still replayed on its retry. The earlier 30-second window is what ended
+grants when a retry crossed it; the five-minute window is documented in the
+[deployment runbook](deployment.md#mcp-and-oauth). `M`, done.
 
 ---
 

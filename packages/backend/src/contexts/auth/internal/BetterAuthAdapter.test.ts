@@ -1348,7 +1348,7 @@ it.effect(
 );
 
 it.effect(
-  "replays a rotated grant for a retry later than thirty seconds",
+  "replays a rotated grant inside the five-minute reuse window",
   () =>
     Effect.gen(function* () {
       const adapter = yield* BetterAuthAdapter;
@@ -1362,7 +1362,7 @@ it.effect(
         IssuedCredentials,
       );
       vi.setSystemTime(
-        DateTime.toDateUtc(DateTime.makeUnsafe(startedAt.epochMilliseconds + 31_000)),
+        DateTime.toDateUtc(DateTime.makeUnsafe(startedAt.epochMilliseconds + 299_000)),
       );
 
       const replay = yield* adapter.handle(
@@ -1381,6 +1381,104 @@ it.effect(
       Effect.ensuring(Effect.sync(() => vi.useRealTimers())),
       Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata)),
     ),
+  databaseTestTimeout,
+);
+
+it.effect(
+  "records the same refresh token's first use and rotated retry on the auth span",
+  () =>
+    Effect.gen(function* () {
+      const adapter = yield* BetterAuthAdapter;
+      const grant = yield* issueGrant(adapter, "trace-refresh@example.test", mcpResource);
+
+      const first = yield* captureSpans(
+        adapter.handle(refreshGrantRequest(grant.refreshToken, grant.clientId, mcpResource)),
+      );
+      assert.strictEqual(first.value.status, 200);
+      const rotated = yield* jsonOf(first.value, IssuedCredentials);
+      const issued = spanNamed(first.spans, "AuthService.handle");
+      assert.strictEqual(issued.attributes.get("oauth.grant_type"), "refresh_token");
+      assert.strictEqual(issued.attributes.get("oauth.client_id"), grant.clientId);
+      assert.strictEqual(issued.attributes.get("oauth.refresh_token_presented"), true);
+      assert.strictEqual(issued.attributes.get("oauth.refresh_token.state"), "active");
+      assert.strictEqual(issued.attributes.get("oauth.refresh_token.reuse_window"), "none");
+      assert.strictEqual(issued.attributes.get("oauth.refresh_token.replay_stored"), false);
+      assert.strictEqual(issued.attributes.get("oauth.refresh_token.expired"), false);
+      assert.strictEqual(issued.attributes.get("oauth.outcome"), "issued");
+      const tokenId = issued.attributes.get("oauth.refresh_token.id");
+      assert.isString(tokenId);
+
+      const retry = yield* captureSpans(
+        adapter.handle(refreshGrantRequest(grant.refreshToken, grant.clientId, mcpResource)),
+      );
+      assert.strictEqual(retry.value.status, 200);
+      const replayed = yield* jsonOf(retry.value, IssuedCredentials);
+      assert.strictEqual(replayed.refresh_token, rotated.refresh_token);
+      const presentedAgain = spanNamed(retry.spans, "AuthService.handle");
+      assert.strictEqual(presentedAgain.attributes.get("oauth.refresh_token.id"), tokenId);
+      assert.strictEqual(presentedAgain.attributes.get("oauth.refresh_token.state"), "rotated");
+      assert.strictEqual(
+        presentedAgain.attributes.get("oauth.refresh_token.reuse_window"),
+        "inside",
+      );
+      assert.strictEqual(presentedAgain.attributes.get("oauth.refresh_token.replay_stored"), true);
+      assert.strictEqual(presentedAgain.attributes.get("oauth.outcome"), "replayed");
+
+      const exported = [...first.spans, ...retry.spans]
+        .flatMap((candidate) => [candidate.name, ...[...candidate.attributes].flat().map(String)])
+        .join("\n");
+      assert.notInclude(exported, grant.refreshToken);
+      assert.notInclude(exported, rotated.refresh_token);
+      assert.notInclude(exported, rotated.access_token);
+    }).pipe(Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
+  databaseTestTimeout,
+);
+
+it.effect(
+  "records a rotated token whose replay response is missing and refuses the retry",
+  () =>
+    Effect.gen(function* () {
+      const adapter = yield* BetterAuthAdapter;
+      const grant = yield* issueGrant(adapter, "lost-replay@example.test", mcpResource);
+      const first = yield* captureSpans(
+        adapter.handle(refreshGrantRequest(grant.refreshToken, grant.clientId, mcpResource)),
+      );
+      assert.strictEqual(first.value.status, 200);
+      const rotated = yield* jsonOf(first.value, IssuedCredentials);
+      const tokenId = spanNamed(first.spans, "AuthService.handle").attributes.get(
+        "oauth.refresh_token.id",
+      );
+      if (typeof tokenId !== "string") {
+        throw new Error("Refresh-token presentation did not record a row id");
+      }
+      const database = yield* AuthDatabase;
+      yield* Effect.promise(() =>
+        database
+          .update(oauthRefreshToken)
+          .set({ rotationReplayResponse: null })
+          .where(eq(oauthRefreshToken.id, tokenId)),
+      );
+
+      const retry = yield* captureSpans(
+        adapter.handle(refreshGrantRequest(grant.refreshToken, grant.clientId, mcpResource)),
+      );
+      assert.strictEqual(retry.value.status, 400);
+      assert.deepStrictEqual(yield* jsonOf(retry.value, ErrorDescription), {
+        error: "invalid_grant",
+        error_description: "invalid refresh token",
+      });
+      const lost = spanNamed(retry.spans, "AuthService.handle");
+      assert.strictEqual(lost.attributes.get("oauth.refresh_token.state"), "rotated");
+      assert.strictEqual(lost.attributes.get("oauth.refresh_token.reuse_window"), "inside");
+      assert.strictEqual(lost.attributes.get("oauth.refresh_token.replay_stored"), false);
+      assert.strictEqual(lost.attributes.get("oauth.outcome"), "refused");
+      assert.strictEqual(lost.attributes.get("oauth.error"), "invalid_grant");
+      assert.propertyVal(
+        yield* adapter.resolveAccessToken(rotated.access_token, ["connections:read"]),
+        "status",
+        "authenticated",
+      );
+    }).pipe(Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
   databaseTestTimeout,
 );
 
@@ -1464,6 +1562,11 @@ it.effect(
       assert.strictEqual(span.attributes.get("oauth.grant_type"), "refresh_token");
       assert.strictEqual(span.attributes.get("oauth.client_id"), grant.clientId);
       assert.strictEqual(span.attributes.get("oauth.refresh_token_presented"), true);
+      assert.strictEqual(span.attributes.get("oauth.refresh_token.state"), "rotated");
+      assert.strictEqual(span.attributes.get("oauth.refresh_token.reuse_window"), "outside");
+      assert.strictEqual(span.attributes.get("oauth.refresh_token.replay_stored"), true);
+      assert.strictEqual(span.attributes.get("oauth.refresh_token.expired"), false);
+      assert.strictEqual(span.attributes.get("oauth.outcome"), "refused");
       const exported = spans
         .flatMap((candidate) => [candidate.name, ...[...candidate.attributes].flat().map(String)])
         .join("\n");
@@ -1929,6 +2032,34 @@ function jsonOf<S extends Schema.Top & { readonly DecodingServices: never }>(
     Effect.flatMap(Schema.decodeUnknownEffect(schema)),
     Effect.orDie,
   );
+}
+
+function captureSpans<A, E>(
+  effect: Effect.Effect<A, E>,
+): Effect.Effect<{ readonly value: A; readonly spans: ReadonlyArray<Tracer.Span> }, E> {
+  return Effect.gen(function* () {
+    const spans: Array<Tracer.Span> = [];
+    const value = yield* effect.pipe(
+      Effect.withTracer(
+        Tracer.make({
+          span: (options) => {
+            const span = new Tracer.NativeSpan(options);
+            spans.push(span);
+            return span;
+          },
+        }),
+      ),
+    );
+    return { value, spans };
+  });
+}
+
+function spanNamed(spans: ReadonlyArray<Tracer.Span>, name: string): Tracer.Span {
+  const span = spans.find((candidate) => candidate.name === name);
+  if (span === undefined) {
+    throw new Error(`Missing ${name} span`);
+  }
+  return span;
 }
 
 const ErrorBody = Schema.Struct({ code: Schema.optional(Schema.String) });
