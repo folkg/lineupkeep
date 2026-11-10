@@ -6,6 +6,8 @@ import { decodeFelo, decodeTeamAnalysis, decodeTradePartners } from "#yahoo/inte
 import type { YahooFelo, YahooTeamAnalysis, YahooTradePartner } from "#yahoo/internal/analysis.ts";
 import { decodeLeagueSettings } from "#yahoo/internal/league.ts";
 import type { YahooLeagueSettings } from "#yahoo/internal/league.ts";
+import { decodeStandings } from "#yahoo/internal/standings.ts";
+import type { YahooStandings } from "#yahoo/internal/standings.ts";
 import { decodeDiscoveredLeagues } from "#yahoo/internal/team.ts";
 import type { YahooDiscoveredLeague } from "#yahoo/internal/team.ts";
 import { YahooGameKey, YahooLeagueKey, YahooTeamKey, leagueKeyOfTeam } from "#yahoo/keys.ts";
@@ -32,6 +34,30 @@ export const settings: API.OperationMethod<
     path: `/fantasy/v2/league/${input.leagueKey}/settings`,
   }),
   decode: (payload, input) => decodeLeagueSettings(payload, input.leagueKey),
+});
+
+export const StandingsRequest = Schema.Struct({
+  leagueKey: YahooLeagueKey,
+});
+export type StandingsRequest = typeof StandingsRequest.Type;
+
+export type StandingsResponse = YahooStandings;
+
+export const standings: API.OperationMethod<
+  StandingsRequest,
+  StandingsResponse,
+  YahooReadError,
+  API.YahooOpContext
+> = API.makeRead({
+  name: "read_standings",
+  input: StandingsRequest,
+  output: Schema.Unknown,
+  request: (input) => ({
+    host: "read",
+    method: "GET",
+    path: `/fantasy/v2/league/${input.leagueKey}/standings`,
+  }),
+  decode: (payload, input) => decodeStandings(payload, input.leagueKey),
 });
 
 const GameKeys = Schema.Array(YahooGameKey).pipe(

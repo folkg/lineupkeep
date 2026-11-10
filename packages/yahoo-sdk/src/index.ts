@@ -30,6 +30,13 @@ export type {
   YahooRemainingGames,
 } from "./internal/matchup.ts";
 export type {
+  YahooStanding,
+  YahooStandingAcquisitionUsage,
+  YahooStandingRecord,
+  YahooStandings,
+  YahooStandingStreak,
+} from "./internal/standings.ts";
+export type {
   YahooPercent,
   YahooPlayerAvailability,
   YahooPlayerDetail,

@@ -26,6 +26,8 @@ import type {
   ProviderRoster,
   ProviderRosterPlayer,
   ProviderRosterSlot,
+  ProviderStanding,
+  ProviderStandings,
   ProviderSchedulePlayer,
   ProviderStartingLineup,
   ProviderStatBasis,
@@ -79,6 +81,25 @@ export const readLeagueThroughSdk = (
     );
   });
 
+export const readStandingsThroughSdk = (
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  leagueKey: string,
+): Effect.Effect<ProviderStandings, ProviderReadFailure> =>
+  Effect.gen(function* () {
+    const session = yield* Yahoo.makeSession(cookie).pipe(
+      Effect.mapError(() => ProviderSessionRejected.make({ operation })),
+    );
+    const standings = yield* Yahoo.leagues.standings({ leagueKey }).pipe(
+      Yahoo.Retry.none,
+      Effect.provideContext(Context.add(context, Yahoo.Credentials, Effect.succeed(session))),
+      Effect.provideService(Tracer.DisablePropagation, true),
+      Effect.mapError((error) => providerReadFailureOf(operation, error)),
+    );
+    return providerStandingsOf(standings);
+  });
+
 export const readMatchupsThroughSdk = (
   context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
   operation: ProviderOperation,
@@ -107,6 +128,7 @@ export const readTransactionsThroughSdk = (
     readonly teamKey: string | undefined;
     readonly limit: number;
     readonly offset: number;
+    readonly type?: "trade";
   },
 ): Effect.Effect<ReadonlyArray<Yahoo.YahooTransaction>, ProviderReadFailure> =>
   Effect.gen(function* () {
@@ -117,8 +139,9 @@ export const readTransactionsThroughSdk = (
       .list({
         leagueKey: input.leagueKey,
         limit: input.limit,
-        ...(input.teamKey === undefined ? {} : { teamKey: input.teamKey }),
+        ...(input.teamKey === undefined || input.teamKey === "" ? {} : { teamKey: input.teamKey }),
         ...(input.offset === 0 ? {} : { offset: input.offset }),
+        ...(input.type === undefined ? {} : { type: input.type }),
       })
       .pipe(
         Yahoo.Retry.none,
@@ -482,6 +505,37 @@ function providerAvailabilityOf(
     default:
       return "unknown";
   }
+}
+
+function providerStandingsOf(standings: Yahoo.YahooStandings): ProviderStandings {
+  return {
+    providerLeagueKey: standings.leagueKey,
+    teams: standings.teams.map((team): ProviderStanding => ({
+      providerTeamKey: team.teamKey,
+      name: team.name,
+      rank: team.rank ?? null,
+      playoffSeed: team.playoffSeed ?? null,
+      record: team.record,
+      gamesBack: team.gamesBack,
+      pointsBack: team.pointsBack,
+      points: team.points,
+      pointsFor: team.pointsFor,
+      pointsAgainst: team.pointsAgainst,
+      streak: team.streak,
+      acquisitionUsage: {
+        seasonMoves: team.acquisitionUsage.seasonMoves,
+        weeklyAdds:
+          team.acquisitionUsage.weeklyAdds === undefined
+            ? undefined
+            : {
+                used: team.acquisitionUsage.weeklyAdds.used,
+                coverage: team.acquisitionUsage.weeklyAdds.coverage,
+              },
+      },
+      categoryTotals: team.categoryTotals,
+      categoryPoints: team.categoryPoints,
+    })),
+  };
 }
 
 function providerLeagueTeamOf(team: Yahoo.YahooLeagueTeam): ProviderLeagueTeam {

@@ -86,6 +86,7 @@ import {
   yahooNhlPlayerDetailsWithoutStartedPercentage,
   yahooNflTransactions,
   yahooNflTradeTransactions,
+  yahooNflTradeTransactionsInOrder,
   yahooNflTradeTransactionsWithoutPartyKeys,
   yahooNflSinglePlayerTrade,
   yahooNflTradeWithPicks,
@@ -95,6 +96,7 @@ import {
   yahooNflEmptyTradeTransaction,
   yahooNflDraftResults,
   yahooNflRoster,
+  yahooNflEmptyStandings,
   yahooNflStandings,
   yahooNflStandingsWithAcquisitionUsage,
   yahooNhlCategoryStandings,
@@ -3682,6 +3684,36 @@ it.effect("rejects standings for another league", () => {
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
+it.effect("rejects a malformed standings league key before sending", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflStandings));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.readStandings({ ...sessionInput, providerLeagueKey: "not-a-league" }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+    assert.strictEqual(error.operation, "read_standings");
+    assert.strictEqual(internet.calls.length, 0);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("rejects standings with no teams", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflEmptyStandings));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.readStandings({ ...sessionInput, providerLeagueKey: "466.l.4000" }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+    assert.strictEqual(error.operation, "read_standings");
+    assert.isUndefined(error.field);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
 it.effect("reads category matchup values, winners, and remaining player-games", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNhlMatchupsWithGames));
   return Effect.gen(function* () {
@@ -3785,7 +3817,7 @@ it.effect("reads older transaction history from your league offset", () => {
 });
 
 it.effect("reads completed trades with the type filter and their transaction keys", () => {
-  const internet = recordingInternet(() => jsonResponse(yahooNflTradeTransactions));
+  const internet = recordingInternet(() => jsonResponse(yahooNflTradeTransactionsInOrder));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
 
@@ -3803,8 +3835,63 @@ it.effect("reads completed trades with the type filter and their transaction key
     assert.isTrue(trades.every((trade) => trade.type === "trade"));
     assert.deepStrictEqual(
       trades.map((trade) => trade.transactionKey),
-      ["466.l.4000.tr.7"],
+      ["466.l.4000.tr.7", "466.l.4000.tr.6"],
     );
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("drops a non-trade row returned for the completed-trade filter", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflTransactions));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const trades = yield* provider.readCompletedTrades({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      providerTeamKey: "466.l.4000.t.1",
+      limit: 25,
+    });
+
+    assert.deepStrictEqual(trades, []);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("rejects completed trades for another league", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflTradeTransactions));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.readCompletedTrades({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4999",
+        providerTeamKey: "466.l.4999.t.1",
+        limit: 25,
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+    assert.strictEqual(error.field, "league.league_key");
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("rejects a completed-trade team key from another league before sending", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflTradeTransactions));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.readCompletedTrades({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+        providerTeamKey: "466.l.4999.t.1",
+        limit: 25,
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+    assert.strictEqual(error.operation, "read_completed_trades");
+    assert.strictEqual(internet.calls.length, 0);
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 

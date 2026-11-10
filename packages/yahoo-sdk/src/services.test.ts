@@ -7,6 +7,7 @@ import {
   crumbPayload,
   datedRosterPayload,
   draftResultsPayload,
+  emptyStandingsPayload,
   leagueSettingsPayload,
   leagueSettingsWithPartialWeekWindow,
   leagueSettingsWithZeroLimits,
@@ -14,8 +15,11 @@ import {
   pendingTradeAsTransactionPayload,
   pendingTradesPayload,
   rosterPayload,
+  rotoStandingsPayload,
   seasonPlayerDetailsPayload,
   sessionPayload,
+  standingsPayload,
+  tradeTransactionsPayload,
   transactionRefusal,
   transactionsPayload,
   weekPlayerDetailsForAnotherWeek,
@@ -33,6 +37,8 @@ const client = {
   readLeagueSettings: (input: WithSession<Yahoo.leagues.SettingsRequest>) =>
     Yahoo.leagues.settings(input),
   readLeagueTeams: (input: WithSession<Yahoo.teams.ListRequest>) => Yahoo.teams.list(input),
+  readStandings: (input: WithSession<Yahoo.leagues.StandingsRequest>) =>
+    Yahoo.leagues.standings(input),
   readRoster: (input: WithSession<Yahoo.rosters.ForTeamRequest>) => Yahoo.rosters.forTeam(input),
   readPlayerDetails: (input: WithSession<Yahoo.players.DetailsRequest>) =>
     Yahoo.players.details(input),
@@ -143,6 +149,112 @@ it.effect("reports a partially published week window by field", () => {
       error._tag === "YahooParseError" ? error.field : undefined,
       "league.end_week",
     );
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("reads head-to-head standings with record, points, usage, and streak", () => {
+  const recording = recordingClient(() => jsonResponse(standingsPayload));
+  return Effect.gen(function* () {
+    const standings = yield* client.readStandings({ session, leagueKey: "466.l.4000" });
+
+    const call = recording.calls[0];
+    if (call === undefined) {
+      return yield* Effect.die("expected one request");
+    }
+    assert.strictEqual(
+      call.url,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/standings?format=json",
+    );
+    assert.strictEqual(standings.leagueKey, "466.l.4000");
+    assert.deepStrictEqual(
+      standings.teams.map((team) => team.teamKey),
+      ["466.l.4000.t.1", "466.l.4000.t.2"],
+    );
+    assert.deepStrictEqual(standings.teams[0], {
+      teamKey: "466.l.4000.t.1",
+      name: "Synthetic NFL Team",
+      rank: 1,
+      playoffSeed: 1,
+      record: { wins: 8, losses: 1, ties: 0, percentage: 0.889 },
+      gamesBack: null,
+      pointsBack: null,
+      points: 1058.16,
+      pointsFor: 1058.16,
+      pointsAgainst: 986.1,
+      streak: { type: "win", value: 1 },
+      acquisitionUsage: {
+        seasonMoves: 4,
+        weeklyAdds: { used: 0, coverage: { type: "week", week: 10 } },
+      },
+      categoryTotals: [],
+      categoryPoints: [],
+    });
+    assert.strictEqual(standings.teams[1]?.points, 1132.12);
+    assert.deepStrictEqual(standings.teams[1]?.record, {
+      wins: 6,
+      losses: 3,
+      ties: 0,
+      percentage: 0.667,
+    });
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("reads rotisserie standings with category totals and published points", () => {
+  const recording = recordingClient(() => jsonResponse(rotoStandingsPayload));
+  return Effect.gen(function* () {
+    const standings = yield* client.readStandings({ session, leagueKey: "466.l.4002" });
+
+    const first = standings.teams[0];
+    if (first === undefined) {
+      return yield* Effect.die("expected a standing");
+    }
+    assert.isUndefined(first.record);
+    assert.strictEqual(first.rank, 1);
+    assert.strictEqual(first.points, 110);
+    assert.strictEqual(first.pointsFor, 110);
+    assert.strictEqual(first.pointsBack, 0);
+    assert.isNull(first.gamesBack);
+    assert.isNull(first.pointsAgainst);
+    assert.deepStrictEqual(first.acquisitionUsage, {
+      seasonMoves: 9,
+      weeklyAdds: { used: 0, coverage: { type: "week", week: 7 } },
+    });
+    assert.strictEqual(first.categoryTotals.length, 15);
+    assert.deepStrictEqual(first.categoryTotals.slice(0, 3), [
+      { statId: 29, value: 279 },
+      { statId: 1, value: 81 },
+      { statId: 2, value: 178 },
+    ]);
+    assert.deepStrictEqual(first.categoryTotals.at(-1), { statId: 26, value: 0.903 });
+    assert.strictEqual(first.categoryPoints.length, 15);
+    assert.deepStrictEqual(first.categoryPoints.slice(0, 2), [
+      { statId: 29, value: null },
+      { statId: 1, value: 9 },
+    ]);
+    assert.deepStrictEqual(first.categoryPoints.at(-1), { statId: 26, value: 10 });
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("rejects standings for another league", () => {
+  const recording = recordingClient(() => jsonResponse(standingsPayload));
+  return Effect.gen(function* () {
+    const error = yield* Effect.flip(client.readStandings({ session, leagueKey: "466.l.4999" }));
+
+    assert.strictEqual(error._tag, "YahooParseError");
+    assert.strictEqual(
+      error._tag === "YahooParseError" ? error.field : undefined,
+      "league.league_key",
+    );
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("rejects standings with no teams", () => {
+  const recording = recordingClient(() => jsonResponse(emptyStandingsPayload));
+  return Effect.gen(function* () {
+    const error = yield* Effect.flip(client.readStandings({ session, leagueKey: "466.l.4000" }));
+
+    assert.strictEqual(error._tag, "YahooParseError");
+    assert.isUndefined(error._tag === "YahooParseError" ? error.field : undefined);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
 
@@ -533,6 +645,50 @@ it.effect("filters transactions by an owned team and paginates with start", () =
       call.url,
       "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/transactions;count=10;start=20;team_key=466.l.4000.t.1?format=json",
     );
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("filters transactions to trades and keeps the provider's order", () => {
+  const recording = recordingClient(() => jsonResponse(tradeTransactionsPayload));
+  return Effect.gen(function* () {
+    const transactions = yield* client.readTransactions({
+      session,
+      leagueKey: "466.l.4000",
+      teamKey: "466.l.4000.t.1",
+      limit: 10,
+      offset: 20,
+      type: "trade",
+    });
+
+    const call = recording.calls[0];
+    if (call === undefined) {
+      return yield* Effect.die("expected one request");
+    }
+    assert.strictEqual(
+      call.url,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/transactions;type=trade;team_key=466.l.4000.t.1;count=10;start=20?format=json",
+    );
+    assert.deepStrictEqual(
+      transactions.map((transaction) => transaction.transactionKey),
+      ["466.l.4000.tr.7", "466.l.4000.tr.6"],
+    );
+    assert.isTrue(transactions.every((transaction) => transaction.type === "trade"));
+    assert.strictEqual(transactions[0]?.picks.length, 2);
+    assert.strictEqual(transactions[0]?.players.length, 2);
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("drops a non-trade row the provider returns for a trade filter", () => {
+  const recording = recordingClient(() => jsonResponse(transactionsPayload));
+  return Effect.gen(function* () {
+    const transactions = yield* client.readTransactions({
+      session,
+      leagueKey: "466.l.4000",
+      limit: 50,
+      type: "trade",
+    });
+
+    assert.deepStrictEqual(transactions, []);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
 

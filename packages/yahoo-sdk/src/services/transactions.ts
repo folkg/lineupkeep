@@ -14,6 +14,7 @@ const ListShape = Schema.Struct({
   teamKey: Schema.optional(YahooTeamKey),
   limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 })),
   offset: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+  type: Schema.optional(Schema.Literal("trade")),
 });
 
 export const ListRequest = ListShape.pipe(
@@ -40,13 +41,24 @@ export const list: API.OperationMethod<
   request: (input) => {
     const offset = input.offset ?? 0;
     const team = input.teamKey === undefined ? "" : `;team_key=${input.teamKey}`;
+    const paging = `;count=${String(input.limit)}${offset === 0 ? "" : `;start=${String(offset)}`}`;
     return {
       host: "read",
       method: "GET",
-      path: `/fantasy/v2/league/${input.leagueKey}/transactions;count=${String(input.limit)}${offset === 0 ? "" : `;start=${String(offset)}`}${team}`,
+      path:
+        input.type === undefined
+          ? `/fantasy/v2/league/${input.leagueKey}/transactions${paging}${team}`
+          : `/fantasy/v2/league/${input.leagueKey}/transactions;type=${input.type}${team}${paging}`,
     };
   },
-  decode: (payload, input) => decodeTransactions(payload, input.leagueKey),
+  decode: (payload, input) =>
+    decodeTransactions(payload, input.leagueKey).pipe(
+      Effect.map((transactions) =>
+        input.type === undefined
+          ? transactions
+          : transactions.filter((transaction) => transaction.type === input.type),
+      ),
+    ),
 });
 
 const PendingTradesShape = Schema.Struct({

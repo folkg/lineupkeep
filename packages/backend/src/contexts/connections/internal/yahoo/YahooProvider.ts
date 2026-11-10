@@ -25,7 +25,6 @@ import {
   ProviderSessionRejected,
 } from "#contexts/connections/Provider.ts";
 import type {
-  ProviderAcquisitionUsage,
   ProviderCategoryWinner,
   ProviderDraftPick,
   ProviderFantasyDay,
@@ -58,9 +57,6 @@ import type {
   ProviderRosterPosition,
   ProviderSchedulePeriod,
   ProviderSchedulePlayer,
-  ProviderStanding,
-  ProviderStandings,
-  ProviderStatValue,
   ProviderTeam,
   ProviderTeamScore,
   ProviderTransaction,
@@ -107,6 +103,7 @@ import {
   readPlayerDetailsThroughSdk,
   readRosterScheduleThroughSdk,
   readRosterThroughSdk,
+  readStandingsThroughSdk,
   readTransactionsThroughSdk,
   rosterSlotOf,
   scheduledOpponent,
@@ -254,16 +251,7 @@ export const yahooProvider = Effect.gen(function* () {
     yield* Effect.annotateCurrentSpan("provider.operation", "read_standings");
     const cookie = yield* sessionCookie(input, "read_standings");
     const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_standings");
-    const payload = yield* readJson(internet, {
-      operation: "read_standings",
-      origin: readOrigin,
-      path: `/fantasy/v2/league/${leagueKey}/standings`,
-      query: { format: "json" },
-      cookie,
-      normalize: true,
-    });
-    const decoded = yield* decodePayload(StandingsPayload, payload, "read_standings");
-    const standings = yield* standingsFromPayload(decoded, leagueKey);
+    const standings = yield* readStandingsThroughSdk(sdk, "read_standings", cookie, leagueKey);
     yield* Effect.annotateCurrentSpan("provider.standing_count", standings.teams.length);
     return standings;
   });
@@ -1017,29 +1005,19 @@ export const yahooProvider = Effect.gen(function* () {
     const cookie = yield* sessionCookie(input, "read_completed_trades");
     const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_completed_trades");
     const limit = yield* ValidTransactionLimit(input.limit);
-    const teamFilter = yield* ValidLeagueTeamKey(
+    const teamKey = yield* ValidLeagueTeamKey(
       input.providerTeamKey,
       leagueKey,
       "read_completed_trades",
     );
-    const payload = yield* readJson(internet, {
-      operation: "read_completed_trades",
-      origin: readOrigin,
-      path: `/fantasy/v2/league/${leagueKey}/transactions;type=trade${teamFilter};count=${String(limit)}`,
-      query: { format: "json" },
-      cookie,
-      normalize: true,
+    const decoded = yield* readTransactionsThroughSdk(sdk, "read_completed_trades", cookie, {
+      leagueKey,
+      teamKey,
+      limit,
+      offset: 0,
+      type: "trade",
     });
-    const decoded = yield* decodePayload(TransactionsPayload, payload, "read_completed_trades");
-    if (decoded.league.league_key !== leagueKey) {
-      return yield* responseMismatch({
-        operation: "read_completed_trades",
-        field: "league.league_key",
-      });
-    }
-    const trades = (yield* decodeTransactions(decoded.league.transactions)).filter(
-      (transaction) => transaction.type === "trade",
-    );
+    const trades = decoded.map(providerTransactionOf);
     yield* Effect.annotateCurrentSpan("provider.completed_trade_count", trades.length);
     return trades;
   });
@@ -2716,91 +2694,6 @@ function historyQuery(
     : { type: "season" };
 }
 
-function standingsFromPayload(
-  payload: typeof StandingsPayload.Type,
-  requestedLeagueKey: string,
-): Effect.Effect<ProviderStandings, ProviderResponseInvalid> {
-  return Effect.gen(function* () {
-    if (payload.league.league_key !== requestedLeagueKey) {
-      return yield* responseMismatch({
-        operation: "read_standings",
-        field: "league.league_key",
-      });
-    }
-    const teams = payload.league.standings.flatMap((group) => group.teams);
-    if (teams.length === 0) {
-      return yield* responseMismatch({ operation: "read_standings" });
-    }
-    return {
-      providerLeagueKey: requestedLeagueKey,
-      teams: teams.map(toStanding),
-    };
-  });
-}
-
-function toStanding(team: typeof StandingsTeamPayload.Type): ProviderStanding {
-  const standings = team.team_standings;
-  const totals = standings?.outcome_totals;
-  return {
-    providerTeamKey: team.team_key,
-    name: team.name,
-    rank: standings?.rank ?? null,
-    playoffSeed: standings?.playoff_seed ?? null,
-    record:
-      totals === undefined
-        ? undefined
-        : {
-            wins: totals.wins,
-            losses: totals.losses,
-            ties: totals.ties,
-            percentage: providerNumber(totals.percentage),
-          },
-    gamesBack: providerNumber(standings?.games_back),
-    pointsBack: providerNumber(standings?.points_back),
-    points: providerNumber(team.team_points?.total),
-    pointsFor: providerNumber(standings?.points_for),
-    pointsAgainst: providerNumber(standings?.points_against),
-    streak:
-      standings?.streak === undefined
-        ? undefined
-        : { type: standings.streak.type, value: standings.streak.value },
-    acquisitionUsage: acquisitionUsageOf(team.number_of_moves, team.roster_adds),
-    categoryTotals: (team.team_stats?.stats ?? []).map(statValue),
-    categoryPoints: (team.team_points?.stats ?? []).map(statValue),
-  };
-}
-
-function acquisitionUsageOf(
-  seasonMoves: number | string | undefined,
-  rosterAdds: typeof AcquisitionPayload.Type | undefined,
-): ProviderAcquisitionUsage {
-  const weeklyAdds = rosterAdds === undefined ? undefined : weeklyAddsOf(rosterAdds);
-  return { seasonMoves: providerNumber(seasonMoves) ?? undefined, weeklyAdds };
-}
-
-function weeklyAddsOf(
-  rosterAdds: typeof AcquisitionPayload.Type,
-): ProviderAcquisitionUsage["weeklyAdds"] {
-  const used = providerNumber(rosterAdds.value);
-  if (used === null) {
-    return undefined;
-  }
-  if (rosterAdds.coverage_type === "date") {
-    return typeof rosterAdds.coverage_value === "string" &&
-      isProviderDate(rosterAdds.coverage_value)
-      ? { used, coverage: { type: "date", date: rosterAdds.coverage_value } }
-      : undefined;
-  }
-  const week = providerNumber(rosterAdds.coverage_value);
-  return week !== null && Number.isInteger(week) && week >= 1 && week <= 99
-    ? { used, coverage: { type: "week", week } }
-    : undefined;
-}
-
-function statValue(entry: typeof StatEntry.Type): ProviderStatValue {
-  return { statId: entry.stat.stat_id, value: providerNumber(entry.stat.value) };
-}
-
 function providerMatchupsOf(
   matchups: ReadonlyArray<YahooMatchup>,
   period: ProviderScoringWeek,
@@ -2833,51 +2726,6 @@ function providerTeamScoreOf(team: YahooMatchup["home"]): ProviderTeamScore {
     remainingGames: team.remainingGames,
     categoryTotals: team.stats,
   };
-}
-
-function decodeTransactions(
-  transactions: ReadonlyArray<typeof TransactionPayload.Type>,
-): Effect.Effect<ReadonlyArray<ProviderTransaction>, ProviderResponseInvalid> {
-  return Effect.gen(function* () {
-    const decoded: ProviderTransaction[] = [];
-    for (const transaction of transactions) {
-      const occurredAt = yield* providerInstant(transaction.timestamp);
-      const type = transactionType(transaction.type);
-      const players = (transaction.players ?? []).map((player) => ({
-        providerPlayerKey: player.player_key,
-        movement: playerMovement(player.transaction_data),
-        name: optionalNonEmpty(player.name?.full ?? ""),
-        primaryPosition: optionalNonEmpty(player.primary_position ?? ""),
-        displayPosition: optionalNonEmpty(player.display_position ?? ""),
-        eligiblePositions:
-          player.eligible_positions === undefined
-            ? undefined
-            : player.eligible_positions.map(({ position }) => position),
-        proTeam: optionalNonEmpty(player.editorial_team_abbr ?? ""),
-      }));
-      const proposer = transactionTeam(transaction.trader_team_key, transaction.trader_team_name);
-      const receiver = transactionTeam(transaction.tradee_team_key, transaction.tradee_team_name);
-      const parties = transactionParties(type, proposer, receiver, players);
-      const picks = (transaction.picks ?? []).map(({ pick }) => ({
-        round: pick.round,
-        from: transactionTeam(pick.source_team_key, pick.source_team_name),
-        to: transactionTeam(pick.destination_team_key, pick.destination_team_name),
-        original: transactionTeam(pick.original_team_key, pick.original_team_name),
-      }));
-      decoded.push({
-        transactionKey: transaction.transaction_key,
-        occurredAt,
-        type,
-        status: optionalNonEmpty(transaction.status ?? ""),
-        parties,
-        teams: transactionTeams(players, picks, parties),
-        picks,
-        players,
-        incomplete: incompleteTransaction(type, players, picks),
-      });
-    }
-    return decoded;
-  });
 }
 
 function providerTransactionOf(transaction: YahooTransaction): ProviderTransaction {
@@ -2922,16 +2770,22 @@ function providerPendingTradeOf(offer: YahooPendingTrade): ProviderPendingTrade 
 function providerTransactionPlayerOf(player: YahooTransactionPlayer): ProviderTransactionPlayer {
   return {
     providerPlayerKey: player.playerKey,
-    movement: {
-      kind: player.movement.kind,
-      from: providerTransactionTeamOf(player.movement.from),
-      to: providerTransactionTeamOf(player.movement.to),
-    },
+    movement: providerTransactionMovementOf(player.movement),
     name: player.name,
     primaryPosition: player.primaryPosition,
     displayPosition: player.displayPosition,
     eligiblePositions: player.eligiblePositions,
     proTeam: player.proTeamAbbreviation,
+  };
+}
+
+function providerTransactionMovementOf(
+  movement: YahooTransactionPlayer["movement"],
+): ProviderTransactionMovement {
+  return {
+    kind: movement.kind,
+    from: providerTransactionTeamOf(movement.from),
+    to: providerTransactionTeamOf(movement.to),
   };
 }
 
@@ -2990,57 +2844,6 @@ function incompletePendingTrade(
     }
   }
   return undefined;
-}
-
-function transactionType(type: string): ProviderTransaction["type"] {
-  switch (type) {
-    case "add":
-      return "add";
-    case "drop":
-      return "drop";
-    case "add/drop":
-      return "add_drop";
-    case "trade":
-      return "trade";
-    case "pending_trade":
-      return "pending_trade";
-    default:
-      return type.startsWith("commish") ? "commissioner" : "other";
-  }
-}
-
-function playerMovement(
-  data: (typeof TransactionPlayerPayload.Type)["transaction_data"],
-): ProviderTransactionMovement {
-  return {
-    kind: movementKind(data.type),
-    from: transactionTeam(data.source_team_key, data.source_team_name),
-    to: transactionTeam(data.destination_team_key, data.destination_team_name),
-  };
-}
-
-function movementKind(type: string): ProviderTransactionMovement["kind"] {
-  switch (type) {
-    case "add":
-      return "add";
-    case "drop":
-      return "drop";
-    case "trade":
-      return "trade";
-    case "pending_trade":
-      return "pending_trade";
-    default:
-      return "other";
-  }
-}
-
-function transactionTeam(
-  providerTeamKey: string | undefined,
-  name: string | undefined,
-): ProviderTransactionTeam | undefined {
-  return providerTeamKey === undefined
-    ? undefined
-    : { providerTeamKey, name: optionalNonEmpty(name ?? "") };
 }
 
 function transactionParties(
@@ -3196,24 +2999,6 @@ function incompleteTransaction(
 
 function playerLabel(player: ProviderTransaction["players"][number]): string {
   return player.name === undefined ? "a player" : `player ${JSON.stringify(player.name)}`;
-}
-
-function providerNumber(value: number | string | null | undefined): number | null {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : null;
-  }
-  if (value === undefined || value === null || value.trim() === "" || value.trim() === "-") {
-    return null;
-  }
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function providerInstant(timestamp: number): Effect.Effect<string, ProviderResponseInvalid> {
-  return Option.match(DateTime.make(timestamp * 1_000), {
-    onNone: () => responseMismatch({ operation: "read_transactions" }),
-    onSome: (instant) => Effect.succeed(DateTime.formatIso(instant)),
-  });
 }
 
 function isReadonlyArray<A>(value: ReadonlyArray<A> | A): value is ReadonlyArray<A> {
@@ -3377,7 +3162,7 @@ function ValidLeagueTeamKey(
     return Effect.succeed("");
   }
   return /^[0-9]+\.l\.[0-9]+\.t\.[0-9]+$/u.test(value) && providerLeagueKey(value) === leagueKey
-    ? Effect.succeed(`;team_key=${value}`)
+    ? Effect.succeed(value)
     : ProviderResponseInvalid.make({ operation });
 }
 
@@ -3440,12 +3225,6 @@ const Flag: Schema.Codec<boolean, boolean | number | string> = Schema.Union([
     }),
   ),
 );
-
-const AcquisitionPayload = Schema.Struct({
-  coverage_type: Schema.Literals(["week", "date"]),
-  coverage_value: Schema.Union([Schema.Finite, Schema.String]),
-  value: Schema.Union([Schema.Finite, Schema.String]),
-});
 
 const CrumbPayload = Schema.Struct({
   service: Schema.Struct({
@@ -3550,13 +3329,6 @@ const PercentOwned = Schema.Struct({
   delta: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
 });
 
-const StatEntry = Schema.Struct({
-  stat: Schema.Struct({
-    stat_id: IntFromStringOrNumber,
-    value: Schema.Union([Schema.Finite, Schema.String, Schema.Null]),
-  }),
-});
-
 const PercentValue = Schema.optional(Schema.NullOr(Schema.Union([Schema.Finite, Schema.String])));
 
 const PercentStartedCut = Schema.Struct({
@@ -3611,14 +3383,6 @@ const PlayerDetailsPayload = Schema.Struct({
   }),
 });
 
-const ScoreboardPointsPayload = Schema.Struct({
-  coverage_type: Schema.optional(Schema.String),
-  week: Schema.optional(IntFromStringOrNumber),
-  season: Schema.optional(IntFromStringOrNumber),
-  total: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
-  stats: Schema.optional(Schema.Array(StatEntry)),
-});
-
 const GamesPlayedPositionPayload = Schema.Struct({
   position: Schema.NonEmptyString,
   games_played: Schema.Struct({
@@ -3662,56 +3426,6 @@ const TeamGamesPlayedPayload = Schema.Struct({
   }),
 });
 
-const TeamStatsPayload = Schema.Struct({
-  coverage_type: Schema.optional(Schema.String),
-  week: Schema.optional(IntFromStringOrNumber),
-  season: Schema.optional(IntFromStringOrNumber),
-  stats: Schema.Array(StatEntry),
-});
-
-const TransactionPlayerPayload = Schema.Struct({
-  player_key: PlayerKey,
-  name: Schema.optional(Schema.Struct({ full: Schema.optional(Schema.String) })),
-  editorial_team_abbr: Schema.optional(Schema.String),
-  display_position: Schema.optional(Schema.String),
-  primary_position: Schema.optional(Schema.String),
-  eligible_positions: Schema.optional(Schema.Array(Schema.Struct({ position: Schema.String }))),
-  transaction_data: Schema.Struct({
-    type: Schema.NonEmptyString,
-    source_type: Schema.optional(Schema.String),
-    source_team_key: Schema.optional(TeamKey),
-    source_team_name: Schema.optional(Schema.String),
-    destination_type: Schema.optional(Schema.String),
-    destination_team_key: Schema.optional(TeamKey),
-    destination_team_name: Schema.optional(Schema.String),
-  }),
-});
-
-const TransactionPickPayload = Schema.Struct({
-  pick: Schema.Struct({
-    round: IntFromStringOrNumber,
-    source_team_key: Schema.optional(TeamKey),
-    source_team_name: Schema.optional(Schema.String),
-    destination_team_key: Schema.optional(TeamKey),
-    destination_team_name: Schema.optional(Schema.String),
-    original_team_key: Schema.optional(TeamKey),
-    original_team_name: Schema.optional(Schema.String),
-  }),
-});
-
-const TransactionPayload = Schema.Struct({
-  transaction_key: Schema.optional(Schema.NonEmptyString),
-  type: Schema.NonEmptyString,
-  status: Schema.optional(Schema.String),
-  timestamp: IntFromStringOrNumber,
-  trader_team_key: Schema.optional(TeamKey),
-  trader_team_name: Schema.optional(Schema.String),
-  tradee_team_key: Schema.optional(TeamKey),
-  tradee_team_name: Schema.optional(Schema.String),
-  picks: Schema.optional(Schema.Array(TransactionPickPayload)),
-  players: Schema.optional(Schema.Array(TransactionPlayerPayload)),
-});
-
 const AvailableDraftPicksPayload = Schema.Struct({
   league: Schema.Struct({
     league_key: LeagueKey,
@@ -3725,58 +3439,6 @@ const AvailableDraftPicksPayload = Schema.Struct({
             }),
           ),
         }),
-      }),
-    ),
-  }),
-});
-
-const TransactionsPayload = Schema.Struct({
-  league: Schema.Struct({
-    league_key: LeagueKey,
-    transactions: Schema.Array(TransactionPayload),
-  }),
-});
-
-const OutcomeTotalsPayload = Schema.Struct({
-  wins: IntFromStringOrNumber,
-  losses: IntFromStringOrNumber,
-  ties: IntFromStringOrNumber,
-  percentage: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
-});
-
-const TeamStandingsPayload = Schema.Struct({
-  rank: Schema.optional(IntFromStringOrNumber),
-  playoff_seed: Schema.optional(IntFromStringOrNumber),
-  outcome_totals: Schema.optional(OutcomeTotalsPayload),
-  streak: Schema.optional(
-    Schema.Struct({
-      type: Schema.String,
-      value: IntFromStringOrNumber,
-    }),
-  ),
-  games_back: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
-  points_for: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
-  points_against: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
-  points_back: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
-  points_change: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
-});
-
-const StandingsTeamPayload = Schema.Struct({
-  team_key: TeamKey,
-  name: Schema.NonEmptyString,
-  number_of_moves: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
-  roster_adds: Schema.optional(AcquisitionPayload),
-  team_points: Schema.optional(ScoreboardPointsPayload),
-  team_standings: Schema.optional(TeamStandingsPayload),
-  team_stats: Schema.optional(TeamStatsPayload),
-});
-
-const StandingsPayload = Schema.Struct({
-  league: Schema.Struct({
-    league_key: LeagueKey,
-    standings: Schema.Array(
-      Schema.Struct({
-        teams: Schema.Array(StandingsTeamPayload),
       }),
     ),
   }),

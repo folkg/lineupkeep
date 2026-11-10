@@ -63,7 +63,7 @@ export function numberOrNull(value: number | string | null | undefined): number 
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : null;
   }
-  if (typeof value === "string" && /^-?\d+(?:\.\d+)?$/u.test(value)) {
+  if (typeof value === "string" && /^-?(?:\d+(?:\.\d*)?|\.\d+)$/u.test(value)) {
     return Number(value);
   }
   return null;

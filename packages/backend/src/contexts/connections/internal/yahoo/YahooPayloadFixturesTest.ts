@@ -1559,6 +1559,79 @@ export const yahooNflTradeTransactions = {
   },
 };
 
+const recordedTradeLeague = yahooNflTradeTransactions.fantasy_content.league[1];
+if (
+  recordedTradeLeague === undefined ||
+  !("transactions" in recordedTradeLeague) ||
+  recordedTradeLeague.transactions === undefined
+) {
+  throw new Error("The recorded trade fixture has no transactions.");
+}
+const firstRecordedTrade = recordedTradeLeague.transactions["0"];
+
+export const yahooNflTradeTransactionsInOrder = {
+  fantasy_content: {
+    league: [
+      yahooNflTradeTransactions.fantasy_content.league[0],
+      {
+        transactions: {
+          "0": firstRecordedTrade,
+          "1": {
+            transaction: [
+              {
+                transaction_key: "466.l.4000.tr.6",
+                transaction_id: "6",
+                type: "trade",
+                status: "successful",
+                timestamp: "1791100000",
+                trader_team_key: "466.l.4000.t.2",
+                trader_team_name: "Synthetic Rival",
+                tradee_team_key: "466.l.4000.t.1",
+                tradee_team_name: "Synthetic Team",
+              },
+              {
+                players: {
+                  "0": {
+                    player: [
+                      [
+                        { player_key: "466.p.20007" },
+                        { player_id: "20007" },
+                        {
+                          name: {
+                            full: "Synthetic Later Trade",
+                            first: "Synthetic",
+                            last: "Later",
+                          },
+                        },
+                        { editorial_team_abbr: "SYN" },
+                        { display_position: "TE" },
+                        { position_type: "O" },
+                      ],
+                      {
+                        transaction_data: {
+                          type: "trade",
+                          source_type: "team",
+                          source_team_key: "466.l.4000.t.2",
+                          source_team_name: "Synthetic Rival",
+                          destination_type: "team",
+                          destination_team_key: "466.l.4000.t.1",
+                          destination_team_name: "Synthetic Team",
+                        },
+                      },
+                    ],
+                  },
+                  count: 1,
+                },
+              },
+            ],
+          },
+          count: 2,
+        },
+      },
+    ],
+  },
+};
+
 export const yahooNflTradeTransactionsWithoutPartyKeys = {
   fantasy_content: {
     league: [
@@ -3106,6 +3179,26 @@ export const yahooNflStandings = standingsPayload("466.l.4000", "Synthetic NFL L
     },
   ]),
 ]);
+
+export const yahooNflEmptyStandings = {
+  fantasy_content: {
+    league: [
+      {
+        league_key: "466.l.4000",
+        league_id: "4000",
+        name: "Synthetic NFL League",
+        url: "https://football.fantasysports.yahoo.com/f1/4000",
+      },
+      {
+        standings: [
+          {
+            teams: { count: 0 },
+          },
+        ],
+      },
+    ],
+  },
+};
 
 export const yahooNflStandingsWithAcquisitionUsage = standingsPayload(
   "466.l.4004",

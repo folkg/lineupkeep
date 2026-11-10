@@ -548,6 +548,242 @@ export const draftResultsPayload = {
   },
 };
 
+export const standingsPayload = {
+  fantasy_content: {
+    league: [
+      leagueAttributes,
+      {
+        standings: [
+          {
+            teams: {
+              "0": {
+                team: [
+                  [
+                    { team_key: "466.l.4000.t.1" },
+                    { team_id: "1" },
+                    { name: "Synthetic NFL Team" },
+                    { url: "https://example.invalid/recorded" },
+                    { number_of_moves: 4 },
+                    { roster_adds: { coverage_type: "week", coverage_value: 10, value: "0" } },
+                  ],
+                  { team_points: { coverage_type: "season", season: "2026", total: "1058.16" } },
+                  {
+                    team_standings: {
+                      rank: "1",
+                      playoff_seed: "1",
+                      outcome_totals: { wins: "8", losses: "1", ties: 0, percentage: ".889" },
+                      streak: { type: "win", value: "1" },
+                      points_for: "1058.16",
+                      points_against: 986.1,
+                    },
+                  },
+                ],
+              },
+              "1": {
+                team: [
+                  [
+                    { team_key: "466.l.4000.t.2" },
+                    { team_id: "2" },
+                    { name: "Synthetic Rival" },
+                    { url: "https://example.invalid/recorded" },
+                    { number_of_moves: 4 },
+                    { roster_adds: { coverage_type: "week", coverage_value: 10, value: "0" } },
+                  ],
+                  { team_points: { coverage_type: "season", season: "2026", total: "1132.12" } },
+                  {
+                    team_standings: {
+                      rank: "2",
+                      playoff_seed: "2",
+                      outcome_totals: { wins: "6", losses: "3", ties: 0, percentage: ".667" },
+                      streak: { type: "win", value: "1" },
+                      points_for: "1132.12",
+                      points_against: 1034.9,
+                    },
+                  },
+                ],
+              },
+              count: 2,
+            },
+          },
+        ],
+      },
+    ],
+  },
+};
+
+export const rotoStandingsPayload = {
+  fantasy_content: {
+    league: [
+      {
+        ...leagueAttributes,
+        league_key: "466.l.4002",
+        league_id: "4002",
+        name: "Synthetic NHL Categories",
+        scoring_type: "roto",
+        scoring_label: "Roto",
+      },
+      {
+        standings: [
+          {
+            teams: {
+              "0": {
+                team: [
+                  [
+                    { team_key: "466.l.4002.t.1" },
+                    { team_id: "1" },
+                    { name: "Synthetic Roto Team" },
+                    { url: "https://example.invalid/recorded" },
+                    { number_of_moves: 9 },
+                    { roster_adds: { coverage_type: "week", coverage_value: 7, value: "0" } },
+                  ],
+                  {
+                    team_points: {
+                      coverage_type: "season",
+                      season: "2026",
+                      total: "110",
+                      stats: [
+                        { stat: { stat_id: 29, value: "" } },
+                        { stat: { stat_id: "1", value: "9" } },
+                        { stat: { stat_id: "2", value: "13" } },
+                        { stat: { stat_id: "3", value: "13" } },
+                        { stat: { stat_id: "8", value: "11" } },
+                        { stat: { stat_id: "14", value: "11" } },
+                        { stat: { stat_id: "31", value: "9" } },
+                        { stat: { stat_id: "32", value: "9" } },
+                        { stat: { stat_id: 30, value: "" } },
+                        { stat: { stat_id: "19", value: "13" } },
+                        { stat: { stat_id: "22", value: "" } },
+                        { stat: { stat_id: "23", value: "12" } },
+                        { stat: { stat_id: "25", value: "" } },
+                        { stat: { stat_id: "24", value: "" } },
+                        { stat: { stat_id: "26", value: "10" } },
+                      ],
+                    },
+                  },
+                  {
+                    team_standings: {
+                      rank: "1",
+                      points_for: "110",
+                      points_change: "3",
+                      points_back: "0",
+                    },
+                  },
+                  {
+                    team_stats: {
+                      coverage_type: "season",
+                      season: "2026",
+                      stats: [
+                        { stat: { stat_id: 29, value: "279" } },
+                        { stat: { stat_id: "1", value: "81" } },
+                        { stat: { stat_id: "2", value: "178" } },
+                        { stat: { stat_id: "3", value: "259" } },
+                        { stat: { stat_id: "8", value: "84" } },
+                        { stat: { stat_id: "14", value: "630" } },
+                        { stat: { stat_id: "31", value: "322" } },
+                        { stat: { stat_id: "32", value: "229" } },
+                        { stat: { stat_id: 30, value: "38" } },
+                        { stat: { stat_id: "19", value: "26" } },
+                        { stat: { stat_id: "22", value: "91" } },
+                        { stat: { stat_id: "23", value: "2.44" } },
+                        { stat: { stat_id: "25", value: "845" } },
+                        { stat: { stat_id: "24", value: "936" } },
+                        { stat: { stat_id: "26", value: ".903" } },
+                      ],
+                    },
+                  },
+                ],
+              },
+              "1": {
+                team: [
+                  [
+                    { team_key: "466.l.4002.t.2" },
+                    { team_id: "2" },
+                    { name: "Synthetic Roto Rival" },
+                    { url: "https://example.invalid/recorded" },
+                    { number_of_moves: 13 },
+                    { roster_adds: { coverage_type: "week", coverage_value: 7, value: "1" } },
+                  ],
+                  {
+                    team_points: {
+                      coverage_type: "season",
+                      season: "2026",
+                      total: "105.5",
+                      stats: [
+                        { stat: { stat_id: 29, value: "" } },
+                        { stat: { stat_id: "1", value: "10.5" } },
+                        { stat: { stat_id: "2", value: "11" } },
+                        { stat: { stat_id: "3", value: "10" } },
+                        { stat: { stat_id: "8", value: "12" } },
+                        { stat: { stat_id: "14", value: "13" } },
+                        { stat: { stat_id: "31", value: "11" } },
+                        { stat: { stat_id: "32", value: "5" } },
+                        { stat: { stat_id: 30, value: "" } },
+                        { stat: { stat_id: "19", value: "12" } },
+                        { stat: { stat_id: "22", value: "" } },
+                        { stat: { stat_id: "23", value: "10" } },
+                        { stat: { stat_id: "25", value: "" } },
+                        { stat: { stat_id: "24", value: "" } },
+                        { stat: { stat_id: "26", value: "11" } },
+                      ],
+                    },
+                  },
+                  {
+                    team_standings: {
+                      rank: "2",
+                      points_for: "105.5",
+                      points_change: "-0.5",
+                      points_back: "4.5",
+                    },
+                  },
+                  {
+                    team_stats: {
+                      coverage_type: "season",
+                      season: "2026",
+                      stats: [
+                        { stat: { stat_id: 29, value: "298" } },
+                        { stat: { stat_id: "1", value: "84" } },
+                        { stat: { stat_id: "2", value: "154" } },
+                        { stat: { stat_id: "3", value: "238" } },
+                        { stat: { stat_id: "8", value: "95" } },
+                        { stat: { stat_id: "14", value: "694" } },
+                        { stat: { stat_id: "31", value: "347" } },
+                        { stat: { stat_id: "32", value: "200" } },
+                        { stat: { stat_id: 30, value: "37" } },
+                        { stat: { stat_id: "19", value: "21" } },
+                        { stat: { stat_id: "22", value: "93" } },
+                        { stat: { stat_id: "23", value: "2.50" } },
+                        { stat: { stat_id: "25", value: "871" } },
+                        { stat: { stat_id: "24", value: "964" } },
+                        { stat: { stat_id: "26", value: ".904" } },
+                      ],
+                    },
+                  },
+                ],
+              },
+              count: 2,
+            },
+          },
+        ],
+      },
+    ],
+  },
+};
+
+export const emptyStandingsPayload = {
+  fantasy_content: {
+    league: [
+      leagueAttributes,
+      {
+        standings: [
+          {
+            teams: { count: 0 },
+          },
+        ],
+      },
+    ],
+  },
+};
+
 export const transactionsPayload = {
   fantasy_content: {
     league: [
@@ -614,6 +850,156 @@ export const transactionsPayload = {
             ],
           },
           count: 1,
+        },
+      },
+    ],
+  },
+};
+
+export const tradeTransactionsPayload = {
+  fantasy_content: {
+    league: [
+      leagueAttributes,
+      {
+        transactions: {
+          "0": {
+            transaction: [
+              {
+                transaction_key: "466.l.4000.tr.7",
+                type: "trade",
+                status: "successful",
+                timestamp: "1794237638",
+                trader_team_key: "466.l.4000.t.2",
+                trader_team_name: "Synthetic Rival",
+                tradee_team_key: "466.l.4000.t.1",
+                tradee_team_name: "Synthetic NFL Team",
+                picks: [
+                  {
+                    pick: {
+                      source_team_key: "466.l.4000.t.2",
+                      source_team_name: "Synthetic Rival",
+                      destination_team_key: "466.l.4000.t.1",
+                      destination_team_name: "Synthetic NFL Team",
+                      original_team_key: "466.l.4000.t.2",
+                      original_team_name: "Synthetic Rival",
+                      round: "7",
+                    },
+                  },
+                  {
+                    pick: {
+                      source_team_key: "466.l.4000.t.1",
+                      source_team_name: "Synthetic NFL Team",
+                      destination_team_key: "466.l.4000.t.2",
+                      destination_team_name: "Synthetic Rival",
+                      original_team_key: "466.l.4000.t.1",
+                      original_team_name: "Synthetic NFL Team",
+                      round: "14",
+                    },
+                  },
+                ],
+              },
+              {
+                players: {
+                  "0": {
+                    player: [
+                      ...playerFragments({
+                        key: "466.p.20003",
+                        name: "Synthetic Sender",
+                        displayPosition: "WR",
+                        primaryPosition: "WR",
+                        eligiblePositions: ["WR"],
+                        proTeam: "SYN",
+                      }),
+                      {
+                        transaction_data: [
+                          {
+                            type: "trade",
+                            source_type: "team",
+                            source_team_key: "466.l.4000.t.2",
+                            source_team_name: "Synthetic Rival",
+                            destination_type: "team",
+                            destination_team_key: "466.l.4000.t.1",
+                            destination_team_name: "Synthetic NFL Team",
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  "1": {
+                    player: [
+                      ...playerFragments({
+                        key: "466.p.20006",
+                        name: "Synthetic Return",
+                        displayPosition: "RB",
+                        primaryPosition: "RB",
+                        eligiblePositions: ["RB"],
+                        proTeam: "SYN",
+                      }),
+                      {
+                        transaction_data: [
+                          {
+                            type: "trade",
+                            source_type: "team",
+                            source_team_key: "466.l.4000.t.1",
+                            source_team_name: "Synthetic NFL Team",
+                            destination_type: "team",
+                            destination_team_key: "466.l.4000.t.2",
+                            destination_team_name: "Synthetic Rival",
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  count: 2,
+                },
+              },
+            ],
+          },
+          "1": {
+            transaction: [
+              {
+                transaction_key: "466.l.4000.tr.6",
+                type: "trade",
+                status: "successful",
+                timestamp: "1794000000",
+                trader_team_key: "466.l.4000.t.1",
+                trader_team_name: "Synthetic NFL Team",
+                tradee_team_key: "466.l.4000.t.2",
+                tradee_team_name: "Synthetic Rival",
+              },
+              {
+                players: {
+                  "0": {
+                    player: [
+                      ...playerFragments({
+                        key: "466.p.20007",
+                        name: "Synthetic Later Trade",
+                        displayPosition: "TE",
+                        primaryPosition: "TE",
+                        eligiblePositions: ["TE"],
+                        proTeam: "SYN",
+                      }),
+                      {
+                        transaction_data: [
+                          {
+                            type: "trade",
+                            source_type: "team",
+                            source_team_key: "466.l.4000.t.1",
+                            source_team_name: "Synthetic NFL Team",
+                            destination_type: "team",
+                            destination_team_key: "466.l.4000.t.2",
+                            destination_team_name: "Synthetic Rival",
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  count: 1,
+                },
+              },
+            ],
+          },
+          count: 2,
         },
       },
     ],
