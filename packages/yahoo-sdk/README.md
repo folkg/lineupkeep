@@ -44,45 +44,47 @@ const settings = yield * Yahoo.leagues.settings;
 const league = yield * settings({ leagueKey: "466.l.4000" });
 ```
 
-| Module               | Operation           | Input                                                                                                      |
-| -------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `Yahoo.session`      | `validate`          | `{}`                                                                                                       |
-| `Yahoo.teams`        | `list`              | league key                                                                                                 |
-| `Yahoo.leagues`      | `settings`          | league key                                                                                                 |
-|                      | `standings`         | league key                                                                                                 |
-|                      | `discover`          | optional game keys; defaults to every game                                                                 |
-|                      | `felo`              | league key                                                                                                 |
-|                      | `tradePartners`     | league key                                                                                                 |
-|                      | `teamAnalysis`      | league and 1–12 team keys                                                                                  |
-| `Yahoo.rosters`      | `forTeam`           | one team, optional week/date coverage                                                                      |
-|                      | `forLeagues`        | the signed-in manager's team in one or more leagues, with coverage, pending transactions, and games played |
-| `Yahoo.players`      | `search`            | one or more league keys, query, availability, sort, stat, limit                                            |
-|                      | `available`         | game key, position, page, offset, sort, availability                                                       |
-|                      | `starters`          | league key and starting position, reads at most two pages                                                  |
-|                      | `details`           | league, up to 25 player keys, one stat basis                                                               |
-| `Yahoo.matchups`     | `week`              | league key, week                                                                                           |
-| `Yahoo.schedule`     | `byDate`            | sport, date, time zone                                                                                     |
-|                      | `game`              | graph game ID, season, time zone                                                                           |
-| `Yahoo.mobile`       | `games`             | league and optional week                                                                                   |
-|                      | `playerCards`       | league, up to 25 player keys, optional subviews                                                            |
-|                      | `playerGameLog`     | league and player                                                                                          |
-|                      | `playerSeasonStats` | league and player                                                                                          |
-| `Yahoo.statcloud`    | `dashboard`         | optional sport and best-ball flag                                                                          |
-|                      | `league`            | league key                                                                                                 |
-|                      | `matchups`          | league and optional roster/team key                                                                        |
-|                      | `playoffs`          | league key                                                                                                 |
-|                      | `matchupScores`     | league, week, team, optional sport suffix                                                                  |
-| `Yahoo.draft`        | `results`           | league key                                                                                                 |
-| `Yahoo.transactions` | `list`              | league, optional team, limit, offset, optional `trade` type filter                                         |
-|                      | `pendingTrades`     | league and team                                                                                            |
-|                      | `apply`             | league, team, add and/or drop, optional FAAB                                                               |
-| `Yahoo.lineups`      | `setNative`         | team, coverage                                                                                             |
-|                      | `assign`            | team, coverage, player/position pairs                                                                      |
-|                      | `reserve`           | team, coverage, player, reserve slot                                                                       |
-| `Yahoo.trades`       | `propose`           | league, both teams, optional player arrays and draft-pick rounds, note                                     |
-|                      | `counter`           | incoming offer, new player/pick assets, note                                                               |
-|                      | `respond`           | pending trade key, accept or reject, note                                                                  |
-|                      | `withdraw`          | transaction key                                                                                            |
+| Module               | Operation           | Input                                                                                                                     |
+| -------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `Yahoo.session`      | `validate`          | `{}`                                                                                                                      |
+| `Yahoo.teams`        | `list`              | league key                                                                                                                |
+| `Yahoo.leagues`      | `settings`          | league key                                                                                                                |
+|                      | `standings`         | league key                                                                                                                |
+|                      | `discover`          | optional game keys; defaults to every game                                                                                |
+|                      | `felo`              | league key                                                                                                                |
+|                      | `tradePartners`     | league key                                                                                                                |
+|                      | `teamAnalysis`      | league and 1–12 team keys                                                                                                 |
+| `Yahoo.rosters`      | `forTeam`           | one team, optional week/date coverage                                                                                     |
+|                      | `forLeagues`        | the signed-in manager's team in one or more leagues, optional game keys, coverage, pending transactions, and games played |
+| `Yahoo.players`      | `search`            | one or more league keys, optional game keys, query, availability, sort, stat, limit, rank types, cut types                |
+|                      | `available`         | game key, position, page, offset, sort, availability, rank types, cut types                                               |
+|                      | `starters`          | league key and starting position, reads at most two pages                                                                 |
+|                      | `details`           | league, up to 25 player keys, optional fields, one stat basis, rank types, cut types                                      |
+| `Yahoo.matchups`     | `week`              | league key, week                                                                                                          |
+| `Yahoo.schedule`     | `byDate`            | sport, date, time zone                                                                                                    |
+|                      | `game`              | graph game ID, season, time zone                                                                                          |
+| `Yahoo.mobile`       | `games`             | league and optional week                                                                                                  |
+|                      | `playerCards`       | league, up to 25 player keys, optional subviews                                                                           |
+|                      | `playerGameLog`     | league and player                                                                                                         |
+|                      | `playerSeasonStats` | league and player                                                                                                         |
+| `Yahoo.statcloud`    | `dashboard`         | optional sport and best-ball flag                                                                                         |
+|                      | `league`            | league key                                                                                                                |
+|                      | `matchups`          | league and optional roster/team key                                                                                       |
+|                      | `playoffs`          | league key                                                                                                                |
+|                      | `matchupScores`     | league, week, team, optional sport suffix                                                                                 |
+| `Yahoo.draft`        | `results`           | league key                                                                                                                |
+| `Yahoo.transactions` | `list`              | league, optional team, limit, offset, optional transaction type filter                                                    |
+|                      | `pendingTrades`     | league and team                                                                                                           |
+|                      | `apply`             | league, team, add and/or drop, optional FAAB                                                                              |
+| `Yahoo.lineups`      | `setNative`         | team, coverage                                                                                                            |
+|                      | `assign`            | team, coverage, player/position pairs                                                                                     |
+|                      | `reserve`           | team, coverage, player, reserve slot                                                                                      |
+| `Yahoo.trades`       | `propose`           | league, both teams, optional player arrays and draft-pick rounds, note                                                    |
+|                      | `counter`           | incoming offer, new player/pick assets, note                                                                              |
+|                      | `respond`           | pending trade key, accept or reject, note                                                                                 |
+|                      | `withdraw`          | transaction key                                                                                                           |
+
+Read options are parameters, not baked into an operation. `players.details` takes `fields` (default `stats,ownership`), `ranks`, `percentStartedCutTypes`, and `percentOwnedCutTypes`; `players.search` and `players.available` take rank and cut types; `players.search` and `rosters.forLeagues` take game keys; `transactions.list` takes any filterable transaction type. Defaults preserve each operation's existing request, and `players.details` requires `stats` whenever `fields` includes `stats`.
 
 Inputs are decoded with an Effect Schema before any request is built. Keys, limits, cross-league team keys, duplicate player keys, and the add/drop pairing are checked locally; a bad input fails with `YahooRequestInvalid` and sends nothing.
 

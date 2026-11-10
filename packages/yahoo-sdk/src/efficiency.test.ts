@@ -333,6 +333,50 @@ it.effect("reads a game-wide available-player page", () => {
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
 
+it.effect("passes requested ranks and cut types to an available-player page", () => {
+  const recording = recordingClient(() =>
+    jsonResponse({
+      fantasy_content: {
+        games: [
+          {
+            game_key: "nfl",
+            players: [
+              {
+                player_key: "466.p.20002",
+                name: { full: "Synthetic Available" },
+                primary_position: "WR",
+                display_position: "WR",
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  );
+
+  return Effect.gen(function* () {
+    yield* Yahoo.players.available({
+      gameKey: "nfl",
+      availability: "all",
+      sort: "ownership",
+      sortType: "season",
+      limit: 25,
+      offset: 0,
+      ranks: ["projected_week"],
+      percentStartedCutTypes: ["diamond"],
+    });
+    const call = recording.calls[0];
+    if (call === undefined) {
+      return yield* Effect.die("expected one request");
+    }
+    assert.include(
+      call.url,
+      ";out=ownership,percent_owned,percent_started,ranks,transactions,opponent,starting_status;ranks=projected_week",
+    );
+    assert.include(call.url, "percent_started.cut_types=diamond");
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
 it.effect("reads a date's schedule from Graphite", () => {
   const recording = recordingClient(() =>
     jsonResponse({

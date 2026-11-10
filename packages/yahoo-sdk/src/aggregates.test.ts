@@ -51,6 +51,34 @@ it.effect(
   },
 );
 
+it.effect("passes requested game keys, ranks, and cut types to a player search", () => {
+  const recording = recordingClient(() => jsonResponse(recordedAggregatePlayerSearch));
+
+  return Effect.gen(function* () {
+    yield* Yahoo.players.search({
+      leagueKeys: [leagueKey],
+      gameKeys: ["nfl", "nhl"],
+      availability: "all",
+      sort: "ownership",
+      sortType: "season",
+      limit: 10,
+      ranks: ["projected_week"],
+      percentStartedCutTypes: ["diamond"],
+    });
+
+    const call = recording.calls[0];
+    if (call === undefined) {
+      return yield* Effect.die("expected one request");
+    }
+    assert.include(call.url, "/games;game_keys=nfl,nhl/");
+    assert.include(
+      call.url,
+      ";out=ownership,percent_owned,percent_started,ranks,transactions,opponent,starting_status;ranks=projected_week",
+    );
+    assert.include(call.url, "percent_started.cut_types=diamond");
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
 it.effect("reads a recorded live league roster whose games played object is empty", () => {
   const recording = recordingClient(() => jsonResponse(recordedAggregateRoster));
 
@@ -62,6 +90,20 @@ it.effect("reads a recorded live league roster whose games played object is empt
     assert.strictEqual(rosters[0]?.leagueKey, leagueKey);
     assert.strictEqual(rosters[0]?.gamesPlayed, undefined);
     assert.strictEqual(rosters[0]?.players.length, 3);
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("passes requested game keys to a league roster read", () => {
+  const recording = recordingClient(() => jsonResponse(recordedAggregateRoster));
+
+  return Effect.gen(function* () {
+    yield* Yahoo.rosters.forLeagues({ leagueKeys: [leagueKey], gameKeys: ["nhl"] });
+
+    const call = recording.calls[0];
+    if (call === undefined) {
+      return yield* Effect.die("expected one request");
+    }
+    assert.include(call.url, "/games;game_keys=nhl/leagues;league_keys=470.l.70271;");
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
 

@@ -3373,7 +3373,7 @@ it.effect("fails loudly when a started percentage cannot be parsed", () => {
     );
 
     assert.instanceOf(error, ProviderResponseInvalid);
-    assert.strictEqual(error.field, "league.players.466.p.30001.percent_started.value");
+    assert.strictEqual(error.field, "percent_started.value");
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 

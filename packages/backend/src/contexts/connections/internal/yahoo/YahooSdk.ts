@@ -43,6 +43,9 @@ export type {
   YahooLeagueSettings,
   YahooMatchup,
   YahooPendingTrade,
+  YahooPercentCut,
+  YahooPlayerDetail,
+  YahooPlayerRank,
   YahooTransaction,
   YahooTransactionPick,
   YahooTransactionPlayer,
@@ -128,7 +131,7 @@ export const readTransactionsThroughSdk = (
     readonly teamKey: string | undefined;
     readonly limit: number;
     readonly offset: number;
-    readonly type?: "trade";
+    readonly type?: Yahoo.TransactionTypeFilter;
   },
 ): Effect.Effect<ReadonlyArray<Yahoo.YahooTransaction>, ProviderReadFailure> =>
   Effect.gen(function* () {
@@ -266,6 +269,24 @@ function providerSchedulePlayerOf(
   };
 }
 
+export const readPlayerDetailsRawThroughSdk = (
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  input: Yahoo.players.DetailsRequest,
+): Effect.Effect<ReadonlyArray<Yahoo.YahooPlayerDetail>, ProviderReadFailure> =>
+  Effect.gen(function* () {
+    const session = yield* Yahoo.makeSession(cookie).pipe(
+      Effect.mapError(() => ProviderSessionRejected.make({ operation })),
+    );
+    return yield* Yahoo.players.details(input).pipe(
+      Yahoo.Retry.none,
+      Effect.provideContext(Context.add(context, Yahoo.Credentials, Effect.succeed(session))),
+      Effect.provideService(Tracer.DisablePropagation, true),
+      Effect.mapError((error) => providerReadFailureOf(operation, error)),
+    );
+  });
+
 export const readPlayerDetailsThroughSdk = (
   context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
   operation: ProviderOperation,
@@ -277,17 +298,11 @@ export const readPlayerDetailsThroughSdk = (
   },
 ): Effect.Effect<ReadonlyArray<ProviderPlayerDetail>, ProviderReadFailure> =>
   Effect.gen(function* () {
-    const session = yield* Yahoo.makeSession(cookie).pipe(
-      Effect.mapError(() => ProviderSessionRejected.make({ operation })),
-    );
-    const details = yield* Yahoo.players
-      .details({ leagueKey: input.leagueKey, playerKeys: input.playerKeys, stats: input.stats })
-      .pipe(
-        Yahoo.Retry.none,
-        Effect.provideContext(Context.add(context, Yahoo.Credentials, Effect.succeed(session))),
-        Effect.provideService(Tracer.DisablePropagation, true),
-        Effect.mapError((error) => providerReadFailureOf(operation, error)),
-      );
+    const details = yield* readPlayerDetailsRawThroughSdk(context, operation, cookie, {
+      leagueKey: input.leagueKey,
+      playerKeys: input.playerKeys,
+      stats: input.stats,
+    });
     return details.map((player) => providerPlayerDetailOf(player, input.stats));
   });
 

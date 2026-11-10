@@ -15,7 +15,15 @@ import type {
   YahooPlayerSummary,
 } from "#yahoo/internal/player.ts";
 import { searchSortToken, statsQueryOf } from "#yahoo/internal/request.ts";
-import { YahooDate, YahooGameKey, YahooLeagueKey, YahooPlayerKey, YahooWeek } from "#yahoo/keys.ts";
+import {
+  YahooDate,
+  YahooGameKey,
+  YahooGameKeys,
+  YahooLeagueKey,
+  YahooPlayerKey,
+  YahooWeek,
+  allYahooGameKeys,
+} from "#yahoo/keys.ts";
 
 const StatQuery = Schema.Union([
   Schema.Struct({ type: Schema.Literal("season") }),
@@ -43,6 +51,34 @@ const Sort = Schema.Literals([
 
 const Availability = Schema.Literals(["all", "free_agent", "waiver"]);
 
+const RankType = Schema.String.pipe(
+  Schema.check(Schema.isMinLength(1)),
+  Schema.check(Schema.isMaxLength(40)),
+  Schema.check(Schema.isPattern(/^[A-Za-z0-9_]+$/u)),
+);
+
+const CutType = Schema.String.pipe(
+  Schema.check(Schema.isMinLength(1)),
+  Schema.check(Schema.isMaxLength(40)),
+  Schema.check(Schema.isPattern(/^[A-Za-z0-9_-]+$/u)),
+);
+
+const RankTypes = Schema.Array(RankType).pipe(
+  Schema.check(Schema.isMinLength(1)),
+  Schema.check(Schema.isMaxLength(20)),
+  Schema.check(
+    Schema.makeFilter((ranks: ReadonlyArray<string>) => new Set(ranks).size === ranks.length),
+  ),
+);
+
+const CutTypes = Schema.Array(CutType).pipe(
+  Schema.check(Schema.isMinLength(1)),
+  Schema.check(Schema.isMaxLength(20)),
+  Schema.check(
+    Schema.makeFilter((cuts: ReadonlyArray<string>) => new Set(cuts).size === cuts.length),
+  ),
+);
+
 const LeagueKeys = Schema.Array(YahooLeagueKey).pipe(
   Schema.check(Schema.isMinLength(1)),
   Schema.check(Schema.isMaxLength(20)),
@@ -55,12 +91,16 @@ const LeagueKeys = Schema.Array(YahooLeagueKey).pipe(
 
 const SearchShape = Schema.Struct({
   leagueKeys: LeagueKeys,
+  gameKeys: Schema.optional(YahooGameKeys),
   query: Schema.optional(Search),
   availability: Availability,
   sort: Sort,
   sortType: Schema.Literals(["season", "week"]),
   statId: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_000 }))),
   limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 })),
+  ranks: Schema.optional(RankTypes),
+  percentStartedCutTypes: Schema.optional(CutTypes),
+  percentOwnedCutTypes: Schema.optional(CutTypes),
 });
 
 export const SearchRequest = SearchShape.pipe(
@@ -101,10 +141,13 @@ export const search: API.OperationMethod<
       input.sort === "stat"
         ? "ownership,percent_owned,percent_started,ranks,stats,transactions,opponent,starting_status"
         : "ownership,percent_owned,percent_started,ranks,transactions,opponent,starting_status";
+    const gameKeys = input.gameKeys ?? allYahooGameKeys;
+    const cuts = cutTypesQuery(input);
     return {
       host: "read",
       method: "GET",
-      path: `/fantasy/v2/users;use_login=1/games;game_keys=nfl,nhl,nba,mlb/leagues;league_keys=${input.leagueKeys.join(",")}/players${status};sort=${searchSortToken(input.sort, statId)}${sortType};count=${String(input.limit)}${search};out=${out}`,
+      path: `/fantasy/v2/users;use_login=1/games;game_keys=${gameKeys.join(",")}/leagues;league_keys=${input.leagueKeys.join(",")}/players${status};sort=${searchSortToken(input.sort, statId)}${sortType};count=${String(input.limit)}${search};out=${out}${rankSuffix(input.ranks)}`,
+      ...(Object.keys(cuts).length === 0 ? {} : { query: cuts }),
     };
   },
   decode: (payload, input) =>
@@ -129,6 +172,9 @@ const AvailableShape = Schema.Struct({
   statId: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_000 }))),
   limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 })),
   offset: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000 })),
+  ranks: Schema.optional(RankTypes),
+  percentStartedCutTypes: Schema.optional(CutTypes),
+  percentOwnedCutTypes: Schema.optional(CutTypes),
 });
 
 export const AvailableRequest = AvailableShape.pipe(
@@ -167,17 +213,31 @@ export const available: API.OperationMethod<
       input.sort === "stat"
         ? "ownership,percent_owned,percent_started,ranks,stats,transactions,opponent,starting_status"
         : "ownership,percent_owned,percent_started,ranks,transactions,opponent,starting_status";
+    const cuts = cutTypesQuery(input);
     return {
       host: "read",
       method: "GET",
-      path: `/fantasy/v2/games;game_keys=${input.gameKey}/players${status}${position};sort=${searchSortToken(input.sort, statId)}${sortType};count=${String(input.limit)};start=${String(input.offset)};out=${out}`,
+      path: `/fantasy/v2/games;game_keys=${input.gameKey}/players${status}${position};sort=${searchSortToken(input.sort, statId)}${sortType};count=${String(input.limit)};start=${String(input.offset)};out=${out}${rankSuffix(input.ranks)}`,
+      ...(Object.keys(cuts).length === 0 ? {} : { query: cuts }),
     };
   },
   decode: (payload, input) =>
     decodeGamePlayers(payload, input.gameKey, input.sort === "stat" ? input.statId : undefined),
 });
 
-export const DetailsRequest = Schema.Struct({
+const DetailField = Schema.Literals([
+  "stats",
+  "ownership",
+  "ranks",
+  "percent_started",
+  "percent_owned",
+  "opponent",
+]);
+type DetailField = typeof DetailField.Type;
+
+const defaultDetailFields: ReadonlyArray<DetailField> = ["stats", "ownership"];
+
+const DetailsShape = Schema.Struct({
   leagueKey: YahooLeagueKey,
   playerKeys: Schema.Array(YahooPlayerKey).pipe(
     Schema.check(Schema.isMinLength(1)),
@@ -186,8 +246,30 @@ export const DetailsRequest = Schema.Struct({
       Schema.makeFilter((keys: ReadonlyArray<string>) => new Set(keys).size === keys.length),
     ),
   ),
-  stats: StatQuery,
+  stats: Schema.optional(StatQuery),
+  fields: Schema.optional(
+    Schema.Array(DetailField).pipe(
+      Schema.check(Schema.isMinLength(1)),
+      Schema.check(
+        Schema.makeFilter(
+          (fields: ReadonlyArray<DetailField>) => new Set(fields).size === fields.length,
+        ),
+      ),
+    ),
+  ),
+  ranks: Schema.optional(RankTypes),
+  percentStartedCutTypes: Schema.optional(CutTypes),
+  percentOwnedCutTypes: Schema.optional(CutTypes),
 });
+
+export const DetailsRequest = DetailsShape.pipe(
+  Schema.check(
+    Schema.makeFilter((input: typeof DetailsShape.Type) => {
+      const fields = detailFieldsOf(input);
+      return !fields.includes("stats") || input.stats !== undefined;
+    }),
+  ),
+);
 export type DetailsRequest = typeof DetailsRequest.Type;
 
 export type DetailsResponse = ReadonlyArray<YahooPlayerDetail>;
@@ -201,14 +283,65 @@ export const details: API.OperationMethod<
   name: "read_player_details",
   input: DetailsRequest,
   output: Schema.Unknown,
-  request: (input) => ({
-    host: "read",
-    method: "GET",
-    path: `/fantasy/v2/league/${input.leagueKey}/players;player_keys=${input.playerKeys.join(",")};out=stats,ownership`,
-    query: statsQueryOf(input.stats),
-  }),
-  decode: (payload, input) => decodePlayerDetails(payload, input.leagueKey, input.stats),
+  request: (input) => {
+    const fields = detailFieldsOf(input);
+    const stats =
+      fields.includes("stats") && input.stats !== undefined ? statsQueryOf(input.stats) : {};
+    const query = { ...stats, ...cutTypesQuery(input) };
+    return {
+      host: "read",
+      method: "GET",
+      path: `/fantasy/v2/league/${input.leagueKey}/players;player_keys=${input.playerKeys.join(",")};out=${fields.join(",")}${rankSuffix(input.ranks)}`,
+      ...(Object.keys(query).length === 0 ? {} : { query }),
+    };
+  },
+  decode: (payload, input) =>
+    decodePlayerDetails(
+      payload,
+      input.leagueKey,
+      detailFieldsOf(input).includes("stats") ? input.stats : undefined,
+    ),
 });
+
+function detailFieldsOf(input: typeof DetailsShape.Type): ReadonlyArray<DetailField> {
+  const fields: Array<DetailField> = [...(input.fields ?? defaultDetailFields)];
+  const add = (field: DetailField): void => {
+    if (!fields.includes(field)) {
+      fields.push(field);
+    }
+  };
+  if (input.stats !== undefined) {
+    add("stats");
+  }
+  if (input.ranks !== undefined) {
+    add("ranks");
+  }
+  if (input.percentStartedCutTypes !== undefined) {
+    add("percent_started");
+  }
+  if (input.percentOwnedCutTypes !== undefined) {
+    add("percent_owned");
+  }
+  return fields;
+}
+
+function rankSuffix(ranks: ReadonlyArray<string> | undefined): string {
+  return ranks === undefined ? "" : `;ranks=${ranks.join(",")}`;
+}
+
+function cutTypesQuery(input: {
+  readonly percentStartedCutTypes?: ReadonlyArray<string>;
+  readonly percentOwnedCutTypes?: ReadonlyArray<string>;
+}): Readonly<Record<string, string>> {
+  return {
+    ...(input.percentStartedCutTypes === undefined
+      ? {}
+      : { "percent_started.cut_types": input.percentStartedCutTypes.join(",") }),
+    ...(input.percentOwnedCutTypes === undefined
+      ? {}
+      : { "percent_owned.cut_types": input.percentOwnedCutTypes.join(",") }),
+  };
+}
 
 const StartingPosition = Schema.Literals(["S_G", "S_P"]);
 

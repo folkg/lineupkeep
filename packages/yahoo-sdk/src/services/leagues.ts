@@ -10,7 +10,13 @@ import { decodeStandings } from "#yahoo/internal/standings.ts";
 import type { YahooStandings } from "#yahoo/internal/standings.ts";
 import { decodeDiscoveredLeagues } from "#yahoo/internal/team.ts";
 import type { YahooDiscoveredLeague } from "#yahoo/internal/team.ts";
-import { YahooGameKey, YahooLeagueKey, YahooTeamKey, leagueKeyOfTeam } from "#yahoo/keys.ts";
+import {
+  YahooGameKeys,
+  YahooLeagueKey,
+  YahooTeamKey,
+  allYahooGameKeys,
+  leagueKeyOfTeam,
+} from "#yahoo/keys.ts";
 
 export const SettingsRequest = Schema.Struct({
   leagueKey: YahooLeagueKey,
@@ -60,26 +66,14 @@ export const standings: API.OperationMethod<
   decode: (payload, input) => decodeStandings(payload, input.leagueKey),
 });
 
-const GameKeys = Schema.Array(YahooGameKey).pipe(
-  Schema.check(Schema.isMinLength(1)),
-  Schema.check(Schema.isMaxLength(4)),
-  Schema.check(
-    Schema.makeFilter(
-      (gameKeys: ReadonlyArray<YahooGameKey>) => new Set(gameKeys).size === gameKeys.length,
-    ),
-  ),
-);
-
 const DiscoverShape = Schema.Struct({
-  gameKeys: Schema.optional(GameKeys),
+  gameKeys: Schema.optional(YahooGameKeys),
 });
 
 export const DiscoverRequest = DiscoverShape;
 export type DiscoverRequest = typeof DiscoverRequest.Type;
 
 export type DiscoverResponse = ReadonlyArray<YahooDiscoveredLeague>;
-
-const allGameKeys = ["nfl", "nhl", "nba", "mlb"] as const;
 
 export const discover: API.OperationMethod<
   DiscoverRequest,
@@ -91,14 +85,14 @@ export const discover: API.OperationMethod<
   input: DiscoverRequest,
   output: Schema.Unknown,
   request: (input) => {
-    const gameKeys = input.gameKeys ?? allGameKeys;
+    const gameKeys = input.gameKeys ?? allYahooGameKeys;
     return {
       host: "read",
       method: "GET",
       path: `/fantasy/v2/users;use_login=1/games;game_keys=${gameKeys.join(",")}/leagues;out=settings/teams;out=standings`,
     };
   },
-  decode: (payload, input) => decodeDiscoveredLeagues(payload, input.gameKeys ?? allGameKeys),
+  decode: (payload, input) => decodeDiscoveredLeagues(payload, input.gameKeys ?? allYahooGameKeys),
 });
 
 export const FeloRequest = Schema.Struct({

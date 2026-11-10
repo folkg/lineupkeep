@@ -200,6 +200,19 @@ export type YahooTransactionType =
   | "commissioner"
   | "other";
 
+export const TransactionTypeFilter = Schema.Literals([
+  "add",
+  "drop",
+  "add_drop",
+  "trade",
+  "pending_trade",
+]);
+export type TransactionTypeFilter = typeof TransactionTypeFilter.Type;
+
+export function transactionTypeTokenOf(type: TransactionTypeFilter): string {
+  return type === "add_drop" ? "add/drop" : type;
+}
+
 export type YahooTransactionTeam = {
   readonly teamKey: string;
   readonly name?: string;

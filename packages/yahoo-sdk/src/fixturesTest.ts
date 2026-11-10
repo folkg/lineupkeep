@@ -358,6 +358,46 @@ export const weekPlayerDetailsPayload = {
   },
 };
 
+export const playerFactsPayload = {
+  fantasy_content: {
+    league: [
+      leagueAttributes,
+      {
+        players: {
+          "0": {
+            player: [
+              playerIdentity("466.p.20001", "Synthetic Fact"),
+              { opponent: "@SEA" },
+              {
+                percent_started: {
+                  coverage_type: "week",
+                  week: "6",
+                  value: 38,
+                  percent_started_cut_types: {
+                    "0": { percent_started_cut_type: { cut_type: "diamond", value: 12 } },
+                    count: 1,
+                  },
+                },
+              },
+              {
+                percent_owned: { coverage_type: "week", week: "6", value: 88, delta: "2" },
+              },
+              {
+                player_ranks: {
+                  "0": { player_rank: { rank_type: "PW", rank_value: "3", rank_week: "6" } },
+                  "1": { player_rank: { rank_type: "L4W", rank_value: "11" } },
+                  count: 2,
+                },
+              },
+            ],
+          },
+          count: 1,
+        },
+      },
+    ],
+  },
+};
+
 export const seasonPlayerDetailsPayload = {
   fantasy_content: {
     league: [

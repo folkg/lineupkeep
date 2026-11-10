@@ -38,6 +38,7 @@ export type {
 } from "./internal/standings.ts";
 export type {
   YahooPercent,
+  YahooPercentCut,
   YahooPlayerAvailability,
   YahooPlayerDetail,
   YahooPlayerRank,
@@ -78,6 +79,7 @@ export type {
   YahooTransactionType,
   YahooPendingTrade,
 } from "./internal/transaction.ts";
+export { TransactionTypeFilter } from "./internal/transaction.ts";
 export type { YahooDraftPick } from "./internal/draft.ts";
 export type { YahooScheduleGame, YahooScoreboardGame } from "./internal/schedule.ts";
 export type {

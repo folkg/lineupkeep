@@ -14,6 +14,7 @@ import {
   matchupsPayload,
   pendingTradeAsTransactionPayload,
   pendingTradesPayload,
+  playerFactsPayload,
   rosterPayload,
   rotoStandingsPayload,
   seasonPlayerDetailsPayload,
@@ -443,6 +444,45 @@ it.effect("reads week player details with percent owned and started values", () 
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
 
+it.effect("reads requested player fields, rank types, and cut types", () => {
+  const recording = recordingClient(() => jsonResponse(playerFactsPayload));
+  return Effect.gen(function* () {
+    const details = yield* client.readPlayerDetails({
+      session,
+      leagueKey: "466.l.4000",
+      playerKeys: ["466.p.20001"],
+      fields: ["percent_started", "percent_owned", "ranks", "opponent"],
+      ranks: ["projected_week", "last4weeks"],
+      percentStartedCutTypes: ["diamond"],
+    });
+
+    const call = recording.calls[0];
+    if (call === undefined) {
+      return yield* Effect.die("expected one request");
+    }
+    assert.strictEqual(
+      call.url,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;player_keys=466.p.20001;out=percent_started,percent_owned,ranks,opponent;ranks=projected_week,last4weeks?format=json&percent_started.cut_types=diamond",
+    );
+    assert.deepStrictEqual(details[0]?.percentStarted, {
+      coverage: { type: "week", week: 6 },
+      value: 38,
+      delta: null,
+      cuts: [{ cut: "diamond", value: 12 }],
+    });
+    assert.deepStrictEqual(details[0]?.percentOwned, {
+      coverage: { type: "week", week: 6 },
+      value: 88,
+      delta: 2,
+    });
+    assert.deepStrictEqual(details[0]?.ranks, [
+      { type: "PW", value: 3, season: undefined, week: 6 },
+      { type: "L4W", value: 11, season: undefined },
+    ]);
+    assert.strictEqual(details[0]?.opponent, "@SEA");
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
 it.effect("reports a player-stat week that differs from the requested week", () => {
   const recording = recordingClient(() => jsonResponse(weekPlayerDetailsForAnotherWeek));
   return Effect.gen(function* () {
@@ -675,6 +715,31 @@ it.effect("filters transactions to trades and keeps the provider's order", () =>
     assert.isTrue(transactions.every((transaction) => transaction.type === "trade"));
     assert.strictEqual(transactions[0]?.picks.length, 2);
     assert.strictEqual(transactions[0]?.players.length, 2);
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("filters transactions by another type with its provider token", () => {
+  const recording = recordingClient(() => jsonResponse(transactionsPayload));
+  return Effect.gen(function* () {
+    const transactions = yield* client.readTransactions({
+      session,
+      leagueKey: "466.l.4000",
+      limit: 50,
+      type: "add_drop",
+    });
+
+    const call = recording.calls[0];
+    if (call === undefined) {
+      return yield* Effect.die("expected one request");
+    }
+    assert.strictEqual(
+      call.url,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/transactions;type=add/drop;count=50?format=json",
+    );
+    assert.deepStrictEqual(
+      transactions.map((transaction) => transaction.type),
+      ["add_drop"],
+    );
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
 

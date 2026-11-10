@@ -88,6 +88,9 @@ import type {
   YahooLeagueSettings,
   YahooMatchup,
   YahooPendingTrade,
+  YahooPercentCut,
+  YahooPlayerDetail,
+  YahooPlayerRank,
   YahooTransaction,
   YahooTransactionPick,
   YahooTransactionPlayer,
@@ -100,6 +103,7 @@ import {
   readLeagueThroughSdk,
   readMatchupsThroughSdk,
   readPendingTradesThroughSdk,
+  readPlayerDetailsRawThroughSdk,
   readPlayerDetailsThroughSdk,
   readRosterScheduleThroughSdk,
   readRosterThroughSdk,
@@ -796,24 +800,13 @@ export const yahooProvider = Effect.gen(function* () {
     const weeks: Array<ProviderPlayerWeekFact> = [];
     for (let index = 0; index < playerKeys.length; index += maximumSelectedPlayers) {
       const chunk = playerKeys.slice(index, index + maximumSelectedPlayers);
-      const payload = yield* readJson(internet, {
-        operation: "read_player_weeks",
-        origin: readOrigin,
-        path:
-          `/fantasy/v2/league/${leagueKey}/players;player_keys=${chunk.join(",")}` +
-          ";out=ranks,opponent;ranks=projected_week",
-        query: { format: "json" },
-        cookie,
-        normalize: true,
+      const details = yield* readPlayerDetailsRawThroughSdk(sdk, "read_player_weeks", cookie, {
+        leagueKey,
+        playerKeys: chunk,
+        fields: ["ranks", "opponent"],
+        ranks: ["projected_week"],
       });
-      const decoded = yield* decodePayload(PlayerDetailsPayload, payload, "read_player_weeks");
-      if (decoded.league.league_key !== leagueKey) {
-        return yield* responseMismatch({
-          operation: "read_player_weeks",
-          field: "league.league_key",
-        });
-      }
-      for (const player of decoded.league.players) {
+      for (const player of details) {
         weeks.push(playerWeekOf(player, input.week.week));
       }
     }
@@ -873,21 +866,14 @@ export const yahooProvider = Effect.gen(function* () {
     const cookie = yield* sessionCookie(input, "read_player_details");
     const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_player_details");
     const playerKeys = yield* ValidBatchPlayerKeys(input.providerPlayerKeys);
-    const payload = yield* readJson(internet, {
-      operation: "read_player_details",
-      origin: readOrigin,
-      path:
-        `/fantasy/v2/league/${leagueKey}/players;player_keys=${playerKeys.join(",")}` +
-        `;out=percent_started,percent_owned,ranks;ranks=${playerRankTypes.join(",")}`,
-      query: {
-        format: "json",
-        "percent_started.cut_types": communityStartRateCut,
-      },
-      cookie,
-      normalize: true,
+    const details = yield* readPlayerDetailsRawThroughSdk(sdk, "read_player_details", cookie, {
+      leagueKey,
+      playerKeys,
+      fields: ["percent_started", "percent_owned", "ranks"],
+      ranks: playerRankTypes,
+      percentStartedCutTypes: [communityStartRateCut],
     });
-    const decoded = yield* decodePayload(PlayerDetailsPayload, payload, "read_player_details");
-    const rates = yield* playerFactsFromPayload(decoded, leagueKey, input.coverage);
+    const rates = yield* playerFactsOf(details, input.coverage);
     yield* Effect.annotateCurrentSpan("provider.player_fact_count", rates.length);
     return rates;
   });
@@ -2257,19 +2243,24 @@ function gamesPlayedFromPayload(
   });
 }
 
-function playerRanksOf(
-  payload: ReadonlyArray<typeof PlayerRankPayload.Type> | undefined,
-): ReadonlyArray<PlayerRank> {
-  const ranks: Array<PlayerRank> = [];
-  for (const entry of payload ?? []) {
-    const type = rankTypeMap[entry.player_rank.rank_type];
-    const rank = Number(entry.player_rank.rank_value);
-    const week = entry.player_rank.rank_week;
-    if (type !== undefined && Number.isInteger(rank) && rank > 0) {
-      ranks.push({ type, rank, ...(week === undefined ? {} : { week }) });
+function playerRanksOf(ranks: ReadonlyArray<YahooPlayerRank>): ReadonlyArray<PlayerRank> {
+  const mapped: Array<PlayerRank> = [];
+  for (const rank of ranks) {
+    const type = rankTypeMap[rank.type];
+    if (
+      type !== undefined &&
+      rank.value !== null &&
+      Number.isInteger(rank.value) &&
+      rank.value > 0
+    ) {
+      mapped.push({
+        type,
+        rank: rank.value,
+        ...(rank.week === undefined ? {} : { week: rank.week }),
+      });
     }
   }
-  return ranks;
+  return mapped;
 }
 
 const rankTypeMap: Readonly<Record<string, RankType>> = {
@@ -2517,41 +2508,24 @@ function isProviderDate(value: string): boolean {
   );
 }
 
-function playerFactsFromPayload(
-  payload: typeof PlayerDetailsPayload.Type,
-  requestedLeagueKey: string,
+function playerFactsOf(
+  details: ReadonlyArray<YahooPlayerDetail>,
   expected: ProviderRosterCoverage,
 ): Effect.Effect<
   ReadonlyArray<YahooPlayerFacts>,
   ProviderResponseInvalid | ProviderPeriodMismatch
 > {
   return Effect.gen(function* () {
-    if (payload.league.league_key !== requestedLeagueKey) {
-      return yield* responseMismatch({
-        operation: "read_player_details",
-        field: "league.league_key",
-      });
-    }
     const rates: Array<YahooPlayerFacts> = [];
-    for (const player of payload.league.players) {
-      const percentStarted = yield* communityStartRateOf(
-        player.percent_started,
-        `league.players.${player.player_key}.percent_started`,
-        expected,
-      );
+    for (const player of details) {
+      const percentStarted = yield* communityStartRateOf(player.percentStarted, expected);
       if (percentStarted !== undefined) {
         rates.push({
-          providerPlayerKey: player.player_key,
+          providerPlayerKey: player.playerKey,
           ...percentStarted,
-          percentOwned: yield* percentageOf(
-            player.percent_owned?.value,
-            `league.players.${player.player_key}.percent_owned.value`,
-          ),
-          percentOwnedDelta: yield* percentDeltaOf(
-            player.percent_owned?.delta,
-            `league.players.${player.player_key}.percent_owned.delta`,
-          ),
-          ranks: playerRanksOf(player.player_ranks),
+          percentOwned: player.percentOwned?.value ?? null,
+          percentOwnedDelta: player.percentOwned?.delta ?? null,
+          ranks: playerRanksOf(player.ranks),
           opponent: scheduledOpponent(player.opponent),
         });
       }
@@ -2566,14 +2540,11 @@ function playerFactsFromPayload(
   });
 }
 
-function playerWeekOf(
-  player: typeof PlayerDetailPayload.Type,
-  week: number,
-): ProviderPlayerWeekFact {
+function playerWeekOf(player: YahooPlayerDetail, week: number): ProviderPlayerWeekFact {
   const opponent = scheduledOpponent(player.opponent);
-  const projected = playerRanksOf(player.player_ranks).find((entry) => entry.type === "PW");
+  const projected = playerRanksOf(player.ranks).find((entry) => entry.type === "PW");
   return {
-    providerPlayerKey: player.player_key,
+    providerPlayerKey: player.playerKey,
     week,
     plays: opponent !== undefined,
     opponent,
@@ -2585,93 +2556,28 @@ function playerWeekOf(
 }
 
 function communityStartRateOf(
-  payload: typeof PercentStartedPayload.Type | undefined,
-  field: string,
+  percentStarted: YahooPlayerDetail["percentStarted"],
   expected: ProviderRosterCoverage,
-): Effect.Effect<
-  YahooStartRateSummary | undefined,
-  ProviderResponseInvalid | ProviderPeriodMismatch
-> {
+): Effect.Effect<YahooStartRateSummary | undefined, ProviderPeriodMismatch> {
   return Effect.gen(function* () {
-    if (payload === undefined) {
+    if (percentStarted === undefined) {
       return undefined;
     }
-    const coverage = yield* coverageOf(payload, field);
-    if (coverage !== null && !sameCoverage(coverage, expected)) {
+    if (percentStarted.coverage !== undefined && !sameCoverage(percentStarted.coverage, expected)) {
       return yield* ProviderPeriodMismatch.make({
         operation: "read_player_details",
         requested: expected,
-        covered: coverage,
-      });
-    }
-    const cuts: Array<YahooStartRateCut> = [];
-    for (const [index, entry] of (payload.percent_started_cut_types ?? []).entries()) {
-      const cut = entry.percent_started_cut_type;
-      cuts.push({
-        cut: cut.cut_type,
-        percent: yield* percentageOf(
-          cut.value,
-          `${field}.percent_started_cut_types.${String(index)}.value`,
-        ),
+        covered: percentStarted.coverage,
       });
     }
     return {
-      percent: yield* percentageOf(payload.value, `${field}.value`),
-      cuts,
+      percent: percentStarted.value,
+      cuts: (percentStarted.cuts ?? []).map((cut: YahooPercentCut): YahooStartRateCut => ({
+        cut: cut.cut,
+        percent: cut.value,
+      })),
     };
   });
-}
-
-function coverageOf(
-  payload: typeof PercentStartedPayload.Type,
-  field: string,
-): Effect.Effect<ProviderRosterCoverage | null, ProviderResponseInvalid> {
-  const coverageType = payload.coverage_type;
-  if (coverageType === undefined) {
-    return Effect.succeed(null);
-  }
-  if (coverageType === "week" && payload.week !== undefined) {
-    return Effect.succeed({ type: "week", week: payload.week });
-  }
-  if (coverageType === "date" && payload.date !== undefined) {
-    return Effect.succeed({ type: "date", date: payload.date });
-  }
-  return responseMismatch({ operation: "read_player_details", field: `${field}.coverage_type` });
-}
-
-function percentageOf(
-  value: number | string | null | undefined,
-  field: string,
-): Effect.Effect<number | null, ProviderResponseInvalid> {
-  if (value === undefined || value === null) {
-    return Effect.succeed(null);
-  }
-  const percent = parsePercent(value);
-  if (percent === undefined || percent < 0 || percent > 100) {
-    return responseMismatch({ operation: "read_player_details", field });
-  }
-  return Effect.succeed(percent);
-}
-
-function percentDeltaOf(
-  value: number | string | null | undefined,
-  field: string,
-): Effect.Effect<number | null, ProviderResponseInvalid> {
-  if (value === undefined || value === null) {
-    return Effect.succeed(null);
-  }
-  const delta = parsePercent(value);
-  if (delta === undefined) {
-    return responseMismatch({ operation: "read_player_details", field });
-  }
-  return Effect.succeed(delta);
-}
-
-function parsePercent(value: number | string): number | undefined {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : undefined;
-  }
-  return /^-?\d+(?:\.\d+)?$/u.test(value) ? Number(value) : undefined;
 }
 
 function sameCoverage(left: ProviderRosterCoverage, right: ProviderRosterCoverage): boolean {
@@ -3315,74 +3221,6 @@ const LeagueRostersPayload = Schema.Struct({
     ),
   }),
 });
-const PlayerKey = Schema.String.pipe(Schema.check(Schema.isPattern(/^[0-9]+\.p\.[0-9]+$/u)));
-
-const PlayerOwnership = Schema.Struct({
-  ownership_type: Schema.optional(Schema.String),
-});
-
-const PercentOwned = Schema.Struct({
-  coverage_type: Schema.optional(Schema.String),
-  week: Schema.optional(IntFromStringOrNumber),
-  date: Schema.optional(Schema.String),
-  value: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
-  delta: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
-});
-
-const PercentValue = Schema.optional(Schema.NullOr(Schema.Union([Schema.Finite, Schema.String])));
-
-const PercentStartedCut = Schema.Struct({
-  percent_started_cut_type: Schema.Struct({
-    coverage_type: Schema.optional(Schema.String),
-    week: Schema.optional(IntFromStringOrNumber),
-    date: Schema.optional(Schema.String),
-    cut_type: Schema.NonEmptyString,
-    value: PercentValue,
-  }),
-});
-
-const PercentStartedPayload = Schema.Struct({
-  coverage_type: Schema.optional(Schema.String),
-  week: Schema.optional(IntFromStringOrNumber),
-  date: Schema.optional(Schema.String),
-  value: PercentValue,
-  delta: PercentValue,
-  percent_started_cut_types: Schema.optional(Schema.Array(PercentStartedCut)),
-});
-
-const PlayerRankPayload = Schema.Struct({
-  player_rank: Schema.Struct({
-    rank_type: Schema.NonEmptyString,
-    rank_value: Schema.Union([Schema.String, Schema.Finite]),
-    rank_season: Schema.optional(IntFromStringOrNumber),
-    rank_week: Schema.optional(IntFromStringOrNumber),
-  }),
-});
-
-const PlayerDetailPayload = Schema.Struct({
-  player_key: PlayerKey,
-  name: Schema.optional(Schema.Struct({ full: Schema.optional(Schema.String) })),
-  primary_position: Schema.optional(Schema.String),
-  display_position: Schema.optional(Schema.String),
-  editorial_team_abbr: Schema.optional(Schema.String),
-  eligible_positions: Schema.optional(Schema.Array(Schema.Struct({ position: Schema.String }))),
-  ownership: Schema.optional(PlayerOwnership),
-  percent_owned: Schema.optional(PercentOwned),
-  percent_started: Schema.optional(PercentStartedPayload),
-  player_ranks: Schema.optional(Schema.Array(PlayerRankPayload)),
-  status: Schema.optional(Schema.Union([Schema.String, Schema.Boolean])),
-  status_full: Schema.optional(Schema.String),
-  injury_note: Schema.optional(Schema.String),
-  opponent: Schema.optional(Schema.NullOr(Schema.String)),
-});
-
-const PlayerDetailsPayload = Schema.Struct({
-  league: Schema.Struct({
-    league_key: LeagueKey,
-    players: Schema.Array(PlayerDetailPayload),
-  }),
-});
-
 const GamesPlayedPositionPayload = Schema.Struct({
   position: Schema.NonEmptyString,
   games_played: Schema.Struct({

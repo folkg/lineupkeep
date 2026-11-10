@@ -28,6 +28,19 @@ export type YahooPendingTradeKey = typeof YahooPendingTradeKey.Type;
 export const YahooGameKey = Schema.Literals(["nfl", "nhl", "nba", "mlb"]);
 export type YahooGameKey = typeof YahooGameKey.Type;
 
+export const allYahooGameKeys = ["nfl", "nhl", "nba", "mlb"] as const;
+
+export const YahooGameKeys = Schema.Array(YahooGameKey).pipe(
+  Schema.check(Schema.isMinLength(1)),
+  Schema.check(Schema.isMaxLength(4)),
+  Schema.check(
+    Schema.makeFilter(
+      (gameKeys: ReadonlyArray<YahooGameKey>) => new Set(gameKeys).size === gameKeys.length,
+    ),
+  ),
+);
+export type YahooGameKeys = typeof YahooGameKeys.Type;
+
 export const YahooDate = Schema.String.pipe(Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)));
 export type YahooDate = typeof YahooDate.Type;
 

@@ -5,7 +5,13 @@ import type { YahooReadError } from "#yahoo/errors.ts";
 import { coverageSuffix } from "#yahoo/internal/request.ts";
 import { decodeLeagueRostersMany, decodeRoster } from "#yahoo/internal/roster.ts";
 import type { YahooLeagueRoster, YahooRoster } from "#yahoo/internal/roster.ts";
-import { YahooCoverage, YahooLeagueKey, YahooTeamKey } from "#yahoo/keys.ts";
+import {
+  YahooCoverage,
+  YahooGameKeys,
+  YahooLeagueKey,
+  YahooTeamKey,
+  allYahooGameKeys,
+} from "#yahoo/keys.ts";
 
 export const ForTeamRequest = Schema.Struct({
   teamKey: YahooTeamKey,
@@ -44,6 +50,7 @@ const LeagueKeys = Schema.Array(YahooLeagueKey).pipe(
 
 export const ForLeaguesRequest = Schema.Struct({
   leagueKeys: LeagueKeys,
+  gameKeys: Schema.optional(YahooGameKeys),
   coverage: Schema.optional(YahooCoverage),
 });
 export type ForLeaguesRequest = typeof ForLeaguesRequest.Type;
@@ -59,10 +66,13 @@ export const forLeagues: API.OperationMethod<
   name: "read_league_rosters",
   input: ForLeaguesRequest,
   output: Schema.Unknown,
-  request: (input) => ({
-    host: "read",
-    method: "GET",
-    path: `/fantasy/v2/users;use_login=1/games;game_keys=nfl,nhl,nba,mlb/leagues;league_keys=${input.leagueKeys.join(",")};out=settings/teams;out=transactions,games_played;transactions.types=waiver,pending_trade/roster${coverageSuffix(input.coverage)}/players;out=opponent,starting_status,transactions`,
-  }),
+  request: (input) => {
+    const gameKeys = input.gameKeys ?? allYahooGameKeys;
+    return {
+      host: "read",
+      method: "GET",
+      path: `/fantasy/v2/users;use_login=1/games;game_keys=${gameKeys.join(",")}/leagues;league_keys=${input.leagueKeys.join(",")};out=settings/teams;out=transactions,games_played;transactions.types=waiver,pending_trade/roster${coverageSuffix(input.coverage)}/players;out=opponent,starting_status,transactions`,
+    };
+  },
   decode: (payload, input) => decodeLeagueRostersMany(payload, input.leagueKeys),
 });

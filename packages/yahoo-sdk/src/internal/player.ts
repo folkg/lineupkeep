@@ -99,6 +99,7 @@ function summariesOf(
           type: player_rank.rank_type,
           value: numberOrNull(player_rank.rank_value),
           season: player_rank.rank_season,
+          ...(player_rank.rank_week === undefined ? {} : { week: player_rank.rank_week }),
         })),
         stats:
           player.player_stats === undefined
@@ -119,7 +120,7 @@ function summariesOf(
 export function decodePlayerDetails(
   payload: unknown,
   requestedLeagueKey: YahooLeagueKey,
-  query: YahooStatQuery,
+  query: YahooStatQuery | undefined,
 ): Effect.Effect<ReadonlyArray<YahooPlayerDetail>, YahooParseError | YahooCoverageMismatch> {
   return Effect.gen(function* () {
     const decoded = yield* decodePayload(PlayerDetailsPayload, payload, "read_player_details");
@@ -157,12 +158,14 @@ export function decodePlayerDetails(
           type: player_rank.rank_type,
           value: numberOrNull(player_rank.rank_value),
           season: player_rank.rank_season,
+          ...(player_rank.rank_week === undefined ? {} : { week: player_rank.rank_week }),
         })),
         stats:
           player.player_stats === undefined
             ? undefined
             : yield* statSeriesOf(player.player_stats, query, "read_player_details"),
         status: statusOf(player.status, player.status_full, player.injury_note),
+        ...(player.opponent === undefined ? {} : { opponent: player.opponent }),
       });
     }
     return details;
@@ -245,10 +248,12 @@ function percentOf(
     if (payload === undefined) {
       return undefined;
     }
+    const cuts = yield* percentCutsOf(payload, operation, field);
     return {
       coverage: yield* coverageOfPercent(payload, operation, field),
       value: yield* percentOrNull(payload.value, operation, `${field}.value`),
       delta: numberOrNull(payload.delta),
+      ...(cuts.length === 0 ? {} : { cuts }),
     };
   });
 }
@@ -266,6 +271,46 @@ function coverageOfPercent(
   }
   if (payload.coverage_type === "date" && payload.date !== undefined) {
     return Effect.succeed({ type: "date", date: payload.date });
+  }
+  return Effect.fail(new YahooParseError({ operation, field: `${field}.coverage_type` }));
+}
+
+function percentCutsOf(
+  payload: typeof PercentOwned.Type,
+  operation: "search_players" | "read_player_details",
+  field: string,
+): Effect.Effect<ReadonlyArray<YahooPercentCut>, YahooParseError> {
+  return Effect.gen(function* () {
+    const entries = [
+      ...(payload.percent_started_cut_types ?? []).map((entry) => entry.percent_started_cut_type),
+      ...(payload.percent_owned_cut_types ?? []).map((entry) => entry.percent_owned_cut_type),
+    ];
+    const cuts: Array<YahooPercentCut> = [];
+    for (const [index, cut] of entries.entries()) {
+      cuts.push({
+        cut: cut.cut_type,
+        value: yield* percentOrNull(cut.value, operation, `${field}.cuts.${String(index)}.value`),
+        ...(cut.coverage_type === undefined
+          ? {}
+          : {
+              coverage: yield* coverageOfCut(cut, operation, `${field}.cuts.${String(index)}`),
+            }),
+      });
+    }
+    return cuts;
+  });
+}
+
+function coverageOfCut(
+  cut: typeof PercentCut.Type,
+  operation: "search_players" | "read_player_details",
+  field: string,
+): Effect.Effect<YahooCoverage, YahooParseError> {
+  if (cut.coverage_type === "week" && cut.week !== undefined) {
+    return Effect.succeed({ type: "week", week: cut.week });
+  }
+  if (cut.coverage_type === "date" && cut.date !== undefined) {
+    return Effect.succeed({ type: "date", date: cut.date });
   }
   return Effect.fail(new YahooParseError({ operation, field: `${field}.coverage_type` }));
 }
@@ -369,18 +414,27 @@ export type YahooPlayerDetail = {
   readonly ranks: ReadonlyArray<YahooPlayerRank>;
   readonly stats?: YahooPlayerStatSeries;
   readonly status?: YahooPlayerStatus;
+  readonly opponent?: string | null;
 };
 
 export type YahooPercent = {
   readonly coverage?: YahooCoverage;
   readonly value: number | null;
   readonly delta: number | null;
+  readonly cuts?: ReadonlyArray<YahooPercentCut>;
+};
+
+export type YahooPercentCut = {
+  readonly cut: string;
+  readonly value: number | null;
+  readonly coverage?: YahooCoverage;
 };
 
 export type YahooPlayerRank = {
   readonly type: string;
   readonly value: number | null;
   readonly season?: number;
+  readonly week?: number;
 };
 
 export type YahooPlayerStatus = {
@@ -412,12 +466,26 @@ export type YahooTransactionCounts = {
   readonly total?: number;
 };
 
+const PercentCut = Schema.Struct({
+  cut_type: Schema.NonEmptyString,
+  value: Schema.optional(Schema.NullOr(Schema.Union([Schema.Finite, Schema.String]))),
+  coverage_type: Schema.optional(Schema.String),
+  week: Schema.optional(IntFromStringOrNumber),
+  date: Schema.optional(YahooDate),
+});
+
 const PercentOwned = Schema.Struct({
   coverage_type: Schema.optional(Schema.String),
   week: Schema.optional(IntFromStringOrNumber),
   date: Schema.optional(YahooDate),
   value: Schema.optional(Schema.NullOr(Schema.Union([Schema.Finite, Schema.String]))),
   delta: Schema.optional(Schema.NullOr(Schema.Union([Schema.Finite, Schema.String]))),
+  percent_started_cut_types: Schema.optional(
+    Schema.Array(Schema.Struct({ percent_started_cut_type: PercentCut })),
+  ),
+  percent_owned_cut_types: Schema.optional(
+    Schema.Array(Schema.Struct({ percent_owned_cut_type: PercentCut })),
+  ),
 });
 
 const StatEntry = Schema.Struct({
@@ -444,6 +512,7 @@ const PlayerRankPayload = Schema.Struct({
     rank_type: Schema.NonEmptyString,
     rank_value: Schema.Union([Schema.String, Schema.Finite]),
     rank_season: Schema.optional(IntFromStringOrNumber),
+    rank_week: Schema.optional(IntFromStringOrNumber),
   }),
 });
 
@@ -510,6 +579,7 @@ const PlayerDetailPayload = Schema.Struct({
   status: StatusPayload,
   status_full: Schema.optional(Schema.String),
   injury_note: Schema.optional(Schema.String),
+  opponent: Schema.optional(Schema.NullOr(Schema.String)),
 });
 
 const LeaguePlayersPayload = Schema.Struct({

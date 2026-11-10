@@ -3,7 +3,12 @@ import * as Schema from "effect/Schema";
 
 import * as API from "#yahoo/api.ts";
 import type { YahooReadError, YahooWriteError } from "#yahoo/errors.ts";
-import { decodePendingTrades, decodeTransactions } from "#yahoo/internal/transaction.ts";
+import {
+  TransactionTypeFilter,
+  decodePendingTrades,
+  decodeTransactions,
+  transactionTypeTokenOf,
+} from "#yahoo/internal/transaction.ts";
 import type { YahooPendingTrade, YahooTransaction } from "#yahoo/internal/transaction.ts";
 import { leagueKeyOfTeam, YahooLeagueKey, YahooPlayerKey, YahooTeamKey } from "#yahoo/keys.ts";
 import { WriteReceipt } from "#yahoo/receipt.ts";
@@ -14,7 +19,7 @@ const ListShape = Schema.Struct({
   teamKey: Schema.optional(YahooTeamKey),
   limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 })),
   offset: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
-  type: Schema.optional(Schema.Literal("trade")),
+  type: Schema.optional(TransactionTypeFilter),
 });
 
 export const ListRequest = ListShape.pipe(
@@ -48,7 +53,7 @@ export const list: API.OperationMethod<
       path:
         input.type === undefined
           ? `/fantasy/v2/league/${input.leagueKey}/transactions${paging}${team}`
-          : `/fantasy/v2/league/${input.leagueKey}/transactions;type=${input.type}${team}${paging}`,
+          : `/fantasy/v2/league/${input.leagueKey}/transactions;type=${transactionTypeTokenOf(input.type)}${team}${paging}`,
     };
   },
   decode: (payload, input) =>
