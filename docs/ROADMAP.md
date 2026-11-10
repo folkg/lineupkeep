@@ -17,22 +17,22 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 
 ## Current state
 
-| Area                 | State                                                                                          |
-| -------------------- | ---------------------------------------------------------------------------------------------- |
-| Phase 1 (stages 0–6) | Complete, deployed, live-accepted                                                              |
-| Phase 2 (stages 7–8) | Complete, deployed, hourly automation verified                                                 |
-| Lineup algorithm     | Custom solver live for all five owner teams                                                    |
-| Provider boundary    | Keyed injection at the composition root; some provider-shaped ideas still reach generic layers |
-| MCP surface          | 19 tools; four resource scopes; round 19 open                                                  |
-| Client feedback      | Round 9 client notes closed on 5 November: structure, copy, local time, action states          |
-| Connections          | Hosted browser only; local helper and device flow deleted                                      |
-| Interface            | Technical sheet, renamed to Lineupgrade; nav is Teams and Account; actions own their states    |
-| Deployment           | Cloud Run web, worker and hosted browser on GCP; CI on a clean Linux runner, container target  |
-| Publication gate     | Blocked on upstream: a temporary backport of the TanStack advisory is in force                 |
-| Restore              | Drill passed 2026-10-29; retention, RPO/RTO and recovery owner undecided                       |
-| Dependencies         | Fresh audit and disposition in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md)                      |
-| Security             | Audit and disposition in [SECURITY-AUDIT.md](SECURITY-AUDIT.md); deferred work is group J      |
-| Checks               | 1695 node, 189 browser, 10 chromium; container end to end 60 passed, one known skip            |
+| Area                 | State                                                                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------- |
+| Phase 1 (stages 0–6) | Complete, deployed, live-accepted                                                                 |
+| Phase 2 (stages 7–8) | Complete, deployed, hourly automation verified                                                    |
+| Lineup algorithm     | Custom solver live for all five owner teams                                                       |
+| Provider boundary    | Every provider request lives in `packages/yahoo-sdk`; the adapter is policy and port mapping only |
+| MCP surface          | 21 tools; four resource scopes plus `notes:write`; descriptions budgeted and tested               |
+| Client feedback      | Round 9 client notes closed on 5 November: structure, copy, local time, action states             |
+| Connections          | Hosted browser only; local helper and device flow deleted                                         |
+| Interface            | Technical sheet, renamed to Lineupgrade; nav is Teams and Account; actions own their states       |
+| Deployment           | Cloud Run web, worker and hosted browser on GCP; CI on a clean Linux runner, container target     |
+| Publication gate     | Blocked on upstream: a temporary backport of the TanStack advisory is in force                    |
+| Restore              | Drill passed 2026-10-29; retention, RPO/RTO and recovery owner undecided                          |
+| Dependencies         | Fresh audit and disposition in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md)                         |
+| Security             | Audit and disposition in [SECURITY-AUDIT.md](SECURITY-AUDIT.md); deferred work is group J         |
+| Checks               | 1909 node, 197 browser, 10 chromium; container end to end 58 passed, nothing skipped              |
 
 ---
 
