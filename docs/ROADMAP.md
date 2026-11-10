@@ -492,12 +492,11 @@ removes an entry from the table.
 
 ## F3. Draft picks in trades (owner's next main-line item)
 
-The league switch is published, the SDK's Android capture proved the write, and a pick now crosses the
-provider port and is sent with the trade. The adapter chooses the app write host for a pick-bearing
-proposal and keeps the website write host for a player-only trade. The live re-proof with the stored
-connection is blocked on the stored sign-in: reads still authenticate, but every write answered 401
-`Cookie has timed out, please log in again.` on 9 November, so no proposal was created and none was
-cancelled.
+The league switch is published, a pick crosses the provider port, and a pick-bearing trade is sent. The
+shape and the host are proved live on 9 November: a Round 1 for Round 1 proposal returned 201 with pending
+trade `477.l.58487.pt.13` and was cancelled with 204. Picks need the app write host, and the body needs a
+`<trade_note>` element even when it is empty; an empty `<players>` element breaks the parser, so it is
+omitted when only picks move.
 
 - [x] Prove, read-only, that our stored connection authenticates the Android v2 read host for
       `available_draft_picks`, before promising the feature. The stored Yahoo connection (`ready`) read
@@ -518,17 +517,39 @@ cancelled.
       pick is carried in the captured `<picks><pick><source_team_key>…<destination_team_key>…<round>…` shape, and a
       pick-only trade is a legal trade. A provider refusal returns in league terms with the provider's own
       sentence and the item stays replaceable; a successful proposal stores the provider's pending-trade key.
-- [ ] Live re-proof with the stored connection. The stored sign-in reads on both read hosts, but every write (a
-      player-only proposal, a roster write, and the same requests on both write hosts) answered 401
-      `Cookie has timed out, please log in again.` A deliberately wrong crumb answered 403 `Invalid crumb`, so
-      the write half of the session had lapsed, not the request body. No proposal was created, so none was
-      cancelled; reconnect and the probe harness can re-run it. The earlier capture remains the evidence for the
-      app write: a Round 1 for Round 1 pending trade returned 201 and was cancelled with 204, while the website
-      write host refused the pick shape with 400 `Invalid XML POSTed. Error code 25`.
+- [x] Live proof with the stored connection, after a fresh sign-in. A Round 1 for Round 1 proposal on Bread
+      Roller returned 201 (`477.l.58487.pt.13`) and was cancelled with 204. The website write host reads the same
+      body and answers "You must select at least one player or pick."; the app write host accepts it. A player and
+      pick body together parse on the app host, so a mixed trade is representable. The live record is
+      `e2e/scratch/pick-send/evidence.md`.
 
 **Verify**: a pick proposal is accepted by validation, appears on the review with both sides named, is sent
 with its picks to the app write host, and a refusal keeps the provider's sentence and leaves the item
-replaceable. `M` — implemented and covered by fixtures; the live write is blocked on a fresh sign-in.
+replaceable. `M` — done, and the write is proved live.
+
+## F4. Every provider request through the SDK (done)
+
+The owner's ruling: "Everything must live in the SDK in a good, strongly typed, general shape. No calls or
+validation shall be left in the app." The migration is complete. The adapter builds no provider request at all:
+not a read, not a write, and not the write token, which now lives inside the SDK's write path so a write is still
+exactly two requests with no retry.
+
+- [x] Migrate every read: teams, session, rosters (single team, schedule, and the whole league), league settings,
+      matchups, transactions, pending trades, draft results, player details and history, weekly ranks, the
+      scorer's percent-started facts, standings, completed trades, discovery, player search, available draft picks,
+      and the scorer's games played.
+- [x] Migrate every write: lineup writes, explicit assignments, reserve moves, transaction writes, trade proposals
+      with picks, counters, responses and withdrawals.
+- [x] Delete the adapter's own transport and builders: `readJson`, its URL builder, the read origins, the payload
+      decoders only it used, every XML body builder, the crumb fetch, `YahooJson.ts`, and the write bounds.
+- [x] Prove the migrated paths live: five reads against a real league, a no-op lineup write with an identical
+      read-back, and a provider-refused write carrying the provider's own sentence
+      (`e2e/scratch/provider-regression/`).
+- [x] Record the size: `YahooProvider.ts` 4,822 to 2,083 lines, plus a 1,101-line thin mapping module, for a 34%
+      reduction across the provider code.
+
+**Verify**: no provider request is built outside `packages/yahoo-sdk`; the adapter keeps only Lineupgrade policy
+and the port mapping. `L` — done.
 
 ## G. Provider boundary and simplification
 
