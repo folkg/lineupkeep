@@ -5,11 +5,12 @@ import {
   IntFromStringOrNumber,
   NumberFromStringOrNumber,
   decodePayload,
+  isReadonlyArray,
   optionalNonEmpty,
 } from "#yahoo/decode.ts";
 import { Unauthorized, YahooParseError } from "#yahoo/errors.ts";
 import { YahooDate, YahooGameKey } from "#yahoo/keys.ts";
-import type { YahooLeagueKey } from "#yahoo/keys.ts";
+import type { YahooLeagueKey, YahooTeamKey } from "#yahoo/keys.ts";
 
 import { decodeLeagueSettings } from "./league.ts";
 import type { YahooLeagueSettings } from "./league.ts";
@@ -48,6 +49,63 @@ export function decodeLeagueTeams(
     }
     return decoded.league.teams.map(teamOf);
   });
+}
+
+export function decodeTeamGamesPlayed(
+  payload: unknown,
+  requestedLeagueKey: YahooLeagueKey,
+  requestedTeamKey: YahooTeamKey,
+): Effect.Effect<ReadonlyArray<YahooGamesPlayed>, YahooParseError> {
+  return Effect.gen(function* () {
+    const decoded = yield* decodePayload(TeamGamesPlayedPayload, payload, "read_team_games_played");
+    if (decoded.league.league_key !== requestedLeagueKey) {
+      return yield* new YahooParseError({
+        operation: "read_team_games_played",
+        field: "league.league_key",
+      });
+    }
+    const team = decoded.league.teams.find((entry) => entry.team_key === requestedTeamKey);
+    if (team === undefined || team.games_played === undefined) {
+      return yield* new YahooParseError({
+        operation: "read_team_games_played",
+        field: "team.games_played",
+      });
+    }
+    return gamesPlayedOf(team.games_played) ?? [];
+  });
+}
+
+export function gamesPlayedOf(
+  value: GamesPlayedGroup | ReadonlyArray<GamesPlayedGroup> | undefined,
+): ReadonlyArray<YahooGamesPlayed> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const groups = isReadonlyArray(value) ? value : [value];
+  const played = groups.flatMap((group) => {
+    const detail = group.games_played_by_position_type;
+    if (detail === undefined) {
+      return [];
+    }
+    return [
+      {
+        positionType: detail.position_type,
+        positions: (isReadonlyArray(detail.games_played)
+          ? detail.games_played
+          : detail.games_played === undefined
+            ? []
+            : [detail.games_played]
+        ).map(({ games_played_by_position }) => ({
+          position: games_played_by_position.position,
+          played: games_played_by_position.games_played.played,
+          max: games_played_by_position.games_played.max,
+          projected: games_played_by_position.games_played.projected,
+        })),
+        ...(detail.innings_pitched === undefined ? {} : { inningsPitched: detail.innings_pitched }),
+      },
+    ];
+  });
+  return played.length === 0 ? undefined : played;
 }
 
 function teamOf(team: typeof TeamPayload.Type): YahooLeagueTeam {
@@ -112,6 +170,25 @@ export type YahooTeamStandings = {
   readonly pointsFor?: number;
   readonly pointsAgainst?: number;
   readonly pointsBack?: number;
+};
+
+export type YahooGamesPlayed = {
+  readonly positionType: string;
+  readonly positions: ReadonlyArray<{
+    readonly position: string;
+    readonly played: number;
+    readonly max: number;
+    readonly projected: number;
+  }>;
+  readonly inningsPitched?: {
+    readonly pitched: string | number;
+    readonly max: string | number;
+    readonly projected: string | number;
+  };
+};
+
+type GamesPlayedGroup = {
+  readonly games_played_by_position_type?: typeof GamesPlayedDetailPayload.Type | undefined;
 };
 
 export type YahooDiscoveredTeam = YahooLeagueTeam & {
@@ -211,6 +288,51 @@ const LeagueTeamsPayload = Schema.Struct({
   league: Schema.Struct({
     league_key: Schema.String.pipe(Schema.check(Schema.isPattern(/^[0-9]+\.l\.[0-9]+$/u))),
     teams: Schema.Array(TeamPayload),
+  }),
+});
+
+const GamesPlayedPositionPayload = Schema.Struct({
+  games_played_by_position: Schema.Struct({
+    position: Schema.String,
+    games_played: Schema.Struct({
+      played: IntFromStringOrNumber,
+      max: IntFromStringOrNumber,
+      projected: NumberFromStringOrNumber,
+    }),
+  }),
+});
+
+export const GamesPlayedDetailPayload = Schema.Struct({
+  position_type: Schema.String,
+  games_played: Schema.optional(
+    Schema.Union([GamesPlayedPositionPayload, Schema.Array(GamesPlayedPositionPayload)]),
+  ),
+  innings_pitched: Schema.optional(
+    Schema.Struct({
+      pitched: Schema.Union([Schema.String, Schema.Finite]),
+      max: Schema.Union([Schema.String, Schema.Finite]),
+      projected: Schema.Union([Schema.String, Schema.Finite]),
+    }),
+  ),
+});
+
+const TeamGamesPlayedGroupPayload = Schema.Struct({
+  games_played_by_position_type: GamesPlayedDetailPayload,
+});
+
+const TeamGamesPlayedPayload = Schema.Struct({
+  league: Schema.Struct({
+    league_key: Schema.String.pipe(Schema.check(Schema.isPattern(/^[0-9]+\.l\.[0-9]+$/u))),
+    teams: Schema.Array(
+      Schema.Struct({
+        team_key: Schema.String.pipe(
+          Schema.check(Schema.isPattern(/^[0-9]+\.l\.[0-9]+\.t\.[0-9]+$/u)),
+        ),
+        games_played: Schema.optional(
+          Schema.Union([Schema.Array(TeamGamesPlayedGroupPayload), TeamGamesPlayedGroupPayload]),
+        ),
+      }),
+    ),
   }),
 });
 

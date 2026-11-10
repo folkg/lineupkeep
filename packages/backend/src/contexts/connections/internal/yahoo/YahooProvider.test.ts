@@ -75,6 +75,7 @@ import {
   yahooNflLeagueSettingsWithSettings,
   yahooNflPlayerDetailsWithOwnership,
   yahooNflGamesPlayed,
+  yahooNflGamesPlayedForAnotherLeague,
   yahooNhlRoster,
   yahooNhlDatedRoster,
   yahooRosterWithConfirmedStart,
@@ -3125,6 +3126,78 @@ it.effect("maps the published innings allowance to the league's pitcher slot", (
       outcome.gamesPlayed.find((entry) => entry.position === "P"),
       { position: "P", played: 82.1, max: 1400, projected: 1400.1 },
     );
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("refuses a games-played answer for another league", () => {
+  const internet = recordingInternet((request) =>
+    jsonResponse(
+      request.url.pathname.endsWith("/settings")
+        ? yahooNflLeagueSettingsWithGamesLimit
+        : request.url.pathname.includes("/teams;")
+          ? yahooNflGamesPlayedForAnotherLeague
+          : yahooNflPlayerDetailsWithOwnership,
+    ),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const league = yield* provider.readLeague({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      sport: "football",
+    });
+    const failure = yield* Effect.flip(
+      provider.scoreRoster(
+        planRequest({
+          league,
+          roster: planRoster({
+            providerLeagueKey: "466.l.4000",
+            coverage: weekSix,
+            members: qbAndWideReceiver,
+          }),
+          target: { coverage: "week", week: 6 },
+        }),
+      ),
+    );
+
+    assert.instanceOf(failure, ProviderResponseInvalid);
+    assert.strictEqual(failure.field, "league.league_key");
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("refuses the score when the provider fails the games-played read", () => {
+  const internet = recordingInternet((request) =>
+    request.url.pathname.endsWith("/settings")
+      ? jsonResponse(yahooNflLeagueSettingsWithGamesLimit)
+      : request.url.pathname.includes("/teams;")
+        ? jsonResponse({}, 500)
+        : jsonResponse(yahooNflPlayerDetailsWithOwnership),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const league = yield* provider.readLeague({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      sport: "football",
+    });
+    const failure = yield* Effect.flip(
+      provider.scoreRoster(
+        planRequest({
+          league,
+          roster: planRoster({
+            providerLeagueKey: "466.l.4000",
+            coverage: weekSix,
+            members: qbAndWideReceiver,
+          }),
+          target: { coverage: "week", week: 6 },
+        }),
+      ),
+    );
+
+    assert.instanceOf(failure, ProviderRequestFailed);
+    assert.strictEqual(failure.status, 500);
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 

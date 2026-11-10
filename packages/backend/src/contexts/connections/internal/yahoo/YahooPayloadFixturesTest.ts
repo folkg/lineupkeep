@@ -309,6 +309,42 @@ export const yahooNflGamesPlayed = {
   },
 };
 
+export const yahooNflGamesPlayedForAnotherLeague = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: {
+      league_key: "466.l.4999",
+      teams: {
+        "0": {
+          team: [
+            { team_key: "466.l.4999.t.1" },
+            {
+              games_played: {
+                "0": {
+                  games_played_by_position_type: {
+                    position_type: "B",
+                    games_played: {
+                      "0": {
+                        games_played_by_position: {
+                          position: "QB",
+                          games_played: { played: 12, max: 17, projected: 17 },
+                        },
+                      },
+                      count: 1,
+                    },
+                  },
+                },
+                count: 1,
+              },
+            },
+          ],
+        },
+        count: 1,
+      },
+    },
+  },
+};
+
 export const yahooNflLeagueSettingsWith = (
   attributes: Readonly<Record<string, unknown>>,
 ): { fantasy_content: Record<string, unknown> } =>

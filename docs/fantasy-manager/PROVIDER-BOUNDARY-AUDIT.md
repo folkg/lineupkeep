@@ -216,12 +216,12 @@ than the assumption.
 These are declarations, not leaks. Each is scoped to one surface and consumed through a keyed lookup,
 so another provider adds an entry without touching behavior.
 
-| Declaration                                        | Location                                                                                         | Why it is acceptable                                                                                                                                                                                           |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Display names and the current default selection    | `apps/web/src/contracts/connections/providerLabels.ts`                                           | Presentation only. The default is the only provider the product currently offers; when a second provider exists, the connections flow should ask which one, which is a product decision rather than a refactor |
-| Hosted browser sign-in URL and allowlisted origins | `packages/hosted-browser/src/provider.ts`                                                        | The hosted browser must navigate to the provider's own sign-in page and nowhere else; the allowlist is a security boundary, and it is one entry per provider                                                   |
-| Provider-labelled sign-in page                     | The provider's own page, opened by the hosted browser                                            | We do not restyle or proxy provider authentication. The person sees the provider's page, so provider identity is the honest label                                                                              |
-| Yahoo wire details and scoring                     | `packages/backend/src/contexts/connections/internal/yahoo/**` and `internal/provider-scoring/**` | Endpoints, XML actions, crumb, game codes, scoring cohorts, review-link parameters, and the arithmetic that turns league rules or crowd shares into scores are the adapter's job                               |
+| Declaration                                        | Location                                                                                                                   | Why it is acceptable                                                                                                                                                                                                                                 |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Display names and the current default selection    | `apps/web/src/contracts/connections/providerLabels.ts`                                                                     | Presentation only. The default is the only provider the product currently offers; when a second provider exists, the connections flow should ask which one, which is a product decision rather than a refactor                                       |
+| Hosted browser sign-in URL and allowlisted origins | `packages/hosted-browser/src/provider.ts`                                                                                  | The hosted browser must navigate to the provider's own sign-in page and nowhere else; the allowlist is a security boundary, and it is one entry per provider                                                                                         |
+| Provider-labelled sign-in page                     | The provider's own page, opened by the hosted browser                                                                      | We do not restyle or proxy provider authentication. The person sees the provider's page, so provider identity is the honest label                                                                                                                    |
+| Yahoo wire details and scoring                     | `packages/yahoo-sdk/**`, `packages/backend/src/contexts/connections/internal/yahoo/**`, and `internal/provider-scoring/**` | Read endpoints, decoding, bounds, and retry belong to the SDK; write bodies, the crumb step, the write host choice, game codes, review-link parameters, and the arithmetic that turns league rules or crowd shares into scores stay with the adapter |
 
 The sign-in URL and the provider's session cookie names are the two facts that cannot move behind
 the server-side `ProviderShape`, because they belong to the hosted browser rather than the backend
@@ -401,7 +401,8 @@ backed by `Yahoo.leagues.standings`; `ProviderShape.readCompletedTrades`, backed
 `Yahoo.leagues.discover`; `ProviderShape.searchPlayers`, backed by `Yahoo.players.search`; and
 `ProviderShape.readAvailableDraftPicks`, backed by `Yahoo.leagues.availableDraftPicks`;
 `ProviderShape.readLeagueRosters`, backed by `Yahoo.rosters.forLeague`. The
-scorer's player facts also use `Yahoo.players.details`. Those per-league and session reads keep the
+scorer's player facts also use `Yahoo.players.details`, and its games-played facts use
+`Yahoo.teams.gamesPlayed`. Those per-league and session reads keep the
 same requests:
 `GET /fantasy/v2/league/{leagueKey}/settings`, `GET /fantasy/v2/league/{leagueKey}/teams`,
 `GET /fantasy/v2/users;use_login=1`,
@@ -415,7 +416,8 @@ same requests:
 `GET /fantasy/v2/league/{leagueKey}/players;player_keys={keys};out=stats,ownership`,
 `GET /fantasy/v2/league/{leagueKey}/players;player_keys={keys};out=ranks,opponent;ranks={ranks}`,
 `GET /fantasy/v2/league/{leagueKey}/players;player_keys={keys};out=percent_started,percent_owned,ranks;ranks={ranks}`,
-`GET /fantasy/v2/league/{leagueKey}/teams;out=roster`, and
+`GET /fantasy/v2/league/{leagueKey}/teams;out=roster`,
+`GET /fantasy/v2/league/{leagueKey}/teams;team_keys={teamKey};out=games_played`, and
 `GET /fantasy/v2/league/{leagueKey}/teams;team_keys={teamKeys};out=available_draft_picks` on the app
 read host, all with `?format=json`; the player read adds `stats.type` and, for a week or a date, `stats.week` or
 `stats.date`, and the scorer-facts read adds `percent_started.cut_types={cuts}`. Two requests differ from what the adapter sent: the adapter asked for `out=stats` on
@@ -426,9 +428,9 @@ the schedule row keeps its pro team key because the SDK roster player now carrie
 `readPendingTrades` uses the SDK's `transactions.pendingTrades`; its movement kind keeps the
 provider's `pending_trade` value as its own kind rather than folding it into `trade`. The two
 aggregate reads change their requests by construction; their published rows, ordering, limits, and
-failure vocabulary do not change. The measured saving is recorded below. The SDK transport replaces
-the adapter's `readJson` for every port read; the adapter path remains only for the scorer's
-games-played sub-read and for writes. `Yahoo.Retry.none` is installed at the port because the existing
+failure vocabulary do not change. The measured saving is recorded below. The SDK transport builds
+every port read, including the scorer's games-played facts; only the write path keeps the adapter's
+own request building. `Yahoo.Retry.none` is installed at the port because the existing
 adapter has no read retry; enabling the SDK's transient retry would be a product decision, not a
 transport swap.
 
@@ -460,18 +462,16 @@ Yahoo's sentence as `detail` only when Yahoo actually supplied one.
 | `readPlayerWeeks`          | `players.details`             | **Migrated.** `fields: ["ranks", "opponent"]` and `ranks: ["projected_week"]` request the same path and publish the same week, opponent, and projected rank.                                                                                                                               |
 | `readAvailableDraftPicks`  | `leagues.availableDraftPicks` | **Migrated.** Same app read host, path, team keys, and `out`; the adapter publishes each list's rounds under the team that returned them, and a league that publishes no picks or omits a requested team still fails as `ProviderResponseInvalid`.                                         |
 | `scoreRoster` player facts | `players.details`             | **Migrated.** `fields`, `ranks`, and `percentStartedCutTypes` request the same percent-started, percent-owned, and rank fields; the adapter keeps the coverage check and cut mapping.                                                                                                      |
+| `scoreRoster` games played | `teams.gamesPlayed`           | **Migrated.** Same read host, path, team key, and `out`; the adapter maps each position's played, max, and projected count and the innings-pitched node to `ProviderGamesPlayed`, and keeps the pitcher-slot choice.                                                                       |
 
-Every port read is built by the SDK. The adapter builds no provider request for a port read: the
-request, host, decoding, identity, coverage, and response-size checks all live in the operation. Two
-provider requests outside the read port still come from the adapter, and the audit names them rather
-than claiming none:
+Every port read is built by the SDK, including the scorer's games-played facts. The adapter builds no
+provider request for a read: the request, host, decoding, identity, coverage, and response-size
+checks all live in the operation. One provider request outside the read port still comes from the
+adapter, and the audit names it rather than claiming none:
 
-- **The scorer's games-played sub-read.** `GET /fantasy/v2/league/{leagueKey}/teams;team_keys={teamKey};out=games_played`
-  is a sub-read of `readLeague`, not a port read. The SDK decodes games-played facts only inside the
-  aggregate roster read, which is owned-team scoped and also fetches players, so adopting it here would
-  change the request and the per-team cap behavior. It remains an adapter-built request.
-- **The write crumb request.** `GET /fantasy/v3/getCrumb?format=json_f` belongs to the write path, which
-  keeps the adapter's own transport; the SDK's write operations are not enabled.
+- **The write crumb request.** `GET /fantasy/v3/getCrumb?format=json_f` is the first step of every
+  write. The write path keeps the adapter's own transport, and the SDK's write operations are not
+  enabled; the crumb fetch is the one GET the adapter still builds.
 
 Writes themselves also keep the adapter's transport and bodies, by the boundary stated below.
 
@@ -481,9 +481,8 @@ which asks one league for every team's roster and fits in its own read bound.
 
 ### What the adapter still owns
 
-Every port read is built by the SDK; the one adapter-built sub-read is the scorer's games-played facts,
-named above, and the write path keeps its own transport. The adapter keeps the policy around those
-reads and every write:
+Every port read is built by the SDK and the write path keeps its own transport, so what remains in the
+adapter is policy, mapping, and writes. It keeps the policy around those reads and every write:
 
 - **Period resolution.** The port's `period` (`current`, a week, or a date) becomes the SDK's `coverage`
   before any request. `readRoster`, `readRosterSchedule`, `readPlayerDetails`, `readPlayerHistory`, and
@@ -511,7 +510,30 @@ reads and every write:
 - **Session material.** The adapter decrypts the owner-scoped hosted-browser session and passes the
   cookie; the SDK owns the crumb, headers, and redirect refusal.
 
-Writes keep the adapter's own transport. The SDK's `lineups.setNative`, `lineups.assign`,
+### Adapter size before and after the SDK migration
+
+The baseline is `506ea267`, the commit before the first read moved behind the SDK. The adapter is the
+two files that carry the provider port on the Lineupgrade side: `YahooProvider.ts`, and the SDK-thin
+`YahooSdk.ts` that turns operations into port failures and rows.
+
+| Adapter file       | Before the migration | After this change |
+| ------------------ | -------------------: | ----------------: |
+| `YahooProvider.ts` |                4,822 |             2,808 |
+| `YahooSdk.ts`      |                    — |               848 |
+| **Total**          |            **4,822** |         **3,656** |
+
+The adapter is 1,166 lines smaller (−24.2%), and `YahooProvider.ts` alone is 2,014 lines smaller
+(−41.8%). This change alone removes 143 lines from `YahooProvider.ts` and adds 20 to the SDK-thin
+mapping. What it deletes is the adapter's read transport: `readJson`, `yahooUrl`, the `ReadRequest` and
+`ReadOperation` types, the read-origin constants `readOrigin` and `serviceOrigin`, and the payload
+decoders only the games-played read used (`TeamGamesPlayedPayload`, `GamesPlayedTypePayload`,
+`GamesPlayedByTypePayload`, `GamesPlayedPositionPayload`, `IntFromStringOrNumber`, `LeagueKey`,
+`TeamKey`, and `gamesPlayedFromPayload`). The fixed crumb URL is built from the SDK's
+`hostOrigin("service")`, so no request the adapter builds names a provider host literal.
+
+Writes keep the adapter's own transport. `readCrumbPayload` fetches the write token from
+`https://pub-api.fantasysports.yahoo.com/fantasy/v3/getCrumb?format=json_f`; it is the only GET the
+adapter still builds, and it exists only to carry a write. The SDK's `lineups.setNative`, `lineups.assign`,
 `transactions.apply`, `trades.propose`, `trades.withdraw`, and `lineups.reserve` cover the adapter's
 write surface but are not enabled as SDK operations. The SDK's host table names both read hosts,
 `read` and `androidRead`, and both write hosts, `write` and `androidWrite`; its `hostOrigin` is the one
@@ -559,10 +581,11 @@ stored key.
    `rosters.forLeague`: one league, every team, its own 8 MiB bound. `readLeagueRosters` is migrated to
    it with the request unchanged.
 7. `leagues.standings`, the `transactions.list` type filter, weekly player ranks, the scorer's
-   player facts, and the Android available-draft-picks read — done, with the standings rows, category
-   totals, acquisition usage, streaks, filtered trade order, unfiltered list, player-week facts,
-   scorer facts, and available picks unchanged.
-8. Writes last, one operation at a time, each with a recorded acceptance or refusal.
+   player facts and games-played facts, and the Android available-draft-picks read — done, with the
+   standings rows, category totals, acquisition usage, streaks, filtered trade order, unfiltered list,
+   player-week facts, scorer facts, games-played facts, and available picks unchanged.
+8. Writes last, one operation at a time, each with a recorded acceptance or refusal. Not started: the
+   write path is the only provider request the adapter still builds.
 
 ### Parity findings from the migrated reads
 
@@ -777,6 +800,31 @@ bound.
   2,056,776, 2,391,866, 1,725,520, and 1,819,651 bytes; the largest is 2.28 MiB against the 8 MiB
   operation bound, so the bound holds with 3.4× headroom. A deliberately invalid cookie answered HTTP
   401 with the provider's sentence as a structured detail, mapped to `provider.session_rejected`.
+
+### Team games-played read parity
+
+The scorer's games-played facts read through `teams.gamesPlayed`. `readGamesPlayed` keeps the pitcher
+slot choice and maps the answer to `ProviderGamesPlayed`; the SDK owns the request and the decoding.
+
+- **Request:** identical URL, method, `accept` and `cookie` headers, empty body, and the same
+  `30_000` ms / `4_194_304` byte bounds:
+  `GET /fantasy/v2/league/{leagueKey}/teams;team_keys={teamKey};out=games_played?format=json` on the
+  read host. The operation's input schema refuses a team key from another league before sending,
+  replacing the adapter's own cross-check; the failure kind is the same `ProviderResponseInvalid`, and
+  the field the adapter called `team_key` is now absent.
+- **Fields:** each position keeps its position name, played, max, and projected count in the provider's
+  order, and the innings-pitched node becomes the adapter's pitcher-slot row with numeric values, as
+  before. The existing exact-shape and pitcher-slot tests pass without edits, and the request assertion
+  still names the same URL.
+- **Refusals:** a league key other than the requested one stays `ProviderResponseInvalid` with field
+  `league.league_key`; a team that is missing or publishes no `games_played` stays
+  `ProviderResponseInvalid` with field `team.games_played`; a provider status stays
+  `ProviderRequestFailed` with its status, and 401/403 keep the session vocabulary. New tests pin the
+  league-mismatch and provider-status failures through `scoreRoster`.
+- **Shape difference:** the read shares the SDK's games-played node schema with the aggregate roster
+  read. An empty `games_played` object is a parse failure, which the adapter's decoder also refused; a
+  fractional `projected` value is accepted, and a blank position string would be published where the
+  adapter refused it. No recorded payload exercises either shape.
 
 ### League, matchup, transaction, pending-trade, and draft read parity
 

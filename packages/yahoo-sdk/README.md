@@ -2,8 +2,8 @@
 
 An Effect-native Yahoo Fantasy Sports SDK. It owns Yahoo's hosts, session and crumb handling, request and response schemas, XML write bodies, provider wording, bounds, and retries. A caller never handles a raw `Response`.
 
-The package lives in this monorepo for now and is shaped as if it were already a standalone package: it imports only `effect`, uses package-internal `#yahoo/*` imports, and does not import application code. The adapter uses it for the migrated reads; the remaining reads and
-writes stay on the adapter's transport.
+The package lives in this monorepo for now and is shaped as if it were already a standalone package: it imports only `effect`, uses package-internal `#yahoo/*` imports, and does not import application code. The adapter uses it for every port read; writes stay on the adapter's
+transport.
 
 The design follows the `@distilled.cloud/*` provider SDKs: resource modules in `services/`, operations built with a shared `API.makeRead`/`API.makeWrite`, Effect Schema inputs, a protocol service, a credentials service, typed provider errors, and an optional retry service. The reference audit, batching answers, and integration plan are in [docs/design.md](docs/design.md).
 
@@ -48,6 +48,7 @@ const league = yield * settings({ leagueKey: "466.l.4000" });
 | -------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `Yahoo.session`      | `validate`            | `{}`                                                                                                                      |
 | `Yahoo.teams`        | `list`                | league key                                                                                                                |
+|                      | `gamesPlayed`         | league and team key                                                                                                       |
 | `Yahoo.leagues`      | `settings`            | league key                                                                                                                |
 |                      | `standings`           | league key                                                                                                                |
 |                      | `discover`            | optional game keys; defaults to every game                                                                                |

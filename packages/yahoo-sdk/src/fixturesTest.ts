@@ -707,6 +707,126 @@ export const draftResultsPayload = {
   },
 };
 
+export const teamGamesPlayedPayload = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: {
+      league_key: "466.l.4000",
+      teams: {
+        "0": {
+          team: [
+            { team_key: "466.l.4000.t.1" },
+            {
+              games_played: {
+                "0": {
+                  games_played_by_position_type: {
+                    position_type: "B",
+                    games_played: {
+                      "0": {
+                        games_played_by_position: {
+                          position: "QB",
+                          games_played: { played: 12, max: 17, projected: 17 },
+                        },
+                      },
+                      "1": {
+                        games_played_by_position: {
+                          position: "WR",
+                          games_played: { played: "31", max: "34", projected: "35.5" },
+                        },
+                      },
+                      count: 2,
+                    },
+                  },
+                },
+                "1": {
+                  games_played_by_position_type: {
+                    position_type: "P",
+                    innings_pitched: { pitched: "82.1", max: "1400", projected: "1400.1" },
+                  },
+                },
+                count: 2,
+              },
+            },
+          ],
+        },
+        count: 1,
+      },
+    },
+  },
+};
+
+export const teamGamesPlayedForAnotherLeaguePayload = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: {
+      league_key: "466.l.4999",
+      teams: {
+        "0": {
+          team: [
+            { team_key: "466.l.4999.t.1" },
+            {
+              games_played: {
+                "0": {
+                  games_played_by_position_type: {
+                    position_type: "B",
+                    games_played: {
+                      "0": {
+                        games_played_by_position: {
+                          position: "QB",
+                          games_played: { played: 12, max: 17, projected: 17 },
+                        },
+                      },
+                      count: 1,
+                    },
+                  },
+                },
+                count: 1,
+              },
+            },
+          ],
+        },
+        count: 1,
+      },
+    },
+  },
+};
+
+export const teamGamesPlayedWithoutTeamPayload = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: {
+      league_key: "466.l.4000",
+      teams: {
+        "0": {
+          team: [
+            { team_key: "466.l.4000.t.2" },
+            {
+              games_played: {
+                "0": {
+                  games_played_by_position_type: {
+                    position_type: "B",
+                    games_played: {
+                      "0": {
+                        games_played_by_position: {
+                          position: "QB",
+                          games_played: { played: 12, max: 17, projected: 17 },
+                        },
+                      },
+                      count: 1,
+                    },
+                  },
+                },
+                count: 1,
+              },
+            },
+          ],
+        },
+        count: 1,
+      },
+    },
+  },
+};
+
 export const availableDraftPicksPayload = {
   fantasy_content: {
     "xml:lang": "en-US",

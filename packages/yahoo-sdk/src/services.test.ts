@@ -25,6 +25,9 @@ import {
   seasonPlayerDetailsPayload,
   sessionPayload,
   standingsPayload,
+  teamGamesPlayedForAnotherLeaguePayload,
+  teamGamesPlayedPayload,
+  teamGamesPlayedWithoutTeamPayload,
   tradeTransactionsPayload,
   transactionRefusal,
   transactionsPayload,
@@ -43,6 +46,8 @@ const client = {
   readLeagueSettings: (input: WithSession<Yahoo.leagues.SettingsRequest>) =>
     Yahoo.leagues.settings(input),
   readLeagueTeams: (input: WithSession<Yahoo.teams.ListRequest>) => Yahoo.teams.list(input),
+  readTeamGamesPlayed: (input: WithSession<Yahoo.teams.GamesPlayedRequest>) =>
+    Yahoo.teams.gamesPlayed(input),
   readStandings: (input: WithSession<Yahoo.leagues.StandingsRequest>) =>
     Yahoo.leagues.standings(input),
   readRoster: (input: WithSession<Yahoo.rosters.ForTeamRequest>) => Yahoo.rosters.forTeam(input),
@@ -790,6 +795,94 @@ it.effect("reads draft results with the optional player name", () => {
       },
       { round: 1, pick: 2, teamKey: "466.l.4000.t.2", playerKey: "466.p.20006" },
     ]);
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("reads a team's games-played allowance by position", () => {
+  const recording = recordingClient(() => jsonResponse(teamGamesPlayedPayload));
+  return Effect.gen(function* () {
+    const gamesPlayed = yield* client.readTeamGamesPlayed({
+      session,
+      leagueKey: "466.l.4000",
+      teamKey: "466.l.4000.t.1",
+    });
+
+    const call = recording.calls[0];
+    if (call === undefined) {
+      return yield* Effect.die("expected one request");
+    }
+    assert.strictEqual(
+      call.url,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/teams;team_keys=466.l.4000.t.1;out=games_played?format=json",
+    );
+    assert.deepStrictEqual(gamesPlayed, [
+      {
+        positionType: "B",
+        positions: [
+          { position: "QB", played: 12, max: 17, projected: 17 },
+          { position: "WR", played: 31, max: 34, projected: 35.5 },
+        ],
+      },
+      {
+        positionType: "P",
+        positions: [],
+        inningsPitched: { pitched: "82.1", max: "1400", projected: "1400.1" },
+      },
+    ]);
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("refuses a games-played answer for another league", () => {
+  const recording = recordingClient(() => jsonResponse(teamGamesPlayedForAnotherLeaguePayload));
+  return Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      client.readTeamGamesPlayed({
+        session,
+        leagueKey: "466.l.4000",
+        teamKey: "466.l.4000.t.1",
+      }),
+    );
+
+    assert.strictEqual(error._tag, "YahooParseError");
+    assert.strictEqual(
+      error._tag === "YahooParseError" ? error.field : undefined,
+      "league.league_key",
+    );
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("refuses a games-played answer that omits the requested team", () => {
+  const recording = recordingClient(() => jsonResponse(teamGamesPlayedWithoutTeamPayload));
+  return Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      client.readTeamGamesPlayed({
+        session,
+        leagueKey: "466.l.4000",
+        teamKey: "466.l.4000.t.1",
+      }),
+    );
+
+    assert.strictEqual(error._tag, "YahooParseError");
+    assert.strictEqual(
+      error._tag === "YahooParseError" ? error.field : undefined,
+      "team.games_played",
+    );
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("refuses a games-played team key from another league before sending", () => {
+  const recording = recordingClient(() => jsonResponse(teamGamesPlayedPayload));
+  return Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      client.readTeamGamesPlayed({
+        session,
+        leagueKey: "466.l.4000",
+        teamKey: "466.l.4001.t.1",
+      }),
+    );
+
+    assert.strictEqual(error._tag, "YahooRequestInvalid");
+    assert.deepStrictEqual(recording.calls, []);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
 

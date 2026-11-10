@@ -1,12 +1,4 @@
-import {
-  DateTime,
-  Effect,
-  Option,
-  Redacted,
-  Schema,
-  SchemaIssue,
-  SchemaTransformation,
-} from "effect";
+import { DateTime, Effect, Option, Redacted, Schema, SchemaIssue } from "effect";
 
 import { fantasyDayLabel } from "#contexts/connections/FantasyDay.ts";
 import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
@@ -84,6 +76,7 @@ import { scoreYahooRoster, yahooCapabilities } from "./YahooLineup.ts";
 import type { YahooPlayerFacts, YahooStartRateCut, YahooStartRateSummary } from "./YahooLineup.ts";
 import type {
   YahooDraftPick,
+  YahooGamesPlayed,
   YahooLeagueSettings,
   YahooMatchup,
   YahooPendingTrade,
@@ -109,6 +102,7 @@ import {
   readRosterScheduleThroughSdk,
   readRosterThroughSdk,
   readStandingsThroughSdk,
+  readTeamGamesPlayedThroughSdk,
   readTransactionsThroughSdk,
   scheduledOpponent,
   searchPlayersThroughSdk,
@@ -117,8 +111,7 @@ import {
   yahooSdkContext,
 } from "./YahooSdk.ts";
 
-const readOrigin = new URL("https://pub-api-ro.fantasysports.yahoo.com");
-const serviceOrigin = new URL("https://pub-api.fantasysports.yahoo.com");
+const crumbUrl = new URL("/fantasy/v3/getCrumb?format=json_f", yahooHostOrigin("service"));
 const writeOrigin = new URL(yahooHostOrigin("write"));
 const androidWriteOrigin = new URL(yahooHostOrigin("androidWrite"));
 const supportedLeagues = ["nfl", "nhl"] as const;
@@ -147,7 +140,6 @@ const playerRankTypes = [
 const maximumHistoryPlayers = 200;
 const maximumUpstreamLimit = 50;
 
-type ReadOperation = ProviderOperation;
 type WriteOperation =
   | "apply_native_action"
   | "apply_explicit_assignments"
@@ -211,14 +203,7 @@ export const yahooProvider = Effect.gen(function* () {
     yield* Effect.annotateCurrentSpan("provider.operation", operation);
     yield* Effect.annotateCurrentSpan("provider.write_step", "write_token");
     const cookie = yield* sessionCookie(input, operation);
-    const payload = yield* readJson(internet, {
-      operation,
-      origin: serviceOrigin,
-      path: "/fantasy/v3/getCrumb",
-      query: { format: "json_f" },
-      cookie,
-      normalize: false,
-    });
+    const payload = yield* readCrumbPayload(internet, operation, cookie);
     const decoded = yield* decodePayload(CrumbPayload, payload, operation);
     const crumb = decoded.service.crumb?.trim();
     if (crumb === undefined || crumb.length === 0) {
@@ -844,24 +829,14 @@ export const yahooProvider = Effect.gen(function* () {
     const cookie = yield* sessionCookie(input, "read_league");
     const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_league");
     const teamKey = yield* ValidTeamKey(input.providerTeamKey, "read_league");
-    if (providerLeagueKey(teamKey) !== leagueKey) {
-      return yield* ProviderResponseInvalid.make({ operation: "read_league", field: "team_key" });
-    }
-    const payload = yield* readJson(internet, {
-      operation: "read_league",
-      origin: readOrigin,
-      path: `/fantasy/v2/league/${leagueKey}/teams;team_keys=${teamKey};out=games_played`,
-      query: { format: "json" },
+    const facts = yield* readTeamGamesPlayedThroughSdk(
+      sdk,
+      "read_league",
       cookie,
-      normalize: true,
-    });
-    const decoded = yield* decodePayload(TeamGamesPlayedPayload, payload, "read_league");
-    const gamesPlayed = yield* gamesPlayedFromPayload(
-      decoded,
       leagueKey,
       teamKey,
-      input.pitcherSlot,
     );
+    const gamesPlayed = providerGamesPlayedOf(facts, input.pitcherSlot);
     yield* Effect.annotateCurrentSpan("provider.games_played_position_count", gamesPlayed.length);
     return gamesPlayed;
   });
@@ -1107,35 +1082,23 @@ function sessionCookie(
   );
 }
 
-type ReadRequest = {
-  readonly operation: ReadOperation;
-  readonly origin: URL;
-  readonly path: string;
-  readonly query: Readonly<Record<string, string>>;
-  readonly cookie: string;
-  readonly normalize: boolean;
-};
-
-function readJson(
+function readCrumbPayload(
   internet: PublicInternet["Service"],
-  request: ReadRequest,
+  operation: WriteOperation,
+  cookie: string,
 ): Effect.Effect<
   unknown,
   ProviderRequestFailed | ProviderResponseInvalid | ProviderSessionRejected
 > {
   return Effect.scoped(
     Effect.gen(function* () {
-      const url = yield* Effect.try({
-        try: () => yahooUrl(request.origin, request.path, request.query),
-        catch: () => ProviderResponseInvalid.make({ operation: request.operation }),
-      });
       const response = yield* internet
         .request(
-          new Request(url, {
+          new Request(crumbUrl, {
             method: "GET",
             headers: {
               accept: "application/json",
-              cookie: request.cookie,
+              cookie,
             },
           }),
           {
@@ -1143,12 +1106,12 @@ function readJson(
             maxResponseBytes: yahooReadResponseLimitBytes,
           },
         )
-        .pipe(Effect.mapError(() => ProviderRequestFailed.make({ operation: request.operation })));
+        .pipe(Effect.mapError(() => ProviderRequestFailed.make({ operation })));
 
       if (response.status === 401 || response.status === 403) {
         yield* Effect.annotateCurrentSpan("provider.refusal.status", response.status);
         return yield* ProviderSessionRejected.make({
-          operation: request.operation,
+          operation,
           status: response.status,
           ...(yield* providerRefusalDetail(response)),
         });
@@ -1156,19 +1119,18 @@ function readJson(
       if (!response.ok) {
         yield* discardBody(response);
         return yield* ProviderRequestFailed.make({
-          operation: request.operation,
+          operation,
           status: response.status,
         });
       }
 
       const text = yield* Effect.tryPromise({
         try: () => response.text(),
-        catch: () => ProviderRequestFailed.make({ operation: request.operation }),
+        catch: () => ProviderRequestFailed.make({ operation }),
       });
-      const payload = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
-        Effect.catchTag("SchemaError", () => responseMismatch({ operation: request.operation })),
+      return yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
+        Effect.catchTag("SchemaError", () => responseMismatch({ operation })),
       );
-      return request.normalize ? normalizeYahooJson(payload) : payload;
     }),
   );
 }
@@ -1178,37 +1140,6 @@ function discardBody(response: Response): Effect.Effect<void> {
     try: () => response.body?.cancel() ?? Promise.resolve(),
     catch: () => "discard_failed" as const,
   }).pipe(Effect.ignore);
-}
-
-function yahooUrl(origin: URL, path: string, query: Readonly<Record<string, string>>): URL {
-  if (!path.startsWith("/") || path.includes("?") || path.includes("#")) {
-    throw new Error("Yahoo path must be a relative path without query or fragment");
-  }
-  const url = new URL(path, origin);
-  if (
-    url.origin !== origin.origin ||
-    url.username !== "" ||
-    url.password !== "" ||
-    url.pathname !== path
-  ) {
-    throw new Error("Yahoo request escaped its fixed origin");
-  }
-  for (const [key, value] of Object.entries(query)) {
-    url.searchParams.set(key, value);
-  }
-  if (
-    [...url.searchParams.keys()].some(
-      (key) =>
-        key !== "format" &&
-        key !== "stats.type" &&
-        key !== "stats.week" &&
-        key !== "stats.date" &&
-        key !== "percent_started.cut_types",
-    )
-  ) {
-    throw new Error("Yahoo request contains an unsupported query field");
-  }
-  return url;
 }
 
 function yahooWriteUrl(path: string, crumb: string, origin: URL): URL {
@@ -1994,44 +1925,31 @@ function pitcherSlotOf(league: ProviderLeagueSettings): string | undefined {
   );
 }
 
-function gamesPlayedFromPayload(
-  payload: typeof TeamGamesPlayedPayload.Type,
-  requestedLeagueKey: string,
-  requestedTeamKey: string,
+function providerGamesPlayedOf(
+  facts: ReadonlyArray<YahooGamesPlayed>,
   pitcherSlot: string | undefined,
-): Effect.Effect<ReadonlyArray<ProviderGamesPlayed>, ProviderResponseInvalid> {
-  return Effect.gen(function* () {
-    if (payload.league.league_key !== requestedLeagueKey) {
-      return yield* responseMismatch({ operation: "read_league", field: "league.league_key" });
+): ReadonlyArray<ProviderGamesPlayed> {
+  const rows: Array<ProviderGamesPlayed> = [];
+  for (const fact of facts) {
+    for (const position of fact.positions) {
+      rows.push({
+        position: position.position,
+        played: position.played,
+        max: position.max,
+        projected: position.projected,
+      });
     }
-    const team = payload.league.teams.find((entry) => entry.team_key === requestedTeamKey);
-    if (team === undefined || team.games_played === undefined) {
-      return yield* responseMismatch({ operation: "read_league", field: "team.games_played" });
+    const innings = fact.inningsPitched;
+    if (innings !== undefined && pitcherSlot !== undefined) {
+      rows.push({
+        position: pitcherSlot,
+        played: Number(innings.pitched),
+        max: Number(innings.max),
+        projected: Number(innings.projected),
+      });
     }
-    const rows: Array<ProviderGamesPlayed> = [];
-    for (const wrapper of team.games_played) {
-      const type = wrapper.games_played_by_position_type;
-      for (const entry of type.games_played ?? []) {
-        const games = entry.games_played_by_position.games_played;
-        rows.push({
-          position: entry.games_played_by_position.position,
-          played: games.played,
-          max: games.max,
-          projected: games.projected,
-        });
-      }
-      const innings = type.innings_pitched;
-      if (innings !== undefined && pitcherSlot !== undefined) {
-        rows.push({
-          position: pitcherSlot,
-          played: Number(innings.pitched),
-          max: Number(innings.max),
-          projected: Number(innings.projected),
-        });
-      }
-    }
-    return rows;
-  });
+  }
+  return rows;
 }
 
 function playerRanksOf(ranks: ReadonlyArray<YahooPlayerRank>): ReadonlyArray<PlayerRank> {
@@ -2883,69 +2801,8 @@ const SessionCookie = Schema.Trim.pipe(
   Schema.check(Schema.isPattern(/=/u)),
 );
 
-const IntFromStringOrNumber: Schema.Codec<number, number | string> = Schema.Union([
-  Schema.Finite,
-  Schema.String,
-]).pipe(
-  Schema.decodeTo(
-    Schema.Int,
-    SchemaTransformation.transform({
-      decode: (value) => (typeof value === "number" ? value : Number(value)),
-      encode: (value) => value,
-    }),
-  ),
-);
-
 const CrumbPayload = Schema.Struct({
   service: Schema.Struct({
     crumb: Schema.NullOr(Schema.String),
-  }),
-});
-
-const GamesPlayedPositionPayload = Schema.Struct({
-  position: Schema.NonEmptyString,
-  games_played: Schema.Struct({
-    played: IntFromStringOrNumber,
-    max: IntFromStringOrNumber,
-    projected: IntFromStringOrNumber,
-  }),
-});
-
-const GamesPlayedByTypePayload = Schema.Struct({
-  position_type: Schema.optional(Schema.String),
-  games_played: Schema.optional(
-    Schema.Array(
-      Schema.Struct({
-        games_played_by_position: GamesPlayedPositionPayload,
-      }),
-    ),
-  ),
-  innings_pitched: Schema.optional(
-    Schema.Struct({
-      pitched: Schema.Union([Schema.Finite, Schema.String]),
-      max: Schema.Union([Schema.Finite, Schema.String]),
-      projected: Schema.Union([Schema.Finite, Schema.String]),
-    }),
-  ),
-});
-
-const LeagueKey = Schema.String.pipe(Schema.check(Schema.isPattern(/^[0-9]+\.l\.[0-9]+$/u)));
-const TeamKey = Schema.String.pipe(
-  Schema.check(Schema.isPattern(/^[0-9]+\.l\.[0-9]+\.t\.[0-9]+$/u)),
-);
-
-const GamesPlayedTypePayload = Schema.Struct({
-  games_played_by_position_type: GamesPlayedByTypePayload,
-});
-
-const TeamGamesPlayedPayload = Schema.Struct({
-  league: Schema.Struct({
-    league_key: LeagueKey,
-    teams: Schema.Array(
-      Schema.Struct({
-        team_key: TeamKey,
-        games_played: Schema.optional(Schema.Array(GamesPlayedTypePayload)),
-      }),
-    ),
   }),
 });

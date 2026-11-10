@@ -41,6 +41,7 @@ import { yahooPlayerStatus } from "./YahooLineup.ts";
 
 export type {
   YahooDraftPick,
+  YahooGamesPlayed,
   YahooLeagueSettings,
   YahooMatchup,
   YahooPendingTrade,
@@ -228,6 +229,25 @@ export const readLeagueTeamsThroughSdk = (
       Effect.mapError((error) => providerReadFailureOf(operation, error)),
     );
     return teams.map(providerLeagueTeamOf);
+  });
+
+export const readTeamGamesPlayedThroughSdk = (
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  leagueKey: string,
+  teamKey: string,
+): Effect.Effect<ReadonlyArray<Yahoo.YahooGamesPlayed>, ProviderReadFailure> =>
+  Effect.gen(function* () {
+    const session = yield* Yahoo.makeSession(cookie).pipe(
+      Effect.mapError(() => ProviderSessionRejected.make({ operation })),
+    );
+    return yield* Yahoo.teams.gamesPlayed({ leagueKey, teamKey }).pipe(
+      Yahoo.Retry.none,
+      Effect.provideContext(Context.add(context, Yahoo.Credentials, Effect.succeed(session))),
+      Effect.provideService(Tracer.DisablePropagation, true),
+      Effect.mapError((error) => providerReadFailureOf(operation, error)),
+    );
   });
 
 export const readRosterThroughSdk = (

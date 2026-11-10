@@ -3,7 +3,6 @@ import { Effect, Schema } from "effect";
 import {
   Flag,
   IntFromStringOrNumber,
-  NumberFromStringOrNumber,
   decodePayload,
   isReadonlyArray,
   optionalNonEmpty,
@@ -13,6 +12,8 @@ import { YahooDate, leagueKeyOfTeam, sameCoverage } from "#yahoo/keys.ts";
 import type { YahooCoverage, YahooLeagueKey, YahooTeamKey } from "#yahoo/keys.ts";
 
 import type { YahooTransactionCounts } from "./player.ts";
+import { GamesPlayedDetailPayload, gamesPlayedOf } from "./team.ts";
+import type { YahooGamesPlayed } from "./team.ts";
 
 export function decodeRoster(
   payload: unknown,
@@ -251,21 +252,6 @@ export type YahooPendingTransaction = {
   readonly status?: string;
 };
 
-export type YahooGamesPlayed = {
-  readonly positionType: string;
-  readonly positions: ReadonlyArray<{
-    readonly position: string;
-    readonly played: number;
-    readonly max: number;
-    readonly projected: number;
-  }>;
-  readonly inningsPitched?: {
-    readonly pitched: string | number;
-    readonly max: string | number;
-    readonly projected: string | number;
-  };
-};
-
 export type YahooRosterPlayer = {
   readonly playerKey: string;
   readonly name: string;
@@ -326,39 +312,6 @@ function pendingTransactionsOf(value: unknown): ReadonlyArray<YahooPendingTransa
       },
     ];
   });
-}
-
-function gamesPlayedOf(
-  value: (typeof AggregateLeagueRostersPayload.Type)["teams"][number]["games_played"],
-): ReadonlyArray<YahooGamesPlayed> | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  const groups = isReadonlyArray(value) ? value : [value];
-  const played = groups.flatMap((group) => {
-    const detail = group.games_played_by_position_type;
-    if (detail === undefined) {
-      return [];
-    }
-    return [
-      {
-        positionType: detail.position_type,
-        positions: (isReadonlyArray(detail.games_played)
-          ? detail.games_played
-          : detail.games_played === undefined
-            ? []
-            : [detail.games_played]
-        ).map(({ games_played_by_position }) => ({
-          position: games_played_by_position.position,
-          played: games_played_by_position.games_played.played,
-          max: games_played_by_position.games_played.max,
-          projected: games_played_by_position.games_played.projected,
-        })),
-        ...(detail.innings_pitched === undefined ? {} : { inningsPitched: detail.innings_pitched }),
-      },
-    ];
-  });
-  return played.length === 0 ? undefined : played;
 }
 
 type SelectedPositionType = typeof SelectedPosition.Type;
@@ -580,33 +533,8 @@ export function decodeLeagueRostersMany(
   });
 }
 
-const GamesPlayedPositionPayload = Schema.Struct({
-  games_played_by_position: Schema.Struct({
-    position: Schema.String,
-    games_played: Schema.Struct({
-      played: IntFromStringOrNumber,
-      max: IntFromStringOrNumber,
-      projected: NumberFromStringOrNumber,
-    }),
-  }),
-});
-
 const GamesPlayedGroupPayload = Schema.Struct({
-  games_played_by_position_type: Schema.optional(
-    Schema.Struct({
-      position_type: Schema.String,
-      games_played: Schema.optional(
-        Schema.Union([GamesPlayedPositionPayload, Schema.Array(GamesPlayedPositionPayload)]),
-      ),
-      innings_pitched: Schema.optional(
-        Schema.Struct({
-          pitched: Schema.Union([Schema.String, Schema.Finite]),
-          max: Schema.Union([Schema.String, Schema.Finite]),
-          projected: Schema.Union([Schema.String, Schema.Finite]),
-        }),
-      ),
-    }),
-  ),
+  games_played_by_position_type: Schema.optional(GamesPlayedDetailPayload),
 });
 
 const LeagueRostersPayload = Schema.Struct({

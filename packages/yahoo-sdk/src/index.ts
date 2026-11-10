@@ -54,7 +54,6 @@ export type {
   YahooStatValue,
 } from "./internal/player.ts";
 export type {
-  YahooGamesPlayed,
   YahooLeagueRoster,
   YahooLeagueRosters,
   YahooLeagueRosterTeam,
@@ -68,6 +67,7 @@ export type {
   YahooAcquisitionUsage,
   YahooDiscoveredLeague,
   YahooDiscoveredTeam,
+  YahooGamesPlayed,
   YahooLeagueTeam,
   YahooManager,
   YahooTeamLogo,
