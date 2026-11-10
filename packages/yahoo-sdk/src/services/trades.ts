@@ -75,7 +75,7 @@ export const propose: API.OperationMethod<
   input: ProposeRequest,
   output: TradeReceipt,
   request: (input) => ({
-    host: "write",
+    host: proposalHost([...(input.sendPicks ?? []), ...(input.receivePicks ?? [])]),
     method: "POST",
     path: `/fantasy/v2/league/${input.leagueKey}/transactions`,
     body: tradeProposalBody({
@@ -90,6 +90,10 @@ export const propose: API.OperationMethod<
   }),
   decode: (payload) => tradeReceipt(payload, "propose_trade"),
 });
+
+function proposalHost(picks: ReadonlyArray<YahooDraftPickRound>): "write" | "androidWrite" {
+  return picks.length === 0 ? "write" : "androidWrite";
+}
 
 function tradeReceipt(
   payload: unknown,
@@ -145,7 +149,7 @@ export const counter: API.OperationMethod<
   input: CounterRequest,
   output: TradeReceipt,
   request: (input) => ({
-    host: "write",
+    host: proposalHost([...(input.sendPicks ?? []), ...(input.receivePicks ?? [])]),
     method: "POST",
     path: `/fantasy/v2/league/${leagueKeyOfTeam(input.offer.receiverTeamKey)}/transactions`,
     body: tradeProposalBody({
@@ -195,7 +199,7 @@ export const respond: API.OperationMethod<
 });
 
 export const WithdrawRequest = Schema.Struct({
-  transactionKey: YahooTransactionKey,
+  transactionKey: YahooPendingTradeKey,
 });
 export type WithdrawRequest = typeof WithdrawRequest.Type;
 

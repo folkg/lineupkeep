@@ -112,10 +112,6 @@ const hosts: Readonly<Record<YahooHost, string>> = {
   graphite: "https://graphite.sports.yahoo.com",
 };
 
-export function hostOrigin(host: YahooHost): string {
-  return hosts[host];
-}
-
 const readDeadline = Duration.seconds(30);
 const defaultReadLimitBytes = 4 * 1024 * 1024;
 export const maximumReadLimitBytes = 8 * 1024 * 1024;
@@ -238,7 +234,7 @@ function readCrumb(
           operation: "read_crumb",
           reason: "request_failed",
           status: response.status,
-          ...(crumbStatement === undefined ? {} : { message: crumbStatement.text }),
+          message: crumbStatement?.text ?? "Yahoo refused the crumb request.",
         }),
       );
     }
@@ -275,7 +271,7 @@ function decode(
     );
     if (args.response.status >= 200 && args.response.status < 300) {
       const payload = text.trim() === "" ? undefined : parseJson(text);
-      if (text.trim() !== "" && payload === undefined) {
+      if (!args.write && text.trim() !== "" && payload === undefined) {
         return yield* Effect.fail(
           new YahooParseError({
             operation: args.operation,
@@ -311,7 +307,9 @@ function decode(
       );
     }
     if (message !== undefined && /premium/iu.test(message)) {
-      return yield* Effect.fail(new YahooPremiumRequired({ message }));
+      return yield* Effect.fail(
+        new YahooPremiumRequired({ message, status: args.response.status }),
+      );
     }
     if (args.write) {
       if (args.response.status === 408 || args.response.status === 429) {
@@ -320,7 +318,7 @@ function decode(
             operation: args.operation,
             reason: "request_failed",
             status: args.response.status,
-            ...(message === undefined ? {} : { message }),
+            message: message ?? "Yahoo did not accept the write request.",
           }),
         );
       }

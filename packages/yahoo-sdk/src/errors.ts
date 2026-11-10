@@ -109,7 +109,7 @@ export class ConfigError extends Schema.TaggedError<
 export class YahooPremiumRequired extends Schema.TaggedError<
   YahooPremiumRequired,
   { readonly brand: unique symbol }
->()("YahooPremiumRequired", { message: Schema.String }) {}
+>()("YahooPremiumRequired", { message: Schema.String, status: Schema.optional(Schema.Number) }) {}
 
 export class YahooHttpError extends Schema.TaggedError<
   YahooHttpError,
@@ -156,7 +156,7 @@ export class YahooNotSent extends Schema.TaggedError<
   operation: Schema.String,
   reason: Schema.Literals(["session_incomplete", "request_failed"]),
   status: Schema.optional(Schema.Number),
-  message: Schema.optional(Schema.String),
+  message: Schema.String,
 }) {}
 
 export class YahooWriteUnknown extends Schema.TaggedError<

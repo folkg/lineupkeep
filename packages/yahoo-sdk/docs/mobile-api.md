@@ -124,6 +124,8 @@ The first attempt was refused with HTTP 400 and this exact sentence:
 
 After the owner moved Cooley, the same Round 1 for Round 1 proposal returned HTTP 201 and a pending trade at `{leagueKey}.pt.{n}`. The response carried both picks with `source_team_key`, `destination_team_key`, and an additional `original_team_key` / `original_team_name`. The app then exposed the pending trade under **Pending Trades** with a **Cancel trade** action. Cancelling sent `DELETE /fantasy/v2/transaction/{transactionKey}` and returned 204; the pending trade disappeared. Nothing was accepted or applied.
 
+The host and the note are both load-bearing, and a missing note is the bug that made picks fail. The website write host parses this body and answers "You must select at least one player or pick.", so a pick never reaches it: `trades.propose` sends a pick-bearing proposal to the app write host and a player-only proposal to the website write host. A body without `<trade_note>` is read as an empty selection and refused, so the SDK always writes the note, empty when the caller passes none. An empty `<players>` element fails the parser with error 25, so the SDK emits neither `<players>` nor `<picks>` when it carries nothing. The 201 above and its 204 cancellation are the live proof of that shape.
+
 `trades.propose` accepts `sendPicks` / `receivePicks` as `{ round }` values alongside optional player arrays. At least one player or pick is required. The same round may appear on both sides; duplicate rounds on one side are rejected before sending. `transactions.pendingTrades` already decodes the response's pick `original` field.
 
 ## Unverified or deliberately not modelled

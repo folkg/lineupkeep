@@ -2,8 +2,7 @@
 
 An Effect-native Yahoo Fantasy Sports SDK. It owns Yahoo's hosts, session and crumb handling, request and response schemas, XML write bodies, provider wording, bounds, and retries. A caller never handles a raw `Response`.
 
-The package lives in this monorepo for now and is shaped as if it were already a standalone package: it imports only `effect`, uses package-internal `#yahoo/*` imports, and does not import application code. The adapter uses it for every port read; writes stay on the adapter's
-transport.
+The package lives in this monorepo for now and is shaped as if it were already a standalone package: it imports only `effect`, uses package-internal `#yahoo/*` imports, and does not import application code. The adapter uses it for every provider request the port makes: every read and every write.
 
 The design follows the `@distilled.cloud/*` provider SDKs: resource modules in `services/`, operations built with a shared `API.makeRead`/`API.makeWrite`, Effect Schema inputs, a protocol service, a credentials service, typed provider errors, and an optional retry service. The reference audit, batching answers, and integration plan are in [docs/design.md](docs/design.md).
 
@@ -105,6 +104,8 @@ A transaction player's movement kind is one of `add`, `drop`, `trade`, or `pendi
 
 Writes use the `pub-api-rw` host with `format=json_f` and a crumb. The SDK fetches the crumb from `pub-api/fantasy/v3/getCrumb` before each write; callers never pass a crumb. The crumb is held as `Redacted`, is not returned, and is scrubbed from provider messages.
 
+A pick-bearing trade proposal uses the app write host, `pub-api-android-rw`, because the website write host's parser refuses a draft pick. A player-only proposal stays on the website write host. A proposal body always carries `<trade_note>`, empty when the caller passes no note, because the app reads a body without it as an empty selection; and it never emits an empty `<players>` or `<picks>` element, because the parser refuses an empty `<players>`. The live proof is in [the Android API notes](docs/mobile-api.md#draft-pick-trades): a Round 1 for Round 1 offer was accepted with 201 and cancelled with 204, after a body with no note had been refused.
+
 | Outcome  | Error               | Meaning                                                          |
 | -------- | ------------------- | ---------------------------------------------------------------- |
 | accepted | _(success)_         | 2xx; `{ status: "accepted" }` or a trade key                     |
@@ -112,7 +113,7 @@ Writes use the `pub-api-rw` host with `format=json_f` and a crumb. The SDK fetch
 | not sent | `YahooNotSent`      | Missing crumb/session, crumb failure, 408, or 429                |
 | unknown  | `YahooWriteUnknown` | No response, 5xx, oversized/unreadable response, or no trade key |
 
-A trade proposal is only `accepted` when the response contains a `pt` transaction key. If Yahoo accepts the call without a key, the result is `YahooWriteUnknown`, never a claimed success.
+A trade proposal is only `accepted` when the response contains a `pt` transaction key. If Yahoo accepts the call without a key, the result is `YahooWriteUnknown`, never a claimed success. A lineup write publishes no receipt: a 2xx answer is `{ status: "accepted" }` whatever its body, because the provider's acknowledgement is the status alone.
 
 `trades.propose` accepts `sendPicks` and `receivePicks` as `{ round }` values. A pick is identified by its round and source team; at least one player or pick is required, and duplicate rounds on one side are rejected before sending. The captured draft-pick body is in [the Android API notes](docs/mobile-api.md#draft-pick-trades).
 
@@ -138,7 +139,7 @@ Status errors carry the provider's HTTP `status`. `GatewayTimeout` omits it only
 | `YahooNotSent`                                                                           | A write failed before transmission                            |
 | `YahooWriteUnknown`                                                                      | A write may have reached Yahoo                                |
 
-`YahooReadError` and `YahooWriteError` are the public unions used by the two operation builders.
+`YahooReadError` and `YahooWriteError` are the public unions used by the two operation builders. A write that is withdrawn must name a pending trade key; a completed trade (`tr`) key is refused before sending.
 
 ## Retry policy
 
@@ -161,7 +162,7 @@ If a policy has no `while`, no retry is installed.
 
 ## Bounds and transport
 
-- Reads use `pub-api-ro`, app reads use `pub-api-android-ro`, the crumb uses `pub-api`, and writes use `pub-api-rw`; all are `fantasysports.yahoo.com`. Graphite schedule reads use `graphite.sports.yahoo.com`.
+- Reads use `pub-api-ro`, app reads use `pub-api-android-ro`, the crumb uses `pub-api`, writes use `pub-api-rw`, and a pick-bearing trade proposal uses the app write host `pub-api-android-rw`; all are `fantasysports.yahoo.com`. Graphite schedule reads use `graphite.sports.yahoo.com`.
 - Paths are exact, relative, and validated to stay on their fixed origin. Queries and fragments in a path are refused.
 - Reads have a 30-second deadline and a 4 MiB response bound. An operation whose provider answer is legitimately larger declares its own bound: `rosters.forLeague` allows 8 MiB for a full league's rosters. Writes have a 30-second deadline and a 256 KiB bound.
 - Redirects are not followed: `FetchClient` sets `redirect: "manual"`, and a 3xx becomes `YahooHttpError`.
@@ -182,9 +183,9 @@ If a policy has no `while`, no retry is installed.
 - An add and its drop share one transaction and one request. Several lineup moves share one roster PUT for that team; the multi-move provider shape is reference-corroborated, not independently live-reproduced.
 - The aggregate discovery, multi-league roster, multi-league player, game-wide player, starter-page, and Graphite schedule calls are implemented as `leagues.discover`, `rosters.forLeagues`, `players.search`, `players.available`, `players.starters`, and `schedule`. `rosters.forLeagues` decodes pending transaction keys/types/statuses and games-played position limits from the same aggregate response. The aggregate league entries are accepted both directly and under the single-key `league` fragment, because live responses use the direct form. Player summaries and roster players carry the provider's `editorial_team_key` as `proTeamKey` beside the abbreviation. Recorded live evidence is summarized in [the design document](docs/design.md#autocoach-reference-audit), and the remaining live-evidence gaps stay recorded there.
 
-## Integration plan
+## Integration
 
-The package stays unreferenced by the application until a separate integration refactor. The design document records the transport swap, what the application gains, what stays with the application, and the rollout gates: [Integration plan](docs/design.md#integration-plan).
+The application adapter builds every port read and every port write through this package, and builds no provider request of its own. The design document records the transport swap, what the application gains, what stays with the application, and the rollout gates: [Integration plan](docs/design.md#integration-plan).
 
 The AutoCoach reference audit, the batching answers, and the remaining evidence gaps are in [the design document](docs/design.md#autocoach-reference-audit).
 

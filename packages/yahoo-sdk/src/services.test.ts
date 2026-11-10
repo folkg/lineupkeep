@@ -1393,9 +1393,14 @@ it.effect("proposes a two-sided trade and reads the pending key from the respons
     }
     assert.strictEqual(write.method, "POST");
     assert.strictEqual(
+      write.url,
+      "https://pub-api-rw.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/transactions?format=json_f&crumb=canary-crumb-value",
+    );
+    assert.strictEqual(
       yield* Effect.promise(() => write.body),
       '<?xml version="1.0" encoding="UTF-8"?><fantasy_content><transaction><type>pending_trade</type><trader_team_key>466.l.4000.t.1</trader_team_key><tradee_team_key>466.l.4000.t.2</tradee_team_key><trade_note></trade_note><players><player><player_key>466.p.20001</player_key><transaction_data><type>pending_trade</type><source_team_key>466.l.4000.t.1</source_team_key><destination_team_key>466.l.4000.t.2</destination_team_key></transaction_data></player><player><player_key>466.p.20003</player_key><transaction_data><type>pending_trade</type><source_team_key>466.l.4000.t.2</source_team_key><destination_team_key>466.l.4000.t.1</destination_team_key></transaction_data></player></players></transaction></fantasy_content>',
     );
+    assert.notInclude(yield* Effect.promise(() => write.body), "<picks>");
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
 
@@ -1414,6 +1419,95 @@ it.effect("does not claim acceptance of a trade whose pending key is absent", ()
         tradeeTeamKey: "466.l.4000.t.2",
         send: ["466.p.20001"],
         receive: ["466.p.20003"],
+        note: undefined,
+      }),
+    );
+
+    assert.strictEqual(error._tag, "YahooWriteUnknown");
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("proposes draft picks to the app write host with a note and no players element", () => {
+  const recording = recordingClient((call) =>
+    call.url.includes("getCrumb")
+      ? jsonResponse(crumbPayload)
+      : jsonResponse(
+          {
+            fantasy_content: {
+              transaction: {
+                transaction_key: "466.l.4000.pt.13",
+                type: "pending_trade",
+              },
+            },
+          },
+          201,
+        ),
+  );
+  return Effect.gen(function* () {
+    const result = yield* client.proposeTrade({
+      session,
+      leagueKey: "466.l.4000",
+      traderTeamKey: "466.l.4000.t.1",
+      tradeeTeamKey: "466.l.4000.t.2",
+      sendPicks: [{ round: 1 }],
+      receivePicks: [{ round: 1 }],
+      note: undefined,
+    });
+
+    assert.deepStrictEqual(result, {
+      status: "accepted",
+      transactionKey: "466.l.4000.pt.13",
+    });
+    assert.strictEqual(recording.calls.length, 2);
+    const write = recording.calls[1];
+    if (write === undefined) {
+      return yield* Effect.die("expected a write");
+    }
+    assert.strictEqual(write.method, "POST");
+    assert.strictEqual(
+      write.url,
+      "https://pub-api-android-rw.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/transactions?format=json_f&crumb=canary-crumb-value",
+    );
+    const body = yield* Effect.promise(() => write.body);
+    assert.strictEqual(
+      body,
+      '<?xml version="1.0" encoding="UTF-8"?><fantasy_content><transaction><type>pending_trade</type><trader_team_key>466.l.4000.t.1</trader_team_key><tradee_team_key>466.l.4000.t.2</tradee_team_key><trade_note></trade_note><picks><pick><source_team_key>466.l.4000.t.1</source_team_key><destination_team_key>466.l.4000.t.2</destination_team_key><round>1</round></pick><pick><source_team_key>466.l.4000.t.2</source_team_key><destination_team_key>466.l.4000.t.1</destination_team_key><round>1</round></pick></picks></transaction></fantasy_content>',
+    );
+    assert.notInclude(body, "<players>");
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("accepts a roster write whose receipt is not JSON", () => {
+  const recording = recordingClient((call) =>
+    call.url.includes("getCrumb")
+      ? jsonResponse(crumbPayload)
+      : textResponse("<fantasy_content><roster/></fantasy_content>", 200),
+  );
+  return Effect.gen(function* () {
+    const result = yield* client.applyNativeAction({
+      session,
+      teamKey: "466.l.4000.t.1",
+      coverage: { type: "week", week: 6 },
+    });
+
+    assert.deepStrictEqual(result, { status: "accepted" });
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("counts an unreadable proposal receipt as unknown rather than a refusal", () => {
+  const recording = recordingClient((call) =>
+    call.url.includes("getCrumb")
+      ? jsonResponse(crumbPayload)
+      : textResponse("<html>accepted</html>", 201),
+  );
+  return Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      client.proposeTrade({
+        session,
+        leagueKey: "466.l.4000",
+        traderTeamKey: "466.l.4000.t.1",
+        tradeeTeamKey: "466.l.4000.t.2",
+        send: ["466.p.20001"],
         note: undefined,
       }),
     );
@@ -1471,6 +1565,46 @@ it.effect("counters an incoming offer back to its proposer with one new proposal
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
 
+it.effect("counters with draft picks on the app write host", () => {
+  const recording = recordingClient((call) =>
+    call.url.includes("getCrumb")
+      ? jsonResponse(crumbPayload)
+      : jsonResponse(
+          {
+            fantasy_content: {
+              transaction: { transaction_key: "466.l.4000.pt.11", type: "pending_trade" },
+            },
+          },
+          201,
+        ),
+  );
+  return Effect.gen(function* () {
+    yield* client.counterTrade({
+      session,
+      offer: {
+        transactionKey: "466.l.4000.pt.9",
+        proposerTeamKey: "466.l.4000.t.2",
+        receiverTeamKey: "466.l.4000.t.1",
+      },
+      receivePicks: [{ round: 3 }],
+      note: "Counter",
+    });
+
+    const write = recording.calls[1];
+    if (write === undefined) {
+      return yield* Effect.die("expected a write");
+    }
+    assert.strictEqual(
+      write.url,
+      "https://pub-api-android-rw.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/transactions?format=json_f&crumb=canary-crumb-value",
+    );
+    assert.strictEqual(
+      yield* Effect.promise(() => write.body),
+      '<?xml version="1.0" encoding="UTF-8"?><fantasy_content><transaction><type>pending_trade</type><trader_team_key>466.l.4000.t.1</trader_team_key><tradee_team_key>466.l.4000.t.2</tradee_team_key><trade_note>Counter</trade_note><picks><pick><source_team_key>466.l.4000.t.2</source_team_key><destination_team_key>466.l.4000.t.1</destination_team_key><round>3</round></pick></picks></transaction></fantasy_content>',
+    );
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
 it.effect("rejects an incoming pending trade with a PUT action", () => {
   const recording = recordingClient((call) =>
     call.url.includes("getCrumb") ? jsonResponse(crumbPayload) : textResponse("", 200),
@@ -1521,6 +1655,18 @@ it.effect("withdraws a trade by its pending key", () => {
       "https://pub-api-rw.fantasysports.yahoo.com/fantasy/v2/transaction/466.l.4000.pt.9?format=json_f&crumb=canary-crumb-value",
     );
     assert.strictEqual(yield* Effect.promise(() => write.body), "");
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("refuses a completed-trade key for a withdrawal before sending", () => {
+  const recording = recordingClient(() => jsonResponse(crumbPayload));
+  return Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      client.withdrawTrade({ session, transactionKey: "466.l.4000.tr.9" }),
+    );
+
+    assert.strictEqual(error._tag, "YahooRequestInvalid");
+    assert.strictEqual(recording.calls.length, 0);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
 

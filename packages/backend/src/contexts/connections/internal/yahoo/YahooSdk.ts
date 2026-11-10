@@ -32,7 +32,9 @@ import type {
   ProviderSchedulePlayer,
   ProviderStartingLineup,
   ProviderStatBasis,
+  ProviderTradeProposalResult,
   ProviderTransactionTrend,
+  ProviderWriteResult,
 } from "#contexts/connections/Provider.ts";
 import type { PublicInternet } from "#runtime/PublicInternet.ts";
 
@@ -53,8 +55,6 @@ export type {
   YahooTransactionPlayer,
   YahooTransactionTeam,
 } from "@lineupkeep/yahoo-sdk";
-
-export const yahooHostOrigin = Yahoo.hostOrigin;
 
 export const yahooSdkContext = (
   internet: PublicInternet["Service"],
@@ -473,6 +473,145 @@ export const searchPlayersThroughSdk = (
     return players.map((player) => providerSearchPlayerOf(player, input.season));
   });
 
+export const applyNativeActionThroughSdk = (
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  input: { readonly teamKey: string; readonly coverage: Yahoo.YahooCoverage },
+): Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid> =>
+  writeThroughSdk(
+    context,
+    operation,
+    cookie,
+    Yahoo.lineups.setNative({ teamKey: input.teamKey, coverage: input.coverage }),
+    acceptedWrite,
+  );
+
+export const applyExplicitAssignmentsThroughSdk = (
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  input: {
+    readonly teamKey: string;
+    readonly coverage: Yahoo.YahooCoverage;
+    readonly assignments: ReadonlyArray<Yahoo.YahooLineupAssignment>;
+  },
+): Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid> =>
+  writeThroughSdk(
+    context,
+    operation,
+    cookie,
+    Yahoo.lineups.assign({
+      teamKey: input.teamKey,
+      coverage: input.coverage,
+      assignments: input.assignments,
+    }),
+    acceptedWrite,
+  );
+
+export const applyReserveMoveThroughSdk = (
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  input: {
+    readonly teamKey: string;
+    readonly coverage: Yahoo.YahooCoverage;
+    readonly playerKey: string;
+    readonly slot: string;
+  },
+): Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid> =>
+  writeThroughSdk(
+    context,
+    operation,
+    cookie,
+    Yahoo.lineups.reserve({
+      teamKey: input.teamKey,
+      coverage: input.coverage,
+      playerKey: input.playerKey,
+      slot: input.slot,
+    }),
+    acceptedWrite,
+  );
+
+export const applyTransactionThroughSdk = (
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  input: {
+    readonly leagueKey: string;
+    readonly teamKey: string;
+    readonly add: string | undefined;
+    readonly drop: string | undefined;
+    readonly faabBid: number | undefined;
+  },
+): Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid> =>
+  writeThroughSdk(
+    context,
+    operation,
+    cookie,
+    Yahoo.transactions.apply({
+      leagueKey: input.leagueKey,
+      teamKey: input.teamKey,
+      ...(input.add === undefined ? {} : { add: input.add }),
+      ...(input.drop === undefined ? {} : { drop: input.drop }),
+      ...(input.faabBid === undefined ? {} : { faabBid: input.faabBid }),
+    }),
+    acceptedWrite,
+  );
+
+export const proposeTradeThroughSdk = (
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  input: {
+    readonly leagueKey: string;
+    readonly traderTeamKey: string;
+    readonly tradeeTeamKey: string;
+    readonly send: ReadonlyArray<string>;
+    readonly receive: ReadonlyArray<string>;
+    readonly sendPicks: ReadonlyArray<number>;
+    readonly receivePicks: ReadonlyArray<number>;
+    readonly note: string;
+  },
+): Effect.Effect<ProviderTradeProposalResult, ProviderSessionRejected | ProviderResponseInvalid> =>
+  writeThroughSdk(
+    context,
+    operation,
+    cookie,
+    Yahoo.trades.propose({
+      leagueKey: input.leagueKey,
+      traderTeamKey: input.traderTeamKey,
+      tradeeTeamKey: input.tradeeTeamKey,
+      ...(input.send.length === 0 ? {} : { send: input.send }),
+      ...(input.receive.length === 0 ? {} : { receive: input.receive }),
+      ...(input.sendPicks.length === 0
+        ? {}
+        : { sendPicks: input.sendPicks.map((round) => ({ round })) }),
+      ...(input.receivePicks.length === 0
+        ? {}
+        : { receivePicks: input.receivePicks.map((round) => ({ round })) }),
+      note: input.note,
+    }),
+    (receipt): { readonly status: "accepted"; readonly transactionKey: string } => ({
+      status: "accepted",
+      transactionKey: receipt.transactionKey,
+    }),
+  );
+
+export const withdrawTradeThroughSdk = (
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  transactionKey: string,
+): Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid> =>
+  writeThroughSdk(
+    context,
+    operation,
+    cookie,
+    Yahoo.trades.withdraw({ transactionKey }),
+    acceptedWrite,
+  );
+
 function providerSearchPlayerOf(
   player: Yahoo.YahooPlayerSummary,
   season: number,
@@ -757,6 +896,120 @@ function yahooSdkHttpClient(internet: PublicInternet["Service"]): HttpClient.Htt
       ),
     ),
   );
+}
+
+type WriteRefusal = Exclude<ProviderWriteResult, { readonly status: "accepted" }>;
+
+const providerDetailLimit = 300;
+
+const acceptedWrite = (): { readonly status: "accepted" } => ({ status: "accepted" });
+
+function writeThroughSdk<Response, Accepted extends { readonly status: string }>(
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  request: Effect.Effect<Response, Yahoo.YahooWriteError, Yahoo.YahooOpContext>,
+  accept: (response: Response) => Accepted,
+): Effect.Effect<Accepted | WriteRefusal, ProviderSessionRejected | ProviderResponseInvalid> {
+  return Effect.gen(function* () {
+    const session = yield* Yahoo.makeSession(cookie).pipe(
+      Effect.mapError(() => ProviderSessionRejected.make({ operation })),
+    );
+    return yield* request.pipe(
+      Effect.provideContext(Context.add(context, Yahoo.Credentials, Effect.succeed(session))),
+      Effect.provideService(Tracer.DisablePropagation, true),
+      Effect.map(accept),
+      Effect.tap((result) => Effect.annotateCurrentSpan("provider.outcome", result.status)),
+      Effect.catch((error) =>
+        writeRefusalOf(operation, error).pipe(
+          Effect.tap((refusal) => Effect.annotateCurrentSpan("provider.outcome", refusal.status)),
+          Effect.tapError((failure) =>
+            Effect.annotateCurrentSpan(
+              "provider.outcome",
+              failure._tag === "provider.session_rejected" ? "session_rejected" : "invalid_request",
+            ),
+          ),
+        ),
+      ),
+    );
+  });
+}
+
+function writeRefusalOf(
+  operation: ProviderOperation,
+  error: Yahoo.YahooWriteError,
+): Effect.Effect<WriteRefusal, ProviderSessionRejected | ProviderResponseInvalid> {
+  switch (error._tag) {
+    case "ConfigError":
+      return ProviderSessionRejected.make({ operation });
+    case "Unauthorized":
+    case "Forbidden":
+      return Effect.gen(function* () {
+        yield* Effect.annotateCurrentSpan(
+          "provider.refusal.status",
+          error.status ?? "not_published",
+        );
+        return yield* ProviderSessionRejected.make({
+          operation,
+          ...(error.status === undefined ? {} : { status: error.status }),
+          ...(error.structured ? { detail: providerDetail(error.message) } : {}),
+        });
+      });
+    case "YahooNotSent":
+      return Effect.succeed({
+        status: "not_sent" as const,
+        reason: error.reason,
+        ...(error.status === undefined ? {} : { httpStatus: error.status }),
+        ...(error.operation === operation ? { detail: providerDetail(error.message) } : {}),
+      });
+    case "TooManyRequests":
+      return Effect.succeed({
+        status: "not_sent" as const,
+        reason: "request_failed" as const,
+        ...(error.status === undefined ? {} : { httpStatus: error.status }),
+        detail: providerDetail(error.message),
+      });
+    case "NotFound":
+      return Effect.succeed({
+        status: "rejected" as const,
+        reason: "not_found" as const,
+        httpStatus: error.status ?? 404,
+        detail: providerDetail(error.message),
+      });
+    case "YahooPremiumRequired":
+      return Effect.succeed({
+        status: "rejected" as const,
+        reason: "premium_required" as const,
+        ...(error.status === undefined ? {} : { httpStatus: error.status }),
+        detail: providerDetail(error.message),
+      });
+    case "BadRequest":
+    case "Conflict":
+    case "UnprocessableEntity":
+    case "Locked":
+    case "YahooHttpError":
+      return Effect.succeed({
+        status: "rejected" as const,
+        reason: "invalid_request" as const,
+        ...(error.status === undefined ? {} : { httpStatus: error.status }),
+        detail: providerDetail(error.message),
+      });
+    case "YahooRequestInvalid":
+    case "YahooParseError":
+    case "YahooCoverageMismatch":
+      return ProviderResponseInvalid.make({ operation });
+    case "HttpClientError":
+    case "GatewayTimeout":
+    case "InternalServerError":
+    case "BadGateway":
+    case "ServiceUnavailable":
+    case "YahooWriteUnknown":
+      return Effect.succeed({ status: "unknown" as const });
+  }
+}
+
+function providerDetail(message: string): string {
+  return message.replace(/\s+/gu, " ").trim().slice(0, providerDetailLimit);
 }
 
 function rosterFailureOf(

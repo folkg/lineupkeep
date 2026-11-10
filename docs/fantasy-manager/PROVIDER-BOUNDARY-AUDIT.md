@@ -106,19 +106,19 @@ Generic query code renders and enforces those facts. It never infers them from a
 
 ### Provider contract and generic services
 
-| Where                                                     | Provider-specific fact                                                                              | Disposition                                                                                                              |
-| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `Provider.ts`                                             | `provider: Literals(["yahoo"])`, provider operation names `apply_native_start_active`, `read_crumb` | `ProviderKey`; `apply_native_action`; `read_crumb` removed from the public operation list and handled inside the adapter |
-| `Provider.ts`                                             | Value source `"percent-started"` and `ProviderPercentStarted`, `cutType`, `delta`                   | Renamed to the provider's own vocabulary, and then removed from the seam entirely in the second pass                     |
-| `Provider.ts`                                             | Roster position `isStarting: boolean`                                                               | `kind: "starting" \| "bench" \| "reserve"` plus declared `eligibility`                                                   |
-| `Provider.ts`                                             | Write-not-sent reason `crumb_unavailable`                                                           | `session_incomplete`, a neutral reason the worker can act on                                                             |
-| `connections/FantasyDay.ts`                               | Hardcoded `yahooPacificMidnight` and `fantasyDayPolicy(provider, league)`                           | Provider-declared `ProviderFantasyDay`; the adapter owns time zone, boundary, and version                                |
-| `connections/QueryResults.ts`                             | Yahoo prose in MCP descriptions; `percentStarted` fields                                            | Capability-driven descriptions; the search surface keeps `percentStarted` as a published share                           |
-| `internal/FantasyQueriesLive.ts`                          | `period`, `startedPeriod`, `currentWeek` vocabulary; hardcoded provider sort and projection checks  | Neutral `period`, `currentPeriod`; behavior comes from `capabilities.playerSearch` and `limitations`                     |
-| `internal/ConnectionsLive.ts`                             | A single `ProviderGateway` and `provider: "yahoo"` in method inputs                                 | Registry lookup by `ProviderKey`; unregistered keys fail as `ConnectionProviderRejected`                                 |
-| `internal/QueryContext.ts`, `internal/QueryRepository.ts` | Resolution assumed one provider                                                                     | Loads the key from the owned team and resolves the shape from the registry                                               |
-| `internal/TeamRepository.ts`                              | Pause-until-day-end used `fantasyDayPolicy(provider, league)`                                       | Uses the team provider's `capabilities.fantasyDay`                                                                       |
-| `internal/NotificationsRepository.ts`                     | Email said "reconnect your Yahoo account"                                                           | Provider-neutral "reconnect your fantasy team"                                                                           |
+| Where                                                     | Provider-specific fact                                                                              | Disposition                                                                                                                       |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `Provider.ts`                                             | `provider: Literals(["yahoo"])`, provider operation names `apply_native_start_active`, `read_crumb` | `ProviderKey`; `apply_native_action`; `read_crumb` removed from the public operation list and handled inside the SDK's write path |
+| `Provider.ts`                                             | Value source `"percent-started"` and `ProviderPercentStarted`, `cutType`, `delta`                   | Renamed to the provider's own vocabulary, and then removed from the seam entirely in the second pass                              |
+| `Provider.ts`                                             | Roster position `isStarting: boolean`                                                               | `kind: "starting" \| "bench" \| "reserve"` plus declared `eligibility`                                                            |
+| `Provider.ts`                                             | Write-not-sent reason `crumb_unavailable`                                                           | `session_incomplete`, a neutral reason the worker can act on                                                                      |
+| `connections/FantasyDay.ts`                               | Hardcoded `yahooPacificMidnight` and `fantasyDayPolicy(provider, league)`                           | Provider-declared `ProviderFantasyDay`; the adapter owns time zone, boundary, and version                                         |
+| `connections/QueryResults.ts`                             | Yahoo prose in MCP descriptions; `percentStarted` fields                                            | Capability-driven descriptions; the search surface keeps `percentStarted` as a published share                                    |
+| `internal/FantasyQueriesLive.ts`                          | `period`, `startedPeriod`, `currentWeek` vocabulary; hardcoded provider sort and projection checks  | Neutral `period`, `currentPeriod`; behavior comes from `capabilities.playerSearch` and `limitations`                              |
+| `internal/ConnectionsLive.ts`                             | A single `ProviderGateway` and `provider: "yahoo"` in method inputs                                 | Registry lookup by `ProviderKey`; unregistered keys fail as `ConnectionProviderRejected`                                          |
+| `internal/QueryContext.ts`, `internal/QueryRepository.ts` | Resolution assumed one provider                                                                     | Loads the key from the owned team and resolves the shape from the registry                                                        |
+| `internal/TeamRepository.ts`                              | Pause-until-day-end used `fantasyDayPolicy(provider, league)`                                       | Uses the team provider's `capabilities.fantasyDay`                                                                                |
+| `internal/NotificationsRepository.ts`                     | Email said "reconnect your Yahoo account"                                                           | Provider-neutral "reconnect your fantasy team"                                                                                    |
 
 ### Planning and values, first pass
 
@@ -216,12 +216,12 @@ than the assumption.
 These are declarations, not leaks. Each is scoped to one surface and consumed through a keyed lookup,
 so another provider adds an entry without touching behavior.
 
-| Declaration                                        | Location                                                                                                                   | Why it is acceptable                                                                                                                                                                                                                                 |
-| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Display names and the current default selection    | `apps/web/src/contracts/connections/providerLabels.ts`                                                                     | Presentation only. The default is the only provider the product currently offers; when a second provider exists, the connections flow should ask which one, which is a product decision rather than a refactor                                       |
-| Hosted browser sign-in URL and allowlisted origins | `packages/hosted-browser/src/provider.ts`                                                                                  | The hosted browser must navigate to the provider's own sign-in page and nowhere else; the allowlist is a security boundary, and it is one entry per provider                                                                                         |
-| Provider-labelled sign-in page                     | The provider's own page, opened by the hosted browser                                                                      | We do not restyle or proxy provider authentication. The person sees the provider's page, so provider identity is the honest label                                                                                                                    |
-| Yahoo wire details and scoring                     | `packages/yahoo-sdk/**`, `packages/backend/src/contexts/connections/internal/yahoo/**`, and `internal/provider-scoring/**` | Read endpoints, decoding, bounds, and retry belong to the SDK; write bodies, the crumb step, the write host choice, game codes, review-link parameters, and the arithmetic that turns league rules or crowd shares into scores stay with the adapter |
+| Declaration                                        | Location                                                                                                                   | Why it is acceptable                                                                                                                                                                                                                                                                 |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Display names and the current default selection    | `apps/web/src/contracts/connections/providerLabels.ts`                                                                     | Presentation only. The default is the only provider the product currently offers; when a second provider exists, the connections flow should ask which one, which is a product decision rather than a refactor                                                                       |
+| Hosted browser sign-in URL and allowlisted origins | `packages/hosted-browser/src/provider.ts`                                                                                  | The hosted browser must navigate to the provider's own sign-in page and nowhere else; the allowlist is a security boundary, and it is one entry per provider                                                                                                                         |
+| Provider-labelled sign-in page                     | The provider's own page, opened by the hosted browser                                                                      | We do not restyle or proxy provider authentication. The person sees the provider's page, so provider identity is the honest label                                                                                                                                                    |
+| Yahoo wire details and scoring                     | `packages/yahoo-sdk/**`, `packages/backend/src/contexts/connections/internal/yahoo/**`, and `internal/provider-scoring/**` | Request paths, hosts, query vocabulary, crumb handling, write bodies, decoding, bounds, and retry belong to the SDK; game codes, review-link parameters, the port-to-operation mapping, and the arithmetic that turns league rules or crowd shares into scores stay with the adapter |
 
 The sign-in URL and the provider's session cookie names are the two facts that cannot move behind
 the server-side `ProviderShape`, because they belong to the hosted browser rather than the backend
@@ -377,12 +377,14 @@ A pick trade is host-specific and shape-specific, both settled against league `4
 - Players and picks parse together on the app host: a mixed body carrying an unknown player was refused with
   "Player --empty-- is not on team Bread Roller.", which proves both parts were read.
 
-The adapter now always writes the trade note, sends a pick-bearing proposal to the app host, and keeps player-only
-trades on the website host. The live record lives in `e2e/scratch/pick-send/evidence.md`.
+`trades.propose` always writes the trade note, sends a pick-bearing proposal to the app host, and keeps
+player-only trades on the website host. The live record lives in `e2e/scratch/pick-send/evidence.md`, and
+the shape is restated in the SDK's own notes at
+[`packages/yahoo-sdk/docs/mobile-api.md#draft-pick-trades`](../../packages/yahoo-sdk/docs/mobile-api.md#draft-pick-trades).
 
-## Yahoo SDK read migration
+## Yahoo SDK migration
 
-`packages/yahoo-sdk` is now a workspace package. It imports only `effect` and its own `#yahoo/*`
+`packages/yahoo-sdk` is a workspace package. It imports only `effect` and its own `#yahoo/*`
 modules, and its tests run in the Node project under the same single-worker-per-file policy as the rest
 of the suite. Its original seven source changes remain unmerged outside this repository; the package
 moved here with one additional upstream change to the error fields.
@@ -429,8 +431,8 @@ the schedule row keeps its pro team key because the SDK roster player now carrie
 provider's `pending_trade` value as its own kind rather than folding it into `trade`. The two
 aggregate reads change their requests by construction; their published rows, ordering, limits, and
 failure vocabulary do not change. The measured saving is recorded below. The SDK transport builds
-every port read, including the scorer's games-played facts; only the write path keeps the adapter's
-own request building. `Yahoo.Retry.none` is installed at the port because the existing
+every port read and every port write, including the scorer's games-played facts; the adapter builds
+no provider request. `Yahoo.Retry.none` is installed at the port because the existing
 adapter has no read retry; enabling the SDK's transient retry would be a product decision, not a
 transport swap.
 
@@ -441,7 +443,7 @@ Yahoo's sentence as `detail` only when Yahoo actually supplied one.
 
 ### Operation map
 
-| Port read                  | SDK operation                 | Verdict                                                                                                                                                                                                                                                                                    |
+| Port operation             | SDK operation                 | Verdict                                                                                                                                                                                                                                                                                    |
 | -------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `readLeagueTeams`          | `teams.list`                  | **Migrated.** Same request, same published fields.                                                                                                                                                                                                                                         |
 | `validateSession`          | `session.validate`            | **Migrated.** Same request, same session outcome; refusal detail is gated by the SDK's `structured` mark.                                                                                                                                                                                  |
@@ -463,17 +465,16 @@ Yahoo's sentence as `detail` only when Yahoo actually supplied one.
 | `readAvailableDraftPicks`  | `leagues.availableDraftPicks` | **Migrated.** Same app read host, path, team keys, and `out`; the adapter publishes each list's rounds under the team that returned them, and a league that publishes no picks or omits a requested team still fails as `ProviderResponseInvalid`.                                         |
 | `scoreRoster` player facts | `players.details`             | **Migrated.** `fields`, `ranks`, and `percentStartedCutTypes` request the same percent-started, percent-owned, and rank fields; the adapter keeps the coverage check and cut mapping.                                                                                                      |
 | `scoreRoster` games played | `teams.gamesPlayed`           | **Migrated.** Same read host, path, team key, and `out`; the adapter maps each position's played, max, and projected count and the innings-pitched node to `ProviderGamesPlayed`, and keeps the pitcher-slot choice.                                                                       |
+| `applyNativeAction`        | `lineups.setNative`           | **Migrated.** Same roster `PUT` on the write host, same body, same crumb. Which action to ask for (`start_active_players`) stays the adapter's choice.                                                                                                                                     |
+| `applyExplicitAssignments` | `lineups.assign`              | **Migrated.** Same roster `PUT` and body; the adapter maps the port's assignment list to the SDK's player-and-slot pairs.                                                                                                                                                                  |
+| `applyReserveMove`         | `lineups.reserve`             | **Migrated.** Same roster `PUT` and body; the port's player key and slot map straight through.                                                                                                                                                                                             |
+| `applyTransaction`         | `transactions.apply`          | **Migrated.** Same transaction `POST` and body; the adapter maps a one-add and/or one-drop port change onto the operation's singular assets and refuses a wider change.                                                                                                                    |
+| `proposeTrade`             | `trades.propose`              | **Migrated.** Same proposal body, same pending-trade key. The adapter maps each port pick onto the side it moves to and the SDK chooses the write host.                                                                                                                                    |
+| `withdrawTrade`            | `trades.withdraw`             | **Migrated.** Same `DELETE`; the SDK refuses a completed-trade (`tr`) key before sending.                                                                                                                                                                                                  |
 
-Every port read is built by the SDK, including the scorer's games-played facts. The adapter builds no
-provider request for a read: the request, host, decoding, identity, coverage, and response-size
-checks all live in the operation. One provider request outside the read port still comes from the
-adapter, and the audit names it rather than claiming none:
-
-- **The write crumb request.** `GET /fantasy/v3/getCrumb?format=json_f` is the first step of every
-  write. The write path keeps the adapter's own transport, and the SDK's write operations are not
-  enabled; the crumb fetch is the one GET the adapter still builds.
-
-Writes themselves also keep the adapter's transport and bodies, by the boundary stated below.
+Every port read and every port write is built by the SDK, including the scorer's games-played facts.
+The adapter builds no provider request at all: the request, host, crumb, headers, body, decoding,
+identity, coverage, and response-size checks all live in the operation.
 
 The aggregate `rosters.forLeagues` operation stays owned-team scoped: the `users;use_login`
 collection returns only the signed-in manager's team. The full-league read is `rosters.forLeague`,
@@ -481,8 +482,8 @@ which asks one league for every team's roster and fits in its own read bound.
 
 ### What the adapter still owns
 
-Every port read is built by the SDK and the write path keeps its own transport, so what remains in the
-adapter is policy, mapping, and writes. It keeps the policy around those reads and every write:
+Every port read and every port write is built by the SDK, so what remains in the adapter is policy and
+mapping:
 
 - **Period resolution.** The port's `period` (`current`, a week, or a date) becomes the SDK's `coverage`
   before any request. `readRoster`, `readRosterSchedule`, `readPlayerDetails`, `readPlayerHistory`, and
@@ -499,14 +500,21 @@ adapter is policy, mapping, and writes. It keeps the policy around those reads a
   offers (`statPeriods`, `playerSearch`, `publishesProjections`, `limitations`, `scheduleRead`).
   `readAvailableDraftPicks` is called only when the league publishes `can_trade_draft_picks` and a
   proposal carries a pick.
-- **Host choice for a pick-bearing write.** `proposeTrade` sends a pick-bearing body to the app write
-  host and a player-only body to the website write host. Both origins resolve through the SDK's
-  `hostOrigin`, so the adapter names the role, not the URL. The adapter chooses no host for any read.
+- **Which write to make.** The port's `applyNativeAction`, `applyExplicitAssignments`,
+  `applyReserveMove`, `applyTransaction`, `proposeTrade`, and `withdrawTrade` map onto the SDK's six
+  write operations one for one. Where a port change is wider than one provider write (more than one
+  add or more than one drop), the adapter refuses it instead of choosing a second request.
+- **Side and asset mapping for a proposal.** The port names each pick by round, source team, and
+  destination team; the SDK names the two sides of the proposal. The adapter maps a pick moving to the
+  counterparty onto `sendPicks`, a pick moving back onto `receivePicks`, and refuses a pick whose two
+  teams are not the trade's two parties. A player-only proposal stays on the website write host and a
+  pick-bearing one goes to the app write host, and that host choice is the SDK's.
 - **Failure vocabulary and mapping.** SDK errors are mapped to `ProviderReadFailure` and
   `ProviderWriteFailure` at the port. The adapter keeps the period and coverage checks that decide
-  when an answer names another period, and the field mapping from SDK rows to port rows. League, team,
-  and roster-identity checks live in the SDK decoders, including the league-roster read's league key,
-  team keys, duplicate teams, empty rosters, and shared coverage.
+  when an answer names another period, the field mapping from SDK rows to port rows, and the write
+  outcome mapping from an SDK write error to `accepted`, `rejected`, `not_sent`, `unknown`, or a
+  session rejection. League, team, and roster-identity checks live in the SDK decoders, including the
+  league-roster read's league key, team keys, duplicate teams, empty rosters, and shared coverage.
 - **Session material.** The adapter decrypts the owner-scoped hosted-browser session and passes the
   cookie; the SDK owns the crumb, headers, and redirect refusal.
 
@@ -516,40 +524,49 @@ The baseline is `506ea267`, the commit before the first read moved behind the SD
 two files that carry the provider port on the Lineupgrade side: `YahooProvider.ts`, and the SDK-thin
 `YahooSdk.ts` that turns operations into port failures and rows.
 
-| Adapter file       | Before the migration | After this change |
-| ------------------ | -------------------: | ----------------: |
-| `YahooProvider.ts` |                4,822 |             2,808 |
-| `YahooSdk.ts`      |                    — |               848 |
-| **Total**          |            **4,822** |         **3,656** |
+| Adapter file       | Before the migration | After the read migration | After the write migration |
+| ------------------ | -------------------: | -----------------------: | ------------------------: |
+| `YahooProvider.ts` |                4,822 |                    2,808 |                     2,083 |
+| `YahooSdk.ts`      |                    — |                      848 |                     1,101 |
+| **Total**          |            **4,822** |                **3,656** |                 **3,184** |
 
-The adapter is 1,166 lines smaller (−24.2%), and `YahooProvider.ts` alone is 2,014 lines smaller
-(−41.8%). This change alone removes 143 lines from `YahooProvider.ts` and adds 20 to the SDK-thin
-mapping. What it deletes is the adapter's read transport: `readJson`, `yahooUrl`, the `ReadRequest` and
+The adapter is 1,638 lines smaller than before the migration (−34.0%). The read migration removed
+1,166 lines and deleted the adapter's read transport: `readJson`, `yahooUrl`, the `ReadRequest` and
 `ReadOperation` types, the read-origin constants `readOrigin` and `serviceOrigin`, and the payload
 decoders only the games-played read used (`TeamGamesPlayedPayload`, `GamesPlayedTypePayload`,
 `GamesPlayedByTypePayload`, `GamesPlayedPositionPayload`, `IntFromStringOrNumber`, `LeagueKey`,
-`TeamKey`, and `gamesPlayedFromPayload`). The fixed crumb URL is built from the SDK's
-`hostOrigin("service")`, so no request the adapter builds names a provider host literal.
+`TeamKey`, and `gamesPlayedFromPayload`).
 
-Writes keep the adapter's own transport. `readCrumbPayload` fetches the write token from
-`https://pub-api.fantasysports.yahoo.com/fantasy/v3/getCrumb?format=json_f`; it is the only GET the
-adapter still builds, and it exists only to carry a write. The SDK's `lineups.setNative`, `lineups.assign`,
-`transactions.apply`, `trades.propose`, `trades.withdraw`, and `lineups.reserve` cover the adapter's
-write surface but are not enabled as SDK operations. The SDK's host table names both read hosts,
-`read` and `androidRead`, and both write hosts, `write` and `androidWrite`; its `hostOrigin` is the one
-list the adapter resolves write hosts from, and a write request to either host carries the same crumb
-and `json_f` format.
+The write migration removes 472 more, 725 from `YahooProvider.ts` against 253 added to the SDK-thin
+mapping. The deleted payload normaliser is a third file, `YahooJson.ts`, 95 lines, which the crumb
+decode was its last caller for.
+
+This change deletes the adapter's write transport and bodies: `readCrumbPayload`, `discardBody`,
+`yahooWriteUrl`, the `CrumbPayload` schema, the `crumbUrl`, `writeOrigin`, and `androidWriteOrigin`
+constants, the `YahooCrumbUnavailable` error, `writeToProvider` and its `writeFailureOf`, and the XML
+builders `nativeStartActiveBody`, `explicitAssignmentsBody`, `reserveMoveBody`, `transactionBody`,
+`transactionPlayerBody`, `tradeProposalBody`, `tradePlayerBody`, `coverageBody`, and `xmlText`. The
+provider-wording helpers those paths used (`providerRefusalDetail`, `providerErrorDetail`,
+`providerStatement`, `providerRawText`, `withoutProviderSecrets`) and the pending-trade key scan
+(`pendingTradeKeyOf`, `findPendingTradeKey`, and the `isRecord` it used) go with them, as do the input
+validators only writes called: `ValidNativeTarget`, `ValidAssignments`, `ValidTransactionPlayerKeys`,
+`ValidTradePlayerKeys`, `ValidTradePicks`, `ValidTradeTransactionKey`,
+`ValidTransactionPlayerKey`, `isTransactionPlayerKey`, and `ValidSlot`. `YahooLimits.ts` keeps only
+the read deadline, and the SDK no longer exports `hostOrigin`: no adapter file resolves a provider
+host.
 
 ### Draft picks in a trade
 
 `ProviderShape.proposeTrade` carries `picks`, each one a round, a source team, and a destination team.
-The adapter validates every key against the trade's two parties, writes the captured app shape
+The adapter maps each pick onto the side it moves to and refuses one whose two teams are not the
+trade's two parties. `trades.propose` writes the captured app shape
 `<picks><pick><source_team_key>…</source_team_key><destination_team_key>…</destination_team_key><round>…</round></pick></picks>`
-after any players, and sends a pick-bearing proposal to `https://pub-api-android-rw.fantasysports.yahoo.com`.
-A player-only proposal stays on `https://pub-api-rw.fantasysports.yahoo.com`. That host choice lives in
-the adapter; nothing above the port names either host. A provider refusal keeps its own sentence as the
-item's failure detail, and the item is replaceable like any refused item. A successful proposal stores
-the provider's pending-trade key and state.
+after any players, always writes `<trade_note>`, never writes an empty `<players>` element, and sends a
+pick-bearing proposal to `https://pub-api-android-rw.fantasysports.yahoo.com`. A player-only proposal
+stays on `https://pub-api-rw.fantasysports.yahoo.com`. Both host choices live in the SDK operation;
+nothing above the port names either host. A provider refusal keeps its own sentence as the item's
+failure detail, and the item is replaceable like any refused item. A successful proposal stores the
+provider's pending-trade key and state.
 
 The live re-proof with the stored connection could not run. On 9 November every write answered HTTP 401
 with the provider's sentence "Cookie has timed out, please log in again." — a player-only proposal, a
@@ -584,8 +601,47 @@ stored key.
    player facts and games-played facts, and the Android available-draft-picks read — done, with the
    standings rows, category totals, acquisition usage, streaks, filtered trade order, unfiltered list,
    player-week facts, scorer facts, games-played facts, and available picks unchanged.
-8. Writes last, one operation at a time, each with a recorded acceptance or refusal. Not started: the
-   write path is the only provider request the adapter still builds.
+8. Writes last, one operation at a time — done for `lineups.setNative`, `lineups.assign`,
+   `lineups.reserve`, `transactions.apply`, `trades.propose`, and `trades.withdraw`, with the body,
+   host, and every published outcome unchanged. The live write proof stays the 9 November pick trade;
+   none was needed for the swap, because the shape was already proved and recorded.
+
+### Write parity
+
+Each write keeps the request the adapter used to build, and each outcome keeps its meaning.
+
+- **Request:** the same method, path, host, `format=json_f`, crumb, `accept` and `cookie` headers, XML
+  body, 30-second deadline, and 256 KiB write bound. The SDK fetches the crumb, so the adapter makes no
+  request of its own; a port write is still exactly two provider requests, the crumb and the write,
+  because the SDK never retries a write. Both write hosts carry the same crumb and format, and
+  `trades.propose` picks the app write host only when a pick moves.
+- **Outcomes:** `accepted` is a 2xx; a lineup write publishes no receipt and a proposal is accepted only
+  when the answer carries a `pt` key. `rejected` is a 4xx other than 408 and 429, with the provider's
+  sentence as `detail`, its status, and `not_found` for 404 and `premium_required` when the sentence names
+  premium. `not_sent` is a crumb failure, 408, or 429; a crumb failure publishes no status or detail
+  because the write was never attempted. `unknown` is a transport failure, a timeout, a 5xx, a response
+  the transport could not read, or an accepted proposal with no readable pending-trade key. 401 and 403
+  stay `ProviderSessionRejected` with the provider's status and, only when the SDK marks the sentence
+  structured, its `detail`.
+- **Sentence shape:** `detail` is still the SDK's sentence with runs of whitespace collapsed and cut to
+  300 characters, so the captured IR refusal keeps the single-spaced form the review page and MCP result
+  assert. One recorded detail differs: a provider HTML entity inside a raw refusal echo is decoded
+  (`&amp;` becomes `&`) because the SDK reads the statement rather than slicing the body. A refusal whose
+  body carries no statement now publishes the SDK's own sentence where the adapter published no detail.
+- **Local refusals:** a provider key of the wrong shape, more than one add or drop, a pick outside rounds
+  1–99, a duplicate pick round on one side, and a non-pending-trade key for a withdrawal are all refused
+  before sending, as `ProviderResponseInvalid` with the same operation. The SDK checks them after it
+  resolves the session, so an invalid request combined with an unusable cookie now reports the session
+  first.
+- **Fixture proof:** every existing adapter write test still asserts the exact body and host for the
+  native action, explicit assignments, reserve move, transaction, player-only proposal, pick-bearing
+  proposal, and withdrawal. The SDK's own tests assert the pick body, the app host, the always-present
+  note, the absent empty `<players>`, and the unreadable-receipt outcomes.
+
+Nothing remains outside the SDK. The only two things the adapter still names are not requests: the
+review page URLs it publishes for a team (`football.fantasysports.yahoo.com` and its siblings), and the
+`PublicInternet` transport it hands to the SDK as the HTTP client, which is the application's
+public-destination guard rather than a provider request.
 
 ### Parity findings from the migrated reads
 

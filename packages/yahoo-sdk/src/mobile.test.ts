@@ -373,7 +373,7 @@ it.effect("proposes a draft-pick-only trade with the observed XML body", () => {
     }
     assert.strictEqual(
       call.url,
-      "https://pub-api-rw.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/transactions?format=json_f&crumb=canary-crumb-value",
+      "https://pub-api-android-rw.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/transactions?format=json_f&crumb=canary-crumb-value",
     );
     assert.deepStrictEqual(receipt, {
       status: "accepted",

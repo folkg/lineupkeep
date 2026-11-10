@@ -30,7 +30,7 @@ import type {
 } from "#contexts/connections/Provider.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { ProviderRegistry, providerRegistryOf } from "#contexts/connections/ProviderRegistry.ts";
-import { PublicInternet } from "#runtime/PublicInternet.ts";
+import { PublicInternet, PublicInternetUnavailable } from "#runtime/PublicInternet.ts";
 import type { PublicInternetOptions } from "#runtime/PublicInternet.ts";
 
 import { yahooCapabilities } from "./YahooLineup.ts";
@@ -866,7 +866,7 @@ it.effect("surfaces the status and the raw words when the refusal has no readabl
       reason: "invalid_request",
       httpStatus: 400,
       detail:
-        '{"error":null,"yahoo:uri":"/fantasy/v2/league/461.l.1000/transactions?format=json_f&amp;crumb=<redacted>","unexpected":{"state":"refused"}}',
+        '{"error":null,"yahoo:uri":"/fantasy/v2/league/461.l.1000/transactions?format=json_f&crumb=<redacted>","unexpected":{"state":"refused"}}',
     });
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
@@ -895,6 +895,7 @@ it.effect("names the HTTP status when a rejected transaction gives no reason", (
       status: "rejected",
       reason: "invalid_request",
       httpStatus: 400,
+      detail: "Yahoo rejected the request.",
     });
   }).pipe(Effect.provide(yahooLayer(layer)));
 });
@@ -923,6 +924,124 @@ it.effect("treats a server failure as unknown without retrying", () => {
     });
     assert.deepStrictEqual(result, { status: "unknown" });
     assert.strictEqual(calls.length, 2);
+  }).pipe(Effect.provide(yahooLayer(layer)));
+});
+
+it.effect("treats a write the internet could not send as unknown, never as a refusal", () => {
+  const calls: Array<string> = [];
+  const layer = Layer.succeed(PublicInternet)({
+    request: (request) =>
+      Effect.suspend(() => {
+        calls.push(request.url);
+        return request.url.includes("getCrumb")
+          ? Effect.succeed(
+              jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } }),
+            )
+          : Effect.fail(PublicInternetUnavailable.make());
+      }),
+  });
+
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+    const result = yield* provider.applyTransaction({
+      ...sessionInput,
+      providerLeagueKey: "461.l.1000",
+      providerTeamKey: "461.l.1000.t.1",
+      adds: ["461.p.10001"],
+      drops: [],
+      faabBid: undefined,
+    });
+    assert.deepStrictEqual(result, { status: "unknown" });
+    assert.strictEqual(calls.length, 2);
+  }).pipe(Effect.provide(yahooLayer(layer)));
+});
+
+it.effect("does not send a write when the crumb request never reaches the provider", () => {
+  const calls: Array<string> = [];
+  const layer = Layer.succeed(PublicInternet)({
+    request: (request) =>
+      Effect.suspend(() => {
+        calls.push(request.url);
+        return request.url.includes("getCrumb")
+          ? Effect.fail(PublicInternetUnavailable.make())
+          : Effect.die("the write must not be attempted");
+      }),
+  });
+
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+    const result = yield* provider.applyTransaction({
+      ...sessionInput,
+      providerLeagueKey: "461.l.1000",
+      providerTeamKey: "461.l.1000.t.1",
+      adds: ["461.p.10001"],
+      drops: [],
+      faabBid: undefined,
+    });
+    assert.deepStrictEqual(result, { status: "not_sent", reason: "request_failed" });
+    assert.strictEqual(calls.length, 1);
+  }).pipe(Effect.provide(yahooLayer(layer)));
+});
+
+it.effect("reports a rate-limited write as not sent rather than unknown", () => {
+  const layer = Layer.succeed(PublicInternet)({
+    request: (request) =>
+      Effect.succeed(
+        request.url.includes("getCrumb")
+          ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
+          : new Response("Too Many Requests", { status: 429 }),
+      ),
+  });
+
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+    const result = yield* provider.applyTransaction({
+      ...sessionInput,
+      providerLeagueKey: "461.l.1000",
+      providerTeamKey: "461.l.1000.t.1",
+      adds: [],
+      drops: ["461.p.10001"],
+      faabBid: undefined,
+    });
+    assert.deepStrictEqual(result, {
+      status: "not_sent",
+      reason: "request_failed",
+      httpStatus: 429,
+      detail: "Too Many Requests",
+    });
+  }).pipe(Effect.provide(yahooLayer(layer)));
+});
+
+it.effect("reports an expired session on a write with the provider's sentence", () => {
+  const layer = Layer.succeed(PublicInternet)({
+    request: (request) =>
+      Effect.succeed(
+        request.url.includes("getCrumb")
+          ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
+          : new Response(
+              JSON.stringify({
+                error: { description: "Cookie has timed out, please log in again." },
+              }),
+              { status: 401 },
+            ),
+      ),
+  });
+
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+    const failure = yield* Effect.flip(
+      provider.applyReserveMove({
+        ...sessionInput,
+        providerTeamKey: "461.l.1000.t.1",
+        coverage: { type: "week", week: 7 },
+        providerPlayerKey: "461.p.10004",
+        slot: "IR",
+      }),
+    );
+    assert.instanceOf(failure, ProviderSessionRejected);
+    assert.strictEqual(failure.status, 401);
+    assert.strictEqual(failure.detail, "Cookie has timed out, please log in again.");
+    assert.notInclude(String(failure), Redacted.value(sessionInput.session));
   }).pipe(Effect.provide(yahooLayer(layer)));
 });
 
