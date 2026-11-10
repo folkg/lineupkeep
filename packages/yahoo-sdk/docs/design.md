@@ -320,10 +320,11 @@ package, and no application code imports the SDK yet.
   feature.
 - **Mobile-only reads.** Player cards, game logs, season tables, live game
   feeds, statcloud dashboards/matchups/playoffs, Felo, recommended trade
-  partners, available draft picks, and team analysis are available for
-  product decisions. The current adapter supports football and hockey; adding
-  basketball, baseball, or additional mobile surfaces is a separate product
-  decision, not an automatic swap.
+  partners, and team analysis are available for product decisions. The
+  current adapter supports football and hockey; adding basketball, baseball,
+  or additional mobile surfaces is a separate product decision, not an
+  automatic swap. `leagues.availableDraftPicks` is already the adapter's read
+  for the trade builder.
 - **More precise provider failures.** The SDK preserves Yahoo's own sentence
   and separates not-sent from unknown writes. The adapter can stop flattening
   those outcomes.

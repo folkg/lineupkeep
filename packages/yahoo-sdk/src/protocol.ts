@@ -35,6 +35,7 @@ import { normalizeYahooJson } from "./json.ts";
 
 export type YahooHost =
   | "read"
+  | "androidRead"
   | "service"
   | "write"
   | "androidWrite"
@@ -98,6 +99,7 @@ export const YahooProtocol = Layer.succeed(Protocol)({
 
 const hosts: Readonly<Record<YahooHost, string>> = {
   read: "https://pub-api-ro.fantasysports.yahoo.com",
+  androidRead: "https://pub-api-android-ro.fantasysports.yahoo.com",
   service: "https://pub-api.fantasysports.yahoo.com",
   write: "https://pub-api-rw.fantasysports.yahoo.com",
   androidWrite: "https://pub-api-android-rw.fantasysports.yahoo.com",

@@ -80,7 +80,7 @@ export type {
   YahooPendingTrade,
 } from "./internal/transaction.ts";
 export { TransactionTypeFilter } from "./internal/transaction.ts";
-export type { YahooDraftPick } from "./internal/draft.ts";
+export type { YahooAvailableDraftPick, YahooDraftPick } from "./internal/draft.ts";
 export type { YahooScheduleGame, YahooScoreboardGame } from "./internal/schedule.ts";
 export type {
   YahooFelo,

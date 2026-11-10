@@ -38,6 +38,7 @@ The app uses four separate surfaces. All are cookie-authenticated. The web `pub-
   - Adds `recommended_trade_partners` (currently only `team_key`) and positional ranks.
 - `/fantasy/v2/league/{leagueKey}/teams;team_keys={teamKey},{teamKey};out=available_draft_picks,positional_ranks,standings;positional_ranks.starters_only=1;/roster;week={week}/players;...`
   - The trade builder read. `available_draft_picks.picks[].pick` is `{ round, cost, pick }`; no original-team field was observed.
+  - The same path with only `out=available_draft_picks` is what `leagues.availableDraftPicks` requests for one or more team keys, and that query published `{ round }` alone.
 - `/fantasy/v2/league/{leagueKey}/transactions;start=0;count={n};types=add,drop,trade`
 - `/fantasy/v2/leagues;league_keys={leagueKey}/players;player_keys={playerKey};...`
   - Player research: game log, schedule, ranks over `last7days`, `last14days`, `last30days`, season, averages, ownership, percent started, player notes, videos, watchlist, matchup rating.

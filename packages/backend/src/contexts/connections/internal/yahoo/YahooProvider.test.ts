@@ -49,6 +49,7 @@ import {
   yahooNflLeagueTeams,
   yahooNflLeagueTeamsWithFaab,
   yahooNhlAvailableDraftPicks,
+  yahooNhlAvailableDraftPicksWithNoPicks,
   yahooNhlAvailableDraftPicksWithoutOneTeam,
   yahooNflPlayerDetailsWithMismatchedStartedCoverage,
   yahooNflPlayerDetailsWithDefaultRanks,
@@ -4520,6 +4521,65 @@ it.effect("refuses an available draft pick read that omits a requested team", ()
     );
 
     assert.instanceOf(error, ProviderResponseInvalid);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("refuses an available draft pick read when the league publishes none", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNhlAvailableDraftPicksWithNoPicks));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.readAvailableDraftPicks({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4001",
+        providerTeamKeys: ["466.l.4001.t.1"],
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("refuses an available draft pick read for keys from another league", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNhlAvailableDraftPicks));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.readAvailableDraftPicks({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4001",
+        providerTeamKeys: ["466.l.4001.t.1", "466.l.4002.t.1"],
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+    assert.deepStrictEqual(internet.calls, []);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("maps a refused available draft pick read into the provider's session vocabulary", () => {
+  const internet = recordingInternet(
+    () =>
+      new Response(JSON.stringify({ error: { description: "Access denied" } }), { status: 403 }),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const failure = yield* Effect.flip(
+      provider.readAvailableDraftPicks({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4001",
+        providerTeamKeys: ["466.l.4001.t.1"],
+      }),
+    );
+
+    if (failure._tag !== "provider.session_rejected") {
+      return assert.fail(`expected a session rejection, got ${failure._tag}`);
+    }
+    assert.strictEqual(failure.status, 403);
+    assert.strictEqual(failure.detail, "Access denied");
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 

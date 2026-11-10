@@ -4,6 +4,8 @@ import * as API from "#yahoo/api.ts";
 import type { YahooReadError } from "#yahoo/errors.ts";
 import { decodeFelo, decodeTeamAnalysis, decodeTradePartners } from "#yahoo/internal/analysis.ts";
 import type { YahooFelo, YahooTeamAnalysis, YahooTradePartner } from "#yahoo/internal/analysis.ts";
+import { decodeAvailableDraftPicks } from "#yahoo/internal/draft.ts";
+import type { YahooAvailableDraftPick } from "#yahoo/internal/draft.ts";
 import { decodeLeagueSettings } from "#yahoo/internal/league.ts";
 import type { YahooLeagueSettings } from "#yahoo/internal/league.ts";
 import { decodeStandings } from "#yahoo/internal/standings.ts";
@@ -183,4 +185,43 @@ export const teamAnalysis: API.OperationMethod<
     path: `/fantasy/v2/league/${input.leagueKey}/teams;team_keys=${input.teamKeys.join(",")};out=available_draft_picks,positional_ranks,standings;positional_ranks.starters_only=1`,
   }),
   decode: (payload, input) => decodeTeamAnalysis(payload, input.leagueKey),
+});
+
+const AvailableDraftPicksShape = Schema.Struct({
+  leagueKey: YahooLeagueKey,
+  teamKeys: Schema.Array(YahooTeamKey).pipe(
+    Schema.check(Schema.isMinLength(1)),
+    Schema.check(Schema.isMaxLength(50)),
+    Schema.check(
+      Schema.makeFilter((keys: ReadonlyArray<string>) => new Set(keys).size === keys.length),
+    ),
+  ),
+});
+
+export const AvailableDraftPicksRequest = AvailableDraftPicksShape.pipe(
+  Schema.check(
+    Schema.makeFilter((input: typeof AvailableDraftPicksShape.Type) =>
+      input.teamKeys.every((key) => leagueKeyOfTeam(key) === input.leagueKey),
+    ),
+  ),
+);
+export type AvailableDraftPicksRequest = typeof AvailableDraftPicksRequest.Type;
+
+export type AvailableDraftPicksResponse = ReadonlyArray<YahooAvailableDraftPick>;
+
+export const availableDraftPicks: API.OperationMethod<
+  AvailableDraftPicksRequest,
+  AvailableDraftPicksResponse,
+  YahooReadError,
+  API.YahooOpContext
+> = API.makeRead({
+  name: "read_available_draft_picks",
+  input: AvailableDraftPicksRequest,
+  output: Schema.Unknown,
+  request: (input) => ({
+    host: "androidRead",
+    method: "GET",
+    path: `/fantasy/v2/league/${input.leagueKey}/teams;team_keys=${input.teamKeys.join(",")};out=available_draft_picks`,
+  }),
+  decode: (payload, input) => decodeAvailableDraftPicks(payload, input.leagueKey, input.teamKeys),
 });

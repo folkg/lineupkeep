@@ -98,6 +98,7 @@ import type {
 } from "./YahooSdk.ts";
 import {
   discoverLeaguesThroughSdk,
+  readAvailableDraftPicksThroughSdk,
   readDraftResultsThroughSdk,
   readLeagueTeamsThroughSdk,
   readLeagueThroughSdk,
@@ -120,7 +121,6 @@ import {
 } from "./YahooSdk.ts";
 
 const readOrigin = new URL("https://pub-api-ro.fantasysports.yahoo.com");
-const androidReadOrigin = new URL("https://pub-api-android-ro.fantasysports.yahoo.com");
 const serviceOrigin = new URL("https://pub-api.fantasysports.yahoo.com");
 const writeOrigin = new URL(yahooHostOrigin("write"));
 const androidWriteOrigin = new URL(yahooHostOrigin("androidWrite"));
@@ -138,7 +138,6 @@ const reviewHosts: Readonly<Record<FantasySport, string>> = {
 const goalsAgainstAverageStatId = 23;
 const savePercentageStatId = 26;
 const maximumSelectedPlayers = 25;
-const maximumDraftPickTeams = 50;
 const playerRankTypes = [
   "last30days",
   "last14days",
@@ -1060,49 +1059,16 @@ export const yahooProvider = Effect.gen(function* () {
     yield* Effect.annotateCurrentSpan("provider.operation", "read_available_draft_picks");
     const cookie = yield* sessionCookie(input, "read_available_draft_picks");
     const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_available_draft_picks");
-    if (
-      input.providerTeamKeys.length === 0 ||
-      input.providerTeamKeys.length > maximumDraftPickTeams ||
-      new Set(input.providerTeamKeys).size !== input.providerTeamKeys.length
-    ) {
-      return yield* ProviderResponseInvalid.make({ operation: "read_available_draft_picks" });
-    }
-    const teamKeys = yield* Effect.forEach(input.providerTeamKeys, (teamKey) =>
-      ValidTeamKey(teamKey, "read_available_draft_picks"),
-    );
-    if (teamKeys.some((teamKey) => providerLeagueKey(teamKey) !== leagueKey)) {
-      return yield* ProviderResponseInvalid.make({ operation: "read_available_draft_picks" });
-    }
-    const payload = yield* readJson(internet, {
-      operation: "read_available_draft_picks",
-      origin: androidReadOrigin,
-      path: `/fantasy/v2/league/${leagueKey}/teams;team_keys=${teamKeys.join(",")};out=available_draft_picks`,
-      query: { format: "json" },
-      cookie,
-      normalize: true,
-    });
-    const decoded = yield* decodePayload(
-      AvailableDraftPicksPayload,
-      payload,
+    const teams = yield* readAvailableDraftPicksThroughSdk(
+      sdk,
       "read_available_draft_picks",
+      cookie,
+      leagueKey,
+      input.providerTeamKeys,
     );
-    const requested = new Set(teamKeys);
-    if (
-      decoded.league.league_key !== leagueKey ||
-      decoded.league.teams.length !== teamKeys.length ||
-      decoded.league.teams.some((team) => !requested.has(team.team_key))
-    ) {
-      return yield* responseMismatch({ operation: "read_available_draft_picks" });
-    }
-    yield* Effect.annotateCurrentSpan(
-      "provider.draft_pick_team_count",
-      decoded.league.teams.length,
-    );
-    return decoded.league.teams.flatMap((team) =>
-      team.available_draft_picks.picks.map(({ pick }) => ({
-        providerTeamKey: team.team_key,
-        round: pick.round,
-      })),
+    yield* Effect.annotateCurrentSpan("provider.draft_pick_team_count", teams.length);
+    return teams.flatMap((team) =>
+      team.picks.map(({ round }) => ({ providerTeamKey: team.teamKey, round })),
     );
   });
 
@@ -3259,24 +3225,6 @@ const TeamGamesPlayedPayload = Schema.Struct({
       Schema.Struct({
         team_key: TeamKey,
         games_played: Schema.optional(Schema.Array(GamesPlayedTypePayload)),
-      }),
-    ),
-  }),
-});
-
-const AvailableDraftPicksPayload = Schema.Struct({
-  league: Schema.Struct({
-    league_key: LeagueKey,
-    teams: Schema.Array(
-      Schema.Struct({
-        team_key: TeamKey,
-        available_draft_picks: Schema.Struct({
-          picks: Schema.Array(
-            Schema.Struct({
-              pick: Schema.Struct({ round: IntFromStringOrNumber }),
-            }),
-          ),
-        }),
       }),
     ),
   }),

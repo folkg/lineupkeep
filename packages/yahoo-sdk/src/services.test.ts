@@ -4,6 +4,10 @@ import * as Effect from "effect/Effect";
 
 import type { YahooSession } from "./credentials.ts";
 import {
+  availableDraftPicksForTwoTeamsPayload,
+  availableDraftPicksPayload,
+  availableDraftPicksWithoutOneTeamPayload,
+  availableDraftPicksWithoutPicksPayload,
   crumbPayload,
   datedRosterPayload,
   draftResultsPayload,
@@ -45,6 +49,8 @@ const client = {
     Yahoo.players.details(input),
   readMatchups: (input: WithSession<Yahoo.matchups.WeekRequest>) => Yahoo.matchups.week(input),
   readDraftResults: (input: WithSession<Yahoo.draft.ResultsRequest>) => Yahoo.draft.results(input),
+  readAvailableDraftPicks: (input: WithSession<Yahoo.leagues.AvailableDraftPicksRequest>) =>
+    Yahoo.leagues.availableDraftPicks(input),
   readTransactions: (input: WithSession<Yahoo.transactions.ListRequest>) =>
     Yahoo.transactions.list(input),
   readPendingTrades: (input: WithSession<Yahoo.transactions.PendingTradesRequest>) =>
@@ -608,6 +614,109 @@ it.effect("reads draft results with the optional player name", () => {
       },
       { round: 1, pick: 2, teamKey: "466.l.4000.t.2", playerKey: "466.p.20006" },
     ]);
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("reads available draft picks from the app read host, per team", () => {
+  const recording = recordingClient(() => jsonResponse(availableDraftPicksPayload));
+  return Effect.gen(function* () {
+    const teams = yield* client.readAvailableDraftPicks({
+      session,
+      leagueKey: "466.l.4001",
+      teamKeys: ["466.l.4001.t.1"],
+    });
+
+    const call = recording.calls[0];
+    if (call === undefined) {
+      return yield* Effect.die("expected one request");
+    }
+    assert.strictEqual(
+      call.url,
+      "https://pub-api-android-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4001/teams;team_keys=466.l.4001.t.1;out=available_draft_picks?format=json",
+    );
+    assert.deepStrictEqual(teams, [
+      {
+        teamKey: "466.l.4001.t.1",
+        picks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19].map((round) => ({
+          round,
+        })),
+      },
+    ]);
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("reads one pick list per requested team in one app read", () => {
+  const recording = recordingClient(() => jsonResponse(availableDraftPicksForTwoTeamsPayload));
+  return Effect.gen(function* () {
+    const teams = yield* client.readAvailableDraftPicks({
+      session,
+      leagueKey: "466.l.4001",
+      teamKeys: ["466.l.4001.t.1", "466.l.4001.t.2"],
+    });
+
+    const call = recording.calls[0];
+    if (call === undefined) {
+      return yield* Effect.die("expected one request");
+    }
+    assert.strictEqual(
+      call.url,
+      "https://pub-api-android-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4001/teams;team_keys=466.l.4001.t.1,466.l.4001.t.2;out=available_draft_picks?format=json",
+    );
+    assert.deepStrictEqual(teams, [
+      { teamKey: "466.l.4001.t.1", picks: [{ round: 1 }, { round: 2 }, { round: 3 }] },
+      { teamKey: "466.l.4001.t.2", picks: [{ round: 1 }, { round: 2 }] },
+    ]);
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("refuses an available draft pick answer that omits a requested team", () => {
+  const recording = recordingClient(() => jsonResponse(availableDraftPicksWithoutOneTeamPayload));
+  return Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      client.readAvailableDraftPicks({
+        session,
+        leagueKey: "466.l.4001",
+        teamKeys: ["466.l.4001.t.1", "466.l.4001.t.2"],
+      }),
+    );
+
+    assert.strictEqual(error._tag, "YahooParseError");
+    assert.strictEqual(error._tag === "YahooParseError" ? error.field : undefined, "league.teams");
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("refuses a team that publishes no available draft picks", () => {
+  const recording = recordingClient(() => jsonResponse(availableDraftPicksWithoutPicksPayload));
+  return Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      client.readAvailableDraftPicks({
+        session,
+        leagueKey: "466.l.4001",
+        teamKeys: ["466.l.4001.t.1"],
+      }),
+    );
+
+    assert.strictEqual(error._tag, "YahooParseError");
+    assert.strictEqual(
+      error._tag === "YahooParseError" ? error.field : undefined,
+      "league.teams.0.available_draft_picks",
+    );
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("refuses available draft pick keys from another league before sending", () => {
+  const recording = recordingClient(() => jsonResponse(availableDraftPicksPayload));
+  return Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      client.readAvailableDraftPicks({
+        session,
+        leagueKey: "466.l.4001",
+        teamKeys: ["466.l.4001.t.1", "466.l.4002.t.1"],
+      }),
+    );
+
+    assert.strictEqual(error._tag, "YahooRequestInvalid");
+    assert.deepStrictEqual(recording.calls, []);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
 

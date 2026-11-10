@@ -588,6 +588,166 @@ export const draftResultsPayload = {
   },
 };
 
+export const availableDraftPicksPayload = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: [
+      {
+        league_key: "466.l.4001",
+        league_id: "4001",
+        name: "Synthetic NHL League",
+        url: "https://hockey.fantasysports.yahoo.com/hockey/4001",
+        draft_status: "postdraft",
+        num_teams: 12,
+        max_teams: "18",
+        roster_type: "date",
+        scoring_type: "head",
+        scoring_label: "H2H Cat",
+        league_type: "private",
+        is_highscore: false,
+        current_week: 7,
+        start_week: "1",
+        start_date: "2026-09-29",
+        end_week: "26",
+        end_date: "2027-04-04",
+        current_date: "2026-11-10",
+        is_plus_league: "0",
+        game_code: "nhl",
+        season: "2026",
+      },
+      {
+        teams: {
+          "0": {
+            team: [
+              [
+                { team_key: "466.l.4001.t.1" },
+                { team_id: "1" },
+                { name: "Synthetic Team" },
+                { is_owned_by_current_login: 1 },
+                { url: "https://hockey.fantasysports.yahoo.com/hockey/4001/1" },
+                { waiver_priority: 2 },
+                { number_of_moves: 9 },
+                { number_of_trades: 0 },
+              ],
+              {
+                available_draft_picks: {
+                  picks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19].map(
+                    (round) => ({ pick: { round } }),
+                  ),
+                },
+              },
+            ],
+          },
+          count: 1,
+        },
+      },
+    ],
+  },
+};
+
+export const availableDraftPicksForTwoTeamsPayload = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: [
+      {
+        league_key: "466.l.4001",
+        league_id: "4001",
+        name: "Synthetic NHL League",
+        url: "https://hockey.fantasysports.yahoo.com/hockey/4001",
+        draft_status: "postdraft",
+        num_teams: 12,
+        max_teams: "18",
+        roster_type: "date",
+        scoring_type: "head",
+        scoring_label: "H2H Cat",
+        league_type: "private",
+        is_highscore: false,
+        current_week: 7,
+        start_week: "1",
+        start_date: "2026-09-29",
+        end_week: "26",
+        end_date: "2027-04-04",
+        current_date: "2026-11-10",
+        is_plus_league: "0",
+        game_code: "nhl",
+        season: "2026",
+      },
+      {
+        teams: {
+          "0": {
+            team: [
+              [{ team_key: "466.l.4001.t.1" }, { team_id: "1" }, { name: "Synthetic Team" }],
+              {
+                available_draft_picks: {
+                  picks: [1, 2, 3].map((round) => ({ pick: { round } })),
+                },
+              },
+            ],
+          },
+          "1": {
+            team: [
+              [{ team_key: "466.l.4001.t.2" }, { team_id: "2" }, { name: "Synthetic Rival" }],
+              {
+                available_draft_picks: {
+                  picks: [1, 2].map((round) => ({ pick: { round } })),
+                },
+              },
+            ],
+          },
+          count: 2,
+        },
+      },
+    ],
+  },
+};
+
+export const availableDraftPicksWithoutOneTeamPayload = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: [
+      {
+        league_key: "466.l.4001",
+        league_id: "4001",
+        name: "Synthetic NHL League",
+        url: "https://hockey.fantasysports.yahoo.com/hockey/4001",
+      },
+      {
+        teams: {
+          "0": {
+            team: [
+              [{ team_key: "466.l.4001.t.1" }, { team_id: "1" }, { name: "Synthetic Team" }],
+              { available_draft_picks: { picks: [{ pick: { round: 1 } }] } },
+            ],
+          },
+          count: 1,
+        },
+      },
+    ],
+  },
+};
+
+export const availableDraftPicksWithoutPicksPayload = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: [
+      {
+        league_key: "466.l.4001",
+        league_id: "4001",
+        name: "Synthetic NHL League",
+        url: "https://hockey.fantasysports.yahoo.com/hockey/4001",
+      },
+      {
+        teams: {
+          "0": {
+            team: [[{ team_key: "466.l.4001.t.1" }, { team_id: "1" }, { name: "Synthetic Team" }]],
+          },
+          count: 1,
+        },
+      },
+    ],
+  },
+};
+
 export const standingsPayload = {
   fantasy_content: {
     league: [

@@ -2828,6 +2828,28 @@ export const yahooNhlAvailableDraftPicksWithoutOneTeam = {
   },
 };
 
+export const yahooNhlAvailableDraftPicksWithNoPicks = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: [
+      {
+        league_key: "466.l.4001",
+        league_id: "4001",
+        name: "Synthetic NHL League",
+        url: "https://hockey.fantasysports.yahoo.com/hockey/4001",
+      },
+      {
+        teams: {
+          "0": {
+            team: [[{ team_key: "466.l.4001.t.1" }, { team_id: "1" }, { name: "Synthetic Team" }]],
+          },
+          count: 1,
+        },
+      },
+    ],
+  },
+};
+
 export const yahooNflRosterWeekMismatch = {
   fantasy_content: {
     team: [

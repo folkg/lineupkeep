@@ -191,6 +191,25 @@ export const readDraftResultsThroughSdk = (
     );
   });
 
+export const readAvailableDraftPicksThroughSdk = (
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  leagueKey: string,
+  teamKeys: ReadonlyArray<string>,
+): Effect.Effect<ReadonlyArray<Yahoo.YahooAvailableDraftPick>, ProviderReadFailure> =>
+  Effect.gen(function* () {
+    const session = yield* Yahoo.makeSession(cookie).pipe(
+      Effect.mapError(() => ProviderSessionRejected.make({ operation })),
+    );
+    return yield* Yahoo.leagues.availableDraftPicks({ leagueKey, teamKeys }).pipe(
+      Yahoo.Retry.none,
+      Effect.provideContext(Context.add(context, Yahoo.Credentials, Effect.succeed(session))),
+      Effect.provideService(Tracer.DisablePropagation, true),
+      Effect.mapError((error) => providerReadFailureOf(operation, error)),
+    );
+  });
+
 export const readLeagueTeamsThroughSdk = (
   context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
   operation: ProviderOperation,

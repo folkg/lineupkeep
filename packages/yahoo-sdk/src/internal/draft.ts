@@ -2,7 +2,41 @@ import { Effect, Schema } from "effect";
 
 import { IntFromStringOrNumber, decodePayload, optionalNonEmpty } from "#yahoo/decode.ts";
 import { YahooParseError } from "#yahoo/errors.ts";
-import type { YahooLeagueKey } from "#yahoo/keys.ts";
+import type { YahooLeagueKey, YahooTeamKey } from "#yahoo/keys.ts";
+
+export function decodeAvailableDraftPicks(
+  payload: unknown,
+  requestedLeagueKey: YahooLeagueKey,
+  requestedTeamKeys: ReadonlyArray<YahooTeamKey>,
+): Effect.Effect<ReadonlyArray<YahooAvailableDraftPick>, YahooParseError> {
+  return Effect.gen(function* () {
+    const decoded = yield* decodePayload(
+      AvailableDraftPicksPayload,
+      payload,
+      "read_available_draft_picks",
+    );
+    if (decoded.league.league_key !== requestedLeagueKey) {
+      return yield* new YahooParseError({
+        operation: "read_available_draft_picks",
+        field: "league.league_key",
+      });
+    }
+    const requested = new Set(requestedTeamKeys);
+    if (
+      decoded.league.teams.length !== requestedTeamKeys.length ||
+      decoded.league.teams.some((team) => !requested.has(team.team_key))
+    ) {
+      return yield* new YahooParseError({
+        operation: "read_available_draft_picks",
+        field: "league.teams",
+      });
+    }
+    return decoded.league.teams.map((team) => ({
+      teamKey: team.team_key,
+      picks: team.available_draft_picks.picks.map(({ pick }) => ({ round: pick.round })),
+    }));
+  });
+}
 
 export function decodeDraftResults(
   payload: unknown,
@@ -43,6 +77,29 @@ export type YahooDraftPick = {
   readonly playerKey: string;
   readonly name?: string;
 };
+
+export type YahooAvailableDraftPick = {
+  readonly teamKey: string;
+  readonly picks: ReadonlyArray<{ readonly round: number }>;
+};
+
+const AvailableDraftPicksPayload = Schema.Struct({
+  league: Schema.Struct({
+    league_key: Schema.String.pipe(Schema.check(Schema.isPattern(/^[0-9]+\.l\.[0-9]+$/u))),
+    teams: Schema.Array(
+      Schema.Struct({
+        team_key: Schema.String.pipe(
+          Schema.check(Schema.isPattern(/^[0-9]+\.l\.[0-9]+\.t\.[0-9]+$/u)),
+        ),
+        available_draft_picks: Schema.Struct({
+          picks: Schema.Array(
+            Schema.Struct({ pick: Schema.Struct({ round: IntFromStringOrNumber }) }),
+          ),
+        }),
+      }),
+    ),
+  }),
+});
 
 const DraftResultPlayerPayload = Schema.Struct({
   name: Schema.optional(Schema.Struct({ full: Schema.optional(Schema.String) })),
