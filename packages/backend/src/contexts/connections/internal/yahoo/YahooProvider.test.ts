@@ -4817,6 +4817,198 @@ it.effect("treats an unscoped roster rejection as a request failure, not a perio
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
+it.effect("reads player details through the SDK transport", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflWeekPlayerDetails));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    yield* provider.readPlayerDetails({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      providerPlayerKeys: ["466.p.20001"],
+      sport: "football",
+      period: { kind: "week", week: 6 },
+      currentPeriod: 7,
+      seasonStart: "2026-09-03",
+      seasonEnd: "2026-12-28",
+    });
+
+    const call = internet.calls[0];
+    if (call === undefined) {
+      return yield* Effect.die("expected a player details request");
+    }
+    assert.strictEqual(
+      call.url.href,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;player_keys=466.p.20001;out=stats,ownership?format=json&stats.type=week&stats.week=6",
+    );
+    assert.strictEqual(call.method, "GET");
+    assert.deepStrictEqual(Object.keys(call.headers).sort(), ["accept", "cookie"]);
+    assert.strictEqual(call.headers["accept"], "application/json");
+    assert.strictEqual(call.headers["cookie"], Redacted.value(sessionInput.session));
+    assert.isNull(call.body);
+    assert.deepStrictEqual(call.options, {
+      timeoutMs: 30_000,
+      maxResponseBytes: 4_194_304,
+    });
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("reads every day of a date range with the same statistics request", () => {
+  const internet = recordingInternet((request) =>
+    jsonResponse(hockeyDailyFixture(request.url.searchParams.get("stats.date") ?? "2026-10-26")),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    yield* provider.readPlayerDetails({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4002",
+      providerPlayerKeys: ["466.p.30001"],
+      sport: "hockey",
+      period: { kind: "range", start: "2026-10-26", end: "2026-10-27" },
+      currentPeriod: 4,
+      ...hockeySeasonWindow,
+    });
+
+    assert.deepStrictEqual(
+      internet.calls.map((call) => call.url.href),
+      ["2026-10-26", "2026-10-27"].map(
+        (date) =>
+          `https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4002/players;player_keys=466.p.30001;out=stats,ownership?format=json&stats.type=date&stats.date=${date}`,
+      ),
+    );
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("reports a player-statistics series for another week as a period mismatch", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflWeekPlayerDetails));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const failure = yield* Effect.flip(
+      provider.readPlayerDetails({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+        providerPlayerKeys: ["466.p.20001"],
+        sport: "football",
+        period: { kind: "week", week: 5 },
+        currentPeriod: 7,
+        seasonStart: "2026-09-03",
+        seasonEnd: "2026-12-28",
+      }),
+    );
+
+    if (failure._tag !== "provider.period_mismatch") {
+      return assert.fail(`expected a period mismatch, got ${failure._tag}`);
+    }
+    assert.deepStrictEqual(failure.requested, { type: "week", week: 5 });
+    assert.deepStrictEqual(failure.covered, { type: "week", week: 6 });
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("reports a day in a range that returns another day as a period mismatch", () => {
+  const internet = recordingInternet(() => jsonResponse(hockeyDailyFixture("2026-10-26")));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const failure = yield* Effect.flip(
+      provider.readPlayerDetails({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4002",
+        providerPlayerKeys: ["466.p.30001"],
+        sport: "hockey",
+        period: { kind: "range", start: "2026-10-26", end: "2026-10-27" },
+        currentPeriod: 4,
+        ...hockeySeasonWindow,
+      }),
+    );
+
+    if (failure._tag !== "provider.period_mismatch") {
+      return assert.fail(`expected a period mismatch, got ${failure._tag}`);
+    }
+    assert.deepStrictEqual(failure.requested, { type: "date", date: "2026-10-27" });
+    assert.deepStrictEqual(failure.covered, { type: "date", date: "2026-10-26" });
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("maps an SDK session rejection during a player details read", () => {
+  const internet = recordingInternet(
+    () =>
+      new Response(JSON.stringify({ error: { description: "Invalid cookie" } }), { status: 401 }),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const failure = yield* Effect.flip(
+      provider.readPlayerDetails({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+        providerPlayerKeys: ["466.p.20001"],
+        sport: "football",
+        period: { kind: "season" },
+        currentPeriod: 7,
+        seasonStart: "2026-09-03",
+        seasonEnd: "2026-12-28",
+      }),
+    );
+
+    if (failure._tag !== "provider.session_rejected") {
+      return assert.fail(`expected a session rejection, got ${failure._tag}`);
+    }
+    assert.strictEqual(failure.status, 401);
+    assert.strictEqual(failure.detail, "Invalid cookie");
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("maps an SDK server failure during a player history read", () => {
+  const internet = recordingInternet(
+    () =>
+      new Response(JSON.stringify({ error: { description: "Upstream failed" } }), { status: 500 }),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const failure = yield* Effect.flip(
+      provider.readPlayerHistory({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+        providerPlayerKeys: ["466.p.20001"],
+        sport: "football",
+        periods: [{ week: 5 }],
+        currentPeriod: 7,
+      }),
+    );
+
+    if (failure._tag !== "provider.request_failed") {
+      return assert.fail(`expected a request failure, got ${failure._tag}`);
+    }
+    assert.strictEqual(failure.status, 500);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("maps an SDK parse failure during a player history read", () => {
+  const internet = recordingInternet(() => new Response("not-json", { status: 200 }));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const failure = yield* Effect.flip(
+      provider.readPlayerHistory({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+        providerPlayerKeys: ["466.p.20001"],
+        sport: "football",
+        periods: [{ week: 5 }],
+        currentPeriod: 7,
+      }),
+    );
+
+    if (failure._tag !== "provider.response_invalid") {
+      return assert.fail(`expected a response rejection, got ${failure._tag}`);
+    }
+    assert.strictEqual(failure.field, "body");
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
 type RecordedRequest = {
   readonly url: URL;
   readonly method: string;

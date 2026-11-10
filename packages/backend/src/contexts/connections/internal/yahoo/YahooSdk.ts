@@ -17,6 +17,7 @@ import type {
   ProviderFailure,
   ProviderLeagueTeam,
   ProviderOperation,
+  ProviderPlayerDetail,
   ProviderPlayerSearchInput,
   ProviderPlayerSearchResult,
   ProviderPlayerSearchSort,
@@ -26,6 +27,7 @@ import type {
   ProviderRosterPlayer,
   ProviderRosterSlot,
   ProviderStartingLineup,
+  ProviderStatBasis,
   ProviderTransactionTrend,
 } from "#contexts/connections/Provider.ts";
 import type { PublicInternet } from "#runtime/PublicInternet.ts";
@@ -203,6 +205,31 @@ export const readRosterThroughSdk = (
     return providerRosterOf(teamKey, roster);
   });
 
+export const readPlayerDetailsThroughSdk = (
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  input: {
+    readonly leagueKey: string;
+    readonly playerKeys: ReadonlyArray<string>;
+    readonly stats: Yahoo.YahooStatQuery;
+  },
+): Effect.Effect<ReadonlyArray<ProviderPlayerDetail>, ProviderReadFailure> =>
+  Effect.gen(function* () {
+    const session = yield* Yahoo.makeSession(cookie).pipe(
+      Effect.mapError(() => ProviderSessionRejected.make({ operation })),
+    );
+    const details = yield* Yahoo.players
+      .details({ leagueKey: input.leagueKey, playerKeys: input.playerKeys, stats: input.stats })
+      .pipe(
+        Yahoo.Retry.none,
+        Effect.provideContext(Context.add(context, Yahoo.Credentials, Effect.succeed(session))),
+        Effect.provideService(Tracer.DisablePropagation, true),
+        Effect.mapError((error) => providerReadFailureOf(operation, error)),
+      );
+    return details.map((player) => providerPlayerDetailOf(player, input.stats));
+  });
+
 export const validateSessionThroughSdk = (
   context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
   operation: ProviderOperation,
@@ -315,7 +342,7 @@ function providerSearchPlayerOf(
     primaryPosition: player.primaryPosition,
     displayPosition: player.displayPosition,
     eligiblePositions: player.eligiblePositions,
-    availability: availabilityOf(player.ownershipType),
+    availability: providerAvailabilityOf(player.ownershipType),
     proTeam: player.proTeamAbbreviation,
     ...(player.proTeamKey === undefined ? {} : { proTeamKey: player.proTeamKey }),
     status: searchPlayerStatusOf(player.status),
@@ -366,9 +393,45 @@ function searchRankOf(
   return null;
 }
 
-function availabilityOf(
+function providerPlayerDetailOf(
+  player: Yahoo.YahooPlayerDetail,
+  query: Yahoo.YahooStatQuery,
+): ProviderPlayerDetail {
+  return {
+    providerPlayerKey: player.playerKey,
+    name: player.name,
+    primaryPosition: player.primaryPosition,
+    displayPosition: player.displayPosition,
+    proTeam: player.proTeamAbbreviation,
+    availabilityDetail: player.status?.detail,
+    eligiblePositions: player.eligiblePositions,
+    rosterStatus: providerAvailabilityOf(player.ownershipType),
+    actual:
+      player.stats === undefined
+        ? undefined
+        : {
+            basis: statBasisOf(query),
+            stats: player.stats.values,
+            notAggregated: [],
+          },
+    projected: undefined,
+  };
+}
+
+function statBasisOf(query: Yahoo.YahooStatQuery): ProviderStatBasis {
+  switch (query.type) {
+    case "season":
+      return { type: "season" };
+    case "week":
+      return { type: "week", week: query.week };
+    case "date":
+      return { type: "date_range", start: query.date, end: query.date, days: 1 };
+  }
+}
+
+function providerAvailabilityOf(
   ownershipType: string | undefined,
-): ProviderPlayerSearchResult["players"][number]["availability"] {
+): ProviderPlayerDetail["rosterStatus"] {
   switch (ownershipType) {
     case "team":
       return "rostered";
