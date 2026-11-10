@@ -27,6 +27,7 @@ export interface OperationConfig<I, O> {
   readonly name: string;
   readonly input: Schema.ConstraintCodec<I, unknown, never>;
   readonly output: Schema.Schema<unknown>;
+  readonly responseLimitBytes?: number;
   readonly request: (input: I) => RequestSpec;
   readonly decode: (
     payload: unknown,
@@ -61,6 +62,9 @@ export function makeRead<I, O>(
         input,
         decode: config.decode,
         write: false,
+        ...(config.responseLimitBytes === undefined
+          ? {}
+          : { responseLimitBytes: config.responseLimitBytes }),
       });
     }).pipe(withRetry),
   );

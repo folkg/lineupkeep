@@ -56,6 +56,7 @@ const league = yield * settings({ leagueKey: "466.l.4000" });
 |                      | `teamAnalysis`        | league and 1–12 team keys                                                                                                 |
 |                      | `availableDraftPicks` | league and 1–50 team keys                                                                                                 |
 | `Yahoo.rosters`      | `forTeam`             | one team, optional week/date coverage                                                                                     |
+|                      | `forLeague`           | every team's roster in one league                                                                                         |
 |                      | `forLeagues`          | the signed-in manager's team in one or more leagues, optional game keys, coverage, pending transactions, and games played |
 | `Yahoo.players`      | `search`              | one or more league keys, optional game keys, query, availability, sort, stat, limit, rank types, cut types                |
 |                      | `available`           | game key, position, page, offset, sort, availability, rank types, cut types                                               |
@@ -91,7 +92,7 @@ Inputs are decoded with an Effect Schema before any request is built. Keys, limi
 
 Batch first. `leagues.discover` requests every league and team, with settings and standings, in one aggregate read and returns league identity, full settings, trade-pick flag, teams, and team standings. `rosters.forLeagues` returns the signed-in manager's roster in each league, with pending-transaction summaries and games-played limits, from the same request. `players.search` takes arrays and returns grouped results, and `players.available` pages a whole sport's pool rather than repeating a league-scoped query. Single-team `rosters.forTeam` and per-league settings/details remain for the cases where one resource is genuinely the whole request.
 
-The multi-league roster read is owned-team scoped because Yahoo's `users;use_login` collection returns only the signed-in manager's team. A root `leagues;league_keys=…/teams;out=roster` request does return every team in those leagues, but its five-league live response was 19.5 MB against the SDK's 4 MiB read bound. Full-league rosters therefore stay one read per league.
+The multi-league roster read is owned-team scoped because Yahoo's `users;use_login` collection returns only the signed-in manager's team. `rosters.forLeague` reads every team's roster in one league from `GET /fantasy/v2/league/{leagueKey}/teams;out=roster`, returns one coverage for the league, and declares its own 8 MiB response bound: five live leagues measured 1.7–2.4 MB each. A root `leagues;league_keys=…/teams;out=roster` request returns every team across several leagues, but its five-league live response was 19.5 MB, so it is not one aggregate read.
 
 ### What is typed, and what is not
 
@@ -161,7 +162,7 @@ If a policy has no `while`, no retry is installed.
 
 - Reads use `pub-api-ro`, app reads use `pub-api-android-ro`, the crumb uses `pub-api`, and writes use `pub-api-rw`; all are `fantasysports.yahoo.com`. Graphite schedule reads use `graphite.sports.yahoo.com`.
 - Paths are exact, relative, and validated to stay on their fixed origin. Queries and fragments in a path are refused.
-- Reads have a 30-second deadline and a 4 MiB response bound. Writes have a 30-second deadline and a 256 KiB bound.
+- Reads have a 30-second deadline and a 4 MiB response bound. An operation whose provider answer is legitimately larger declares its own bound: `rosters.forLeague` allows 8 MiB for a full league's rosters. Writes have a 30-second deadline and a 256 KiB bound.
 - Redirects are not followed: `FetchClient` sets `redirect: "manual"`, and a 3xx becomes `YahooHttpError`.
 - The crumb request has its own 30-second deadline. A crumb failure is `YahooNotSent` and the write is never attempted.
 - The SDK does not provide a public-internet guard. The application layer must supply a fetch implementation that refuses non-public destinations.

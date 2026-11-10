@@ -15,6 +15,7 @@ import {
 import type {
   PlayerWeekOpponent,
   ProviderFailure,
+  ProviderLeagueRoster,
   ProviderLeagueTeam,
   ProviderOperation,
   ProviderPlayerDetail,
@@ -35,7 +36,7 @@ import type {
 } from "#contexts/connections/Provider.ts";
 import type { PublicInternet } from "#runtime/PublicInternet.ts";
 
-import { yahooReadDeadlineMillis, yahooReadResponseLimitBytes } from "./YahooLimits.ts";
+import { yahooReadDeadlineMillis } from "./YahooLimits.ts";
 import { yahooPlayerStatus } from "./YahooLineup.ts";
 
 export type {
@@ -287,6 +288,31 @@ function providerSchedulePlayerOf(
         : [{ date: coverage.type === "date" ? coverage.date : undefined, ...opponent }],
   };
 }
+
+export const readLeagueRostersThroughSdk = (
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  leagueKey: string,
+): Effect.Effect<ReadonlyArray<ProviderLeagueRoster>, ProviderReadFailure> =>
+  Effect.gen(function* () {
+    const session = yield* Yahoo.makeSession(cookie).pipe(
+      Effect.mapError(() => ProviderSessionRejected.make({ operation })),
+    );
+    const rosters = yield* Yahoo.rosters.forLeague({ leagueKey }).pipe(
+      Yahoo.Retry.none,
+      Effect.provideContext(Context.add(context, Yahoo.Credentials, Effect.succeed(session))),
+      Effect.provideService(Tracer.DisablePropagation, true),
+      Effect.mapError((error) => providerReadFailureOf(operation, error)),
+    );
+    return rosters.teams.map((team) => ({
+      providerTeamKey: team.teamKey,
+      providerLeagueKey: rosters.leagueKey,
+      name: team.name,
+      coverage: rosters.coverage,
+      players: team.players.map(providerRosterPlayerOf),
+    }));
+  });
 
 export const readPlayerDetailsRawThroughSdk = (
   context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
@@ -621,7 +647,7 @@ function providerRosterPlayerOf(player: Yahoo.YahooRosterPlayer): ProviderRoster
   };
 }
 
-export function rosterSlotOf(rawValue: string): ProviderRosterSlot {
+function rosterSlotOf(rawValue: string): ProviderRosterSlot {
   return rawValue === ""
     ? {
         status: "unverified",
@@ -645,7 +671,7 @@ export function scheduledOpponent(
     : { opponent: named, home: true };
 }
 
-export function startingLineupOf(starting: boolean | undefined): ProviderStartingLineup {
+function startingLineupOf(starting: boolean | undefined): ProviderStartingLineup {
   return starting === undefined
     ? "unconfirmed"
     : starting
@@ -662,7 +688,7 @@ function isReadonlyArray<A>(value: ReadonlyArray<A> | A): value is ReadonlyArray
   return Array.isArray(value);
 }
 
-export function transactionTrendOf(
+function transactionTrendOf(
   value: TransactionCounts | ReadonlyArray<TransactionCounts> | undefined,
 ): ProviderTransactionTrend {
   const counts = isReadonlyArray(value) ? value[0] : value;
@@ -688,7 +714,7 @@ function yahooSdkHttpClient(internet: PublicInternet["Service"]): HttpClient.Htt
         Effect.gen(function* () {
           const received = yield* internet.request(webRequest, {
             timeoutMs: yahooReadDeadlineMillis,
-            maxResponseBytes: yahooReadResponseLimitBytes,
+            maxResponseBytes: Yahoo.maximumReadLimitBytes,
           });
           const body = yield* Effect.tryPromise({
             try: () => received.arrayBuffer(),

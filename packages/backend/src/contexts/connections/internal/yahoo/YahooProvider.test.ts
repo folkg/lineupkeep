@@ -133,7 +133,7 @@ it.effect("validates a session with one exact read request", () => {
     assert.isNull(call.body);
     assert.deepStrictEqual(call.options, {
       timeoutMs: 30_000,
-      maxResponseBytes: 4_194_304,
+      maxResponseBytes: 8_388_608,
     });
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
@@ -178,7 +178,7 @@ it.effect(
         },
       ]);
       assert.isTrue(internet.calls.every((call) => call.options?.timeoutMs === 30_000));
-      assert.isTrue(internet.calls.every((call) => call.options?.maxResponseBytes === 4_194_304));
+      assert.isTrue(internet.calls.every((call) => call.options?.maxResponseBytes === 8_388_608));
     }).pipe(Effect.provide(yahooLayer(internet)));
   },
 );
@@ -4625,6 +4625,9 @@ it.effect("reads every league roster in one request", () => {
     assert.deepStrictEqual(starter?.eligiblePositions, ["QB", "W/R"]);
     assert.strictEqual(starter?.byeWeek, 7);
     assert.strictEqual(starter?.undroppable, false);
+    assert.strictEqual(starter?.scheduled, false);
+    assert.strictEqual(starter?.opponent, undefined);
+    assert.strictEqual(starter?.startingLineup, "unconfirmed");
     assert.deepStrictEqual(starter?.transactionTrend, {
       status: "not_published",
       reason: "Your league published no add and drop counts for this player.",
@@ -4684,6 +4687,66 @@ it.effect("rejects league rosters that name another league", () => {
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
+it.effect("rejects a malformed league roster key before sending", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflLeagueRosters));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.readLeagueRosters({ ...sessionInput, providerLeagueKey: "not-a-league" }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+    assert.strictEqual(error.operation, "read_league_rosters");
+    assert.strictEqual(internet.calls.length, 0);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("maps a refused league roster read into the provider's session vocabulary", () => {
+  const internet = recordingInternet(
+    () =>
+      new Response(JSON.stringify({ error: { description: "Access denied" } }), { status: 403 }),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const failure = yield* Effect.flip(
+      provider.readLeagueRosters({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+      }),
+    );
+
+    if (failure._tag !== "provider.session_rejected") {
+      return assert.fail(`expected a session rejection, got ${failure._tag}`);
+    }
+    assert.strictEqual(failure.status, 403);
+    assert.strictEqual(failure.detail, "Access denied");
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("reports a league roster server failure with its status", () => {
+  const internet = recordingInternet(
+    () =>
+      new Response(JSON.stringify({ error: { description: "Upstream failed" } }), { status: 500 }),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const failure = yield* Effect.flip(
+      provider.readLeagueRosters({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+      }),
+    );
+
+    if (failure._tag !== "provider.request_failed") {
+      return assert.fail(`expected a request failure, got ${failure._tag}`);
+    }
+    assert.strictEqual(failure.status, 500);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
 it.effect("publishes a team's remaining FAAB balance only when your league sends one", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflLeagueTeamsWithFaab));
   return Effect.gen(function* () {
@@ -4740,7 +4803,7 @@ it.effect("reads league team membership through the SDK transport", () => {
     assert.isNull(call.body);
     assert.deepStrictEqual(call.options, {
       timeoutMs: 30_000,
-      maxResponseBytes: 4_194_304,
+      maxResponseBytes: 8_388_608,
     });
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
@@ -4879,7 +4942,7 @@ it.effect("reads a week roster through the SDK transport", () => {
     assert.isNull(call.body);
     assert.deepStrictEqual(call.options, {
       timeoutMs: 30_000,
-      maxResponseBytes: 4_194_304,
+      maxResponseBytes: 8_388_608,
     });
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
@@ -4995,7 +5058,7 @@ it.effect("reads player details through the SDK transport", () => {
     assert.isNull(call.body);
     assert.deepStrictEqual(call.options, {
       timeoutMs: 30_000,
-      maxResponseBytes: 4_194_304,
+      maxResponseBytes: 8_388_608,
     });
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
@@ -5182,7 +5245,7 @@ it.effect("reads a week schedule through the SDK transport", () => {
     assert.isNull(call.body);
     assert.deepStrictEqual(call.options, {
       timeoutMs: 30_000,
-      maxResponseBytes: 4_194_304,
+      maxResponseBytes: 8_388_608,
     });
   }).pipe(Effect.provide(yahooLayer(internet)));
 });

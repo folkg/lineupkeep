@@ -91,10 +91,13 @@ GET https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_
   response and its direct league entries. That collection is scoped to the
   signed-in manager and returns one team per league. A root
   `leagues;league_keys={leagueKeys}/teams;out=roster` request does return every
-  team in those leagues, but its five-league live response was 19.5 MB, which
-  exceeds the SDK's 4 MiB read bound. Full-league rosters therefore remain a
-  per-league read, and `rosters.forLeagues` publishes the signed-in manager's
-  teams only. The transaction and games-played shapes were also decoded against
+  team in those leagues, but its five-league live response was 19.5 MB, so the
+  aggregate collection is not one read. Full-league rosters are the
+  per-league `rosters.forLeague` operation, which requests
+  `league/{leagueKey}/teams;out=roster`, publishes one coverage for the league
+  and every team's roster, and declares an 8 MiB response bound; five live
+  single-league responses measured 1.7–2.4 MB each. `rosters.forLeagues`
+  publishes the signed-in manager's teams only. The transaction and games-played shapes were also decoded against
   the reference MLB fixtures for that request. A live team can publish an empty
   `games_played` object; that means no games-played data, not a malformed
   response.
@@ -308,9 +311,9 @@ package, and no application code imports the SDK yet.
 ### What the application gains
 
 - **Batch-first discovery and rosters.** One `leagues.discover` call replaces a
-  game-by-game discovery loop, one `rosters.forLeagues` call replaces repeated
-  league roster reads, and `players.search` groups several leagues in one
-  request. The application can adopt these without a new product surface.
+  game-by-game discovery loop, one `rosters.forLeague` call returns a full
+  league's rosters, and `players.search` groups several leagues in one request.
+  The application can adopt these without a new product surface.
 - **Draft-pick trades.** `trades.propose` already accepts `sendPicks` and
   `receivePicks`; the provider body and a successful pending-trade round trip
   are recorded. `ProviderLeagueSettings.tradeDraftPicks` already records the

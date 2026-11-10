@@ -30,7 +30,6 @@ import type {
   ProviderFantasyDay,
   ProviderGamesPlayed,
   ProviderLeagueSettings,
-  ProviderLeagueRoster,
   ProviderLineupAssignment,
   ProviderPeriodSupport,
   ProviderStatBasis,
@@ -81,7 +80,7 @@ import {
   yahooWriteDeadlineMillis,
   yahooWriteResponseLimitBytes,
 } from "./YahooLimits.ts";
-import { scoreYahooRoster, yahooCapabilities, yahooPlayerStatus } from "./YahooLineup.ts";
+import { scoreYahooRoster, yahooCapabilities } from "./YahooLineup.ts";
 import type { YahooPlayerFacts, YahooStartRateCut, YahooStartRateSummary } from "./YahooLineup.ts";
 import type {
   YahooDraftPick,
@@ -102,6 +101,7 @@ import {
   readDraftResultsThroughSdk,
   readLeagueTeamsThroughSdk,
   readLeagueThroughSdk,
+  readLeagueRostersThroughSdk,
   readMatchupsThroughSdk,
   readPendingTradesThroughSdk,
   readPlayerDetailsRawThroughSdk,
@@ -110,11 +110,8 @@ import {
   readRosterThroughSdk,
   readStandingsThroughSdk,
   readTransactionsThroughSdk,
-  rosterSlotOf,
   scheduledOpponent,
   searchPlayersThroughSdk,
-  startingLineupOf,
-  transactionTrendOf,
   validateSessionThroughSdk,
   yahooHostOrigin,
   yahooSdkContext,
@@ -282,58 +279,17 @@ export const yahooProvider = Effect.gen(function* () {
   ) {
     yield* Effect.annotateCurrentSpan("provider.operation", "read_league_rosters");
     const cookie = yield* sessionCookie(input, "read_league_rosters");
-    const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_league_rosters");
-    const payload = yield* readJson(internet, {
-      operation: "read_league_rosters",
-      origin: readOrigin,
-      path: `/fantasy/v2/league/${leagueKey}/teams;out=roster`,
-      query: { format: "json" },
+    const rosters = yield* readLeagueRostersThroughSdk(
+      sdk,
+      "read_league_rosters",
       cookie,
-      normalize: true,
-    });
-    const decoded = yield* decodePayload(LeagueRostersPayload, payload, "read_league_rosters");
-    if (decoded.league.league_key !== leagueKey) {
-      return yield* responseMismatch({
-        operation: "read_league_rosters",
-        field: "league.league_key",
-      });
-    }
-    const seen = new Set<string>();
-    const rosters: ProviderLeagueRoster[] = [];
-    for (const team of decoded.league.teams) {
-      if (seen.has(team.team_key)) {
-        return yield* responseMismatch({
-          operation: "read_league_rosters",
-          field: "league.teams.team_key",
-        });
-      }
-      seen.add(team.team_key);
-      rosters.push(yield* leagueRosterFromPayload(team, leagueKey));
-    }
-    if (rosters.length === 0) {
-      return yield* responseMismatch({ operation: "read_league_rosters", field: "league.teams" });
-    }
-    const coverage = rosters[0]?.coverage;
-    if (
-      coverage === undefined ||
-      rosters.some((roster) => !sameRosterCoverage(roster.coverage, coverage))
-    ) {
-      return yield* responseMismatch({
-        operation: "read_league_rosters",
-        field: "league.teams.roster.coverage",
-      });
-    }
+      input.providerLeagueKey,
+    );
     yield* Effect.annotateCurrentSpan({
       "provider.team_count": rosters.length,
       "provider.player_count": rosters.reduce((total, roster) => total + roster.players.length, 0),
     });
-    return rosters.toSorted((left, right) =>
-      left.providerTeamKey < right.providerTeamKey
-        ? -1
-        : left.providerTeamKey > right.providerTeamKey
-          ? 1
-          : 0,
-    );
+    return rosters;
   });
 
   const readRosterSchedule = Effect.fn("YahooProvider.readRosterSchedule")(function* (
@@ -1995,106 +1951,6 @@ function weekWindow(
   });
 }
 
-function leagueRosterFromPayload(
-  team: (typeof LeagueRostersPayload.Type)["league"]["teams"][number],
-  requestedLeagueKey: string,
-): Effect.Effect<ProviderLeagueRoster, ProviderResponseInvalid> {
-  return Effect.gen(function* () {
-    if (providerLeagueKey(team.team_key) !== requestedLeagueKey) {
-      return yield* responseMismatch({
-        operation: "read_league_rosters",
-        field: "league.teams.team_key",
-      });
-    }
-    const roster = team.roster;
-    const entries = isReadonlyArray(roster)
-      ? roster
-      : "entries" in roster
-        ? roster.entries
-        : [roster];
-    const players = entries.flatMap((entry) => entry.players);
-    if (players.length === 0) {
-      return yield* responseMismatch({
-        operation: "read_league_rosters",
-        field: `league.teams.${team.team_key}.roster.players`,
-      });
-    }
-    const coverage = yield* leagueRosterCoverage(
-      players,
-      isReadonlyArray(roster) ? undefined : roster,
-    );
-    return {
-      providerTeamKey: team.team_key,
-      providerLeagueKey: requestedLeagueKey,
-      name: team.name,
-      coverage,
-      players: players.map(toRosterPlayer),
-    };
-  });
-}
-
-function leagueRosterCoverage(
-  players: ReadonlyArray<typeof LeagueRosterPlayerPayload.Type>,
-  declared: typeof RosterCoverage.Type | undefined,
-): Effect.Effect<ProviderRosterCoverage, ProviderResponseInvalid> {
-  return Effect.gen(function* () {
-    const coverageTypes = new Set(players.map((player) => player.selected_position.coverage_type));
-    const coverageType = [...coverageTypes][0];
-    if (coverageTypes.size !== 1 || coverageType === undefined) {
-      return yield* responseMismatch({ operation: "read_league_rosters" });
-    }
-    if (coverageType === "week") {
-      const weeks = new Set(
-        players.flatMap((player) =>
-          player.selected_position.week === undefined ? [] : [player.selected_position.week],
-        ),
-      );
-      if (weeks.size > 1) {
-        return yield* responseMismatch({ operation: "read_league_rosters" });
-      }
-      const playerWeek = [...weeks][0];
-      const declaredWeek = declared?.week;
-      if (declaredWeek !== undefined && playerWeek !== undefined && declaredWeek !== playerWeek) {
-        return yield* responseMismatch({ operation: "read_league_rosters" });
-      }
-      const week = declaredWeek ?? playerWeek;
-      if (week === undefined) {
-        return yield* responseMismatch({ operation: "read_league_rosters" });
-      }
-      return { type: "week" as const, week };
-    }
-    if (coverageType === "date") {
-      const dates = new Set(
-        players.flatMap((player) =>
-          player.selected_position.date === undefined ? [] : [player.selected_position.date],
-        ),
-      );
-      if (dates.size > 1) {
-        return yield* responseMismatch({ operation: "read_league_rosters" });
-      }
-      const playerDate = [...dates][0];
-      const declaredDate = declared?.date;
-      if (declaredDate !== undefined && playerDate !== undefined && declaredDate !== playerDate) {
-        return yield* responseMismatch({ operation: "read_league_rosters" });
-      }
-      const date = declaredDate ?? playerDate;
-      if (date === undefined) {
-        return yield* responseMismatch({ operation: "read_league_rosters" });
-      }
-      return { type: "date" as const, date };
-    }
-    return yield* responseMismatch({ operation: "read_league_rosters" });
-  });
-}
-
-function sameRosterCoverage(left: ProviderRosterCoverage, right: ProviderRosterCoverage): boolean {
-  return left.type === "week" && right.type === "week"
-    ? left.week === right.week
-    : left.type === "date" && right.type === "date"
-      ? left.date === right.date
-      : false;
-}
-
 function mergeDailySchedules(
   days: ReadonlyArray<ReadonlyArray<ProviderSchedulePlayer>>,
 ): ReadonlyArray<ProviderSchedulePlayer> {
@@ -2128,37 +1984,6 @@ function scheduleDates(period: {
     });
   }
   return Effect.succeed(dates);
-}
-
-function toRosterPlayer(player: typeof LeagueRosterPlayerPayload.Type): ProviderRosterPlayer {
-  const opponent = scheduledOpponent(player.opponent);
-  return {
-    providerPlayerKey: player.player_key,
-    name: player.name.full,
-    displayPosition: player.display_position,
-    primaryPosition: player.primary_position,
-    positionType: optionalNonEmpty(player.position_type),
-    proTeamAbbreviation: optionalNonEmpty(player.editorial_team_abbr ?? ""),
-    eligiblePositions: (player.eligible_positions ?? []).map(({ position }) => position),
-    slot: rosterSlotOf(player.selected_position.position),
-    isEditable: player.is_editable ?? null,
-    injuryCode: optionalNonEmpty(player.status),
-    injuryDetail: optionalNonEmpty(player.injury_note) ?? optionalNonEmpty(player.status_full),
-    status: yahooPlayerStatus(optionalNonEmpty(player.status)),
-    byeWeek: player.bye_weeks?.week ?? null,
-    scheduled: opponent !== undefined,
-    opponent,
-    startingLineup: startingLineupOf(startingFlagOf(player.starting_status)),
-    undroppable: player.is_undroppable ?? null,
-    transactionTrend: transactionTrendOf(player.transactions),
-  };
-}
-
-function startingFlagOf(
-  status: ReadonlyArray<typeof StartingStatus.Type> | undefined,
-): boolean | undefined {
-  const starting = status?.find((entry) => entry.is_starting === 0 || entry.is_starting === 1);
-  return starting === undefined ? undefined : starting.is_starting === 1;
 }
 
 function pitcherSlotOf(league: ProviderLeagueSettings): string | undefined {
@@ -2873,10 +2698,6 @@ function playerLabel(player: ProviderTransaction["players"][number]): string {
   return player.name === undefined ? "a player" : `player ${JSON.stringify(player.name)}`;
 }
 
-function isReadonlyArray<A>(value: ReadonlyArray<A> | A): value is ReadonlyArray<A> {
-  return Array.isArray(value);
-}
-
 function reviewBase(url: string, sport: FantasySport, leagueId: string): URL {
   const parsed = new URL(url);
   if (
@@ -3055,10 +2876,6 @@ function ValidWeek(value: number): Effect.Effect<number, ProviderResponseInvalid
     : ProviderResponseInvalid.make({ operation: "read_roster" });
 }
 
-function optionalNonEmpty(value: string | undefined): string | undefined {
-  return value === undefined || value.trim() === "" ? undefined : value;
-}
-
 const SessionCookie = Schema.Trim.pipe(
   Schema.check(Schema.isMinLength(1)),
   Schema.check(Schema.isMaxLength(8_192)),
@@ -3079,114 +2896,12 @@ const IntFromStringOrNumber: Schema.Codec<number, number | string> = Schema.Unio
   ),
 );
 
-const Flag: Schema.Codec<boolean, boolean | number | string> = Schema.Union([
-  Schema.Boolean,
-  Schema.Finite,
-  Schema.String,
-]).pipe(
-  Schema.decodeTo(
-    Schema.Boolean,
-    SchemaTransformation.transform({
-      decode: (value) =>
-        typeof value === "boolean"
-          ? value
-          : typeof value === "number"
-            ? value !== 0
-            : value === "1",
-      encode: (value) => value,
-    }),
-  ),
-);
-
 const CrumbPayload = Schema.Struct({
   service: Schema.Struct({
     crumb: Schema.NullOr(Schema.String),
   }),
 });
 
-const StartingStatus = Schema.Struct({
-  coverage_type: Schema.optional(Schema.String),
-  date: Schema.optional(Schema.String),
-  week: Schema.optional(IntFromStringOrNumber),
-  is_starting: Schema.optional(IntFromStringOrNumber),
-});
-
-const PlayerTransactions = Schema.Union([
-  Schema.Struct({
-    adds: Schema.optional(IntFromStringOrNumber),
-    drops: Schema.optional(IntFromStringOrNumber),
-  }),
-  Schema.Array(
-    Schema.Struct({
-      adds: Schema.optional(IntFromStringOrNumber),
-      drops: Schema.optional(IntFromStringOrNumber),
-    }),
-  ),
-]);
-
-const RosterPlayerFields = Schema.Struct({
-  player_key: Schema.String.pipe(Schema.check(Schema.isPattern(/^[0-9]+\.p\.[0-9]+$/u))),
-  name: Schema.Struct({ full: Schema.NonEmptyString }),
-  display_position: Schema.NonEmptyString,
-  primary_position: Schema.NonEmptyString,
-  position_type: Schema.optional(Schema.String),
-  eligible_positions: Schema.optional(Schema.Array(Schema.Struct({ position: Schema.String }))),
-  editorial_team_key: Schema.optional(Schema.String),
-  editorial_team_abbr: Schema.optional(Schema.String),
-  selected_position: Schema.Struct({
-    coverage_type: Schema.NonEmptyString,
-    week: Schema.optional(IntFromStringOrNumber),
-    date: Schema.optional(Schema.String),
-    position: Schema.Union([Schema.NonEmptyString, Schema.Literal("")]),
-    is_flex: Schema.optional(Flag),
-  }),
-  is_editable: Schema.optional(Flag),
-  status: Schema.optional(Schema.String),
-  status_full: Schema.optional(Schema.String),
-  injury_note: Schema.optional(Schema.String),
-  bye_weeks: Schema.optional(Schema.Struct({ week: IntFromStringOrNumber })),
-  is_undroppable: Schema.optional(Flag),
-});
-
-const LeagueRosterPlayerPayload = Schema.Struct({
-  ...RosterPlayerFields.fields,
-  opponent: Schema.optional(Schema.NullOr(Schema.String)),
-  starting_status: Schema.optional(Schema.Array(StartingStatus)),
-  transactions: Schema.optional(PlayerTransactions),
-});
-
-const RosterCoverage = Schema.Struct({
-  coverage_type: Schema.optional(Schema.NonEmptyString),
-  week: Schema.optional(IntFromStringOrNumber),
-  date: Schema.optional(Schema.String),
-});
-
-const LeagueRosterEntry = Schema.Struct({
-  ...RosterCoverage.fields,
-  players: Schema.Array(LeagueRosterPlayerPayload),
-});
-
-const LeagueKey = Schema.String.pipe(Schema.check(Schema.isPattern(/^[0-9]+\.l\.[0-9]+$/u)));
-const TeamKey = Schema.String.pipe(
-  Schema.check(Schema.isPattern(/^[0-9]+\.l\.[0-9]+\.t\.[0-9]+$/u)),
-);
-
-const LeagueRostersPayload = Schema.Struct({
-  league: Schema.Struct({
-    league_key: LeagueKey,
-    teams: Schema.Array(
-      Schema.Struct({
-        team_key: TeamKey,
-        name: Schema.NonEmptyString,
-        roster: Schema.Union([
-          Schema.Array(LeagueRosterEntry),
-          Schema.Struct({ ...RosterCoverage.fields, entries: Schema.Array(LeagueRosterEntry) }),
-          LeagueRosterEntry,
-        ]),
-      }),
-    ),
-  }),
-});
 const GamesPlayedPositionPayload = Schema.Struct({
   position: Schema.NonEmptyString,
   games_played: Schema.Struct({
@@ -3213,6 +2928,11 @@ const GamesPlayedByTypePayload = Schema.Struct({
     }),
   ),
 });
+
+const LeagueKey = Schema.String.pipe(Schema.check(Schema.isPattern(/^[0-9]+\.l\.[0-9]+$/u)));
+const TeamKey = Schema.String.pipe(
+  Schema.check(Schema.isPattern(/^[0-9]+\.l\.[0-9]+\.t\.[0-9]+$/u)),
+);
 
 const GamesPlayedTypePayload = Schema.Struct({
   games_played_by_position_type: GamesPlayedByTypePayload,

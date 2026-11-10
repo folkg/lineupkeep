@@ -305,6 +305,125 @@ export const datedRosterPayload = {
   },
 };
 
+export const leagueRostersPayload = {
+  fantasy_content: {
+    league: [
+      leagueAttributes,
+      {
+        teams: {
+          "0": {
+            team: [
+              [{ team_key: "466.l.4000.t.1" }, { name: "Synthetic Team" }],
+              {
+                roster: {
+                  "0": {
+                    players: {
+                      "0": {
+                        player: [
+                          ...playerFragments({
+                            key: "466.p.20001",
+                            name: "Synthetic Starter",
+                            displayPosition: "QB",
+                            primaryPosition: "QB",
+                            eligiblePositions: ["QB", "W/R"],
+                            proTeam: "SYN",
+                            proTeamKey: "nfl.t.2",
+                            byeWeek: "7",
+                            undroppable: "0",
+                          }),
+                          {
+                            selected_position: [
+                              { coverage_type: "week", week: "6" },
+                              { position: "QB" },
+                              { is_flex: 0 },
+                            ],
+                          },
+                          {
+                            starting_status: {
+                              "0": { coverage_type: "week", week: "6" },
+                              "1": { is_starting: 1 },
+                              count: 2,
+                            },
+                          },
+                          { opponent: "SEA" },
+                          { transactions: { adds: "37", drops: "3" } },
+                        ],
+                      },
+                      "1": {
+                        player: [
+                          ...playerFragments({
+                            key: "466.p.20002",
+                            name: "Synthetic Reserve",
+                            displayPosition: "WR",
+                            primaryPosition: "WR",
+                            eligiblePositions: ["WR"],
+                            proTeam: "SYN",
+                            status: "O",
+                            statusFull: "Out",
+                            injuryNote: "Synthetic injury note",
+                            undroppable: "1",
+                          }),
+                          {
+                            selected_position: [
+                              { coverage_type: "week", week: "6" },
+                              { position: "BN" },
+                              { is_flex: 0 },
+                            ],
+                          },
+                          { opponent: null },
+                        ],
+                      },
+                      count: 2,
+                    },
+                  },
+                  coverage_type: "week",
+                  week: "6",
+                },
+              },
+            ],
+          },
+          "1": {
+            team: [
+              [{ team_key: "466.l.4000.t.2" }, { name: "Synthetic Rival" }],
+              {
+                roster: {
+                  "0": {
+                    players: {
+                      "0": {
+                        player: [
+                          ...playerFragments({
+                            key: "466.p.20003",
+                            name: "Synthetic Rival Player",
+                            displayPosition: "RB",
+                            primaryPosition: "RB",
+                            eligiblePositions: ["RB"],
+                            proTeam: "SYN",
+                          }),
+                          {
+                            selected_position: [
+                              { coverage_type: "week", week: "6" },
+                              { position: "RB" },
+                              { is_flex: 0 },
+                            ],
+                          },
+                        ],
+                      },
+                      count: 1,
+                    },
+                  },
+                  coverage_type: "week",
+                  week: "6",
+                },
+              },
+            ],
+          },
+          count: 2,
+        },
+      },
+    ],
+  },
+};
+
 const playerIdentity = (playerKey: string, name: string): ReadonlyArray<unknown> => [
   { player_key: playerKey },
   { player_id: playerKey.split(".").at(-1) },

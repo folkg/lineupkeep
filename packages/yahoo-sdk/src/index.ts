@@ -8,6 +8,7 @@ export {
   Protocol,
   YahooProtocol,
   hostOrigin,
+  maximumReadLimitBytes,
   type ProtocolShape,
   type RequestSpec,
   type YahooHost,
@@ -55,6 +56,8 @@ export type {
 export type {
   YahooGamesPlayed,
   YahooLeagueRoster,
+  YahooLeagueRosters,
+  YahooLeagueRosterTeam,
   YahooPendingTransaction,
   YahooRoster,
   YahooRosterPlayer,

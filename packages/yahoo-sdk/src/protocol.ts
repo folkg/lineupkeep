@@ -59,6 +59,7 @@ interface DecodeArgs<I, O> {
   readonly operation: string;
   readonly response: HttpClientResponse.HttpClientResponse;
   readonly input: I;
+  readonly responseLimitBytes?: number;
   readonly decode: (
     payload: unknown,
     input: I,
@@ -116,7 +117,8 @@ export function hostOrigin(host: YahooHost): string {
 }
 
 const readDeadline = Duration.seconds(30);
-const readLimitBytes = 4 * 1024 * 1024;
+const defaultReadLimitBytes = 4 * 1024 * 1024;
+export const maximumReadLimitBytes = 8 * 1024 * 1024;
 const writeDeadline = Duration.seconds(30);
 const writeLimitBytes = 256 * 1024;
 
@@ -265,7 +267,12 @@ function decode(
   args: DecodeArgs<unknown, unknown> & { readonly write: boolean },
 ): Effect.Effect<unknown, YahooWriteError> {
   return Effect.gen(function* () {
-    const text = yield* readBody(args.response, args.operation, args.write);
+    const text = yield* readBody(
+      args.response,
+      args.operation,
+      args.write,
+      args.write ? undefined : args.responseLimitBytes,
+    );
     if (args.response.status >= 200 && args.response.status < 300) {
       const payload = text.trim() === "" ? undefined : parseJson(text);
       if (text.trim() !== "" && payload === undefined) {
@@ -346,8 +353,9 @@ function readBody(
   response: HttpClientResponse.HttpClientResponse,
   operation: string,
   write: boolean,
+  responseLimitBytes: number | undefined,
 ): Effect.Effect<string, YahooWriteError> {
-  const limit = write ? writeLimitBytes : readLimitBytes;
+  const limit = write ? writeLimitBytes : (responseLimitBytes ?? defaultReadLimitBytes);
   const deadline = write ? writeDeadline : readDeadline;
   return effectBody(response, deadline).pipe(
     Effect.mapError((error) =>

@@ -9,7 +9,7 @@ import {
   optionalNonEmpty,
 } from "#yahoo/decode.ts";
 import { YahooCoverageMismatch, YahooParseError } from "#yahoo/errors.ts";
-import { YahooDate, sameCoverage } from "#yahoo/keys.ts";
+import { YahooDate, leagueKeyOfTeam, sameCoverage } from "#yahoo/keys.ts";
 import type { YahooCoverage, YahooLeagueKey, YahooTeamKey } from "#yahoo/keys.ts";
 
 import type { YahooTransactionCounts } from "./player.ts";
@@ -65,9 +65,7 @@ function rosterRows(
   };
 }
 
-function leagueRosterRows(
-  roster: (typeof AggregateLeagueRostersPayload.Type)["teams"][number]["roster"],
-): RosterRows<typeof LeagueRosterPlayerPayload.Type> {
+function leagueRosterRows(roster: LeagueRoster): RosterRows<typeof LeagueRosterPlayerPayload.Type> {
   if (isReadonlyArray(roster)) {
     return {
       declared: undefined,
@@ -235,6 +233,18 @@ export type YahooLeagueRoster = YahooRoster & {
   readonly gamesPlayed?: ReadonlyArray<YahooGamesPlayed>;
 };
 
+export type YahooLeagueRosters = {
+  readonly leagueKey: string;
+  readonly coverage: YahooCoverage;
+  readonly teams: ReadonlyArray<YahooLeagueRosterTeam>;
+};
+
+export type YahooLeagueRosterTeam = {
+  readonly teamKey: string;
+  readonly name: string;
+  readonly players: ReadonlyArray<YahooRosterPlayer>;
+};
+
 export type YahooPendingTransaction = {
   readonly transactionKey?: string;
   readonly type: string;
@@ -365,6 +375,11 @@ type RosterRows<Player> = {
   readonly players: ReadonlyArray<Player>;
 };
 
+type LeagueRoster =
+  | ReadonlyArray<typeof LeagueRosterEntry.Type>
+  | (RosterCoverageMetadata & { readonly entries: ReadonlyArray<typeof LeagueRosterEntry.Type> })
+  | typeof LeagueRosterEntry.Type;
+
 const SelectedPosition = Schema.Struct({
   coverage_type: Schema.NonEmptyString,
   week: Schema.optional(IntFromStringOrNumber),
@@ -460,6 +475,66 @@ const TeamRosterPayload = Schema.Struct({
   }),
 });
 
+export function decodeLeagueRosters(
+  payload: unknown,
+  requestedLeagueKey: YahooLeagueKey,
+): Effect.Effect<YahooLeagueRosters, YahooParseError> {
+  return Effect.gen(function* () {
+    const decoded = yield* decodePayload(LeagueRostersPayload, payload, "read_league_rosters");
+    if (decoded.league.league_key !== requestedLeagueKey) {
+      return yield* new YahooParseError({
+        operation: "read_league_rosters",
+        field: "league.league_key",
+      });
+    }
+    const teamKeys = new Set<YahooTeamKey>();
+    const teams: Array<YahooLeagueRosterTeam> = [];
+    let coverage: YahooCoverage | undefined;
+    for (const team of decoded.league.teams) {
+      if (teamKeys.has(team.team_key) || leagueKeyOfTeam(team.team_key) !== requestedLeagueKey) {
+        return yield* new YahooParseError({
+          operation: "read_league_rosters",
+          field: "league.teams.team_key",
+        });
+      }
+      teamKeys.add(team.team_key);
+      const rows = leagueRosterRows(team.roster);
+      if (rows.players.length === 0) {
+        return yield* new YahooParseError({
+          operation: "read_league_rosters",
+          field: `league.teams.${team.team_key}.roster.players`,
+        });
+      }
+      const teamCoverage = yield* coverageOf(rows.declared, rows.players, "read_league_rosters");
+      if (coverage !== undefined && !sameCoverage(coverage, teamCoverage)) {
+        return yield* new YahooParseError({
+          operation: "read_league_rosters",
+          field: "league.teams.roster.coverage",
+        });
+      }
+      coverage = teamCoverage;
+      teams.push({
+        teamKey: team.team_key,
+        name: team.name,
+        players: rows.players.map(rosterPlayerOf),
+      });
+    }
+    if (coverage === undefined) {
+      return yield* new YahooParseError({
+        operation: "read_league_rosters",
+        field: "league.teams",
+      });
+    }
+    return {
+      leagueKey: requestedLeagueKey,
+      coverage,
+      teams: teams.toSorted((left, right) =>
+        left.teamKey < right.teamKey ? -1 : left.teamKey > right.teamKey ? 1 : 0,
+      ),
+    };
+  });
+}
+
 export function decodeLeagueRostersMany(
   payload: unknown,
   requestedLeagueKeys: ReadonlyArray<YahooLeagueKey>,
@@ -532,6 +607,25 @@ const GamesPlayedGroupPayload = Schema.Struct({
       ),
     }),
   ),
+});
+
+const LeagueRostersPayload = Schema.Struct({
+  league: Schema.Struct({
+    league_key: Schema.String.pipe(Schema.check(Schema.isPattern(/^[0-9]+\.l\.[0-9]+$/u))),
+    teams: Schema.Array(
+      Schema.Struct({
+        team_key: Schema.String.pipe(
+          Schema.check(Schema.isPattern(/^[0-9]+\.l\.[0-9]+\.t\.[0-9]+$/u)),
+        ),
+        name: Schema.NonEmptyString,
+        roster: Schema.Union([
+          Schema.Array(LeagueRosterEntry),
+          Schema.Struct({ ...RosterCoverage.fields, entries: Schema.Array(LeagueRosterEntry) }),
+          LeagueRosterEntry,
+        ]),
+      }),
+    ),
+  }),
 });
 
 const AggregateLeagueRostersPayload = Schema.Struct({

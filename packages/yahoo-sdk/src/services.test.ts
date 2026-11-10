@@ -15,6 +15,7 @@ import {
   leagueSettingsPayload,
   leagueSettingsWithPartialWeekWindow,
   leagueSettingsWithZeroLimits,
+  leagueRostersPayload,
   matchupsPayload,
   pendingTradeAsTransactionPayload,
   pendingTradesPayload,
@@ -45,6 +46,8 @@ const client = {
   readStandings: (input: WithSession<Yahoo.leagues.StandingsRequest>) =>
     Yahoo.leagues.standings(input),
   readRoster: (input: WithSession<Yahoo.rosters.ForTeamRequest>) => Yahoo.rosters.forTeam(input),
+  readLeagueRosters: (input: WithSession<Yahoo.rosters.ForLeagueRequest>) =>
+    Yahoo.rosters.forLeague(input),
   readPlayerDetails: (input: WithSession<Yahoo.players.DetailsRequest>) =>
     Yahoo.players.details(input),
   readMatchups: (input: WithSession<Yahoo.matchups.WeekRequest>) => Yahoo.matchups.week(input),
@@ -363,6 +366,179 @@ it.effect("reads a date roster and keeps the provider's date coverage", () => {
     });
     assert.strictEqual(roster.players[0]?.proTeamAbbreviation, "SYN");
     assert.strictEqual(roster.players[0]?.proTeamKey, "nhl.t.17");
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("reads every team's roster in one league with the team roster's player rows", () => {
+  const recording = recordingClient(() => jsonResponse(leagueRostersPayload));
+  return Effect.gen(function* () {
+    const rosters = yield* client.readLeagueRosters({ session, leagueKey: "466.l.4000" });
+
+    const call = recording.calls[0];
+    if (call === undefined) {
+      return yield* Effect.die("expected one request");
+    }
+    assert.strictEqual(
+      call.url,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/teams;out=roster?format=json",
+    );
+    assert.strictEqual(rosters.leagueKey, "466.l.4000");
+    assert.deepStrictEqual(rosters.coverage, { type: "week", week: 6 });
+    assert.deepStrictEqual(
+      rosters.teams.map((team) => ({
+        teamKey: team.teamKey,
+        name: team.name,
+        players: team.players.map((player) => player.playerKey),
+      })),
+      [
+        {
+          teamKey: "466.l.4000.t.1",
+          name: "Synthetic Team",
+          players: ["466.p.20001", "466.p.20002"],
+        },
+        {
+          teamKey: "466.l.4000.t.2",
+          name: "Synthetic Rival",
+          players: ["466.p.20003"],
+        },
+      ],
+    );
+
+    const [starter, reserve] = rosters.teams[0]?.players ?? [];
+    if (starter === undefined || reserve === undefined) {
+      return yield* Effect.die("expected two players on the first team");
+    }
+    assert.strictEqual(starter.selectedPosition.position, "QB");
+    assert.deepStrictEqual(starter.eligiblePositions, ["QB", "W/R"]);
+    assert.strictEqual(starter.proTeamKey, "nfl.t.2");
+    assert.strictEqual(starter.byeWeek, 7);
+    assert.strictEqual(starter.undroppable, false);
+    assert.strictEqual(starter.opponent, "SEA");
+    assert.deepStrictEqual(starter.startingStatus, {
+      coverage: { type: "week", week: 6 },
+      starting: true,
+    });
+    assert.deepStrictEqual(starter.transactions, { adds: 37, drops: 3 });
+    assert.strictEqual(reserve.statusCode, "O");
+    assert.strictEqual(reserve.statusDetail, "Synthetic injury note");
+    assert.strictEqual(reserve.opponent, null);
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("refuses league rosters that name another league", () => {
+  const recording = recordingClient(() =>
+    jsonResponse(leagueRostersWithTeams([rosterTeam("466.l.4001.t.1")], "466.l.4001")),
+  );
+  return Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      client.readLeagueRosters({ session, leagueKey: "466.l.4000" }),
+    );
+
+    assert.strictEqual(error._tag, "YahooParseError");
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("refuses league rosters with a team key from another league", () => {
+  const recording = recordingClient(() =>
+    jsonResponse(leagueRostersWithTeams([rosterTeam("466.l.4001.t.1")])),
+  );
+  return Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      client.readLeagueRosters({ session, leagueKey: "466.l.4000" }),
+    );
+
+    assert.strictEqual(error._tag, "YahooParseError");
+    if (error._tag === "YahooParseError") {
+      assert.strictEqual(error.field, "league.teams.team_key");
+    }
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("refuses league rosters that publish the same team twice", () => {
+  const recording = recordingClient(() =>
+    jsonResponse(
+      leagueRostersWithTeams([
+        rosterTeam("466.l.4000.t.1"),
+        rosterTeam("466.l.4000.t.1", "Synthetic Duplicate"),
+      ]),
+    ),
+  );
+  return Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      client.readLeagueRosters({ session, leagueKey: "466.l.4000" }),
+    );
+
+    assert.strictEqual(error._tag, "YahooParseError");
+    if (error._tag === "YahooParseError") {
+      assert.strictEqual(error.field, "league.teams.team_key");
+    }
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("refuses league rosters whose teams disagree on coverage", () => {
+  const recording = recordingClient(() =>
+    jsonResponse(
+      leagueRostersWithTeams([
+        rosterTeam("466.l.4000.t.1", "Synthetic Team", 6),
+        rosterTeam("466.l.4000.t.2", "Synthetic Rival", 7),
+      ]),
+    ),
+  );
+  return Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      client.readLeagueRosters({ session, leagueKey: "466.l.4000" }),
+    );
+
+    assert.strictEqual(error._tag, "YahooParseError");
+    if (error._tag === "YahooParseError") {
+      assert.strictEqual(error.field, "league.teams.roster.coverage");
+    }
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("refuses a league roster read with no teams or an empty roster", () => {
+  const empty = leagueRostersWithTeams([]);
+  const emptyRoster = leagueRostersWithTeams([
+    rosterTeam("466.l.4000.t.1", "Synthetic Team", 6, []),
+  ]);
+
+  return Effect.gen(function* () {
+    const noTeams = yield* Effect.flip(
+      client
+        .readLeagueRosters({ session, leagueKey: "466.l.4000" })
+        .pipe(Effect.provide(testLayer(recordingClient(() => jsonResponse(empty)).client))),
+    );
+    assert.strictEqual(noTeams._tag, "YahooParseError");
+
+    const noPlayers = yield* Effect.flip(
+      client
+        .readLeagueRosters({ session, leagueKey: "466.l.4000" })
+        .pipe(Effect.provide(testLayer(recordingClient(() => jsonResponse(emptyRoster)).client))),
+    );
+    assert.strictEqual(noPlayers._tag, "YahooParseError");
+  });
+});
+
+it.effect("accepts a league roster answer above the default read bound", () => {
+  const recording = recordingClient(() => jsonResponse(leagueRostersPadded(5 * 1024 * 1024)));
+  return Effect.gen(function* () {
+    const rosters = yield* client.readLeagueRosters({ session, leagueKey: "466.l.4000" });
+
+    assert.strictEqual(rosters.teams.length, 2);
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("refuses a league roster answer above its own read bound", () => {
+  const recording = recordingClient(() => jsonResponse(leagueRostersPadded(9 * 1024 * 1024)));
+  return Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      client.readLeagueRosters({ session, leagueKey: "466.l.4000" }),
+    );
+
+    assert.strictEqual(error._tag, "YahooHttpError");
+    if (error._tag === "YahooHttpError") {
+      assert.include(error.message, "exceeded");
+    }
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
 
@@ -1343,3 +1519,67 @@ it.effect("redacts a crumb echoed in a provider refusal body", () => {
     }
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
+
+function leagueRostersWithTeams(teams: ReadonlyArray<unknown>, leagueKey = "466.l.4000"): unknown {
+  return {
+    fantasy_content: {
+      league: [
+        { league_key: leagueKey, name: "Synthetic NFL League" },
+        {
+          teams: Object.fromEntries(teams.map((team, index) => [String(index), { team }])),
+        },
+      ],
+    },
+  };
+}
+
+function rosterTeam(
+  teamKey: string,
+  name = "Synthetic Team",
+  week = 6,
+  playerKeys: ReadonlyArray<string> = ["466.p.20001"],
+): ReadonlyArray<unknown> {
+  return [
+    [{ team_key: teamKey }, { name }],
+    {
+      roster: {
+        "0": {
+          players: Object.fromEntries(
+            playerKeys.map((playerKey, index) => [
+              String(index),
+              { player: rosterPlayer(playerKey, week) },
+            ]),
+          ),
+        },
+        coverage_type: "week",
+        week,
+      },
+    },
+  ];
+}
+
+function rosterPlayer(playerKey: string, week: number): ReadonlyArray<unknown> {
+  return [
+    { player_key: playerKey },
+    { name: { full: "Synthetic Player" } },
+    { display_position: "QB" },
+    { position_type: "O" },
+    { primary_position: "QB" },
+    { selected_position: [{ coverage_type: "week", week }, { position: "QB" }] },
+  ];
+}
+
+function leagueRostersPadded(bytes: number): unknown {
+  return {
+    ...leagueRostersPayload,
+    fantasy_content: {
+      league: [
+        leagueRostersPayload.fantasy_content.league[0],
+        {
+          ...leagueRostersPayload.fantasy_content.league[1],
+          padding: "x".repeat(bytes),
+        },
+      ],
+    },
+  };
+}
