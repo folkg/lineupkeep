@@ -1,0 +1,85 @@
+{
+  "fantasy_content": {
+    "xml:lang": "en-US",
+    "users": {
+      "0": {
+        "user": [
+          {
+            "guid": "RECORDEDGUID"
+          },
+          {
+            "games": {
+              "0": {
+                "game": [
+                  [
+                    {
+                      "game_key": "470"
+                    },
+                    {
+                      "game_id": "470"
+                    },
+                    {
+                      "name": "Football"
+                    },
+                    {
+                      "code": "nfl"
+                    },
+                    {
+                      "type": "full"
+                    },
+                    {
+                      "url": "https://example.invalid/recorded"
+                    },
+                    {
+                      "season": "2026"
+                    }
+                  ],
+                  {
+                    "leagues": {
+                      "0": {
+                        "league": [
+                          [
+                            {
+                              "league_key": "470.l.70271"
+                            },
+                            {
+                              "league_id": "70271"
+                            },
+                            {
+                              "name": "Recorded"
+                            },
+                            {
+                              "url": "https://example.invalid/recorded"
+                            },
+                            {
+                              "num_teams": 12
+                            },
+                            {
+                              "current_week": 10
+                            },
+                            {
+                              "season": "2026"
+                            }
+                          ],
+                          {
+                            "players": []
+                          }
+                        ]
+                      },
+                      "count": 1
+                    }
+                  }
+                ]
+              },
+              "count": 1
+            }
+          }
+        ]
+      },
+      "count": 1
+    },
+    "time": "148.21410179138ms",
+    "copyright": "Certain Data by Sportradar, Stats Perform and Rotowire",
+    "refresh_rate": "30"
+  }
+}

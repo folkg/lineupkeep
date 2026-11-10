@@ -3291,3 +3291,31 @@ export const recordedAggregateRoster = {
     ],
   },
 };
+
+export const recordedAggregateEmptyPlayerSearch = {
+  fantasy_content: {
+    users: [
+      {
+        guid: "RECORDEDGUID",
+        games: [
+          {
+            game_key: "470",
+            code: "nfl",
+            season: "2026",
+            leagues: [
+              {
+                league_key: "470.l.70271",
+                league_id: "70271",
+                name: "Recorded",
+                num_teams: 12,
+                current_week: 10,
+                season: "2026",
+                players: [],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+};

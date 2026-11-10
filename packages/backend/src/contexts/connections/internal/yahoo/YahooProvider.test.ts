@@ -13,6 +13,9 @@ import {
 } from "effect";
 import { TestClock } from "effect/testing";
 
+import yahooNflFreeAgentPoolEmpty from "#contexts/connections/fixtures/yahoo-nfl-free-agent-pool-2026-11-10.json";
+import yahooNflPlayerWeeksLive from "#contexts/connections/fixtures/yahoo-nfl-player-weeks-2026-11-10.json";
+import yahooNflWaiverPool from "#contexts/connections/fixtures/yahoo-nfl-waiver-pool-2026-11-10.json";
 import capturedTransactionRefusal from "#contexts/connections/fixtures/yahoo-transaction-refusal-2026-11-03.json";
 import { LineupTargetPeriod } from "#contexts/connections/LineupRun.ts";
 import {
@@ -2344,6 +2347,219 @@ it.effect("rejects an empty roster as an unestablished period", () => {
         ...sessionInput,
         providerTeamKey: "466.l.4000.t.1",
         period: undefined,
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("publishes an empty football free-agent pool without a weekly-fact failure", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflFreeAgentPoolEmpty));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const result = yield* provider.searchPlayers({
+      ...sessionInput,
+      providerLeagueKey: "470.l.70271",
+      season: 2026,
+      query: undefined,
+      availability: "free_agent",
+      sort: "ownership",
+      statId: undefined,
+      statType: "season",
+      limit: 25,
+    });
+    const weeks = yield* provider.readPlayerWeeks({
+      ...sessionInput,
+      providerLeagueKey: "470.l.70271",
+      providerPlayerKeys: result.players.map((player) => player.providerPlayerKey),
+      week: { week: 10 },
+    });
+
+    assert.deepStrictEqual(result.players, []);
+    assert.deepStrictEqual(weeks, []);
+    assert.deepStrictEqual(
+      internet.calls.map((call) => call.url.href),
+      [
+        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1/games;game_keys=nfl,nhl,nba,mlb/leagues;league_keys=470.l.70271/players;status=FA;sort=R_PO;count=25;out=ownership,percent_owned,percent_started,ranks,transactions,opponent,starting_status?format=json",
+      ],
+    );
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("publishes the football waiver pool's rows and fields", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflWaiverPool));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const result = yield* provider.searchPlayers({
+      ...sessionInput,
+      providerLeagueKey: "470.l.70271",
+      season: 2026,
+      query: undefined,
+      availability: "waiver",
+      sort: "ownership",
+      statId: undefined,
+      statType: "season",
+      limit: 25,
+    });
+
+    assert.deepStrictEqual(
+      result.players.map((player) => ({
+        providerPlayerKey: player.providerPlayerKey,
+        name: player.name,
+        primaryPosition: player.primaryPosition,
+        displayPosition: player.displayPosition,
+        eligiblePositions: player.eligiblePositions,
+        availability: player.availability,
+        proTeam: player.proTeam,
+        proTeamKey: player.proTeamKey,
+        percentOwned: player.percentOwned,
+        percentOwnedDelta: player.percentOwnedDelta,
+        percentStarted: player.percentStarted,
+        percentStartedChange: player.percentStartedChange,
+        actualRank: player.actualRank,
+        overallRank: player.overallRank,
+        transactionTrend: player.transactionTrend,
+        status: player.status,
+      })),
+      [
+        {
+          providerPlayerKey: "470.p.100017",
+          name: "Recorded Defense",
+          primaryPosition: "DEF",
+          displayPosition: "DEF",
+          eligiblePositions: ["DEF"],
+          availability: "waiver",
+          proTeam: "NE",
+          proTeamKey: "nfl.t.17",
+          percentOwned: 66,
+          percentOwnedDelta: -1,
+          percentStarted: 53,
+          percentStartedChange: null,
+          actualRank: 214,
+          overallRank: 189,
+          transactionTrend: {
+            status: "published",
+            adds: 56,
+            drops: 6194,
+            window: "provider_current_day",
+          },
+          status: { value: "healthy", code: undefined, detail: undefined },
+        },
+        {
+          providerPlayerKey: "470.p.40078",
+          name: "Recorded Tight End",
+          primaryPosition: "TE",
+          displayPosition: "TE",
+          eligiblePositions: ["TE", "W/R/T"],
+          availability: "waiver",
+          proTeam: "Jax",
+          proTeamKey: "nfl.t.30",
+          percentOwned: 58,
+          percentOwnedDelta: 0,
+          percentStarted: 26,
+          percentStartedChange: 3,
+          actualRank: 144,
+          overallRank: 111,
+          transactionTrend: {
+            status: "published",
+            adds: 1591,
+            drops: 2406,
+            window: "provider_current_day",
+          },
+          status: { value: "healthy", code: undefined, detail: undefined },
+        },
+        {
+          providerPlayerKey: "470.p.28227",
+          name: "Recorded Kicker",
+          primaryPosition: "K",
+          displayPosition: "K",
+          eligiblePositions: ["K"],
+          availability: "waiver",
+          proTeam: "Chi",
+          proTeamKey: "nfl.t.3",
+          percentOwned: 56,
+          percentOwnedDelta: -3,
+          percentStarted: 52,
+          percentStartedChange: -4,
+          actualRank: 106,
+          overallRank: 234,
+          transactionTrend: {
+            status: "published",
+            adds: 16,
+            drops: 19707,
+            window: "provider_current_day",
+          },
+          status: { value: "healthy", code: undefined, detail: undefined },
+        },
+      ],
+    );
+    assert.deepStrictEqual(
+      internet.calls.map((call) => call.url.href),
+      [
+        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1/games;game_keys=nfl,nhl,nba,mlb/leagues;league_keys=470.l.70271/players;status=W;sort=R_PO;count=25;out=ownership,percent_owned,percent_started,ranks,transactions,opponent,starting_status?format=json",
+      ],
+    );
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("reads weekly facts for the football pool's rows", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflPlayerWeeksLive));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const weeks = yield* provider.readPlayerWeeks({
+      ...sessionInput,
+      providerLeagueKey: "470.l.70271",
+      providerPlayerKeys: ["470.p.100017", "470.p.40078", "470.p.28227"],
+      week: { week: 10 },
+    });
+
+    assert.deepStrictEqual(weeks, [
+      {
+        providerPlayerKey: "470.p.100017",
+        week: 10,
+        plays: true,
+        opponent: { opponent: "Rec", home: false },
+        projectedRank: 230,
+      },
+      {
+        providerPlayerKey: "470.p.40078",
+        week: 10,
+        plays: true,
+        opponent: { opponent: "Rec", home: false },
+        projectedRank: 89,
+      },
+      {
+        providerPlayerKey: "470.p.28227",
+        week: 10,
+        plays: true,
+        opponent: { opponent: "Rec", home: true },
+        projectedRank: 1014,
+      },
+    ]);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("refuses a malformed football pool payload instead of publishing no rows", () => {
+  const malformed = withMalformedPlayerCollection(structuredClone(yahooNflWaiverPool));
+  const internet = recordingInternet(() => jsonResponse(malformed));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.searchPlayers({
+        ...sessionInput,
+        providerLeagueKey: "470.l.70271",
+        season: 2026,
+        query: undefined,
+        availability: "waiver",
+        sort: "ownership",
+        statId: undefined,
+        statType: "season",
+        limit: 25,
       }),
     );
 
@@ -5647,6 +5863,25 @@ function rosterMember(
       reason: "Synthetic absence.",
     },
   };
+}
+
+function withMalformedPlayerCollection(payload: unknown): unknown {
+  if (Array.isArray(payload)) {
+    return payload.map(withMalformedPlayerCollection);
+  }
+  if (!isRecord(payload)) {
+    return payload;
+  }
+  if ("players" in payload) {
+    return { ...payload, players: "not-a-collection" };
+  }
+  return Object.fromEntries(
+    Object.entries(payload).map(([key, value]) => [key, withMalformedPlayerCollection(value)]),
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function planLeague(input: {

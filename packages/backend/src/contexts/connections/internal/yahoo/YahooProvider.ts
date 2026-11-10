@@ -488,7 +488,7 @@ export const yahooProvider = Effect.gen(function* () {
     yield* Effect.annotateCurrentSpan("provider.operation", "read_player_weeks");
     const cookie = yield* sessionCookie(input, "read_player_weeks");
     const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_player_weeks");
-    const playerKeys = yield* ValidBatchPlayerKeys(input.providerPlayerKeys);
+    const playerKeys = yield* ValidBatchPlayerKeys(input.providerPlayerKeys, "read_player_weeks");
     const weeks: Array<ProviderPlayerWeekFact> = [];
     for (let index = 0; index < playerKeys.length; index += maximumSelectedPlayers) {
       const chunk = playerKeys.slice(index, index + maximumSelectedPlayers);
@@ -518,7 +518,7 @@ export const yahooProvider = Effect.gen(function* () {
     yield* Effect.annotateCurrentSpan("provider.operation", "read_player_history");
     const cookie = yield* sessionCookie(input, "read_player_history");
     const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_player_history");
-    const playerKeys = yield* ValidBatchPlayerKeys(input.providerPlayerKeys);
+    const playerKeys = yield* ValidBatchPlayerKeys(input.providerPlayerKeys, "read_player_history");
     const periods = yield* ValidPlayerPeriods(input.periods);
     const history: Array<ProviderPlayerPeriod> = [];
     for (const period of periods) {
@@ -557,7 +557,10 @@ export const yahooProvider = Effect.gen(function* () {
     yield* Effect.annotateCurrentSpan("provider.operation", "read_player_details");
     const cookie = yield* sessionCookie(input, "read_player_details");
     const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_player_details");
-    const playerKeys = yield* ValidBatchPlayerKeys(input.providerPlayerKeys);
+    const playerKeys = yield* ValidBatchPlayerKeys(input.providerPlayerKeys, "read_player_details");
+    if (playerKeys.length === 0) {
+      return [];
+    }
     const details = yield* readPlayerDetailsRawThroughSdk(sdk, "read_player_details", cookie, {
       leagueKey,
       playerKeys,
@@ -1976,13 +1979,13 @@ function ValidPlayerPeriods(
 
 function ValidBatchPlayerKeys(
   value: ReadonlyArray<string>,
+  operation: ProviderOperation,
 ): Effect.Effect<ReadonlyArray<string>, ProviderResponseInvalid> {
   if (
-    value.length === 0 ||
     value.length > maximumHistoryPlayers ||
     !value.every((key) => /^[0-9]+\.p\.[0-9]+$/u.test(key))
   ) {
-    return ProviderResponseInvalid.make({ operation: "read_player_history" });
+    return ProviderResponseInvalid.make({ operation });
   }
   return Effect.succeed(value);
 }

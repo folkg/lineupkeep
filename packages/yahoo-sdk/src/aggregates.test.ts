@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 
 import {
   recordedAggregateDiscover,
+  recordedAggregateEmptyPlayerSearch,
   recordedAggregatePlayerSearch,
   recordedAggregateRoster,
 } from "./aggregateFixturesTest.ts";
@@ -50,6 +51,24 @@ it.effect(
     }).pipe(Effect.provide(testLayer(recording.client)));
   },
 );
+
+it.effect("searches a recorded live empty free-agent answer without failing", () => {
+  const recording = recordingClient(() => jsonResponse(recordedAggregateEmptyPlayerSearch));
+
+  return Effect.gen(function* () {
+    const groups = yield* Yahoo.players.search({
+      leagueKeys: [leagueKey],
+      availability: "free_agent",
+      sort: "ownership",
+      sortType: "season",
+      limit: 25,
+    });
+
+    assert.strictEqual(groups.length, 1);
+    assert.strictEqual(groups[0]?.leagueKey, leagueKey);
+    assert.deepStrictEqual(groups[0]?.players, []);
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
 
 it.effect("passes requested game keys, ranks, and cut types to a player search", () => {
   const recording = recordingClient(() => jsonResponse(recordedAggregatePlayerSearch));
