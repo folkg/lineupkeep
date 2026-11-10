@@ -758,9 +758,10 @@ the assets its own trade request can name, and the review publishes that declara
 `tradeProposal` (`assets` and a plain `detail`) on each team. A pick the request cannot carry is
 accepted, validated, and shown on the review with both sides named, then skipped with that true
 reason when the set is submitted; nothing is sent for it, and it is never silently dropped. For
-Yahoo, its web trade request accepts players only and refused a draft pick with "Invalid XML POSTed.
-Error code 25", while its app trade request does accept a pick: the limit is the write host we have
-not shown our stored sign-in can reach, not the product.
+Yahoo, the adapter sends a player-only trade to its website write host and a pick-bearing trade to
+its app write host, in the captured `<picks><pick>` shape. The website host refused that shape with
+"Invalid XML POSTed. Error code 25"; the app host is the one the SDK capture proved. A refusal from
+either host returns in league terms with the provider's own sentence, and the item stays replaceable.
 Staging a trade reads the league settings, both rosters, the league's teams, and the available
 draft picks for both teams, and refuses the item when the counterparty is not another team in the
 same league, a player is not on the roster they would leave, or the trade window has closed. A free-agent add carries no bid, a waiver claim carries one of 0 or more, and a

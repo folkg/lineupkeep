@@ -424,9 +424,35 @@ Yahoo's sentence as `detail` only when Yahoo actually supplied one.
 | `readAvailableDraftPicks`  | none                         | The adapter reads the Android read host with `out=available_draft_picks`; `leagues.teamAnalysis` uses the web host and a different `out`.                                                                                                                                                               |
 | `scoreRoster` player facts | none                         | Needs percent-started cut types and the full rank set; no SDK operation requests that shape.                                                                                                                                                                                                            |
 
-Writes are unchanged. The SDK's `lineups.setNative`, `lineups.assign`, `transactions.apply`,
-`trades.propose`, `trades.withdraw`, and `lineups.reserve` cover the adapter's write surface but are not
-enabled. `trades.propose` also accepts draft picks, which the port does not carry yet.
+Writes keep the adapter's own transport. The SDK's `lineups.setNative`, `lineups.assign`,
+`transactions.apply`, `trades.propose`, `trades.withdraw`, and `lineups.reserve` cover the adapter's
+write surface but are not enabled as SDK operations. The SDK's host table now names both write hosts,
+`write` and `androidWrite`, and its `hostOrigin` is the one list the adapter resolves them from; a
+write request to either host carries the same crumb and `json_f` format.
+
+### Draft picks in a trade
+
+`ProviderShape.proposeTrade` carries `picks`, each one a round, a source team, and a destination team.
+The adapter validates every key against the trade's two parties, writes the captured app shape
+`<picks><pick><source_team_key>…</source_team_key><destination_team_key>…</destination_team_key><round>…</round></pick></picks>`
+after any players, and sends a pick-bearing proposal to `https://pub-api-android-rw.fantasysports.yahoo.com`.
+A player-only proposal stays on `https://pub-api-rw.fantasysports.yahoo.com`. That host choice lives in
+the adapter; nothing above the port names either host. A provider refusal keeps its own sentence as the
+item's failure detail, and the item is replaceable like any refused item. A successful proposal stores
+the provider's pending-trade key and state.
+
+The live re-proof with the stored connection could not run. On 9 November every write answered HTTP 401
+with the provider's sentence "Cookie has timed out, please log in again." — a player-only proposal, a
+roster write, and the same requests on both write hosts. Reads still authenticated on both read hosts,
+and a deliberately wrong crumb answered 403 "Invalid crumb", so the session's write half had lapsed,
+not the request body. No proposal was created, so there was nothing to cancel.
+
+The pick shape is the captured one, and the earlier refusal is recorded in the roadmap: the same shape
+on the website write host answered 400 "Invalid XML POSTed. Error code 25", a parse failure, while a
+player-only body on that host reaches semantic validation. The product sends the app host the capture
+proved rather than treating the website's parse refusal as the product's answer. The live write is
+unproven with our stored sign-in; the fixtures prove the body, the host choice, the sentence, and the
+stored key.
 
 ### Migration order
 

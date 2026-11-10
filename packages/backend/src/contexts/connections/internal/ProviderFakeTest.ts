@@ -40,6 +40,7 @@ import type {
   ProviderStatBasis,
   ProviderStatPeriod,
   ProviderTeam,
+  ProviderTradePick,
   ProviderTradeProposalResult,
   ProviderTransaction,
   ProviderTransactionPlayer,
@@ -124,6 +125,7 @@ type FakeProviderState = {
   readonly transactionRequests: ReadonlyArray<FakeTransactionRequest>;
   readonly tradeProposalAction: FakeWriteAction;
   readonly tradeProposalKey: string | undefined;
+  readonly tradeProposalDetail: string | undefined;
   readonly tradeProposalRequests: ReadonlyArray<FakeTradeProposalRequest>;
   readonly withdrawTradeAction: FakeWriteAction;
   readonly withdrawTradeDetail: string | undefined;
@@ -210,7 +212,11 @@ export type FakeProviderWorldShape = {
     action: FakeWriteAction,
   ) => Effect.Effect<void>;
   readonly transactionRequests: Effect.Effect<ReadonlyArray<FakeTransactionRequest>>;
-  readonly setTradeProposalAction: (action: FakeWriteAction, key?: string) => Effect.Effect<void>;
+  readonly setTradeProposalAction: (
+    action: FakeWriteAction,
+    key?: string,
+    detail?: string,
+  ) => Effect.Effect<void>;
   readonly tradeProposalRequests: Effect.Effect<ReadonlyArray<FakeTradeProposalRequest>>;
   readonly setWithdrawTradeAction: (
     action: FakeWriteAction,
@@ -288,6 +294,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         transactionRequests: [],
         tradeProposalAction: "accept",
         tradeProposalKey: "nhl.l.1.pt.1",
+        tradeProposalDetail: undefined,
         tradeProposalRequests: [],
         withdrawTradeAction: "accept",
         withdrawTradeDetail: undefined,
@@ -399,8 +406,13 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
             teamTransactionActions: { ...current.teamTransactionActions, [teamKey]: action },
           })),
         transactionRequests: Effect.map(Ref.get(state), (current) => current.transactionRequests),
-        setTradeProposalAction: (tradeProposalAction, tradeProposalKey) =>
-          modify((current) => ({ ...current, tradeProposalAction, tradeProposalKey })),
+        setTradeProposalAction: (tradeProposalAction, tradeProposalKey, tradeProposalDetail) =>
+          modify((current) => ({
+            ...current,
+            tradeProposalAction,
+            tradeProposalKey,
+            tradeProposalDetail,
+          })),
         tradeProposalRequests: Effect.map(
           Ref.get(state),
           (current) => current.tradeProposalRequests,
@@ -734,6 +746,7 @@ const providerFake = Effect.gen(function* () {
             counterpartyTeamKey: input.counterpartyTeamKey,
             send: input.send,
             receive: input.receive,
+            picks: input.picks,
             note: input.note,
             session: Redacted.value(input.session),
           },
@@ -749,6 +762,7 @@ const providerFake = Effect.gen(function* () {
                   counterpartyTeamKey: input.counterpartyTeamKey,
                   send: input.send,
                   receive: input.receive,
+                  picks: input.picks,
                   note: input.note,
                 }),
               ],
@@ -762,7 +776,7 @@ const providerFake = Effect.gen(function* () {
           ? { status: "unknown" as const }
           : { status: "accepted" as const, transactionKey: acceptedKey };
       }
-      return tradeWriteResult(current.tradeProposalAction);
+      return tradeWriteResult(current.tradeProposalAction, current.tradeProposalDetail);
     }),
     withdrawTrade: Effect.fn("FakeProvider.withdrawTrade")(function* (input) {
       const current = yield* prepare(input, "withdraw_trade").pipe(
@@ -1104,9 +1118,9 @@ const fakeCapabilities: ProviderCapabilities = {
   projections: { basis: "week", sports: ["football"] },
   scheduleRead: { maximumDates: 21 },
   tradeProposal: {
-    assets: ["player"],
+    assets: ["player", "draft_pick"],
     detail:
-      "The fake provider's trade request accepts players only, and this connection cannot send a draft pick. Picks are read and reviewed, never offered.",
+      "The fake provider's trade request accepts players and draft picks. A pick names its round and the two teams it moves between.",
   },
   transactionRequest: { maximumAdds: 1, maximumDrops: 1 },
   limitations: [
@@ -1238,6 +1252,7 @@ function fakePendingTrade(input: {
   readonly counterpartyTeamKey: string;
   readonly send: ReadonlyArray<string>;
   readonly receive: ReadonlyArray<string>;
+  readonly picks: ReadonlyArray<ProviderTradePick>;
   readonly note: string | undefined;
 }): ProviderPendingTrade {
   const proposer = { providerTeamKey: input.providerTeamKey, name: undefined };
@@ -1267,12 +1282,20 @@ function fakePendingTrade(input: {
       ...input.send.map((key) => player(key, proposer, receiver)),
       ...input.receive.map((key) => player(key, receiver, proposer)),
     ],
-    picks: [],
+    picks: input.picks.map((pick) => ({
+      round: pick.round,
+      from: { providerTeamKey: pick.sourceTeamKey, name: undefined },
+      to: { providerTeamKey: pick.destinationTeamKey, name: undefined },
+      original: undefined,
+    })),
     incomplete: undefined,
   };
 }
 
-function tradeWriteResult(action: Exclude<FakeWriteAction, "accept">): ProviderTradeProposalResult {
+function tradeWriteResult(
+  action: Exclude<FakeWriteAction, "accept">,
+  detail?: string,
+): ProviderTradeProposalResult {
   switch (action) {
     case "lost_response":
       return { status: "unknown" };
@@ -1280,7 +1303,11 @@ function tradeWriteResult(action: Exclude<FakeWriteAction, "accept">): ProviderT
       return { status: "not_sent", reason: "request_failed" };
     case "reject":
     case "invalid":
-      return { status: "rejected", reason: "invalid_request" };
+      return {
+        status: "rejected",
+        reason: "invalid_request",
+        ...(detail === undefined ? {} : { detail }),
+      };
   }
 }
 
@@ -1394,6 +1421,7 @@ type FakeTradeProposalRequest = {
   readonly counterpartyTeamKey: string;
   readonly send: ReadonlyArray<string>;
   readonly receive: ReadonlyArray<string>;
+  readonly picks: ReadonlyArray<ProviderTradePick>;
   readonly note: string | undefined;
   readonly session: string;
 };

@@ -459,13 +459,10 @@ shaped `{round}_{originalTeamId}`. Every XML shape tried against the transaction
 schema level, while a real player in the same body reaches semantic validation, so the request shape is
 the limit rather than the product.
 
-To propose a pick we would need the website session, which means storing more of the account's cookies
-than the API needs. The owner chose to keep the API-only connection, so a pick is refused with that
-reason and the rule is reported honestly.
-
-A future route worth trying: capture the provider's mobile app traffic, which likely speaks a private
-API with picks. An Android emulator can trust a proxy certificate without a rooted phone; app pinning
-may still refuse, in which case instrumentation is needed. Recorded here rather than scheduled.
+The capture in `packages/yahoo-sdk/docs/mobile-api.md` answered the shape, and F3 below carries the
+work: a pick crosses the port, the adapter sends it to the app write host, and a refusal keeps the
+provider's sentence. The website write host still refuses the pick body at parse level, so no website
+session is stored.
 
 ### What the capture session is for
 
@@ -474,17 +471,17 @@ Android. One capture session is worth more than one question, so the list below 
 of things we cannot read today and would act on. Every entry is a question to answer from observed
 traffic, never a promise; an entry that turns out not to exist is deleted rather than guessed at.
 
-| Question                                                                                              | What it would change                                                           | Where it probably lives                           |
-| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------- |
-| How does a pick enter a trade request?                                                                | Draft pick trades become proposable, which is the seed of this section         | The trade submission call behind the website form |
-| What are the real bid amounts on resolved waiver claims, and who else bid?                            | Waiver advice can say what a claim needs rather than only what is allowed      | The claim history or transaction detail call      |
-| Why is a player unavailable, in words?                                                                | The app explains a status instead of only showing it, which is what people ask | A player notes or injury feed                     |
-| What is a player's role this week: line, pair, depth?                                                 | Streaming and start/sit advice stops treating every player as interchangeable  | Depth chart or projection detail                  |
-| Who is on the trade block, and what is being shopped?                                                 | Trade proposals can start from real interest instead of a cold offer           | A trade block or team activity call               |
-| What does a keeper cost? The round, pick, team, and season are already published as draft provenance. | A keeper cost the provider states, instead of the owner's own formula          | A keeper or draft-detail call, if one exists      |
-| What is the draft order for next season?                                                              | Pick trade value becomes computable, which is the point of trading picks       | Draft settings or draft results with order        |
-| When does each player lock, per game?                                                                 | A late scratch or a bench swap before a specific game start becomes correct    | Schedule detail or lineup lock metadata           |
-| How are live points attributed per player during a matchup?                                           | Activity can explain a swing in a matchup, not just a lineup change            | Matchup or live scoring detail                    |
+| Question                                                                                              | What it would change                                                                 | Where it probably lives                      |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------- |
+| How does a pick enter a trade request?                                                                | Answered by the Android capture and F3: `<picks><pick>` with round and two team keys | The trade submission call behind the app     |
+| What are the real bid amounts on resolved waiver claims, and who else bid?                            | Waiver advice can say what a claim needs rather than only what is allowed            | The claim history or transaction detail call |
+| Why is a player unavailable, in words?                                                                | The app explains a status instead of only showing it, which is what people ask       | A player notes or injury feed                |
+| What is a player's role this week: line, pair, depth?                                                 | Streaming and start/sit advice stops treating every player as interchangeable        | Depth chart or projection detail             |
+| Who is on the trade block, and what is being shopped?                                                 | Trade proposals can start from real interest instead of a cold offer                 | A trade block or team activity call          |
+| What does a keeper cost? The round, pick, team, and season are already published as draft provenance. | A keeper cost the provider states, instead of the owner's own formula                | A keeper or draft-detail call, if one exists |
+| What is the draft order for next season?                                                              | Pick trade value becomes computable, which is the point of trading picks             | Draft settings or draft results with order   |
+| When does each player lock, per game?                                                                 | A late scratch or a bench swap before a specific game start becomes correct          | Schedule detail or lineup lock metadata      |
+| How are live points attributed per player during a matchup?                                           | Activity can explain a swing in a matchup, not just a lineup change                  | Matchup or live scoring detail               |
 
 Reads to try on our existing channel first, before assuming a capture is needed: the transaction detail
 shape behind a completed trade, the waiver claim history for a league, and any player endpoint that
@@ -495,10 +492,12 @@ removes an entry from the table.
 
 ## F3. Draft picks in trades (owner's next main-line item)
 
-The league switch is published and the SDK's Android capture proved the write: a Round 1 for Round 1 pending trade
-returned 201 and was cancelled with a 204, while the same proposal on the web write host is refused. Our own read
-now reaches the Android v2 read host with the stored connection; the write there is still unproven, so a pick is
-validated and reviewed but never offered.
+The league switch is published, the SDK's Android capture proved the write, and a pick now crosses the
+provider port and is sent with the trade. The adapter chooses the app write host for a pick-bearing
+proposal and keeps the website write host for a player-only trade. The live re-proof with the stored
+connection is blocked on the stored sign-in: reads still authenticate, but every write answered 401
+`Cookie has timed out, please log in again.` on 9 November, so no proposal was created and none was
+cancelled.
 
 - [x] Prove, read-only, that our stored connection authenticates the Android v2 read host for
       `available_draft_picks`, before promising the feature. The stored Yahoo connection (`ready`) read
@@ -515,14 +514,21 @@ validated and reviewed but never offered.
       not allow with the reason, never silently ignore it.
 - [x] Carry picks through a proposal item, the order, submission and the reads, in league terms: a first-round
       pick, from whom, to whom.
-- [x] Say what execution can and cannot honour. The review publishes `tradeProposal` with `assets: [player]` and a
-      plain reason, and submitting a pick trade skips it with that reason and sends nothing.
-- [ ] Owner declined a live write proof on 9 November: picks stay review-only until a quiet way exists to prove the
-      app write host with our stored credential. Nothing is promised beyond what validation and review honour.
+- [x] Say what execution honours. The review publishes `tradeProposal` with `assets: [player, draft_pick]`; a
+      pick is carried in the captured `<picks><pick><source_team_key>…<destination_team_key>…<round>…` shape, and a
+      pick-only trade is a legal trade. A provider refusal returns in league terms with the provider's own
+      sentence and the item stays replaceable; a successful proposal stores the provider's pending-trade key.
+- [ ] Live re-proof with the stored connection. The stored sign-in reads on both read hosts, but every write (a
+      player-only proposal, a roster write, and the same requests on both write hosts) answered 401
+      `Cookie has timed out, please log in again.` A deliberately wrong crumb answered 403 `Invalid crumb`, so
+      the write half of the session had lapsed, not the request body. No proposal was created, so none was
+      cancelled; reconnect and the probe harness can re-run it. The earlier capture remains the evidence for the
+      app write: a Round 1 for Round 1 pending trade returned 201 and was cancelled with 204, while the website
+      write host refused the pick shape with 400 `Invalid XML POSTed. Error code 25`.
 
-**Verify**: a pick proposal is accepted by validation, appears on the review with both sides named, and either
-executes through a proven host or is refused with the true reason. `M` — accepted and reviewed; execution is
-refused with the true reason until the app write host is proven.
+**Verify**: a pick proposal is accepted by validation, appears on the review with both sides named, is sent
+with its picks to the app write host, and a refusal keeps the provider's sentence and leaves the item
+replaceable. `M` — implemented and covered by fixtures; the live write is blocked on a fresh sign-in.
 
 ## G. Provider boundary and simplification
 

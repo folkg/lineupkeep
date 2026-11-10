@@ -509,6 +509,7 @@ it.effect("proposes a two-sided trade and reads the pt key from the response", (
       counterpartyTeamKey: "461.l.1000.t.2",
       send: ["461.p.10001", "461.p.10002"],
       receive: ["461.p.10003"],
+      picks: [],
       note: "Two for one.",
     });
 
@@ -525,6 +526,110 @@ it.effect("proposes a two-sided trade and reads the pt key from the response", (
       write.body,
       '<?xml version="1.0" encoding="UTF-8"?><fantasy_content><transaction><type>pending_trade</type><trader_team_key>461.l.1000.t.1</trader_team_key><tradee_team_key>461.l.1000.t.2</tradee_team_key><trade_note>Two for one.</trade_note><players><player><player_key>461.p.10001</player_key><transaction_data><type>pending_trade</type><source_team_key>461.l.1000.t.1</source_team_key><destination_team_key>461.l.1000.t.2</destination_team_key></transaction_data></player><player><player_key>461.p.10002</player_key><transaction_data><type>pending_trade</type><source_team_key>461.l.1000.t.1</source_team_key><destination_team_key>461.l.1000.t.2</destination_team_key></transaction_data></player><player><player_key>461.p.10003</player_key><transaction_data><type>pending_trade</type><source_team_key>461.l.1000.t.2</source_team_key><destination_team_key>461.l.1000.t.1</destination_team_key></transaction_data></player></players></transaction></fantasy_content>',
     );
+  }).pipe(Effect.provide(yahooLayer(layer)));
+});
+
+it.effect("sends a draft-pick trade to the app write host and keeps the captured body", () => {
+  const calls: Array<{ readonly url: URL; readonly body: string }> = [];
+  const layer = Layer.succeed(PublicInternet)({
+    request: (request) =>
+      Effect.promise(async () => {
+        calls.push({
+          url: new URL(request.url),
+          body: request.body === null ? "" : await request.clone().text(),
+        });
+        return request.url.includes("getCrumb")
+          ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
+          : jsonResponse({
+              fantasy_content: {
+                transaction: {
+                  transaction_key: "461.l.1000.pt.5",
+                  type: "pending_trade",
+                  status: "proposed",
+                },
+              },
+            });
+      }),
+  });
+
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+    const result = yield* provider.proposeTrade({
+      ...sessionInput,
+      providerLeagueKey: "461.l.1000",
+      providerTeamKey: "461.l.1000.t.1",
+      counterpartyTeamKey: "461.l.1000.t.2",
+      send: [],
+      receive: [],
+      picks: [
+        {
+          round: 1,
+          sourceTeamKey: "461.l.1000.t.1",
+          destinationTeamKey: "461.l.1000.t.2",
+        },
+        {
+          round: 1,
+          sourceTeamKey: "461.l.1000.t.2",
+          destinationTeamKey: "461.l.1000.t.1",
+        },
+      ],
+      note: undefined,
+    });
+
+    assert.deepStrictEqual(result, {
+      status: "accepted",
+      transactionKey: "461.l.1000.pt.5",
+    });
+    const write = calls[1];
+    assert.isDefined(write);
+    assert.strictEqual(write.url.origin, "https://pub-api-android-rw.fantasysports.yahoo.com");
+    assert.strictEqual(write.url.pathname, "/fantasy/v2/league/461.l.1000/transactions");
+    assert.strictEqual(
+      write.body,
+      '<?xml version="1.0" encoding="UTF-8"?><fantasy_content><transaction><type>pending_trade</type><trader_team_key>461.l.1000.t.1</trader_team_key><tradee_team_key>461.l.1000.t.2</tradee_team_key><picks><pick><source_team_key>461.l.1000.t.1</source_team_key><destination_team_key>461.l.1000.t.2</destination_team_key><round>1</round></pick><pick><source_team_key>461.l.1000.t.2</source_team_key><destination_team_key>461.l.1000.t.1</destination_team_key><round>1</round></pick></picks></transaction></fantasy_content>',
+    );
+  }).pipe(Effect.provide(yahooLayer(layer)));
+});
+
+it.effect("returns the app write host's sentence for a refused draft-pick trade", () => {
+  const layer = Layer.succeed(PublicInternet)({
+    request: (request) =>
+      Effect.succeed(
+        request.url.includes("getCrumb")
+          ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
+          : new Response(
+              "<error><description>Invalid XML POSTed. Error code 25</description></error>",
+              {
+                status: 400,
+              },
+            ),
+      ),
+  });
+
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+    const result = yield* provider.proposeTrade({
+      ...sessionInput,
+      providerLeagueKey: "461.l.1000",
+      providerTeamKey: "461.l.1000.t.1",
+      counterpartyTeamKey: "461.l.1000.t.2",
+      send: [],
+      receive: [],
+      picks: [
+        {
+          round: 1,
+          sourceTeamKey: "461.l.1000.t.2",
+          destinationTeamKey: "461.l.1000.t.1",
+        },
+      ],
+      note: undefined,
+    });
+    assert.deepStrictEqual(result, {
+      status: "rejected",
+      reason: "invalid_request",
+      detail: "Invalid XML POSTed. Error code 25",
+      httpStatus: 400,
+    });
   }).pipe(Effect.provide(yahooLayer(layer)));
 });
 
@@ -554,6 +659,7 @@ it.effect("reads a proposed trade's key before the request scope closes", () => 
       counterpartyTeamKey: "461.l.1000.t.2",
       send: ["461.p.10001"],
       receive: ["461.p.10003"],
+      picks: [],
       note: undefined,
     });
     assert.deepStrictEqual(result, { status: "accepted", transactionKey: "461.l.1000.pt.5" });
@@ -581,6 +687,7 @@ it.effect("treats an accepted trade propose without a pt key as unknown and neve
       counterpartyTeamKey: "461.l.1000.t.2",
       send: ["461.p.10001"],
       receive: ["461.p.10003"],
+      picks: [],
       note: undefined,
     });
     assert.deepStrictEqual(result, { status: "unknown" });

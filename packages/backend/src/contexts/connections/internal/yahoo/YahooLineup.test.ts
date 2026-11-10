@@ -33,11 +33,10 @@ import type { YahooLineupReader, YahooPlayerFacts } from "./YahooLineup.ts";
 const targetWeek = 7;
 
 describe("Yahoo declared trade proposal assets", () => {
-  it("names players only and says the write host cannot send a pick", () => {
-    expect(yahooCapabilities.tradeProposal.assets).toEqual(["player"]);
-    expect(yahooCapabilities.tradeProposal.detail).toContain("Error code 25");
-    expect(yahooCapabilities.tradeProposal.detail).toContain("has not shown");
-    expect(yahooCapabilities.tradeProposal.detail).toContain("never offered");
+  it("names players and draft picks with the shape a pick carries", () => {
+    expect(yahooCapabilities.tradeProposal.assets).toEqual(["player", "draft_pick"]);
+    expect(yahooCapabilities.tradeProposal.detail).toContain("players and draft picks");
+    expect(yahooCapabilities.tradeProposal.detail).toContain("round");
   });
 });
 

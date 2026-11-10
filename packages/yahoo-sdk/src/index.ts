@@ -7,6 +7,7 @@ export { FetchClient } from "./fetcher.ts";
 export {
   Protocol,
   YahooProtocol,
+  hostOrigin,
   type ProtocolShape,
   type RequestSpec,
   type YahooHost,

@@ -295,6 +295,7 @@ export type ProviderShape = {
       readonly counterpartyTeamKey: string;
       readonly send: ReadonlyArray<string>;
       readonly receive: ReadonlyArray<string>;
+      readonly picks: ReadonlyArray<ProviderTradePick>;
       readonly note: string | undefined;
     },
   ) => Effect.Effect<
@@ -876,6 +877,12 @@ export type ProviderDraftPick = {
 export type ProviderAvailableDraftPick = {
   readonly providerTeamKey: string;
   readonly round: number;
+};
+
+export type ProviderTradePick = {
+  readonly round: number;
+  readonly sourceTeamKey: string;
+  readonly destinationTeamKey: string;
 };
 
 export type ProviderAcquisitionUsage = {

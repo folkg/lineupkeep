@@ -37,6 +37,7 @@ export type YahooHost =
   | "read"
   | "service"
   | "write"
+  | "androidWrite"
   | "mobile"
   | "statcloud"
   | "dfyql"
@@ -99,6 +100,7 @@ const hosts: Readonly<Record<YahooHost, string>> = {
   read: "https://pub-api-ro.fantasysports.yahoo.com",
   service: "https://pub-api.fantasysports.yahoo.com",
   write: "https://pub-api-rw.fantasysports.yahoo.com",
+  androidWrite: "https://pub-api-android-rw.fantasysports.yahoo.com",
   mobile: "https://api-fantasy-mobile.sports.yahoo.com",
   statcloud: "https://api-statcloud.sports.yahoo.com",
   dfyql: "https://dfyql-ro.sports.yahoo.com",
@@ -106,6 +108,10 @@ const hosts: Readonly<Record<YahooHost, string>> = {
   fandom: "https://sports-fandom-api.sports.yahoo.com",
   graphite: "https://graphite.sports.yahoo.com",
 };
+
+export function hostOrigin(host: YahooHost): string {
+  return hosts[host];
+}
 
 const readDeadline = Duration.seconds(30);
 const readLimitBytes = 4 * 1024 * 1024;
@@ -402,7 +408,7 @@ function requestUrl(request: RequestSpec, crumb: string): Effect.Effect<string, 
     if (url.origin !== origin.origin || url.pathname !== request.path) {
       return yield* Effect.fail(new YahooParseError({ operation: "request", field: "path" }));
     }
-    if (request.host === "write") {
+    if (request.host === "write" || request.host === "androidWrite") {
       url.searchParams.set("format", "json_f");
       url.searchParams.set("crumb", crumb);
     } else if (request.format !== "none") {

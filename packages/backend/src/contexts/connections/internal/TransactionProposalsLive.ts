@@ -1738,11 +1738,21 @@ export const TransactionProposalsLive = Layer.effect(
         }
         const send = input.change.drops.map((drop) => drop.key);
         const receive = input.change.adds.map((add) => add.key);
-        if (send.length === 0 || receive.length === 0) {
+        const picks = input.item.picks.map((pick) => ({
+          round: pick.round,
+          sourceTeamKey: pick.sourceTeamKey,
+          destinationTeamKey: pick.destinationTeamKey,
+        }));
+        const outgoing =
+          send.length +
+          picks.filter((pick) => pick.sourceTeamKey === input.facts.providerTeamKey).length;
+        const incoming =
+          receive.length + picks.filter((pick) => pick.sourceTeamKey === counterpartyKey).length;
+        if (outgoing === 0 || incoming === 0) {
           return {
             outcome: "failed",
             detail:
-              "A trade needs at least one player going out and one coming back, so no offer was sent.",
+              "A trade needs at least one asset going out and one coming back, so no offer was sent.",
             steps: [],
             settled: false,
           };
@@ -1756,6 +1766,7 @@ export const TransactionProposalsLive = Layer.effect(
             counterpartyTeamKey: counterpartyKey,
             send,
             receive,
+            picks,
             note: undefined,
           }),
         );
@@ -1770,7 +1781,7 @@ export const TransactionProposalsLive = Layer.effect(
           }
           return {
             outcome: "failed",
-            detail: sessionFailureDetail(sent.failure._tag, "transaction"),
+            detail: sessionFailureDetail(sent.failure._tag, "trade offer"),
             steps: [],
             settled: false,
           };
@@ -5275,7 +5286,7 @@ function notSentDetail(
 
 function sessionFailureDetail(
   tag: "provider.session_rejected" | "provider.response_invalid",
-  subject: "reserve move" | "slot move" | "transaction",
+  subject: "reserve move" | "slot move" | "transaction" | "trade offer",
 ): string {
   return tag === "provider.session_rejected"
     ? `Your league rejected the stored sign-in, so this ${subject} was not sent. Reconnect before proposing a fresh set.`

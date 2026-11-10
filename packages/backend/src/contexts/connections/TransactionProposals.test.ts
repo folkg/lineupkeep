@@ -3127,7 +3127,7 @@ it.effect("refuses the move that cannot reach its slot and keeps the others", ()
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect("accepts and reviews a draft-pick trade your league allows", () =>
+it.effect("sends a draft-pick trade your league allows and records the pending key", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;
     const fake = yield* FakeProviderWorld;
@@ -3195,9 +3195,9 @@ it.effect("accepts and reviews a draft-pick trade your league allows", () =>
       ],
     );
     assert.deepStrictEqual(team.tradeProposal, {
-      assets: ["player"],
+      assets: ["player", "draft_pick"],
       detail:
-        "The fake provider's trade request accepts players only, and this connection cannot send a draft pick. Picks are read and reviewed, never offered.",
+        "The fake provider's trade request accepts players and draft picks. A pick names its round and the two teams it moves between.",
     });
     const itemId = item.id;
     assert.isDefined(itemId);
@@ -3207,11 +3207,79 @@ it.effect("accepts and reviews a draft-pick trade your league allows", () =>
       include: [itemId],
     });
     const submittedItem = Array.getUnsafe(itemsOf(submitted), 0);
-    assert.strictEqual(submittedItem.state, "skipped");
-    assert.include(submittedItem.execution?.detail ?? "", "cannot send a draft pick");
-    assert.include(submittedItem.execution?.detail ?? "", "never offered");
-    assert.deepStrictEqual(yield* fake.writeSequence, []);
-    assert.deepStrictEqual(yield* fake.tradeProposalRequests, []);
+    assert.strictEqual(submittedItem.state, "pending");
+    assert.strictEqual(submittedItem.trade?.state, "pending");
+    assert.include(submittedItem.execution?.detail ?? "", "Offer sent to Blue Line");
+    const repository = yield* TransactionProposalRepository;
+    const stored = yield* repository.load(owner, proposed.set.id);
+    assert.isDefined(stored);
+    assert.strictEqual(
+      stored.items.find((entry) => entry.id === itemId)?.trade?.providerKey,
+      "nhl.l.1.pt.1",
+    );
+    assert.deepStrictEqual(yield* fake.writeSequence, ["propose_trade"]);
+
+    const requests = yield* fake.tradeProposalRequests;
+    assert.strictEqual(requests.length, 1);
+    assert.deepStrictEqual(Array.getUnsafe(requests, 0).send, []);
+    assert.deepStrictEqual(Array.getUnsafe(requests, 0).receive, []);
+    assert.deepStrictEqual(Array.getUnsafe(requests, 0).picks, [
+      { round: 1, sourceTeamKey: "nhl.l.1.t.1", destinationTeamKey: "nhl.l.1.t.2" },
+      { round: 3, sourceTeamKey: "nhl.l.1.t.2", destinationTeamKey: "nhl.l.1.t.1" },
+    ]);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("keeps a refused draft-pick trade's sentence and leaves it replaceable", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seedTradeTeams(fake, {
+      league: leagueFixture({ tradeDraftPicks: true }),
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const rival = yield* counterpartyRef(tokens, "nhl.l.1.t.2");
+    yield* fake.setAvailableDraftPicks([
+      { providerTeamKey: "nhl.l.1.t.1", round: 1 },
+      { providerTeamKey: "nhl.l.1.t.2", round: 1 },
+    ]);
+    yield* fake.setTradeProposalAction("reject", undefined, "That pick is not available to trade.");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [pickTradeDraft(redLine, rival, [1], [1])],
+    });
+    const itemId = Array.getUnsafe(
+      itemsOf(yield* proposals.read(owner, { set: proposed.set.id })),
+      0,
+    ).id;
+
+    const submitted = yield* proposals.submit(owner, {
+      set: proposed.set.id,
+      include: [itemId],
+    });
+    const submittedItem = Array.getUnsafe(itemsOf(submitted), 0);
+    assert.strictEqual(submittedItem.state, "failed");
+    assert.include(
+      submittedItem.execution?.detail ?? "",
+      "Your league rejected the trade offer. It said: That pick is not available to trade.",
+    );
+    assert.strictEqual((yield* fake.tradeProposalRequests).length, 1);
+
+    yield* fake.setTradeProposalAction("accept");
+    yield* fake.setAvailableDraftPicks([
+      { providerTeamKey: "nhl.l.1.t.1", round: 1 },
+      { providerTeamKey: "nhl.l.1.t.1", round: 2 },
+      { providerTeamKey: "nhl.l.1.t.2", round: 1 },
+      { providerTeamKey: "nhl.l.1.t.2", round: 2 },
+    ]);
+    const replacement = yield* proposals.propose(owner, proposer, {
+      items: [pickTradeDraft(redLine, rival, [2], [2])],
+    });
+    assert.notStrictEqual(replacement.set.id, proposed.set.id);
+    assert.strictEqual(
+      Array.getUnsafe(itemsOf(yield* proposals.read(owner, { set: replacement.set.id })), 0).state,
+      "proposed",
+    );
   }).pipe(Effect.provide(TestLayer)),
 );
 
@@ -5231,7 +5299,7 @@ const LineupRunsTest = LineupRunsLive.pipe(
 );
 
 const TestLayer = TransactionProposalsLive.pipe(
-  Layer.provide(TransactionProposalRepository.layer),
+  Layer.provideMerge(TransactionProposalRepository.layer),
   Layer.provideMerge(ConnectionsLive),
   Layer.provideMerge(LineupRunsTest),
   Layer.provideMerge(QueryRepositoryTest),

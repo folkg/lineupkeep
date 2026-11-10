@@ -71,6 +71,7 @@ import type {
   ProviderTransactionParty,
   ProviderTransactionPlayer,
   ProviderTransactionTeam,
+  ProviderTradePick,
   ProviderShape,
   ProviderWriteResult,
 } from "#contexts/connections/Provider.ts";
@@ -112,13 +113,15 @@ import {
   startingLineupOf,
   transactionTrendOf,
   validateSessionThroughSdk,
+  yahooHostOrigin,
   yahooSdkContext,
 } from "./YahooSdk.ts";
 
 const readOrigin = new URL("https://pub-api-ro.fantasysports.yahoo.com");
 const androidReadOrigin = new URL("https://pub-api-android-ro.fantasysports.yahoo.com");
 const serviceOrigin = new URL("https://pub-api.fantasysports.yahoo.com");
-const writeOrigin = new URL("https://pub-api-rw.fantasysports.yahoo.com");
+const writeOrigin = new URL(yahooHostOrigin("write"));
+const androidWriteOrigin = new URL(yahooHostOrigin("androidWrite"));
 const supportedLeagues = ["nfl", "nhl"] as const;
 const leagueSport = {
   nfl: "football",
@@ -488,12 +491,18 @@ export const yahooProvider = Effect.gen(function* () {
       }
       const send = yield* ValidTradePlayerKeys(input.send);
       const receive = yield* ValidTradePlayerKeys(input.receive);
-      if (send.length + receive.length === 0) {
+      const picks = yield* ValidTradePicks(
+        input.picks,
+        input.providerTeamKey,
+        input.counterpartyTeamKey,
+      );
+      if (send.length + receive.length + picks.length === 0) {
         return yield* ProviderResponseInvalid.make({ operation: "propose_trade" });
       }
       yield* Effect.annotateCurrentSpan({
         "provider.send_count": send.length,
         "provider.receive_count": receive.length,
+        "provider.pick_count": picks.length,
       });
       const cookie = yield* sessionCookie(input, "propose_trade");
       const crumb = yield* Effect.result(readCrumb(input, "propose_trade"));
@@ -510,6 +519,7 @@ export const yahooProvider = Effect.gen(function* () {
       const url = yahooWriteUrl(
         `/fantasy/v2/league/${leagueKey}/transactions`,
         Redacted.value(crumb.success.crumb),
+        picks.length > 0 ? androidWriteOrigin : writeOrigin,
       );
       return yield* Effect.scoped(
         Effect.gen(function* () {
@@ -527,6 +537,7 @@ export const yahooProvider = Effect.gen(function* () {
                   counterpartyTeamKey: input.counterpartyTeamKey,
                   send,
                   receive,
+                  picks,
                   note: input.note,
                 }),
               }),
@@ -646,7 +657,7 @@ export const yahooProvider = Effect.gen(function* () {
           ? { status: "not_sent" as const, reason: "session_incomplete" as const }
           : { status: "not_sent" as const, reason: "request_failed" as const };
       }
-      const url = yahooWriteUrl(path, Redacted.value(crumb.success.crumb));
+      const url = yahooWriteUrl(path, Redacted.value(crumb.success.crumb), writeOrigin);
       return yield* Effect.scoped(
         Effect.gen(function* () {
           const response = yield* internet
@@ -1350,13 +1361,13 @@ function yahooUrl(origin: URL, path: string, query: Readonly<Record<string, stri
   return url;
 }
 
-function yahooWriteUrl(path: string, crumb: string): URL {
+function yahooWriteUrl(path: string, crumb: string, origin: URL): URL {
   if (!path.startsWith("/") || path.includes("?") || path.includes("#")) {
     throw new Error("Yahoo write path must be a relative path without query or fragment");
   }
-  const url = new URL(path, writeOrigin);
+  const url = new URL(path, origin);
   if (
-    url.origin !== writeOrigin.origin ||
+    url.origin !== origin.origin ||
     url.username !== "" ||
     url.password !== "" ||
     url.pathname !== path
@@ -1418,10 +1429,29 @@ function ValidTradePlayerKeys(
   keys: ReadonlyArray<string>,
 ): Effect.Effect<ReadonlyArray<string>, ProviderResponseInvalid> {
   const unique = new Set(keys);
-  if (unique.size !== keys.length || !keys.every(isTransactionPlayerKey) || keys.length === 0) {
+  if (unique.size !== keys.length || !keys.every(isTransactionPlayerKey)) {
     return ProviderResponseInvalid.make({ operation: "propose_trade" });
   }
   return Effect.succeed(keys);
+}
+
+function ValidTradePicks(
+  picks: ReadonlyArray<ProviderTradePick>,
+  providerTeamKey: string,
+  counterpartyTeamKey: string,
+): Effect.Effect<ReadonlyArray<ProviderTradePick>, ProviderResponseInvalid> {
+  const identities = new Set(picks.map((pick) => `${String(pick.round)}:${pick.sourceTeamKey}`));
+  const valid = picks.every(
+    (pick) =>
+      Number.isSafeInteger(pick.round) &&
+      pick.round >= 1 &&
+      pick.sourceTeamKey !== pick.destinationTeamKey &&
+      [providerTeamKey, counterpartyTeamKey].includes(pick.sourceTeamKey) &&
+      [providerTeamKey, counterpartyTeamKey].includes(pick.destinationTeamKey),
+  );
+  return valid && identities.size === picks.length
+    ? Effect.succeed(picks)
+    : ProviderResponseInvalid.make({ operation: "propose_trade" });
 }
 
 function ValidTradeTransactionKey(
@@ -1488,6 +1518,7 @@ function tradeProposalBody(input: {
   readonly counterpartyTeamKey: string;
   readonly send: ReadonlyArray<string>;
   readonly receive: ReadonlyArray<string>;
+  readonly picks: ReadonlyArray<ProviderTradePick>;
   readonly note: string | undefined;
 }): string {
   const players = [
@@ -1498,7 +1529,17 @@ function tradeProposalBody(input: {
       tradePlayerBody(key, input.counterpartyTeamKey, input.providerTeamKey),
     ),
   ];
-  return `<?xml version="1.0" encoding="UTF-8"?><fantasy_content><transaction><type>pending_trade</type><trader_team_key>${input.providerTeamKey}</trader_team_key><tradee_team_key>${input.counterpartyTeamKey}</tradee_team_key><trade_note>${xmlText(input.note ?? "")}</trade_note><players>${players.join("")}</players></transaction></fantasy_content>`;
+  const picks = input.picks.map(
+    (pick) =>
+      `<pick><source_team_key>${pick.sourceTeamKey}</source_team_key><destination_team_key>${pick.destinationTeamKey}</destination_team_key><round>${String(pick.round)}</round></pick>`,
+  );
+  const playersBody = players.length === 0 ? "" : `<players>${players.join("")}</players>`;
+  const picksBody = picks.length === 0 ? "" : `<picks>${picks.join("")}</picks>`;
+  const noteBody =
+    input.note === undefined && picks.length > 0
+      ? ""
+      : `<trade_note>${xmlText(input.note ?? "")}</trade_note>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><fantasy_content><transaction><type>pending_trade</type><trader_team_key>${input.providerTeamKey}</trader_team_key><tradee_team_key>${input.counterpartyTeamKey}</tradee_team_key>${noteBody}${playersBody}${picksBody}</transaction></fantasy_content>`;
 }
 
 function tradePlayerBody(

@@ -44,6 +44,8 @@ export type {
   YahooTransactionTeam,
 } from "@lineupkeep/yahoo-sdk";
 
+export const yahooHostOrigin = Yahoo.hostOrigin;
+
 export const yahooSdkContext = (
   internet: PublicInternet["Service"],
 ): Effect.Effect<Context.Context<HttpClient.HttpClient | Yahoo.Protocol>, never> =>

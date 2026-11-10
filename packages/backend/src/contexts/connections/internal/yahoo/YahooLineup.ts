@@ -99,9 +99,9 @@ export const yahooCapabilities: ProviderCapabilities = {
   projections: { basis: "week", sports: ["football"] },
   scheduleRead: { maximumDates: 21 },
   tradeProposal: {
-    assets: ["player"],
+    assets: ["player", "draft_pick"],
     detail:
-      "Yahoo's web trade request accepts players only and refused a draft pick with \"Invalid XML POSTed. Error code 25\". Its app trade request does accept a draft pick, but Lineupgrade has not shown that your stored sign-in can write to that host, so it cannot send one. A league's available draft picks are read and a pick trade is reviewed, never offered.",
+      "The provider's trade request carries players and draft picks. A pick names its round and the two teams it moves between; a player names the two teams it moves between.",
   },
   transactionRequest: { maximumAdds: 1, maximumDrops: 1 },
   limitations: [

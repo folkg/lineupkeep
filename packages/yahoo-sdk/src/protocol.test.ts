@@ -72,6 +72,33 @@ it.effect("reads a crumb before building a write request", () => {
   }).pipe(Effect.provide(layer(recording.client)));
 });
 
+it.effect("reads a crumb before building an app write request", () => {
+  const recording = recordingClient(() => jsonResponse({ service: { crumb: "canary-crumb" } }));
+  return Effect.gen(function* () {
+    const protocol = yield* Protocol;
+    const request = yield* protocol.encode({
+      request: {
+        host: "androidWrite",
+        method: "POST",
+        path: "/fantasy/v2/league/466.l.4000/transactions",
+        body: "<transaction/>",
+      },
+      write: true,
+    });
+
+    assert.strictEqual(
+      request.url,
+      "https://pub-api-android-rw.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/transactions?format=json_f&crumb=canary-crumb",
+    );
+    assert.strictEqual(request.headers["content-type"], "application/xml");
+    assert.strictEqual(recording.calls.length, 1);
+    assert.strictEqual(
+      recording.calls[0]?.url,
+      "https://pub-api.fantasysports.yahoo.com/fantasy/v3/getCrumb?format=json_f",
+    );
+  }).pipe(Effect.provide(layer(recording.client)));
+});
+
 it.effect("reports a missing crumb as not sent", () => {
   const recording = recordingClient(() => jsonResponse({ service: { crumb: null } }));
   return Effect.gen(function* () {
