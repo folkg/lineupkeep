@@ -38,10 +38,14 @@ import type { QueryError, QueryTeam } from "#contexts/connections/QueryValues.ts
 import type { CounterpartyRef, PlayerRef } from "#contexts/connections/QueryValues.ts";
 import {
   rosterOccupancy,
+  rosterPlaceChange,
+  rosterPlaceCount,
   rosterRuleOf,
+  slotCapacity,
   slotMismatchDetail,
   slotPlacement,
 } from "#contexts/connections/RosterSlots.ts";
+import type { RosterPlayerPlace } from "#contexts/connections/RosterSlots.ts";
 import type {
   PendingTradeOffer,
   ProposalBudget,
@@ -1184,10 +1188,20 @@ export const TransactionProposalsLive = Layer.effect(
         }
       }
 
-      const stopped = new Map<TeamId, string>();
+      const sendableIds = new Set(sendable.map((item) => item.id));
+      let held = 0;
       for (const teamId of loaded.set.teams) {
         const check = checkByTeam.get(teamId);
         const teamItems = sequenceByTeam.get(teamId) ?? [];
+        const run =
+          check?.facts === undefined
+            ? undefined
+            : runStateOf({
+                facts: check.facts,
+                items: loaded.items,
+                current: sendableIds,
+                team: teamId,
+              });
         for (const item of teamItems) {
           const current = itemById.get(item.id) ?? item;
           const change = changeById.get(item.id);
@@ -1196,12 +1210,7 @@ export const TransactionProposalsLive = Layer.effect(
           }
           const decidedAt = yield* DateTime.now;
           const position = positionByItem.get(current.id);
-          const stoppedDetail = stopped.get(teamId);
-          if (stoppedDetail !== undefined) {
-            outcomes.push(skippedOutcome(current, stoppedDetail, decidedAt, position, false));
-            continue;
-          }
-          if (check?.facts === undefined || check.context === undefined) {
+          if (check?.facts === undefined || check.context === undefined || run === undefined) {
             outcomes.push(
               skippedOutcome(
                 current,
@@ -1213,13 +1222,23 @@ export const TransactionProposalsLive = Layer.effect(
             );
             continue;
           }
+          const hold = holdDetailFor({
+            item: current,
+            change,
+            facts: check.facts,
+            seats: run.seats,
+            earlier: run.earlier,
+          });
+          if (hold !== undefined) {
+            held += 1;
+            outcomes.push(skippedOutcome(current, hold, decidedAt, position, false));
+            run.earlier.push(pendingEffectOf(current, change, check.facts, run.seats, "skipped"));
+            continue;
+          }
           const refusal = executableRefusal(current, check.context.provider.capabilities);
           if (refusal !== undefined) {
             outcomes.push(skippedOutcome(current, refusal, decidedAt, position, true));
-            stopped.set(
-              teamId,
-              `Not attempted because ${moveLabel(current)} could not be sent. ${refusal} Later moves on this team were not checked against the resulting roster.`,
-            );
+            run.earlier.push(pendingEffectOf(current, change, check.facts, run.seats, "skipped"));
             continue;
           }
           const execution = yield* executeItem({
@@ -1239,8 +1258,12 @@ export const TransactionProposalsLive = Layer.effect(
             settled: execution.settled,
             ...(execution.trade === undefined ? {} : { trade: execution.trade }),
           });
-          if (execution.outcome !== "executed") {
-            stopped.set(teamId, stoppedDetailFor(current, execution.outcome, execution.detail));
+          if (execution.outcome === "executed") {
+            applySeats(current, change, run.seats);
+          } else {
+            run.earlier.push(
+              pendingEffectOf(current, change, check.facts, run.seats, execution.outcome),
+            );
           }
         }
       }
@@ -1293,7 +1316,7 @@ export const TransactionProposalsLive = Layer.effect(
         "proposal.items_pending": final.items.filter((item) => item.outcome === "pending").length,
         "proposal.items_failed": final.items.filter((item) => item.outcome === "failed").length,
         "proposal.items_unknown": final.items.filter((item) => item.outcome === "unknown").length,
-        "proposal.teams_stopped": stopped.size,
+        "proposal.items_held": held,
       });
       return yield* buildReview(
         tokens,
@@ -4982,24 +5005,378 @@ function executableRefusal(
   return undefined;
 }
 
-function stoppedDetailFor(
+type ItemTouch = {
+  readonly key: string;
+  readonly name: string;
+  readonly action: "add" | "drop" | "move";
+};
+
+type SlotEffect = {
+  readonly frees: ReadonlyArray<string>;
+  readonly takes: ReadonlyArray<string>;
+};
+
+type PendingEffect = {
+  readonly label: string;
+  readonly touches: ReadonlyArray<ItemTouch>;
+  readonly slots: SlotEffect;
+  readonly placeDelta: number;
+  readonly branch: "may" | "did-not";
+  readonly trade: boolean;
+  readonly unknown: boolean;
+};
+
+type TeamRun = {
+  readonly seats: Map<string, string | undefined>;
+  readonly earlier: Array<PendingEffect>;
+};
+
+function runStateOf(input: {
+  readonly facts: TeamFacts;
+  readonly items: ReadonlyArray<ProposalItemRecord>;
+  readonly current: ReadonlySet<string>;
+  readonly team: TeamId;
+}): TeamRun {
+  const seats = rosterSeats(input.facts);
+  return {
+    seats,
+    earlier: input.items.flatMap((item) =>
+      item.team === input.team &&
+      !input.current.has(item.id) &&
+      (item.state === "pending" || item.state === "unknown")
+        ? [pendingEffectOf(item, undefined, input.facts, seats, item.state)]
+        : [],
+    ),
+  };
+}
+
+function pendingEffectOf(
   item: ProposalItemRecord,
+  change: ProposalItemChange | undefined,
+  facts: TeamFacts,
+  seats: ReadonlyMap<string, string | undefined>,
   outcome: ProposalOutcome,
-  detail: string | undefined,
-): string {
-  const label = moveLabel(item);
-  const words = detail === undefined ? "" : ` ${detail}`;
-  switch (outcome) {
-    case "failed":
-      return `Not attempted because ${label} failed.${words} Later moves on this team were not checked against the resulting roster.`;
-    case "unknown":
-      return `Not attempted because ${label} may or may not have applied.${words} Later moves on this team were not checked against the resulting roster.`;
-    case "pending":
-      return `Not attempted because ${label} is still pending and may change the roster when it resolves.${words} Later moves on this team were not checked against the resulting roster.`;
-    case "skipped":
-    case "executed":
-      return "Not attempted because an earlier move on this team did not complete.";
+): PendingEffect {
+  const places = placeEffectOf(item, change, facts, seats);
+  return {
+    label: moveLabel(item),
+    touches: itemTouches(item, change),
+    slots: slotEffectOf(item, change, seats),
+    placeDelta: places.frees - places.takes,
+    branch: outcome === "pending" ? "may" : "did-not",
+    trade: outcome === "pending" && item.kind === "trade",
+    unknown: outcome === "unknown",
+  };
+}
+
+function holdDetailFor(input: {
+  readonly item: ProposalItemRecord;
+  readonly change: ProposalItemChange;
+  readonly facts: TeamFacts;
+  readonly seats: ReadonlyMap<string, string | undefined>;
+  readonly earlier: ReadonlyArray<PendingEffect>;
+}): string | undefined {
+  const label = moveLabel(input.item);
+  const touches = itemTouches(input.item, input.change);
+  const places = placeEffectOf(input.item, input.change, input.facts, input.seats);
+  const placesFree = freeRosterPlaces(input.facts, input.seats);
+  const placesNeeded = Math.max(0, places.takes - places.frees);
+  const destination = destinationOf(input.item, input.change);
+  const ownSlots = slotEffectOf(input.item, input.change, input.seats);
+  for (const earlier of input.earlier) {
+    if (earlier.trade) {
+      return `Not attempted because ${earlier.label} is still open, and accepting it would change the roster.`;
+    }
+    if (earlier.unknown) {
+      return `Not attempted because ${earlier.label} may or may not have applied, and its effect on the roster cannot be bounded.`;
+    }
+    if (earlier.branch === "may") {
+      const shared = sharedTouch(earlier.touches, touches);
+      if (shared !== undefined) {
+        return `Not attempted because this move ${touchWord(shared.later, true)} ${shared.name}, and ${earlier.label} may ${touchWord(shared.earlier, false)} ${shared.name} as well.`;
+      }
+    }
+    const placeHold =
+      placesNeeded > 0 && earlier.placeDelta !== 0
+        ? placeHoldDetail(earlier, placesFree, placesNeeded, label)
+        : undefined;
+    if (placeHold !== undefined) {
+      return placeHold;
+    }
+    const slotHold = slotHoldDetail({
+      earlier,
+      destination,
+      ownSlots,
+      seats: input.seats,
+      facts: input.facts,
+      label,
+    });
+    if (slotHold !== undefined) {
+      return slotHold;
+    }
   }
+  return undefined;
+}
+
+function placeHoldDetail(
+  earlier: PendingEffect,
+  placesFree: number,
+  placesNeeded: number,
+  label: string,
+): string | undefined {
+  if (earlier.branch === "may") {
+    if (placesFree + earlier.placeDelta < placesNeeded) {
+      return `Not attempted because ${earlier.label} may take the roster place that ${label} needs.`;
+    }
+    return placesFree < placesNeeded
+      ? `Not attempted because ${label} needs the roster place that ${earlier.label} frees.`
+      : undefined;
+  }
+  return earlier.placeDelta > 0 && placesFree < placesNeeded
+    ? `Not attempted because ${label} needs the roster place that ${earlier.label} was to free, and that move did not free it.`
+    : undefined;
+}
+
+function slotHoldDetail(input: {
+  readonly earlier: PendingEffect;
+  readonly destination: string | undefined;
+  readonly ownSlots: SlotEffect;
+  readonly seats: ReadonlyMap<string, string | undefined>;
+  readonly facts: TeamFacts;
+  readonly label: string;
+}): string | undefined {
+  const destination = input.destination;
+  if (destination === undefined) {
+    return undefined;
+  }
+  const rule = rosterRuleOf(
+    input.facts.league.rosterConstraints,
+    input.facts.league.rosterPositions,
+  );
+  const reported = rule.byPosition.get(destination);
+  const capacity = reported === undefined ? undefined : slotCapacity(rule, reported);
+  if (capacity === undefined) {
+    return undefined;
+  }
+  const occupied = [...input.seats.values()].filter((slot) => slot === destination).length;
+  const base =
+    occupied - tally(input.ownSlots.frees, destination) + tally(input.ownSlots.takes, destination);
+  if (input.earlier.branch === "did-not") {
+    return base > capacity && input.earlier.slots.frees.includes(destination)
+      ? `Not attempted because ${input.label} needs the place in ${destination} that ${input.earlier.label} was to free, and that move did not free it.`
+      : undefined;
+  }
+  const applied =
+    base -
+    tally(input.earlier.slots.frees, destination) +
+    tally(input.earlier.slots.takes, destination);
+  if (base <= capacity && applied > capacity) {
+    return `Not attempted because ${input.earlier.label} may take the place in ${destination} that ${input.label} needs.`;
+  }
+  return base > capacity && applied <= capacity
+    ? `Not attempted because ${input.label} needs the place in ${destination} that ${input.earlier.label} frees.`
+    : undefined;
+}
+
+function tally(slots: ReadonlyArray<string>, slot: string): number {
+  return slots.filter((entry) => entry === slot).length;
+}
+
+function itemTouches(
+  item: ProposalItemRecord,
+  change: ProposalItemChange | undefined,
+): ReadonlyArray<ItemTouch> {
+  const touches = new Map<string, ItemTouch>();
+  for (const add of change?.adds ?? item.adds) {
+    touches.set(add.key, { key: add.key, name: add.name ?? add.key, action: "add" });
+  }
+  for (const drop of change?.drops ?? item.drops) {
+    touches.set(drop.key, { key: drop.key, name: drop.name ?? drop.key, action: "drop" });
+  }
+  const placement = change === undefined ? item.placement : change.placement;
+  const reserveMove = change === undefined ? item.reserveMove : change.reserveMove;
+  const moves = [
+    item.slotMove === undefined
+      ? undefined
+      : { key: item.slotMove.playerKey, name: item.slotMove.playerName },
+    item.intent?.player === undefined
+      ? undefined
+      : { key: item.intent.player.key, name: item.intent.player.name },
+    placement === undefined ? undefined : { key: placement.playerKey, name: placement.playerName },
+    reserveMove === undefined
+      ? undefined
+      : { key: reserveMove.playerKey, name: reserveMove.playerName },
+  ];
+  for (const move of moves) {
+    if (move !== undefined && !touches.has(move.key)) {
+      touches.set(move.key, { key: move.key, name: move.name ?? move.key, action: "move" });
+    }
+  }
+  return [...touches.values()];
+}
+
+function sharedTouch(
+  earlier: ReadonlyArray<ItemTouch>,
+  later: ReadonlyArray<ItemTouch>,
+):
+  | {
+      readonly name: string;
+      readonly earlier: ItemTouch["action"];
+      readonly later: ItemTouch["action"];
+    }
+  | undefined {
+  for (const mine of later) {
+    const theirs = earlier.find((touch) => touch.key === mine.key);
+    if (theirs !== undefined) {
+      return { name: mine.name, earlier: theirs.action, later: mine.action };
+    }
+  }
+  return undefined;
+}
+
+function touchWord(action: ItemTouch["action"], thirdPerson: boolean): string {
+  switch (action) {
+    case "add":
+      return thirdPerson ? "adds" : "add";
+    case "drop":
+      return thirdPerson ? "drops" : "drop";
+    case "move":
+      return thirdPerson ? "moves" : "move";
+  }
+}
+
+function moveOf(
+  item: ProposalItemRecord,
+  placement: ProposalItemRecord["placement"],
+): { readonly playerKey: string; readonly toSlot: string } | undefined {
+  if (item.kind === "slot_move" && item.slotMove !== undefined) {
+    return { playerKey: item.slotMove.playerKey, toSlot: item.slotMove.toSlot };
+  }
+  if ((item.kind === "activate" || item.kind === "stash") && placement !== undefined) {
+    return { playerKey: placement.playerKey, toSlot: placement.toSlot };
+  }
+  return undefined;
+}
+
+function destinationOf(item: ProposalItemRecord, change: ProposalItemChange): string | undefined {
+  return moveOf(item, change.placement ?? item.placement)?.toSlot;
+}
+
+function placeEffectOf(
+  item: ProposalItemRecord,
+  change: ProposalItemChange | undefined,
+  facts: TeamFacts,
+  seats: ReadonlyMap<string, string | undefined>,
+): { readonly frees: number; readonly takes: number } {
+  if (item.kind === "trade") {
+    return { frees: 0, takes: 0 };
+  }
+  const rule = rosterRuleOf(facts.league.rosterConstraints, facts.league.rosterPositions);
+  const drops = change?.drops ?? item.drops;
+  const adds = change?.adds ?? item.adds;
+  const repair = change === undefined ? item.reserveMove : change.reserveMove;
+  const move = moveOf(item, change === undefined ? item.placement : change.placement);
+  if (move !== undefined) {
+    const changed = rosterPlaceChange(rule, seats.get(move.playerKey), move.toSlot);
+    return { frees: changed.frees, takes: changed.consumes };
+  }
+  const frees = drops.filter((drop) => rosterPlaceCount(rule, seats.get(drop.key)) > 0).length;
+  const repairMove =
+    repair === undefined
+      ? { frees: 0, consumes: 0 }
+      : rosterPlaceChange(rule, seats.get(repair.playerKey) ?? repair.fromSlot, repair.toSlot);
+  return {
+    frees: frees + repairMove.frees,
+    takes: adds.length + repairMove.consumes,
+  };
+}
+
+function slotEffectOf(
+  item: ProposalItemRecord,
+  change: ProposalItemChange | undefined,
+  seats: ReadonlyMap<string, string | undefined>,
+): SlotEffect {
+  const drops = change?.drops ?? item.drops;
+  const placement = change === undefined ? item.placement : change.placement;
+  const repair = change === undefined ? item.reserveMove : change.reserveMove;
+  const adds = change?.adds ?? item.adds;
+  const move = moveOf(item, placement);
+  const frees = new Set<string>();
+  const takes = new Set<string>();
+  for (const drop of drops) {
+    const slot = seats.get(drop.key);
+    if (slot !== undefined) {
+      frees.add(slot);
+    }
+  }
+  if (move !== undefined) {
+    const from = seats.get(move.playerKey);
+    if (from !== undefined) {
+      frees.add(from);
+    }
+    takes.add(move.toSlot);
+  }
+  if (repair !== undefined) {
+    const from = seats.get(repair.playerKey) ?? repair.fromSlot;
+    if (from !== undefined) {
+      frees.add(from);
+    }
+    takes.add(repair.toSlot);
+  }
+  if (move === undefined && placement !== undefined && adds.length === 1) {
+    takes.add(placement.toSlot);
+  }
+  return { frees: [...frees], takes: [...takes] };
+}
+
+function applySeats(
+  item: ProposalItemRecord,
+  change: ProposalItemChange,
+  seats: Map<string, string | undefined>,
+): void {
+  for (const drop of change.drops) {
+    seats.delete(drop.key);
+  }
+  const move = moveOf(item, change.placement ?? item.placement);
+  if (move !== undefined) {
+    seats.set(move.playerKey, move.toSlot);
+  }
+  if (change.reserveMove !== undefined) {
+    seats.set(change.reserveMove.playerKey, change.reserveMove.toSlot);
+  }
+  for (const add of change.adds) {
+    seats.set(add.key, change.adds.length === 1 ? change.placement?.toSlot : undefined);
+  }
+}
+
+function rosterSeats(facts: TeamFacts): Map<string, string | undefined> {
+  return new Map(
+    facts.roster.players.map(
+      (player) =>
+        [
+          player.providerPlayerKey,
+          player.slot.status === "verified" ? player.slot.slot : undefined,
+        ] as const,
+    ),
+  );
+}
+
+function freeRosterPlaces(
+  facts: TeamFacts,
+  seats: ReadonlyMap<string, string | undefined>,
+): number {
+  const rule = rosterRuleOf(facts.league.rosterConstraints, facts.league.rosterPositions);
+  const occupied = [...seats.values()].filter((slot) => rosterPlaceCount(rule, slot) > 0).length;
+  return facts.league.rosterConstraints.rosterMaximum - occupied;
+}
+
+function rosterPlacesOf(facts: TeamFacts): ReadonlyArray<RosterPlayerPlace> {
+  return facts.roster.players.map((player) => ({
+    key: player.providerPlayerKey,
+    name: player.name,
+    slot: player.slot.status === "verified" ? player.slot.slot : undefined,
+    positions: player.eligiblePositions,
+  }));
 }
 
 function withdrawalRefusal(
@@ -5305,15 +5682,7 @@ function illegalSlots(
   const byKey = new Map(
     facts.roster.players.map((player) => [player.providerPlayerKey, player] as const),
   );
-  return rosterOccupancy({
-    rule,
-    players: facts.roster.players.map((player) => ({
-      key: player.providerPlayerKey,
-      name: player.name,
-      slot: player.slot.status === "verified" ? player.slot.slot : undefined,
-      positions: player.eligiblePositions,
-    })),
-  }).illegal.flatMap((occupant) => {
+  return rosterOccupancy({ rule, players: rosterPlacesOf(facts) }).illegal.flatMap((occupant) => {
     if (droppedKeys.has(occupant.key)) {
       return [];
     }
