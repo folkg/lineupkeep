@@ -2945,7 +2945,7 @@ it.effect("searches waiver players without a query", () => {
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
-it.effect("searches the whole player pool without an availability filter", () => {
+it.effect("searches all available players, free agents and waiver players", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflAggregateFreeAgents));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
@@ -2965,7 +2965,7 @@ it.effect("searches the whole player pool without an availability filter", () =>
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1/games;game_keys=nfl,nhl,nba,mlb/leagues;league_keys=466.l.4000/players;sort=NAME;count=25;out=ownership,percent_owned,percent_started,ranks,transactions,opponent,starting_status?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1/games;game_keys=nfl,nhl,nba,mlb/leagues;league_keys=466.l.4000/players;status=A;sort=NAME;count=25;out=ownership,percent_owned,percent_started,ranks,transactions,opponent,starting_status?format=json",
     );
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
@@ -3003,8 +3003,8 @@ it.effect("requests the rank and stat values that each provider-ordered sort pub
     assert.deepStrictEqual(
       internet.calls.map((call) => call.url.href),
       [
-        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1/games;game_keys=nfl,nhl,nba,mlb/leagues;league_keys=466.l.4000/players;sort=4;sort_type=season;count=10;out=ownership,percent_owned,percent_started,ranks,stats,transactions,opponent,starting_status?format=json",
-        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1/games;game_keys=nfl,nhl,nba,mlb/leagues;league_keys=466.l.4000/players;sort=AR;sort_type=season;count=10;out=ownership,percent_owned,percent_started,ranks,transactions,opponent,starting_status?format=json",
+        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1/games;game_keys=nfl,nhl,nba,mlb/leagues;league_keys=466.l.4000/players;status=A;sort=4;sort_type=season;count=10;out=ownership,percent_owned,percent_started,ranks,stats,transactions,opponent,starting_status?format=json",
+        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1/games;game_keys=nfl,nhl,nba,mlb/leagues;league_keys=466.l.4000/players;status=A;sort=AR;sort_type=season;count=10;out=ownership,percent_owned,percent_started,ranks,transactions,opponent,starting_status?format=json",
       ],
     );
     assert.deepStrictEqual(

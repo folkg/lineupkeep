@@ -1612,6 +1612,9 @@ it("publishes the accepted player-statistics periods and the compact standings f
   expect(searchWindow).toContain("last_days");
   expect(searchWindow).toContain("last_weeks");
   expect(searchWindow).toContain("get_league");
+  expect(searchWindow).toContain("every player off a roster");
+  expect(searchWindow).toContain("`free_agent` lists free agents only");
+  expect(searchWindow).toContain("`waiver` lists waiver-listed players only");
   expect(JSON.stringify(tool("get_league").outputSchema)).toContain("playerSearch");
   expect(JSON.stringify(tool("get_players").outputSchema)).toContain("aggregated");
   expect(playersSchema).toContain("1 to 25 private player references");

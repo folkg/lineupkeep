@@ -281,6 +281,7 @@ it.effect("searches several leagues in one aggregate read", () => {
       return yield* Effect.die("expected one request");
     }
     assert.match(call.url, /league_keys=466\.l\.4000,477\.l\.31027/u);
+    assert.match(call.url, /\/players;status=A;sort=NAME/u);
     assert.strictEqual(groups.length, 2);
     assert.strictEqual(groups[0]?.leagueKey, leagueKey);
     assert.strictEqual(groups[1]?.players[0]?.name, "Synthetic Hockey Player");
@@ -500,6 +501,7 @@ it.effect("passes requested ranks and cut types to an available-player page", ()
       call.url,
       ";out=ownership,percent_owned,percent_started,ranks,transactions,opponent,starting_status;ranks=projected_week",
     );
+    assert.include(call.url, "/players;status=A;sort=R_PO;");
     assert.include(call.url, "percent_started.cut_types=diamond");
   }).pipe(Effect.provide(testLayer(recording.client)));
 });

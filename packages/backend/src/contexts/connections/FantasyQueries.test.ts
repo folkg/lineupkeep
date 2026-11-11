@@ -58,7 +58,7 @@ import {
   TeamSummaryResult,
 } from "./QueryResults.ts";
 import { StatRef } from "./QueryValues.ts";
-import { QuerySelectionInvalid, QueryTeamNotFound } from "./QueryValues.ts";
+import { type QueryError, QuerySelectionInvalid, QueryTeamNotFound } from "./QueryValues.ts";
 
 it.effect("lists owned teams with stable paging and owner-bound continuations", () =>
   Effect.gen(function* () {
@@ -2556,6 +2556,112 @@ it.effect("publishes the professional team on search rows", () =>
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+it.effect("returns distinct free-agent, waiver, and all pools with all as their union", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.setSearchPlayers([
+      searchFixture({
+        providerPlayerKey: "461.p.10011",
+        name: "Rostered Player",
+        availability: "rostered",
+        actualRank: 1,
+        overallRank: 1,
+        statValue: null,
+        percentOwned: 90,
+        percentOwnedDelta: 0,
+        percentStarted: 80,
+        percentStartedChange: 0,
+      }),
+      searchFixture({
+        providerPlayerKey: "461.p.10012",
+        name: "Free Agent",
+        availability: "free_agent",
+        actualRank: 20,
+        overallRank: 30,
+        statValue: null,
+        percentOwned: 25,
+        percentOwnedDelta: 1,
+        percentStarted: 10,
+        percentStartedChange: 1,
+      }),
+      searchFixture({
+        providerPlayerKey: "461.p.10013",
+        name: "Waiver Player",
+        availability: "waiver",
+        actualRank: 40,
+        overallRank: 50,
+        statValue: null,
+        percentOwned: 5,
+        percentOwnedDelta: -1,
+        percentStarted: 2,
+        percentStartedChange: 0,
+      }),
+    ]);
+
+    const pool = (
+      availability: "all" | "free_agent" | "waiver",
+    ): Effect.Effect<ReadonlyArray<string>, QueryError> =>
+      queries.searchPlayers(owner, { team: teamId, availability, sort: "name" }).pipe(
+        Effect.map((result) => {
+          assert.strictEqual(result.status, "ok");
+          return result.status === "ok" ? result.players.map((player) => player.name) : [];
+        }),
+      );
+
+    const freeAgents = yield* pool("free_agent");
+    const waivers = yield* pool("waiver");
+    const all = yield* pool("all");
+
+    assert.deepStrictEqual(freeAgents, ["Free Agent"]);
+    assert.deepStrictEqual(waivers, ["Waiver Player"]);
+    assert.deepStrictEqual(all, ["Free Agent", "Waiver Player"]);
+    assert.deepStrictEqual(all, [...freeAgents, ...waivers].sort());
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("answers a league with no waiver players honestly", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.setSearchPlayers([
+      searchFixture({
+        providerPlayerKey: "461.p.10011",
+        name: "Free Agent",
+        availability: "free_agent",
+        actualRank: 20,
+        overallRank: 30,
+        statValue: null,
+        percentOwned: 25,
+        percentOwnedDelta: 1,
+        percentStarted: 10,
+        percentStartedChange: 1,
+      }),
+    ]);
+
+    const empty = yield* queries.searchPlayers(owner, {
+      team: teamId,
+      availability: "waiver",
+      sort: "name",
+    });
+
+    assert.strictEqual(empty.status, "ok");
+    if (empty.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(empty.players, []);
+    assert.deepStrictEqual(empty.page, { returned: 0, complete: true, remaining: 0 });
+    assert.deepStrictEqual(empty.failures, []);
+    assert.isTrue(
+      empty.coverage.some((entry) => entry.resource === "players" && entry.status === "available"),
+    );
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
 it.effect("carries your league's day-window transaction counts on search rows", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
@@ -3204,7 +3310,7 @@ it.effect(
         searchFixture({
           providerPlayerKey: "461.p.10002",
           name: "Synthetic 1",
-          availability: "rostered",
+          availability: "free_agent",
           actualRank: 3,
           overallRank: 3,
           statValue: null,

@@ -890,7 +890,12 @@ export const PlayerGroup = Schema.Literals([
 ]);
 export type PlayerGroup = typeof PlayerGroup.Type;
 
-const SearchAvailability = Schema.Literals(["all", "free_agent", "waiver"]);
+const SearchAvailability = Schema.Literals(["all", "free_agent", "waiver"]).pipe(
+  Schema.annotate({
+    description:
+      "`all` lists every player off a roster: free agents and waiver-listed players. `free_agent` lists free agents only. `waiver` lists waiver-listed players only.",
+  }),
+);
 
 export const SearchPlayersInput = Schema.Struct({
   team: TeamId,
@@ -899,7 +904,7 @@ export const SearchPlayersInput = Schema.Struct({
       Schema.check(Schema.isMaxLength(80)),
       Schema.annotate({
         description:
-          "Case-insensitive name filter of 1 to 80 characters. Omit it to list the whole pool; a blank value is refused.",
+          "Case-insensitive name filter, 1 to 80 characters. Omit it to list the pool; a blank value is refused.",
       }),
     ),
   ),
@@ -913,7 +918,7 @@ export const SearchPlayersInput = Schema.Struct({
     PlayerSort.pipe(
       Schema.annotate({
         description:
-          "An order the site backs: `actual_rank`, `overall_rank`, `stat`, `ownership` (highest first), `name`, `position`, or `recent_rank` over `statPeriod`.",
+          "An order the site backs: `actual_rank`, `overall_rank`, `stat`, `ownership` (highest first), `name`, `position`, or `recent_rank` over `window`.",
       }),
     ),
   ),
@@ -929,7 +934,7 @@ export const SearchPlayersInput = Schema.Struct({
     StatWindow.pipe(
       Schema.annotate({
         description:
-          "`stat` takes `season` or one `week`; `recent_rank` takes `last_days` or `last_weeks`. `get_league` publishes this league's windows; an unsupported one is refused with the nearest.",
+          "`stat` takes `season` or one `week`; `recent_rank` takes `last_days` or `last_weeks`. `get_league` publishes the league's windows; an unsupported one is refused with the nearest.",
       }),
     ),
   ),
@@ -937,7 +942,7 @@ export const SearchPlayersInput = Schema.Struct({
     Schema.Boolean.pipe(
       Schema.annotate({
         description:
-          "Add each row's remaining games for the current scoring window as `gamesRemaining`, at the cost of league-window reads.",
+          "Add each row's remaining games this scoring window as `gamesRemaining`, at the cost of league-window reads.",
       }),
     ),
   ),
@@ -982,7 +987,7 @@ const SearchPlayer = Schema.Struct({
   proTeam: Schema.NullOr(Schema.NonEmptyString).pipe(
     Schema.annotate({
       description:
-        "The professional-team abbreviation a roster entry's `proTeam` carries. Null when unpublished.",
+        "The professional-team abbreviation a roster entry carries. Null when unpublished.",
     }),
   ),
   eligiblePositions: Schema.Array(Schema.NonEmptyString),
@@ -990,12 +995,12 @@ const SearchPlayer = Schema.Struct({
   status: Schema.Struct({
     value: Schema.Literals(["healthy", "day_to_day", "out", "injured_reserve", "unknown"]).pipe(
       Schema.annotate({
-        description: "The availability the site reports. `unknown` never means healthy.",
+        description: "The availability the site reports; `unknown` never means healthy.",
       }),
     ),
     code: Schema.optional(Schema.String).pipe(
       Schema.annotate({
-        description: "The site's status code, verbatim (for example `IR-LT`). Absent when healthy.",
+        description: "The site's status code, verbatim (for example `IR-LT`); absent when healthy.",
       }),
     ),
     detail: Schema.optional(Schema.String).pipe(
@@ -1012,34 +1017,34 @@ const SearchPlayer = Schema.Struct({
   }),
   percentOwned: Schema.NullOr(Schema.Finite).pipe(
     Schema.annotate({
-      description: "Percent owned as the site publishes it; null when unpublished.",
+      description: "Percent owned; null when unpublished.",
     }),
   ),
   percentOwnedDelta: Schema.NullOr(Schema.Finite).pipe(
     Schema.annotate({
       description:
-        "Change over the site's ownership-change window, which the row does not state. Null when unpublished.",
+        "Change over the site's ownership-change window (unstated). Null when unpublished.",
     }),
   ),
   percentStarted: Schema.NullOr(Schema.Finite).pipe(
     Schema.annotate({
-      description: "Percent started as the site publishes it; null when unpublished.",
+      description: "Percent started; null when unpublished.",
     }),
   ),
   percentStartedChange: Schema.NullOr(Schema.Finite).pipe(
     Schema.annotate({
       description:
-        "Change over the site's started-percentage window, which the row does not state. Null when unpublished.",
+        "Change over the site's started-percentage window (unstated). Null when unpublished.",
     }),
   ),
   actualRank: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))).pipe(
     Schema.annotate({
-      description: "The site's current-season rank; the value that orders sort `actual_rank`.",
+      description: "The site's current-season rank; it orders sort `actual_rank`.",
     }),
   ),
   overallRank: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))).pipe(
     Schema.annotate({
-      description: "The site's overall rank; the value that orders sort `overall_rank`.",
+      description: "The site's overall rank; it orders sort `overall_rank`.",
     }),
   ),
   recentRank: Schema.optional(
@@ -1055,7 +1060,7 @@ const SearchPlayer = Schema.Struct({
   statValue: Schema.optional(Schema.NullOr(Schema.Finite)).pipe(
     Schema.annotate({
       description:
-        "The site's season value for the requested `stat`. Present only with sort `stat`; null when unpublished.",
+        "The site's season value for `stat`, present only with sort `stat`; null when unpublished.",
     }),
   ),
   gamesRemaining: Schema.optional(SchedulePlayerGamesRemaining),
@@ -1077,7 +1082,7 @@ const SearchGamesRemaining = Schema.Union([
 ]).pipe(
   Schema.annotate({
     description:
-      "The window and observation time behind the rows' `gamesRemaining`; present only with `includeGames`. `unsupported` says why none is published.",
+      "The window and observation time behind `gamesRemaining`; present only with `includeGames`. `unsupported` says why none is published.",
   }),
 );
 

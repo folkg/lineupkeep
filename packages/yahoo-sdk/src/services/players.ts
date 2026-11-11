@@ -69,6 +69,17 @@ const AvailableSort = Schema.Literals([
 
 const Availability = Schema.Literals(["all", "free_agent", "waiver"]);
 
+const availabilityFilter = (availability: typeof Availability.Type): string => {
+  switch (availability) {
+    case "all":
+      return ";status=A";
+    case "free_agent":
+      return ";status=FA";
+    case "waiver":
+      return ";status=W";
+  }
+};
+
 const RankType = Schema.String.pipe(
   Schema.check(Schema.isMinLength(1)),
   Schema.check(Schema.isMaxLength(40)),
@@ -152,12 +163,7 @@ export const search: API.OperationMethod<
   output: Schema.Unknown,
   request: (input) => {
     const statId = input.sort === "stat" ? input.statId : undefined;
-    const status =
-      input.availability === "all"
-        ? ""
-        : input.availability === "free_agent"
-          ? ";status=FA"
-          : ";status=W";
+    const status = availabilityFilter(input.availability);
     const query = input.query?.trim();
     const search =
       query === undefined || query.length === 0 ? "" : `;search=${encodeURIComponent(query)}`;
@@ -219,12 +225,7 @@ export const available: API.OperationMethod<
   output: Schema.Unknown,
   request: (input) => {
     const statId = input.sort === "stat" ? input.statId : undefined;
-    const status =
-      input.availability === "all"
-        ? ""
-        : input.availability === "free_agent"
-          ? ";status=FA"
-          : ";status=W";
+    const status = availabilityFilter(input.availability);
     const position = input.position === undefined ? "" : `;position=${input.position}`;
     const out =
       input.sort === "stat"

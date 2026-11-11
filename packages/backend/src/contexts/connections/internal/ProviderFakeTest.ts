@@ -932,7 +932,9 @@ const providerFake = Effect.gen(function* () {
         );
       const filtered = rows.filter(
         (player) =>
-          (input.availability === "all" || player.availability === input.availability) &&
+          (input.availability === "all"
+            ? player.availability !== "rostered"
+            : player.availability === input.availability) &&
           (query === undefined || query === "" || player.name.toLocaleLowerCase().includes(query)),
       );
       const ascending = (left: number | null, right: number | null): number =>

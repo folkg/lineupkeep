@@ -5,6 +5,9 @@ revisions that carried each change.
 
 ## Unreleased — neutral recent-form windows, including football
 
+- `search_players` availability `all` lists every player off a roster: free agents and
+  waiver-listed players. It no longer includes rostered players. The schema states what `all`,
+  `free_agent`, and `waiver` each return, with no provider status codes.
 - `search_players` takes one `window` instead of the three-name `statPeriod`: `{kind: "last_days",
   days}` or `{kind: "last_weeks", weeks}` for `recent_rank`, and `season` or `week` for `stat`. The
   three fixed presets are gone; the schema accepts a day or week count instead of a fixed list,
