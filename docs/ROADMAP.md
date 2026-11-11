@@ -557,10 +557,10 @@ and the port mapping. `L` — done.
 honest answer rather than a defect. Waiver-listed players get their own availability value so a client can ask for
 them explicitly.
 
-- [ ] Add an availability value for waiver-listed players beside the existing ones, with the league's own words for
-      what it means, and keep `free_agent` unchanged.
-- [ ] Prove both directions against the owner's football league, where every available player was on waivers: the
-      strict pool is honestly empty, and the waiver value returns those players.
+- [x] Three distinct pools: `free_agent` (off rosters, outside waivers), `waiver` (off rosters, on waivers), and
+      `all` (both). The audit found `all` had been returning rostered players, and fixed it at the provider request.
+- [x] Proved against the owner's football league, where every available player was on waivers, with live counts and
+      an honest empty strict pool. Evidence: `e2e/scratch/availability-pools/`.
 
 **Verify**: a client can ask for free agents, for waiver-listed players, or for both explicitly, and each answer is
 what the league actually holds. `S`
@@ -986,13 +986,14 @@ Modelled on how alchemy distilled its providers: an Effect-native package that o
 payloads and refusals, with the application calling a typed client instead of carrying promise-shaped
 provider code.
 
-- [ ] Survey what the application already knows: hosts, read and write paths, the crumb, rate limits, the
-      captured refusals, the XML transaction body, and the leagues, rosters, players and matchups reads.
-- [ ] Design the public surface as Effect services with typed errors that carry the provider's own words,
-      so a caller never sees a raw response.
-- [ ] Build it in its own package, tested against recorded payloads, without wiring it into the application.
-- [ ] Cut over only when it covers everything the product calls, and only after the app's boundary tests can
-      run against either implementation.
+- [x] Survey what the application already knows: hosts, read and write paths, the crumb, read bounds, the captured
+      refusals, the transaction body, and every league, roster, player and matchup read.
+- [x] Designed as Effect services with typed errors carrying the provider's own words; no caller sees a raw response.
+- [x] Built in `packages/yahoo-sdk`, tested against recorded payloads.
+- [x] Cut over completely: every provider read and write now goes through the SDK, and the adapter builds no request
+      of its own. `YahooProvider.ts` fell from 4,822 lines to 2,083 plus a 1,101-line mapping module, and the
+      migrated paths were proved live against the owner's leagues, including a no-op lineup write and a refusal.
+- **Done** (changes `e7d04561` through `67e9908e`, plus the standings, roster, picks and window work after them).
 
 This can proceed in parallel with product work because nothing cuts over until it is complete. A signed-in
 browser tab is available for checking shapes the recordings do not cover.
@@ -1036,8 +1037,8 @@ animation, frequent interactions should not be animated, and motion exists to de
 - [x] Fix the working hairline: the owner saw it stutter, in Firefox. Measured in both engines, the cause was the
       animated value, not the layout; it now animates a compositable transform and keeps full strength while the
       control works.
-- [ ] Keep every duration and easing in the theme tokens, and keep the reduced-motion rule authoritative.
-- [ ] Do not animate the action states: their timing is already decided and written down.
+- [x] Keep every duration and easing in the theme tokens, and keep the reduced-motion rule authoritative.
+- [x] Do not animate the action states: their timing is already decided and written down.
 
 **Verify**: each added motion names the moment it serves, its duration comes from a token, a reduced-motion
 capture shows the same content without it, and the submit bar's frame timing is recorded. `S`
@@ -1047,12 +1048,14 @@ capture shows the same content without it, and the submit bar's frame timing is 
 The owner prefers the de facto statechart library to the one we adopted. `@typeonce/effect-machine` drives the
 lineup-run workflow and the connection lifecycle.
 
-- [ ] Evaluate XState with its Effect integration on the new v6 beta against the two machines we have: the lineup
-      run workflow and the connection lifecycle. State the migration shape before writing it.
-- [ ] Keep the domain events and states identical; the machine's vocabulary is product language and must not
-      change because the library did.
-- [ ] Migrate one machine behind its existing tests, then the other, and delete the old package and its adapter.
-- [ ] Do not migrate while the transaction work is mid-change; take it when the proposal surface is quiet.
+- [x] Evaluate XState with its Effect integration on the v6 beta against the two machines: the lineup run workflow,
+      the connection lifecycle, the team automation and hosted linking. The machine definition is data behind
+      `packages/backend/src/utilities/machine.ts`.
+- [x] The domain events and states stayed identical; the machine's vocabulary is product language.
+- [x] Both machines migrated behind their existing tests, and `@typeonce/effect-machine` with its lint plugin was
+      deleted.
+- [x] The migration waited until the proposal surface was quiet.
+- **Done** (changes `c84e8a81`, `f90db215`, `039ce7e4`, `69e345a7`): no test changed outcome.
 
 **Verify**: both machines' tests pass unchanged in intent, the persistence format is either migrated or read with
 a compatibility test, and the old dependency is gone from the lockfile. `M`
