@@ -1271,15 +1271,26 @@ shapes, order, stat ids, rank types, presence counts, and masked identifiers onl
   `sort_type`. Across 50 free-agent rows in each of three hockey leagues, the returned order was
   exactly ascending `L7`, `L14`, or `L30` (zero inversions, zero missing values), so the token names
   the window the order uses.
-- The collection still publishes only `OR` and per-season `S` ranks, and `ranks=` is rejected on it.
-  The recent-window rank itself comes from the players detail read
+- The aggregate players collection publishes only `OR` and per-season `S` ranks. A league-scoped
+  collection accepts the rank list in its path: `league/{leagueKey}/players;...;out=ranks;ranks=...`
+  answered the requested type for each sport, and the same shape chained onto the league settings
+  read returns the settings and a five-player rank sample in one request.
+- The recent-window rank itself comes from the players detail read
   (`league/{leagueKey}/players;player_keys={keys};out=ranks;ranks=last7days,last14days,last30days`),
   which answers `L7`, `L14`, and `L30` as integer ranks for hockey. It accepts 25 keys per request.
-- Football answers the same selector with `"-"` for `L7`, `L14`, and `L30` while `L4W` carries the
-  last-four-week rank, so none of the three preset windows can order a football pool.
+- Football answers the same day selector with `"-"` for `L7`, `L14`, and `L30`, while `L4W` carries
+  the last-four-week rank. `sort=AR_L4W;sort_type=last4weeks` (and `sort=AR_L4W` alone) ordered the
+  football pool exactly ascending `L4W` (25, 28, 54, 55, 66, 68, 73, 77 in one sample), so the
+  four-week window is the one football ordering can explain. The three day orders are accepted but
+  their published values are empty, and the order they return is not ascending `L4W` either.
+- `sort_type=last4weeks` is rejected with HTTP 400 for hockey. `biweekly` is accepted with
+  `sort=AR_L14` for hockey and rejected with HTTP 400 for football; `lastmonth` is accepted with
+  `sort=AR_L30` for both and returns the same order as the plain token. The adapter uses the plain
+  day tokens and the football four-week token, because each already publishes the value that orders
+  its pool.
 - `sort_type=lastweek` and `sort_type=lastmonth` are accepted (200) on the collection, but
-  `out=stats` still reports `coverage_type: season`, so those orders have no published value and the
-  adapter does not use them.
+  `out=stats` still reports `coverage_type: season`, so a stat order over them has no published
+  value and the adapter does not use them.
 - `position=` narrows the collection. Recognised position codes (`G`, `C`, `D`, `G,C`) filter the
   rows; unknown tokens such as `Util`, `BN`, `IR`, `IR+`, and `NA` are ignored and widen the answer;
   invalid syntax such as `W/R` answers HTTP 404 for hockey. Unrecognised tokens never fail, so the
@@ -1292,9 +1303,16 @@ shapes, order, stat ids, rank types, presence counts, and masked identifiers onl
   had already raised that season rate to .911; season saves is informational in all three leagues
   and refuses a stat sort.
 - Recorded payloads: `yahoo-nhl-goalie-pool-season-saves-2026-11-11.json`,
-  `yahoo-nhl-goalie-pool-recent-rank-2026-11-11.json`, and
-  `yahoo-nhl-goalie-pool-recent-rank-values-2026-11-11.json` under
+  `yahoo-nhl-goalie-pool-recent-rank-2026-11-11.json`,
+  `yahoo-nhl-goalie-pool-recent-rank-values-2026-11-11.json`,
+  `yahoo-nfl-free-agent-pool-last-4-weeks-2026-11-11.json`, and
+  `yahoo-nfl-free-agent-pool-last-4-weeks-values-2026-11-11.json` under
   `packages/backend/src/contexts/connections/fixtures/`.
+- Not verified live: any baseball or basketball recent-form window, and whether a second football or
+  hockey league publishes a different set. The AutoCoach reference orders its non-football pool with
+  `sort=AR_L14;sort_type=biweekly` and lists `sort=AR_L30;sort_type=lastmonth` and
+  `sort=AR_L4W;sort_type=last4weeks`; that is reference vocabulary, not a current provider
+  observation, and the reference's baseball and basketball behavior was not exercised here.
 
 ## Live rotisserie standings shape (2026-10-28)
 
@@ -1336,12 +1354,12 @@ Findings:
 
 - **Football publishes no daily player series.** `stats.type=date&stats.date={past date}` answers
   HTTP 200 with **no `player_stats` node** for either sampled player, exactly as a weekly hockey read
-  does. The declared `range`/`preset` refusal for football is therefore grounded in the provider's own
+  does. The declared recent-window/range refusal for football is therefore grounded in the provider's own
   behaviour, not an assumption from the hockey probes.
 - **Football season and completed-week bases still work.** `{kind: "season"}` returned the season
   basis with 23 stat ids for both sampled players; `{kind: "week", week: 7}` (current week 8)
   returned the week basis with the same ids and populated counts.
-- **Refusals name the kind, the declaration, and the remedy.** A football preset and a football range
+- **Refusals name the kind, the declaration, and the remedy.** A football recent window and a football range
   both answered `provider.period_unsupported` with `declared: "unsupported"` and the remedy listing
   `kind: "season"` and `kind: "week"` with a completed scoring week. No request was issued for either.
 - **Standings shape.** The football league publishes 10 teams and no per-category totals (points

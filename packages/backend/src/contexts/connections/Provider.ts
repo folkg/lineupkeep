@@ -5,7 +5,7 @@ import type { ProviderSessionEvidence } from "./Connection.ts";
 import { FantasyLeague, FantasySport } from "./FantasyTeam.ts";
 import type { LineupTargetPeriod } from "./LineupRun.ts";
 import { ProviderKey } from "./ProviderKey.ts";
-import type { LeagueFormat, StatPeriodKind } from "./QueryValues.ts";
+import type { LeagueFormat } from "./QueryValues.ts";
 
 const ProviderOperation = Schema.Literals([
   "validate_session",
@@ -91,7 +91,6 @@ export type ProviderCapabilities = {
     readonly sorts: ReadonlyArray<ProviderPlayerSearchSort>;
     readonly providerOrderedSorts: ReadonlyArray<ProviderPlayerSearchSort>;
     readonly weeklyOrderingValues: boolean;
-    readonly recentRanks: Readonly<Record<FantasySport, ProviderRecentRankSupport>>;
   };
   readonly statPeriods: Readonly<Record<FantasySport, ProviderPeriodSupport>>;
   readonly scheduleRead: {
@@ -110,20 +109,9 @@ type ProviderProjectionSupport = {
 
 type ProviderPeriodMode = "native" | "aggregated" | "unsupported";
 
-type ProviderPeriodPresetWindow = {
-  readonly preset: StatPeriodPresetName;
-  readonly days: number;
-};
-
-type ProviderRecentRankSupport = {
-  readonly windows: ReadonlyArray<StatPeriodPresetName>;
-  readonly detail: string;
-};
-
 export type ProviderPeriodSupport = {
-  readonly kinds: Readonly<Record<StatPeriodKind, ProviderPeriodMode>>;
-  readonly presets: ReadonlyArray<ProviderPeriodPresetWindow>;
-  readonly maximumRangeDays: number;
+  readonly kinds: Readonly<Record<StatWindow["kind"], ProviderPeriodMode>>;
+  readonly maximumWindowDays: number;
   readonly detail: string;
 };
 
@@ -196,7 +184,7 @@ export class ProviderPeriodUnsupported extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()("provider.period_unsupported", {
   operation: ProviderOperation,
-  kind: Schema.Literals(["season", "week", "preset", "range"]),
+  kind: Schema.Literals(["season", "week", "last_days", "last_weeks", "range"]),
   declared: Schema.Literals(["native", "aggregated", "unsupported"]),
   reason: Schema.String,
   remedy: Schema.String,
@@ -499,6 +487,14 @@ export type ProviderLeagueSettings = {
   readonly rosterPositions: ReadonlyArray<ProviderRosterPosition>;
   readonly statCategories: ReadonlyArray<ProviderStatCategory>;
   readonly statModifiers: ReadonlyArray<ProviderStatModifier>;
+  readonly playerSearch?: ProviderLeaguePlayerSearch;
+};
+
+export type ProviderLeaguePlayerSearch = {
+  readonly status: "published" | "unverified";
+  readonly sorts: ReadonlyArray<ProviderPlayerSearchSort>;
+  readonly windows: ReadonlyArray<RecentFormWindow>;
+  readonly detail: string;
 };
 
 export type ProviderScoringWeek = {
@@ -641,13 +637,17 @@ export type ProviderStatValue = {
   readonly value: number | null;
 };
 
-export type StatPeriodPresetName = "last_7_days" | "last_14_days" | "last_30_days";
+export type RecentFormWindow =
+  | { readonly kind: "last_days"; readonly days: number }
+  | { readonly kind: "last_weeks"; readonly weeks: number };
 
-export type ProviderStatPeriod =
+export type StatWindow =
   | { readonly kind: "season" }
   | { readonly kind: "week"; readonly week: number }
-  | { readonly kind: "preset"; readonly preset: StatPeriodPresetName }
+  | RecentFormWindow
   | { readonly kind: "range"; readonly start: string; readonly end: string };
+
+export type ProviderStatPeriod = StatWindow;
 
 export type ProviderStatBasis =
   | { readonly type: "week"; readonly week: number }
@@ -706,7 +706,7 @@ export type ProviderPlayerSearchInput = ProviderSessionMaterial & {
   readonly sort: ProviderPlayerSearchSort;
   readonly statId: number | undefined;
   readonly statType: ProviderStatBasis["type"];
-  readonly recentWindow?: StatPeriodPresetName;
+  readonly window?: RecentFormWindow;
   readonly positions?: ReadonlyArray<string>;
   readonly limit: number;
 };
@@ -735,7 +735,7 @@ export type ProviderPlayerSearchResult = {
     readonly actualRank: number | null;
     readonly overallRank: number | null;
     readonly recentRank?: {
-      readonly window: StatPeriodPresetName;
+      readonly window: RecentFormWindow;
       readonly rank: number | null;
     };
     readonly statValue: number | null;

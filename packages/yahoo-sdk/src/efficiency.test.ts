@@ -326,7 +326,7 @@ it.effect("orders a league pool by a recent window and a position at the provide
       availability: "free_agent",
       sort: "recent_rank",
       sortType: "season",
-      recentWindow: "last14days",
+      recentWindow: { type: "days", days: 14 },
       position: "G",
       limit: 50,
     });
@@ -340,6 +340,59 @@ it.effect("orders a league pool by a recent window and a position at the provide
     );
     assert.strictEqual(groups[0]?.players[0]?.name, "Synthetic Goalie");
     assert.strictEqual(groups[0]?.players[0]?.primaryPosition, "G");
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("maps a four-week window to the provider's four-week sort", () => {
+  const recording = recordingClient(() =>
+    jsonResponse({
+      fantasy_content: {
+        users: [
+          {
+            games: [
+              {
+                leagues: [
+                  {
+                    league: {
+                      league_key: otherLeagueKey,
+                      players: [
+                        {
+                          player_key: "470.p.30001",
+                          name: { full: "Synthetic Receiver" },
+                          primary_position: "WR",
+                          display_position: "WR",
+                          eligible_positions: [{ position: "WR" }],
+                          ownership: { ownership_type: "freeagents" },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  );
+
+  return Effect.gen(function* () {
+    yield* Yahoo.players.search({
+      leagueKeys: [otherLeagueKey],
+      availability: "free_agent",
+      sort: "recent_rank",
+      sortType: "season",
+      recentWindow: { type: "weeks", weeks: 4 },
+      limit: 50,
+    });
+    const call = recording.calls[0];
+    if (call === undefined) {
+      return yield* Effect.die("expected one request");
+    }
+    assert.strictEqual(
+      call.url,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1/games;game_keys=nfl,nhl,nba,mlb/leagues;league_keys=477.l.31027/players;status=FA;sort=AR_L4W;sort_type=last4weeks;count=50;out=ownership,percent_owned,percent_started,ranks,transactions,opponent,starting_status?format=json",
+    );
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
 

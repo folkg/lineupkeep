@@ -18,11 +18,11 @@ import {
   QueryPeriod,
   QueryStatus,
   QueryTeam,
+  RecentFormWindow,
   RosterSlot,
   StartingStatus,
-  StatPeriod,
-  StatPeriodPreset,
   StatRef,
+  StatWindow,
   TeamListRow,
   TeamOwnerNote,
 } from "./QueryValues.ts";
@@ -594,6 +594,28 @@ const DraftHistory = Schema.Union([
   }),
 ]);
 
+const PlayerSort = Schema.Literals([
+  "name",
+  "position",
+  "ownership",
+  "actual_rank",
+  "overall_rank",
+  "stat",
+  "recent_rank",
+]);
+
+const PlayerSearchSupport = Schema.Struct({
+  status: Schema.Literals(["published", "unverified"]),
+  sorts: Schema.Array(PlayerSort),
+  windows: Schema.Array(RecentFormWindow),
+  detail: Schema.NonEmptyString,
+}).pipe(
+  Schema.annotate({
+    description:
+      "What this league's player search accepts: the orderings and the recent-form windows it publishes. `unverified` means the site gave no ranks to sample.",
+  }),
+);
+
 export const LeagueData = Schema.Struct({
   status: QueryStatus,
   team: QueryTeam,
@@ -609,6 +631,11 @@ export const LeagueData = Schema.Struct({
     Schema.annotate({
       description:
         "This league's stat categories in order, each marked `scoring` or `informational`.",
+    }),
+  ),
+  playerSearch: Schema.optional(PlayerSearchSupport).pipe(
+    Schema.annotate({
+      description: "Search orderings and windows this league publishes.",
     }),
   ),
   standings: Schema.optional(
@@ -865,16 +892,6 @@ export type PlayerGroup = typeof PlayerGroup.Type;
 
 const SearchAvailability = Schema.Literals(["all", "free_agent", "waiver"]);
 
-const PlayerSort = Schema.Literals([
-  "name",
-  "position",
-  "ownership",
-  "actual_rank",
-  "overall_rank",
-  "stat",
-  "recent_rank",
-]);
-
 export const SearchPlayersInput = Schema.Struct({
   team: TeamId,
   query: Schema.optional(
@@ -908,11 +925,11 @@ export const SearchPlayersInput = Schema.Struct({
       }),
     ),
   ),
-  statPeriod: Schema.optional(
-    Schema.Literals(["season", "week", "last_7_days", "last_14_days", "last_30_days"]).pipe(
+  window: Schema.optional(
+    StatWindow.pipe(
       Schema.annotate({
         description:
-          "Period for sort `stat` (`season` or a published `week`) or `recent_rank` (a preset window). A window the league does not publish is refused.",
+          "`stat` takes `season` or one `week`; `recent_rank` takes `last_days` or `last_weeks`. `get_league` publishes this league's windows; an unsupported one is refused with the nearest.",
       }),
     ),
   ),
@@ -1027,12 +1044,11 @@ const SearchPlayer = Schema.Struct({
   ),
   recentRank: Schema.optional(
     Schema.Struct({
-      window: Schema.Literals(["last_7_days", "last_14_days", "last_30_days"]),
+      window: RecentFormWindow,
       rank: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
     }).pipe(
       Schema.annotate({
-        description:
-          "The site's rank over the requested recent window; the value that orders `recent_rank`. Null when unpublished.",
+        description: "The site's rank over the requested window; it orders `recent_rank`.",
       }),
     ),
   ),
@@ -1094,10 +1110,10 @@ export const GetPlayersInput = Schema.Struct({
     }),
   ),
   period: Schema.optional(
-    StatPeriod.pipe(
+    StatWindow.pipe(
       Schema.annotate({
         description:
-          "Period for `actual_stats`: `season` (default), one `week`, a `preset`, or an inclusive `range`. `periodSupport` states what the site serves; an unsupported kind is refused.",
+          "Period for `actual_stats`: `season` (default), one `week`, `last_days`, `last_weeks`, or an inclusive `range`. `periodSupport` states what the site serves; an unsupported kind is refused.",
       }),
     ),
   ),
@@ -1181,21 +1197,16 @@ const StatPeriodSupport = Schema.Struct({
   kinds: Schema.Struct({
     season: Schema.Literals(["native", "aggregated", "unsupported"]),
     week: Schema.Literals(["native", "aggregated", "unsupported"]),
-    preset: Schema.Literals(["native", "aggregated", "unsupported"]),
+    last_days: Schema.Literals(["native", "aggregated", "unsupported"]),
+    last_weeks: Schema.Literals(["native", "aggregated", "unsupported"]),
     range: Schema.Literals(["native", "aggregated", "unsupported"]),
   }).pipe(
     Schema.annotate({
       description:
-        "How the site serves each period kind: `native` is one series, `aggregated` sums daily reads, and `unsupported` is refused with a remedy.",
+        "How the site serves each kind: `native`, `aggregated` daily sums, or `unsupported`.",
     }),
   ),
-  presets: Schema.Array(
-    Schema.Struct({
-      preset: StatPeriodPreset,
-      days: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
-    }),
-  ),
-  maximumRangeDays: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  maximumWindowDays: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   detail: Schema.NonEmptyString,
 });
 
@@ -1256,7 +1267,7 @@ const StatDefinition = Schema.Struct({
 export const PlayersData = Schema.Struct({
   status: QueryStatus,
   team: QueryTeam,
-  period: Schema.optional(StatPeriod),
+  period: Schema.optional(StatWindow),
   periodSupport: StatPeriodSupport,
   dictionary: Schema.Array(StatDefinition),
   players: Schema.Array(PlayerDetail),

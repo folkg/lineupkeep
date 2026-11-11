@@ -75,6 +75,13 @@ export const secondProviderLeague: ProviderLeagueSettings = {
   },
   statCategories: [],
   statModifiers: [],
+  playerSearch: {
+    status: "published",
+    sorts: ["name", "position"],
+    windows: [],
+    detail:
+      "Atlas publishes no recent-form player rank, so its pool cannot be ordered by recent form.",
+  },
 };
 
 export const secondProviderRoster: ProviderRoster = {
@@ -101,19 +108,18 @@ export const secondProviderCapabilities: ProviderCapabilities = {
     sorts: ["name", "position"],
     providerOrderedSorts: [],
     weeklyOrderingValues: true,
-    recentRanks: {
-      baseball: { windows: [], detail: "Atlas does not serve baseball." },
-      basketball: { windows: [], detail: "Atlas publishes no recent-window player rank." },
-      football: { windows: [], detail: "Atlas does not serve football." },
-      hockey: { windows: [], detail: "Atlas does not serve hockey." },
-    },
   },
   statPeriods: {
     baseball: unsupportedPeriods("Atlas does not serve baseball."),
     basketball: {
-      kinds: { season: "native", week: "native", preset: "unsupported", range: "unsupported" },
-      presets: [],
-      maximumRangeDays: 0,
+      kinds: {
+        season: "native",
+        week: "native",
+        last_days: "unsupported",
+        last_weeks: "unsupported",
+        range: "unsupported",
+      },
+      maximumWindowDays: 0,
       detail: "Atlas publishes season and completed-week player series.",
     },
     football: unsupportedPeriods("Atlas does not serve football."),
@@ -281,11 +287,11 @@ function unsupportedPeriods(detail: string): ProviderCapabilities["statPeriods"]
     kinds: {
       season: "unsupported",
       week: "unsupported",
-      preset: "unsupported",
+      last_days: "unsupported",
+      last_weeks: "unsupported",
       range: "unsupported",
     },
-    presets: [],
-    maximumRangeDays: 0,
+    maximumWindowDays: 0,
     detail,
   };
 }

@@ -43,11 +43,11 @@ function unsupportedSportPeriods(detail: string): ProviderPeriodSupport {
     kinds: {
       season: "unsupported",
       week: "unsupported",
-      preset: "unsupported",
+      last_days: "unsupported",
+      last_weeks: "unsupported",
       range: "unsupported",
     },
-    presets: [],
-    maximumRangeDays: 0,
+    maximumWindowDays: 0,
     detail,
   };
 }
@@ -63,49 +63,31 @@ export const yahooCapabilities: ProviderCapabilities = {
     sorts: ["name", "position", "ownership", "actual_rank", "overall_rank", "stat", "recent_rank"],
     providerOrderedSorts: ["actual_rank", "overall_rank", "stat", "recent_rank"],
     weeklyOrderingValues: false,
-    recentRanks: {
-      football: {
-        windows: [],
-        detail:
-          "Football publishes a last-four-week rank and leaves the seven-, fourteen-, and thirty-day ranks empty, so no preset window can order its pool.",
-      },
-      hockey: {
-        windows: ["last_7_days", "last_14_days", "last_30_days"],
-        detail:
-          "Hockey publishes seven-, fourteen-, and thirty-day player ranks, and the players collection orders its pool by them.",
-      },
-      baseball: { windows: [], detail: "Your league does not serve baseball." },
-      basketball: { windows: [], detail: "Your league does not serve basketball." },
-    },
   },
   statPeriods: {
     football: {
       kinds: {
         season: "native",
         week: "native",
-        preset: "unsupported",
+        last_days: "unsupported",
+        last_weeks: "unsupported",
         range: "unsupported",
       },
-      presets: [],
-      maximumRangeDays: 0,
+      maximumWindowDays: 0,
       detail:
-        "Football publishes season and completed-week player series, and no daily player series, so a preset window or an explicit range is refused rather than guessed from weekly values.",
+        "Football publishes season and completed-week player series, and no daily player series, so a recent window or an explicit range is refused rather than guessed from weekly values.",
     },
     hockey: {
       kinds: {
         season: "native",
         week: "unsupported",
-        preset: "aggregated",
+        last_days: "aggregated",
+        last_weeks: "aggregated",
         range: "aggregated",
       },
-      presets: [
-        { preset: "last_7_days", days: 7 },
-        { preset: "last_14_days", days: 14 },
-        { preset: "last_30_days", days: 30 },
-      ],
-      maximumRangeDays: 31,
+      maximumWindowDays: 31,
       detail:
-        "Hockey publishes season totals and one day of player statistics at a time, and no weekly player series. A preset window or an explicit range is the sum of your league's daily reads for the days it covers; average and percentage categories are not summed and are listed as not aggregated.",
+        "Hockey publishes season totals and one day of player statistics at a time, and no weekly player series. A recent window or an explicit range is the sum of your league's daily reads for the days it covers; average and percentage categories are not summed and are listed as not aggregated.",
     },
     baseball: unsupportedSportPeriods("Your league does not serve baseball."),
     basketball: unsupportedSportPeriods("Your league does not serve basketball."),

@@ -35,7 +35,7 @@ import type {
   ProviderPendingTrade,
   ProviderScoreRequest,
   ProviderTradeRatification,
-  StatPeriodPresetName,
+  RecentFormWindow,
   ProviderPlayerDetail,
   ProviderPlayerPeriod,
   ProviderPlayerSearchInput,
@@ -63,6 +63,7 @@ import type {
 } from "#contexts/connections/Provider.ts";
 import type { ProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
+import { describeStatWindow, statWindowDays } from "#contexts/connections/StatWindow.ts";
 import { PublicInternet } from "#runtime/PublicInternet.ts";
 
 import { scoreYahooRoster, yahooCapabilities } from "./YahooLineup.ts";
@@ -106,6 +107,9 @@ import {
   searchPlayersThroughSdk,
   validateSessionThroughSdk,
   withdrawTradeThroughSdk,
+  yahooPlayerSearchCapability,
+  yahooRecentFormWindowOf,
+  type YahooRecentWindow,
   yahooSdkContext,
 } from "./YahooSdk.ts";
 
@@ -606,10 +610,8 @@ export const yahooProvider = Effect.gen(function* () {
     const limit = yield* ValidSearchLimit(input.limit);
     const query = yield* ValidSearchQuery(input.query);
     const stat = yield* ValidSearchStat(input.sort, input.statId, input.statType);
-    const recentWindow =
-      input.sort === "recent_rank"
-        ? yield* ValidRecentRankWindow(input.sport, input.recentWindow)
-        : undefined;
+    const window =
+      input.sort === "recent_rank" ? yield* ValidRecentFormWindow(input.window) : undefined;
     const positions = Option.getOrUndefined(yield* ValidSearchPositions(input.positions));
     const players = yield* searchPlayersThroughSdk(sdk, "search_players", cookie, {
       leagueKey,
@@ -619,7 +621,7 @@ export const yahooProvider = Effect.gen(function* () {
       sort: input.sort,
       statType: stat.statType,
       statId: stat.statId,
-      recentWindow,
+      window,
       positions,
       limit,
     });
@@ -986,6 +988,7 @@ function leagueSettings(
         statId,
         points: String(value),
       })),
+      playerSearch: yahooPlayerSearchCapability(settings),
     };
   });
 }
@@ -1329,16 +1332,17 @@ function resolvePlayerPeriod(input: {
         }
         return { kind: "single" as const, query: { type: "week" as const, week } };
       }
-      case "preset": {
-        const window = input.support.presets.find((entry) => entry.preset === period.preset);
-        if (window === undefined) {
+      case "last_days":
+      case "last_weeks": {
+        const days = statWindowDays(period);
+        if (days === undefined) {
           return yield* unsupportedPeriod(
             input,
-            `Your league does not declare the \`${period.preset}\` window.`,
+            `Your league does not declare ${describeStatWindow(period)}.`,
           );
         }
         const end = fantasyDayLabel(input.now, input.fantasyDay);
-        const start = shiftDate(end, -(window.days - 1));
+        const start = shiftDate(end, -(days - 1));
         return yield* dailyResolution(input, start, end);
       }
       case "range":
@@ -1383,10 +1387,10 @@ function dailyResolution(
 ): Effect.Effect<PlayerPeriodResolution, ProviderReadFailure> {
   return Effect.gen(function* () {
     const days = calendarDays(start, end);
-    if (days.length > input.support.maximumRangeDays) {
+    if (days.length > input.support.maximumWindowDays) {
       return yield* unsupportedPeriod(
         input,
-        `The requested window covers ${String(days.length)} days, and your league serves an explicit window of at most ${String(input.support.maximumRangeDays)} days.`,
+        `The requested window covers ${String(days.length)} days, and your league serves a window of at most ${String(input.support.maximumWindowDays)} days.`,
       );
     }
     return { kind: "daily" as const, start, end, days };
@@ -1422,14 +1426,19 @@ function servedAlternatives(support: ProviderPeriodSupport): ReadonlyArray<strin
   if (support.kinds.week !== "unsupported") {
     alternatives.push('`kind: "week"` with a completed scoring week');
   }
-  if (support.kinds.preset !== "unsupported" && support.presets.length > 0) {
+  if (support.kinds.last_days !== "unsupported") {
     alternatives.push(
-      `\`kind: "preset"\` with ${support.presets.map((entry) => `\`${entry.preset}\``).join(", ")}`,
+      `\`kind: "last_days"\` with at most ${String(support.maximumWindowDays)} days`,
+    );
+  }
+  if (support.kinds.last_weeks !== "unsupported") {
+    alternatives.push(
+      `\`kind: "last_weeks"\` with at most ${String(Math.floor(support.maximumWindowDays / 7))} weeks`,
     );
   }
   if (support.kinds.range !== "unsupported") {
     alternatives.push(
-      `\`kind: "range"\` with an explicit \`start\` and \`end\` of at most ${String(support.maximumRangeDays)} days`,
+      `\`kind: "range"\` with an explicit \`start\` and \`end\` of at most ${String(support.maximumWindowDays)} days`,
     );
   }
   return alternatives;
@@ -2071,26 +2080,23 @@ function ValidSearchPositions(
     : ProviderResponseInvalid.make({ operation: "search_players", field: "positions" });
 }
 
-function ValidRecentRankWindow(
-  sport: FantasySport,
-  window: StatPeriodPresetName | undefined,
-): Effect.Effect<StatPeriodPresetName, ProviderPeriodUnsupported> {
-  const support = yahooCapabilities.playerSearch.recentRanks[sport];
-  if (window !== undefined && support.windows.includes(window)) {
-    return Effect.succeed(window);
+function ValidRecentFormWindow(
+  window: RecentFormWindow | undefined,
+): Effect.Effect<YahooRecentWindow, ProviderPeriodUnsupported> {
+  const mapped = window === undefined ? undefined : yahooRecentFormWindowOf(window);
+  if (mapped !== undefined) {
+    return Effect.succeed(mapped);
   }
   return ProviderPeriodUnsupported.make({
     operation: "search_players",
-    kind: "preset",
-    declared: support.windows.length === 0 ? "unsupported" : "native",
+    kind: window?.kind ?? "last_days",
+    declared: "unsupported",
     reason:
       window === undefined
-        ? `A recent-rank ordering names one preset window, and your league publishes no window it can order by. ${support.detail}`
-        : support.detail,
+        ? "A recent-form ordering names one window, and this request names none."
+        : `This provider publishes no recent-form rank for ${describeStatWindow(window)}.`,
     remedy:
-      support.windows.length === 0
-        ? "Order the pool by ownership, a season rank, or a season stat instead."
-        : `Ask for one of: ${support.windows.join(", ")}.`,
+      "Ask for the last 7 days, the last 14 days, the last 30 days, or the last 4 weeks, or order by ownership, a season rank, or a season stat.",
   });
 }
 

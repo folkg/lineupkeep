@@ -14,6 +14,7 @@ import {
   emptyStandingsPayload,
   leagueSettingsPayload,
   leagueSettingsWithPartialWeekWindow,
+  leagueSettingsWithPlayerRanks,
   leagueSettingsWithZeroLimits,
   leagueRostersPayload,
   matchupsPayload,
@@ -115,7 +116,7 @@ it.effect("reads league settings into named slots, categories, and modifiers", (
     }
     assert.strictEqual(
       call.url,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/settings?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000;out=settings/players;status=A;sort=AR;sort_type=season;count=5;out=ranks;ranks=last7days,last14days,last30days,last4weeks?format=json",
     );
     assert.strictEqual(league.name, "Synthetic NFL League");
     assert.strictEqual(league.season, 2026);
@@ -137,6 +138,43 @@ it.effect("reads league settings into named slots, categories, and modifiers", (
     ]);
     assert.strictEqual(league.settings.usesFaab, false);
     assert.strictEqual(league.settings.tradeRatifyType, "commish");
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("reads the player-rank sample that travels with the league settings", () => {
+  const recording = recordingClient(() => jsonResponse(leagueSettingsWithPlayerRanks));
+  return Effect.gen(function* () {
+    const league = yield* client.readLeagueSettings({ session, leagueKey: "466.l.4000" });
+
+    assert.deepStrictEqual(league.playerRankSample, [
+      {
+        playerKey: "466.p.20001",
+        ranks: [
+          { type: "L7", value: 5, season: undefined },
+          { type: "L14", value: null, season: undefined },
+          { type: "L30", value: 9, season: undefined },
+          { type: "L4W", value: 25, season: undefined },
+        ],
+      },
+      {
+        playerKey: "466.p.20002",
+        ranks: [
+          { type: "L7", value: 8, season: undefined },
+          { type: "L14", value: 12, season: undefined },
+          { type: "L30", value: null, season: undefined },
+          { type: "L4W", value: null, season: undefined },
+        ],
+      },
+    ]);
+    assert.deepStrictEqual(
+      Yahoo.players.publishedRecentFormWindows(league.playerRankSample ?? []),
+      [
+        { type: "days", days: 7 },
+        { type: "days", days: 14 },
+        { type: "days", days: 30 },
+        { type: "weeks", weeks: 4 },
+      ],
+    );
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
 

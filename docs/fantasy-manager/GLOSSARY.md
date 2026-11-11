@@ -251,8 +251,12 @@ _Avoid_: Fact hook, cache lookup, source call
 A fantasy team not enrolled in scheduled lineup automation. Newly discovered teams are disabled.
 
 **Statistic period**:
-The window a player-statistics read covers: a whole season, one scoring week, a fixed recent preset window, or an explicit inclusive date range. A provider declares per sport whether it serves each kind natively, by aggregating its daily reads, or not at all, and a kind it does not serve is refused with the alternative rather than replaced by season totals.
+The window a player-statistics read covers: a whole season, one scoring week, the last N days, the last N weeks, or an explicit inclusive date range. A provider declares per sport whether it serves each kind natively, by aggregating its daily reads, or not at all, and a kind it does not serve is refused with the alternative rather than replaced by season totals.
 _Avoid_: Timeframe, split, timespan
+
+**Recent-form window**:
+The neutral window a pool can be ordered over: the last N days or the last N weeks. A league publishes which of its provider's windows it actually carries, and a window it does not publish is refused with the nearest published one named. The provider's own token, rank type, and sort-type names stay below the provider seam.
+_Avoid_: Preset, L7, L4W, biweekly, lastmonth
 
 **Aggregated period**:
 A statistic period a provider serves by summing its own daily reads for every day in the window. It reports the covered dates and its method, and it never sums categories the provider publishes as rates or percentages.

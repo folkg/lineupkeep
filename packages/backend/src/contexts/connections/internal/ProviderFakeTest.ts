@@ -1075,57 +1075,51 @@ const fakeCapabilities: ProviderCapabilities = {
     sorts: ["name", "position", "ownership", "actual_rank", "overall_rank", "stat", "recent_rank"],
     providerOrderedSorts: ["actual_rank", "overall_rank", "stat", "recent_rank"],
     weeklyOrderingValues: false,
-    recentRanks: {
-      football: {
-        windows: [],
-        detail: "The fake provider publishes no recent-window rank for football.",
-      },
-      hockey: {
-        windows: ["last_7_days", "last_14_days", "last_30_days"],
-        detail: "The fake provider publishes seven-, fourteen-, and thirty-day ranks for hockey.",
-      },
-      baseball: { windows: [], detail: "The fake provider does not serve baseball." },
-      basketball: { windows: [], detail: "The fake provider does not serve basketball." },
-    },
   },
   statPeriods: {
     football: {
-      kinds: { season: "native", week: "native", preset: "unsupported", range: "unsupported" },
-      presets: [],
-      maximumRangeDays: 0,
+      kinds: {
+        season: "native",
+        week: "native",
+        last_days: "unsupported",
+        last_weeks: "unsupported",
+        range: "unsupported",
+      },
+      maximumWindowDays: 0,
       detail: "The fake provider publishes season and completed-week player series only.",
     },
     hockey: {
-      kinds: { season: "native", week: "unsupported", preset: "aggregated", range: "aggregated" },
-      presets: [
-        { preset: "last_7_days", days: 7 },
-        { preset: "last_14_days", days: 14 },
-        { preset: "last_30_days", days: 30 },
-      ],
-      maximumRangeDays: 31,
+      kinds: {
+        season: "native",
+        week: "unsupported",
+        last_days: "aggregated",
+        last_weeks: "aggregated",
+        range: "aggregated",
+      },
+      maximumWindowDays: 31,
       detail:
-        "The fake provider publishes no weekly player series for hockey and serves preset windows and explicit ranges by aggregating daily reads.",
+        "The fake provider publishes no weekly player series for hockey and serves recent windows and explicit ranges by aggregating daily reads.",
     },
     baseball: {
       kinds: {
         season: "unsupported",
         week: "unsupported",
-        preset: "unsupported",
+        last_days: "unsupported",
+        last_weeks: "unsupported",
         range: "unsupported",
       },
-      presets: [],
-      maximumRangeDays: 0,
+      maximumWindowDays: 0,
       detail: "The fake provider does not serve baseball.",
     },
     basketball: {
       kinds: {
         season: "unsupported",
         week: "unsupported",
-        preset: "unsupported",
+        last_days: "unsupported",
+        last_weeks: "unsupported",
         range: "unsupported",
       },
-      presets: [],
-      maximumRangeDays: 0,
+      maximumWindowDays: 0,
       detail: "The fake provider does not serve basketball.",
     },
   },
@@ -1208,10 +1202,12 @@ function fakePlayerBasis(
       kind: period.kind,
       declared: "unsupported",
       reason: support.detail,
-      remedy: `Ask for one of: \`kind: "season"\` for season totals, \`kind: "preset"\` with ${support.presets
-        .map((entry) => entry.preset)
-        .join(", ")}, \`kind: "range"\` with an explicit \`start\` and \`end\` of at most ${String(
-        support.maximumRangeDays,
+      remedy: `Ask for one of: \`kind: "season"\` for season totals, \`kind: "last_days"\` within ${String(
+        support.maximumWindowDays,
+      )} days, \`kind: "last_weeks"\` within ${String(
+        Math.floor(support.maximumWindowDays / 7),
+      )} weeks, or \`kind: "range"\` with an explicit \`start\` and \`end\` of at most ${String(
+        support.maximumWindowDays,
       )} days.`,
     });
   }
@@ -1228,9 +1224,9 @@ function fakePlayerBasis(
             remedy: 'Ask for a completed week, or `kind: "season"` for season totals.',
           })
         : Effect.succeed({ type: "week" as const, week: period.week });
-    case "preset": {
-      const window = support.presets.find((entry) => entry.preset === period.preset);
-      const days = window?.days ?? 1;
+    case "last_days":
+    case "last_weeks": {
+      const days = period.kind === "last_days" ? period.days : period.weeks * 7;
       return Effect.succeed({
         type: "date_range" as const,
         start: fakeShiftDate(fakeFantasyDay, -(days - 1)),

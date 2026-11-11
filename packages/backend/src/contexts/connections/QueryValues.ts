@@ -32,15 +32,21 @@ const StatPeriodWeek = Schema.Int.check(
 
 const StatPeriodDate = Schema.String.pipe(Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)));
 
-export const StatPeriodPreset = Schema.Literals(["last_7_days", "last_14_days", "last_30_days"]);
-export type StatPeriodPreset = typeof StatPeriodPreset.Type;
+const StatWindowDays = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(1),
+  Schema.isLessThanOrEqualTo(365),
+);
+const StatWindowWeeks = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(1),
+  Schema.isLessThanOrEqualTo(52),
+);
 
-export const StatPeriod = Schema.Union([
+export const StatWindow = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("season"),
   }).pipe(
     Schema.annotate({
-      description: "Season-to-date totals; the default when `period` is omitted.",
+      description: "Season totals",
     }),
   ),
   Schema.Struct({
@@ -49,16 +55,23 @@ export const StatPeriod = Schema.Union([
   }).pipe(
     Schema.annotate({
       description:
-        "One scoring week. `{week}` alone is the short form. Served only for a completed week in a sport with a weekly series.",
+        "One scoring week; `{week}` is the short form. Completed weeks only where the sport has a weekly series.",
     }),
   ),
   Schema.Struct({
-    kind: Schema.Literal("preset"),
-    preset: StatPeriodPreset,
+    kind: Schema.Literal("last_days"),
+    days: StatWindowDays,
   }).pipe(
     Schema.annotate({
-      description:
-        "A fixed recent window ending on the current fantasy day: `last_7_days`, `last_14_days`, or `last_30_days`.",
+      description: "The last N days",
+    }),
+  ),
+  Schema.Struct({
+    kind: Schema.Literal("last_weeks"),
+    weeks: StatWindowWeeks,
+  }).pipe(
+    Schema.annotate({
+      description: "The last N weeks",
     }),
   ),
   Schema.Struct({
@@ -67,14 +80,23 @@ export const StatPeriod = Schema.Union([
     end: StatPeriodDate,
   }).pipe(
     Schema.annotate({
-      description:
-        "An inclusive calendar range. The site bounds its length and reports the cap in `periodSupport`.",
+      description: "An inclusive date range; the site's maximum is in `periodSupport`.",
     }),
   ),
 ]);
-export type StatPeriod = typeof StatPeriod.Type;
+export type StatWindow = typeof StatWindow.Type;
 
-export type StatPeriodKind = "season" | "week" | "preset" | "range";
+export const RecentFormWindow = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("last_days"),
+    days: StatWindowDays,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("last_weeks"),
+    weeks: StatWindowWeeks,
+  }),
+]);
+export type RecentFormWindow = typeof RecentFormWindow.Type;
 
 export const PlayerRef = Schema.String.pipe(
   Schema.check(Schema.isMinLength(1), Schema.isMaxLength(2_048)),

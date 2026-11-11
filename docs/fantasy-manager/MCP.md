@@ -14,21 +14,21 @@ Status: proposed surface and acceptance criteria. Names other than the agreed ge
 
 ## Proposed tool families
 
-| Tool                  | Purpose and important limits                                                                                                                                                                              |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list_connections`    | Safe owned provider connection metadata/status only                                                                                                                                                       |
-| `list_teams`          | Compact owned team discovery with season/sport/connection filters; stable paging                                                                                                                          |
-| `get_calendar`        | Valid current/historical periods and relevant fantasy-day/lock context; no guessed week equivalence                                                                                                       |
-| `get_league`          | Selected league settings, scoring definitions, roster rules, standings with records, season points, and category totals, and completed draft history; bounded groups/pages                                |
-| `get_rosters`         | Exact selected team/period rosters, or every team's roster in a linked league paged by whole teams; professional-team abbreviation and goalie/pitcher starting status; full detail carries the owner note |
-| `search_players`      | Bounded league/sport-context player search with ownership/started signals, validated sorts including the provider's recent-window rank, draft provenance, and optional professional games remaining       |
-| `get_players`         | Explicit-list hydration of up to 25 selected-player references, returned whole; stats, availability, draft provenance, and the week's projection where published                                          |
-| `get_matchups`        | Selected matchup/scoreboard data with explicit period, category values/winners, and remaining player-games                                                                                                |
-| `get_transactions`    | Bounded transaction history with team scope and date filtering, two-sided player movements, trade parties, traded draft picks, and explicit incompleteness; no execution                                  |
-| `get_team_summary`    | One bounded per-team snapshot: league, standing and record, standings, current matchup, and a compact roster carrying draft provenance and starting status                                                |
-| `set_lineup`          | The sole roster mutation operation; creates durable team runs and returns verified or pending outcomes                                                                                                    |
-| `set_team_automation` | Enable, disable, pause for the rest of the fantasy day, or resume owned team automation; reports resulting state                                                                                          |
-| `get_lineup_runs`     | Owned run status, safe concise explanations, observed changes, and unresolved conditions                                                                                                                  |
+| Tool                  | Purpose and important limits                                                                                                                                                                                 |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `list_connections`    | Safe owned provider connection metadata/status only                                                                                                                                                          |
+| `list_teams`          | Compact owned team discovery with season/sport/connection filters; stable paging                                                                                                                             |
+| `get_calendar`        | Valid current/historical periods and relevant fantasy-day/lock context; no guessed week equivalence                                                                                                          |
+| `get_league`          | Selected league settings, scoring definitions, roster rules, standings with records, season points, and category totals, and completed draft history; bounded groups/pages                                   |
+| `get_rosters`         | Exact selected team/period rosters, or every team's roster in a linked league paged by whole teams; professional-team abbreviation and goalie/pitcher starting status; full detail carries the owner note    |
+| `search_players`      | Bounded league/sport-context player search with ownership/started signals, validated sorts including the league's published recent-form windows, draft provenance, and optional professional games remaining |
+| `get_players`         | Explicit-list hydration of up to 25 selected-player references, returned whole; stats, availability, draft provenance, and the week's projection where published                                             |
+| `get_matchups`        | Selected matchup/scoreboard data with explicit period, category values/winners, and remaining player-games                                                                                                   |
+| `get_transactions`    | Bounded transaction history with team scope and date filtering, two-sided player movements, trade parties, traded draft picks, and explicit incompleteness; no execution                                     |
+| `get_team_summary`    | One bounded per-team snapshot: league, standing and record, standings, current matchup, and a compact roster carrying draft provenance and starting status                                                   |
+| `set_lineup`          | The sole roster mutation operation; creates durable team runs and returns verified or pending outcomes                                                                                                       |
+| `set_team_automation` | Enable, disable, pause for the rest of the fantasy day, or resume owned team automation; reports resulting state                                                                                             |
+| `get_lineup_runs`     | Owned run status, safe concise explanations, observed changes, and unresolved conditions                                                                                                                     |
 
 Do not expose a general policy-mode selector, native/premium action selector, custom formula, or fallback override. Return the implementation actually used. The MCP surface covers automation enrollment, pause, and resume because an agent must be able to manage a team it owns; it still does not expose registration, provider session upload, or every frontend control as tools.
 
@@ -315,7 +315,7 @@ same read the roster already used.
 `search_players` rows carry the value each provider-ordered sort uses: `actualRank` (the provider's
 current-season rank, which orders `actual_rank`), `overallRank` (which orders `overall_rank`),
 `statValue` (the season value of the requested `stat`, present only for a `stat` sort), and
-`recentRank` (the provider's rank over the requested preset window, present only for a `recent_rank`
+`recentRank` (the provider's rank over the requested window, present only for a `recent_rank`
 sort). A client can therefore check the order it received without a second read. Provider ownership and started
 percentages and their changes are null only when the provider published no value for that row, and
 the field descriptions say so. There is exactly one ownership-change field, `percentOwnedDelta`; an
@@ -325,13 +325,20 @@ week, and `percentStartedChange` is its delta over its current started-percentag
 week in football, the provider's fantasy day in hockey); both windows are stated in the field
 descriptions. Weekly rank and stat sorts are refused with the remedy because the provider's search
 payload publishes only season values for them; offering the sort would return an order the rows
-cannot explain. The recent-window sorts read the provider's own `L7`, `L14`, or `L30` rank, which the
-search payload never carries, so the ranking read that supplies those values also supplies the order
-and its explanation. A sport whose provider leaves the preset ranks empty refuses every preset window
-with that reason, as football does with its last-four-week rank; a preset window on a season sort is
-refused with the sort that accepts it. A `recent_rank` request narrows plain position codes at the
-provider, so its first page is that narrowed pool; a roster-slot value stays a local filter over the
-provider's page.
+cannot explain. The recent-form order reads the provider's own rank over the requested window, which
+the search payload never carries, so the ranking read that supplies the value also supplies the
+order and its explanation.
+
+`search_players` takes one product window: `{kind: "last_days", days}` or
+`{kind: "last_weeks", weeks}` for `recent_rank`, and `{kind: "season"}` or
+`{kind: "week", week}` for `stat`. A recent window on a season sort is refused with the sort that
+accepts it, and a season window on a recent-form sort is refused with the windows the league
+publishes. `get_league` publishes `playerSearch` — the `sorts` and `windows` that league actually
+publishes, plus a plain `detail` — so a client can see the options before calling. A window the
+league does not publish is refused with the nearest published window named; a league that publishes
+no recent-form rank does not offer `recent_rank`. A `recent_rank` request narrows plain position
+codes at the provider, so its first page is that narrowed pool; a roster-slot value stays a local
+filter over the provider's page.
 
 `get_transactions` maps `scope: team` onto the provider's team filter. `since` and `until` are ISO
 8601 instants such as `2026-09-20T00:00:00Z`. The provider has no date filter, but its history is
@@ -712,25 +719,57 @@ Actual statistics state their basis: `week` with the covered period when the pro
 
 ### Player-statistics periods
 
-`get_players` accepts exactly four period shapes for `actual_stats`: `{kind: "season"}` (the default),
-`{kind: "week", week}` with `{week}` as its short form, `{kind: "preset", preset}` with
-`last_7_days`, `last_14_days`, or `last_30_days`, and `{kind: "range", start, end}` with inclusive
-`YYYY-MM-DD` dates. The provider declares, as data beside its other capabilities, how it serves each
-kind for each sport — `native`, `aggregated`, or `unsupported` — plus the preset windows and the range
-length cap. The published period schema lists the shapes and the result repeats the declaration in
-`periodSupport`, so a client can read the boundary instead of probing it.
+`get_players` accepts exactly five period shapes for `actual_stats`: `{kind: "season"}` (the default),
+`{kind: "week", week}` with `{week}` as its short form, `{kind: "last_days", days}`,
+`{kind: "last_weeks", weeks}`, and `{kind: "range", start, end}` with inclusive `YYYY-MM-DD` dates. The
+provider declares, as data beside its other capabilities, how it serves each kind for each sport —
+`native`, `aggregated`, or `unsupported` — plus the window length cap. The published period schema
+lists the shapes and the result repeats the declaration in `periodSupport`, so a client can read the
+boundary instead of probing it.
 
-| Provider | Sport    | season | week                          | preset      | range       | Notes                                                                                            |
-| -------- | -------- | ------ | ----------------------------- | ----------- | ----------- | ------------------------------------------------------------------------------------------------ |
-| Yahoo    | football | native | native (completed weeks only) | unsupported | unsupported | No daily player series; a preset or range is refused with the week or season remedy              |
-| Yahoo    | hockey   | native | unsupported                   | aggregated  | aggregated  | Daily reads summed; range capped at 31 days; the window's rate categories are listed, not summed |
+| Provider | Sport    | season | week                          | last_days   | last_weeks  | range       | Notes                                                                                      |
+| -------- | -------- | ------ | ----------------------------- | ----------- | ----------- | ----------- | ------------------------------------------------------------------------------------------ |
+| Yahoo    | football | native | native (completed weeks only) | unsupported | unsupported | unsupported | No daily player series; a recent window or range is refused with the week or season remedy |
+| Yahoo    | hockey   | native | unsupported                   | aggregated  | aggregated  | aggregated  | Daily reads summed; capped at 31 days; the window's rate categories are listed, not summed |
 
 A refusal names the period kind, whether the provider serves that kind at all, and the kinds it can
-serve instead; season totals are never substituted silently. Yahoo's hockey preset windows and
+serve instead; season totals are never substituted silently. Yahoo's hockey recent windows and
 ranges are one batched request per day for every requested player reference (25 references at most),
 run with bounded concurrency, so a 7-day window for 25 players is 7 upstream reads rather than 175.
 A range that covers the league's declared season is served as the season series instead of daily
-calls, and a range longer than the declared cap is refused with the cap and the alternative windows.
+calls, and a window longer than the declared cap is refused with the cap and the alternative windows.
+
+### What recent-form windows each league publishes
+
+The league read carries `playerSearch` with `status`, `sorts`, `windows`, and a plain `detail`. The
+window list comes from a five-player rank sample read in the same request as the league settings,
+not from a per-sport table, so a league that publishes a different set says so.
+
+Live, read-only, against the owner's linked leagues on 2026-11-11, with the football and hockey
+rows read back through the committed league read:
+
+| Provider | Sport      | Windows the league published | What was verified                                                                                                                                 |
+| -------- | ---------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Yahoo    | hockey     | last 7, 14, 30 days          | All three came back as integer ranks and the pool order was exactly ascending that rank across three leagues.                                     |
+| Yahoo    | football   | last 4 weeks                 | The four-week rank came back for every sampled player and the pool order was exactly ascending it (25, 28, 54, 55, 66, 68, 73, 77 on one sample). |
+| Yahoo    | baseball   | not verified                 | No linked league. The reference puts it in the non-football pool ordered by a fourteen-day rank, a call shape rather than an observation here.    |
+| Yahoo    | basketball | not verified                 | No linked league. The reference puts it in the non-football pool ordered by a fourteen-day rank, a call shape rather than an observation here.    |
+
+Football left the seven-, fourteen-, and thirty-day rank values empty while still accepting those
+orders: the rows came back in an order the published values did not explain, so those windows are not
+offered. Its four-week token is accepted with the provider's four-week sort type; that sort type is
+rejected for hockey, whose plain day tokens are enough. `biweekly` is accepted for hockey's
+fourteen-day order and rejected for football's; `lastmonth` is accepted for a thirty-day order and
+changes nothing. Those alternate sort types are not used, because the plain token already publishes
+the value that orders the pool.
+
+Not verified here: whether every football or hockey league publishes the same set (one football and
+one hockey league were sampled for the capability), and any baseball or basketball window. The
+AutoCoach reference splits its pool into football and everything else: its non-football request,
+covering hockey, baseball, and basketball, uses `sort=AR_L14;sort_type=biweekly`, and its football
+request uses `sort=AR_L4W;sort_type=last4weeks`. That is evidence of the reference's vocabulary, not
+of today's provider response for baseball or basketball.
+
 An aggregated group states its covered dates, its `daily_sum` method, and a `notAggregated` list for
 categories the provider publishes as rates or percentages (Yahoo hockey goals against average and
 save percentage): a rate is never summed across days, and an unpublished day stays null rather than

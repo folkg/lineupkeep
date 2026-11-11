@@ -121,7 +121,7 @@ it("resolves a dated target for a second provider without a weekly assumption", 
   }
 });
 
-it.effect("reads a second provider's weekly search order and states its own schedule bound", () =>
+it.effect("reads a second provider's player search and states its own schedule bound", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
     const connections = yield* Connections;
@@ -134,12 +134,11 @@ it.effect("reads a second provider's weekly search order and states its own sche
     const discovered = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
     const teamId = Array.getUnsafe(discovered, 0).id;
 
-    const weekly = yield* queries.searchPlayers(owner, {
+    const search = yield* queries.searchPlayers(owner, {
       team: teamId,
       sort: "name",
-      statPeriod: "week",
     });
-    assert.strictEqual(weekly.status, "ok");
+    assert.strictEqual(search.status, "ok");
 
     const summary = yield* queries.getTeamSummary(owner, {
       team: teamId,

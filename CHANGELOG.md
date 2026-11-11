@@ -3,6 +3,23 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
+## Unreleased — neutral recent-form windows, including football
+
+- `search_players` takes one `window` instead of the three-name `statPeriod`: `{kind: "last_days",
+  days}` or `{kind: "last_weeks", weeks}` for `recent_rank`, and `season` or `week` for `stat`. The
+  three fixed presets are gone; the schema accepts a day or week count instead of a fixed list,
+  and the league decides which it publishes. `recentRank` rows now state the same neutral window.
+- `get_league` publishes `playerSearch`: the orderings and recent-form windows that league actually
+  publishes, read from a five-player rank sample in the league-settings request. A client can see the
+  options before calling `search_players`; an unsupported window is refused with the nearest
+  published one named.
+- Football's recent form works over the last four weeks. The provider accepted seven-, fourteen-,
+  and thirty-day orders but left those rank values empty, so the rows could not explain the order;
+  the four-week order publishes the rank on every row (25, 28, 54, 55, 66, 68, 73, 77 in one live
+  sample). Hockey's seven-, fourteen-, and thirty-day ranks are unchanged. Live evidence and the
+  reference-only baseball and basketball call shapes are recorded in
+  [MCP.md](docs/fantasy-manager/MCP.md#what-recent-form-windows-each-league-publishes).
+
 ## Unreleased — transactions by intent, and a lineup after each submission
 
 - `propose_transactions` accepts `activate` and `stash` items and an add's `to: active | reserve`. Neither names a slot. The server chooses the place with the lineup solver and the set read carries a `placement` with the chosen place and one sentence saying why. `slot_move` stays for a client that genuinely wants one named slot. The input arrays `adds` and `drops` may be omitted when an item has only an intent.

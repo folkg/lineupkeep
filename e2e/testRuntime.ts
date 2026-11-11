@@ -74,7 +74,7 @@ function yahooResponse(url: URL): unknown {
   if (league === "nfl" || league === "nhl") {
     return teamsPayload(league);
   }
-  const settings = /^\/fantasy\/v2\/league\/([^/]+)\/settings$/u.exec(url.pathname);
+  const settings = /^\/fantasy\/v2\/league\/([^/;]+);out=settings(?:[/;]|$)/u.exec(url.pathname);
   if (settings?.[1] !== undefined) {
     return leagueSettingsPayload(settings[1]);
   }
@@ -351,9 +351,34 @@ function discoverLeague(leagueKey: string, teamName: string): unknown {
 
 function leagueSettingsPayload(leagueKey: string): unknown {
   const { attributes, settings, teamKey } = leagueSettingsFragments(leagueKey);
+  const playerKey = `${leagueKey.slice(0, leagueKey.indexOf("."))}.p.90001`;
+  const ranks =
+    leagueKey === "461.l.9000"
+      ? [{ rank_type: "L4W", rank_value: "25" }]
+      : [
+          { rank_type: "L7", rank_value: "5" },
+          { rank_type: "L14", rank_value: "12" },
+          { rank_type: "L30", rank_value: "9" },
+        ];
   return {
     fantasy_content: {
-      league: [attributes, { settings: [settings], count: 1, team_key: teamKey }],
+      league: [
+        attributes,
+        { settings: [settings], count: 1, team_key: teamKey },
+        {
+          players: {
+            count: 1,
+            "0": {
+              player: [
+                [{ player_key: playerKey }],
+                {
+                  player_ranks: ranks.map((rank) => ({ player_rank: rank })),
+                },
+              ],
+            },
+          },
+        },
+      ],
     },
   };
 }

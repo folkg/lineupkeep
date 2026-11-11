@@ -35,6 +35,7 @@ import { ProfessionalCalendar } from "./ProfessionalCalendar.ts";
 import type {
   ProviderAcquisitionUsage,
   ProviderSchedulePeriod,
+  ProviderLeaguePlayerSearch,
   ProviderLeagueRoster,
   ProviderLeagueSettings,
   ProviderTransaction,
@@ -1688,7 +1689,7 @@ it.effect("orders the pool by a recent window and states each row's rank", () =>
         proTeam: "BOS",
         primaryPosition: "G",
         displayPosition: "G",
-        recentRank: { window: "last_14_days", rank: 193 },
+        recentRank: { window: { kind: "last_days", days: 14 }, rank: 193 },
       }),
       searchFixture({
         providerPlayerKey: "465.p.30002",
@@ -1704,7 +1705,7 @@ it.effect("orders the pool by a recent window and states each row's rank", () =>
         proTeam: "TOR",
         primaryPosition: "G",
         displayPosition: "G",
-        recentRank: { window: "last_14_days", rank: 29 },
+        recentRank: { window: { kind: "last_days", days: 14 }, rank: 29 },
       }),
       searchFixture({
         providerPlayerKey: "465.p.30003",
@@ -1720,7 +1721,7 @@ it.effect("orders the pool by a recent window and states each row's rank", () =>
         proTeam: "NYR",
         primaryPosition: "G",
         displayPosition: "G",
-        recentRank: { window: "last_14_days", rank: 16 },
+        recentRank: { window: { kind: "last_days", days: 14 }, rank: 16 },
       }),
       searchFixture({
         providerPlayerKey: "465.p.30004",
@@ -1736,7 +1737,7 @@ it.effect("orders the pool by a recent window and states each row's rank", () =>
         proTeam: "SEA",
         primaryPosition: "G",
         displayPosition: "G",
-        recentRank: { window: "last_14_days", rank: null },
+        recentRank: { window: { kind: "last_days", days: 14 }, rank: null },
       }),
     ]);
 
@@ -1745,7 +1746,7 @@ it.effect("orders the pool by a recent window and states each row's rank", () =>
       positions: ["G"],
       availability: "free_agent",
       sort: "recent_rank",
-      statPeriod: "last_14_days",
+      window: { kind: "last_days", days: 14 },
     });
 
     assert.strictEqual(search.status, "ok");
@@ -1755,10 +1756,10 @@ it.effect("orders the pool by a recent window and states each row's rank", () =>
     assert.deepStrictEqual(
       search.players.map((player) => [player.name, player.recentRank]),
       [
-        ["Season Leader", { window: "last_14_days", rank: 16 }],
-        ["In Form Goalie", { window: "last_14_days", rank: 29 }],
-        ["Cold Goalie", { window: "last_14_days", rank: 193 }],
-        ["Unranked Goalie", { window: "last_14_days", rank: null }],
+        ["Season Leader", { window: { kind: "last_days", days: 14 }, rank: 16 }],
+        ["In Form Goalie", { window: { kind: "last_days", days: 14 }, rank: 29 }],
+        ["Cold Goalie", { window: { kind: "last_days", days: 14 }, rank: 193 }],
+        ["Unranked Goalie", { window: { kind: "last_days", days: 14 }, rank: null }],
       ],
     );
     assert.isTrue(
@@ -1769,7 +1770,134 @@ it.effect("orders the pool by a recent window and states each row's rank", () =>
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect("refuses a preset window a season order cannot answer with", () =>
+it.effect(
+  "answers one neutral recent-form question in the same row shape for hockey and football",
+  () =>
+    Effect.gen(function* () {
+      const queries = yield* FantasyQueries;
+      const fake = yield* FakeProviderWorld;
+      yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl"), team("461.l.1000.t.1", "Alpha")], {
+        league: hockeyLeagueFixture,
+      });
+      const listed = yield* queries.listTeams(owner, {});
+      assert.strictEqual(listed.status, "ok");
+      if (listed.status !== "ok") {
+        return;
+      }
+      const hockeyTeam = listed.teams.find((entry) => entry.name === "Gamma")?.team;
+      const footballTeam = listed.teams.find((entry) => entry.name === "Alpha")?.team;
+      assert.isDefined(hockeyTeam);
+      assert.isDefined(footballTeam);
+
+      yield* fake.setSearchPlayers([
+        searchFixture({
+          providerPlayerKey: "465.p.30001",
+          name: "Hockey Second",
+          availability: "free_agent",
+          actualRank: 20,
+          overallRank: 40,
+          statValue: null,
+          percentOwned: 10,
+          percentOwnedDelta: 0,
+          percentStarted: 5,
+          percentStartedChange: 0,
+          primaryPosition: "G",
+          displayPosition: "G",
+          recentRank: { window: { kind: "last_days", days: 14 }, rank: 29 },
+        }),
+        searchFixture({
+          providerPlayerKey: "465.p.30002",
+          name: "Hockey First",
+          availability: "free_agent",
+          actualRank: 12,
+          overallRank: 70,
+          statValue: null,
+          percentOwned: 35,
+          percentOwnedDelta: 1,
+          percentStarted: 20,
+          percentStartedChange: 0,
+          primaryPosition: "G",
+          displayPosition: "G",
+          recentRank: { window: { kind: "last_days", days: 14 }, rank: 16 },
+        }),
+      ]);
+      const hockey = yield* queries.searchPlayers(owner, {
+        team: hockeyTeam,
+        availability: "free_agent",
+        sort: "recent_rank",
+        window: { kind: "last_days", days: 14 },
+      });
+      assert.strictEqual(hockey.status, "ok");
+      if (hockey.status !== "ok") {
+        return;
+      }
+      assert.deepStrictEqual(
+        hockey.players.map((player) => [player.name, player.recentRank]),
+        [
+          ["Hockey First", { window: { kind: "last_days", days: 14 }, rank: 16 }],
+          ["Hockey Second", { window: { kind: "last_days", days: 14 }, rank: 29 }],
+        ],
+      );
+
+      yield* fake.setLeague(leagueFixture);
+      yield* fake.setSearchPlayers([
+        searchFixture({
+          providerPlayerKey: "461.p.50001",
+          name: "Football Second",
+          availability: "free_agent",
+          actualRank: 30,
+          overallRank: 60,
+          statValue: null,
+          percentOwned: 12,
+          percentOwnedDelta: 0,
+          percentStarted: 8,
+          percentStartedChange: 0,
+          recentRank: { window: { kind: "last_weeks", weeks: 4 }, rank: 66 },
+        }),
+        searchFixture({
+          providerPlayerKey: "461.p.50002",
+          name: "Football First",
+          availability: "free_agent",
+          actualRank: 5,
+          overallRank: 20,
+          statValue: null,
+          percentOwned: 40,
+          percentOwnedDelta: 2,
+          percentStarted: 21,
+          percentStartedChange: 1,
+          recentRank: { window: { kind: "last_weeks", weeks: 4 }, rank: 25 },
+        }),
+      ]);
+      const football = yield* queries.searchPlayers(owner, {
+        team: footballTeam,
+        availability: "free_agent",
+        sort: "recent_rank",
+        window: { kind: "last_weeks", weeks: 4 },
+      });
+      assert.strictEqual(football.status, "ok");
+      if (football.status !== "ok") {
+        return;
+      }
+      assert.deepStrictEqual(
+        football.players.map((player) => [player.name, player.recentRank]),
+        [
+          ["Football First", { window: { kind: "last_weeks", weeks: 4 }, rank: 25 }],
+          ["Football Second", { window: { kind: "last_weeks", weeks: 4 }, rank: 66 }],
+        ],
+      );
+
+      for (const search of [hockey, football]) {
+        assert.isTrue(
+          search.players.every(
+            (player) => player.recentRank !== undefined && player.statValue === undefined,
+          ),
+          "both sports publish the same row shape and the value that ordered it",
+        );
+      }
+    }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("refuses a recent window a season order cannot answer with", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
@@ -1781,36 +1909,50 @@ it.effect("refuses a preset window a season order cannot answer with", () =>
       return;
     }
     const stat = Array.getUnsafe(league.scoring ?? [], 0).stat;
+    assert.deepStrictEqual(league.playerSearch, {
+      status: "published",
+      sorts: [
+        "name",
+        "position",
+        "ownership",
+        "actual_rank",
+        "overall_rank",
+        "stat",
+        "recent_rank",
+      ],
+      windows: [{ kind: "last_weeks", weeks: 4 }],
+      detail: "This league publishes a recent-form player rank for the last 4 weeks.",
+    });
 
     const seasonStat = yield* Effect.flip(
       queries.searchPlayers(owner, {
         team: teamId,
         sort: "stat",
         stat,
-        statPeriod: "last_14_days",
+        window: { kind: "last_days", days: 14 },
       }),
     );
     assert.instanceOf(seasonStat, QuerySelectionInvalid);
-    assert.include(seasonStat.detail, "recent_rank");
+    assert.include(seasonStat.detail, "recent rank");
 
     const noWindow = yield* Effect.flip(
       queries.searchPlayers(owner, { team: teamId, sort: "recent_rank" }),
     );
     assert.instanceOf(noWindow, QuerySelectionInvalid);
-    assert.include(noWindow.detail, "last_14_days");
+    assert.include(noWindow.detail, "the last 4 weeks");
 
     const weekWindow = yield* Effect.flip(
       queries.searchPlayers(owner, {
         team: teamId,
         sort: "recent_rank",
-        statPeriod: "week",
+        window: { kind: "week", week: 2 },
       }),
     );
     assert.instanceOf(weekWindow, QuerySelectionInvalid);
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect("refuses a recent window the league's sport does not publish", () =>
+it.effect("refuses a recent window the league does not publish and names the nearest", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
@@ -1820,12 +1962,52 @@ it.effect("refuses a recent window the league's sport does not publish", () =>
       queries.searchPlayers(owner, {
         team: Array.getUnsafe(seeded, 0).id,
         sort: "recent_rank",
-        statPeriod: "last_7_days",
+        window: { kind: "last_days", days: 7 },
       }),
     );
 
     assert.instanceOf(error, QuerySelectionInvalid);
-    assert.include(error.detail, "no recent-window rank for football");
+    assert.include(error.detail, "the last 4 weeks");
+    assert.include(error.detail, "nearest window");
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("does not offer a recent-form ordering a league publishes no rank for", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      league: {
+        ...leagueFixture,
+        playerSearch: {
+          status: "published",
+          sorts: ["name", "position", "ownership", "actual_rank", "overall_rank", "stat"],
+          windows: [],
+          detail:
+            "This league publishes no recent-form player rank, so its pool cannot be ordered by recent form.",
+        },
+      },
+    });
+    const teamId = Array.getUnsafe(seeded, 0).id;
+
+    const league = yield* queries.getLeague(owner, { team: teamId });
+    assert.strictEqual(league.status, "ok");
+    if (league.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(league.playerSearch?.windows, []);
+    assert.notInclude(league.playerSearch?.sorts ?? [], "recent_rank");
+
+    const error = yield* Effect.flip(
+      queries.searchPlayers(owner, {
+        team: teamId,
+        sort: "recent_rank",
+        window: { kind: "last_weeks", weeks: 4 },
+      }),
+    );
+
+    assert.instanceOf(error, QuerySelectionInvalid);
+    assert.include(error.detail, "no recent-form player rank");
     assert.include(error.detail, "Order the pool by ownership");
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
@@ -2514,7 +2696,7 @@ it.effect("refuses a period your league cannot honour instead of ignoring it", (
     if (noWeeklySeries._tag === "query.selection_invalid") {
       assert.include(noWeeklySeries.detail, "kind `week`");
       assert.include(noWeeklySeries.detail, "no weekly player series");
-      assert.include(noWeeklySeries.detail, "last_7_days");
+      assert.include(noWeeklySeries.detail, "last_days");
       assert.include(noWeeklySeries.detail, "at most 31 days");
     }
 
@@ -2547,7 +2729,7 @@ it.effect("refuses a period your league cannot honour instead of ignoring it", (
 );
 
 it.effect(
-  "serves a hockey preset window through your league and states its aggregation basis",
+  "serves a hockey recent window through your league and states its aggregation basis",
   () =>
     Effect.gen(function* () {
       const queries = yield* FantasyQueries;
@@ -2589,7 +2771,7 @@ it.effect(
       const hydrated = yield* queries.getPlayers(owner, {
         team: teamId,
         players: [Array.getUnsafe(roster.players, 0).player],
-        period: { kind: "preset", preset: "last_7_days" },
+        period: { kind: "last_days", days: 7 },
         groups: ["actual_stats"],
       });
 
@@ -2597,19 +2779,15 @@ it.effect(
       if (hydrated.status !== "ok") {
         return;
       }
-      assert.deepStrictEqual(hydrated.period, { kind: "preset", preset: "last_7_days" });
+      assert.deepStrictEqual(hydrated.period, { kind: "last_days", days: 7 });
       assert.deepStrictEqual(hydrated.periodSupport.kinds, {
         season: "native",
         week: "unsupported",
-        preset: "aggregated",
+        last_days: "aggregated",
+        last_weeks: "aggregated",
         range: "aggregated",
       });
-      assert.deepStrictEqual(hydrated.periodSupport.presets, [
-        { preset: "last_7_days", days: 7 },
-        { preset: "last_14_days", days: 14 },
-        { preset: "last_30_days", days: 30 },
-      ]);
-      assert.strictEqual(hydrated.periodSupport.maximumRangeDays, 31);
+      assert.strictEqual(hydrated.periodSupport.maximumWindowDays, 31);
       assert.strictEqual(hydrated.periodSupport.sport, "hockey");
 
       const stats = Array.getUnsafe(hydrated.players, 0).actualStats;
@@ -4281,7 +4459,7 @@ it.effect("refuses a weekly player sort the rows cannot explain", () =>
         team: teamId,
         availability: "free_agent",
         sort: "actual_rank",
-        statPeriod: "week",
+        window: { kind: "week", week: 2 },
       }),
     );
     assert.strictEqual(rejected._tag, "query.selection_invalid");
@@ -4293,7 +4471,7 @@ it.effect("refuses a weekly player sort the rows cannot explain", () =>
       team: teamId,
       availability: "free_agent",
       sort: "actual_rank",
-      statPeriod: "season",
+      window: { kind: "season" },
     });
     assert.strictEqual(season.status, "ok");
   }).pipe(Effect.provide(QueriesTestLayer)),
@@ -6510,6 +6688,11 @@ const hockeyLeagueFixture: ProviderLeagueSettings = {
     },
   ],
   statModifiers: [],
+  playerSearch: playerSearchWith([
+    { kind: "last_days", days: 7 },
+    { kind: "last_days", days: 14 },
+    { kind: "last_days", days: 30 },
+  ]),
 };
 
 const rotoLeagueFixture: ProviderLeagueSettings = {
@@ -6696,7 +6879,28 @@ const leagueFixture: ProviderLeagueSettings = {
     },
   ],
   statModifiers: [{ statId: 4, points: "0.04" }],
+  playerSearch: playerSearchWith([{ kind: "last_weeks", weeks: 4 }]),
 };
+
+function playerSearchWith(
+  windows: ReadonlyArray<ProviderLeaguePlayerSearch["windows"][number]>,
+): ProviderLeaguePlayerSearch {
+  return {
+    status: "published",
+    sorts: ["name", "position", "ownership", "actual_rank", "overall_rank", "stat", "recent_rank"],
+    windows,
+    detail:
+      windows.length === 0
+        ? "This league publishes no recent-form player rank, so its pool cannot be ordered by recent form."
+        : `This league publishes a recent-form player rank for ${windows
+            .map((window) =>
+              window.kind === "last_days"
+                ? `the last ${String(window.days)} days`
+                : `the last ${String(window.weeks)} weeks`,
+            )
+            .join(", ")}.`,
+  };
+}
 
 function assertDrafted(draft: PlayerDraft | undefined): void {
   assert.strictEqual(draft?.status, "drafted");

@@ -9,7 +9,11 @@ import {
   singleEntry,
 } from "#yahoo/decode.ts";
 import { YahooParseError } from "#yahoo/errors.ts";
+import { YahooPlayerKey } from "#yahoo/keys.ts";
 import type { YahooLeagueKey } from "#yahoo/keys.ts";
+
+import { PlayerRankPayload, playerRanksOf } from "./player.ts";
+import type { YahooPlayerRank } from "./player.ts";
 
 export function decodeLeagueSettings(
   payload: unknown,
@@ -26,6 +30,13 @@ export function decodeLeagueSettings(
       });
     }
     const weekWindow = yield* weekWindowOf(league);
+    const playerRankSample =
+      league.players === undefined
+        ? undefined
+        : league.players.map((player) => ({
+            playerKey: player.player_key,
+            ranks: playerRanksOf(player.player_ranks),
+          }));
     return {
       leagueKey: league.league_key,
       name: league.name,
@@ -43,6 +54,7 @@ export function decodeLeagueSettings(
       weeklyDeadline: league.weekly_deadline,
       editKey: league.edit_key === undefined ? undefined : String(league.edit_key),
       draftStatus: optionalNonEmpty(league.draft_status),
+      playerRankSample,
       settings: {
         rosterType: optionalNonEmpty(settings.roster_type),
         waiverType: optionalNonEmpty(settings.waiver_type),
@@ -139,7 +151,13 @@ export type YahooLeagueSettings = {
   readonly weeklyDeadline?: string;
   readonly editKey?: string;
   readonly draftStatus?: string;
+  readonly playerRankSample?: ReadonlyArray<YahooPlayerRankSample>;
   readonly settings: YahooLeagueSettingsValues;
+};
+
+type YahooPlayerRankSample = {
+  readonly playerKey: string;
+  readonly ranks: ReadonlyArray<YahooPlayerRank>;
 };
 
 export type YahooLeagueSettingsValues = {
@@ -276,5 +294,13 @@ const LeaguePayload = Schema.Struct({
   league: Schema.Struct({
     ...LeagueAttributes.fields,
     settings: Schema.Union([Schema.Array(LeagueSettingsAttributes), LeagueSettingsAttributes]),
+    players: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          player_key: YahooPlayerKey,
+          player_ranks: Schema.optional(Schema.Array(PlayerRankPayload)),
+        }),
+      ),
+    ),
   }),
 });

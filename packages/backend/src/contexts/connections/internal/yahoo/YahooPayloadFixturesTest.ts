@@ -742,6 +742,36 @@ export function yahooNhlLeagueSettingsWith(attributes: Readonly<Record<string, u
   };
 }
 
+function fixtureFragments(value: unknown): ReadonlyArray<unknown> {
+  return Array.isArray(value) ? value : [];
+}
+
+export function withPlayerRankSample(
+  payload: { fantasy_content: Record<string, unknown> },
+  ranks: ReadonlyArray<Readonly<Record<string, string>>>,
+): { fantasy_content: Record<string, unknown> } {
+  const league = fixtureFragments(payload.fantasy_content["league"]);
+  const players: Record<string, unknown> = { count: ranks.length };
+  for (const [index, values] of ranks.entries()) {
+    players[String(index)] = {
+      player: [
+        [{ player_key: `466.p.9${String(index).padStart(4, "0")}` }],
+        {
+          player_ranks: Object.entries(values).map(([type, value]) => ({
+            player_rank: { rank_type: type, rank_value: value },
+          })),
+        },
+      ],
+    };
+  }
+  return {
+    fantasy_content: {
+      ...payload.fantasy_content,
+      league: [...league, { players }],
+    },
+  };
+}
+
 export const yahooNflRoster = {
   fantasy_content: {
     team: [

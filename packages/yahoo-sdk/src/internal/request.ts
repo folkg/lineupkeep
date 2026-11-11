@@ -1,14 +1,8 @@
 import type { YahooCoverage } from "#yahoo/keys.ts";
 
 import type { YahooStatQuery } from "./player.ts";
-
-const recentSortTokens = {
-  last7days: "AR_L7",
-  last14days: "AR_L14",
-  last30days: "AR_L30",
-} as const;
-
-export type SearchRecentWindow = keyof typeof recentSortTokens;
+import type { RecentFormWindow } from "./recentForm.ts";
+import { recentFormSpec } from "./recentForm.ts";
 
 export function coverageSuffix(coverage: YahooCoverage | undefined): string {
   return coverage === undefined
@@ -29,29 +23,37 @@ export function statsQueryOf(query: YahooStatQuery): Readonly<Record<string, str
   }
 }
 
-export function searchSortToken(
+export function searchSortFragment(
   sort: string,
+  statType: "season" | "week",
   statId: number | undefined,
-  recentWindow: SearchRecentWindow | undefined,
+  recentWindow: RecentFormWindow | undefined,
 ): string {
+  if (sort === "recent_rank") {
+    if (recentWindow === undefined) {
+      throw new Error("A recent-rank sort needs a window.");
+    }
+    const window = recentFormSpec(recentWindow);
+    return `sort=${window.sort}${
+      window.sortType === undefined ? "" : `;sort_type=${window.sortType}`
+    }`;
+  }
   switch (sort) {
     case "name":
     case "position":
-      return "NAME";
+      return "sort=NAME";
     case "ownership":
-      return "R_PO";
+      return "sort=R_PO";
     case "actual_rank":
-      return "AR";
+      return `sort=AR;sort_type=${statType}`;
     case "overall_rank":
-      return "OR";
+      return `sort=OR;sort_type=${statType}`;
     case "stat":
-      return String(statId);
-    case "recent_rank":
-      if (recentWindow === undefined) {
-        throw new Error("A recent-rank sort needs a window.");
+      if (statId === undefined) {
+        throw new Error("A stat sort needs a stat id.");
       }
-      return recentSortTokens[recentWindow];
+      return `sort=${String(statId)};sort_type=${statType}`;
     default:
-      return "NAME";
+      return "sort=NAME";
   }
 }

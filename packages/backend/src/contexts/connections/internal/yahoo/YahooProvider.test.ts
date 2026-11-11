@@ -14,6 +14,8 @@ import {
 import { TestClock } from "effect/testing";
 
 import yahooNflFreeAgentPoolEmpty from "#contexts/connections/fixtures/yahoo-nfl-free-agent-pool-2026-11-10.json";
+import yahooNflFreeAgentPoolLast4Weeks from "#contexts/connections/fixtures/yahoo-nfl-free-agent-pool-last-4-weeks-2026-11-11.json";
+import yahooNflFreeAgentPoolLast4WeeksValues from "#contexts/connections/fixtures/yahoo-nfl-free-agent-pool-last-4-weeks-values-2026-11-11.json";
 import yahooNflPlayerWeeksLive from "#contexts/connections/fixtures/yahoo-nfl-player-weeks-2026-11-10.json";
 import yahooNflWaiverPool from "#contexts/connections/fixtures/yahoo-nfl-waiver-pool-2026-11-10.json";
 import yahooNhlGoaliePoolRecentRank from "#contexts/connections/fixtures/yahoo-nhl-goalie-pool-recent-rank-2026-11-11.json";
@@ -73,6 +75,7 @@ import {
   yahooNflLeagueSettingsForAnotherLeague,
   yahooNflLeagueSettingsWithTextTeamCount,
   yahooNflLeagueSettingsWithoutEndWeek,
+  withPlayerRankSample,
   yahooNhlLeagueSettings,
   yahooNhlLeagueSettingsWith,
   yahooNflLeagueSettingsWith,
@@ -1316,7 +1319,7 @@ it.effect("reads an NFL league whose settings publish extra and renamed fields",
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/settings?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000;out=settings/players;status=A;sort=AR;sort_type=season;count=5;out=ranks;ranks=last7days,last14days,last30days,last4weeks?format=json",
     );
     assert.strictEqual(internet.calls[0]?.headers["cookie"], Redacted.value(sessionInput.session));
     assert.strictEqual(league.name, "Synthetic NFL League");
@@ -1649,7 +1652,7 @@ it.effect(
   () => {
     const internet = recordingInternet((request) =>
       jsonResponse(
-        request.url.pathname.endsWith("/settings")
+        request.url.pathname.includes(";out=settings")
           ? yahooNflLeagueSettingsWith({ weekly_deadline: "3", edit_key: "6" })
           : yahooNflRoster,
       ),
@@ -2604,7 +2607,7 @@ it.effect("orders the pool by a recent window and publishes the rank that decide
       sort: "recent_rank",
       statId: undefined,
       statType: "season",
-      recentWindow: "last_14_days",
+      window: { kind: "last_days", days: 14 },
       positions: ["G"],
       limit: 50,
     });
@@ -2612,12 +2615,12 @@ it.effect("orders the pool by a recent window and publishes the rank that decide
     assert.deepStrictEqual(
       result.players.map((player) => [player.name, player.percentOwned, player.recentRank]),
       [
-        ["Samuel Ersson", 11, { window: "last_14_days", rank: 16 }],
-        ["Cam Talbot", 22, { window: "last_14_days", rank: 29 }],
-        ["Ukko-Pekka Luukkonen", 65, { window: "last_14_days", rank: 68 }],
-        ["Akira Schmid", 18, { window: "last_14_days", rank: 114 }],
-        ["Dustin Wolf", 30, { window: "last_14_days", rank: 184 }],
-        ["Colten Ellis", 6, { window: "last_14_days", rank: 193 }],
+        ["Samuel Ersson", 11, { window: { kind: "last_days", days: 14 }, rank: 16 }],
+        ["Cam Talbot", 22, { window: { kind: "last_days", days: 14 }, rank: 29 }],
+        ["Ukko-Pekka Luukkonen", 65, { window: { kind: "last_days", days: 14 }, rank: 68 }],
+        ["Akira Schmid", 18, { window: { kind: "last_days", days: 14 }, rank: 114 }],
+        ["Dustin Wolf", 30, { window: { kind: "last_days", days: 14 }, rank: 184 }],
+        ["Colten Ellis", 6, { window: { kind: "last_days", days: 14 }, rank: 193 }],
       ],
     );
     assert.isTrue(result.players.every((player) => player.statValue === null));
@@ -2631,7 +2634,52 @@ it.effect("orders the pool by a recent window and publishes the rank that decide
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
-it.effect("refuses a recent window the sport does not publish", () => {
+it.effect(
+  "orders a football pool by its four-week rank and publishes the value that decided it",
+  () => {
+    const internet = recordingInternet((request) =>
+      jsonResponse(
+        request.url.href.includes("player_keys=")
+          ? yahooNflFreeAgentPoolLast4WeeksValues
+          : yahooNflFreeAgentPoolLast4Weeks,
+      ),
+    );
+    return Effect.gen(function* () {
+      const provider = yield* testProvider;
+
+      const result = yield* provider.searchPlayers({
+        ...sessionInput,
+        providerLeagueKey: "470.l.70271",
+        sport: "football",
+        season: 2026,
+        query: undefined,
+        availability: "free_agent",
+        sort: "recent_rank",
+        statId: undefined,
+        statType: "season",
+        window: { kind: "last_weeks", weeks: 4 },
+        limit: 50,
+      });
+
+      assert.deepStrictEqual(
+        result.players.map((player) => [player.name, player.recentRank]),
+        [
+          ["Geno Smith", { window: { kind: "last_weeks", weeks: 4 }, rank: 25 }],
+          ["Buccaneers", { window: { kind: "last_weeks", weeks: 4 }, rank: 28 }],
+          ["Jason Sanders", { window: { kind: "last_weeks", weeks: 4 }, rank: 54 }],
+          ["Chase McLaughlin", { window: { kind: "last_weeks", weeks: 4 }, rank: 55 }],
+          ["Sam Darnold", { window: { kind: "last_weeks", weeks: 4 }, rank: 66 }],
+          ["Malik Willis", { window: { kind: "last_weeks", weeks: 4 }, rank: 68 }],
+        ],
+      );
+      assert.strictEqual(internet.calls.length, 2);
+      assert.include(internet.calls[0]?.url.href, "sort=AR_L4W;sort_type=last4weeks;count=50");
+      assert.include(internet.calls[1]?.url.href, ";ranks=last4weeks");
+    }).pipe(Effect.provide(yahooLayer(internet)));
+  },
+);
+
+it.effect("refuses a recent window the provider has no rank for and names the ones it has", () => {
   const internet = recordingInternet(() => jsonResponse({}));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
@@ -2647,20 +2695,52 @@ it.effect("refuses a recent window the sport does not publish", () => {
         sort: "recent_rank",
         statId: undefined,
         statType: "season",
-        recentWindow: "last_14_days",
+        window: { kind: "last_days", days: 9 },
         limit: 50,
       }),
     );
 
     assert.instanceOf(error, ProviderPeriodUnsupported);
-    assert.strictEqual(error.kind, "preset");
+    assert.strictEqual(error.kind, "last_days");
     assert.strictEqual(error.declared, "unsupported");
-    assert.include(error.reason, "leaves the seven-, fourteen-, and thirty-day ranks empty");
-    assert.strictEqual(
-      error.remedy,
-      "Order the pool by ownership, a season rank, or a season stat instead.",
-    );
+    assert.include(error.reason, "the last 9 days");
+    assert.include(error.remedy, "the last 4 weeks");
     assert.deepStrictEqual(internet.calls, []);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("publishes the recent-form windows the settings read actually returned", () => {
+  const internet = recordingInternet(() =>
+    jsonResponse(
+      withPlayerRankSample(yahooNflLeagueSettings, [
+        { L7: "-", L14: "-", L30: "-", L4W: "25" },
+        { L7: "-", L14: "-", L30: "-", L4W: "86" },
+      ]),
+    ),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const league = yield* provider.readLeague({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      sport: "football",
+    });
+
+    assert.deepStrictEqual(league.playerSearch, {
+      status: "published",
+      sorts: [
+        "name",
+        "position",
+        "ownership",
+        "actual_rank",
+        "overall_rank",
+        "stat",
+        "recent_rank",
+      ],
+      windows: [{ kind: "last_weeks", weeks: 4 }],
+      detail: "This league publishes a recent-form player rank for the last 4 weeks.",
+    });
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
@@ -3283,7 +3363,7 @@ const hockeyDailyFixture = (date: string): ReturnType<typeof yahooNhlDatePlayerD
     },
   ]);
 
-it.effect("serves a hockey preset window as the sum of batched daily reads", () => {
+it.effect("serves a hockey recent window as the sum of batched daily reads", () => {
   const internet = recordingInternet((request) =>
     jsonResponse(hockeyDailyFixture(request.url.searchParams.get("stats.date") ?? "2026-10-26")),
   );
@@ -3296,7 +3376,7 @@ it.effect("serves a hockey preset window as the sum of batched daily reads", () 
       providerLeagueKey: "466.l.4002",
       providerPlayerKeys: ["466.p.30001", "466.p.30002"],
       sport: "hockey",
-      period: { kind: "preset", preset: "last_7_days" },
+      period: { kind: "last_days", days: 7 },
       currentPeriod: 4,
       ...hockeySeasonWindow,
     });
@@ -3406,7 +3486,7 @@ it.effect("refuses a range longer than the declared cap and names the window it 
       assert.include(error.reason, "32 days");
       assert.include(error.reason, "at most 31 days");
       assert.include(error.remedy, "at most 31 days");
-      assert.include(error.remedy, '`kind: "preset"`');
+      assert.include(error.remedy, '`kind: "last_days"`');
     }
     assert.deepStrictEqual(internet.calls, []);
   }).pipe(Effect.provide(yahooLayer(internet)));
@@ -3429,7 +3509,7 @@ it.effect("declares each period kind's support as the capability table says", ()
     },
     {
       sport: "football" as const,
-      period: { kind: "preset" as const, preset: "last_7_days" as const },
+      period: { kind: "last_days" as const, days: 7 },
       sportWindow: { seasonStart: "2026-09-03", seasonEnd: "2026-12-28" },
       respond: anyBody,
     },
@@ -3453,7 +3533,13 @@ it.effect("declares each period kind's support as the capability table says", ()
     },
     {
       sport: "hockey" as const,
-      period: { kind: "preset" as const, preset: "last_14_days" as const },
+      period: { kind: "last_days" as const, days: 14 },
+      sportWindow: hockeySeasonWindow,
+      respond: (url: URL) => hockeyDailyFixture(url.searchParams.get("stats.date") ?? ""),
+    },
+    {
+      sport: "hockey" as const,
+      period: { kind: "last_weeks" as const, weeks: 2 },
       sportWindow: hockeySeasonWindow,
       respond: (url: URL) => hockeyDailyFixture(url.searchParams.get("stats.date") ?? ""),
     },
@@ -3513,7 +3599,7 @@ it.effect("declares each period kind's support as the capability table says", ()
 it.effect("reads a declared games limit and the team's per-position allowance", () => {
   const internet = recordingInternet((request) =>
     jsonResponse(
-      request.url.pathname.endsWith("/settings")
+      request.url.pathname.includes(";out=settings")
         ? yahooNflLeagueSettingsWithGamesLimit
         : request.url.pathname.includes("/teams;")
           ? yahooNflGamesPlayed
@@ -3559,7 +3645,7 @@ it.effect("reads a declared games limit and the team's per-position allowance", 
 it.effect("maps the published innings allowance to the league's pitcher slot", () => {
   const internet = recordingInternet((request) =>
     jsonResponse(
-      request.url.pathname.endsWith("/settings")
+      request.url.pathname.includes(";out=settings")
         ? yahooNflLeagueSettingsWithPitcherSlot
         : request.url.pathname.includes("/teams;")
           ? yahooNflGamesPlayed
@@ -3600,7 +3686,7 @@ it.effect("maps the published innings allowance to the league's pitcher slot", (
 it.effect("refuses a games-played answer for another league", () => {
   const internet = recordingInternet((request) =>
     jsonResponse(
-      request.url.pathname.endsWith("/settings")
+      request.url.pathname.includes(";out=settings")
         ? yahooNflLeagueSettingsWithGamesLimit
         : request.url.pathname.includes("/teams;")
           ? yahooNflGamesPlayedForAnotherLeague
@@ -3636,7 +3722,7 @@ it.effect("refuses a games-played answer for another league", () => {
 
 it.effect("refuses the score when the provider fails the games-played read", () => {
   const internet = recordingInternet((request) =>
-    request.url.pathname.endsWith("/settings")
+    request.url.pathname.includes(";out=settings")
       ? jsonResponse(yahooNflLeagueSettingsWithGamesLimit)
       : request.url.pathname.includes("/teams;")
         ? jsonResponse({}, 500)
@@ -3672,7 +3758,7 @@ it.effect("refuses the score when the provider fails the games-played read", () 
 it.effect("prices a games-limited league from the ownership composite, not the crowd", () => {
   const internet = recordingInternet((request) =>
     jsonResponse(
-      request.url.pathname.endsWith("/settings")
+      request.url.pathname.includes(";out=settings")
         ? yahooNflLeagueSettingsWithGamesLimit
         : request.url.pathname.includes("/teams;")
           ? yahooNflGamesPlayed
@@ -3711,7 +3797,7 @@ it.effect("prices a games-limited league from the ownership composite, not the c
       { providerPlayerKey: "466.p.20001", score: 920000, availability: "will-play" },
       { providerPlayerKey: "466.p.20002", score: 125000, availability: "will-play" },
     ]);
-    const factsRequest = internet.calls.find((call) => call.url.pathname.includes("/players;"));
+    const factsRequest = internet.calls.find((call) => call.url.pathname.includes("player_keys="));
     assert.include(factsRequest?.url.pathname, ";out=percent_started,percent_owned,ranks");
     assert.include(
       factsRequest?.url.pathname,

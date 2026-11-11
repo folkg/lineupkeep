@@ -1604,17 +1604,15 @@ it("publishes the accepted player-statistics periods and the compact standings f
   };
 
   const playersSchema = JSON.stringify(tool("get_players").inputSchema);
-  for (const shape of [
-    "season",
-    "preset",
-    "range",
-    "last_7_days",
-    "last_14_days",
-    "last_30_days",
-  ]) {
+  for (const shape of ["season", "week", "last_days", "last_weeks", "range"]) {
     expect(playersSchema).toContain(shape);
   }
   expect(playersSchema).toContain("periodSupport");
+  const searchWindow = JSON.stringify(tool("search_players").inputSchema);
+  expect(searchWindow).toContain("last_days");
+  expect(searchWindow).toContain("last_weeks");
+  expect(searchWindow).toContain("get_league");
+  expect(JSON.stringify(tool("get_league").outputSchema)).toContain("playerSearch");
   expect(JSON.stringify(tool("get_players").outputSchema)).toContain("aggregated");
   expect(playersSchema).toContain("1 to 25 private player references");
   expect(playersSchema).toContain("another team");

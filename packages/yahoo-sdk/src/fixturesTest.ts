@@ -92,6 +92,46 @@ function leaguePayload(
 
 export const leagueSettingsPayload = leaguePayload(leagueAttributes, leagueSettings);
 
+export const leagueSettingsWithPlayerRanks = {
+  fantasy_content: {
+    league: [
+      leagueAttributes,
+      { settings: [leagueSettings], count: 1 },
+      {
+        players: {
+          count: 2,
+          "0": {
+            player: [
+              [{ player_key: "466.p.20001" }],
+              {
+                player_ranks: [
+                  { player_rank: { rank_type: "L7", rank_value: "5" } },
+                  { player_rank: { rank_type: "L14", rank_value: "-" } },
+                  { player_rank: { rank_type: "L30", rank_value: "9" } },
+                  { player_rank: { rank_type: "L4W", rank_value: "25" } },
+                ],
+              },
+            ],
+          },
+          "1": {
+            player: [
+              [{ player_key: "466.p.20002" }],
+              {
+                player_ranks: [
+                  { player_rank: { rank_type: "L7", rank_value: "8" } },
+                  { player_rank: { rank_type: "L14", rank_value: "12" } },
+                  { player_rank: { rank_type: "L30", rank_value: "-" } },
+                  { player_rank: { rank_type: "L4W", rank_value: "-" } },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    ],
+  },
+};
+
 export const leagueSettingsWithZeroLimits = leaguePayload(leagueAttributes, {
   ...leagueSettings,
   max_weekly_adds: "0",

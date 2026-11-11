@@ -15,6 +15,7 @@ import {
 import type {
   PlayerWeekOpponent,
   ProviderFailure,
+  ProviderLeaguePlayerSearch,
   ProviderLeagueRoster,
   ProviderLeagueTeam,
   ProviderOperation,
@@ -35,12 +36,13 @@ import type {
   ProviderTradeProposalResult,
   ProviderTransactionTrend,
   ProviderWriteResult,
-  StatPeriodPresetName,
+  RecentFormWindow,
 } from "#contexts/connections/Provider.ts";
+import { describeStatWindow } from "#contexts/connections/StatWindow.ts";
 import type { PublicInternet } from "#runtime/PublicInternet.ts";
 
 import { yahooReadDeadlineMillis } from "./YahooLimits.ts";
-import { yahooPlayerStatus } from "./YahooLineup.ts";
+import { yahooCapabilities, yahooPlayerStatus } from "./YahooLineup.ts";
 
 export type {
   YahooDraftPick,
@@ -437,7 +439,7 @@ type ProviderPlayerSearchRead = {
   readonly sort: ProviderPlayerSearchSort;
   readonly statType: "season";
   readonly statId: number | undefined;
-  readonly recentWindow: StatPeriodPresetName | undefined;
+  readonly window: Yahoo.players.RecentFormWindow | undefined;
   readonly positions: ReadonlyArray<string> | undefined;
   readonly limit: number;
 };
@@ -455,8 +457,6 @@ export const searchPlayersThroughSdk = (
     const session = yield* Yahoo.makeSession(cookie).pipe(
       Effect.mapError(() => ProviderSessionRejected.make({ operation })),
     );
-    const window =
-      input.recentWindow === undefined ? undefined : recentRankWindows[input.recentWindow];
     const groups = yield* Yahoo.players
       .search({
         leagueKeys: [input.leagueKey],
@@ -466,7 +466,7 @@ export const searchPlayersThroughSdk = (
         limit: input.limit,
         ...(input.query === undefined ? {} : { query: input.query }),
         ...(input.statId === undefined ? {} : { statId: input.statId }),
-        ...(window === undefined ? {} : { recentWindow: window.yahoo }),
+        ...(input.window === undefined ? {} : { recentWindow: input.window }),
         ...(input.positions === undefined ? {} : { position: input.positions.join(",") }),
       })
       .pipe(
@@ -480,6 +480,7 @@ export const searchPlayersThroughSdk = (
       return yield* ProviderResponseInvalid.make({ operation, field: "league.league_key" });
     }
     const rows = players.map((player) => providerSearchPlayerOf(player, input.season));
+    const window = input.window;
     if (window === undefined) {
       return rows;
     }
@@ -494,22 +495,70 @@ export const searchPlayersThroughSdk = (
     return rows.map((row) => ({
       ...row,
       recentRank: {
-        window: window.preset,
+        window: providerRecentFormWindow(window),
         rank: ranks.get(row.providerPlayerKey) ?? null,
       },
     }));
   });
 
-const recentRankWindows = {
-  last_7_days: { preset: "last_7_days", yahoo: "last7days", rankType: "L7" },
-  last_14_days: { preset: "last_14_days", yahoo: "last14days", rankType: "L14" },
-  last_30_days: { preset: "last_30_days", yahoo: "last30days", rankType: "L30" },
-} as const satisfies Record<
-  StatPeriodPresetName,
-  { readonly preset: StatPeriodPresetName; readonly yahoo: string; readonly rankType: string }
->;
+export type YahooRecentWindow = Yahoo.players.RecentFormWindow;
 
-type YahooRecentRankWindow = (typeof recentRankWindows)[StatPeriodPresetName];
+export function yahooRecentFormWindowOf(window: RecentFormWindow): YahooRecentWindow | undefined {
+  if (window.kind === "last_weeks") {
+    return window.weeks === 4 ? { type: "weeks", weeks: 4 } : undefined;
+  }
+  switch (window.days) {
+    case 7:
+      return { type: "days", days: 7 };
+    case 14:
+      return { type: "days", days: 14 };
+    case 30:
+      return { type: "days", days: 30 };
+    default:
+      return undefined;
+  }
+}
+
+function providerRecentFormWindow(window: Yahoo.players.RecentFormWindow): RecentFormWindow {
+  return window.type === "days"
+    ? { kind: "last_days", days: window.days }
+    : { kind: "last_weeks", weeks: window.weeks };
+}
+
+export function yahooPlayerSearchCapability(
+  settings: Yahoo.YahooLeagueSettings,
+): ProviderLeaguePlayerSearch {
+  const sorts = yahooCapabilities.playerSearch.sorts;
+  const sample = settings.playerRankSample;
+  if (sample === undefined) {
+    return {
+      status: "unverified",
+      sorts: sorts.filter((sort) => sort !== "recent_rank"),
+      windows: [],
+      detail:
+        "This league published no player ranks to sample, so its recent-form windows could not be verified.",
+    };
+  }
+  const windows = Yahoo.players
+    .publishedRecentFormWindows(sample)
+    .map((window) => providerRecentFormWindow(window));
+  return {
+    status: "published",
+    sorts: windows.length === 0 ? sorts.filter((sort) => sort !== "recent_rank") : [...sorts],
+    windows,
+    detail:
+      windows.length === 0
+        ? "This league publishes no recent-form player rank, so its pool cannot be ordered by recent form."
+        : `This league publishes a recent-form player rank for ${listWindows(windows)}.`,
+  };
+}
+
+function listWindows(windows: ReadonlyArray<RecentFormWindow>): string {
+  const labels = windows.map((window) => describeStatWindow(window));
+  return labels.length === 1
+    ? (labels[0] ?? "")
+    : `${labels.slice(0, -1).join(", ")} and ${labels.at(-1) ?? ""}`;
+}
 
 function recentRankIndex(
   context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
@@ -517,7 +566,7 @@ function recentRankIndex(
   cookie: string,
   leagueKey: string,
   playerKeys: ReadonlyArray<string>,
-  window: YahooRecentRankWindow,
+  window: Yahoo.players.RecentFormWindow,
 ): Effect.Effect<ReadonlyMap<string, number>, ProviderReadFailure> {
   return Effect.gen(function* () {
     const ranks = new Map<string, number>();
@@ -526,11 +575,11 @@ function recentRankIndex(
         leagueKey,
         playerKeys: playerKeys.slice(index, index + maximumDetailPlayers),
         fields: ["ranks"],
-        ranks: [window.yahoo],
+        ranks: [Yahoo.players.recentFormRankName(window)],
       });
       for (const detail of details) {
-        const rank = detail.ranks.find((entry) => entry.type === window.rankType)?.value;
-        if (rank !== null && rank !== undefined) {
+        const rank = Yahoo.players.recentFormRankOf(detail.ranks, window);
+        if (rank !== null) {
           ranks.set(detail.playerKey, rank);
         }
       }

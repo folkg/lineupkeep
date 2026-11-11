@@ -21,6 +21,7 @@ import type {
   ProviderReadFailure,
   ProviderRoster,
   ProviderRosterCoverage,
+  RecentFormWindow,
   ProviderMatchup,
   ProviderRemainingGames,
   ProviderRosterPlayer,
@@ -105,13 +106,19 @@ import {
   type PlayerRef,
   type QueryTeam,
   type StartingStatus,
-  type StatPeriod,
+  type StatWindow,
   QueryPersistenceFailed,
   QuerySelectionInvalid,
   type StatRef,
   type TeamOwnerNote,
 } from "#contexts/connections/QueryValues.ts";
 import { rosterOccupancy, rosterRuleOf } from "#contexts/connections/RosterSlots.ts";
+import {
+  describeStatWindow,
+  nearestStatWindow,
+  sameStatWindow,
+  statWindowKey,
+} from "#contexts/connections/StatWindow.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
 import { countGamesForTeam, isLeagueOffNight, leagueGamesByDate } from "./LeagueSchedule.ts";
@@ -983,6 +990,16 @@ export const FantasyQueriesLive = Layer.effect(
         week: leagueWeek(league),
         ...(groups.includes("overview") ? { overview: leagueOverview(league) } : {}),
         ...(groups.includes("roster_rules") ? { rosterRules: rosterRules(league) } : {}),
+        ...(league.playerSearch === undefined
+          ? {}
+          : {
+              playerSearch: {
+                status: league.playerSearch.status,
+                sorts: [...league.playerSearch.sorts],
+                windows: [...league.playerSearch.windows],
+                detail: league.playerSearch.detail,
+              },
+            }),
         coverage: coverageEntries,
         failures,
         budget: queryBudget,
@@ -1378,48 +1395,71 @@ export const FantasyQueriesLive = Layer.effect(
       const fetchedAt = yield* DateTime.now;
       const availability = input.availability ?? "all";
       const sort = input.sort ?? "name";
-      const statPeriod = input.statPeriod ?? "season";
+      const requestedWindow: ProviderStatPeriod | undefined =
+        input.window === undefined ? undefined : normalizeStatPeriod(input.window);
       const playerSearch = context.provider.capabilities.playerSearch;
       if (!playerSearch.sorts.includes(sort)) {
         return yield* QuerySelectionInvalid.make({
           detail: `Your league does not accept the \`${sort}\` player sort. Choose one of: ${playerSearch.sorts.join(", ")}.`,
         });
       }
-      const recentWindow =
-        statPeriod === "last_7_days" ||
-        statPeriod === "last_14_days" ||
-        statPeriod === "last_30_days"
-          ? statPeriod
-          : undefined;
+      if (requestedWindow?.kind === "week" && !playerSearch.weeklyOrderingValues) {
+        return yield* QuerySelectionInvalid.make({
+          detail:
+            "Your league's player search publishes no weekly rank or stat value, so a weekly ordering cannot be shown in the rows. Use a season window, or sort by name, position, or ownership.",
+        });
+      }
+      let leagueOutcome: ReadOutcome<ProviderLeagueSettings> | undefined;
+      let formWindow: RecentFormWindow | undefined;
       if (sort === "recent_rank") {
-        if (recentWindow === undefined) {
+        leagueOutcome = yield* readLeague(context);
+        if (leagueOutcome._tag !== "ok") {
+          return searchWithoutData(team, fetchedAt, leagueOutcome);
+        }
+        const leagueSearch = leagueOutcome.value.playerSearch;
+        if (leagueSearch === undefined || leagueSearch.status === "unverified") {
           return yield* QuerySelectionInvalid.make({
             detail:
-              "A recent-rank ordering needs a preset window in `statPeriod`: `last_7_days`, `last_14_days`, or `last_30_days`.",
+              leagueSearch?.detail ??
+              "This league's recent-form windows could not be verified, so they cannot order the pool. Order by ownership, a season rank, or a season stat instead.",
           });
         }
-        const support = playerSearch.recentRanks[context.owned.team.sport];
-        if (!support.windows.includes(recentWindow)) {
+        if (!leagueSearch.sorts.includes("recent_rank")) {
           return yield* QuerySelectionInvalid.make({
-            detail: `${support.detail} ${
-              support.windows.length === 0
-                ? "Order the pool by ownership, a season rank, or a season stat instead."
-                : `Ask for one of: ${support.windows.join(", ")}.`
+            detail: `${leagueSearch.detail} Order the pool by ownership, a season rank, or a season stat instead.`,
+          });
+        }
+        if (requestedWindow === undefined) {
+          return yield* QuerySelectionInvalid.make({
+            detail: `A recent-form ordering needs a window. ${leagueSearch.detail}`,
+          });
+        }
+        if (requestedWindow.kind !== "last_days" && requestedWindow.kind !== "last_weeks") {
+          return yield* QuerySelectionInvalid.make({
+            detail: `Recent form is ordered over the last N days or weeks, not ${describeStatWindow(requestedWindow)}. ${leagueSearch.detail} The season rank order is \`actual_rank\`.`,
+          });
+        }
+        formWindow = leagueSearch.windows.find((window) => sameStatWindow(window, requestedWindow));
+        if (formWindow === undefined) {
+          const nearest = nearestStatWindow(requestedWindow, leagueSearch.windows);
+          return yield* QuerySelectionInvalid.make({
+            detail: `${leagueSearch.detail}${
+              nearest === undefined
+                ? " Order the pool by ownership, a season rank, or a season stat instead."
+                : ` The nearest window is ${describeStatWindow(nearest)}; ask for it.`
             }`,
           });
         }
-      }
-      if (sort !== "recent_rank" && recentWindow !== undefined) {
-        return yield* QuerySelectionInvalid.make({
-          detail:
-            "Preset windows order the pool by the site's recent rank. Use sort `recent_rank` with that `statPeriod`, or keep `statPeriod` `season` for a season value.",
-        });
-      }
-      if (statPeriod === "week" && !playerSearch.weeklyOrderingValues) {
-        return yield* QuerySelectionInvalid.make({
-          detail:
-            "Your league's player search publishes no weekly rank or stat value, so a weekly ordering cannot be shown in the rows. Use statPeriod `season`, or sort by name, position, or ownership.",
-        });
+      } else if (requestedWindow !== undefined && requestedWindow.kind !== "season") {
+        const weekly = requestedWindow.kind === "week" && sort === "stat";
+        if (!weekly) {
+          return yield* QuerySelectionInvalid.make({
+            detail:
+              sort === "stat"
+                ? "A stat ordering reads a season value or a completed scoring week; a recent window orders the pool by recent rank instead."
+                : "Recent windows order the pool by recent rank. Use sort `recent_rank` with that window, or omit `window`.",
+          });
+        }
       }
       if (sort === "stat" && input.stat === undefined) {
         return yield* QuerySelectionInvalid.make({
@@ -1474,8 +1514,8 @@ export const FantasyQueriesLive = Layer.effect(
           availability,
           sort,
           statId,
-          statType: statPeriod === "week" ? "week" : "season",
-          recentWindow,
+          statType: requestedWindow?.kind === "week" ? "week" : "season",
+          window: formWindow,
           positions: orderingPositions,
           limit: 50,
         }),
@@ -1483,7 +1523,7 @@ export const FantasyQueriesLive = Layer.effect(
       if (outcome._tag !== "ok") {
         return searchWithoutData(team, fetchedAt, outcome);
       }
-      const leagueOutcome = yield* readLeague(context);
+      leagueOutcome = leagueOutcome ?? (yield* readLeague(context));
       const league = leagueOutcome._tag === "ok" ? leagueOutcome.value : undefined;
       const poolGames = includeGames ? yield* readPoolGames(context, leagueOutcome) : undefined;
       const filtered = outcome.value.players.filter(
@@ -1602,7 +1642,7 @@ export const FantasyQueriesLive = Layer.effect(
           `availability=${availability}`,
           `sort=${sort}`,
           `stat=${input.stat ?? ""}`,
-          `statPeriod=${statPeriod}`,
+          `window=${requestedWindow === undefined ? "season" : statWindowKey(requestedWindow)}`,
           `includeGames=${String(includeGames)}`,
           "order=provider",
         ].join("|"),
@@ -2075,7 +2115,7 @@ export const FantasyQueriesLive = Layer.effect(
         [
           "players",
           `team=${input.team}`,
-          `period=${statPeriodKey(requestedPeriod)}`,
+          `period=${statWindowKey(requestedPeriod)}`,
           `groups=${[...groups].sort().join(",")}`,
           `players=${input.players.join(",")}`,
           "order=request",
@@ -4632,29 +4672,16 @@ function providerRosterPeriod(period: QueryPeriod | undefined): ProviderRosterCo
   return period === undefined ? undefined : { type: "week", week: period.week };
 }
 
-function normalizeStatPeriod(period: StatPeriod | undefined): ProviderStatPeriod {
-  if (period === undefined || period.kind === "season") {
-    return { kind: "season" };
-  }
-  if (period.kind === "preset") {
-    return { kind: "preset", preset: period.preset };
-  }
-  if (period.kind === "range") {
-    return { kind: "range", start: period.start, end: period.end };
-  }
-  return { kind: "week", week: period.week };
-}
-
-function statPeriodKey(period: ProviderStatPeriod): string {
-  switch (period.kind) {
-    case "season":
-      return "season";
+function normalizeStatPeriod(period: StatWindow | undefined): ProviderStatPeriod {
+  switch (period?.kind) {
+    case undefined:
     case "week":
-      return `week:${String(period.week)}`;
-    case "preset":
-      return `preset:${period.preset}`;
+      return period === undefined ? { kind: "season" } : { kind: "week", week: period.week };
+    case "season":
+    case "last_days":
+    case "last_weeks":
     case "range":
-      return `range:${period.start}..${period.end}`;
+      return period;
   }
 }
 
@@ -4663,8 +4690,7 @@ function periodSupportOf(context: TeamContext, sport: FantasySport): PlayersData
   return {
     sport,
     kinds: support.kinds,
-    presets: [...support.presets],
-    maximumRangeDays: support.maximumRangeDays,
+    maximumWindowDays: support.maximumWindowDays,
     detail: support.detail,
   };
 }

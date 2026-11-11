@@ -8,6 +8,7 @@ import { decodeAvailableDraftPicks } from "#yahoo/internal/draft.ts";
 import type { YahooAvailableDraftPick } from "#yahoo/internal/draft.ts";
 import { decodeLeagueSettings } from "#yahoo/internal/league.ts";
 import type { YahooLeagueSettings } from "#yahoo/internal/league.ts";
+import { recentFormRankNames } from "#yahoo/internal/recentForm.ts";
 import { decodeStandings } from "#yahoo/internal/standings.ts";
 import type { YahooStandings } from "#yahoo/internal/standings.ts";
 import { decodeDiscoveredLeagues } from "#yahoo/internal/team.ts";
@@ -39,7 +40,7 @@ export const settings: API.OperationMethod<
   request: (input) => ({
     host: "read",
     method: "GET",
-    path: `/fantasy/v2/league/${input.leagueKey}/settings`,
+    path: `/fantasy/v2/league/${input.leagueKey};out=settings/players;status=A;sort=AR;sort_type=season;count=5;out=ranks;ranks=${recentFormRankNames().join(",")}`,
   }),
   decode: (payload, input) => decodeLeagueSettings(payload, input.leagueKey),
 });

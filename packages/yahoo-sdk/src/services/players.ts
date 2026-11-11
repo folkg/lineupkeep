@@ -14,7 +14,7 @@ import type {
   YahooPlayerDetail,
   YahooPlayerSummary,
 } from "#yahoo/internal/player.ts";
-import { searchSortToken, statsQueryOf } from "#yahoo/internal/request.ts";
+import { searchSortFragment, statsQueryOf } from "#yahoo/internal/request.ts";
 import {
   YahooDate,
   YahooGameKey,
@@ -50,7 +50,13 @@ const Sort = Schema.Literals([
   "recent_rank",
 ]);
 
-const RecentWindow = Schema.Literals(["last7days", "last14days", "last30days"]);
+const RecentWindow = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("days"),
+    days: Schema.Literals([7, 14, 30]),
+  }),
+  Schema.Struct({ type: Schema.Literal("weeks"), weeks: Schema.Literal(4) }),
+]);
 
 const AvailableSort = Schema.Literals([
   "name",
@@ -152,9 +158,6 @@ export const search: API.OperationMethod<
         : input.availability === "free_agent"
           ? ";status=FA"
           : ";status=W";
-    const sortType = ["actual_rank", "overall_rank", "stat"].includes(input.sort)
-      ? `;sort_type=${input.sortType}`
-      : "";
     const query = input.query?.trim();
     const search =
       query === undefined || query.length === 0 ? "" : `;search=${encodeURIComponent(query)}`;
@@ -168,7 +171,7 @@ export const search: API.OperationMethod<
     return {
       host: "read",
       method: "GET",
-      path: `/fantasy/v2/users;use_login=1/games;game_keys=${gameKeys.join(",")}/leagues;league_keys=${input.leagueKeys.join(",")}/players${status}${position};sort=${searchSortToken(input.sort, statId, input.recentWindow)}${sortType};count=${String(input.limit)}${search};out=${out}${rankSuffix(input.ranks)}`,
+      path: `/fantasy/v2/users;use_login=1/games;game_keys=${gameKeys.join(",")}/leagues;league_keys=${input.leagueKeys.join(",")}/players${status}${position};${searchSortFragment(input.sort, input.sortType, statId, input.recentWindow)};count=${String(input.limit)}${search};out=${out}${rankSuffix(input.ranks)}`,
       ...(Object.keys(cuts).length === 0 ? {} : { query: cuts }),
     };
   },
@@ -222,9 +225,6 @@ export const available: API.OperationMethod<
         : input.availability === "free_agent"
           ? ";status=FA"
           : ";status=W";
-    const sortType = ["actual_rank", "overall_rank", "stat"].includes(input.sort)
-      ? `;sort_type=${input.sortType}`
-      : "";
     const position = input.position === undefined ? "" : `;position=${input.position}`;
     const out =
       input.sort === "stat"
@@ -234,7 +234,7 @@ export const available: API.OperationMethod<
     return {
       host: "read",
       method: "GET",
-      path: `/fantasy/v2/games;game_keys=${input.gameKey}/players${status}${position};sort=${searchSortToken(input.sort, statId, undefined)}${sortType};count=${String(input.limit)};start=${String(input.offset)};out=${out}${rankSuffix(input.ranks)}`,
+      path: `/fantasy/v2/games;game_keys=${input.gameKey}/players${status}${position};${searchSortFragment(input.sort, input.sortType, statId, undefined)};count=${String(input.limit)};start=${String(input.offset)};out=${out}${rankSuffix(input.ranks)}`,
       ...(Object.keys(cuts).length === 0 ? {} : { query: cuts }),
     };
   },
@@ -412,3 +412,13 @@ export const starters: API.OperationMethod<
     });
   }),
 );
+
+export type { RecentFormWindow } from "#yahoo/internal/recentForm.ts";
+export {
+  publishedRecentFormWindows,
+  recentFormRankName,
+  recentFormRankNames,
+  recentFormRankOf,
+  recentFormWindows,
+  sameRecentFormWindow,
+} from "#yahoo/internal/recentForm.ts";

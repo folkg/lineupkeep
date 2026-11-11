@@ -95,12 +95,7 @@ function summariesOf(
         ownershipType: player.ownership?.ownership_type,
         percentOwned: yield* percentOf(player.percent_owned, operation, "percent_owned"),
         percentStarted: yield* percentOf(player.percent_started, operation, "percent_started"),
-        ranks: (player.player_ranks ?? []).map(({ player_rank }) => ({
-          type: player_rank.rank_type,
-          value: numberOrNull(player_rank.rank_value),
-          season: player_rank.rank_season,
-          ...(player_rank.rank_week === undefined ? {} : { week: player_rank.rank_week }),
-        })),
+        ranks: playerRanksOf(player.player_ranks),
         stats:
           player.player_stats === undefined
             ? undefined
@@ -154,12 +149,7 @@ export function decodePlayerDetails(
           "read_player_details",
           "percent_started",
         ),
-        ranks: (player.player_ranks ?? []).map(({ player_rank }) => ({
-          type: player_rank.rank_type,
-          value: numberOrNull(player_rank.rank_value),
-          season: player_rank.rank_season,
-          ...(player_rank.rank_week === undefined ? {} : { week: player_rank.rank_week }),
-        })),
+        ranks: playerRanksOf(player.player_ranks),
         stats:
           player.player_stats === undefined
             ? undefined
@@ -508,7 +498,7 @@ const PlayerStats = Schema.Struct({
   entries: Schema.Array(StatCoverageEntry),
 });
 
-const PlayerRankPayload = Schema.Struct({
+export const PlayerRankPayload = Schema.Struct({
   player_rank: Schema.Struct({
     rank_type: Schema.NonEmptyString,
     rank_value: Schema.Union([Schema.String, Schema.Finite]),
@@ -516,6 +506,17 @@ const PlayerRankPayload = Schema.Struct({
     rank_week: Schema.optional(IntFromStringOrNumber),
   }),
 });
+
+export function playerRanksOf(
+  ranks: ReadonlyArray<typeof PlayerRankPayload.Type> | undefined,
+): ReadonlyArray<YahooPlayerRank> {
+  return (ranks ?? []).map(({ player_rank }) => ({
+    type: player_rank.rank_type,
+    value: numberOrNull(player_rank.rank_value),
+    season: player_rank.rank_season,
+    ...(player_rank.rank_week === undefined ? {} : { week: player_rank.rank_week }),
+  }));
+}
 
 const PlayerTransactions = Schema.Union([
   Schema.Struct({
