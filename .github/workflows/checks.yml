@@ -40,7 +40,14 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
 
       - name: Install Playwright Chromium
-        run: bunx playwright install --with-deps chromium
+        run: |
+          for attempt in 1 2 3 4; do
+            if bunx playwright install --with-deps chromium; then exit 0; fi
+            echo "Browser install attempt $attempt failed; retrying after a pause."
+            sleep $((attempt * 20))
+          done
+          echo "Browser install failed after four attempts."
+          exit 1
 
       - run: bun run checks:ci
 
@@ -91,7 +98,14 @@ jobs:
       - run: bun install --frozen-lockfile
 
       - name: Install Playwright Chromium
-        run: bunx playwright install --with-deps chromium
+        run: |
+          for attempt in 1 2 3 4; do
+            if bunx playwright install --with-deps chromium; then exit 0; fi
+            echo "Browser install attempt $attempt failed; retrying after a pause."
+            sleep $((attempt * 20))
+          done
+          echo "Browser install failed after four attempts."
+          exit 1
 
       - name: Run target E2E and owned infrastructure safety suites
         run: node e2e/test.ts --target ${{ matrix.target }}
