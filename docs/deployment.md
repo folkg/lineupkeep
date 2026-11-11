@@ -604,7 +604,9 @@ bytes). The branch showed 19 applied migrations against production's 20, and sti
 and branch were deleted afterwards; production was never touched.
 
 This establishes that PITR produces a usable application database. It does not establish a retention policy,
-an RPO/RTO commitment, or who executes recovery under duress; those remain policy decisions for the owner.
+an RPO/RTO commitment, or who executes recovery under duress. The owner ruled on 10 November: keep the
+current retention windows, accept up to 15 minutes of data loss, recover within 4 hours, and the owner
+executes recovery.
 
 ## Bootstrap protected state — owner only
 

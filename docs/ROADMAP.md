@@ -29,7 +29,7 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 | Interface            | Technical sheet, renamed to Lineupgrade; nav is Teams and Account; actions own their states       |
 | Deployment           | Cloud Run web, worker and hosted browser on GCP; CI on a clean Linux runner, container target     |
 | Publication gate     | Blocked on upstream: a temporary backport of the TanStack advisory is in force                    |
-| Restore              | Drill passed 2026-10-29; retention, RPO/RTO and recovery owner undecided                          |
+| Restore              | Drill passed 2026-10-29; RPO 15 minutes, RTO 4 hours, owner executes recovery (ruled 10 November) |
 | Dependencies         | Fresh audit and disposition in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md)                         |
 | Security             | Audit and disposition in [SECURITY-AUDIT.md](SECURITY-AUDIT.md); deferred work is group J         |
 | Checks               | 1909 node, 197 browser, 10 chromium; container end to end 58 passed, nothing skipped              |
@@ -551,6 +551,20 @@ exactly two requests with no retry.
 **Verify**: no provider request is built outside `packages/yahoo-sdk`; the adapter keeps only Lineupgrade policy
 and the port mapping. `L` — done.
 
+## F5. Availability values for the pool (owner's ruling, 10 November)
+
+`free_agent` stays strict: a free agent is a player the provider offers outside waivers, and an empty pool is an
+honest answer rather than a defect. Waiver-listed players get their own availability value so a client can ask for
+them explicitly.
+
+- [ ] Add an availability value for waiver-listed players beside the existing ones, with the league's own words for
+      what it means, and keep `free_agent` unchanged.
+- [ ] Prove both directions against the owner's football league, where every available player was on waivers: the
+      strict pool is honestly empty, and the waiver value returns those players.
+
+**Verify**: a client can ask for free agents, for waiver-listed players, or for both explicitly, and each answer is
+what the league actually holds. `S`
+
 ## G. Provider boundary and simplification
 
 ### G1 — Stop provider-shaped ideas leaking into generic code
@@ -891,7 +905,8 @@ depends on G1.
 
 The drill proved point-in-time restore produces a usable database. What remains is policy.
 
-- [ ] **decide** retention window, recovery point and time objectives, and who executes recovery.
+- [x] Owner ruled 10 November: keep the current retention windows, accept up to 15 minutes of data loss,
+      recover within 4 hours, and the owner executes recovery.
 - [ ] Record it in the deployment runbook and test the alert path.
 
 **Verify**: the written policy plus one rehearsal that follows it end to end. `S`
@@ -1080,20 +1095,20 @@ why anything is declined. Currently zero open.
 
 ## Decisions needed from the owner
 
-| ID  | Decision                                                                                                               | Blocks |
-| --- | ---------------------------------------------------------------------------------------------------------------------- | ------ |
-| D1  | ~~Staging model for CI~~ settled: no staging; the container target is the proof                                        | —      |
-| D2  | ~~Cloudflare split~~ settled: stay on Cloud Run, the waking shell covers the cold start                                | —      |
-| D3  | ~~Schedule cache source: derived from our reads, or external~~ settled: cache our reads, NHL API external, no graphite | F1     |
-| D4  | Retention, RPO/RTO and recovery owner                                                                                  | N1     |
-| D5  | ~~Rename to lineupgrade~~ settled: product-visible strings renamed; infra identities keep their names                  | —      |
-| D6  | ~~Solver direction~~ settled: keep current behaviour, revisit only on a wrong lineup                                   | —      |
-| D7  | ~~Transactions read-only or executed~~ settled: group I owns it                                                        | —      |
-| D8  | Reserve-slot eligibility: per-player, or per reserve position                                                          | A7     |
-| D9  | Passkeys as a sign-in option                                                                                           | future |
-| D10 | ~~Sign-in email delivery~~ settled: SMTP relay, proved live by the erasure run                                         | —      |
-| D11 | ~~Grant revocation on replay~~ settled: keep RFC 9700 family revocation                                                | —      |
-| D12 | ~~Roster spots on an offer; per-player ranking on a run~~ settled: neither publishes; neither changes a decision       | —      |
+| ID  | Decision                                                                                                                   | Blocks |
+| --- | -------------------------------------------------------------------------------------------------------------------------- | ------ |
+| D1  | ~~Staging model for CI~~ settled: no staging; the container target is the proof                                            | —      |
+| D2  | ~~Cloudflare split~~ settled: stay on Cloud Run, the waking shell covers the cold start                                    | —      |
+| D3  | ~~Schedule cache source: derived from our reads, or external~~ settled: cache our reads, NHL API external, no graphite     | F1     |
+| D4  | ~~Retention, RPO/RTO and recovery owner~~ settled: current windows, 15 minutes of loss, 4 hours to recover, owner executes | —      |
+| D5  | ~~Rename to lineupgrade~~ settled: product-visible strings renamed; infra identities keep their names                      | —      |
+| D6  | ~~Solver direction~~ settled: keep current behaviour, revisit only on a wrong lineup                                       | —      |
+| D7  | ~~Transactions read-only or executed~~ settled: group I owns it                                                            | —      |
+| D8  | Reserve-slot eligibility: per-player, or per reserve position                                                              | A7     |
+| D9  | Passkeys as a sign-in option                                                                                               | future |
+| D10 | ~~Sign-in email delivery~~ settled: SMTP relay, proved live by the erasure run                                             | —      |
+| D11 | ~~Grant revocation on replay~~ settled: keep RFC 9700 family revocation                                                    | —      |
+| D12 | ~~Roster spots on an offer; per-player ranking on a run~~ settled: neither publishes; neither changes a decision           | —      |
 
 Ruled already, recorded so they are not reopened: the transactions review is one group and comes before the
 framework migration, which is waiting on a release; Foldkit before any redesign; the rename before the
