@@ -86,7 +86,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("search_players", {
     description:
-      "Search the player pool at one linked team's league. Each row states the value that orders the requested `sort`.",
+      "Search the player pool at one linked team's league. Each row states the value that orders the requested `sort`, including the recent-window rank.",
     parameters: SearchPlayersInput,
     success: Schema.toCodecJson(SearchPlayersResult),
     failure: ToolFailure,

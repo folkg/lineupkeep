@@ -57,7 +57,7 @@ import {
   TeamSummaryResult,
 } from "./QueryResults.ts";
 import { StatRef } from "./QueryValues.ts";
-import { QueryTeamNotFound } from "./QueryValues.ts";
+import { QuerySelectionInvalid, QueryTeamNotFound } from "./QueryValues.ts";
 
 it.effect("lists owned teams with stable paging and owner-bound continuations", () =>
   Effect.gen(function* () {
@@ -1663,6 +1663,170 @@ it.effect("states each pool row's week, opponent, and projected rank", () =>
         ],
       ],
     );
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("orders the pool by a recent window and states each row's rank", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
+      league: hockeyLeagueFixture,
+    });
+    yield* fake.setSearchPlayers([
+      searchFixture({
+        providerPlayerKey: "465.p.30001",
+        name: "Cold Goalie",
+        availability: "free_agent",
+        actualRank: 41,
+        overallRank: 88,
+        statValue: null,
+        percentOwned: 6,
+        percentOwnedDelta: 0,
+        percentStarted: 3,
+        percentStartedChange: 0,
+        proTeam: "BOS",
+        primaryPosition: "G",
+        displayPosition: "G",
+        recentRank: { window: "last_14_days", rank: 193 },
+      }),
+      searchFixture({
+        providerPlayerKey: "465.p.30002",
+        name: "In Form Goalie",
+        availability: "free_agent",
+        actualRank: 99,
+        overallRank: 120,
+        statValue: null,
+        percentOwned: 22,
+        percentOwnedDelta: 11,
+        percentStarted: 14,
+        percentStartedChange: 4,
+        proTeam: "TOR",
+        primaryPosition: "G",
+        displayPosition: "G",
+        recentRank: { window: "last_14_days", rank: 29 },
+      }),
+      searchFixture({
+        providerPlayerKey: "465.p.30003",
+        name: "Season Leader",
+        availability: "free_agent",
+        actualRank: 12,
+        overallRank: 70,
+        statValue: null,
+        percentOwned: 35,
+        percentOwnedDelta: 1,
+        percentStarted: 20,
+        percentStartedChange: 0,
+        proTeam: "NYR",
+        primaryPosition: "G",
+        displayPosition: "G",
+        recentRank: { window: "last_14_days", rank: 16 },
+      }),
+      searchFixture({
+        providerPlayerKey: "465.p.30004",
+        name: "Unranked Goalie",
+        availability: "free_agent",
+        actualRank: 20,
+        overallRank: 90,
+        statValue: null,
+        percentOwned: 2,
+        percentOwnedDelta: 0,
+        percentStarted: 0,
+        percentStartedChange: 0,
+        proTeam: "SEA",
+        primaryPosition: "G",
+        displayPosition: "G",
+        recentRank: { window: "last_14_days", rank: null },
+      }),
+    ]);
+
+    const search = yield* queries.searchPlayers(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      positions: ["G"],
+      availability: "free_agent",
+      sort: "recent_rank",
+      statPeriod: "last_14_days",
+    });
+
+    assert.strictEqual(search.status, "ok");
+    if (search.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(
+      search.players.map((player) => [player.name, player.recentRank]),
+      [
+        ["Season Leader", { window: "last_14_days", rank: 16 }],
+        ["In Form Goalie", { window: "last_14_days", rank: 29 }],
+        ["Cold Goalie", { window: "last_14_days", rank: 193 }],
+        ["Unranked Goalie", { window: "last_14_days", rank: null }],
+      ],
+    );
+    assert.isTrue(
+      search.players.every((player) => player.statValue === undefined),
+      "a recent-rank ordering carries no season stat value",
+    );
+    assert.deepStrictEqual(search.failures, []);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("refuses a preset window a season order cannot answer with", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    const league = yield* queries.getLeague(owner, { team: teamId, groups: ["scoring"] });
+    assert.strictEqual(league.status, "ok");
+    if (league.status !== "ok") {
+      return;
+    }
+    const stat = Array.getUnsafe(league.scoring ?? [], 0).stat;
+
+    const seasonStat = yield* Effect.flip(
+      queries.searchPlayers(owner, {
+        team: teamId,
+        sort: "stat",
+        stat,
+        statPeriod: "last_14_days",
+      }),
+    );
+    assert.instanceOf(seasonStat, QuerySelectionInvalid);
+    assert.include(seasonStat.detail, "recent_rank");
+
+    const noWindow = yield* Effect.flip(
+      queries.searchPlayers(owner, { team: teamId, sort: "recent_rank" }),
+    );
+    assert.instanceOf(noWindow, QuerySelectionInvalid);
+    assert.include(noWindow.detail, "last_14_days");
+
+    const weekWindow = yield* Effect.flip(
+      queries.searchPlayers(owner, {
+        team: teamId,
+        sort: "recent_rank",
+        statPeriod: "week",
+      }),
+    );
+    assert.instanceOf(weekWindow, QuerySelectionInvalid);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("refuses a recent window the league's sport does not publish", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+
+    const error = yield* Effect.flip(
+      queries.searchPlayers(owner, {
+        team: Array.getUnsafe(seeded, 0).id,
+        sort: "recent_rank",
+        statPeriod: "last_7_days",
+      }),
+    );
+
+    assert.instanceOf(error, QuerySelectionInvalid);
+    assert.include(error.detail, "no recent-window rank for football");
+    assert.include(error.detail, "Order the pool by ownership");
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
@@ -6576,6 +6740,7 @@ function searchFixture(input: {
   readonly availability: "free_agent" | "waiver" | "rostered";
   readonly actualRank: number | null;
   readonly overallRank: number | null;
+  readonly recentRank?: ProviderPlayerSearchResult["players"][number]["recentRank"];
   readonly statValue: number | null;
   readonly percentOwned: number | null;
   readonly percentOwnedDelta: number | null;
@@ -6583,15 +6748,17 @@ function searchFixture(input: {
   readonly percentStartedChange: number | null;
   readonly proTeam?: string;
   readonly proTeamKey?: string;
+  readonly primaryPosition?: string;
+  readonly displayPosition?: string;
   readonly transactionTrend?: ProviderTransactionTrend;
 }): ProviderPlayerSearchResult["players"][number] {
   return {
     ...input,
     proTeam: input.proTeam,
     proTeamKey: input.proTeamKey,
-    primaryPosition: "QB",
-    displayPosition: "QB",
-    eligiblePositions: ["QB"],
+    primaryPosition: input.primaryPosition ?? "QB",
+    displayPosition: input.displayPosition ?? "QB",
+    eligiblePositions: [input.primaryPosition ?? "QB"],
     status: { value: "healthy", code: undefined, detail: undefined },
     transactionTrend: input.transactionTrend ?? {
       status: "published",

@@ -101,6 +101,12 @@ export const secondProviderCapabilities: ProviderCapabilities = {
     sorts: ["name", "position"],
     providerOrderedSorts: [],
     weeklyOrderingValues: true,
+    recentRanks: {
+      baseball: { windows: [], detail: "Atlas does not serve baseball." },
+      basketball: { windows: [], detail: "Atlas publishes no recent-window player rank." },
+      football: { windows: [], detail: "Atlas does not serve football." },
+      hockey: { windows: [], detail: "Atlas does not serve hockey." },
+    },
   },
   statPeriods: {
     baseball: unsupportedPeriods("Atlas does not serve baseball."),

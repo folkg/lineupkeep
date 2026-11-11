@@ -91,6 +91,7 @@ export type ProviderCapabilities = {
     readonly sorts: ReadonlyArray<ProviderPlayerSearchSort>;
     readonly providerOrderedSorts: ReadonlyArray<ProviderPlayerSearchSort>;
     readonly weeklyOrderingValues: boolean;
+    readonly recentRanks: Readonly<Record<FantasySport, ProviderRecentRankSupport>>;
   };
   readonly statPeriods: Readonly<Record<FantasySport, ProviderPeriodSupport>>;
   readonly scheduleRead: {
@@ -112,6 +113,11 @@ type ProviderPeriodMode = "native" | "aggregated" | "unsupported";
 type ProviderPeriodPresetWindow = {
   readonly preset: StatPeriodPresetName;
   readonly days: number;
+};
+
+type ProviderRecentRankSupport = {
+  readonly windows: ReadonlyArray<StatPeriodPresetName>;
+  readonly detail: string;
 };
 
 export type ProviderPeriodSupport = {
@@ -635,7 +641,7 @@ export type ProviderStatValue = {
   readonly value: number | null;
 };
 
-type StatPeriodPresetName = "last_7_days" | "last_14_days" | "last_30_days";
+export type StatPeriodPresetName = "last_7_days" | "last_14_days" | "last_30_days";
 
 export type ProviderStatPeriod =
   | { readonly kind: "season" }
@@ -688,16 +694,20 @@ export type ProviderPlayerSearchSort =
   | "ownership"
   | "actual_rank"
   | "overall_rank"
-  | "stat";
+  | "stat"
+  | "recent_rank";
 
 export type ProviderPlayerSearchInput = ProviderSessionMaterial & {
   readonly providerLeagueKey: string;
+  readonly sport: FantasySport;
   readonly season: number;
   readonly query: string | undefined;
   readonly availability: "all" | "free_agent" | "waiver";
   readonly sort: ProviderPlayerSearchSort;
   readonly statId: number | undefined;
   readonly statType: ProviderStatBasis["type"];
+  readonly recentWindow?: StatPeriodPresetName;
+  readonly positions?: ReadonlyArray<string>;
   readonly limit: number;
 };
 
@@ -724,6 +734,10 @@ export type ProviderPlayerSearchResult = {
     readonly percentStartedChange: number | null;
     readonly actualRank: number | null;
     readonly overallRank: number | null;
+    readonly recentRank?: {
+      readonly window: StatPeriodPresetName;
+      readonly rank: number | null;
+    };
     readonly statValue: number | null;
     readonly transactionTrend: ProviderTransactionTrend;
   }>;

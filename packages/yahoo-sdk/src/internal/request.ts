@@ -2,6 +2,14 @@ import type { YahooCoverage } from "#yahoo/keys.ts";
 
 import type { YahooStatQuery } from "./player.ts";
 
+const recentSortTokens = {
+  last7days: "AR_L7",
+  last14days: "AR_L14",
+  last30days: "AR_L30",
+} as const;
+
+export type SearchRecentWindow = keyof typeof recentSortTokens;
+
 export function coverageSuffix(coverage: YahooCoverage | undefined): string {
   return coverage === undefined
     ? ""
@@ -21,7 +29,11 @@ export function statsQueryOf(query: YahooStatQuery): Readonly<Record<string, str
   }
 }
 
-export function searchSortToken(sort: string, statId: number | undefined): string {
+export function searchSortToken(
+  sort: string,
+  statId: number | undefined,
+  recentWindow: SearchRecentWindow | undefined,
+): string {
   switch (sort) {
     case "name":
     case "position":
@@ -34,6 +46,11 @@ export function searchSortToken(sort: string, statId: number | undefined): strin
       return "OR";
     case "stat":
       return String(statId);
+    case "recent_rank":
+      if (recentWindow === undefined) {
+        throw new Error("A recent-rank sort needs a window.");
+      }
+      return recentSortTokens[recentWindow];
     default:
       return "NAME";
   }

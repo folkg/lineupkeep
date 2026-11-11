@@ -35,6 +35,7 @@ import type {
   ProviderPendingTrade,
   ProviderScoreRequest,
   ProviderTradeRatification,
+  StatPeriodPresetName,
   ProviderPlayerDetail,
   ProviderPlayerPeriod,
   ProviderPlayerSearchInput,
@@ -605,6 +606,11 @@ export const yahooProvider = Effect.gen(function* () {
     const limit = yield* ValidSearchLimit(input.limit);
     const query = yield* ValidSearchQuery(input.query);
     const stat = yield* ValidSearchStat(input.sort, input.statId, input.statType);
+    const recentWindow =
+      input.sort === "recent_rank"
+        ? yield* ValidRecentRankWindow(input.sport, input.recentWindow)
+        : undefined;
+    const positions = Option.getOrUndefined(yield* ValidSearchPositions(input.positions));
     const players = yield* searchPlayersThroughSdk(sdk, "search_players", cookie, {
       leagueKey,
       season: input.season,
@@ -613,6 +619,8 @@ export const yahooProvider = Effect.gen(function* () {
       sort: input.sort,
       statType: stat.statType,
       statId: stat.statId,
+      recentWindow,
+      positions,
       limit,
     });
     yield* Effect.annotateCurrentSpan("provider.player_count", players.length);
@@ -2046,6 +2054,44 @@ function ValidSearchStat(
   return statId !== undefined && Number.isSafeInteger(statId) && statId >= 1 && statId <= 1_000
     ? Effect.succeed({ statId, statType })
     : ProviderResponseInvalid.make({ operation: "search_players" });
+}
+
+function ValidSearchPositions(
+  positions: ReadonlyArray<string> | undefined,
+): Effect.Effect<Option.Option<ReadonlyArray<string>>, ProviderResponseInvalid> {
+  if (positions === undefined) {
+    return Effect.succeed(Option.none());
+  }
+  const valid =
+    positions.length > 0 &&
+    new Set(positions).size === positions.length &&
+    positions.every((position) => /^[A-Za-z]{1,3}$/u.test(position));
+  return valid
+    ? Effect.succeed(Option.some(positions))
+    : ProviderResponseInvalid.make({ operation: "search_players", field: "positions" });
+}
+
+function ValidRecentRankWindow(
+  sport: FantasySport,
+  window: StatPeriodPresetName | undefined,
+): Effect.Effect<StatPeriodPresetName, ProviderPeriodUnsupported> {
+  const support = yahooCapabilities.playerSearch.recentRanks[sport];
+  if (window !== undefined && support.windows.includes(window)) {
+    return Effect.succeed(window);
+  }
+  return ProviderPeriodUnsupported.make({
+    operation: "search_players",
+    kind: "preset",
+    declared: support.windows.length === 0 ? "unsupported" : "native",
+    reason:
+      window === undefined
+        ? `A recent-rank ordering names one preset window, and your league publishes no window it can order by. ${support.detail}`
+        : support.detail,
+    remedy:
+      support.windows.length === 0
+        ? "Order the pool by ownership, a season rank, or a season stat instead."
+        : `Ask for one of: ${support.windows.join(", ")}.`,
+  });
 }
 
 function ValidLeagueTeamKey(

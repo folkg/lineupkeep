@@ -47,6 +47,18 @@ const Sort = Schema.Literals([
   "actual_rank",
   "overall_rank",
   "stat",
+  "recent_rank",
+]);
+
+const RecentWindow = Schema.Literals(["last7days", "last14days", "last30days"]);
+
+const AvailableSort = Schema.Literals([
+  "name",
+  "position",
+  "ownership",
+  "actual_rank",
+  "overall_rank",
+  "stat",
 ]);
 
 const Availability = Schema.Literals(["all", "free_agent", "waiver"]);
@@ -89,14 +101,21 @@ const LeagueKeys = Schema.Array(YahooLeagueKey).pipe(
   ),
 );
 
+const Position = Schema.String.pipe(
+  Schema.check(Schema.isMaxLength(40)),
+  Schema.check(Schema.isPattern(/^[A-Za-z0-9_/+,-]+$/u)),
+);
+
 const SearchShape = Schema.Struct({
   leagueKeys: LeagueKeys,
   gameKeys: Schema.optional(YahooGameKeys),
   query: Schema.optional(Search),
+  position: Schema.optional(Position),
   availability: Availability,
   sort: Sort,
   sortType: Schema.Literals(["season", "week"]),
   statId: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_000 }))),
+  recentWindow: Schema.optional(RecentWindow),
   limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 })),
   ranks: Schema.optional(RankTypes),
   percentStartedCutTypes: Schema.optional(CutTypes),
@@ -106,7 +125,9 @@ const SearchShape = Schema.Struct({
 export const SearchRequest = SearchShape.pipe(
   Schema.check(
     Schema.makeFilter(
-      (input: typeof SearchShape.Type) => input.sort !== "stat" || input.statId !== undefined,
+      (input: typeof SearchShape.Type) =>
+        (input.sort !== "stat" || input.statId !== undefined) &&
+        (input.sort === "recent_rank") === (input.recentWindow !== undefined),
     ),
   ),
 );
@@ -137,6 +158,7 @@ export const search: API.OperationMethod<
     const query = input.query?.trim();
     const search =
       query === undefined || query.length === 0 ? "" : `;search=${encodeURIComponent(query)}`;
+    const position = input.position === undefined ? "" : `;position=${input.position}`;
     const out =
       input.sort === "stat"
         ? "ownership,percent_owned,percent_started,ranks,stats,transactions,opponent,starting_status"
@@ -146,7 +168,7 @@ export const search: API.OperationMethod<
     return {
       host: "read",
       method: "GET",
-      path: `/fantasy/v2/users;use_login=1/games;game_keys=${gameKeys.join(",")}/leagues;league_keys=${input.leagueKeys.join(",")}/players${status};sort=${searchSortToken(input.sort, statId)}${sortType};count=${String(input.limit)}${search};out=${out}${rankSuffix(input.ranks)}`,
+      path: `/fantasy/v2/users;use_login=1/games;game_keys=${gameKeys.join(",")}/leagues;league_keys=${input.leagueKeys.join(",")}/players${status}${position};sort=${searchSortToken(input.sort, statId, input.recentWindow)}${sortType};count=${String(input.limit)}${search};out=${out}${rankSuffix(input.ranks)}`,
       ...(Object.keys(cuts).length === 0 ? {} : { query: cuts }),
     };
   },
@@ -158,16 +180,11 @@ export const search: API.OperationMethod<
     ),
 });
 
-const Position = Schema.String.pipe(
-  Schema.check(Schema.isMaxLength(40)),
-  Schema.check(Schema.isPattern(/^[A-Za-z0-9_/+,-]+$/u)),
-);
-
 const AvailableShape = Schema.Struct({
   gameKey: YahooGameKey,
   availability: Availability,
   position: Schema.optional(Position),
-  sort: Sort,
+  sort: AvailableSort,
   sortType: Schema.Literals(["season", "week"]),
   statId: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_000 }))),
   limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 })),
@@ -217,7 +234,7 @@ export const available: API.OperationMethod<
     return {
       host: "read",
       method: "GET",
-      path: `/fantasy/v2/games;game_keys=${input.gameKey}/players${status}${position};sort=${searchSortToken(input.sort, statId)}${sortType};count=${String(input.limit)};start=${String(input.offset)};out=${out}${rankSuffix(input.ranks)}`,
+      path: `/fantasy/v2/games;game_keys=${input.gameKey}/players${status}${position};sort=${searchSortToken(input.sort, statId, undefined)}${sortType};count=${String(input.limit)};start=${String(input.offset)};out=${out}${rankSuffix(input.ranks)}`,
       ...(Object.keys(cuts).length === 0 ? {} : { query: cuts }),
     };
   },

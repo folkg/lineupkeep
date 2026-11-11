@@ -371,7 +371,8 @@ export type YahooPlayerSearchSort =
   | "ownership"
   | "actual_rank"
   | "overall_rank"
-  | "stat";
+  | "stat"
+  | "recent_rank";
 
 export type YahooPlayerAvailability = "all" | "free_agent" | "waiver";
 

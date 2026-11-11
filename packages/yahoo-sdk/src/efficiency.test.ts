@@ -287,6 +287,80 @@ it.effect("searches several leagues in one aggregate read", () => {
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
 
+it.effect("orders a league pool by a recent window and a position at the provider", () => {
+  const recording = recordingClient(() =>
+    jsonResponse({
+      fantasy_content: {
+        users: [
+          {
+            games: [
+              {
+                leagues: [
+                  {
+                    league: {
+                      league_key: otherLeagueKey,
+                      players: [
+                        {
+                          player_key: "477.p.30001",
+                          name: { full: "Synthetic Goalie" },
+                          primary_position: "G",
+                          display_position: "G",
+                          eligible_positions: [{ position: "G" }],
+                          ownership: { ownership_type: "freeagents" },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  );
+
+  return Effect.gen(function* () {
+    const groups = yield* Yahoo.players.search({
+      leagueKeys: [otherLeagueKey],
+      availability: "free_agent",
+      sort: "recent_rank",
+      sortType: "season",
+      recentWindow: "last14days",
+      position: "G",
+      limit: 50,
+    });
+    const call = recording.calls[0];
+    if (call === undefined) {
+      return yield* Effect.die("expected one request");
+    }
+    assert.strictEqual(
+      call.url,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1/games;game_keys=nfl,nhl,nba,mlb/leagues;league_keys=477.l.31027/players;status=FA;position=G;sort=AR_L14;count=50;out=ownership,percent_owned,percent_started,ranks,transactions,opponent,starting_status?format=json",
+    );
+    assert.strictEqual(groups[0]?.players[0]?.name, "Synthetic Goalie");
+    assert.strictEqual(groups[0]?.players[0]?.primaryPosition, "G");
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("refuses a recent-rank search that names no window", () => {
+  const recording = recordingClient(() => jsonResponse({}));
+
+  return Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      Yahoo.players.search({
+        leagueKeys: [otherLeagueKey],
+        availability: "free_agent",
+        sort: "recent_rank",
+        sortType: "season",
+        limit: 50,
+      }),
+    );
+    assert.instanceOf(error, Yahoo.YahooRequestInvalid);
+    assert.deepStrictEqual(recording.calls, []);
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
 it.effect("reads a game-wide available-player page", () => {
   const recording = recordingClient(() =>
     jsonResponse({

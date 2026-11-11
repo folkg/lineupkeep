@@ -35,6 +35,7 @@ import type {
   ProviderTradeProposalResult,
   ProviderTransactionTrend,
   ProviderWriteResult,
+  StatPeriodPresetName,
 } from "#contexts/connections/Provider.ts";
 import type { PublicInternet } from "#runtime/PublicInternet.ts";
 
@@ -55,6 +56,8 @@ export type {
   YahooTransactionPlayer,
   YahooTransactionTeam,
 } from "@lineupkeep/yahoo-sdk";
+
+const maximumDetailPlayers = 25;
 
 export const yahooSdkContext = (
   internet: PublicInternet["Service"],
@@ -434,6 +437,8 @@ type ProviderPlayerSearchRead = {
   readonly sort: ProviderPlayerSearchSort;
   readonly statType: "season";
   readonly statId: number | undefined;
+  readonly recentWindow: StatPeriodPresetName | undefined;
+  readonly positions: ReadonlyArray<string> | undefined;
   readonly limit: number;
 };
 
@@ -450,6 +455,8 @@ export const searchPlayersThroughSdk = (
     const session = yield* Yahoo.makeSession(cookie).pipe(
       Effect.mapError(() => ProviderSessionRejected.make({ operation })),
     );
+    const window =
+      input.recentWindow === undefined ? undefined : recentRankWindows[input.recentWindow];
     const groups = yield* Yahoo.players
       .search({
         leagueKeys: [input.leagueKey],
@@ -459,6 +466,8 @@ export const searchPlayersThroughSdk = (
         limit: input.limit,
         ...(input.query === undefined ? {} : { query: input.query }),
         ...(input.statId === undefined ? {} : { statId: input.statId }),
+        ...(window === undefined ? {} : { recentWindow: window.yahoo }),
+        ...(input.positions === undefined ? {} : { position: input.positions.join(",") }),
       })
       .pipe(
         Yahoo.Retry.none,
@@ -470,8 +479,65 @@ export const searchPlayersThroughSdk = (
     if (players === undefined) {
       return yield* ProviderResponseInvalid.make({ operation, field: "league.league_key" });
     }
-    return players.map((player) => providerSearchPlayerOf(player, input.season));
+    const rows = players.map((player) => providerSearchPlayerOf(player, input.season));
+    if (window === undefined) {
+      return rows;
+    }
+    const ranks = yield* recentRankIndex(
+      context,
+      operation,
+      cookie,
+      input.leagueKey,
+      rows.map((row) => row.providerPlayerKey),
+      window,
+    );
+    return rows.map((row) => ({
+      ...row,
+      recentRank: {
+        window: window.preset,
+        rank: ranks.get(row.providerPlayerKey) ?? null,
+      },
+    }));
   });
+
+const recentRankWindows = {
+  last_7_days: { preset: "last_7_days", yahoo: "last7days", rankType: "L7" },
+  last_14_days: { preset: "last_14_days", yahoo: "last14days", rankType: "L14" },
+  last_30_days: { preset: "last_30_days", yahoo: "last30days", rankType: "L30" },
+} as const satisfies Record<
+  StatPeriodPresetName,
+  { readonly preset: StatPeriodPresetName; readonly yahoo: string; readonly rankType: string }
+>;
+
+type YahooRecentRankWindow = (typeof recentRankWindows)[StatPeriodPresetName];
+
+function recentRankIndex(
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  leagueKey: string,
+  playerKeys: ReadonlyArray<string>,
+  window: YahooRecentRankWindow,
+): Effect.Effect<ReadonlyMap<string, number>, ProviderReadFailure> {
+  return Effect.gen(function* () {
+    const ranks = new Map<string, number>();
+    for (let index = 0; index < playerKeys.length; index += maximumDetailPlayers) {
+      const details = yield* readPlayerDetailsRawThroughSdk(context, operation, cookie, {
+        leagueKey,
+        playerKeys: playerKeys.slice(index, index + maximumDetailPlayers),
+        fields: ["ranks"],
+        ranks: [window.yahoo],
+      });
+      for (const detail of details) {
+        const rank = detail.ranks.find((entry) => entry.type === window.rankType)?.value;
+        if (rank !== null && rank !== undefined) {
+          ranks.set(detail.playerKey, rank);
+        }
+      }
+    }
+    return ranks;
+  });
+}
 
 export const applyNativeActionThroughSdk = (
   context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,

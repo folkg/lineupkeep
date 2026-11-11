@@ -1262,6 +1262,40 @@ order only:
   The search payload's `percent_owned`/`percent_started` nodes carry
   `coverage_type`, `value`, `delta`, and a `week`/`date`; all four are decoded where present.
 
+## Live recent-window pool ordering (2026-11-11)
+
+Read-only probes of the owner's four hockey leagues and one football league, recorded as request
+shapes, order, stat ids, rank types, presence counts, and masked identifiers only.
+
+- The league players collection accepts `sort=AR_L7`, `sort=AR_L14`, and `sort=AR_L30` with no
+  `sort_type`. Across 50 free-agent rows in each of three hockey leagues, the returned order was
+  exactly ascending `L7`, `L14`, or `L30` (zero inversions, zero missing values), so the token names
+  the window the order uses.
+- The collection still publishes only `OR` and per-season `S` ranks, and `ranks=` is rejected on it.
+  The recent-window rank itself comes from the players detail read
+  (`league/{leagueKey}/players;player_keys={keys};out=ranks;ranks=last7days,last14days,last30days`),
+  which answers `L7`, `L14`, and `L30` as integer ranks for hockey. It accepts 25 keys per request.
+- Football answers the same selector with `"-"` for `L7`, `L14`, and `L30` while `L4W` carries the
+  last-four-week rank, so none of the three preset windows can order a football pool.
+- `sort_type=lastweek` and `sort_type=lastmonth` are accepted (200) on the collection, but
+  `out=stats` still reports `coverage_type: season`, so those orders have no published value and the
+  adapter does not use them.
+- `position=` narrows the collection. Recognised position codes (`G`, `C`, `D`, `G,C`) filter the
+  rows; unknown tokens such as `Util`, `BN`, `IR`, `IR+`, and `NA` are ignored and widen the answer;
+  invalid syntax such as `W/R` answers HTTP 404 for hockey. Unrecognised tokens never fail, so the
+  adapter narrows only with plain position codes and keeps the local eligibility filter.
+- Free agents in the owner's hockey leagues on 2026-11-11: Cam Talbot carried a 22 % owned share and
+  was a free agent in three of the four hockey leagues. The ownership screen (first page, positions
+  `G`) returned 6–7 rows and never included him; the `L7` order placed him first in two leagues and
+  second in the third, and the `L14` order placed him second in two and third in the third. Season
+  save percentage (where the league scores it) placed him fourth, because the run that was missed
+  had already raised that season rate to .911; season saves is informational in all three leagues
+  and refuses a stat sort.
+- Recorded payloads: `yahoo-nhl-goalie-pool-season-saves-2026-11-11.json`,
+  `yahoo-nhl-goalie-pool-recent-rank-2026-11-11.json`, and
+  `yahoo-nhl-goalie-pool-recent-rank-values-2026-11-11.json` under
+  `packages/backend/src/contexts/connections/fixtures/`.
+
 ## Live rotisserie standings shape (2026-10-28)
 
 The same read-only pass read the owner's rotisserie hockey league standings (`GET .../standings`)

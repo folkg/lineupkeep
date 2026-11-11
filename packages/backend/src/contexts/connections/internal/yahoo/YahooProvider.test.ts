@@ -16,6 +16,9 @@ import { TestClock } from "effect/testing";
 import yahooNflFreeAgentPoolEmpty from "#contexts/connections/fixtures/yahoo-nfl-free-agent-pool-2026-11-10.json";
 import yahooNflPlayerWeeksLive from "#contexts/connections/fixtures/yahoo-nfl-player-weeks-2026-11-10.json";
 import yahooNflWaiverPool from "#contexts/connections/fixtures/yahoo-nfl-waiver-pool-2026-11-10.json";
+import yahooNhlGoaliePoolRecentRank from "#contexts/connections/fixtures/yahoo-nhl-goalie-pool-recent-rank-2026-11-11.json";
+import yahooNhlGoaliePoolRecentRankValues from "#contexts/connections/fixtures/yahoo-nhl-goalie-pool-recent-rank-values-2026-11-11.json";
+import yahooNhlGoaliePoolSeasonSaves from "#contexts/connections/fixtures/yahoo-nhl-goalie-pool-season-saves-2026-11-11.json";
 import capturedTransactionRefusal from "#contexts/connections/fixtures/yahoo-transaction-refusal-2026-11-03.json";
 import { LineupTargetPeriod } from "#contexts/connections/LineupRun.ts";
 import {
@@ -2362,6 +2365,7 @@ it.effect("publishes an empty football free-agent pool without a weekly-fact fai
     const result = yield* provider.searchPlayers({
       ...sessionInput,
       providerLeagueKey: "470.l.70271",
+      sport: "football",
       season: 2026,
       query: undefined,
       availability: "free_agent",
@@ -2396,6 +2400,7 @@ it.effect("publishes the football waiver pool's rows and fields", () => {
     const result = yield* provider.searchPlayers({
       ...sessionInput,
       providerLeagueKey: "470.l.70271",
+      sport: "football",
       season: 2026,
       query: undefined,
       availability: "waiver",
@@ -2543,6 +2548,122 @@ it.effect("reads weekly facts for the football pool's rows", () => {
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
+it.effect("keeps a season stat order at its season value and candidate window", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNhlGoaliePoolSeasonSaves));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const result = yield* provider.searchPlayers({
+      ...sessionInput,
+      providerLeagueKey: "477.l.5744",
+      sport: "hockey",
+      season: 2026,
+      query: undefined,
+      availability: "free_agent",
+      sort: "stat",
+      statId: 25,
+      statType: "season",
+      positions: ["G"],
+      limit: 50,
+    });
+
+    assert.deepStrictEqual(
+      result.players.map((player) => [player.name, player.statValue]),
+      [
+        ["Leevi Meriläinen", 343],
+        ["Arturs Silovs", 275],
+        ["Joseph Woll", 266],
+        ["Ukko-Pekka Luukkonen", 252],
+        ["Darcy Kuemper", 238],
+        ["Dustin Wolf", 238],
+      ],
+    );
+    assert.isFalse(result.players.some((player) => player.name === "Cam Talbot"));
+    assert.isTrue(result.players.every((player) => player.recentRank === undefined));
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("orders the pool by a recent window and publishes the rank that decided it", () => {
+  const internet = recordingInternet((request) =>
+    jsonResponse(
+      request.url.href.includes("player_keys=")
+        ? yahooNhlGoaliePoolRecentRankValues
+        : yahooNhlGoaliePoolRecentRank,
+    ),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const result = yield* provider.searchPlayers({
+      ...sessionInput,
+      providerLeagueKey: "477.l.5744",
+      sport: "hockey",
+      season: 2026,
+      query: undefined,
+      availability: "free_agent",
+      sort: "recent_rank",
+      statId: undefined,
+      statType: "season",
+      recentWindow: "last_14_days",
+      positions: ["G"],
+      limit: 50,
+    });
+
+    assert.deepStrictEqual(
+      result.players.map((player) => [player.name, player.percentOwned, player.recentRank]),
+      [
+        ["Samuel Ersson", 11, { window: "last_14_days", rank: 16 }],
+        ["Cam Talbot", 22, { window: "last_14_days", rank: 29 }],
+        ["Ukko-Pekka Luukkonen", 65, { window: "last_14_days", rank: 68 }],
+        ["Akira Schmid", 18, { window: "last_14_days", rank: 114 }],
+        ["Dustin Wolf", 30, { window: "last_14_days", rank: 184 }],
+        ["Colten Ellis", 6, { window: "last_14_days", rank: 193 }],
+      ],
+    );
+    assert.isTrue(result.players.every((player) => player.statValue === null));
+    assert.deepStrictEqual(
+      internet.calls.map((call) => call.url.href),
+      [
+        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1/games;game_keys=nfl,nhl,nba,mlb/leagues;league_keys=477.l.5744/players;status=FA;position=G;sort=AR_L14;count=50;out=ownership,percent_owned,percent_started,ranks,transactions,opponent,starting_status?format=json",
+        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/477.l.5744/players;player_keys=477.p.8040,477.p.4854,477.p.7569,477.p.8033,477.p.8489,477.p.8371;out=ranks;ranks=last14days?format=json",
+      ],
+    );
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("refuses a recent window the sport does not publish", () => {
+  const internet = recordingInternet(() => jsonResponse({}));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.searchPlayers({
+        ...sessionInput,
+        providerLeagueKey: "470.l.70271",
+        sport: "football",
+        season: 2026,
+        query: undefined,
+        availability: "free_agent",
+        sort: "recent_rank",
+        statId: undefined,
+        statType: "season",
+        recentWindow: "last_14_days",
+        limit: 50,
+      }),
+    );
+
+    assert.instanceOf(error, ProviderPeriodUnsupported);
+    assert.strictEqual(error.kind, "preset");
+    assert.strictEqual(error.declared, "unsupported");
+    assert.include(error.reason, "leaves the seven-, fourteen-, and thirty-day ranks empty");
+    assert.strictEqual(
+      error.remedy,
+      "Order the pool by ownership, a season rank, or a season stat instead.",
+    );
+    assert.deepStrictEqual(internet.calls, []);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
 it.effect("refuses a malformed football pool payload instead of publishing no rows", () => {
   const malformed = withMalformedPlayerCollection(structuredClone(yahooNflWaiverPool));
   const internet = recordingInternet(() => jsonResponse(malformed));
@@ -2553,6 +2674,7 @@ it.effect("refuses a malformed football pool payload instead of publishing no ro
       provider.searchPlayers({
         ...sessionInput,
         providerLeagueKey: "470.l.70271",
+        sport: "football",
         season: 2026,
         query: undefined,
         availability: "waiver",
@@ -2575,6 +2697,7 @@ it.effect("searches free agents with one exact request and typed availability", 
     const result = yield* provider.searchPlayers({
       ...sessionInput,
       providerLeagueKey: "466.l.4000",
+      sport: "football",
       season: 2026,
       query: "Synthetic Free",
       availability: "free_agent",
@@ -2697,6 +2820,7 @@ it.effect("never reads a flagged search row as healthy when it names no code", (
     const result = yield* provider.searchPlayers({
       ...sessionInput,
       providerLeagueKey: "466.l.4000",
+      sport: "football",
       season: 2026,
       query: undefined,
       availability: "all",
@@ -2724,6 +2848,7 @@ it.effect("searches waiver players without a query", () => {
     yield* provider.searchPlayers({
       ...sessionInput,
       providerLeagueKey: "466.l.4000",
+      sport: "football",
       season: 2026,
       query: undefined,
       availability: "waiver",
@@ -2748,6 +2873,7 @@ it.effect("searches the whole player pool without an availability filter", () =>
     yield* provider.searchPlayers({
       ...sessionInput,
       providerLeagueKey: "466.l.4000",
+      sport: "football",
       season: 2026,
       query: undefined,
       availability: "all",
@@ -2772,6 +2898,7 @@ it.effect("requests the rank and stat values that each provider-ordered sort pub
     const statSort = yield* provider.searchPlayers({
       ...sessionInput,
       providerLeagueKey: "466.l.4000",
+      sport: "football",
       season: 2026,
       query: undefined,
       availability: "all",
@@ -2783,6 +2910,7 @@ it.effect("requests the rank and stat values that each provider-ordered sort pub
     yield* provider.searchPlayers({
       ...sessionInput,
       providerLeagueKey: "466.l.4000",
+      sport: "football",
       season: 2026,
       query: undefined,
       availability: "all",
@@ -2820,6 +2948,7 @@ it.effect("rejects a search answer for a league it did not request", () => {
       provider.searchPlayers({
         ...sessionInput,
         providerLeagueKey: "466.l.4000",
+        sport: "football",
         season: 2026,
         query: undefined,
         availability: "all",
@@ -2844,6 +2973,7 @@ it.effect("rejects a search answer with no league group", () => {
       provider.searchPlayers({
         ...sessionInput,
         providerLeagueKey: "466.l.4000",
+        sport: "football",
         season: 2026,
         query: undefined,
         availability: "all",
@@ -2868,6 +2998,7 @@ it.effect("refuses a weekly player sort the rows cannot explain", () => {
       provider.searchPlayers({
         ...sessionInput,
         providerLeagueKey: "466.l.4000",
+        sport: "football",
         season: 2026,
         query: undefined,
         availability: "all",
@@ -2892,6 +3023,7 @@ it.effect("refuses a stat sort without a stat id", () => {
       provider.searchPlayers({
         ...sessionInput,
         providerLeagueKey: "466.l.4000",
+        sport: "football",
         season: 2026,
         query: undefined,
         availability: "all",
@@ -2916,6 +3048,7 @@ it.effect("rejects an unbounded player search without a request", () => {
       provider.searchPlayers({
         ...sessionInput,
         providerLeagueKey: "461.l.1000",
+        sport: "football",
         season: 2026,
         query: undefined,
         availability: "all",

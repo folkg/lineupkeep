@@ -953,6 +953,8 @@ const providerFake = Effect.gen(function* () {
             return ascending(left.overallRank, right.overallRank);
           case "stat":
             return descending(left.statValue, right.statValue);
+          case "recent_rank":
+            return ascending(left.recentRank?.rank ?? null, right.recentRank?.rank ?? null);
         }
       });
       return { players: sorted.slice(0, input.limit) };
@@ -1070,9 +1072,21 @@ const fakeCapabilities: ProviderCapabilities = {
   },
   sports: ["football", "hockey"],
   playerSearch: {
-    sorts: ["name", "position", "ownership", "actual_rank", "overall_rank", "stat"],
-    providerOrderedSorts: ["actual_rank", "overall_rank", "stat"],
+    sorts: ["name", "position", "ownership", "actual_rank", "overall_rank", "stat", "recent_rank"],
+    providerOrderedSorts: ["actual_rank", "overall_rank", "stat", "recent_rank"],
     weeklyOrderingValues: false,
+    recentRanks: {
+      football: {
+        windows: [],
+        detail: "The fake provider publishes no recent-window rank for football.",
+      },
+      hockey: {
+        windows: ["last_7_days", "last_14_days", "last_30_days"],
+        detail: "The fake provider publishes seven-, fourteen-, and thirty-day ranks for hockey.",
+      },
+      baseball: { windows: [], detail: "The fake provider does not serve baseball." },
+      basketball: { windows: [], detail: "The fake provider does not serve basketball." },
+    },
   },
   statPeriods: {
     football: {

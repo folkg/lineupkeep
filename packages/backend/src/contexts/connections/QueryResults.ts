@@ -872,6 +872,7 @@ const PlayerSort = Schema.Literals([
   "actual_rank",
   "overall_rank",
   "stat",
+  "recent_rank",
 ]);
 
 export const SearchPlayersInput = Schema.Struct({
@@ -881,7 +882,7 @@ export const SearchPlayersInput = Schema.Struct({
       Schema.check(Schema.isMaxLength(80)),
       Schema.annotate({
         description:
-          "Case-insensitive name filter of 1 to 80 characters. Omit it to list the whole pool; a blank value is refused with the remedy.",
+          "Case-insensitive name filter of 1 to 80 characters. Omit it to list the whole pool; a blank value is refused.",
       }),
     ),
   ),
@@ -895,7 +896,7 @@ export const SearchPlayersInput = Schema.Struct({
     PlayerSort.pipe(
       Schema.annotate({
         description:
-          "An order the site backs. `actual_rank` and `overall_rank` order by the site's ranks; `stat` by the league category in `stat`; `ownership` by percent owned, highest first.",
+          "An order the site backs: `actual_rank`, `overall_rank`, `stat`, `ownership` (highest first), `name`, `position`, or `recent_rank` over `statPeriod`.",
       }),
     ),
   ),
@@ -908,10 +909,10 @@ export const SearchPlayersInput = Schema.Struct({
     ),
   ),
   statPeriod: Schema.optional(
-    Schema.Literals(["season", "week"]).pipe(
+    Schema.Literals(["season", "week", "last_7_days", "last_14_days", "last_30_days"]).pipe(
       Schema.annotate({
         description:
-          "Period for a `stat` sort. `week` is offered only where the site publishes the weekly value; otherwise it is refused with the remedy.",
+          "Period for sort `stat` (`season` or a published `week`) or `recent_rank` (a preset window). A window the league does not publish is refused.",
       }),
     ),
   ),
@@ -919,7 +920,7 @@ export const SearchPlayersInput = Schema.Struct({
     Schema.Boolean.pipe(
       Schema.annotate({
         description:
-          "Add each row's remaining games for the current scoring window as `gamesRemaining`. It costs league-window and professional-calendar reads.",
+          "Add each row's remaining games for the current scoring window as `gamesRemaining`, at the cost of league-window reads.",
       }),
     ),
   ),
@@ -951,7 +952,7 @@ const SchedulePlayerGamesRemaining = Schema.Union([
 ]).pipe(
   Schema.annotate({
     description:
-      "Games this player's team plays in the window the section states. `unavailable` says why neither source produced a count, never a silent zero.",
+      "Games this player's team plays in the window the section states; `unavailable` says why, never a silent zero.",
   }),
 );
 
@@ -964,7 +965,7 @@ const SearchPlayer = Schema.Struct({
   proTeam: Schema.NullOr(Schema.NonEmptyString).pipe(
     Schema.annotate({
       description:
-        "The professional-team abbreviation, the same value a roster entry's `proTeam` carries. Null when the site published none.",
+        "The professional-team abbreviation a roster entry's `proTeam` carries. Null when unpublished.",
     }),
   ),
   eligiblePositions: Schema.Array(Schema.NonEmptyString),
@@ -1023,6 +1024,17 @@ const SearchPlayer = Schema.Struct({
     Schema.annotate({
       description: "The site's overall rank; the value that orders sort `overall_rank`.",
     }),
+  ),
+  recentRank: Schema.optional(
+    Schema.Struct({
+      window: Schema.Literals(["last_7_days", "last_14_days", "last_30_days"]),
+      rank: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+    }).pipe(
+      Schema.annotate({
+        description:
+          "The site's rank over the requested recent window; the value that orders `recent_rank`. Null when unpublished.",
+      }),
+    ),
   ),
   statValue: Schema.optional(Schema.NullOr(Schema.Finite)).pipe(
     Schema.annotate({

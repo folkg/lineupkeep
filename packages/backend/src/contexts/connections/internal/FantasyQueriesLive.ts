@@ -1385,6 +1385,36 @@ export const FantasyQueriesLive = Layer.effect(
           detail: `Your league does not accept the \`${sort}\` player sort. Choose one of: ${playerSearch.sorts.join(", ")}.`,
         });
       }
+      const recentWindow =
+        statPeriod === "last_7_days" ||
+        statPeriod === "last_14_days" ||
+        statPeriod === "last_30_days"
+          ? statPeriod
+          : undefined;
+      if (sort === "recent_rank") {
+        if (recentWindow === undefined) {
+          return yield* QuerySelectionInvalid.make({
+            detail:
+              "A recent-rank ordering needs a preset window in `statPeriod`: `last_7_days`, `last_14_days`, or `last_30_days`.",
+          });
+        }
+        const support = playerSearch.recentRanks[context.owned.team.sport];
+        if (!support.windows.includes(recentWindow)) {
+          return yield* QuerySelectionInvalid.make({
+            detail: `${support.detail} ${
+              support.windows.length === 0
+                ? "Order the pool by ownership, a season rank, or a season stat instead."
+                : `Ask for one of: ${support.windows.join(", ")}.`
+            }`,
+          });
+        }
+      }
+      if (sort !== "recent_rank" && recentWindow !== undefined) {
+        return yield* QuerySelectionInvalid.make({
+          detail:
+            "Preset windows order the pool by the site's recent rank. Use sort `recent_rank` with that `statPeriod`, or keep `statPeriod` `season` for a season value.",
+        });
+      }
       if (statPeriod === "week" && !playerSearch.weeklyOrderingValues) {
         return yield* QuerySelectionInvalid.make({
           detail:
@@ -1403,6 +1433,9 @@ export const FantasyQueriesLive = Layer.effect(
         });
       }
       const includeGames = input.includeGames === true;
+      const positions = new Set(input.positions ?? []);
+      const orderingPositions =
+        sort === "recent_rank" ? providerPositionCodes(positions) : undefined;
       let statId: number | undefined;
       if (input.stat !== undefined) {
         const resolved = yield* resolveStatRef(context, input.stat);
@@ -1435,12 +1468,15 @@ export const FantasyQueriesLive = Layer.effect(
         context.provider.searchPlayers({
           ...providerIdentity(context),
           providerLeagueKey: context.owned.team.providerLeagueKey,
+          sport: context.owned.team.sport,
           season: context.owned.team.season,
           query,
           availability,
           sort,
           statId,
-          statType: statPeriod,
+          statType: statPeriod === "week" ? "week" : "season",
+          recentWindow,
+          positions: orderingPositions,
           limit: 50,
         }),
       );
@@ -1450,7 +1486,6 @@ export const FantasyQueriesLive = Layer.effect(
       const leagueOutcome = yield* readLeague(context);
       const league = leagueOutcome._tag === "ok" ? leagueOutcome.value : undefined;
       const poolGames = includeGames ? yield* readPoolGames(context, leagueOutcome) : undefined;
-      const positions = new Set(input.positions ?? []);
       const filtered = outcome.value.players.filter(
         (player) =>
           (availability === "all" || player.availability === availability) &&
@@ -1551,6 +1586,9 @@ export const FantasyQueriesLive = Layer.effect(
           percentStartedChange: player.percentStartedChange,
           actualRank: player.actualRank,
           overallRank: player.overallRank,
+          ...(sort === "recent_rank" && player.recentRank !== undefined
+            ? { recentRank: player.recentRank }
+            : {}),
           transactionTrend: player.transactionTrend,
           ...(sort === "stat" ? { statValue: player.statValue } : {}),
         };
@@ -5036,6 +5074,13 @@ function providerOrdered(
   return provider.capabilities.playerSearch.providerOrderedSorts.includes(sort);
 }
 
+function providerPositionCodes(positions: ReadonlySet<string>): ReadonlyArray<string> | undefined {
+  const codes = [...positions];
+  return codes.length > 0 && codes.every((code) => /^[A-Za-z]{1,3}$/u.test(code))
+    ? codes
+    : undefined;
+}
+
 function limitation(provider: TeamContext["provider"], subject: ProviderLimitationSubject): string {
   return (
     provider.capabilities.limitations.find((entry) => entry.subject === subject)?.detail ??
@@ -5072,6 +5117,7 @@ function comparePlayers(
     case "actual_rank":
     case "overall_rank":
     case "stat":
+    case "recent_rank":
       return 0;
   }
 }

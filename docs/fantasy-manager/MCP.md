@@ -21,7 +21,7 @@ Status: proposed surface and acceptance criteria. Names other than the agreed ge
 | `get_calendar`        | Valid current/historical periods and relevant fantasy-day/lock context; no guessed week equivalence                                                                                                       |
 | `get_league`          | Selected league settings, scoring definitions, roster rules, standings with records, season points, and category totals, and completed draft history; bounded groups/pages                                |
 | `get_rosters`         | Exact selected team/period rosters, or every team's roster in a linked league paged by whole teams; professional-team abbreviation and goalie/pitcher starting status; full detail carries the owner note |
-| `search_players`      | Bounded league/sport-context player search with ownership/started signals, validated sorts, draft provenance, and optional professional games remaining                                                   |
+| `search_players`      | Bounded league/sport-context player search with ownership/started signals, validated sorts including the provider's recent-window rank, draft provenance, and optional professional games remaining       |
 | `get_players`         | Explicit-list hydration of up to 25 selected-player references, returned whole; stats, availability, draft provenance, and the week's projection where published                                          |
 | `get_matchups`        | Selected matchup/scoreboard data with explicit period, category values/winners, and remaining player-games                                                                                                |
 | `get_transactions`    | Bounded transaction history with team scope and date filtering, two-sided player movements, trade parties, traded draft picks, and explicit incompleteness; no execution                                  |
@@ -313,9 +313,10 @@ detail read publishes none. A rostered player still reports injury from the rost
 same read the roster already used.
 
 `search_players` rows carry the value each provider-ordered sort uses: `actualRank` (the provider's
-current-season rank, which orders `actual_rank`), `overallRank` (which orders `overall_rank`), and
-`statValue` (the season value of the requested `stat`, present only for a `stat` sort). A client can
-therefore check the order it received without a second read. Provider ownership and started
+current-season rank, which orders `actual_rank`), `overallRank` (which orders `overall_rank`),
+`statValue` (the season value of the requested `stat`, present only for a `stat` sort), and
+`recentRank` (the provider's rank over the requested preset window, present only for a `recent_rank`
+sort). A client can therefore check the order it received without a second read. Provider ownership and started
 percentages and their changes are null only when the provider published no value for that row, and
 the field descriptions say so. There is exactly one ownership-change field, `percentOwnedDelta`; an
 earlier response shape carried a second, always-null `percentOwnedChange`, which is removed rather
@@ -324,7 +325,13 @@ week, and `percentStartedChange` is its delta over its current started-percentag
 week in football, the provider's fantasy day in hockey); both windows are stated in the field
 descriptions. Weekly rank and stat sorts are refused with the remedy because the provider's search
 payload publishes only season values for them; offering the sort would return an order the rows
-cannot explain.
+cannot explain. The recent-window sorts read the provider's own `L7`, `L14`, or `L30` rank, which the
+search payload never carries, so the ranking read that supplies those values also supplies the order
+and its explanation. A sport whose provider leaves the preset ranks empty refuses every preset window
+with that reason, as football does with its last-four-week rank; a preset window on a season sort is
+refused with the sort that accepts it. A `recent_rank` request narrows plain position codes at the
+provider, so its first page is that narrowed pool; a roster-slot value stays a local filter over the
+provider's page.
 
 `get_transactions` maps `scope: team` onto the provider's team filter. `since` and `until` are ISO
 8601 instants such as `2026-09-20T00:00:00Z`. The provider has no date filter, but its history is

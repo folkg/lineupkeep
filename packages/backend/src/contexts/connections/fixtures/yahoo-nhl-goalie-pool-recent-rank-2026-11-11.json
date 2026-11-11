@@ -1,0 +1,1187 @@
+{
+  "fantasy_content": {
+    "xml:lang": "en-US",
+    "yahoo:uri": "/fantasy/v2/users;use_login=1/games;game_keys=nfl,nhl,nba,mlb/leagues;league_keys=477.l.5744/players;status=FA;position=G;sort=AR_L14;count=50;out=ownership,percent_owned,percent_started,ranks,stats,transactions,opponent,starting_status",
+    "users": {
+      "0": {
+        "user": [
+          {
+            "guid": "HAY7C2CDLRLPZM4F3MBWFMSI3E"
+          },
+          {
+            "games": {
+              "0": {
+                "game": [
+                  {
+                    "game_key": "470",
+                    "game_id": "470",
+                    "name": "Football",
+                    "code": "nfl",
+                    "type": "full",
+                    "url": "https://football.fantasysports.yahoo.com/f1",
+                    "season": "2026",
+                    "is_registration_over": 0,
+                    "is_game_over": 0,
+                    "is_offseason": 0,
+                    "is_live_draft_lobby_active": 1
+                  },
+                  {
+                    "leagues": []
+                  }
+                ]
+              },
+              "1": {
+                "game": [
+                  {
+                    "game_key": "477",
+                    "game_id": "477",
+                    "name": "Hockey",
+                    "code": "nhl",
+                    "type": "full",
+                    "url": "https://hockey.fantasysports.yahoo.com/hockey",
+                    "season": "2026",
+                    "is_registration_over": 0,
+                    "is_game_over": 0,
+                    "is_offseason": 0,
+                    "is_live_draft_lobby_active": 1
+                  },
+                  {
+                    "leagues": {
+                      "0": {
+                        "league": [
+                          {
+                            "league_key": "477.l.5744",
+                            "league_id": "5744",
+                            "name": "Irish Lacrosse",
+                            "url": "https://hockey.fantasysports.yahoo.com/hockey/5744",
+                            "recordbook_url": "https://hockey.fantasysports.yahoo.com/hockey/5744/recordbook?layout=webview&device=smartphone",
+                            "logo_url": "https://s.yimg.com/ep/cx/blendr/v2/image-hockey-player-emoji-png_1721256348578.png",
+                            "draft_status": "postdraft",
+                            "num_teams": 10,
+                            "max_teams": "14",
+                            "edit_key": "2026-11-10",
+                            "weekly_deadline": "intraday",
+                            "roster_type": "date",
+                            "league_update_timestamp": "1794301408",
+                            "scoring_type": "head",
+                            "scoring_label": "H2H Cat",
+                            "league_type": "private",
+                            "renew": "465_31432",
+                            "renewed": "",
+                            "felo_tier": "silver",
+                            "is_highscore": false,
+                            "is_guillotine": "0",
+                            "matchup_week": 7,
+                            "iris_group_chat_id": "",
+                            "allow_add_to_dl_extra_pos": 1,
+                            "is_pro_league": "0",
+                            "is_cash_league": "0",
+                            "current_week": 7,
+                            "start_week": "1",
+                            "start_date": "2026-09-29",
+                            "end_week": "26",
+                            "end_date": "2027-04-04",
+                            "current_date": "2026-11-10",
+                            "is_plus_league": "0",
+                            "game_code": "nhl",
+                            "season": "2026"
+                          },
+                          {
+                            "players": {
+                              "0": {
+                                "player": [
+                                  [
+                                    {
+                                      "player_key": "477.p.8040"
+                                    },
+                                    {
+                                      "name": {
+                                        "full": "Samuel Ersson",
+                                        "first": "Samuel",
+                                        "last": "Ersson",
+                                        "ascii_first": "Samuel",
+                                        "ascii_last": "Ersson"
+                                      }
+                                    },
+                                    {
+                                      "editorial_team_key": "nhl.t.14"
+                                    },
+                                    {
+                                      "editorial_team_abbr": "OTT"
+                                    },
+                                    {
+                                      "display_position": "G"
+                                    },
+                                    {
+                                      "position_type": "G"
+                                    },
+                                    {
+                                      "primary_position": "G"
+                                    },
+                                    {
+                                      "eligible_positions": [
+                                        {
+                                          "position": "G"
+                                        }
+                                      ]
+                                    }
+                                  ],
+                                  {
+                                    "starting_status": [
+                                      {
+                                        "coverage_type": "date",
+                                        "date": "2026-11-10"
+                                      },
+                                      {
+                                        "is_starting": 1
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "ownership": {
+                                      "ownership_type": "freeagents"
+                                    }
+                                  },
+                                  {
+                                    "percent_owned": [
+                                      {
+                                        "coverage_type": "week",
+                                        "week": 7
+                                      },
+                                      {
+                                        "value": 11
+                                      },
+                                      {
+                                        "delta": "3"
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "percent_started": [
+                                      {
+                                        "coverage_type": "date",
+                                        "date": "2026-11-10"
+                                      },
+                                      {
+                                        "value": 10
+                                      },
+                                      {
+                                        "delta": 7
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "player_ranks": [
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "OR",
+                                          "rank_value": "577"
+                                        }
+                                      },
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "S",
+                                          "rank_value": "327",
+                                          "rank_season": "2026"
+                                        }
+                                      },
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "S",
+                                          "rank_value": "628",
+                                          "rank_season": "2025"
+                                        }
+                                      },
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "S",
+                                          "rank_value": "331",
+                                          "rank_season": "2024"
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "player_stats": {
+                                      "0": {
+                                        "coverage_type": "season",
+                                        "season": "2026"
+                                      },
+                                      "stats": [
+                                        {
+                                          "stat": {
+                                            "stat_id": "19",
+                                            "value": "3"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "22",
+                                            "value": "22"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "23",
+                                            "value": "3.14"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "25",
+                                            "value": "177"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "24",
+                                            "value": "199"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "26",
+                                            "value": ".889"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "27",
+                                            "value": "0"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  {
+                                    "transactions": {
+                                      "total": "3231",
+                                      "adds": "3072",
+                                      "drops": "159",
+                                      "trades": "0"
+                                    }
+                                  },
+                                  {
+                                    "opponent": "WSH"
+                                  }
+                                ]
+                              },
+                              "1": {
+                                "player": [
+                                  [
+                                    {
+                                      "player_key": "477.p.4854"
+                                    },
+                                    {
+                                      "name": {
+                                        "full": "Cam Talbot",
+                                        "first": "Cam",
+                                        "last": "Talbot",
+                                        "ascii_first": "Cam",
+                                        "ascii_last": "Talbot"
+                                      }
+                                    },
+                                    {
+                                      "editorial_team_key": "nhl.t.29"
+                                    },
+                                    {
+                                      "editorial_team_abbr": "CBJ"
+                                    },
+                                    {
+                                      "display_position": "G"
+                                    },
+                                    {
+                                      "position_type": "G"
+                                    },
+                                    {
+                                      "primary_position": "G"
+                                    },
+                                    {
+                                      "eligible_positions": [
+                                        {
+                                          "position": "G"
+                                        }
+                                      ]
+                                    }
+                                  ],
+                                  {
+                                    "starting_status": [
+                                      {
+                                        "coverage_type": "date",
+                                        "date": "2026-11-10"
+                                      },
+                                      {
+                                        "is_starting": 1
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "ownership": {
+                                      "ownership_type": "freeagents"
+                                    }
+                                  },
+                                  {
+                                    "percent_owned": [
+                                      {
+                                        "coverage_type": "week",
+                                        "week": 7
+                                      },
+                                      {
+                                        "value": 22
+                                      },
+                                      {
+                                        "delta": "11"
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "percent_started": [
+                                      {
+                                        "coverage_type": "date",
+                                        "date": "2026-11-10"
+                                      },
+                                      {
+                                        "value": 21
+                                      },
+                                      {
+                                        "delta": 17
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "player_ranks": [
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "OR",
+                                          "rank_value": "503"
+                                        }
+                                      },
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "S",
+                                          "rank_value": "99",
+                                          "rank_season": "2026"
+                                        }
+                                      },
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "S",
+                                          "rank_value": "523",
+                                          "rank_season": "2025"
+                                        }
+                                      },
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "S",
+                                          "rank_value": "194",
+                                          "rank_season": "2024"
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "player_stats": {
+                                      "0": {
+                                        "coverage_type": "season",
+                                        "season": "2026"
+                                      },
+                                      "stats": [
+                                        {
+                                          "stat": {
+                                            "stat_id": "19",
+                                            "value": "5"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "22",
+                                            "value": "18"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "23",
+                                            "value": "2.44"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "25",
+                                            "value": "185"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "24",
+                                            "value": "203"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "26",
+                                            "value": ".911"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "27",
+                                            "value": "0"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  {
+                                    "transactions": {
+                                      "total": "6670",
+                                      "adds": "6617",
+                                      "drops": "52",
+                                      "trades": "1"
+                                    }
+                                  },
+                                  {
+                                    "opponent": "FLA"
+                                  }
+                                ]
+                              },
+                              "2": {
+                                "player": [
+                                  [
+                                    {
+                                      "player_key": "477.p.7569"
+                                    },
+                                    {
+                                      "name": {
+                                        "full": "Ukko-Pekka Luukkonen",
+                                        "first": "Ukko-Pekka",
+                                        "last": "Luukkonen",
+                                        "ascii_first": "Ukko-Pekka",
+                                        "ascii_last": "Luukkonen"
+                                      }
+                                    },
+                                    {
+                                      "editorial_team_key": "nhl.t.2"
+                                    },
+                                    {
+                                      "editorial_team_abbr": "BUF"
+                                    },
+                                    {
+                                      "display_position": "G"
+                                    },
+                                    {
+                                      "position_type": "G"
+                                    },
+                                    {
+                                      "primary_position": "G"
+                                    },
+                                    {
+                                      "eligible_positions": [
+                                        {
+                                          "position": "G"
+                                        }
+                                      ]
+                                    }
+                                  ],
+                                  {
+                                    "ownership": {
+                                      "ownership_type": "freeagents"
+                                    }
+                                  },
+                                  {
+                                    "percent_owned": [
+                                      {
+                                        "coverage_type": "week",
+                                        "week": 7
+                                      },
+                                      {
+                                        "value": 65
+                                      },
+                                      {
+                                        "delta": "-1"
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "percent_started": [
+                                      {
+                                        "coverage_type": "date",
+                                        "date": "2026-11-10"
+                                      },
+                                      {
+                                        "value": 37
+                                      },
+                                      {
+                                        "delta": -11
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "player_ranks": [
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "OR",
+                                          "rank_value": "169"
+                                        }
+                                      },
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "S",
+                                          "rank_value": "484",
+                                          "rank_season": "2026"
+                                        }
+                                      },
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "S",
+                                          "rank_value": "79",
+                                          "rank_season": "2025"
+                                        }
+                                      },
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "S",
+                                          "rank_value": "345",
+                                          "rank_season": "2024"
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "player_stats": {
+                                      "0": {
+                                        "coverage_type": "season",
+                                        "season": "2026"
+                                      },
+                                      "stats": [
+                                        {
+                                          "stat": {
+                                            "stat_id": "19",
+                                            "value": "5"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "22",
+                                            "value": "35"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "23",
+                                            "value": "3.27"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "25",
+                                            "value": "252"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "24",
+                                            "value": "287"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "26",
+                                            "value": ".878"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "27",
+                                            "value": "0"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  {
+                                    "transactions": {
+                                      "total": "493",
+                                      "adds": "132",
+                                      "drops": "354",
+                                      "trades": "7"
+                                    }
+                                  },
+                                  {
+                                    "opponent": null
+                                  }
+                                ]
+                              },
+                              "3": {
+                                "player": [
+                                  [
+                                    {
+                                      "player_key": "477.p.8033"
+                                    },
+                                    {
+                                      "name": {
+                                        "full": "Akira Schmid",
+                                        "first": "Akira",
+                                        "last": "Schmid",
+                                        "ascii_first": "Akira",
+                                        "ascii_last": "Schmid"
+                                      }
+                                    },
+                                    {
+                                      "editorial_team_key": "nhl.t.26"
+                                    },
+                                    {
+                                      "editorial_team_abbr": "FLA"
+                                    },
+                                    {
+                                      "display_position": "G"
+                                    },
+                                    {
+                                      "position_type": "G"
+                                    },
+                                    {
+                                      "primary_position": "G"
+                                    },
+                                    {
+                                      "eligible_positions": [
+                                        {
+                                          "position": "G"
+                                        }
+                                      ]
+                                    }
+                                  ],
+                                  {
+                                    "starting_status": [
+                                      {
+                                        "coverage_type": "date",
+                                        "date": "2026-11-10"
+                                      },
+                                      {
+                                        "is_starting": 0
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "ownership": {
+                                      "ownership_type": "freeagents"
+                                    }
+                                  },
+                                  {
+                                    "percent_owned": [
+                                      {
+                                        "coverage_type": "week",
+                                        "week": 7
+                                      },
+                                      {
+                                        "value": 18
+                                      },
+                                      {
+                                        "delta": "-9"
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "percent_started": [
+                                      {
+                                        "coverage_type": "date",
+                                        "date": "2026-11-10"
+                                      },
+                                      {
+                                        "value": 15
+                                      },
+                                      {
+                                        "delta": 3
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "player_ranks": [
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "OR",
+                                          "rank_value": "171"
+                                        }
+                                      },
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "S",
+                                          "rank_value": "285",
+                                          "rank_season": "2026"
+                                        }
+                                      },
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "S",
+                                          "rank_value": "166",
+                                          "rank_season": "2025"
+                                        }
+                                      },
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "S",
+                                          "rank_value": "145",
+                                          "rank_season": "2024"
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "player_stats": {
+                                      "0": {
+                                        "coverage_type": "season",
+                                        "season": "2026"
+                                      },
+                                      "stats": [
+                                        {
+                                          "stat": {
+                                            "stat_id": "19",
+                                            "value": "5"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "22",
+                                            "value": "26"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "23",
+                                            "value": "3.00"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "25",
+                                            "value": "203"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "24",
+                                            "value": "229"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "26",
+                                            "value": ".886"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "27",
+                                            "value": "0"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  {
+                                    "transactions": {
+                                      "total": "1221",
+                                      "adds": "58",
+                                      "drops": "1161",
+                                      "trades": "2"
+                                    }
+                                  },
+                                  {
+                                    "opponent": "@CBJ"
+                                  }
+                                ]
+                              },
+                              "4": {
+                                "player": [
+                                  [
+                                    {
+                                      "player_key": "477.p.8489"
+                                    },
+                                    {
+                                      "name": {
+                                        "full": "Dustin Wolf",
+                                        "first": "Dustin",
+                                        "last": "Wolf",
+                                        "ascii_first": "Dustin",
+                                        "ascii_last": "Wolf"
+                                      }
+                                    },
+                                    {
+                                      "editorial_team_key": "nhl.t.3"
+                                    },
+                                    {
+                                      "editorial_team_abbr": "CGY"
+                                    },
+                                    {
+                                      "display_position": "G"
+                                    },
+                                    {
+                                      "position_type": "G"
+                                    },
+                                    {
+                                      "primary_position": "G"
+                                    },
+                                    {
+                                      "eligible_positions": [
+                                        {
+                                          "position": "G"
+                                        }
+                                      ]
+                                    }
+                                  ],
+                                  {
+                                    "ownership": {
+                                      "ownership_type": "freeagents"
+                                    }
+                                  },
+                                  {
+                                    "percent_owned": [
+                                      {
+                                        "coverage_type": "week",
+                                        "week": 7
+                                      },
+                                      {
+                                        "value": 30
+                                      },
+                                      {
+                                        "delta": "-9"
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "percent_started": [
+                                      {
+                                        "coverage_type": "date",
+                                        "date": "2026-11-10"
+                                      },
+                                      {
+                                        "value": 15
+                                      },
+                                      {
+                                        "delta": -7
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "player_ranks": [
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "OR",
+                                          "rank_value": "210"
+                                        }
+                                      },
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "S",
+                                          "rank_value": "778",
+                                          "rank_season": "2026"
+                                        }
+                                      },
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "S",
+                                          "rank_value": "215",
+                                          "rank_season": "2025"
+                                        }
+                                      },
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "S",
+                                          "rank_value": "78",
+                                          "rank_season": "2024"
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "player_stats": {
+                                      "0": {
+                                        "coverage_type": "season",
+                                        "season": "2026"
+                                      },
+                                      "stats": [
+                                        {
+                                          "stat": {
+                                            "stat_id": "19",
+                                            "value": "3"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "22",
+                                            "value": "36"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "23",
+                                            "value": "3.75"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "25",
+                                            "value": "238"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "24",
+                                            "value": "274"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "26",
+                                            "value": ".869"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "27",
+                                            "value": "0"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  {
+                                    "transactions": {
+                                      "total": "1027",
+                                      "adds": "62",
+                                      "drops": "963",
+                                      "trades": "2"
+                                    }
+                                  },
+                                  {
+                                    "opponent": null
+                                  }
+                                ]
+                              },
+                              "5": {
+                                "player": [
+                                  [
+                                    {
+                                      "player_key": "477.p.8371"
+                                    },
+                                    {
+                                      "name": {
+                                        "full": "Colten Ellis",
+                                        "first": "Colten",
+                                        "last": "Ellis",
+                                        "ascii_first": "Colten",
+                                        "ascii_last": "Ellis"
+                                      }
+                                    },
+                                    {
+                                      "editorial_team_key": "nhl.t.2"
+                                    },
+                                    {
+                                      "editorial_team_abbr": "BUF"
+                                    },
+                                    {
+                                      "display_position": "G"
+                                    },
+                                    {
+                                      "position_type": "G"
+                                    },
+                                    {
+                                      "primary_position": "G"
+                                    },
+                                    {
+                                      "eligible_positions": [
+                                        {
+                                          "position": "G"
+                                        }
+                                      ]
+                                    }
+                                  ],
+                                  {
+                                    "ownership": {
+                                      "ownership_type": "freeagents"
+                                    }
+                                  },
+                                  {
+                                    "percent_owned": [
+                                      {
+                                        "coverage_type": "week",
+                                        "week": 7
+                                      },
+                                      {
+                                        "value": 6
+                                      },
+                                      {
+                                        "delta": "0"
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "percent_started": [
+                                      {
+                                        "coverage_type": "date",
+                                        "date": "2026-11-10"
+                                      },
+                                      {
+                                        "value": 3
+                                      },
+                                      {
+                                        "delta": -2
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "player_ranks": [
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "OR",
+                                          "rank_value": "370"
+                                        }
+                                      },
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "S",
+                                          "rank_value": "234",
+                                          "rank_season": "2026"
+                                        }
+                                      },
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "S",
+                                          "rank_value": "212",
+                                          "rank_season": "2025"
+                                        }
+                                      },
+                                      {
+                                        "player_rank": {
+                                          "rank_type": "S",
+                                          "rank_value": "971",
+                                          "rank_season": "2024"
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "player_stats": {
+                                      "0": {
+                                        "coverage_type": "season",
+                                        "season": "2026"
+                                      },
+                                      "stats": [
+                                        {
+                                          "stat": {
+                                            "stat_id": "19",
+                                            "value": "3"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "22",
+                                            "value": "20"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "23",
+                                            "value": "3.09"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "25",
+                                            "value": "153"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "24",
+                                            "value": "173"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "26",
+                                            "value": ".884"
+                                          }
+                                        },
+                                        {
+                                          "stat": {
+                                            "stat_id": "27",
+                                            "value": "1"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  {
+                                    "transactions": {
+                                      "total": "690",
+                                      "adds": "18",
+                                      "drops": "672",
+                                      "trades": "0"
+                                    }
+                                  },
+                                  {
+                                    "opponent": null
+                                  }
+                                ]
+                              },
+                              "count": 6
+                            }
+                          }
+                        ]
+                      },
+                      "count": 1
+                    }
+                  }
+                ]
+              },
+              "2": {
+                "game": [
+                  {
+                    "game_key": "478",
+                    "game_id": "478",
+                    "name": "Basketball",
+                    "code": "nba",
+                    "type": "full",
+                    "url": "https://basketball.fantasysports.yahoo.com/nba",
+                    "season": "2026",
+                    "is_registration_over": 0,
+                    "is_game_over": 0,
+                    "is_offseason": 0,
+                    "is_live_draft_lobby_active": 1
+                  },
+                  {
+                    "leagues": []
+                  }
+                ]
+              },
+              "3": {
+                "game": [
+                  {
+                    "game_key": "469",
+                    "game_id": "469",
+                    "name": "Baseball",
+                    "code": "mlb",
+                    "type": "full",
+                    "url": "https://baseball.fantasysports.yahoo.com/b1",
+                    "season": "2026",
+                    "is_registration_over": 1,
+                    "is_game_over": 1,
+                    "is_offseason": 1,
+                    "alternate_start_deadline": "2025-03-26"
+                  },
+                  {
+                    "leagues": []
+                  }
+                ]
+              },
+              "count": 4
+            }
+          }
+        ]
+      },
+      "count": 1
+    },
+    "time": "181.00786209106ms",
+    "copyright": "Certain Data by Sportradar, Stats Perform and Rotowire",
+    "refresh_rate": "30"
+  }
+}

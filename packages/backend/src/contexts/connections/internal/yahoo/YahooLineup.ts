@@ -60,9 +60,23 @@ export const yahooCapabilities: ProviderCapabilities = {
   },
   sports: [...supportedSports],
   playerSearch: {
-    sorts: ["name", "position", "ownership", "actual_rank", "overall_rank", "stat"],
-    providerOrderedSorts: ["actual_rank", "overall_rank", "stat"],
+    sorts: ["name", "position", "ownership", "actual_rank", "overall_rank", "stat", "recent_rank"],
+    providerOrderedSorts: ["actual_rank", "overall_rank", "stat", "recent_rank"],
     weeklyOrderingValues: false,
+    recentRanks: {
+      football: {
+        windows: [],
+        detail:
+          "Football publishes a last-four-week rank and leaves the seven-, fourteen-, and thirty-day ranks empty, so no preset window can order its pool.",
+      },
+      hockey: {
+        windows: ["last_7_days", "last_14_days", "last_30_days"],
+        detail:
+          "Hockey publishes seven-, fourteen-, and thirty-day player ranks, and the players collection orders its pool by them.",
+      },
+      baseball: { windows: [], detail: "Your league does not serve baseball." },
+      basketball: { windows: [], detail: "Your league does not serve basketball." },
+    },
   },
   statPeriods: {
     football: {
