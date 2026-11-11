@@ -54,8 +54,7 @@ export const StatWindow = Schema.Union([
     week: StatPeriodWeek,
   }).pipe(
     Schema.annotate({
-      description:
-        "One scoring week; `{week}` is the short form. Completed weeks only where the sport has a weekly series.",
+      description: "One scoring week; `{week}` is the short form.",
     }),
   ),
   Schema.Struct({
@@ -80,7 +79,7 @@ export const StatWindow = Schema.Union([
     end: StatPeriodDate,
   }).pipe(
     Schema.annotate({
-      description: "An inclusive date range; the site's maximum is in `periodSupport`.",
+      description: "An inclusive date range; the maximum is in `periodSupport`.",
     }),
   ),
 ]);
@@ -153,14 +152,14 @@ export const QueryPage = Schema.Struct({
   size: Schema.optional(
     Schema.Int.check(Schema.isGreaterThan(0)).pipe(
       Schema.annotate({
-        description: "The page's row bound: the effective `limit`.",
+        description: "The effective `limit`.",
       }),
     ),
   ),
   total: Schema.optional(
     Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
       Schema.annotate({
-        description: "Rows in the paged resource before paging, where the read knows it.",
+        description: "Rows in the resource before paging; absent when unknown.",
       }),
     ),
   ),
@@ -207,7 +206,7 @@ export const RosterSlot = Schema.Union([
 ]).pipe(
   Schema.annotate({
     description:
-      "Where the player sits. `verified` establishes position eligibility; `unverified` keeps the raw value and reason and is never moved.",
+      "The player's slot; `verified` establishes eligibility, `unverified` keeps the raw value and reason.",
   }),
 );
 export type RosterSlot = typeof RosterSlot.Type;
@@ -220,7 +219,7 @@ export const StartingStatus = Schema.Literals([
 ]).pipe(
   Schema.annotate({
     description:
-      "A goalie or pitcher's real-world starting status; `unconfirmed` when the site published none.",
+      "A goalie or pitcher's real-world starting status; `unconfirmed` when unpublished.",
   }),
 );
 export type StartingStatus = typeof StartingStatus.Type;
@@ -245,7 +244,7 @@ export const TeamOwnerNote = Schema.Union([
 ]).pipe(
   Schema.annotate({
     description:
-      "The team owner's note in Lineupgrade: owner context, not a league fact, and never a place for credentials.",
+      "The team owner's note in Lineupgrade: owner context, not a league fact, never credentials.",
   }),
 );
 export type TeamOwnerNote = typeof TeamOwnerNote.Type;
@@ -253,8 +252,7 @@ export type TeamOwnerNote = typeof TeamOwnerNote.Type;
 export const Cursor = Schema.String.pipe(
   Schema.check(Schema.isMaxLength(2_048)),
   Schema.annotate({
-    description:
-      "A `page.next` token, bound to the issuing call's arguments and valid for 15 minutes.",
+    description: "A `page.next` token; bound to the issuing call's arguments, valid 15 minutes.",
   }),
 );
 export const PageLimit = Schema.Int.check(

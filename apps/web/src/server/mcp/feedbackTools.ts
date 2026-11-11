@@ -39,7 +39,7 @@ type ListFeedbackResult = typeof ListFeedbackResult.Type;
 export const feedbackTools = Toolkit.make(
   Tool.make("submit_feedback", {
     description:
-      "File a bug, data problem, friction, or wishlist item for this account; returns the report id and status. Never include passwords, cookies, account identifiers, or raw league-site responses: reports are stored as plain text and read back verbatim.",
+      "File a bug, data problem, friction, or wishlist item for this account; returns the report id and status. Never include passwords, cookies, account identifiers, or raw league-site responses: reports are stored as plain text.",
     parameters: FeedbackSubmission,
     success: Schema.toCodecJson(SubmitFeedbackResult),
     failure: ToolFailure,

@@ -42,7 +42,7 @@ type ProposalReview = typeof ProposalReview.Type;
 export const proposalTools = Toolkit.make(
   Tool.make("propose_transactions", {
     description:
-      "Propose a set of player moves across this account's teams for a person to review, and return the set and a review link. It stores proposals only: nothing is sent to the league's site, and no tool submits, executes, or spends. Each item that cannot run returns in `refused` with its request position, reason, and fix, and is not stored.",
+      "Propose player moves across this account's teams for a person to review, returning the set and a review link. Proposals are stored only: nothing reaches the league's site, nothing is submitted, executed, or spent. A refused item returns in `refused` with its position, reason, and fix, and is not stored.",
     parameters: ProposeTransactionsInput,
     success: Schema.toCodecJson(ProposedTransactions),
     failure: ToolFailure,
@@ -55,7 +55,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_transaction_proposal_set", {
     description:
-      "Read one stored proposal set: its items by team with state, last check, planned order, and submissions. It reads stored state only and contacts no league site; another account's set is not found.",
+      "Read one stored proposal set: its items by team with state, last check, planned order, and submissions. It reads stored state only, so a set can be stale.",
     parameters: ProposalSetInput,
     success: Schema.toCodecJson(ProposalReview),
     failure: ToolFailure,
@@ -68,7 +68,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("revalidate_transaction_proposal_set", {
     description:
-      "Re-check one proposal set against current league state and mark each open item current, stale, or illegal with reasons. Staleness is not failure: items stay proposed and the ordered plan is recomputed.",
+      "Re-check one proposal set against current league state, marking each open item current, stale, or illegal with reasons. Staleness is not failure: items stay proposed and the plan is recomputed.",
     parameters: ProposalSetInput,
     success: Schema.toCodecJson(ProposalReview),
     failure: ToolFailure,

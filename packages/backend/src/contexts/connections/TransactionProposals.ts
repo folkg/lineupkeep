@@ -129,7 +129,7 @@ export type ProposalExecutionStep = typeof ProposalExecutionStep.Type;
 const ProposalItemExecution = Schema.Struct({
   position: Schema.optional(
     Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
-      description: "The move's position in that submission's team order, counted from zero.",
+      description: "The move's position in the submission's team order, from zero.",
     }),
   ),
   outcome: ProposalOutcome,
@@ -144,7 +144,7 @@ const ProposalReserveMove = Schema.Struct({
   fromSlot: Schema.optional(Schema.NonEmptyString),
   toSlot: Schema.NonEmptyString,
   order: Schema.Literals(["before", "after"]).annotate({
-    description: "Whether this move is sent before the item's moves or after them.",
+    description: "Whether this move is sent before or after the item's moves.",
   }),
 });
 type ProposalReserveMove = typeof ProposalReserveMove.Type;
@@ -164,7 +164,7 @@ const ProposalItemPlacement = Schema.Struct({
     description: "Why the place was chosen, in one sentence.",
   }),
 }).annotate({
-  description: "The place chosen for an item stated as intent, such as an add, activate, or stash.",
+  description: "The place chosen for an intent item, such as an add, activate, or stash.",
 });
 type ProposalItemPlacement = typeof ProposalItemPlacement.Type;
 
@@ -215,8 +215,7 @@ const ProposalTrade = Schema.Struct({
   settledAt: Schema.optional(Schema.DateTimeUtc),
   detail: Schema.optional(Schema.NonEmptyString),
 }).annotate({
-  description:
-    "A submitted trade is a real offer to another manager, who alone decides whether to accept it.",
+  description: "A submitted trade is a real offer to another manager, who alone decides.",
 });
 type ProposalTrade = typeof ProposalTrade.Type;
 
@@ -231,8 +230,7 @@ export const ProposalItem = Schema.Struct({
   reason: Schema.NonEmptyString,
   state: ProposalItemState,
   settled: Schema.Boolean.annotate({
-    description:
-      "Whether the move will never run again: it executed, its offer ended, or it was skipped irreversibly. A failed move is not settled.",
+    description: "Whether the move will never run again; a failed move is not settled.",
   }),
   staleness: ProposalStaleness,
   execution: Schema.optional(ProposalItemExecution),
@@ -314,7 +312,7 @@ const ProposalOrderStep = Schema.Struct({
   rosterPlace: Schema.optional(
     Schema.Literals(["frees", "consumes"]).annotate({
       description:
-        "Whether this move frees or consumes a place. Absent when it leaves the count unchanged.",
+        "Whether this move frees or consumes a place; absent when the count is unchanged.",
     }),
   ),
 });
@@ -325,8 +323,7 @@ const ProposalOrderRosterPlaces = Schema.Struct({
     description: "Places held now; reserve-list players are outside this count.",
   }),
   net: Schema.Int.annotate({
-    description:
-      "Ordered moves' freed places minus consumed places, so `occupied` plus `net` is the count after them.",
+    description: "Freed minus consumed places, so `occupied` plus `net` is the count after them.",
   }),
 });
 
@@ -357,7 +354,7 @@ const ProposalOrderDecision = Schema.Union([
   }),
 ]).annotate({
   description:
-    "The plan chosen for a team: an order, a conflict between moves, or a search that hit its bound. A trade follows the roster moves.",
+    "The plan for a team: an order, a conflict between moves, or a bound the search hit; a trade follows the roster moves.",
 });
 
 export const ProposalTeamLineup = Schema.Struct({
@@ -376,7 +373,7 @@ export const ProposalTeamLineup = Schema.Struct({
   at: Schema.optional(Schema.NonEmptyString),
 }).annotate({
   description:
-    "The lineup run given after these items ran, if any, and its outcome. A failed run changes no item's outcome.",
+    "The lineup run given after these items ran, and its outcome; a failed run changes no item.",
 });
 export type ProposalTeamLineup = typeof ProposalTeamLineup.Type;
 
@@ -396,7 +393,7 @@ export const ProposalTeam = Schema.Struct({
   lineup: Schema.optional(ProposalTeamLineup),
   failure: Schema.optional(Schema.NonEmptyString).annotate({
     description:
-      "Why this team's state could not be read; its items are stale and other teams are unaffected.",
+      "Why this team's state could not be read; its items are stale, other teams unaffected.",
   }),
   items: Schema.Array(ProposalItem),
   pendingOffers: Schema.Array(PendingTradeOffer),
@@ -415,8 +412,7 @@ export const ProposalSubmission = Schema.Struct({
   submittedAt: Schema.DateTimeUtc,
   completedAt: Schema.optional(Schema.DateTimeUtc),
 }).annotate({
-  description:
-    "One submission of this set and, once every outcome was recorded, when it completed.",
+  description: "One submission, and when its last outcome was recorded.",
 });
 export type ProposalSubmission = typeof ProposalSubmission.Type;
 
@@ -429,12 +425,11 @@ export const ProposalSet = Schema.Struct({
   }),
   expired: Schema.Boolean,
   submissions: Schema.Array(ProposalSubmission).annotate({
-    description:
-      "Every submission, oldest first. More than one when a failed or skipped move left the set open.",
+    description: "Every submission, oldest first; more than one when a move failed or was skipped.",
   }),
   settled: Schema.Boolean.annotate({
     description:
-      "Whether the set is an audit record: submitted, with every move settled. A settled set refuses new items and submissions.",
+      "Submitted, with every move settled; a settled set refuses new items and submissions.",
   }),
   reviewPath: Schema.NonEmptyString,
 });
@@ -531,8 +526,7 @@ export const ProposalItemDraft = Schema.Struct({
 export type ProposalItemDraft = typeof ProposalItemDraft.Type;
 
 const ProposeSetTarget = Schema.optional(Schema.NullOr(ProposalSetId)).annotate({
-  description:
-    "An open set to append these items to. Omit to create a new set; a settled or expired set refuses new items.",
+  description: "An open set to append these items to; omit to create a new set.",
 });
 
 export const ProposeTransactionsInput = Schema.Struct({
@@ -609,8 +603,7 @@ export type ProposalItemToWithdraw = typeof ProposalItemToWithdraw.Type;
 export const ProposeTransactionsResult = Schema.Struct({
   set: ProposalSet,
   created: Schema.Boolean.annotate({
-    description:
-      "False when an identical set already existed; a changed set no longer matches its original items.",
+    description: "False when an identical set already existed.",
   }),
   extended: Schema.Boolean,
   items: Schema.Array(ProposalItemAccepted),

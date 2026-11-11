@@ -34,7 +34,7 @@ const ToolFailure = Schema.Struct({ code: Schema.String, message: Schema.String 
 export const fantasyQueryTools = Toolkit.make(
   Tool.make("list_teams", {
     description:
-      "Your linked fantasy teams, filterable by sport, season, or connection. `team` is the private id every other tool takes; connection keys are never returned.",
+      "Your linked fantasy teams, filterable by sport, season, or connection. `team` is the private id every other tool takes.",
     parameters: ListTeamsInput,
     success: Schema.toCodecJson(ListTeamsResult),
     failure: ToolFailure,
@@ -86,7 +86,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("search_players", {
     description:
-      "Search the player pool at one linked team's league. Each row states the value that orders the requested `sort`, including the recent-window rank.",
+      "Search the player pool at one linked team's league. Each row carries the value that orders the requested `sort`.",
     parameters: SearchPlayersInput,
     success: Schema.toCodecJson(SearchPlayersResult),
     failure: ToolFailure,
@@ -112,7 +112,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_matchups", {
     description:
-      "Matchups for one linked team in one league week: points, projections, win probability, per-category values, and remaining player-games where the site publishes them.",
+      "Matchups for one linked team in one league week: points, projections, win probability, per-category values, and remaining player-games.",
     parameters: GetMatchupsInput,
     success: Schema.toCodecJson(MatchupsResult),
     failure: ToolFailure,
@@ -125,7 +125,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_team_summary", {
     description:
-      "One bounded snapshot of one linked team: league, standing, record, standings, matchup, remaining player-games, and roster. `groups` selects sections and each section states its own coverage.",
+      "One bounded snapshot of one linked team: league, standing, record, standings, matchup, remaining player-games, and roster. `groups` selects the sections.",
     parameters: GetTeamSummaryInput,
     success: Schema.toCodecJson(TeamSummaryResult),
     failure: ToolFailure,

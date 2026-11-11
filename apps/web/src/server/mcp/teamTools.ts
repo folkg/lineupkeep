@@ -39,7 +39,7 @@ type SetTeamAutomationResult = typeof SetTeamAutomationResult.Type;
 export const teamTools = Toolkit.make(
   Tool.make("set_team_automation", {
     description:
-      "Change scheduled lineup automation for teams you own. It changes Lineupkeep settings only; it does not set a lineup or contact the league's site.",
+      "Change scheduled lineup automation for teams you own. It changes Lineupkeep settings only; it does not set a lineup.",
     parameters: SetTeamAutomationInput,
     success: Schema.toCodecJson(SetTeamAutomationResult),
     failure: ToolFailure,
@@ -52,7 +52,7 @@ export const teamTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("add_team_agent_note", {
     description:
-      "Append agent memory to one team you own and return the stored note with its author and time. Notes are append-only and are not the owner's note, which they never change.",
+      "Append agent memory to one team you own and return the stored note with its author and time. Notes are append-only and never the owner's note.",
     parameters: TeamAgentNoteInput,
     success: Schema.toCodecJson(TeamAgentNoteSaved),
     failure: ToolFailure,

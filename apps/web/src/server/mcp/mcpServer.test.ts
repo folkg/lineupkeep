@@ -1691,7 +1691,7 @@ it("publishes the accepted player-statistics periods and the compact standings f
 
   const scoring = JSON.stringify(tool("get_league").outputSchema);
   expect(scoring).toContain("informational");
-  expect(scoring).toContain("display-only");
+  expect(scoring).toContain("published but does not count");
 
   const cursor = JSON.stringify(tool("get_team_summary").inputSchema);
   expect(cursor).toContain("bound to the issuing call's arguments");

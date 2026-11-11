@@ -57,7 +57,7 @@ const ConnectionView = Schema.Struct({
   session: ProviderSessionView.pipe(
     Schema.annotate({
       description:
-        "The provider session's health. Its action is separate from reconnecting the MCP connector in this client.",
+        "The provider session's health; its action is separate from reconnecting this MCP client.",
     }),
   ),
   linkingExpiresAt: Schema.optional(Schema.DateTimeUtc),
@@ -71,7 +71,7 @@ const ConnectionView = Schema.Struct({
 export const connectionTools = Toolkit.make(
   Tool.make("list_connections", {
     description:
-      "Your league-site connections with their status. Sign-in credentials, account identity, and other people's connections are never returned.",
+      "Your league-site connections with their status. Credentials and other accounts' connections are never returned.",
     parameters: Tool.EmptyParams,
     success: Schema.Struct({ connections: Schema.Array(Schema.toCodecJson(ConnectionView)) }),
     failure: ToolFailure,

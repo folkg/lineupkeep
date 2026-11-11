@@ -36,8 +36,7 @@ export const TeamAgentNoteAuthor = Schema.Struct({
   name: Schema.NullOr(Schema.NonEmptyString),
 }).pipe(
   Schema.annotate({
-    description:
-      "The OAuth client that wrote the note: its registration and self-declared name, never supplied by the caller.",
+    description: "The OAuth client that wrote the note: its registration and self-declared name.",
   }),
 );
 export type TeamAgentNoteAuthor = typeof TeamAgentNoteAuthor.Type;
@@ -48,8 +47,7 @@ export const TeamAgentNote = Schema.Struct({
   writtenAt: Schema.DateTimeUtc,
 }).pipe(
   Schema.annotate({
-    description:
-      "A durable agent note about a team: client memory, append-only, and never the owner's instruction.",
+    description: "A durable agent note: client memory, never the owner's instruction.",
   }),
 );
 export type TeamAgentNote = typeof TeamAgentNote.Type;
