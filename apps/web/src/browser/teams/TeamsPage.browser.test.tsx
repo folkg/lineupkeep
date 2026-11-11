@@ -119,6 +119,12 @@ const checkingRun: LineupRunView = {
   outcome: undefined,
 };
 
+const queuedRun: LineupRunView = {
+  ...checkingRun,
+  run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165b5",
+  status: "queued",
+};
+
 const longName = "Skinner? I barely know her! The second coming of a very long team name";
 const longNamedTeam: TeamSummaryView = {
   ...enabledTeam,
@@ -567,6 +573,15 @@ it("says the next check, the pause, checks off, or a check in flight", async () 
       .toBeVisible();
   } finally {
     inFlight[Symbol.dispose]();
+  }
+
+  const waiting = setupTeamsPage([{ ...enabledTeam, lastRun: queuedRun, recentRuns: [queuedRun] }]);
+  try {
+    await expect
+      .element(page.getByText("A check is waiting to start.", { exact: true }))
+      .toBeVisible();
+  } finally {
+    waiting[Symbol.dispose]();
   }
 });
 

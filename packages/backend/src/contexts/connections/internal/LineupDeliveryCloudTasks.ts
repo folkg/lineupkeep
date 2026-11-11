@@ -43,6 +43,14 @@ export const LineupDeliveryCloudTasks = Layer.effect(
       Effect.forEach(inputs, enqueue, { concurrency: 2 }).pipe(Effect.asVoid);
 
     const enqueue = (input: LineupDeliveryInput): Effect.Effect<void, LineupDeliveryFailed> =>
+      createTask(input).pipe(
+        Effect.retry({
+          times: 2,
+          while: (failure) => failure.reason === "unavailable",
+        }),
+      );
+
+    const createTask = (input: LineupDeliveryInput): Effect.Effect<void, LineupDeliveryFailed> =>
       Effect.gen(function* () {
         const accessToken = yield* metadataAccessToken(http);
         const taskName = `${queue}/tasks/deliveries-${input.delivery}`;
@@ -76,6 +84,9 @@ export const LineupDeliveryCloudTasks = Layer.effect(
           .pipe(Effect.mapError(() => LineupDeliveryFailed.make({ reason: "unavailable" })));
         if (response.status === 409) {
           return;
+        }
+        if (response.status === 429 || response.status >= 500) {
+          return yield* LineupDeliveryFailed.make({ reason: "unavailable" });
         }
         if (response.status < 200 || response.status >= 300) {
           return yield* LineupDeliveryFailed.make({ reason: "rejected" });

@@ -215,13 +215,13 @@ export function runIsInProgress(status: LineupRunView["status"]): boolean {
 
 export function runIsCheckingNow(status: LineupRunView["status"]): boolean {
   switch (status) {
-    case "queued":
     case "reading":
     case "planning":
     case "validating":
     case "applying":
     case "verifying":
       return true;
+    case "queued":
     case "completed":
     case "skipped":
     case "blocked":

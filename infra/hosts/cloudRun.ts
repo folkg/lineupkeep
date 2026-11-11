@@ -242,6 +242,29 @@ export function cloudRunHost(
           },
         },
       });
+      yield* GCP.CloudScheduler.Job("LineupRepair", {
+        location: region,
+        schedule: "*/5 * * * *",
+        timeZone: "UTC",
+        attemptDeadline: "300s",
+        retryConfig: {
+          retryCount: 2,
+          maxRetryDuration: "300s",
+          maxDoublings: 2,
+          minBackoffDuration: "30s",
+          maxBackoffDuration: "300s",
+        },
+        httpTarget: {
+          uri: Output.interpolate`${workerUrl}/api/internal/lineup-worker`,
+          httpMethod: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "repair", limit: 50 }),
+          oidcToken: {
+            serviceAccountEmail: queueEnqueuer.email,
+            audience: workerUrl,
+          },
+        },
+      });
       const browser = yield* GCP.Run.Service("HostedBrowser", {
         serviceId: "lineupkeep-hb",
         location: region,

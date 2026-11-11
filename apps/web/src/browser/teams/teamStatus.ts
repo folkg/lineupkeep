@@ -15,6 +15,9 @@ export function nextScheduledCheck(at: Date): Date {
 }
 
 export function teamStatusLine(team: TeamSummaryView, now: Date): string {
+  if (team.lastRun?.status === "queued") {
+    return "A check is waiting to start.";
+  }
   if (team.lastRun !== undefined && runIsCheckingNow(team.lastRun.status)) {
     return "Checking now. This usually takes under a minute.";
   }

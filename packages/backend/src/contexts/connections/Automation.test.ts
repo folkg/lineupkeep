@@ -3,7 +3,7 @@ import { assert, beforeEach, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { eq } from "drizzle-orm";
 import { Array, Config, Effect, Layer, Option, Redacted, Schema } from "effect";
-import { DateTime } from "effect";
+import { DateTime, Duration } from "effect";
 import { TestClock } from "effect/testing";
 
 import { AccountRetention } from "#contexts/auth/AccountRetention.ts";
@@ -39,7 +39,7 @@ import { RetentionSweepLive } from "./internal/RetentionSweepRepository.ts";
 import { ScheduleGateTest } from "./internal/ScheduleGateTest.ts";
 import { TeamRepository } from "./internal/TeamRepository.ts";
 import { TeamsLive } from "./internal/TeamsLive.ts";
-import { LineupRequestInput } from "./LineupRun.ts";
+import { LineupRequestId, LineupRequestInput } from "./LineupRun.ts";
 import { LineupRuns } from "./LineupRuns.ts";
 import type { ProviderLeagueSettings, ProviderRoster, ProviderTeam } from "./Provider.ts";
 import { Teams } from "./Teams.ts";
@@ -304,6 +304,69 @@ it.effect("repairs an undispatched scheduled delivery before scheduling another"
     assert.strictEqual(loaded.runs[0]?.run, pending.runs[0]?.id);
     assert.strictEqual(loaded.runs[0]?.status, "completed");
     assert.strictEqual(yield* fake.nativeCallCount, 1);
+  }).pipe(Effect.provide(AutomationTestLayer)),
+);
+
+it.effect("recovers a queued run whose delivery was dispatched but never claimed", () =>
+  Effect.gen(function* () {
+    const automation = yield* Automation;
+    const repository = yield* LineupRunRepository;
+    const runs = yield* LineupRuns;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
+    yield* refuseCustomPlanning(fake);
+    const teams = yield* Teams;
+    yield* teams.control(owner, [{ team, action: "enable" }]);
+    const at = yield* DateTime.now;
+    const queued = yield* repository.createScheduledRuns({
+      userId: owner,
+      at,
+      runs: [{ team, connectionId: (yield* teams.get(owner, team)).team.connectionId }],
+    });
+    const deliveries = yield* repository.claimDeliveries(at, 10);
+    yield* repository.finishDeliveries(
+      deliveries.map((record) => ({ deliveryId: record.id, at, outcome: "dispatched" as const })),
+    );
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.addDuration(at, Duration.minutes(3))));
+
+    const summary = yield* automation.run(10);
+    const loaded = yield* runs.get(owner, { team });
+
+    assert.strictEqual(summary.scheduledRuns, 0);
+    assert.strictEqual(summary.delivered, 1);
+    assert.strictEqual(loaded.runs[0]?.run, queued.runs[0]?.id);
+    assert.strictEqual(loaded.runs[0]?.status, "completed");
+  }).pipe(Effect.provide(AutomationTestLayer)),
+);
+
+it.effect("treats a team with an in-flight manual run as busy for scheduling", () =>
+  Effect.gen(function* () {
+    const repository = yield* LineupRunRepository;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
+    const teams = yield* Teams;
+    const at = yield* DateTime.now;
+    const created = yield* repository.createRequest({
+      userId: owner,
+      requestId: yield* Schema.decodeEffect(LineupRequestId)(
+        "018f79ea-7d86-7c18-9b4a-8b4d0c9164fc",
+      ),
+      intent: '{"trigger":"manual"}',
+      runs: [
+        {
+          team,
+          connectionId: (yield* teams.get(owner, team)).team.connectionId,
+          trigger: "manual",
+          target: { coverage: "current" },
+        },
+      ],
+    });
+    const run = Array.getUnsafe(created.runs, 0);
+    assert.isTrue(Option.isSome(yield* repository.claim(run.id, at)));
+
+    const busy = yield* repository.scheduledTeamIds([team]);
+
+    assert.isTrue(busy.has(team));
   }).pipe(Effect.provide(AutomationTestLayer)),
 );
 

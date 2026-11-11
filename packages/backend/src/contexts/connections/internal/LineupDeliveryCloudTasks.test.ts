@@ -56,7 +56,51 @@ it.effect("enqueues deterministic Cloud Tasks deliveries with no credentials", (
   ),
 );
 
+it.effect("retries a task that could not be created before reporting the delivery pending", () =>
+  Effect.gen(function* () {
+    const delivery = yield* LineupDelivery;
+    const runId = yield* Schema.decodeEffect(LineupRunId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a2");
+    const deliveryId = yield* Schema.decodeEffect(LineupId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a3");
+
+    yield* delivery.enqueueMany([{ delivery: deliveryId, runs: [runId] }]);
+
+    assert.strictEqual(taskAttempts, 2);
+  }).pipe(
+    Effect.provide(
+      LineupDeliveryCloudTasks.pipe(
+        Layer.provide(Layer.succeed(HttpClient.HttpClient)(retryingSink)),
+        Layer.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromUnknown({
+              LINEUP_CLOUD_TASKS_QUEUE: "projects/p/locations/us-central1/queues/lineup",
+              LINEUP_WORKER_URL: "https://worker.test",
+              LINEUP_QUEUE_SERVICE_ACCOUNT: "queue@example.test",
+            }),
+          ),
+        ),
+      ),
+    ),
+  ),
+);
+
 const requests: Array<{ readonly url: string; readonly body: unknown }> = [];
+let taskAttempts = 0;
+const retryingSink = HttpClient.make((request) => {
+  if (request.url.includes("metadata.google.internal")) {
+    return Effect.succeed(
+      HttpClientResponse.fromWeb(
+        request,
+        new Response('{"access_token":"metadata-token"}', {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+  }
+  taskAttempts += 1;
+  const status = taskAttempts === 1 ? 503 : 200;
+  return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}", { status })));
+});
 const sink = HttpClient.make((request) => {
   requests.push({ url: request.url, body: request.body });
   if (request.url.includes("metadata.google.internal")) {

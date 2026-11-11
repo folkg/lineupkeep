@@ -60,6 +60,7 @@ import { TeamAutomationState } from "./TeamAutomationWorkflow.ts";
 
 const lineupLeaseDurationMillis = 45_000;
 const lineupDeliveryStaleMillis = 60_000;
+const lineupQueuedStaleMillis = 120_000;
 
 export type NewLineupRun = {
   readonly team: TeamId;
@@ -371,11 +372,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
           .selectDistinct({ teamId: lineupRuns.teamId })
           .from(lineupRuns)
           .where(
-            and(
-              anyOf(lineupRuns.teamId, ids),
-              eq(lineupRuns.trigger, "scheduled"),
-              anyOf(lineupRuns.status, nonTerminalRunStatuses),
-            ),
+            and(anyOf(lineupRuns.teamId, ids), anyOf(lineupRuns.status, nonTerminalRunStatuses)),
           )
           .pipe(Effect.mapError(mapPersistenceFailure));
         return new Set(rows.map((row) => row.teamId));
@@ -1121,6 +1118,9 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
         LineupPersistenceFailed
       > =>
         Effect.gen(function* () {
+          const queuedBefore = DateTime.toDateUtc(
+            DateTime.subtractDuration(now, lineupQueuedStaleMillis),
+          );
           const rows = yield* database
             .selectDistinct({ userId: lineupRuns.userId, requestId: lineupRuns.requestId })
             .from(lineupRuns)
@@ -1135,6 +1135,14 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                     "applying",
                     "verifying",
                   ]),
+                  or(
+                    isNull(lineupTeamLeases.teamId),
+                    lte(lineupTeamLeases.expiresAt, DateTime.toDateUtc(now)),
+                  ),
+                ),
+                and(
+                  eq(lineupRuns.status, "queued"),
+                  lte(lineupRuns.createdAt, queuedBefore),
                   or(
                     isNull(lineupTeamLeases.teamId),
                     lte(lineupTeamLeases.expiresAt, DateTime.toDateUtc(now)),
