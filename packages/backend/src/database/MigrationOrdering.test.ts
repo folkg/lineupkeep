@@ -407,6 +407,49 @@ describe("plan lifetime removal migration", () => {
   );
 });
 
+describe("ready connection approval backfill", () => {
+  const backfillMigration = "20261112191452_backfill_ready_connection_approval";
+
+  it.effect("records the last write as the approval time when a ready connection has none", () =>
+    Effect.gen(function* () {
+      const sql = yield* PgliteClient.PgliteClient;
+
+      for (const statement of migrationStatements((name) => name < backfillMigration)) {
+        yield* sql.unsafe(statement);
+      }
+
+      yield* sql.unsafe(`
+        insert into provider_connections
+          (id, user_id, request_id, provider, status, created_at, updated_at, approved_at)
+        values
+          ('ready-legacy', 'owner', 'request-legacy', 'yahoo', 'ready',
+            '2026-10-25T12:51:57Z', '2026-11-10T02:17:47Z', null),
+          ('ready-approved', 'owner', 'request-approved', 'yahoo', 'ready',
+            '2026-11-01T10:00:00Z', '2026-11-02T10:00:00Z', '2026-11-01T10:30:00Z'),
+          ('reconnecting', 'owner', 'request-reconnecting', 'yahoo', 'reconnect-required',
+            '2026-11-01T10:00:00Z', '2026-11-03T10:00:00Z', null)
+      `);
+
+      for (const statement of migrationStatements((name) => name === backfillMigration)) {
+        yield* sql.unsafe(statement);
+      }
+
+      const rows = yield* sql.unsafe<{
+        readonly id: string;
+        readonly missing: boolean;
+        readonly matches_update: boolean;
+      }>(
+        "select id, approved_at is null as missing, coalesce(approved_at = updated_at, false) as matches_update from provider_connections order by id",
+      );
+      expect(rows).toEqual([
+        { id: "ready-approved", missing: false, matches_update: false },
+        { id: "ready-legacy", missing: false, matches_update: true },
+        { id: "reconnecting", missing: true, matches_update: false },
+      ]);
+    }).pipe(Effect.provide(PgliteClient.layer())),
+  );
+});
+
 function migrationStatements(select: (name: string) => boolean): ReadonlyArray<string> {
   const statements: string[] = [];
   for (const name of readdirSync(migrationsFolder).filter(select).sort()) {
