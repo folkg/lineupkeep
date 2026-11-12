@@ -317,3 +317,25 @@ and never published, and the owner's approval of its two no-new-read candidates.
 4. **Accepted: existing descriptions pay for the new ones.** The cursor description was shortened to
    keep the total field-description budget under its 30,000-character ceiling; the new field is
    described once per schema occurrence.
+
+## Round 16 — One lineup run at a time, and what waits behind it
+
+Status: implemented. Motivated by four teams freezing when a scheduled run and an action run
+collided, and the owner's ruling that an action waits rather than being refused.
+
+1. **Accepted: one running run and one waiting run per team and target period.** Postgres enforces
+   both with partial unique indexes. A request that cannot take the waiting slot joins it instead of
+   creating a rival, and receives that run's identity. A waiting run stores intent, not a snapshot,
+   so it reads the roster when it starts and reflects every change that arrived before it.
+2. **Accepted: a second, third, or later request joins the same waiting run.** Copies of the same
+   intent would read and write the same lineup repeatedly; the last would win and the others would
+   spend provider calls and time. A request that arrives after the waiting run has started takes the
+   now-free waiting slot, so at most one run runs and one waits.
+3. **Accepted: the hourly clock is the only clock.** The five-minute repair job kept the worker at
+   thirteen requests an hour and stopped the database suspending; Cloud Tasks retries a failed
+   delivery itself and the hourly tick repairs pending deliveries, stale runs, and queued runs
+   nobody claimed. Recovery is bounded by the hour instead of minutes, and the worker returns to
+   zero between checks.
+4. **Accepted: the lease is ten minutes, not forty-five seconds.** A real check takes seconds, so the
+   lease only guards a duplicate offer arriving mid-run. Forty-five seconds could let that duplicate
+   take a team during a slow provider read and lose the first worker's writes.
