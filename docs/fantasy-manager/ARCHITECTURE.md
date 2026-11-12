@@ -175,6 +175,21 @@ Native Phase 1 planning prepares the bounded native command, not a custom lineup
 
 Persist the state data needed to resume/reconcile, not an in-memory process continuation. Full state identifiers, events, codecs, retry budgets, and transition guards are a Stage 1 implementation specification; diagrams alone are insufficient.
 
+### One run at a time per team
+
+A team's lineup is one thing at a time. Postgres enforces it rather than a
+convention: a partial unique index allows at most one run in a running state
+(`reading` to `verifying`) for a team, and at most one `queued` run per team and
+target period. A request either takes the waiting slot or joins the run already
+in it, which is what coalesces a trade and an hourly check that arrive together.
+
+A run that finishes releases its lease in the same transaction, and the worker
+that finished it asks the dispatcher for any waiting run. Delivery is therefore
+offered only for work that can start now; a queued run waiting behind a running
+one keeps its pending delivery and is dispatched when the slot frees. The lease
+remains, but only to notice a worker that died while holding a team; a queued run
+nobody claimed and a run waiting to retry are recovered by the same pass.
+
 ## 7. Durable execution without a custom workflow engine
 
 Use Postgres snapshots, short atomic transitions, a delivery outbox, and Cloud Tasks. Do not hold a database transaction or row lock while making external HTTP requests.
@@ -184,7 +199,10 @@ Use Postgres snapshots, short atomic transitions, a delivery outbox, and Cloud T
 1. Authenticate the caller; resolve owned team/period and validate bounded input.
 2. Use a stable request identity, rejecting reuse with different intent. In one transaction, persist the run and enqueue intent.
 3. Dispatch the outbox promptly with deterministic delivery identity. Record success; duplicate task creation/delivery must be harmless.
-4. The existing hourly scheduler also repairs undispatched intents and stale work. Do not add a high-frequency database polling daemon that prevents Neon suspension.
+4. The hourly scheduler also repairs undispatched intents and stale work. A
+   five-minute repair job re-delivers pending deliveries, runs waiting to retry,
+   and queued runs nobody claimed. Do not add a high-frequency database polling
+   daemon that prevents Neon suspension.
 5. Worker delivery contains run references, never cookies. Load and authorize stored work rather than trusting incoming owner/team fields.
 6. Manual MCP waits for a bounded interval, then returns current status/run reference. Request cancellation does not cancel committed durable work. `BackgroundWork` is not a substitute for durable enqueue.
 

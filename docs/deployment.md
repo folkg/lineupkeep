@@ -167,11 +167,15 @@ scheduled. Bread Roller, Skinner? I barely know her!, Meier? I barely know her!
 and $G-Money$ were frozen this way between 9 and 11 November.
 
 Three things now bound that. A team with any run in flight is not given a
-second scheduled run. A queued run that nothing claimed is treated as stale once
-it is two minutes old and its lease has expired, so repair re-delivers it. A
-delivery whose Cloud Tasks enqueue failed is retried immediately twice, and if
-it still fails it stays pending for the repair job rather than waiting for the
-next hour. Repair runs every five minutes; the hourly check itself is unchanged.
+second scheduled run. Postgres itself allows one running run per team and one
+waiting run per team and target period, so a second request joins the waiting
+run instead of creating a rival. A run releases its lease as it finishes and the
+worker that finished it dispatches any waiting run, so the hand-off takes
+seconds. A queued run that nothing claimed is treated as stale once it is two
+minutes old and its lease has expired, so repair re-delivers it. A delivery whose
+Cloud Tasks enqueue failed is retried immediately twice, and if it still fails it
+stays pending for the repair job rather than waiting for the next hour. Repair
+runs every five minutes; the hourly check itself is unchanged.
 
 ### Measured usage and the idle window (2026-10-31)
 

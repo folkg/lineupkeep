@@ -1,5 +1,5 @@
-import { and, asc, desc, eq, gte, isNull, lte, ne, or } from "drizzle-orm";
-import { Array, Context, Crypto, DateTime, Effect, Layer, Option, Schema } from "effect";
+import { and, asc, desc, eq, gte, isNull, lte, ne, notInArray, or } from "drizzle-orm";
+import { Array, Context, Crypto, DateTime, Effect, Equal, Layer, Option, Schema } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
 import { ConnectionId } from "#contexts/connections/Connection.ts";
@@ -21,7 +21,7 @@ import type {
   LineupTargetPeriod,
   LineupTrigger,
 } from "#contexts/connections/LineupRun.ts";
-import { anyOf, maxInsertRows, mutateRows } from "#database/dbUtilities.ts";
+import { anyOf, maxInsertRows, mutateRows, runningRunPredicate } from "#database/dbUtilities.ts";
 import { retentionPolicy } from "#retention/RetentionPolicy.ts";
 import { chunked } from "#utilities/collections.ts";
 import { plan, snapshotOf } from "#utilities/machine.ts";
@@ -219,23 +219,65 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
               const rows = yield* Effect.forEach(records, (record) =>
                 Schema.encodeEffect(LineupRunRow)(record),
               );
-              yield* chunked(rows, maxInsertRows(lineupRuns), (chunk) =>
-                tx.insert(lineupRuns).values(chunk).returning(),
+              const insertedRows = yield* chunked(rows, maxInsertRows(lineupRuns), (chunk) =>
+                tx.insert(lineupRuns).values(chunk).onConflictDoNothing().returning({
+                  id: lineupRuns.id,
+                }),
               );
-              yield* tx.insert(lineupDeliveries).values({
-                id: deliveryId,
-                userId: input.userId,
-                requestId: input.requestId,
-                status: "pending",
-                attempts: 0,
-                runIds: records.map((record) => record.id),
-                lastError: null,
-                createdAt: at,
-                updatedAt: at,
-                dispatchedAt: null,
+              const insertedIds = new Set(insertedRows.map((row) => row.id));
+              const created = records.filter((record) => insertedIds.has(record.id));
+              const refused = records.filter((record) => !insertedIds.has(record.id));
+              const refusedTeams = [...new Set(refused.map((record) => record.teamId))];
+              const waiting = !Array.isArrayNonEmpty(refusedTeams)
+                ? []
+                : yield* tx
+                    .select()
+                    .from(lineupRuns)
+                    .where(
+                      and(
+                        eq(lineupRuns.userId, input.userId),
+                        anyOf(lineupRuns.teamId, refusedTeams),
+                        eq(lineupRuns.status, "queued"),
+                      ),
+                    )
+                    .orderBy(desc(lineupRuns.createdAt))
+                    .for("update");
+              const joined = new Map<string, LineupRunRecord>();
+              for (const row of waiting) {
+                const record = yield* decodeRun(row);
+                const requested = refused.find((entry) => entry.teamId === record.teamId);
+                if (requested !== undefined && Equal.equals(requested.target, record.target)) {
+                  joined.set(record.teamId, record);
+                }
+              }
+              if (created.length > 0) {
+                yield* tx.insert(lineupDeliveries).values({
+                  id: deliveryId,
+                  userId: input.userId,
+                  requestId: input.requestId,
+                  status: "pending",
+                  attempts: 0,
+                  runIds: created.map((record) => record.id),
+                  lastError: null,
+                  createdAt: at,
+                  updatedAt: at,
+                  dispatchedAt: null,
+                });
+              }
+              const settled = input.runs.flatMap((run) => {
+                const record = created.find((entry) => entry.teamId === run.team);
+                if (record !== undefined) {
+                  return [record];
+                }
+                const waitingRun = joined.get(run.team);
+                return waitingRun === undefined ? [] : [waitingRun];
               });
-              yield* Effect.annotateCurrentSpan("lineup.run_count", records.length);
-              return { created: true, runs: records } satisfies CreatedLineupRequest;
+              yield* Effect.annotateCurrentSpan("lineup.run_count", created.length);
+              yield* Effect.annotateCurrentSpan(
+                "lineup.run_joined_count",
+                settled.length - created.length,
+              );
+              return { created: created.length > 0, runs: settled } satisfies CreatedLineupRequest;
             }),
           )
           .pipe(
@@ -975,6 +1017,35 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
         );
       });
 
+      const blockedRunIds = Effect.fn("LineupRunRepository.blockedRunIds")(function* (
+        runIds: ReadonlyArray<LineupRunId>,
+      ) {
+        const ids = [...new Set(runIds)];
+        if (!Array.isArrayNonEmpty(ids)) {
+          return new Set<LineupRunId>();
+        }
+        const runs = yield* database
+          .select({ id: lineupRuns.id, teamId: lineupRuns.teamId })
+          .from(lineupRuns)
+          .where(anyOf(lineupRuns.id, ids));
+        const teams = [...new Set(runs.map((run) => run.teamId))];
+        if (!Array.isArrayNonEmpty(teams)) {
+          return new Set<LineupRunId>();
+        }
+        const busy = yield* database
+          .selectDistinct({ teamId: lineupRuns.teamId })
+          .from(lineupRuns)
+          .where(
+            and(
+              anyOf(lineupRuns.teamId, teams),
+              runningRunPredicate(lineupRuns),
+              notInArray(lineupRuns.id, ids),
+            ),
+          );
+        const busyTeams = new Set(busy.map((row) => row.teamId));
+        return new Set(runs.filter((run) => busyTeams.has(run.teamId)).map((run) => run.id));
+      }, Effect.mapError(mapPersistenceFailure));
+
       const claimDeliveries = (
         now: DateTime.Utc,
         limit: number,
@@ -1280,6 +1351,12 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
         return Effect.gen(function* () {
           const next = yield* planState(record.state, event);
           yield* updateRunState(tx, record, next, at, record.attempts);
+          if (!holdsLease(next)) {
+            yield* tx
+              .delete(lineupTeamLeases)
+              .where(eq(lineupTeamLeases.teamId, record.teamId))
+              .pipe(Effect.mapError(mapPersistenceFailure));
+          }
         });
       }
 
@@ -1341,6 +1418,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
         recordFailed,
         recordRetry,
         claimDeliveries,
+        blockedRunIds,
         finishDeliveries,
         loadDelivery,
         staleRequests,
@@ -1394,6 +1472,26 @@ function claimEvent(
     case "Failed":
     case "Superseded":
       throw new Error("Terminal lineup run cannot be claimed");
+  }
+}
+
+function holdsLease(state: LineupRunState): boolean {
+  switch (state._tag) {
+    case "Reading":
+    case "Planning":
+    case "Validating":
+    case "Applying":
+    case "Verifying":
+    case "Uncertain":
+      return true;
+    case "Queued":
+    case "Completed":
+    case "Skipped":
+    case "Blocked":
+    case "Failed":
+    case "Superseded":
+    case "RetryWait":
+      return false;
   }
 }
 

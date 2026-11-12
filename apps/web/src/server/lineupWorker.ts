@@ -78,7 +78,15 @@ function execute(
     switch (request.action) {
       case "deliver": {
         const worker = yield* LineupWorker;
+        const dispatcher = yield* LineupDispatcher;
         const report = yield* worker.deliver(request.runs);
+        yield* dispatcher
+          .dispatchPending(20)
+          .pipe(
+            Effect.catchTag("lineup.persistence_failed", (cause) =>
+              Effect.logWarning("A waiting lineup run could not be started", cause),
+            ),
+          );
         return json({
           status: report.stopped.length === 0 ? "ok" : "incomplete",
           action: request.action,

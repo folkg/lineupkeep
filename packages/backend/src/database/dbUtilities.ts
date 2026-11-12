@@ -41,11 +41,12 @@ export function incrementedWindowCounter(table: {
   };
 }
 
-export function scheduledPendingPredicate(table: {
-  readonly trigger: PgColumn;
-  readonly status: PgColumn;
-}): SQL<boolean> {
-  return sql`${table.trigger} = 'scheduled' and ${table.status} in ('queued', 'reading', 'planning', 'validating', 'applying', 'verifying', 'retry-wait', 'uncertain')`;
+export function runningRunPredicate(table: { readonly status: PgColumn }): SQL<boolean> {
+  return sql`${table.status} in ('reading', 'planning', 'validating', 'applying', 'verifying')`;
+}
+
+export function queuedRunPredicate(table: { readonly status: PgColumn }): SQL<boolean> {
+  return sql`${table.status} = 'queued'`;
 }
 
 export function unnestRows<

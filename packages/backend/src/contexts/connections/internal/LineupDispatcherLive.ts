@@ -25,27 +25,40 @@ export const LineupDispatcherLive = Layer.effect(
         if (claimed.length === 0) {
           return { delivered: 0, pending: 0 };
         }
+        const blocked = yield* repository.blockedRunIds(claimed.flatMap((record) => record.runIds));
+        const runnable = claimed.filter((record) =>
+          record.runIds.every((runId) => !blocked.has(runId)),
+        );
+        const held = claimed.filter((record) => !runnable.includes(record));
+        if (held.length > 0) {
+          yield* repository.finishDeliveries(
+            held.map((record) => ({ deliveryId: record.id, at: now, outcome: "pending" as const })),
+          );
+        }
+        if (runnable.length === 0) {
+          return { delivered: 0, pending: held.length };
+        }
         const result = yield* Effect.result(
           delivery.enqueueMany(
-            claimed.map((record) => ({ delivery: record.id, runs: record.runIds })),
+            runnable.map((record) => ({ delivery: record.id, runs: record.runIds })),
           ),
         );
         if (result._tag === "Success") {
           yield* repository.finishDeliveries(
-            claimed.map((record) => ({ deliveryId: record.id, at: now, outcome: "dispatched" })),
+            runnable.map((record) => ({ deliveryId: record.id, at: now, outcome: "dispatched" })),
           );
-          return { delivered: claimed.length, pending: 0 };
+          return { delivered: runnable.length, pending: held.length };
         }
         yield* repository.finishDeliveries(
-          claimed.map((record) => ({
+          runnable.map((record) => ({
             deliveryId: record.id,
             at: now,
-            outcome: "pending",
+            outcome: "pending" as const,
             error: result.failure._tag,
           })),
         );
         yield* Effect.annotateCurrentSpan({
-          "lineup.delivery_count": claimed.length,
+          "lineup.delivery_count": runnable.length,
           "app.outcome": "failure",
           "error.type": result.failure._tag,
         });

@@ -1,0 +1,114 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "aad4c0ee-1c4a-4afb-9dfe-c044274ff979",
+  "prevIds": ["204d8002-f4e2-445f-bc56-7fce99bde1ef"],
+  "footprints": [
+    {
+      "statementType": "drop_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "lineup_runs",
+        "lineup_runs_one_scheduled_pending_idx"
+      ],
+      "writes": [
+        "s|idx|public.lineup_runs_one_scheduled_pending_idx",
+        "n|idx|public.lineup_runs_one_scheduled_pending_idx",
+        "e|idx|public.lineup_runs_one_scheduled_pending_idx",
+        "n|rel|public.lineup_runs_one_scheduled_pending_idx"
+      ],
+      "reads": ["e|tbl|public.lineup_runs", "n|sch|public", "e|col|public.lineup_runs.team_id"],
+      "sharedWrites": []
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "lineup_runs", "lineup_runs_one_running_idx"],
+      "writes": [
+        "s|idx|public.lineup_runs_one_running_idx",
+        "n|idx|public.lineup_runs_one_running_idx",
+        "e|idx|public.lineup_runs_one_running_idx",
+        "n|rel|public.lineup_runs_one_running_idx"
+      ],
+      "reads": ["n|tbl|public.lineup_runs", "n|sch|public", "n|col|public.lineup_runs.team_id"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "lineup_runs", "lineup_runs_one_queued_idx"],
+      "writes": [
+        "s|idx|public.lineup_runs_one_queued_idx",
+        "n|idx|public.lineup_runs_one_queued_idx",
+        "e|idx|public.lineup_runs_one_queued_idx",
+        "n|rel|public.lineup_runs_one_queued_idx"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_runs",
+        "n|sch|public",
+        "n|col|public.lineup_runs.team_id",
+        "n|col|public.lineup_runs.target"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "lineup_runs_one_running_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "team_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": true,
+        "where": "\"status\" in ('reading', 'planning', 'validating', 'applying', 'verifying')",
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "lineup_runs_one_queued_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "team_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "target",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": true,
+        "where": "\"status\" = 'queued'",
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "drop",
+      "key": "indexes\u0000[\"public\",\"lineup_runs_one_scheduled_pending_idx\"]"
+    }
+  ]
+}

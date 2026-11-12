@@ -41,6 +41,7 @@ import { TeamRepository } from "./internal/TeamRepository.ts";
 import { TeamsLive } from "./internal/TeamsLive.ts";
 import { LineupRequestId, LineupRequestInput } from "./LineupRun.ts";
 import { LineupRuns } from "./LineupRuns.ts";
+import { LineupDispatcher } from "./LineupWork.ts";
 import type { ProviderLeagueSettings, ProviderRoster, ProviderTeam } from "./Provider.ts";
 import { Teams } from "./Teams.ts";
 
@@ -367,6 +368,88 @@ it.effect("treats a team with an in-flight manual run as busy for scheduling", (
     const busy = yield* repository.scheduledTeamIds([team]);
 
     assert.isTrue(busy.has(team));
+  }).pipe(Effect.provide(AutomationTestLayer)),
+);
+
+it.effect("joins the run that is already waiting for a team", () =>
+  Effect.gen(function* () {
+    const runs = yield* LineupRuns;
+    const repository = yield* LineupRunRepository;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
+    const teams = yield* Teams;
+    const at = yield* DateTime.now;
+    const waiting = yield* repository.createScheduledRuns({
+      userId: owner,
+      at,
+      runs: [{ team, connectionId: (yield* teams.get(owner, team)).team.connectionId }],
+    });
+    const waitingRun = Array.getUnsafe(waiting.runs, 0);
+
+    const submitted = yield* runs.submit(owner, {
+      requestId: yield* Schema.decodeEffect(LineupRequestId)(
+        "018f79ea-7d86-7c18-9b4a-8b4d0c9164fd",
+      ),
+      teams: [{ team, period: { coverage: "current" } }],
+    });
+
+    assert.strictEqual(Array.getUnsafe(submitted.runs, 0).run, waitingRun.id);
+    assert.strictEqual(submitted.delivery, "queued");
+    const listed = yield* runs.get(owner, { team });
+    assert.strictEqual(listed.runs.length, 1);
+  }).pipe(Effect.provide(AutomationTestLayer)),
+);
+
+it.effect("starts the waiting run once the run ahead of it finishes", () =>
+  Effect.gen(function* () {
+    const runs = yield* LineupRuns;
+    const repository = yield* LineupRunRepository;
+    const dispatcher = yield* LineupDispatcher;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
+    const teams = yield* Teams;
+    const at = yield* DateTime.now;
+    const first = yield* repository.createScheduledRuns({
+      userId: owner,
+      at,
+      runs: [{ team, connectionId: (yield* teams.get(owner, team)).team.connectionId }],
+    });
+    const running = Array.getUnsafe(first.runs, 0);
+    const claimed = yield* repository.claim(running.id, at);
+    assert.isTrue(Option.isSome(claimed));
+
+    const submitted = yield* runs.submit(owner, {
+      requestId: yield* Schema.decodeEffect(LineupRequestId)(
+        "018f79ea-7d86-7c18-9b4a-8b4d0c9164fe",
+      ),
+      teams: [{ team, period: { coverage: "current" } }],
+    });
+    const successor = Array.getUnsafe(submitted.runs, 0);
+    assert.strictEqual(successor.status, "queued");
+
+    const held = yield* dispatcher.dispatchPending(10);
+    assert.strictEqual(held.delivered, 0);
+
+    yield* repository.recordSkipped({
+      runId: running.id,
+      lease: Option.getOrThrow(claimed).lease,
+      at,
+      outcome: {
+        kind: "skipped" as const,
+        verified: false,
+        reconciled: false,
+        summary: "Nothing to do before the next check.",
+        observedAt: at,
+        changes: [],
+        lockedPlayers: 0,
+        editablePlayers: 1,
+      },
+    });
+    const released = yield* dispatcher.dispatchPending(10);
+    assert.strictEqual(released.delivered, 1);
+
+    const loaded = yield* runs.get(owner, { runs: [successor.run] });
+    assert.strictEqual(Array.getUnsafe(loaded.runs, 0).status, "completed");
   }).pipe(Effect.provide(AutomationTestLayer)),
 );
 
@@ -754,6 +837,7 @@ const AutomationTestLayer = Layer.mergeAll(
   ConnectionsTest,
   RetentionTest,
   LineupRepositoryTest,
+  DispatcherTest,
 ).pipe(
   Layer.provideMerge(DatabaseLayer),
   Layer.provideMerge(ProviderFakeTest),

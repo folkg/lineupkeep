@@ -23,7 +23,7 @@ import {
   LineupTrigger,
   LineupImplementation,
 } from "#contexts/connections/LineupRun.ts";
-import { scheduledPendingPredicate } from "#database/dbUtilities.ts";
+import { queuedRunPredicate, runningRunPredicate } from "#database/dbUtilities.ts";
 
 import {
   LineupObservedPlayer,
@@ -94,9 +94,10 @@ export const lineupRuns = pgTable(
     index("lineup_runs_status_updated_at_idx").on(table.status, table.updatedAt),
     index("lineup_runs_status_next_action_at_idx").on(table.status, table.nextActionAt),
     uniqueIndex("lineup_runs_team_schedule_key_idx").on(table.teamId, table.scheduleKey),
-    uniqueIndex("lineup_runs_one_scheduled_pending_idx")
-      .on(table.teamId)
-      .where(scheduledPendingPredicate(table)),
+    uniqueIndex("lineup_runs_one_running_idx").on(table.teamId).where(runningRunPredicate(table)),
+    uniqueIndex("lineup_runs_one_queued_idx")
+      .on(table.teamId, table.target)
+      .where(queuedRunPredicate(table)),
   ],
 );
 

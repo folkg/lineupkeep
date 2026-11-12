@@ -38,6 +38,20 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 
 ## Ship log
 
+### 11 November 2026
+
+- **A frozen team is no longer possible.** A scheduled run created while an action run held the team's lease
+  was declined by the worker and never offered again; the scheduler then read the unfinished run as busy and
+  stopped checking the team. Bread Roller, Skinner? I barely know her!, Meier? I barely know her! and
+  $G-Money$ were frozen between 9 and 11 November. The four stranded runs were delivered by hand, completed,
+  and the cause was closed rather than papered over.
+- **One run at a time is a database rule.** A partial unique index allows one running run per team and one
+  waiting run per team and target period; a second request joins the waiting run. A finished run releases its
+  lease and dispatches whatever was waiting, so the hand-off is seconds rather than the next hour. Repair runs
+  every five minutes for the paths a crash can still strand, and Cloud Tasks enqueue failures retry in place.
+- **A queued run no longer claims to be checking.** The team row said "Checking now. This usually takes under a
+  minute" for any unfinished run, including one that had never started; it now says a check is waiting to start.
+
 ### 6 November 2026
 
 - **Team rows carry a status line that always exists**: next check at the hour's :55 in the reader's zone,
