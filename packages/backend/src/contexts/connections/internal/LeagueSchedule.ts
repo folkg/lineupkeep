@@ -59,6 +59,19 @@ export function countGamesForTeam(
   return gamesForTeam(games, providerTeamKey).filter(gameCanBePlayed).length;
 }
 
+export function gameDatesForTeam(
+  games: ReadonlyArray<ProfessionalGame>,
+  providerTeamKey: string,
+): ReadonlyArray<string> {
+  return [
+    ...new Set(
+      gamesForTeam(games, providerTeamKey)
+        .filter(gameCanBePlayed)
+        .map((game) => game.date),
+    ),
+  ].sort();
+}
+
 export function nextGameForTeams(input: {
   readonly games: ReadonlyArray<ProfessionalGame>;
   readonly providerTeamKeys: ReadonlySet<string>;

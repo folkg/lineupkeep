@@ -241,8 +241,11 @@ as `proTeam`, the same abbreviation a roster entry carries. Pass `includeGames: 
 professional games over the scoring window, so a pool player needs no roster row and no second
 read; a row with no key reports `unavailable` with the reason instead of a guessed count, and the
 result's `gamesRemaining` section states the window and observation time or why the league has no
-game source. Omit `includeGames` for a cheaper search that does not read the league window or the
-professional calendar. The provider’s dated pool selector is not exposed: it projected one date’s
+game source. Pass `gamesWindow: { start, end }` instead to count each row's game days over dates a
+client chooses, as `gameDays` with the exact dates the player's team plays and the section's window
+and read time in `gamesWindow`; a window wider than one schedule read is refused with the limit
+rather than truncated, and the cheap search stays cheap. Omit both for a cheaper search that does not
+read the league window or the professional calendar. The provider’s dated pool selector is not exposed: it projected one date’s
 opponent rather than filtering the pool, and no client used it. The probe and its results remain in
 [RESEARCH.md](RESEARCH.md#pool-player-schedule-shapes-2026-10-31).
 
@@ -474,7 +477,8 @@ The `schedule` group answers what a client cannot otherwise compute: which games
 a stated window, how many games their professional team has left in it, and which nights are light.
 For every rostered player it reports the dates they play, the opponent abbreviation, whether the game
 is home or away, and a game count for the window; `dates` carries a per-date count across the roster,
-so a light night needs no client-side arithmetic and no second schedule source. Each player also
+so a light night needs no client-side arithmetic and no second schedule source, and the player rows'
+own dates say who plays a given night without a second copy of the same references. Each player also
 carries `gamesRemaining` with the source of its own count: `professional_games` when it was counted
 from the league's professional games, `provider_opponent` when those games were unavailable and the
 provider's own roster schedule supplied it; the section aggregates the sources used. A count is

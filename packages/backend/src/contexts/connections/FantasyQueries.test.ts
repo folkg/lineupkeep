@@ -2321,6 +2321,144 @@ it.effect("counts a pool player's games from its professional team key without a
   }).pipe(Effect.provide(queriesTestLayerWithGames(6))),
 );
 
+it.effect("counts a pool window's game days instead of the scoring window", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const games = yield* FakeGameSourceWorld;
+    const store = yield* ScheduleObservationRepository;
+    const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
+      league: hockeyLeagueFixture,
+    });
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    const observedAt = DateTime.makeUnsafe("2026-10-19T12:00:00.000Z");
+    const provider = decodeProviderKey("yahoo");
+    yield* TestClock.setTime(DateTime.toEpochMillis(observedAt));
+    yield* store.recordTeamIdentities([
+      {
+        sport: "hockey",
+        source: provider,
+        sourceTeamIdentifier: "TOR",
+        provider,
+        providerTeamKey: "nhl.t.21",
+        observedAt,
+      },
+      {
+        sport: "hockey",
+        source: provider,
+        sourceTeamIdentifier: "BOS",
+        provider,
+        providerTeamKey: "nhl.t.1",
+        observedAt,
+      },
+    ]);
+    yield* fake.setSearchPlayers([
+      searchFixture({
+        providerPlayerKey: "465.p.1",
+        name: "Keyed Skater",
+        availability: "free_agent",
+        actualRank: 1,
+        overallRank: 1,
+        statValue: null,
+        percentOwned: 1,
+        percentOwnedDelta: 0,
+        percentStarted: 0,
+        percentStartedChange: 0,
+        proTeam: "TOR",
+        proTeamKey: "nhl.t.21",
+      }),
+      searchFixture({
+        providerPlayerKey: "465.p.2",
+        name: "Keyless Skater",
+        availability: "free_agent",
+        actualRank: 2,
+        overallRank: 2,
+        statValue: null,
+        percentOwned: 1,
+        percentOwnedDelta: 0,
+        percentStarted: 0,
+        percentStartedChange: 0,
+        proTeam: "BOS",
+      }),
+      searchFixture({
+        providerPlayerKey: "465.p.3",
+        name: "Unmapped Skater",
+        availability: "free_agent",
+        actualRank: 3,
+        overallRank: 3,
+        statValue: null,
+        percentOwned: 1,
+        percentOwnedDelta: 0,
+        percentStarted: 0,
+        percentStartedChange: 0,
+        proTeam: "ZZZ",
+      }),
+    ]);
+    yield* games.setGames([
+      calendarGame("g1", "2026-10-19", "TOR", "BOS"),
+      calendarGame("g2", "2026-10-22", "TOR", "BOS"),
+    ]);
+
+    const search = yield* queries.searchPlayers(owner, {
+      team: teamId,
+      gamesWindow: { start: "2026-10-19", end: "2026-10-22" },
+    });
+    assert.strictEqual(search.status, "ok");
+    if (search.status !== "ok") {
+      return;
+    }
+    assert.isUndefined(search.gamesRemaining);
+    assert.strictEqual(search.gamesWindow?.status, "available");
+    if (search.gamesWindow?.status === "available") {
+      assert.deepStrictEqual(search.gamesWindow.window, {
+        start: "2026-10-19",
+        end: "2026-10-22",
+        source: "requested",
+      });
+      assert.isTrue(DateTime.isDateTime(search.gamesWindow.observedAt));
+    }
+    assert.deepStrictEqual(
+      search.players.map((player) => [player.name, player.gamesRemaining, player.gameDays]),
+      [
+        ["Keyed Skater", undefined, { status: "available", dates: ["2026-10-19", "2026-10-22"] }],
+        ["Keyless Skater", undefined, { status: "available", dates: ["2026-10-19", "2026-10-22"] }],
+        [
+          "Unmapped Skater",
+          undefined,
+          {
+            status: "unavailable",
+            detail:
+              "This row's professional team could not be resolved to a key, so its game days cannot be joined without guessing from an abbreviation.",
+          },
+        ],
+      ],
+    );
+  }).pipe(Effect.provide(queriesTestLayerWithGames(6))),
+);
+
+it.effect("refuses a pool window wider than one schedule read", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+
+    const search = yield* queries.searchPlayers(owner, {
+      team: teamId,
+      gamesWindow: { start: "2026-10-01", end: "2026-11-30" },
+    });
+    assert.strictEqual(search.status, "ok");
+    if (search.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(search.gamesWindow?.status, "unsupported");
+    if (search.gamesWindow?.status === "unsupported") {
+      assert.include(search.gamesWindow.detail, "one read covers at most 21");
+    }
+    assert.isTrue(search.players.every((player) => player.gameDays === undefined));
+  }).pipe(Effect.provide(queriesTestLayerWithGames(6))),
+);
+
 it.effect(
   "states the season basis hockey uses and rejects projections without a period failure",
   () =>

@@ -27,6 +27,15 @@ import {
   TeamOwnerNote,
 } from "./QueryValues.ts";
 
+const ScheduleWindowDate = Schema.String.pipe(
+  Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)),
+);
+
+const ScheduleWindowInput = Schema.Struct({
+  start: ScheduleWindowDate,
+  end: ScheduleWindowDate,
+});
+
 export const ListTeamsInput = Schema.Struct({
   sport: Schema.optional(FantasySport),
   season: Schema.optional(Schema.Int.check(Schema.isGreaterThan(1900))),
@@ -932,6 +941,14 @@ export const SearchPlayersInput = Schema.Struct({
       }),
     ),
   ),
+  gamesWindow: Schema.optional(
+    ScheduleWindowInput.pipe(
+      Schema.annotate({
+        description:
+          "Dates to count each row's games over as `gameDays`, instead of `includeGames`' scoring window; a wider window than the league's schedule read allows is refused with the limit.",
+      }),
+    ),
+  ),
   cursor: Schema.optional(Cursor),
   limit: Schema.optional(PageLimit),
 });
@@ -963,6 +980,20 @@ const SchedulePlayerGamesRemaining = Schema.Union([
       "Games this player's team plays in the window the section states; `unavailable` says why.",
   }),
 );
+
+export const PlayerGameDays = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("available"),
+    dates: Schema.Array(Schema.NonEmptyString),
+  }),
+  Schema.Struct({ status: Schema.Literal("unavailable"), detail: Schema.NonEmptyString }),
+]).pipe(
+  Schema.annotate({
+    description:
+      "Dates this player's team plays in a requested window; `unavailable` is not no games.",
+  }),
+);
+export type PlayerGameDays = typeof PlayerGameDays.Type;
 
 const SearchPlayer = Schema.Struct({
   player: PlayerRef,
@@ -1048,6 +1079,7 @@ const SearchPlayer = Schema.Struct({
     }),
   ),
   gamesRemaining: Schema.optional(SchedulePlayerGamesRemaining),
+  gameDays: Schema.optional(PlayerGameDays),
   week: Schema.optional(PlayerWeek),
   transactionTrend: PlayerTransactionTrend,
 });
@@ -1076,6 +1108,20 @@ export const SearchPlayersData = Schema.Struct({
   coverage: Schema.Array(QueryCoverage),
   players: Schema.Array(SearchPlayer),
   gamesRemaining: Schema.optional(SearchGamesRemaining),
+  gamesWindow: Schema.optional(
+    Schema.Union([
+      Schema.Struct({
+        status: Schema.Literal("available"),
+        window: ScheduleWindow,
+        observedAt: Schema.DateTimeUtc,
+      }),
+      Schema.Struct({ status: Schema.Literal("unsupported"), detail: Schema.NonEmptyString }),
+    ]).pipe(
+      Schema.annotate({
+        description: "The window and read time behind each row's `gameDays`.",
+      }),
+    ),
+  ),
   failures: Schema.Array(QueryFailure),
   page: QueryPage,
   budget: QueryBudget,
@@ -1496,10 +1542,6 @@ export const SummaryGroup = Schema.Literals([
 ]);
 export type SummaryGroup = typeof SummaryGroup.Type;
 
-const SummaryWindowDate = Schema.String.pipe(
-  Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)),
-);
-
 export const GetTeamSummaryInput = Schema.Struct({
   team: TeamId,
   groups: Schema.optional(
@@ -1512,7 +1554,7 @@ export const GetTeamSummaryInput = Schema.Struct({
     ),
   ),
   window: Schema.optional(
-    Schema.Struct({ start: SummaryWindowDate, end: SummaryWindowDate }).pipe(
+    Schema.Struct({ start: ScheduleWindowDate, end: ScheduleWindowDate }).pipe(
       Schema.annotate({
         description:
           "Inclusive dates for `schedule`, instead of the scoring period; wider than the site's limit is refused with the limit in `schedule.detail`.",

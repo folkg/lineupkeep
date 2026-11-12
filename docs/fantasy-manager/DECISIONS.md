@@ -339,3 +339,26 @@ collided, and the owner's ruling that an action waits rather than being refused.
 4. **Accepted: the lease is ten minutes, not forty-five seconds.** A real check takes seconds, so the
    lease only guards a duplicate offer arriving mid-run. Forty-five seconds could let that duplicate
    take a team during a slow provider read and lose the first worker's writes.
+
+## Round 17 - Plans outlive the day, and windows a client chooses
+
+Status: partly implemented. Windowed game days shipped; the plan lifecycle and scheduled items are
+next. The owner answered three design questions on 12 November.
+
+1. **Accepted: proposal sets stay, as durable plans rather than expiring sets.** A set is still one
+   reviewed unit with one fingerprint, one provenance trail, and one review link, because that is what
+   makes a replay safe and a submission auditable. It stops expiring after twenty-four hours, and
+   expiry stops being how an unwanted item goes away: a plan stays open until every item is executed,
+   dismissed, or withdrawn.
+2. **Accepted: mixing immediate and scheduled items is dissolved rather than answered.** An item that
+   has no execution window runs when the plan is submitted; a scheduled item stays in the plan across
+   submissions until its window opens. One plan can therefore hold both without one submission being
+   half-refused.
+3. **Accepted: the server promotes a scheduled add's fallback.** When the first choice is gone at
+   revalidation, the server takes the first available fallback, marks the item promoted, and states the
+   reason. A client that reads the plan list sees what happened without polling a proposal call.
+4. **Accepted: an execution window is a date, for now.** The window names one calendar date; a time of
+   day would imply a clock the scheduler does not keep per item.
+5. **Accepted: a team's open plans are listed on one transactions page.** The page groups every open
+   plan by state and offers per-item dismiss and per-plan submit; a review link opens the plan it was
+   minted for. Sets were never reachable from the interface, which is why the question arose.

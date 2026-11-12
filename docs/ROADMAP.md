@@ -32,11 +32,22 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 | Restore              | Drill passed 2026-10-29; RPO 15 minutes, RTO 4 hours, owner executes recovery (ruled 10 November) |
 | Dependencies         | Fresh audit and disposition in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md)                         |
 | Security             | Audit and disposition in [SECURITY-AUDIT.md](SECURITY-AUDIT.md); deferred work is group J         |
-| Checks               | 1948 node, 201 browser, 10 chromium; container end to end 58 passed, nothing skipped              |
+| Checks               | 1950 node, 201 browser, 10 chromium; container end to end 58 passed, nothing skipped              |
 
 ---
 
 ## Ship log
+
+### 12 November 2026
+
+- **A pool row can count game days over a window the client chooses.** A pool search takes
+  `gamesWindow: { start, end }` and returns each row's `gameDays` as the dates its professional team plays,
+  instead of a count over the scoring window. A window wider than one schedule read is refused with the
+  limit rather than silently truncated, and a row whose team key is unknown or unresolved says so instead of
+  publishing an empty list. The roster side needed nothing new: every rostered player's games already carry
+  their dates and the window's per-date rows already count them, so a second copy of the same player
+  references was not published; it would have spent the summary's byte budget and pushed roster rows onto
+  another page.
 
 ### 11 November 2026
 
