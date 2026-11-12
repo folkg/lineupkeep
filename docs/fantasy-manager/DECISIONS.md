@@ -363,3 +363,22 @@ answered three design questions on 12 November.
 5. **Accepted: a team's open plans are listed on one transactions page.** The page groups every open
    plan by state and offers per-item dismiss and per-plan submit; a review link opens the plan it was
    minted for. Sets were never reachable from the interface, which is why the question arose.
+
+## Round 18 - A team's plans are one list, and where it renders
+
+Status: implemented. Two acceptance findings and one repair, on 12 November.
+
+1. **Accepted: a team's plans are readable without the review link.** One owner-scoped read returns a
+   team's plans filtered by open or closed in SQL, in one page, with each plan's moves for that team and
+   a cursor for what follows. The agent read is the same read the page uses, so a person and an agent
+   never disagree about which plans are open. Closed plans stay readable as the audit record they are.
+2. **Accepted: the team transactions page renders on the client.** Acceptance found that a
+   server-rendered version hydrated without reflecting its own disclosure or dismissal controls: the
+   markup kept what it arrived with while the handler ran. Opting that one route out of server rendering
+   restores them; the rest of the app keeps server rendering, and the review page and its forms are
+   unaffected. This is a limitation to re-check when the renderer changes, not a property to copy.
+3. **Accepted: a ready connection's approval time is repaired, not tolerated.** The lifecycle requires a
+   ready connection to name when it was approved. Rows written before the column existed were null and
+   failed that requirement on read. The repair records each row's last write as its approval time; a
+   null is still refused for a ready connection, because a connection that was approved always was
+   approved at some time.

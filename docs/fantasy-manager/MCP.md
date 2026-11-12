@@ -857,6 +857,15 @@ and is replaced by a new item. A set that stayed open after a submission still a
 of a move that is still proposed; a plan whose moves have all ended is an audit record and refuses both
 new moves and withdrawals. A plan never expires; it stops when every move has ended.
 
+`list_transaction_proposals` returns one team's plans, newest change first, filtered by `state`:
+`open` (the default, a plan with at least one move that can still run) or `closed` (every move has
+ended). Each plan carries who proposed it, when it was created and last changed, its review path, and
+that team's moves with their state, staleness, and outcome. The read is owner-scoped and paged: a
+`cursor` from the previous page fetches the next, and `limit` (1 to 50, default 20) sizes the page. A
+plan appears once for the team whose moves are asked for, and a team the account does not own is
+refused rather than answered as empty. The read writes nothing and never changes a plan. The team
+transactions page uses the same read, so a person and an agent see the same plans.
+
 A signed-in owner dismisses one move from the review page. The move becomes `dismissed`, keeps the
 owner's reason in `outcomeDetail`, and never runs; dismissing the last open move closes the plan. No
 MCP tool dismisses: an agent withdraws the moves it still controls.
@@ -960,6 +969,7 @@ lacking a scope a different tool needs, does not change whether a call succeeds.
 | `get_matchups`                        | `fantasy:read`        |
 | `get_team_summary`                    | `fantasy:read`        |
 | `get_transactions`                    | `fantasy:read`        |
+| `list_transaction_proposals`          | `fantasy:read`        |
 | `get_pending_trade_offers`            | `fantasy:read`        |
 | `get_lineup_runs`                     | `fantasy:read`        |
 | `submit_feedback`                     | `fantasy:read`        |

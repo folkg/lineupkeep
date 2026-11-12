@@ -32,7 +32,7 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 | Restore              | Drill passed 2026-10-29; RPO 15 minutes, RTO 4 hours, owner executes recovery (ruled 10 November) |
 | Dependencies         | Fresh audit and disposition in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md)                         |
 | Security             | Audit and disposition in [SECURITY-AUDIT.md](SECURITY-AUDIT.md); deferred work is group J         |
-| Checks               | 1950 node, 201 browser, 10 chromium; container end to end 58 passed, nothing skipped              |
+| Checks               | 1966 node, 210 browser, 10 chromium; container end to end 59 passed, nothing skipped              |
 
 ---
 
@@ -40,6 +40,16 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 
 ### 12 November 2026
 
+- **A team's plans are one list, on a page and over MCP.** A plan no longer needs its review link to be
+  found: the team transactions page lists every open plan with its moves, a stale section that names why,
+  per-move dismissal, and closed plans in history. The same read is `list_transaction_proposals`, filtered
+  by open or closed in one SQL pass and paged by cursor, so an agent sees the plan a person sees. The page
+  reads its lists and controls on the client; server-rendered, the hydrated disclosure and dismissal
+  controls kept the markup they arrived with, so that route opts out of server rendering.
+- **A ready connection always carries the time it was approved.** Rows written before the approval column
+  existed decoded as ready with a null approval time, and reading that connection refused the whole team
+  list. The migration records the row's last write as its approval time; every other state keeps its null
+  because it was never approved.
 - **A pool row can count game days over a window the client chooses.** A pool search takes
   `gamesWindow: { start, end }` and returns each row's `gameDays` as the dates its professional team plays,
   instead of a count over the scoring window. A window wider than one schedule read is refused with the
