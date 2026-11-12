@@ -41,7 +41,7 @@ place.
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Service         | `lineupkeep-hb` — `https://lineupkeep-hb-hcfc7y3kha-ue.a.run.app`                                                                                                 |
 | Revision        | `lineupkeep-hb-00010-6db` (address-based egress and popup streaming; image digest `sha256:41c92d69c8d498e6fd00ad0e7ddd4f4dbc574d5868883fc1522d0ad13e77edfe`)      |
-| Runtime account | `alchemgx4kg3sc7lv6v6t2vmqz6g6v@lineupkeep-prod.iam.gserviceaccount.com`                                                                                          |
+| Runtime account | `<runtime service account>`                                                                                                                                       |
 | Access          | `run.googleapis.com/ingress=all` plus IAM required; only the web runtime account holds `roles/run.invoker`. Unauthenticated callers are refused by Cloud Run IAM. |
 | Scaling         | min 0, max 2, `containerConcurrency: 1`, request timeout 780 s, startup CPU boost, request-based billing with CPU throttling                                      |
 | Resources       | 1 vCPU / 2 GiB, `/healthz` startup probe every 5 s with 30 attempts                                                                                               |
