@@ -578,6 +578,7 @@ export type ProviderRosterPlayer = {
   readonly primaryPosition: string;
   readonly positionType: string | undefined;
   readonly proTeamAbbreviation: string | undefined;
+  readonly proTeamKey?: string;
   readonly eligiblePositions: ReadonlyArray<string>;
   readonly slot: ProviderRosterSlot;
   readonly isEditable: boolean | null;

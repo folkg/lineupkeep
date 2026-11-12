@@ -606,10 +606,27 @@ const PlayerSort = Schema.Literals([
   "recent_rank",
 ]);
 
+const PlayerSearchGames = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("date_window"),
+    detail: Schema.NonEmptyString,
+  }),
+  Schema.Struct({
+    status: Schema.Literal("scoring_week"),
+    detail: Schema.NonEmptyString,
+  }),
+]).pipe(
+  Schema.annotate({
+    description:
+      "`date_window` takes inclusive dates built from the league's own schedule; `scoring_week` refuses a date window and names `includeGames`.",
+  }),
+);
+
 const PlayerSearchSupport = Schema.Struct({
   status: Schema.Literals(["published", "unverified"]),
   sorts: Schema.Array(PlayerSort),
   windows: Schema.Array(RecentFormWindow),
+  games: PlayerSearchGames,
   detail: Schema.NonEmptyString,
 }).pipe(
   Schema.annotate({
@@ -945,7 +962,7 @@ export const SearchPlayersInput = Schema.Struct({
     ScheduleWindowInput.pipe(
       Schema.annotate({
         description:
-          "Dates to count each row's games over as `gameDays`, instead of `includeGames`' scoring window; a wider window than the league's schedule read allows is refused with the limit.",
+          "Dates to count each row's games over as `gameDays`, instead of `includeGames`' scoring window; a league that counts games by scoring week refuses it.",
       }),
     ),
   ),
@@ -1557,7 +1574,7 @@ export const GetTeamSummaryInput = Schema.Struct({
     Schema.Struct({ start: ScheduleWindowDate, end: ScheduleWindowDate }).pipe(
       Schema.annotate({
         description:
-          "Inclusive dates for `schedule`, instead of the scoring period; wider than the site's limit is refused with the limit in `schedule.detail`.",
+          "Inclusive dates for `schedule`, instead of the scoring period; a league whose coverage is a scoring week refuses it.",
       }),
     ),
   ),
@@ -1565,7 +1582,7 @@ export const GetTeamSummaryInput = Schema.Struct({
     Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(366)).pipe(
       Schema.annotate({
         description:
-          "Length of the `schedule` window from today, used only without `window`; above the site's limit it is refused with the limit in `schedule.detail`.",
+          "Length of the `schedule` window from today, used only without `window`; a league with no professional games states its bound in `schedule.detail`.",
       }),
     ),
   ),
@@ -1746,10 +1763,10 @@ export const SummarySchedulePlayer = Schema.Struct({
   player: PlayerRef,
   name: Schema.NonEmptyString,
   proTeam: Schema.NullOr(Schema.NonEmptyString),
-  status: Schema.Literals(["scheduled", "no_games"]).pipe(
+  status: Schema.Literals(["scheduled", "no_games", "unknown"]).pipe(
     Schema.annotate({
       description:
-        "`scheduled` when the team plays in the window, `no_games` when the site publishes no game for them there.",
+        "`scheduled` when the team plays in the window, `no_games` when it does not, `unknown` when the player's professional team could not be identified.",
     }),
   ),
   gameCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(

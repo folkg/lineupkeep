@@ -2,7 +2,6 @@ import { DateTime, Effect, Layer, Option, Schema } from "effect";
 
 import { FantasyLeague } from "#contexts/connections/FantasyTeam.ts";
 import { GameSourceRegistry } from "#contexts/connections/GameSource.ts";
-import type { ProfessionalGameWeek } from "#contexts/connections/ProfessionalCalendar.ts";
 import { ProfessionalCalendarUnavailable } from "#contexts/connections/ProfessionalCalendar.ts";
 import { ProfessionalCalendar } from "#contexts/connections/ProfessionalCalendar.ts";
 import { professionalGameFreshness } from "#contexts/connections/ProfessionalGame.ts";
@@ -11,6 +10,8 @@ import { readProfessionalGameWeek } from "./ProfessionalGameFacts.ts";
 import { ScheduleObservationRepository } from "./ScheduleObservationRepository.ts";
 
 const CalendarDate = Schema.String.pipe(Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)));
+
+const maximumWeekReadConcurrency = 4;
 
 const ReadLeagueWeek = Schema.Struct({
   league: FantasyLeague,
@@ -94,10 +95,18 @@ export const ProfessionalCalendarLive = Layer.effect(
           reason: "no_source",
         });
       }
-      const weeks: Array<ProfessionalGameWeek> = [];
-      for (let weekStart = from; weekStart <= to;) {
-        weeks.push(
-          yield* readProfessionalGameWeek({
+      const weekStarts: Array<string> = [];
+      for (
+        let weekStart = from;
+        weekStart <= to;
+        weekStart = addDays(weekStart, covered.source.capabilities.weekDays)
+      ) {
+        weekStarts.push(weekStart);
+      }
+      const weeks = yield* Effect.forEach(
+        weekStarts,
+        (weekStart) =>
+          readProfessionalGameWeek({
             store,
             source: covered.source,
             league: input.league,
@@ -105,9 +114,8 @@ export const ProfessionalCalendarLive = Layer.effect(
             freshness: input.freshness,
             ...(input.notBefore === undefined ? {} : { notBefore: input.notBefore }),
           }),
-        );
-        weekStart = addDays(weekStart, covered.source.capabilities.weekDays);
-      }
+        { concurrency: maximumWeekReadConcurrency },
+      );
       const served = weeks.map((week) => ({
         ...week,
         games: week.games.filter((fact) => fact.game.date >= from && fact.game.date <= to),

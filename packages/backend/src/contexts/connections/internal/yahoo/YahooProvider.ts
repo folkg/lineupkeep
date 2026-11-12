@@ -1206,7 +1206,7 @@ function scheduleDates(period: {
   if (dates.length > maximumScheduleDates) {
     return ProviderOperationUnsupported.make({
       operation: "read_roster_schedule",
-      reason: `The scoring period ${period.start} to ${period.end} covers ${String(dates.length)} dates, above the ${String(maximumScheduleDates)}-date limit for one schedule read.`,
+      reason: `One read of your league's roster schedule covers at most ${String(maximumScheduleDates)} dates, and this window covers ${String(dates.length)}. Ask for a narrower window.`,
     });
   }
   return Effect.succeed(dates);

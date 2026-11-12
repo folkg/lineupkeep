@@ -41,35 +41,31 @@ export function leagueGamesByDate(
   );
 }
 
-function gamesForTeam(
+export function gamesForTeam(
   games: ReadonlyArray<ProfessionalGame>,
   providerTeamKey: string,
 ): ReadonlyArray<ProfessionalGame> {
-  return games.filter(
-    (game) =>
-      game.home.providerTeamKey === providerTeamKey ||
-      game.away.providerTeamKey === providerTeamKey,
-  );
+  return games
+    .filter(
+      (game) =>
+        game.home.providerTeamKey === providerTeamKey ||
+        game.away.providerTeamKey === providerTeamKey,
+    )
+    .filter(gameCanBePlayed);
 }
 
 export function countGamesForTeam(
   games: ReadonlyArray<ProfessionalGame>,
   providerTeamKey: string,
 ): number {
-  return gamesForTeam(games, providerTeamKey).filter(gameCanBePlayed).length;
+  return gamesForTeam(games, providerTeamKey).length;
 }
 
 export function gameDatesForTeam(
   games: ReadonlyArray<ProfessionalGame>,
   providerTeamKey: string,
 ): ReadonlyArray<string> {
-  return [
-    ...new Set(
-      gamesForTeam(games, providerTeamKey)
-        .filter(gameCanBePlayed)
-        .map((game) => game.date),
-    ),
-  ].sort();
+  return [...new Set(gamesForTeam(games, providerTeamKey).map((game) => game.date))].sort();
 }
 
 export function nextGameForTeams(input: {

@@ -2259,25 +2259,28 @@ it.effect("reads a weekly league's opponent as the period's game without dates",
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
-it.effect("refuses a scoring period wider than the 21-date limit before reading", () => {
-  const internet = recordingInternet(() => jsonResponse({}, 500));
-  return Effect.gen(function* () {
-    const provider = yield* testProvider;
+it.effect(
+  "refuses a scoring period wider than the 21-date roster schedule limit before reading",
+  () => {
+    const internet = recordingInternet(() => jsonResponse({}, 500));
+    return Effect.gen(function* () {
+      const provider = yield* testProvider;
 
-    const error = yield* Effect.flip(
-      provider.readRosterSchedule({
-        ...sessionInput,
-        providerTeamKey: "466.l.4002.t.3",
-        period: { type: "date", start: "2026-10-01", end: "2026-10-22" },
-      }),
-    );
+      const error = yield* Effect.flip(
+        provider.readRosterSchedule({
+          ...sessionInput,
+          providerTeamKey: "466.l.4002.t.3",
+          period: { type: "date", start: "2026-10-01", end: "2026-10-22" },
+        }),
+      );
 
-    assert.instanceOf(error, ProviderOperationUnsupported);
-    assert.include(error.reason, "covers 22 dates");
-    assert.include(error.reason, "21-date limit");
-    assert.strictEqual(internet.calls.length, 0);
-  }).pipe(Effect.provide(yahooLayer(internet)));
-});
+      assert.instanceOf(error, ProviderOperationUnsupported);
+      assert.include(error.reason, "covers 22");
+      assert.include(error.reason, "at most 21 dates");
+      assert.strictEqual(internet.calls.length, 0);
+    }).pipe(Effect.provide(yahooLayer(internet)));
+  },
+);
 
 it.effect("reports a dated schedule read that returns another date", () => {
   const internet = recordingInternet(() =>

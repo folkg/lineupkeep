@@ -125,6 +125,7 @@ import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption
 import {
   countGamesForTeam,
   gameDatesForTeam,
+  gamesForTeam,
   isLeagueOffNight,
   leagueGamesByDate,
 } from "./LeagueSchedule.ts";
@@ -142,6 +143,7 @@ const defaultLeagueGroups: ReadonlyArray<LeagueGroup> = ["overview", "scoring", 
 const defaultPlayerGroups: ReadonlyArray<PlayerGroup> = ["identity", "availability", "eligibility"];
 const transactionReadPageSize = 50;
 const transactionReadMaximumPages = 10;
+const maximumSeasonDates = 366;
 const summaryGroups: ReadonlyArray<SummaryGroup> = [
   "league",
   "standings",
@@ -362,14 +364,13 @@ export const FantasyQueriesLive = Layer.effect(
     const readPoolGamesForWindow = (
       context: TeamContext,
       requested: { readonly start: string; readonly end: string },
-    ): Effect.Effect<PoolGames, QueryPersistenceFailed> =>
+    ): Effect.Effect<PoolGames, QuerySelectionInvalid | QueryPersistenceFailed> =>
       Effect.gen(function* () {
         if (gameSources.sourceFor(context.owned.team.league) === undefined) {
-          return {
-            status: "unavailable" as const,
+          return yield* QuerySelectionInvalid.make({
             detail:
-              "This league has no professional-game source. Hockey is the only supported sport today.",
-          };
+              "This league counts games by scoring week, so a date window cannot answer for it. Pass `includeGames: true` to ask about games.",
+          });
         }
         const from = calendarDate(requested.start);
         const to = calendarDate(requested.end);
@@ -381,12 +382,10 @@ export const FantasyQueriesLive = Layer.effect(
               "The game window is not a pair of calendar dates in order, so no window bounds the pool's games. Pass `gamesWindow` with `start` on or before `end`.",
           };
         }
-        const maximum = context.provider.capabilities.scheduleRead.maximumDates;
-        if (dates.length > maximum) {
-          return {
-            status: "unavailable" as const,
-            detail: `The game window covers ${String(dates.length)} dates and one read covers at most ${String(maximum)}; a wider window is refused rather than truncated.`,
-          };
+        if (dates.length > maximumSeasonDates) {
+          return yield* QuerySelectionInvalid.make({
+            detail: `The game window covers ${String(dates.length)} dates, and a window cannot exceed one season (${String(maximumSeasonDates)} dates). Ask for a narrower window.`,
+          });
         }
         return yield* readPoolGamesOverWindow(context, {
           start: requested.start,
@@ -426,7 +425,7 @@ export const FantasyQueriesLive = Layer.effect(
           return {
             status: "unavailable" as const,
             detail:
-              "This league has no professional-game source. Hockey is the only supported sport today.",
+              "This league counts games by scoring week and publishes no professional-game calendar, so its pool rows have no remaining-games count. Read the row's `week` instead.",
           };
         }
         if (leagueOutcome === undefined || leagueOutcome._tag !== "ok") {
@@ -1047,6 +1046,18 @@ export const FantasyQueriesLive = Layer.effect(
                 status: league.playerSearch.status,
                 sorts: [...league.playerSearch.sorts],
                 windows: [...league.playerSearch.windows],
+                games:
+                  gameSources.sourceFor(context.owned.team.league) === undefined
+                    ? {
+                        status: "scoring_week" as const,
+                        detail:
+                          "This league counts games by scoring week; pass `includeGames: true` to ask about games.",
+                      }
+                    : {
+                        status: "date_window" as const,
+                        detail:
+                          "The window is built from the league's own schedule and takes inclusive dates.",
+                      },
                 detail: league.playerSearch.detail,
               },
             }),
@@ -2865,6 +2876,8 @@ export const FantasyQueriesLive = Layer.effect(
 
       const window = league?.periodWindow;
       const period = currentPeriod(window);
+      const hasProfessionalGameSource =
+        gameSources.sourceFor(context.owned.team.league) !== undefined;
       const readRoster = (
         requested: QueryPeriod | undefined,
       ): Effect.Effect<ReadOutcome<ProviderRoster>, QueryPersistenceFailed> =>
@@ -2878,7 +2891,7 @@ export const FantasyQueriesLive = Layer.effect(
           }),
         );
       let rosterOutcome: ReadOutcome<ProviderRoster> | undefined;
-      if (includes("roster")) {
+      if (includes("roster") || (includes("schedule") && hasProfessionalGameSource)) {
         rosterOutcome = yield* readRoster(period);
         if (
           rosterOutcome._tag === "failed" &&
@@ -2915,7 +2928,7 @@ export const FantasyQueriesLive = Layer.effect(
       const draft = yield* draftProvenance(
         context,
         fetchedAt,
-        rosterPlayers.map((player) => player.providerPlayerKey),
+        includes("roster") ? rosterPlayers.map((player) => player.providerPlayerKey) : [],
         "roster",
       );
       if (draft.coverage !== undefined) {
@@ -2932,7 +2945,9 @@ export const FantasyQueriesLive = Layer.effect(
       const rosterCoverage =
         rosterOutcome?._tag === "ok" ? rosterOutcome.value.coverage : undefined;
       const rosterPeriod =
-        rosterCoverage?.type === "week" ? { week: rosterCoverage.week } : undefined;
+        includes("roster") && rosterCoverage?.type === "week"
+          ? { week: rosterCoverage.week }
+          : undefined;
       const rosterProjectionByKey = new Map<string, number>();
       if (
         includes("roster") &&
@@ -3103,13 +3118,32 @@ export const FantasyQueriesLive = Layer.effect(
               requestedDates,
               days: input.days,
               weekDates: windowDates,
+              hasProfessionalGameSource,
             });
       const schedulePeriod =
         scheduleWindowResolution.status === "resolved"
           ? scheduleWindowResolution.period
           : undefined;
+      const scheduleWindow =
+        scheduleWindowResolution.status === "resolved"
+          ? scheduleWindowResolution.window
+          : undefined;
+      const requestedScheduleDates =
+        scheduleWindow === undefined
+          ? undefined
+          : scheduleWindowDates(scheduleWindow.start, scheduleWindow.end);
+      const providerDateBound = context.provider.capabilities.scheduleRead.maximumDates;
+      const providerScheduleBoundDetail =
+        !hasProfessionalGameSource &&
+        requestedScheduleDates !== undefined &&
+        requestedScheduleDates.length > providerDateBound
+          ? `One read of this league's roster schedule covers at most ${String(providerDateBound)} dates, and this window covers ${String(requestedScheduleDates.length)}. Ask for a narrower window or use \`days\`.`
+          : undefined;
       const scheduleOutcome =
-        !includes("schedule") || schedulePeriod === undefined
+        !includes("schedule") ||
+        schedulePeriod === undefined ||
+        hasProfessionalGameSource ||
+        providerScheduleBoundDetail !== undefined
           ? undefined
           : yield* readOutcome(
               context,
@@ -3124,26 +3158,49 @@ export const FantasyQueriesLive = Layer.effect(
                 period: schedulePeriod,
               }),
             );
-      const scheduleWindow =
-        scheduleWindowResolution.status === "resolved"
-          ? scheduleWindowResolution.window
-          : undefined;
       const gamesRemainingSources = new Set<GamesRemainingSource>();
       const schedulePlayerByKey = new Map<string, SummarySchedulePlayer>();
       let scheduleSection: TeamSummaryData["schedule"];
       if (!includes("schedule")) {
         scheduleSection = undefined;
-      } else if (
-        scheduleWindowResolution.status === "unavailable" ||
-        schedulePeriod === undefined ||
-        scheduleOutcome === undefined
-      ) {
+      } else if (scheduleWindowResolution.status === "unavailable") {
         scheduleSection = {
           status: "unsupported",
-          detail:
-            scheduleWindowResolution.status === "unavailable"
-              ? scheduleWindowResolution.detail
-              : "Your league did not return a schedule for this window.",
+          detail: scheduleWindowResolution.detail,
+        };
+      } else if (providerScheduleBoundDetail !== undefined) {
+        scheduleSection = { status: "unsupported", detail: providerScheduleBoundDetail };
+      } else if (hasProfessionalGameSource) {
+        const professional = yield* professionalScheduleSection({
+          calendar,
+          league: context.owned.team.league,
+          sport: context.owned.team.sport,
+          rosterPlayers,
+          rosterRefs,
+          rosterRowByKey,
+          window: scheduleWindow,
+          period,
+          store: scheduleObservations,
+        });
+        scheduleSection = professional.section;
+        for (const [providerPlayerKey, row] of professional.players) {
+          schedulePlayerByKey.set(providerPlayerKey, row);
+        }
+        if (professional.section.status === "available") {
+          coverageEntries.push(
+            coverage(
+              "schedule",
+              "professional_games",
+              professional.section.observedAt,
+              undefined,
+              "Games and opponents from the league's professional schedule.",
+            ),
+          );
+        }
+      } else if (schedulePeriod === undefined || scheduleOutcome === undefined) {
+        scheduleSection = {
+          status: "unsupported",
+          detail: "Your league did not return a schedule for this window.",
         };
       } else if (scheduleOutcome._tag !== "ok") {
         scheduleSection = {
@@ -3337,7 +3394,12 @@ export const FantasyQueriesLive = Layer.effect(
       }
       if (scheduleSection?.status === "unsupported") {
         coverageEntries.push(
-          unsupportedCoverage("schedule", "roster_schedule", fetchedAt, scheduleSection.detail),
+          unsupportedCoverage(
+            "schedule",
+            hasProfessionalGameSource ? "professional_games" : "roster_schedule",
+            fetchedAt,
+            scheduleSection.detail,
+          ),
         );
       }
 
@@ -4245,8 +4307,9 @@ function resolveScheduleWindow(input: {
   readonly requestedDates: ReadonlyArray<string> | undefined;
   readonly days: number | undefined;
   readonly weekDates: { readonly start: string; readonly end: string } | undefined;
+  readonly hasProfessionalGameSource: boolean;
 }): ScheduleWindowResolution {
-  if (input.league.rosterCoverage === "week") {
+  if (input.league.rosterCoverage === "week" && !input.hasProfessionalGameSource) {
     if (input.requestedDates !== undefined || input.days !== undefined) {
       return {
         status: "unavailable",
@@ -4397,7 +4460,7 @@ function schedulePeriodDetail(input: {
   if (input.coverage === "week") {
     return `Scoring week ${String(input.period?.week)} opponents only. Your league publishes no start time, no per-week game count, and no season-long schedule.`;
   }
-  const bound = ` One schedule read covers at most ${String(input.maximumDates)} dates; a wider window is refused rather than truncated.`;
+  const bound = ` One read of this league's roster schedule covers at most ${String(input.maximumDates)} dates; ask for a narrower window or use \`days\`.`;
   const range = input.window === undefined ? "" : ` (${input.window.start} to ${input.window.end})`;
   const count = String(input.dates.length);
   switch (input.window?.source) {
@@ -4524,7 +4587,7 @@ function professionalGamesUnavailableDetail(failure: {
   if (failure._tag === "professional_calendar.unavailable") {
     switch (failure.reason) {
       case "no_source":
-        return "This league has no professional-game source. Hockey is the only supported sport today.";
+        return "This league counts games by scoring week and publishes no professional-game calendar.";
       case "invalid_window":
       case "invalid_week":
         return "The schedule window is not a valid date range.";
@@ -4536,6 +4599,230 @@ function professionalGamesUnavailableDetail(failure: {
     return "The professional-game source could not be refreshed, and its previous observation is past its maximum age.";
   }
   return "The professional-game source could not be reached.";
+}
+
+type ProfessionalScheduleSection = {
+  readonly section: NonNullable<TeamSummaryData["schedule"]>;
+  readonly players: ReadonlyMap<string, SummarySchedulePlayer>;
+};
+
+type SummaryScheduledGameView = {
+  readonly date: string;
+  readonly opponent: string;
+  readonly home: boolean;
+  readonly offNight?: boolean;
+};
+
+function professionalScheduleSection(input: {
+  readonly calendar: ProfessionalCalendar["Service"];
+  readonly league: TeamContext["owned"]["team"]["league"];
+  readonly sport: FantasySport;
+  readonly rosterPlayers: ReadonlyArray<ProviderRosterPlayer>;
+  readonly rosterRefs: ReadonlyArray<PlayerRef>;
+  readonly rosterRowByKey: ReadonlyMap<string, SummaryRosterPlayer>;
+  readonly window: SummaryScheduleWindow | undefined;
+  readonly period: QueryPeriod | undefined;
+  readonly store: ScheduleObservationRepository["Service"];
+}): Effect.Effect<ProfessionalScheduleSection, QueryPersistenceFailed> {
+  return Effect.gen(function* () {
+    if (input.window === undefined) {
+      return unsupportedProfessionalSchedule(
+        "Your league publishes no date window for this schedule, so the league's games cannot be placed on its dates.",
+      );
+    }
+    if (input.rosterPlayers.length === 0) {
+      return unsupportedProfessionalSchedule(
+        "Your league did not return a roster, so no player's professional games can be placed on its dates.",
+      );
+    }
+    const games = yield* readProfessionalScheduleGames({
+      calendar: input.calendar,
+      league: input.league,
+      from: input.window.start,
+      to: input.window.end,
+    });
+    if (games.status === "unavailable") {
+      return unsupportedProfessionalSchedule(games.detail);
+    }
+    const dates = scheduleWindowDates(input.window.start, input.window.end);
+    if (dates === undefined) {
+      return unsupportedProfessionalSchedule("The schedule window is not a valid date range.");
+    }
+    const abbreviations = input.rosterPlayers.flatMap((player) =>
+      player.proTeamKey === undefined && player.proTeamAbbreviation !== undefined
+        ? [player.proTeamAbbreviation]
+        : [],
+    );
+    const identities =
+      abbreviations.length === 0
+        ? []
+        : yield* input.store.readProviderTeamIdentities({
+            sport: input.sport,
+            identifiers: abbreviations,
+          });
+    const keyByAbbreviation = uniqueProviderTeamKeys(identities);
+    const leagueByDate = leagueGamesByDate(games.games);
+    const offNightByDate = new Map(
+      dates.map((date): readonly [string, boolean] => [
+        date,
+        isLeagueOffNight({
+          teamsPlaying: leagueByDate.get(date)?.teamsPlaying ?? 0,
+          teamCount: games.teamCount,
+        }),
+      ]),
+    );
+    const players = new Map<string, SummarySchedulePlayer>();
+    const rosterGamesByDate = new Map<string, number>();
+    let unknownTeamRows = 0;
+    for (const [player, sealedRef] of EffectArray.zip(input.rosterPlayers, input.rosterRefs)) {
+      const rosterRow = input.rosterRowByKey.get(player.providerPlayerKey);
+      const proTeamKey =
+        player.proTeamKey ??
+        (player.proTeamAbbreviation === undefined
+          ? undefined
+          : keyByAbbreviation.get(player.proTeamAbbreviation));
+      const row = professionalScheduleRow({
+        games: games.games,
+        proTeamKey,
+        offNightByDate,
+      });
+      if (row.status === "unknown") {
+        unknownTeamRows += 1;
+      }
+      for (const game of row.games) {
+        rosterGamesByDate.set(game.date, (rosterGamesByDate.get(game.date) ?? 0) + 1);
+      }
+      players.set(player.providerPlayerKey, {
+        player: rosterRow?.player ?? sealedRef,
+        name: rosterRow?.name ?? player.name,
+        proTeam: rosterRow?.proTeam ?? player.proTeamAbbreviation ?? null,
+        status: row.status,
+        gameCount: row.games.length,
+        games: row.games,
+        gamesRemaining: row.gamesRemaining,
+      });
+    }
+    return {
+      section: {
+        status: "available",
+        coverage: "date",
+        ...(input.period === undefined ? {} : { period: input.period }),
+        window: input.window,
+        observedAt: games.observedAt,
+        dates: dates.map((date) => {
+          const leagueDay = leagueByDate.get(date);
+          return {
+            date,
+            rosterGames: rosterGamesByDate.get(date) ?? 0,
+            leagueGames: leagueDay?.games ?? 0,
+            teamsPlaying: leagueDay?.teamsPlaying ?? 0,
+            offNight: offNightByDate.get(date) ?? false,
+          };
+        }),
+        offNights: {
+          status: "available",
+          definition: leagueOffNightDefinition,
+          sport: "hockey",
+        },
+        gamesRemaining: {
+          status: "available",
+          sources: ["professional_games"],
+          window: input.window,
+          observedAt: games.observedAt,
+          ...(unknownTeamRows === 0
+            ? {}
+            : {
+                detail:
+                  "Some players' professional teams could not be identified, so those rows publish no games remaining.",
+              }),
+        },
+        players: [],
+        detail: professionalScheduleDetail({
+          window: input.window,
+          period: input.period,
+          dates: dates.length,
+          unknownTeamRows,
+        }),
+      },
+      players,
+    };
+  });
+}
+
+function unsupportedProfessionalSchedule(detail: string): ProfessionalScheduleSection {
+  return { section: { status: "unsupported", detail }, players: new Map() };
+}
+
+function professionalScheduleRow(input: {
+  readonly games: ReadonlyArray<ProfessionalGame>;
+  readonly proTeamKey: string | undefined;
+  readonly offNightByDate: ReadonlyMap<string, boolean>;
+}): {
+  readonly status: SummarySchedulePlayer["status"];
+  readonly games: ReadonlyArray<SummaryScheduledGameView>;
+  readonly gamesRemaining: SummarySchedulePlayer["gamesRemaining"];
+} {
+  const proTeamKey = input.proTeamKey;
+  if (proTeamKey === undefined) {
+    return {
+      status: "unknown",
+      games: [],
+      gamesRemaining: {
+        status: "unavailable",
+        detail:
+          "This player's professional team could not be identified, so the league's games cannot be joined to this row.",
+      },
+    };
+  }
+  const teamGames = gamesForTeam(input.games, proTeamKey);
+  return {
+    status: teamGames.length === 0 ? "no_games" : "scheduled",
+    games: teamGames.map((game) => {
+      const home = game.home.providerTeamKey === proTeamKey;
+      const opponent = home ? game.away : game.home;
+      const offNight = input.offNightByDate.get(game.date);
+      return {
+        date: game.date,
+        opponent: opponent.sourceTeamAbbreviation,
+        home,
+        ...(offNight === undefined ? {} : { offNight }),
+      };
+    }),
+    gamesRemaining: {
+      status: "available",
+      count: teamGames.length,
+      source: "professional_games",
+    },
+  };
+}
+
+function professionalScheduleDetail(input: {
+  readonly window: SummaryScheduleWindow;
+  readonly period: QueryPeriod | undefined;
+  readonly dates: number;
+  readonly unknownTeamRows: number;
+}): string {
+  const range = ` (${input.window.start} to ${input.window.end})`;
+  const count = String(input.dates);
+  const base = ((): string => {
+    switch (input.window.source) {
+      case "requested":
+        return `Opponents on each of the ${count} dates of the requested window${range}, from your league's professional games.`;
+      case "rest_of_week":
+        return `Opponents on each of the ${count} dates of the rest of your league's current week${range}, from your league's professional games; pass \`window\` or \`days\` for other dates.`;
+      case "period":
+        return `Opponents on each of the ${count} dates of scoring period ${String(input.period?.week)}${range}, from your league's professional games.`;
+    }
+  })();
+  return input.unknownTeamRows === 0
+    ? base
+    : `${base} ${unidentifiedTeamRowsDetail(input.unknownTeamRows)}`;
+}
+
+function unidentifiedTeamRowsDetail(count: number): string {
+  return count === 1
+    ? "1 roster row has no professional team that could be identified, so its games are unknown."
+    : `${String(count)} roster rows have no professional team that could be identified, so their games are unknown.`;
 }
 
 function providerGamesInWindow(

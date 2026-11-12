@@ -906,6 +906,7 @@ function providerRosterPlayerOf(player: Yahoo.YahooRosterPlayer): ProviderRoster
     primaryPosition: player.primaryPosition,
     positionType: player.positionType,
     proTeamAbbreviation: player.proTeamAbbreviation,
+    ...(player.proTeamKey === undefined ? {} : { proTeamKey: player.proTeamKey }),
     eligiblePositions: player.eligiblePositions,
     slot: rosterSlotOf(player.selectedPosition.position),
     isEditable: player.editable ?? null,

@@ -243,8 +243,11 @@ read; a row with no key reports `unavailable` with the reason instead of a guess
 result's `gamesRemaining` section states the window and observation time or why the league has no
 game source. Pass `gamesWindow: { start, end }` instead to count each row's game days over dates a
 client chooses, as `gameDays` with the exact dates the player's team plays and the section's window
-and read time in `gamesWindow`; a window wider than one schedule read is refused with the limit
-rather than truncated, and the cheap search stays cheap. Omit both for a cheaper search that does not
+and read time in `gamesWindow`. The window is built from the league's own schedule wherever a
+professional-game source covers the league, so it is not bounded by the provider's roster read; a
+window longer than one season (366 dates) is refused with that limit rather than truncated. A league
+that counts games by scoring week refuses a date window and names `includeGames: true` instead.
+Omit both for a cheaper search that does not
 read the league window or the professional calendar. The provider’s dated pool selector is not exposed: it projected one date’s
 opponent rather than filtering the pool, and no client used it. The probe and its results remain in
 [RESEARCH.md](RESEARCH.md#pool-player-schedule-shapes-2026-10-31).
@@ -337,7 +340,11 @@ order and its explanation.
 `{kind: "week", week}` for `stat`. A recent window on a season sort is refused with the sort that
 accepts it, and a season window on a recent-form sort is refused with the windows the league
 publishes. `get_league` publishes `playerSearch` — the `sorts` and `windows` that league actually
-publishes, plus a plain `detail` — so a client can see the options before calling. A window the
+publishes, its `games` capability, and a plain `detail` — so a client can see the options before
+calling. `games` is `date_window` when a professional-game source covers the league: the window is
+built from the league's own schedule and takes inclusive dates. It is `scoring_week` otherwise: the
+league counts games by scoring week, a date window cannot answer for it, and `includeGames: true` is
+the way to ask. A window the
 league does not publish is refused with the nearest published window named; a league that publishes
 no recent-form rank does not offer `recent_rank`. A `recent_rank` request narrows plain position
 codes at the provider, so its first page is that narrowed pool; a roster-slot value stays a local
@@ -476,14 +483,18 @@ team; football declares it unsupported with the bye-week alternative in its plac
 The `schedule` group answers what a client cannot otherwise compute: which games a candidate has in
 a stated window, how many games their professional team has left in it, and which nights are light.
 For every rostered player it reports the dates they play, the opponent abbreviation, whether the game
-is home or away, and a game count for the window; `dates` carries a per-date count across the roster,
-so a light night needs no client-side arithmetic and no second schedule source, and the player rows'
-own dates say who plays a given night without a second copy of the same references. Each player also
+is home or away, and a game count for the window. For a league with a professional-game source those
+dates come from the league's own schedule, joined to the player by the professional team key the
+roster row publishes; a roster row whose professional team cannot be identified is `status:
+"unknown"` with no games rather than a published zero, and the section's `detail` names how many rows
+that affected. `dates` carries a per-date count across the roster, built from the same rows, so a
+light night needs no client-side arithmetic and no second schedule source, and the player rows' own
+dates say who plays a given night without a second copy of the same references. Each player also
 carries `gamesRemaining` with the source of its own count: `professional_games` when it was counted
-from the league's professional games, `provider_opponent` when those games were unavailable and the
-provider's own roster schedule supplied it; the section aggregates the sources used. A count is
-never zero because a source was missing; when neither source can answer, the player or section says
-why.
+from the league's professional games, `provider_opponent` when the league has no professional-game
+source and the provider's own roster schedule supplied it; the section aggregates the sources used.
+A count is never zero because a source was missing; when neither source can answer, the player or
+section says why.
 The section states its own `window` — the inclusive `start` and `end` dates and a `source` — and
 `observedAt`. The `gamesRemaining` section adds the exact dates its counts cover in `window` when
 the provider publishes them (otherwise the schedule's `period` bounds the count), and
@@ -509,12 +520,16 @@ counted over the stated rest-of-week window instead, and games per date are publ
 provider publishes neither a period nor a current date and the call passed neither argument, the
 section says so in one sentence and names `window`/`days` instead of inventing dates. An explicit
 `window` or `days` takes precedence over a scoring period and is marked `requested`. Coverage
-follows what the league declares: a date-scoped league is read once per date of the window, from the
-provider's own scoring-week dates or the requested/default window, while a league whose cadence is a
-scoring week reports that week's opponent as the honest equivalent, refuses a date window, and is
-never given invented dates. The provider publishes no start time and no season-long schedule, and
-`detail` repeats both boundaries in the result; one schedule read covers at most 21 dates, and a
-wider window is refused with that limit rather than silently truncated.
+follows what the league declares. A league with a professional-game source builds the window from
+that source and is not bounded by the provider's roster read. A date-scoped league without one is
+read once per date of the window, from the provider's own scoring-week dates or the
+requested/default window, while a league whose cadence is a scoring week reports that week's
+opponent as the honest equivalent, refuses a date window, and is never given invented dates. The
+provider publishes no start time and no season-long schedule, and `detail` repeats both boundaries
+in the result. A league without a professional-game source is bounded by what its provider's roster
+schedule can answer: one read of that league's roster schedule covers a stated number of dates, and
+a wider window is refused with that limit and the remedy to ask for a narrower window or use `days`,
+rather than silently truncated.
 
 The roster and schedule sections are one paged player list, and they exist only when requested: with
 neither `roster` nor `schedule` selected the response carries no `roster` key at all, a complete
@@ -745,9 +760,11 @@ calls, and a window longer than the declared cap is refused with the cap and the
 
 ### What recent-form windows each league publishes
 
-The league read carries `playerSearch` with `status`, `sorts`, `windows`, and a plain `detail`. The
+The league read carries `playerSearch` with `status`, `sorts`, `windows`, `games`, and a plain
+`detail`. The
 window list comes from a five-player rank sample read in the same request as the league settings,
-not from a per-sport table, so a league that publishes a different set says so.
+not from a per-sport table, so a league that publishes a different set says so. `games` is derived
+from whether a professional-game source covers the league, never from the sport or league name.
 
 Live, read-only, against the owner's linked leagues on 2026-11-11, with the football and hockey
 rows read back through the committed league read:

@@ -163,3 +163,36 @@ it.effect("reads a second provider's player search and states its own schedule b
     );
   }).pipe(Effect.provide(SecondProviderTestLayer)),
 );
+
+it.effect("refuses a schedule window wider than one read of the league's roster schedule", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const connections = yield* Connections;
+    const linked = Array.getUnsafe(
+      yield* connections.link(owner, [
+        { provider: secondProviderKey, session: Redacted.make("A1=second-session") },
+      ]),
+      0,
+    );
+    const discovered = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
+    const teamId = Array.getUnsafe(discovered, 0).id;
+
+    const summary = yield* queries.getTeamSummary(owner, {
+      team: teamId,
+      groups: ["schedule"],
+      days: 31,
+    });
+
+    assert.strictEqual(summary.status, "unsupported");
+    if (summary.status === "narrowing_required") {
+      return;
+    }
+    assert.strictEqual(summary.schedule?.status, "unsupported");
+    if (summary.schedule?.status === "unsupported") {
+      assert.include(summary.schedule.detail, "at most 10 dates");
+      assert.include(summary.schedule.detail, "this window covers 31");
+      assert.include(summary.schedule.detail, "narrower window");
+      assert.include(summary.schedule.detail, "`days`");
+    }
+  }).pipe(Effect.provide(SecondProviderTestLayer)),
+);

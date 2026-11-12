@@ -1700,12 +1700,18 @@ it("publishes the accepted player-statistics periods and the compact standings f
   const summaryOutput = JSON.stringify(tool("get_team_summary").outputSchema);
   expect(summaryOutput).toContain("playsThisWeek");
   expect(summaryOutput).not.toContain("probableStarters");
+  expect(summaryOutput).toContain("could not be identified");
+  expect(summaryOutput).toContain('"unknown"');
   expect(searchWindow).toContain("gamesWindow");
-  expect(searchWindow).toContain("a wider window than the league's schedule read allows");
+  expect(searchWindow).toContain("a league that counts games by scoring week refuses it");
   expect(JSON.stringify(tool("search_players").outputSchema)).toContain("gameDays");
   expect(JSON.stringify(tool("search_players").outputSchema)).toContain(
     "plays in a requested window",
   );
+  const leagueGames = JSON.stringify(tool("get_league").outputSchema);
+  expect(leagueGames).toContain("date_window");
+  expect(leagueGames).toContain("scoring_week");
+  expect(leagueGames).toContain("includeGames");
 
   const playersOutput = JSON.stringify(tool("get_players").outputSchema);
   expect(playersOutput).toContain("not_published");
