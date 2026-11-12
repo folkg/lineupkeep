@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, exists, isNull, not } from "drizzle-orm";
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
 import { Array, Context, Crypto, DateTime, Effect, Layer, Schema } from "effect";
 
@@ -542,6 +542,85 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
         return { set, submissions, items, steps };
       });
 
+      const listForTeam = Effect.fn("TransactionProposalRepository.listForTeam")(function* (
+        userId: UserId,
+        input: {
+          readonly team: TeamId;
+          readonly state: "open" | "closed";
+          readonly offset: number;
+          readonly limit: number;
+        },
+      ) {
+        const hasItemForTeam = exists(
+          database
+            .select({ id: transactionProposalItems.id })
+            .from(transactionProposalItems)
+            .where(
+              and(
+                eq(transactionProposalItems.setId, transactionProposalSets.id),
+                eq(transactionProposalItems.userId, userId),
+                eq(transactionProposalItems.teamId, input.team),
+              ),
+            ),
+        );
+        const hasOpenItem = exists(
+          database
+            .select({ id: transactionProposalItems.id })
+            .from(transactionProposalItems)
+            .where(
+              and(
+                eq(transactionProposalItems.setId, transactionProposalSets.id),
+                eq(transactionProposalItems.userId, userId),
+                eq(transactionProposalItems.settled, false),
+              ),
+            ),
+        );
+        const stateFilter = input.state === "open" ? hasOpenItem : not(hasOpenItem);
+        const where = and(eq(transactionProposalSets.userId, userId), hasItemForTeam, stateFilter);
+        const counted = yield* database
+          .select({ total: count() })
+          .from(transactionProposalSets)
+          .where(where)
+          .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
+        const total = counted[0]?.total ?? 0;
+        const rows = yield* database
+          .select()
+          .from(transactionProposalSets)
+          .where(where)
+          .orderBy(desc(transactionProposalSets.updatedAt), desc(transactionProposalSets.id))
+          .limit(input.limit)
+          .offset(input.offset)
+          .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
+        const sets = yield* Effect.forEach(rows, decodeSet);
+        const ids = sets.map((set) => set.id);
+        if (!Array.isArrayNonEmpty(ids)) {
+          return { sets: [], total };
+        }
+        const itemRows = yield* database
+          .select()
+          .from(transactionProposalItems)
+          .where(
+            and(
+              eq(transactionProposalItems.userId, userId),
+              anyOf(transactionProposalItems.setId, ids),
+              eq(transactionProposalItems.teamId, input.team),
+            ),
+          )
+          .orderBy(asc(transactionProposalItems.setId), asc(transactionProposalItems.position))
+          .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
+        const items = yield* Effect.forEach(itemRows, decodeItem);
+        const itemsBySet = new Map<string, Array<ProposalItemRecord>>();
+        for (const item of items) {
+          const current = itemsBySet.get(item.setId) ?? [];
+          current.push(item);
+          itemsBySet.set(item.setId, current);
+        }
+        return {
+          sets: sets.map((set) => ({ set, items: itemsBySet.get(set.id) ?? [] })),
+          total,
+        };
+      });
+
       const loadItem = Effect.fn("TransactionProposalRepository.loadItem")(function* (
         userId: UserId,
         itemId: ProposalItemId,
@@ -923,6 +1002,7 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
         newSetId,
         load,
         loadItem,
+        listForTeam,
         listTeams,
         loadTeams,
         saveChecks,

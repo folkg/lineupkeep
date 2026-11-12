@@ -243,6 +243,47 @@ export type TransactionReviewData = {
   readonly submittedBids?: ReadonlyArray<{ readonly item: string; readonly bid: number }>;
 };
 
+export type TransactionProposalItemView = TransactionReviewItemView & {
+  readonly settled: boolean;
+};
+
+export type TransactionProposalSetSummaryView = {
+  readonly id: string;
+  readonly proposedBy: {
+    readonly kind: "user" | "agent";
+    readonly surface: "app" | "mcp";
+    readonly client?: string;
+  };
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly closed: boolean;
+  readonly reviewPath: string;
+  readonly teams: ReadonlyArray<{
+    readonly team: TransactionReviewTeamView["team"];
+    readonly items: ReadonlyArray<TransactionProposalItemView>;
+  }>;
+};
+
+export type TransactionProposalListData = {
+  readonly status: "ok";
+  readonly team: TransactionReviewTeamView["team"];
+  readonly sets: ReadonlyArray<TransactionProposalSetSummaryView>;
+  readonly page: {
+    readonly returned: number;
+    readonly complete: boolean;
+    readonly remaining: number;
+    readonly next?: string;
+    readonly total?: number;
+  };
+};
+
+export type TransactionProposalListRequest = {
+  readonly team: string;
+  readonly state?: "open" | "closed";
+  readonly cursor?: string;
+  readonly limit?: number;
+};
+
 export type SubmitTransactionReviewRequest = {
   readonly set: string;
   readonly include: ReadonlyArray<string>;

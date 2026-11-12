@@ -21,6 +21,7 @@ import type { TeamsShape } from "@lineupkeep/backend/connections/Teams";
 import { Teams } from "@lineupkeep/backend/connections/Teams";
 import type {
   ProposalSet,
+  ProposalSetList,
   ProposalSetReview,
   ProposeTransactionsResult,
   TransactionProposalsShape,
@@ -411,6 +412,7 @@ it("lists only the read-only connection tool without exposing account identity",
     "revalidate_transaction_proposal_set",
     "withdraw_transaction_proposal_items",
     "get_pending_trade_offers",
+    "list_transaction_proposals",
     "set_lineup",
     "get_lineup_runs",
     "set_team_automation",
@@ -904,10 +906,36 @@ it("proposes a transaction set under the review scope and returns the review lin
       },
     ],
   } satisfies ProposalSetReview;
+  const listedTeam = review.teams[0]?.team;
+  if (listedTeam === undefined) {
+    throw new Error("Expected the review fixture to carry its team");
+  }
+  const listedSets: ProposalSetList = {
+    status: "ok",
+    team: listedTeam,
+    sets: [
+      {
+        id: set.id,
+        proposedBy: set.proposedBy,
+        createdAt: at,
+        updatedAt: at,
+        closed: false,
+        reviewPath: set.reviewPath,
+        teams: [{ team: listedTeam, items: [failedItem] }],
+      },
+    ],
+    page: { returned: 1, complete: true, remaining: 0, total: 1 },
+  };
+  const listedInputs: Array<{ readonly team: string; readonly state?: string }> = [];
   const proposed: Array<{ userId: string; proposer: unknown }> = [];
   let revalidations = 0;
   const proposals: TransactionProposalsShape = {
     ...unavailableProposals,
+    list: (userId, input) => {
+      expect(userId).toBe("reader");
+      listedInputs.push(input);
+      return Effect.succeed(listedSets);
+    },
     propose: (userId, proposer, input) => {
       proposed.push({ userId, proposer });
       if (input.set !== undefined && input.set !== null) {
@@ -1018,6 +1046,33 @@ it("proposes a transaction set under the review scope and returns the review lin
   });
   expect(JSON.stringify(readBody)).toContain(providerRefusal);
   expect(JSON.stringify(readBody)).toContain(illegalDetail);
+
+  const listed = await call(
+    request(
+      "tools/call",
+      { name: "list_transaction_proposals", arguments: { team, state: "open" } },
+      "fantasy",
+    ),
+  );
+  const listedBody = await json(listed);
+  expect(listed.status).toBe(200);
+  expect(listedBody).toMatchObject({
+    result: {
+      isError: false,
+      structuredContent: {
+        status: "ok",
+        sets: [
+          {
+            id: set.id,
+            closed: false,
+            teams: [{ team: { id: team }, items: [{ id: failedItem.id }] }],
+          },
+        ],
+        page: { returned: 1, complete: true, total: 1 },
+      },
+    },
+  });
+  expect(listedInputs).toEqual([{ team, state: "open" }]);
 
   const closed = await call(
     request(
@@ -1535,6 +1590,7 @@ const unavailableProposals: TransactionProposalsShape = {
   withdrawItems: () => Effect.die(new Error("proposals unavailable")),
   dismissItems: () => Effect.die(new Error("proposals unavailable")),
   read: () => Effect.die(new Error("proposals unavailable")),
+  list: () => Effect.die(new Error("proposals unavailable")),
   submit: () => Effect.die(new Error("proposals unavailable")),
   readPendingOffers: () => Effect.die(new Error("proposals unavailable")),
   withdrawTrade: () => Effect.die(new Error("proposals unavailable")),
@@ -1622,6 +1678,7 @@ it("keeps every published description inside its budget", async () => {
     list_connections: 220,
     list_feedback: 220,
     list_teams: 220,
+    list_transaction_proposals: 220,
     propose_transactions: 400,
     revalidate_transaction_proposal_set: 260,
     search_players: 220,

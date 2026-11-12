@@ -162,6 +162,14 @@ it("offers a way back to the teams list and shows the run time in the reader's z
   await expect.element(page.getByText(formatReaderTime(threeDaysAgo))).toBeVisible();
 });
 
+it("links to the team's transaction plans beside its other actions", async () => {
+  using _app = setupTeamDetailPage(team);
+
+  await expect
+    .element(page.getByRole("link", { name: "Transactions" }))
+    .toHaveAttribute("href", `/teams/${teamId}/transactions`);
+});
+
 it("names the league context and keeps quiet states off the page", async () => {
   using _app = setupTeamDetailPage(team);
 
@@ -645,6 +653,11 @@ function setupTeamDetailPage(
       />
     ),
   });
+  const transactionsRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/teams/$teamId/transactions",
+    component: () => <p>Transactions</p>,
+  });
   const feedbackRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/feedback",
@@ -658,7 +671,13 @@ function setupTeamDetailPage(
   const router = createRouter({
     context: { queryClient, sessionRemote },
     history: createMemoryHistory({ initialEntries: [`/teams/${teamSummary.team.id}`] }),
-    routeTree: rootRoute.addChildren([teamsRoute, teamRoute, feedbackRoute, runRoute]),
+    routeTree: rootRoute.addChildren([
+      teamsRoute,
+      teamRoute,
+      transactionsRoute,
+      feedbackRoute,
+      runRoute,
+    ]),
   });
   const host = document.body.appendChild(document.createElement("div"));
   const dispose = render(() => <RouterProvider router={router} />, host);

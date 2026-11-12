@@ -212,3 +212,71 @@ test("shows one league refusal in the review page and in the MCP result", async 
   await expect(page.getByText(detail, { exact: true }).first()).toBeVisible();
   expect(await page.content()).not.toContain("without giving a reason");
 });
+
+test("lists a team's open plans and moves a dismissed one into history", async ({
+  page,
+  services,
+  mcp,
+}) => {
+  await signUp(page);
+  const discovered = Schema.decodeUnknownSync(
+    Schema.Array(
+      Schema.Struct({
+        id: Schema.String,
+        name: Schema.String,
+      }),
+    ),
+  )(
+    await services.exercise(
+      page,
+      "link the provider fake and discover teams",
+      "connectYahooAndDiscoverTeams",
+      {},
+    ),
+  );
+  const football = discovered.find((team) => team.name === "Embedded Browser Team");
+  expect(football, "a football team").toBeDefined();
+  if (football === undefined) {
+    return;
+  }
+
+  const client = await mcp(["fantasy:read", "transactions:review"], page);
+  const roster = await client.callTool("get_rosters", { team: football.id });
+  const drop = Schema.decodeUnknownSync(
+    Schema.Struct({ players: Schema.Array(Schema.Struct({ player: Schema.String })) }),
+  )(roster.structuredContent).players[0]?.player;
+  expect(drop, "a rostered player reference").toBeDefined();
+  if (drop === undefined) {
+    return;
+  }
+
+  const reason = "Free the bench spot before the waiver run.";
+  const proposed = await client.callTool("propose_transactions", {
+    items: [
+      {
+        team: football.id,
+        kind: "drop",
+        adds: [],
+        drops: [drop],
+        reason,
+      },
+    ],
+  });
+  expect(proposed.isError).toBe(false);
+
+  await page.goto(`/teams/${football.id}/transactions`);
+  await expect(page.getByRole("heading", { name: "Open plans" })).toBeVisible();
+  const move = page.getByText("Drop Riverside Receiver", { exact: true });
+  await expect(move).toBeVisible();
+
+  await page.locator("[data-dismiss-item]").first().click();
+  await expect(move).toHaveCount(0);
+
+  const history = page.locator("button[aria-expanded]");
+  await expect(history).toHaveAttribute("aria-expanded", "false");
+  await history.click();
+  await expect(history).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByText("Dismissed", { exact: true })).toBeVisible();
+  await expect(page.getByText("Drop Riverside Receiver", { exact: true })).toBeVisible();
+  await expect(page.getByText("1 closed plan", { exact: true })).toBeVisible();
+});

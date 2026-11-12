@@ -6,8 +6,11 @@ import { TeamAgentNote } from "./AgentNote.ts";
 import { TeamId } from "./FantasyTeam.ts";
 import {
   CounterpartyRef,
+  Cursor,
+  PageLimit,
   PlayerRef,
   QueryCoverage,
+  QueryPage,
   QueryTeam,
   TeamOwnerNote,
   TradeOfferRef,
@@ -410,6 +413,68 @@ export const ProposalSetProvenance = Schema.Struct({
 });
 export type ProposalSetProvenance = typeof ProposalSetProvenance.Type;
 
+const ProposalSetSummary = Schema.Struct({
+  id: ProposalSetId.annotate({
+    description: "The plan's identifier, used by its review page and by a later submission.",
+  }),
+  proposedBy: ProposalSetProvenance.annotate({
+    description: "Who proposed the plan, from which surface, and the client label when recorded.",
+  }),
+  createdAt: Schema.DateTimeUtc.annotate({
+    description: "When the plan was first proposed.",
+  }),
+  updatedAt: Schema.DateTimeUtc.annotate({
+    description: "When the plan last changed.",
+  }),
+  closed: Schema.Boolean.annotate({
+    description: "Whether every move in the plan has ended, so it cannot be submitted again.",
+  }),
+  reviewPath: Schema.NonEmptyString.annotate({
+    description: "The application path of the plan's review and submit page.",
+  }),
+  teams: Schema.Array(
+    Schema.Struct({
+      team: QueryTeam.annotate({
+        description: "The team whose moves this summary carries.",
+      }),
+      items: Schema.Array(ProposalItem).annotate({
+        description: "This team's moves in the plan, with their state and last recorded check.",
+      }),
+    }),
+  ).annotate({
+    description: "The requested team's part of the plan; another team's moves are not repeated.",
+  }),
+});
+type ProposalSetSummary = typeof ProposalSetSummary.Type;
+
+export const ListProposalSetsInput = Schema.Struct({
+  team: TeamId.annotate({
+    description: "The owned team whose plans are listed.",
+  }),
+  state: Schema.optional(Schema.Literals(["open", "closed"])).annotate({
+    description: "`open` lists plans with a move that has not settled; `closed` lists the rest.",
+  }),
+  cursor: Schema.optional(Cursor),
+  limit: Schema.optional(PageLimit),
+});
+export type ListProposalSetsInput = typeof ListProposalSetsInput.Type;
+
+export const ProposalSetList = Schema.Struct({
+  status: Schema.Literal("ok").annotate({
+    description: "The read succeeded.",
+  }),
+  team: QueryTeam.annotate({
+    description: "The team whose plans were listed.",
+  }),
+  sets: Schema.Array(ProposalSetSummary).annotate({
+    description: "Plans on this page, newest change first.",
+  }),
+  page: QueryPage.annotate({
+    description: "How many plans this page returned, whether more remain, and the next cursor.",
+  }),
+});
+export type ProposalSetList = typeof ProposalSetList.Type;
+
 export const ProposalSubmission = Schema.Struct({
   submittedAt: Schema.DateTimeUtc,
   completedAt: Schema.optional(Schema.DateTimeUtc),
@@ -727,6 +792,11 @@ export type TransactionProposalsShape = {
     userId: UserId,
     input: ProposalSetInput,
   ) => Effect.Effect<ProposalSetReview, ProposalError>;
+
+  readonly list: (
+    userId: UserId,
+    input: ListProposalSetsInput,
+  ) => Effect.Effect<ProposalSetList, ProposalError>;
 
   readonly submit: (
     userId: UserId,

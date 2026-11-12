@@ -93,6 +93,15 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
           <TeamAttention team={props.team} />
         </Stack>
         <TeamControls team={props.team} remote={props.remote} />
+        <Inline gap="sm">
+          <ButtonLink
+            params={{ teamId: props.team.team.id }}
+            to="/teams/$teamId/transactions"
+            variant="secondary"
+          >
+            Transactions
+          </ButtonLink>
+        </Inline>
       </Stack>
 
       <Stack as="section" gap="sm" labelledBy="team-activity-title">

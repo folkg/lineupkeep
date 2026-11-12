@@ -67,6 +67,7 @@ test("discovers and authorizes a stateless client through email sign-in, consent
     "revalidate_transaction_proposal_set",
     "withdraw_transaction_proposal_items",
     "get_pending_trade_offers",
+    "list_transaction_proposals",
     "set_lineup",
     "get_lineup_runs",
     "set_team_automation",
@@ -143,6 +144,7 @@ test("serves every tool scope after one consent for the documented scope set", a
     ["revalidate_transaction_proposal_set", { set: randomUUID() }],
     ["withdraw_transaction_proposal_items", { set: randomUUID(), items: [randomUUID()] }],
     ["get_pending_trade_offers", { team }],
+    ["list_transaction_proposals", { team }],
     [
       "set_lineup",
       { requestId: randomUUID(), teams: [{ team, period: { coverage: "week", week: 3 } }] },

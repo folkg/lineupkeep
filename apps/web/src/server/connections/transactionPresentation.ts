@@ -1,11 +1,14 @@
 import type {
   ProposalError,
+  ProposalSetList,
   ProposalSetReview,
   ProposalStaleReason,
 } from "@lineupkeep/backend/connections/TransactionProposals";
 import { DateTime, Schema } from "effect";
 
 import type {
+  TransactionProposalListData,
+  TransactionProposalSetSummaryView,
   TransactionReviewItemView,
   TransactionReviewOrderView,
   TransactionReviewPlayerView,
@@ -40,6 +43,52 @@ export function toTransactionReviewView(review: ProposalSetReview): TransactionR
       closed: review.set.closed,
     },
     teams: review.teams.map(toTeamView),
+  };
+}
+
+export function toTransactionProposalListView(list: ProposalSetList): TransactionProposalListData {
+  return {
+    status: "ok",
+    team: toListTeam(list.team),
+    sets: list.sets.map(toProposalSetSummaryView),
+    page: {
+      returned: list.page.returned,
+      complete: list.page.complete,
+      remaining: list.page.remaining,
+      ...(list.page.next === undefined ? {} : { next: list.page.next }),
+      ...(list.page.total === undefined ? {} : { total: list.page.total }),
+    },
+  };
+}
+
+function toProposalSetSummaryView(
+  set: ProposalSetList["sets"][number],
+): TransactionProposalSetSummaryView {
+  return {
+    id: set.id,
+    proposedBy: {
+      kind: set.proposedBy.kind,
+      surface: set.proposedBy.surface,
+      ...(set.proposedBy.client === undefined ? {} : { client: set.proposedBy.client }),
+    },
+    createdAt: DateTime.formatIso(set.createdAt),
+    updatedAt: DateTime.formatIso(set.updatedAt),
+    closed: set.closed,
+    reviewPath: set.reviewPath,
+    teams: set.teams.map((entry) => ({
+      team: toListTeam(entry.team),
+      items: entry.items.map((item) => ({ ...toItemView(item), settled: item.settled })),
+    })),
+  };
+}
+
+function toListTeam(team: ProposalSetList["team"]): TransactionReviewTeamView["team"] {
+  return {
+    id: team.id,
+    name: team.name,
+    league: team.league,
+    sport: team.sport,
+    season: team.season,
   };
 }
 

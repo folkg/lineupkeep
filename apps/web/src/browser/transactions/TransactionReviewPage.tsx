@@ -497,7 +497,19 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
   return (
     <Stack as="section" gap="sm" labelledBy={headingId()}>
       <Stack gap="xs">
-        <SectionTitle id={headingId()} focusable>
+        <SectionTitle
+          id={headingId()}
+          focusable
+          action={
+            <TextLink
+              params={{ teamId: props.team.team.id }}
+              size="caption"
+              to="/teams/$teamId/transactions"
+            >
+              Transactions
+            </TextLink>
+          }
+        >
           <TextLink params={{ teamId: props.team.team.id }} size="item" to="/teams/$teamId">
             {props.team.team.name}
           </TextLink>

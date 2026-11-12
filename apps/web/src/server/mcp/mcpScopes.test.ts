@@ -66,6 +66,7 @@ it("spends a declared allowance on every shipped tool, smallest for the destruct
     "list_connections",
     "list_feedback",
     "list_teams",
+    "list_transaction_proposals",
     "search_players",
   ]);
   expect(toolCallLimits.destructive.clientMax).toBeLessThan(toolCallLimits.write.clientMax);
@@ -118,6 +119,7 @@ it("reads a connection, a team, and a lineup run under the same read scope", () 
 
   expect(scopeOf.get("list_connections")).toBe("fantasy:read");
   expect(scopeOf.get("list_teams")).toBe("fantasy:read");
+  expect(scopeOf.get("list_transaction_proposals")).toBe("fantasy:read");
   expect(scopeOf.get("get_lineup_runs")).toBe("fantasy:read");
   expect(scopeOf.get("set_lineup")).toBe("lineups:write");
   expect(scopeOf.get("set_team_automation")).toBe("teams:manage");

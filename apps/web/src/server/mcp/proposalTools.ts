@@ -3,9 +3,11 @@ import type { AuthenticatedAgent } from "@lineupkeep/backend/auth/Auth";
 import { providerSessionRefusal } from "@lineupkeep/backend/connections/Connection";
 import { fantasyQueryScopes } from "@lineupkeep/backend/connections/QueryScopes";
 import {
+  ListProposalSetsInput,
   PendingTradeOffersInput,
   PendingTradeOffersResult,
   ProposalSetInput,
+  ProposalSetList,
   ProposalSetReview,
   ProposeTransactionsInput,
   ProposeTransactionsResult,
@@ -105,6 +107,19 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.Destructive, false)
     .annotate(Tool.Idempotent, true)
     .annotate(Tool.OpenWorld, false),
+  Tool.make("list_transaction_proposals", {
+    description:
+      "List one team's plans, newest first, as open or closed, with their moves and review links. It reads stored state only, so each move's check and time are as last recorded.",
+    parameters: ListProposalSetsInput,
+    success: Schema.toCodecJson(ProposalSetList),
+    failure: ToolFailure,
+  })
+    .annotate(RequiredScope, fantasyQueryScopes.read)
+    .annotate(Tool.Title, "List transaction plans for a team")
+    .annotate(Tool.Readonly, true)
+    .annotate(Tool.Destructive, false)
+    .annotate(Tool.Idempotent, true)
+    .annotate(Tool.OpenWorld, false),
 );
 
 export function proposalToolHandlers(
@@ -148,6 +163,7 @@ export function proposalToolHandlers(
           proposals.withdrawItems(agent.userId, input).pipe(Effect.map(toReview), mapFailure),
         get_pending_trade_offers: (input) =>
           proposals.readPendingOffers(agent.userId, input).pipe(mapFailure),
+        list_transaction_proposals: (input) => proposals.list(agent.userId, input).pipe(mapFailure),
       });
     }),
   );

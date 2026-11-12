@@ -53,6 +53,7 @@ import {
   ProposalSetClosed,
   ProposalSetNotFound,
   ProposalSetReview,
+  ProposalTeamNotFound,
   TransactionProposals,
 } from "./TransactionProposals.ts";
 
@@ -5470,6 +5471,240 @@ it.effect("dismisses a failed move so its plan can close", () =>
     assert.isTrue(after.settled);
     assert.strictEqual(after.outcomeDetail, "No longer needed.");
     assert.isTrue(dismissed.set.closed);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("lists a team's plans newest first and pages without duplicates or gaps", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const reasons = ["First plan.", "Second plan.", "Third plan."];
+    const ids: Array<string> = [];
+    for (const reason of reasons) {
+      const created = yield* proposals.propose(owner, proposer, {
+        items: [
+          {
+            team: redLine,
+            kind: "drop",
+            adds: [],
+            drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+            reason,
+          },
+        ],
+      });
+      ids.push(created.set.id);
+      yield* TestClock.adjust("1 minute");
+    }
+
+    const first = yield* proposals.list(owner, { team: redLine, limit: 2 });
+    assert.deepStrictEqual(
+      first.sets.map((set) => set.id),
+      [ids[2], ids[1]],
+    );
+    assert.strictEqual(first.page.total, 3);
+    assert.strictEqual(first.page.returned, 2);
+    assert.strictEqual(first.page.remaining, 1);
+    assert.isFalse(first.page.complete);
+    assert.isDefined(first.page.next);
+    assert.deepStrictEqual(
+      first.sets.map((set) => set.teams.map((entry) => [entry.team.id, entry.items.length])),
+      [[[redLine, 1]], [[redLine, 1]]],
+    );
+
+    const second = yield* proposals.list(owner, {
+      team: redLine,
+      limit: 2,
+      cursor: first.page.next,
+    });
+    assert.deepStrictEqual(
+      second.sets.map((set) => set.id),
+      [ids[0]],
+    );
+    assert.strictEqual(second.page.returned, 1);
+    assert.strictEqual(second.page.remaining, 0);
+    assert.isTrue(second.page.complete);
+    assert.isUndefined(second.page.next);
+    assert.deepStrictEqual(
+      [...first.sets, ...second.sets].map((set) => set.id),
+      [...ids].reverse(),
+    );
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("filters open and closed plans and keeps a failed move open", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seedTwoTeams(fake);
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const openPlan = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          reason: "This plan stays open.",
+        },
+      ],
+    });
+    const failedPlan = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          reason: "This move fails.",
+        },
+      ],
+    });
+    const closedPlan = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          reason: "This plan closes.",
+        },
+      ],
+    });
+
+    const failedItem = Array.getUnsafe(
+      itemsOf(yield* proposals.read(owner, { set: failedPlan.set.id })),
+      0,
+    );
+    yield* fake.setTransactionAction("reject", "That player is locked.");
+    const submitted = yield* proposals.submit(owner, {
+      set: failedPlan.set.id,
+      include: [failedItem.id],
+    });
+    const failed = Array.getUnsafe(itemsOf(submitted), 0);
+    assert.strictEqual(failed.state, "failed");
+    assert.isFalse(failed.settled);
+    assert.isFalse(submitted.set.closed);
+
+    const closedItem = Array.getUnsafe(
+      itemsOf(yield* proposals.read(owner, { set: closedPlan.set.id })),
+      0,
+    );
+    yield* proposals.dismissItems(owner, {
+      set: closedPlan.set.id,
+      items: [closedItem.id],
+    });
+
+    const openItem = Array.getUnsafe(
+      itemsOf(yield* proposals.read(owner, { set: openPlan.set.id })),
+      0,
+    );
+    const open = yield* proposals.list(owner, { team: redLine, state: "open" });
+    assert.deepStrictEqual(
+      open.sets.map((set) => set.id).sort(),
+      [failedPlan.set.id, openPlan.set.id].sort(),
+    );
+    assert.deepStrictEqual(
+      open.sets
+        .flatMap((set) => set.teams.flatMap((entry) => entry.items))
+        .map((item) => item.id)
+        .sort(),
+      [failedItem.id, openItem.id].sort(),
+    );
+
+    const closed = yield* proposals.list(owner, { team: redLine, state: "closed" });
+    assert.deepStrictEqual(
+      closed.sets.map((set) => set.id),
+      [closedPlan.set.id],
+    );
+
+    const dismissed = yield* proposals.dismissItems(owner, {
+      set: failedPlan.set.id,
+      items: [failedItem.id],
+      reason: "No longer needed.",
+    });
+    assert.isTrue(dismissed.set.closed);
+
+    const openAfter = yield* proposals.list(owner, { team: redLine, state: "open" });
+    assert.deepStrictEqual(
+      openAfter.sets.map((set) => set.id),
+      [openPlan.set.id],
+    );
+
+    const closedAfter = yield* proposals.list(owner, { team: redLine, state: "closed" });
+    assert.deepStrictEqual(
+      closedAfter.sets.map((set) => set.id).sort(),
+      [closedPlan.set.id, failedPlan.set.id].sort(),
+    );
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("lists a two-team plan under each team with only its own summary", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seedTwoTeams(fake);
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const blueLine = teamId(seeded, "nhl.l.1.t.2");
+    const created = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          reason: "Drop the red center.",
+        },
+        {
+          team: blueLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          reason: "Drop the blue center.",
+        },
+      ],
+    });
+
+    const red = yield* proposals.list(owner, { team: redLine });
+    const blue = yield* proposals.list(owner, { team: blueLine });
+    for (const [list, team, reason] of [
+      [red, redLine, "Drop the red center."],
+      [blue, blueLine, "Drop the blue center."],
+    ] as const) {
+      assert.strictEqual(list.sets.length, 1);
+      const summary = Array.getUnsafe(list.sets, 0);
+      assert.strictEqual(summary.id, created.set.id);
+      assert.strictEqual(summary.teams.length, 1);
+      const entry = Array.getUnsafe(summary.teams, 0);
+      assert.strictEqual(entry.team.id, team);
+      assert.deepStrictEqual(
+        entry.items.map((item) => [item.team, item.reason]),
+        [[team, reason]],
+      );
+    }
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("returns an empty page for a quiet team and refuses another user's team", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+
+    const quiet = yield* proposals.list(owner, { team: redLine });
+    assert.deepStrictEqual(quiet.sets, []);
+    assert.strictEqual(quiet.page.returned, 0);
+    assert.strictEqual(quiet.page.total, 0);
+    assert.strictEqual(quiet.page.remaining, 0);
+    assert.isTrue(quiet.page.complete);
+
+    const foreign = yield* Effect.flip(proposals.list(other, { team: redLine }));
+    assert.instanceOf(foreign, ProposalTeamNotFound);
   }).pipe(Effect.provide(TestLayer)),
 );
 

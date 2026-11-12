@@ -50,6 +50,9 @@ it("renders a two-team proposal, a quiet team, and one disabled action", async (
   await expect.element(page.getByText("Alex Vance", { exact: true })).toBeVisible();
   await expect.element(page.getByText("Cover the receiver spot before Sunday.")).toBeVisible();
   await expect.element(page.getByText(/Checked against current state/u)).toBeVisible();
+  await expect
+    .element(page.getByRole("link", { name: "Transactions" }).first())
+    .toHaveAttribute("href", `/teams/${alphaId}/transactions`);
 
   await expect
     .element(page.getByRole("heading", { name: "Teams with nothing proposed" }))
@@ -1562,6 +1565,7 @@ function setupReviewPage(
   const queryClient = createQueryClient();
   const remote: TransactionRemote = {
     read: () => Promise.resolve(review),
+    list: () => Promise.reject(new Error("Unexpected plan list read")),
     submit: options.submit ?? (() => Promise.resolve({ review })),
     dismiss: options.dismiss ?? (() => Promise.resolve({ outcome: "dismissed" as const, review })),
     withdraw:
@@ -1597,6 +1601,11 @@ function setupReviewPage(
     path: "/teams/$teamId",
     component: () => <p>Team</p>,
   });
+  const teamTransactionsRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/teams/$teamId/transactions",
+    component: () => <p>Transactions</p>,
+  });
   const teamsRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/teams",
@@ -1610,7 +1619,13 @@ function setupReviewPage(
   const router = createRouter({
     context: { queryClient, sessionRemote },
     history: createMemoryHistory({ initialEntries: [`/transactions/${review.set.id}`] }),
-    routeTree: rootRoute.addChildren([reviewRoute, teamRoute, teamsRoute, accountRoute]),
+    routeTree: rootRoute.addChildren([
+      reviewRoute,
+      teamRoute,
+      teamTransactionsRoute,
+      teamsRoute,
+      accountRoute,
+    ]),
   });
   const host = document.body.appendChild(document.createElement("div"));
   const dispose = render(() => <RouterProvider router={router} />, host);

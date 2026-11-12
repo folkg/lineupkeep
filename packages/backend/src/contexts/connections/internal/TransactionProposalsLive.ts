@@ -1,4 +1,4 @@
-import { Array, DateTime, Effect, Layer, Result, Schema } from "effect";
+import { Array, Crypto, DateTime, Effect, Layer, Result, Schema } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
@@ -69,6 +69,7 @@ import type {
 } from "#contexts/connections/TransactionProposals.ts";
 import {
   DismissProposalItemsInput,
+  ListProposalSetsInput,
   PendingTradeOffersResult as PendingTradeOffersResultSchema,
   ProposalConnectionNotReady,
   ProposalContentInvalid,
@@ -79,6 +80,7 @@ import {
   ProposalPersistenceFailed,
   ProposalProviderUnavailable,
   ProposalSetClosed,
+  ProposalSetList as ProposalSetListSchema,
   ProposalSetNotFound,
   ProposalSetReview as ProposalSetReviewSchema,
   ProposalSubmissionInProgress,
@@ -137,6 +139,8 @@ const withdrawInvalidDetail =
   "A withdrawal names one proposal set and one to twenty of its move ids. Reload the set and withdraw again.";
 const dismissInvalidDetail =
   "A dismissal names one plan and one to twenty-five of its moves, with an optional reason of at most 500 characters. Reload the plan and dismiss again.";
+const listInvalidDetail =
+  "A plan list names one owned team, an optional state of `open` or `closed`, an optional page cursor, and a limit from 1 to 50. Reload the team and try again.";
 const closedPlanDetail =
   "Every move in this plan has been executed, dismissed, or withdrawn, so the plan is closed and takes no new moves or submissions. Propose a fresh set to start a new plan.";
 const skippedMovementDetail =
@@ -244,6 +248,7 @@ export const TransactionProposalsLive = Layer.effect(
     const registry = yield* ProviderRegistry;
     const tokens = yield* QueryTokens;
     const lineups = yield* LineupRuns;
+    const crypto = yield* Crypto.Crypto;
 
     const tradeProposalsOf = (
       teams: ReadonlyArray<ProposalTeamRecord>,
@@ -887,6 +892,102 @@ export const TransactionProposalsLive = Layer.effect(
           undefined,
           tradeProposalsOf(teams),
         );
+      },
+    );
+
+    const list: TransactionProposals["Service"]["list"] = Effect.fn("TransactionProposals.list")(
+      function* (userId: UserId, input) {
+        const decoded = yield* Schema.decodeEffect(ListProposalSetsInput)(input).pipe(
+          Effect.mapError(() => ProposalContentInvalid.make({ detail: listInvalidDetail })),
+        );
+        const state = decoded.state ?? "open";
+        const teams = yield* repository.loadTeams(userId, [decoded.team]);
+        const team = teams[0];
+        if (team === undefined) {
+          return yield* ProposalTeamNotFound.make({ team: decoded.team });
+        }
+        const fingerprintValue = yield* crypto
+          .digest(
+            "SHA-256",
+            new TextEncoder().encode(
+              [
+                "list_proposal_sets",
+                `team=${decoded.team}`,
+                `state=${state}`,
+                "order=updatedAt,id",
+              ].join("|"),
+            ),
+          )
+          .pipe(
+            Effect.map((bytes) =>
+              Array.fromIterable(bytes)
+                .map((byte) => byte.toString(16).padStart(2, "0"))
+                .join(""),
+            ),
+            Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })),
+          );
+        const now = yield* DateTime.now;
+        const offset =
+          decoded.cursor === undefined
+            ? 0
+            : yield* tokens
+                .openCursor({
+                  userId,
+                  fingerprint: fingerprintValue,
+                  cursor: decoded.cursor,
+                  now,
+                })
+                .pipe(
+                  Effect.mapError(() => ProposalContentInvalid.make({ detail: listInvalidDetail })),
+                );
+        const listed = yield* repository.listForTeam(userId, {
+          team: decoded.team,
+          state,
+          offset,
+          limit: decoded.limit ?? 20,
+        });
+        if (offset > listed.total) {
+          return yield* ProposalContentInvalid.make({ detail: listInvalidDetail });
+        }
+        const sets = yield* Effect.forEach(listed.sets, ({ set, items }) =>
+          Effect.gen(function* () {
+            const views = yield* Effect.forEach(items, (item) =>
+              toItem(tokens, userId, team, item, undefined, item.reserveMove, undefined),
+            );
+            return {
+              id: set.id,
+              proposedBy: set.proposedBy,
+              createdAt: set.createdAt,
+              updatedAt: set.updatedAt,
+              closed: state === "closed",
+              reviewPath: reviewPath(set.id),
+              teams: [{ team: teamView(team), items: views }],
+            };
+          }),
+        );
+        const returned = sets.length;
+        const remaining = Math.max(0, listed.total - offset - returned);
+        const next =
+          remaining === 0
+            ? undefined
+            : yield* tokens.sealCursor({
+                userId,
+                fingerprint: fingerprintValue,
+                offset: offset + returned,
+                now,
+              });
+        return yield* Schema.decodeEffect(ProposalSetListSchema)({
+          status: "ok",
+          team: teamView(team),
+          sets,
+          page: {
+            returned,
+            complete: remaining === 0,
+            remaining,
+            ...(next === undefined ? {} : { next }),
+            total: listed.total,
+          },
+        }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
       },
     );
 
@@ -2338,6 +2439,7 @@ export const TransactionProposalsLive = Layer.effect(
       withdrawItems,
       dismissItems,
       read,
+      list,
       submit,
       readPendingOffers,
       withdrawTrade,

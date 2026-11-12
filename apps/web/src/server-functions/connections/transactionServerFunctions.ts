@@ -2,6 +2,7 @@ import { TeamId } from "@lineupkeep/backend/connections/FantasyTeam";
 import { TradeOfferRef } from "@lineupkeep/backend/connections/QueryValues";
 import {
   DismissProposalItemsInput,
+  ListProposalSetsInput,
   ProposalItemId,
   ProposalSetId,
   TransactionProposals,
@@ -12,6 +13,7 @@ import { Effect, Schema } from "effect";
 
 import type {
   DismissTransactionProposalData,
+  TransactionProposalListData,
   TransactionReviewData,
   WithdrawTradeData,
 } from "#contracts/connections/transactionContract.ts";
@@ -19,6 +21,7 @@ import { runUseCase } from "#server/backendEntry.ts";
 import {
   TransactionInputInvalid,
   mapTransactionReviewError,
+  toTransactionProposalListView,
   toTransactionReviewView,
 } from "#server/connections/transactionPresentation.ts";
 
@@ -89,6 +92,36 @@ export const submitTransactionReviewServerFn = createServerFn({ method: "POST" }
             review: toTransactionReviewView(submission),
             submittedBids: submission.submittedBids,
           } satisfies TransactionReviewData;
+        }),
+      (error) =>
+        error._tag === "TransactionInputInvalid"
+          ? { type: "transactions.input_invalid", outcome: "rejected" }
+          : mapTransactionReviewError(error),
+    );
+  });
+
+export const listTransactionProposalSetsServerFn = createServerFn({ method: "POST" })
+  .validator(
+    (raw: {
+      readonly team: string;
+      readonly state?: "open" | "closed";
+      readonly cursor?: string;
+      readonly limit?: number;
+    }) => Schema.decodeResult(ListProposalSetsInput)(raw),
+  )
+  .handler(({ data }) => {
+    const request = getRequest();
+    return runUseCase(
+      request,
+      "transactions.list",
+      (userId) =>
+        Effect.gen(function* () {
+          const input = yield* Effect.fromResult(data).pipe(
+            Effect.mapError(() => TransactionInputInvalid.make({})),
+          );
+          const proposals = yield* TransactionProposals;
+          const list = yield* proposals.list(userId, input);
+          return toTransactionProposalListView(list) satisfies TransactionProposalListData;
         }),
       (error) =>
         error._tag === "TransactionInputInvalid"

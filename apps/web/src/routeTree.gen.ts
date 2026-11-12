@@ -27,6 +27,7 @@ import { Route as ApiAccountExportRouteImport } from './routes/api/account/expor
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiDevProviderLoginRouteImport } from './routes/api/dev/provider-login'
 import { Route as ApiInternalLineupWorkerRouteImport } from './routes/api/internal/lineup-worker'
+import { Route as TeamsTeamIdTransactionsRouteImport } from './routes/teams.$teamId.transactions'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -118,6 +119,11 @@ const ApiInternalLineupWorkerRoute = ApiInternalLineupWorkerRouteImport.update({
   path: '/api/internal/lineup-worker',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TeamsTeamIdTransactionsRoute = TeamsTeamIdTransactionsRouteImport.update({
+  id: '/transactions',
+  path: '/transactions',
+  getParentRoute: () => TeamsTeamIdRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -131,13 +137,14 @@ export interface FileRoutesByFullPath {
   '/.well-known/$': typeof DotwellKnownSplatRoute
   '/api/telemetry': typeof ApiTelemetryRoute
   '/runs/$runId': typeof RunsRunIdRoute
-  '/teams/$teamId': typeof TeamsTeamIdRoute
+  '/teams/$teamId': typeof TeamsTeamIdRouteWithChildren
   '/transactions/$setId': typeof TransactionsSetIdRoute
   '/teams/': typeof TeamsIndexRoute
   '/api/account/export': typeof ApiAccountExportRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/dev/provider-login': typeof ApiDevProviderLoginRoute
   '/api/internal/lineup-worker': typeof ApiInternalLineupWorkerRoute
+  '/teams/$teamId/transactions': typeof TeamsTeamIdTransactionsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -151,13 +158,14 @@ export interface FileRoutesByTo {
   '/.well-known/$': typeof DotwellKnownSplatRoute
   '/api/telemetry': typeof ApiTelemetryRoute
   '/runs/$runId': typeof RunsRunIdRoute
-  '/teams/$teamId': typeof TeamsTeamIdRoute
+  '/teams/$teamId': typeof TeamsTeamIdRouteWithChildren
   '/transactions/$setId': typeof TransactionsSetIdRoute
   '/teams': typeof TeamsIndexRoute
   '/api/account/export': typeof ApiAccountExportRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/dev/provider-login': typeof ApiDevProviderLoginRoute
   '/api/internal/lineup-worker': typeof ApiInternalLineupWorkerRoute
+  '/teams/$teamId/transactions': typeof TeamsTeamIdTransactionsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -172,13 +180,14 @@ export interface FileRoutesById {
   '/.well-known/$': typeof DotwellKnownSplatRoute
   '/api/telemetry': typeof ApiTelemetryRoute
   '/runs/$runId': typeof RunsRunIdRoute
-  '/teams/$teamId': typeof TeamsTeamIdRoute
+  '/teams/$teamId': typeof TeamsTeamIdRouteWithChildren
   '/transactions/$setId': typeof TransactionsSetIdRoute
   '/teams/': typeof TeamsIndexRoute
   '/api/account/export': typeof ApiAccountExportRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/dev/provider-login': typeof ApiDevProviderLoginRoute
   '/api/internal/lineup-worker': typeof ApiInternalLineupWorkerRoute
+  '/teams/$teamId/transactions': typeof TeamsTeamIdTransactionsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -201,6 +210,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/dev/provider-login'
     | '/api/internal/lineup-worker'
+    | '/teams/$teamId/transactions'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -221,6 +231,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/dev/provider-login'
     | '/api/internal/lineup-worker'
+    | '/teams/$teamId/transactions'
   id:
     | '__root__'
     | '/'
@@ -241,6 +252,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/dev/provider-login'
     | '/api/internal/lineup-worker'
+    | '/teams/$teamId/transactions'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -255,7 +267,7 @@ export interface RootRouteChildren {
   DotwellKnownSplatRoute: typeof DotwellKnownSplatRoute
   ApiTelemetryRoute: typeof ApiTelemetryRoute
   RunsRunIdRoute: typeof RunsRunIdRoute
-  TeamsTeamIdRoute: typeof TeamsTeamIdRoute
+  TeamsTeamIdRoute: typeof TeamsTeamIdRouteWithChildren
   TransactionsSetIdRoute: typeof TransactionsSetIdRoute
   TeamsIndexRoute: typeof TeamsIndexRoute
   ApiAccountExportRoute: typeof ApiAccountExportRoute
@@ -392,8 +404,27 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof ApiInternalLineupWorkerRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/teams/$teamId/transactions': {
+      id: '/teams/$teamId/transactions'
+      path: '/transactions'
+      fullPath: '/teams/$teamId/transactions'
+      preLoaderRoute: typeof TeamsTeamIdTransactionsRouteImport
+      parentRoute: typeof TeamsTeamIdRoute
+    }
   }
 }
+
+interface TeamsTeamIdRouteChildren {
+  TeamsTeamIdTransactionsRoute: typeof TeamsTeamIdTransactionsRoute
+}
+
+const TeamsTeamIdRouteChildren: TeamsTeamIdRouteChildren = {
+  TeamsTeamIdTransactionsRoute: TeamsTeamIdTransactionsRoute,
+}
+
+const TeamsTeamIdRouteWithChildren = TeamsTeamIdRoute._addFileChildren(
+  TeamsTeamIdRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -407,7 +438,7 @@ const rootRouteChildren: RootRouteChildren = {
   DotwellKnownSplatRoute: DotwellKnownSplatRoute,
   ApiTelemetryRoute: ApiTelemetryRoute,
   RunsRunIdRoute: RunsRunIdRoute,
-  TeamsTeamIdRoute: TeamsTeamIdRoute,
+  TeamsTeamIdRoute: TeamsTeamIdRouteWithChildren,
   TransactionsSetIdRoute: TransactionsSetIdRoute,
   TeamsIndexRoute: TeamsIndexRoute,
   ApiAccountExportRoute: ApiAccountExportRoute,

@@ -37,6 +37,10 @@ export const transactionMutations = {
             transactionQueries.reviewKey(data.review.set.id),
             data.review,
           );
+          void context.client.invalidateQueries({
+            queryKey: transactionQueries.listAll(),
+            refetchType: "none",
+          });
         }
       },
     }),
@@ -63,4 +67,8 @@ function storeSubmittedReview(
   context: MutationFunctionContext,
 ): void {
   void context.client.setQueryData(transactionQueries.reviewKey(data.review.set.id), data.review);
+  void context.client.invalidateQueries({
+    queryKey: transactionQueries.listAll(),
+    refetchType: "none",
+  });
 }

@@ -2,6 +2,8 @@ import type {
   DismissTransactionProposalData,
   DismissTransactionProposalRequest,
   SubmitTransactionReviewRequest,
+  TransactionProposalListData,
+  TransactionProposalListRequest,
   TransactionReviewData,
   TransactionReviewView,
   WithdrawTradeData,
@@ -9,6 +11,7 @@ import type {
 } from "#contracts/connections/transactionContract.ts";
 import {
   dismissTransactionProposalItemsServerFn,
+  listTransactionProposalSetsServerFn,
   readTransactionReviewServerFn,
   submitTransactionReviewServerFn,
   withdrawTradeServerFn,
@@ -20,6 +23,10 @@ export const transactionRemote: TransactionRemote = {
   read: (input, options) =>
     readTransactionReviewServerFn({ data: input, signal: options?.signal }).then(
       (result) => requireTransactionSuccess(result).review,
+    ),
+  list: (input, options) =>
+    listTransactionProposalSetsServerFn({ data: input, signal: options?.signal }).then((result) =>
+      requireTransactionSuccess(result),
     ),
   submit: (input, options) =>
     submitTransactionReviewServerFn({ data: input, signal: options?.signal }).then((result) =>
@@ -40,6 +47,10 @@ export type TransactionRemote = {
     input: { readonly set: string },
     options?: { readonly signal?: AbortSignal },
   ) => Promise<TransactionReviewView>;
+  readonly list: (
+    input: TransactionProposalListRequest,
+    options?: { readonly signal?: AbortSignal },
+  ) => Promise<TransactionProposalListData>;
   readonly submit: (
     input: SubmitTransactionReviewRequest,
     options?: { readonly signal?: AbortSignal },

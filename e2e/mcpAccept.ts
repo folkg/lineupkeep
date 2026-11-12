@@ -823,6 +823,7 @@ function callArguments(tool: string, team: string): Record<string, unknown> {
     case "withdraw_transaction_proposal_items":
       return { set: randomUUID(), items: [randomUUID()] };
     case "get_pending_trade_offers":
+    case "list_transaction_proposals":
       return { team: randomUUID() };
     case "set_lineup":
       return {
