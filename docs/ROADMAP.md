@@ -199,7 +199,7 @@ and `timing.rosterChange` publishes a sourced rule. The league player pool is da
 `type=date`; the shape was probed and recorded in
 [RESEARCH.md](fantasy-manager/RESEARCH.md#pool-player-schedule-shapes-2026-10-31), but the public
 pool selector was removed because it projected one date's opponent rather than filtering the pool and
-no client used it. Pool rows carry games remaining only when `includeGames` is requested. The summary
+no client used it. Pool rows carry game days or scoring weeks only when `gamesWindow` asks for them. The summary
 compacts category rows, pairs matchup categories, and has its own 20 KiB target/28 KiB hard ceiling;
 the six-group call returns seven roster rows on the 13-team league.
 

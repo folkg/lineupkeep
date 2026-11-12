@@ -40,6 +40,7 @@ import type {
   ProviderPlayerPeriod,
   ProviderPlayerSearchInput,
   ProviderPlayerWeekFact,
+  ProviderPlayerWeekOpponent,
   ProviderReadFailure,
   ProviderRosterChange,
   ProviderRosterConstraints,
@@ -511,6 +512,53 @@ export const yahooProvider = Effect.gen(function* () {
     return weeks;
   });
 
+  const readPlayerWeekOpponents = Effect.fn("YahooProvider.readPlayerWeekOpponents")(
+    function* (input: {
+      readonly provider: ProviderKey;
+      readonly session: Redacted.Redacted<string>;
+      readonly providerLeagueKey: string;
+      readonly providerPlayerKeys: ReadonlyArray<string>;
+      readonly week: ProviderScoringWeek;
+    }) {
+      yield* Effect.annotateCurrentSpan("provider.operation", "read_player_week_opponents");
+      const cookie = yield* sessionCookie(input, "read_player_week_opponents");
+      const leagueKey = yield* ValidLeagueKey(
+        input.providerLeagueKey,
+        "read_player_week_opponents",
+      );
+      const playerKeys = yield* ValidBatchPlayerKeys(
+        input.providerPlayerKeys,
+        "read_player_week_opponents",
+      );
+      const weeks: Array<ProviderPlayerWeekOpponent> = [];
+      for (let index = 0; index < playerKeys.length; index += maximumSelectedPlayers) {
+        const chunk = playerKeys.slice(index, index + maximumSelectedPlayers);
+        const details = yield* readPlayerDetailsRawThroughSdk(
+          sdk,
+          "read_player_week_opponents",
+          cookie,
+          {
+            leagueKey,
+            playerKeys: chunk,
+            fields: ["opponent"],
+            week: input.week.week,
+          },
+        );
+        for (const player of details) {
+          const opponent = scheduledOpponent(player.opponent);
+          weeks.push({
+            providerPlayerKey: player.playerKey,
+            week: input.week.week,
+            plays: opponent !== undefined,
+            opponent,
+          });
+        }
+      }
+      yield* Effect.annotateCurrentSpan("provider.player_week_count", weeks.length);
+      return weeks;
+    },
+  );
+
   const readPlayerHistory = Effect.fn("YahooProvider.readPlayerHistory")(function* (
     input: ProviderSessionMaterial & {
       readonly providerLeagueKey: string;
@@ -787,6 +835,7 @@ export const yahooProvider = Effect.gen(function* () {
     readPlayerDetails,
     readPlayerHistory,
     readPlayerWeeks,
+    readPlayerWeekOpponents,
     searchPlayers,
     readMatchups,
     readTransactions,

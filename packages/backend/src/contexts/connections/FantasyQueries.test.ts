@@ -1667,6 +1667,126 @@ it.effect("states each pool row's week, opponent, and projected rank", () =>
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+it.effect("reads a pool's games by scoring week over several weeks", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    yield* fake.setSearchPlayers([
+      searchFixture({
+        providerPlayerKey: "461.p.20001",
+        name: "Playing Receiver",
+        availability: "free_agent",
+        actualRank: 4,
+        overallRank: 4,
+        statValue: null,
+        percentOwned: 22,
+        percentOwnedDelta: 3,
+        percentStarted: 10,
+        percentStartedChange: 1,
+        proTeam: "SEA",
+      }),
+      searchFixture({
+        providerPlayerKey: "461.p.20002",
+        name: "Bye Receiver",
+        availability: "free_agent",
+        actualRank: 5,
+        overallRank: 5,
+        statValue: null,
+        percentOwned: 71,
+        percentOwnedDelta: -22,
+        percentStarted: 21,
+        percentStartedChange: -69,
+        proTeam: "PIT",
+      }),
+    ]);
+    yield* fake.setPlayerWeeks([
+      {
+        providerPlayerKey: "461.p.20001",
+        week: 3,
+        plays: true,
+        opponent: { opponent: "SEA", home: false },
+        projectedRank: 9,
+      },
+      {
+        providerPlayerKey: "461.p.20002",
+        week: 3,
+        plays: false,
+        opponent: undefined,
+        projectedRank: undefined,
+      },
+      {
+        providerPlayerKey: "461.p.20001",
+        week: 4,
+        plays: true,
+        opponent: { opponent: "LA", home: true },
+        projectedRank: undefined,
+      },
+      {
+        providerPlayerKey: "461.p.20002",
+        week: 4,
+        plays: true,
+        opponent: { opponent: "CIN", home: true },
+        projectedRank: undefined,
+      },
+    ]);
+
+    const current = yield* queries.searchPlayers(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      sort: "name",
+      gamesWindow: { kind: "current" },
+    });
+    assert.strictEqual(current.status, "ok");
+    if (current.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(
+      current.players.map((player) => [player.name, player.gameWeeks]),
+      [
+        ["Bye Receiver", { status: "available", weeks: [] }],
+        [
+          "Playing Receiver",
+          { status: "available", weeks: [{ week: 3, opponent: "SEA", home: false }] },
+        ],
+      ],
+    );
+
+    const search = yield* queries.searchPlayers(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      sort: "name",
+      gamesWindow: { kind: "next_weeks", weeks: 2 },
+    });
+    assert.strictEqual(search.status, "ok");
+    if (search.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(search.gamesWindow?.status, "available");
+    if (search.gamesWindow?.status === "available" && search.gamesWindow.basis === "week") {
+      assert.deepStrictEqual(search.gamesWindow.weeks, { first: 3, last: 4 });
+      assert.isTrue(DateTime.isDateTime(search.gamesWindow.observedAt));
+    }
+    assert.deepStrictEqual(
+      search.players.map((player) => [player.name, player.gameWeeks]),
+      [
+        [
+          "Bye Receiver",
+          { status: "available", weeks: [{ week: 4, opponent: "CIN", home: true }] },
+        ],
+        [
+          "Playing Receiver",
+          {
+            status: "available",
+            weeks: [
+              { week: 3, opponent: "SEA", home: false },
+              { week: 4, opponent: "LA", home: true },
+            ],
+          },
+        ],
+      ],
+    );
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
 it.effect("orders the pool by a recent window and states each row's rank", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
@@ -1924,7 +2044,7 @@ it.effect("refuses a recent window a season order cannot answer with", () =>
       games: {
         status: "scoring_week",
         detail:
-          "This league counts games by scoring week; pass `includeGames: true` to ask about games.",
+          'This league counts games by scoring week. Ask `search_players` with `gamesWindow: {kind: "current"}` or `{kind: "next_weeks", weeks: N}`; it refuses a date window.',
       },
       detail: "This league publishes a recent-form player rank for the last 4 weeks.",
     });
@@ -2184,146 +2304,151 @@ it.effect("returns every explicitly requested player reference in one response",
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect("counts a pool player's games from its professional team key without a roster row", () =>
-  Effect.gen(function* () {
-    const queries = yield* FantasyQueries;
-    const fake = yield* FakeProviderWorld;
-    const games = yield* FakeGameSourceWorld;
-    const store = yield* ScheduleObservationRepository;
-    const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
-      league: hockeyLeagueFixture,
-    });
-    const teamId = Array.getUnsafe(seeded, 0).id;
-    yield* fake.setMatchups([matchupFixture({ period: 3 })]);
-    const provider = decodeProviderKey("yahoo");
-    const observedAt = DateTime.makeUnsafe("2026-10-19T12:00:00.000Z");
-    yield* store.recordTeamIdentities([
-      {
-        sport: "hockey",
-        source: provider,
-        sourceTeamIdentifier: "TOR",
-        provider,
-        providerTeamKey: "nhl.t.21",
-        observedAt,
-      },
-      {
-        sport: "hockey",
-        source: provider,
-        sourceTeamIdentifier: "BOS",
-        provider,
-        providerTeamKey: "nhl.t.1",
-        observedAt,
-      },
-    ]);
-    yield* fake.setSearchPlayers([
-      searchFixture({
-        providerPlayerKey: "465.p.1",
-        name: "Keyed Skater",
-        availability: "free_agent",
-        actualRank: 1,
-        overallRank: 1,
-        statValue: null,
-        percentOwned: 1,
-        percentOwnedDelta: 0,
-        percentStarted: 0,
-        percentStartedChange: 0,
-        proTeam: "TOR",
-        proTeamKey: "nhl.t.21",
-      }),
-      searchFixture({
-        providerPlayerKey: "465.p.2",
-        name: "Pair Skater",
-        availability: "free_agent",
-        actualRank: 2,
-        overallRank: 2,
-        statValue: null,
-        percentOwned: 1,
-        percentOwnedDelta: 0,
-        percentStarted: 0,
-        percentStartedChange: 0,
-        proTeam: "BOS",
-      }),
-      searchFixture({
-        providerPlayerKey: "465.p.3",
-        name: "Unmapped Skater",
-        availability: "free_agent",
-        actualRank: 3,
-        overallRank: 3,
-        statValue: null,
-        percentOwned: 1,
-        percentOwnedDelta: 0,
-        percentStarted: 0,
-        percentStartedChange: 0,
-        proTeam: "ZZZ",
-      }),
-      searchFixture({
-        providerPlayerKey: "465.p.4",
-        name: "Keyed Unresolved Skater",
-        availability: "free_agent",
-        actualRank: 4,
-        overallRank: 4,
-        statValue: null,
-        percentOwned: 1,
-        percentOwnedDelta: 0,
-        percentStarted: 0,
-        percentStartedChange: 0,
-        proTeam: "ZZZ",
-        proTeamKey: "nhl.t.13",
-      }),
-    ]);
-    yield* games.setGames([
-      calendarGame("g1", "2026-10-19", "TOR", "BOS"),
-      calendarGame("g2", "2026-10-21", "TOR", "LA"),
-      calendarGame("g3", "2026-10-22", "ZZZ", "BOS"),
-    ]);
-
-    const before = yield* fake.providerReads;
-    const plain = yield* queries.searchPlayers(owner, { team: teamId });
-    assert.strictEqual(plain.status, "ok");
-    if (plain.status !== "ok") {
-      return;
-    }
-    assert.isUndefined(plain.gamesRemaining);
-    assert.strictEqual((yield* fake.providerReads) - before, 3);
-
-    const search = yield* queries.searchPlayers(owner, { team: teamId, includeGames: true });
-    assert.strictEqual(search.status, "ok");
-    if (search.status !== "ok") {
-      return;
-    }
-    assert.strictEqual(search.gamesRemaining?.status, "available");
-    if (search.gamesRemaining?.status === "available") {
-      assert.deepStrictEqual(search.gamesRemaining.window, {
-        start: "2026-10-19",
-        end: "2026-10-25",
-        source: "period",
+it.effect(
+  "reads a pool player's game days from its professional team key without a roster row",
+  () =>
+    Effect.gen(function* () {
+      const queries = yield* FantasyQueries;
+      const fake = yield* FakeProviderWorld;
+      const games = yield* FakeGameSourceWorld;
+      const store = yield* ScheduleObservationRepository;
+      const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
+        league: hockeyLeagueFixture,
       });
-      assert.isTrue(DateTime.isDateTime(search.gamesRemaining.observedAt));
-    }
-    assert.deepStrictEqual(
-      search.players.map((player) => [player.name, player.gamesRemaining]),
-      [
-        ["Keyed Skater", { status: "available", count: 2, source: "professional_games" }],
+      const teamId = Array.getUnsafe(seeded, 0).id;
+      yield* fake.setMatchups([matchupFixture({ period: 3 })]);
+      const provider = decodeProviderKey("yahoo");
+      const observedAt = DateTime.makeUnsafe("2026-10-19T12:00:00.000Z");
+      yield* store.recordTeamIdentities([
+        {
+          sport: "hockey",
+          source: provider,
+          sourceTeamIdentifier: "TOR",
+          provider,
+          providerTeamKey: "nhl.t.21",
+          observedAt,
+        },
+        {
+          sport: "hockey",
+          source: provider,
+          sourceTeamIdentifier: "BOS",
+          provider,
+          providerTeamKey: "nhl.t.1",
+          observedAt,
+        },
+      ]);
+      yield* fake.setSearchPlayers([
+        searchFixture({
+          providerPlayerKey: "465.p.1",
+          name: "Keyed Skater",
+          availability: "free_agent",
+          actualRank: 1,
+          overallRank: 1,
+          statValue: null,
+          percentOwned: 1,
+          percentOwnedDelta: 0,
+          percentStarted: 0,
+          percentStartedChange: 0,
+          proTeam: "TOR",
+          proTeamKey: "nhl.t.21",
+        }),
+        searchFixture({
+          providerPlayerKey: "465.p.2",
+          name: "Pair Skater",
+          availability: "free_agent",
+          actualRank: 2,
+          overallRank: 2,
+          statValue: null,
+          percentOwned: 1,
+          percentOwnedDelta: 0,
+          percentStarted: 0,
+          percentStartedChange: 0,
+          proTeam: "BOS",
+        }),
+        searchFixture({
+          providerPlayerKey: "465.p.3",
+          name: "Unmapped Skater",
+          availability: "free_agent",
+          actualRank: 3,
+          overallRank: 3,
+          statValue: null,
+          percentOwned: 1,
+          percentOwnedDelta: 0,
+          percentStarted: 0,
+          percentStartedChange: 0,
+          proTeam: "ZZZ",
+        }),
+        searchFixture({
+          providerPlayerKey: "465.p.4",
+          name: "Keyed Unresolved Skater",
+          availability: "free_agent",
+          actualRank: 4,
+          overallRank: 4,
+          statValue: null,
+          percentOwned: 1,
+          percentOwnedDelta: 0,
+          percentStarted: 0,
+          percentStartedChange: 0,
+          proTeam: "ZZZ",
+          proTeamKey: "nhl.t.13",
+        }),
+      ]);
+      yield* games.setGames([
+        calendarGame("g1", "2026-10-19", "TOR", "BOS"),
+        calendarGame("g2", "2026-10-21", "TOR", "LA"),
+        calendarGame("g3", "2026-10-22", "ZZZ", "BOS"),
+      ]);
+
+      const before = yield* fake.providerReads;
+      const plain = yield* queries.searchPlayers(owner, { team: teamId });
+      assert.strictEqual(plain.status, "ok");
+      if (plain.status !== "ok") {
+        return;
+      }
+      assert.isUndefined(plain.gamesWindow);
+      assert.strictEqual((yield* fake.providerReads) - before, 3);
+
+      const search = yield* queries.searchPlayers(owner, {
+        team: teamId,
+        gamesWindow: { kind: "current" },
+      });
+      assert.strictEqual(search.status, "ok");
+      if (search.status !== "ok") {
+        return;
+      }
+      assert.strictEqual(search.gamesWindow?.status, "available");
+      if (search.gamesWindow?.status === "available" && search.gamesWindow.basis === "date") {
+        assert.deepStrictEqual(search.gamesWindow.window, {
+          start: "2026-10-19",
+          end: "2026-10-25",
+          source: "period",
+        });
+        assert.isTrue(DateTime.isDateTime(search.gamesWindow.observedAt));
+      }
+      assert.deepStrictEqual(
+        search.players.map((player) => [player.name, player.gameDays]),
         [
-          "Keyed Unresolved Skater",
-          {
-            status: "unavailable",
-            detail:
-              "The league's professional games include a team with no key, so this player's team cannot be counted without guessing.",
-          },
+          ["Keyed Skater", { status: "available", dates: ["2026-10-19", "2026-10-21"] }],
+          [
+            "Keyed Unresolved Skater",
+            {
+              status: "unavailable",
+              detail:
+                "The league's professional games include a team with no key, so this player's team cannot be placed on a date without guessing.",
+            },
+          ],
+          ["Pair Skater", { status: "available", dates: ["2026-10-19", "2026-10-22"] }],
+          [
+            "Unmapped Skater",
+            {
+              status: "unavailable",
+              detail:
+                "This row's professional team could not be resolved to a key, so its game days cannot be joined without guessing from an abbreviation.",
+            },
+          ],
         ],
-        ["Pair Skater", { status: "available", count: 2, source: "professional_games" }],
-        [
-          "Unmapped Skater",
-          {
-            status: "unavailable",
-            detail:
-              "This pool row publishes no professional team key, so its games cannot be joined without guessing from an abbreviation.",
-          },
-        ],
-      ],
-    );
-  }).pipe(Effect.provide(queriesTestLayerWithGames(6))),
+      );
+    }).pipe(Effect.provide(queriesTestLayerWithGames(6))),
 );
 
 it.effect("counts a pool window's game days instead of the scoring window", () =>
@@ -2412,9 +2537,8 @@ it.effect("counts a pool window's game days instead of the scoring window", () =
     if (search.status !== "ok") {
       return;
     }
-    assert.isUndefined(search.gamesRemaining);
     assert.strictEqual(search.gamesWindow?.status, "available");
-    if (search.gamesWindow?.status === "available") {
+    if (search.gamesWindow?.status === "available" && search.gamesWindow.basis === "date") {
       assert.deepStrictEqual(search.gamesWindow.window, {
         start: "2026-10-19",
         end: "2026-10-22",
@@ -2423,13 +2547,12 @@ it.effect("counts a pool window's game days instead of the scoring window", () =
       assert.isTrue(DateTime.isDateTime(search.gamesWindow.observedAt));
     }
     assert.deepStrictEqual(
-      search.players.map((player) => [player.name, player.gamesRemaining, player.gameDays]),
+      search.players.map((player) => [player.name, player.gameDays]),
       [
-        ["Keyed Skater", undefined, { status: "available", dates: ["2026-10-19", "2026-10-22"] }],
-        ["Keyless Skater", undefined, { status: "available", dates: ["2026-10-19", "2026-10-22"] }],
+        ["Keyed Skater", { status: "available", dates: ["2026-10-19", "2026-10-22"] }],
+        ["Keyless Skater", { status: "available", dates: ["2026-10-19", "2026-10-22"] }],
         [
           "Unmapped Skater",
-          undefined,
           {
             status: "unavailable",
             detail:
@@ -2496,7 +2619,7 @@ it.effect("reads a season's worth of game days from the league's weekly schedule
     }
     assert.strictEqual((yield* games.calls).length - readsBeforeWindow, 12);
     assert.strictEqual(search.gamesWindow?.status, "available");
-    if (search.gamesWindow?.status === "available") {
+    if (search.gamesWindow?.status === "available" && search.gamesWindow.basis === "date") {
       assert.deepStrictEqual(search.gamesWindow.window, {
         start: "2026-10-01",
         end: "2026-12-29",
@@ -2517,7 +2640,8 @@ it.effect("reads a season's worth of game days from the league's weekly schedule
     if (league.status === "ok") {
       assert.deepStrictEqual(league.playerSearch?.games, {
         status: "date_window",
-        detail: "The window is built from the league's own schedule and takes inclusive dates.",
+        detail:
+          'This league has a dated professional schedule. Ask `search_players` with `gamesWindow: {kind: "current"}` or `{start, end}` dates; it refuses a week window.',
       });
     }
   }).pipe(Effect.provide(queriesTestLayerWithGames(6))),
@@ -2562,7 +2686,7 @@ it.effect("refuses a game window for a league that counts games by scoring week"
     assert.instanceOf(error, QuerySelectionInvalid);
     assert.include(error.detail, "counts games by scoring week");
     assert.include(error.detail, "a date window cannot answer for it");
-    assert.include(error.detail, "includeGames: true");
+    assert.include(error.detail, 'gamesWindow: {kind: "next_weeks", weeks: 4}');
   }).pipe(Effect.provide(queriesTestLayerWithGames(6))),
 );
 

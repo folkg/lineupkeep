@@ -2398,6 +2398,47 @@ it.effect("publishes an empty football free-agent pool without a weekly-fact fai
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
+it.effect("reads weekly opponents for a future football week", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflPlayerWeeksLive));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const weeks = yield* provider.readPlayerWeekOpponents({
+      ...sessionInput,
+      providerLeagueKey: "470.l.70271",
+      providerPlayerKeys: ["470.p.100017", "470.p.40078", "470.p.28227"],
+      week: { week: 11 },
+    });
+
+    assert.deepStrictEqual(weeks, [
+      {
+        providerPlayerKey: "470.p.100017",
+        week: 11,
+        plays: true,
+        opponent: { opponent: "Rec", home: false },
+      },
+      {
+        providerPlayerKey: "470.p.40078",
+        week: 11,
+        plays: true,
+        opponent: { opponent: "Rec", home: false },
+      },
+      {
+        providerPlayerKey: "470.p.28227",
+        week: 11,
+        plays: true,
+        opponent: { opponent: "Rec", home: true },
+      },
+    ]);
+    assert.deepStrictEqual(
+      internet.calls.map((call) => call.url.href),
+      [
+        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/470.l.70271/players;player_keys=470.p.100017,470.p.40078,470.p.28227;type=week;week=11;out=opponent?format=json",
+      ],
+    );
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
 it.effect("publishes the football waiver pool's rows and fields", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflWaiverPool));
   return Effect.gen(function* () {

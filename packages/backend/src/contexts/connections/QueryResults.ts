@@ -618,7 +618,7 @@ const PlayerSearchGames = Schema.Union([
 ]).pipe(
   Schema.annotate({
     description:
-      "`date_window` takes inclusive dates built from the league's own schedule; `scoring_week` refuses a date window and names `includeGames`.",
+      '`date_window` takes `{kind: "current"}` or `{start, end}` dates; `scoring_week` takes `{kind: "current"}` or `{kind: "next_weeks"}` and refuses a date window.',
   }),
 );
 
@@ -911,6 +911,21 @@ const SearchAvailability = Schema.Literals(["all", "free_agent", "waiver"]).pipe
   }),
 );
 
+const GamesWindowInput = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("current") }),
+  Schema.Struct({
+    kind: Schema.Literal("next_weeks"),
+    weeks: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 52 })),
+  }),
+  ScheduleWindowInput,
+]).pipe(
+  Schema.annotate({
+    description:
+      "`current` is the league's current window; `next_weeks` is this scoring week and the next N-1; `{start, end}` is inclusive dates. `get_league` publishes which kinds the league answers.",
+  }),
+);
+export type GamesWindowInput = typeof GamesWindowInput.Type;
+
 export const SearchPlayersInput = Schema.Struct({
   team: TeamId,
   query: Schema.optional(
@@ -951,21 +966,7 @@ export const SearchPlayersInput = Schema.Struct({
       }),
     ),
   ),
-  includeGames: Schema.optional(
-    Schema.Boolean.pipe(
-      Schema.annotate({
-        description: "Add each row's remaining games this scoring window as `gamesRemaining`.",
-      }),
-    ),
-  ),
-  gamesWindow: Schema.optional(
-    ScheduleWindowInput.pipe(
-      Schema.annotate({
-        description:
-          "Dates to count each row's games over as `gameDays`, instead of `includeGames`' scoring window; a league that counts games by scoring week refuses it.",
-      }),
-    ),
-  ),
+  gamesWindow: Schema.optional(GamesWindowInput),
   cursor: Schema.optional(Cursor),
   limit: Schema.optional(PageLimit),
 });
@@ -1011,6 +1012,26 @@ export const PlayerGameDays = Schema.Union([
   }),
 );
 export type PlayerGameDays = typeof PlayerGameDays.Type;
+
+export const PlayerGameWeeks = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("available"),
+    weeks: Schema.Array(
+      Schema.Struct({
+        week: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+        opponent: Schema.NonEmptyString,
+        home: Schema.Boolean,
+      }),
+    ),
+  }),
+  Schema.Struct({ status: Schema.Literal("unavailable"), detail: Schema.NonEmptyString }),
+]).pipe(
+  Schema.annotate({
+    description:
+      "Scoring weeks this player's team plays in the window the section states, with the opponent and whether the game is home; a bye is absent from `weeks`.",
+  }),
+);
+export type PlayerGameWeeks = typeof PlayerGameWeeks.Type;
 
 const SearchPlayer = Schema.Struct({
   player: PlayerRef,
@@ -1095,18 +1116,27 @@ const SearchPlayer = Schema.Struct({
         "The site's season value for `stat`, present only with sort `stat`; null when unpublished.",
     }),
   ),
-  gamesRemaining: Schema.optional(SchedulePlayerGamesRemaining),
   gameDays: Schema.optional(PlayerGameDays),
+  gameWeeks: Schema.optional(PlayerGameWeeks),
   week: Schema.optional(PlayerWeek),
   transactionTrend: PlayerTransactionTrend,
 });
 
-const SearchGamesRemaining = Schema.Union([
+const SearchGamesWindow = Schema.Union([
   Schema.Struct({
     status: Schema.Literal("available"),
+    basis: Schema.Literal("date"),
     window: ScheduleWindow,
     observedAt: Schema.DateTimeUtc,
-    detail: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({
+    status: Schema.Literal("available"),
+    basis: Schema.Literal("week"),
+    weeks: Schema.Struct({
+      first: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+      last: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+    }),
+    observedAt: Schema.DateTimeUtc,
   }),
   Schema.Struct({
     status: Schema.Literal("unsupported"),
@@ -1115,7 +1145,7 @@ const SearchGamesRemaining = Schema.Union([
 ]).pipe(
   Schema.annotate({
     description:
-      "The window and observation time behind `gamesRemaining`; present only with `includeGames`.",
+      "The window and read time behind each row's `gameDays` (basis `date`) or `gameWeeks` (basis `week`).",
   }),
 );
 
@@ -1124,21 +1154,7 @@ export const SearchPlayersData = Schema.Struct({
   team: QueryTeam,
   coverage: Schema.Array(QueryCoverage),
   players: Schema.Array(SearchPlayer),
-  gamesRemaining: Schema.optional(SearchGamesRemaining),
-  gamesWindow: Schema.optional(
-    Schema.Union([
-      Schema.Struct({
-        status: Schema.Literal("available"),
-        window: ScheduleWindow,
-        observedAt: Schema.DateTimeUtc,
-      }),
-      Schema.Struct({ status: Schema.Literal("unsupported"), detail: Schema.NonEmptyString }),
-    ]).pipe(
-      Schema.annotate({
-        description: "The window and read time behind each row's `gameDays`.",
-      }),
-    ),
-  ),
+  gamesWindow: Schema.optional(SearchGamesWindow),
   failures: Schema.Array(QueryFailure),
   page: QueryPage,
   budget: QueryBudget,

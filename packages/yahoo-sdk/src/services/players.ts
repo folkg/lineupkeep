@@ -276,6 +276,7 @@ const DetailsShape = Schema.Struct({
     ),
   ),
   ranks: Schema.optional(RankTypes),
+  week: Schema.optional(YahooWeek),
   percentStartedCutTypes: Schema.optional(CutTypes),
   percentOwnedCutTypes: Schema.optional(CutTypes),
 });
@@ -309,7 +310,7 @@ export const details: API.OperationMethod<
     return {
       host: "read",
       method: "GET",
-      path: `/fantasy/v2/league/${input.leagueKey}/players;player_keys=${input.playerKeys.join(",")};out=${fields.join(",")}${rankSuffix(input.ranks)}`,
+      path: `/fantasy/v2/league/${input.leagueKey}/players;player_keys=${input.playerKeys.join(",")}${weekSelector(input.week)};out=${fields.join(",")}${rankSuffix(input.ranks)}`,
       ...(Object.keys(query).length === 0 ? {} : { query }),
     };
   },
@@ -345,6 +346,10 @@ function detailFieldsOf(input: typeof DetailsShape.Type): ReadonlyArray<DetailFi
 
 function rankSuffix(ranks: ReadonlyArray<string> | undefined): string {
   return ranks === undefined ? "" : `;ranks=${ranks.join(",")}`;
+}
+
+function weekSelector(week: number | undefined): string {
+  return week === undefined ? "" : `;type=week;week=${String(week)}`;
 }
 
 function cutTypesQuery(input: {

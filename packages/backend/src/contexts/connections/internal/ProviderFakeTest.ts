@@ -858,9 +858,10 @@ const providerFake = Effect.gen(function* () {
         ),
       );
       return input.providerPlayerKeys.map((providerPlayerKey) => {
-        const configured = current.playerWeeks.find(
-          (week) => week.providerPlayerKey === providerPlayerKey,
-        );
+        const configured =
+          current.playerWeeks.find(
+            (week) => week.providerPlayerKey === providerPlayerKey && week.week === input.week.week,
+          ) ?? current.playerWeeks.find((week) => week.providerPlayerKey === providerPlayerKey);
         if (configured !== undefined) {
           return configured;
         }
@@ -871,6 +872,27 @@ const providerFake = Effect.gen(function* () {
           plays: player?.scheduled ?? true,
           opponent: player?.opponent,
           projectedRank: undefined,
+        };
+      });
+    }),
+    readPlayerWeekOpponents: Effect.fn("FakeProvider.readPlayerWeekOpponents")(function* (input) {
+      const current = yield* prepare(input, "read_player_week_opponents");
+      const rostered = new Map(
+        (current.roster?.players ?? []).map(
+          (player) => [player.providerPlayerKey, player] as const,
+        ),
+      );
+      return input.providerPlayerKeys.map((providerPlayerKey) => {
+        const configured = current.playerWeeks.find(
+          (week) => week.providerPlayerKey === providerPlayerKey && week.week === input.week.week,
+        );
+        const player = rostered.get(providerPlayerKey);
+        const plays = configured?.plays ?? player?.scheduled ?? true;
+        return {
+          providerPlayerKey,
+          week: input.week.week,
+          plays,
+          opponent: plays ? (configured?.opponent ?? player?.opponent) : undefined,
         };
       });
     }),

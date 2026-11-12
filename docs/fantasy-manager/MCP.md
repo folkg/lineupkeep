@@ -236,19 +236,19 @@ the team's `ownerNote`, while the compact default omits it; the note is the owne
 for that team, not a provider or league fact, and it belongs with the roster facts a trade or lineup
 decision reads. `search_players` reports provider
 ownership/started percentages without inventing either, and publishes the player's professional team
-as `proTeam`, the same abbreviation a roster entry carries. Pass `includeGames: true` to add
-`gamesRemaining` to each pool row, joined from the row's professional-team key against the same
-professional games over the scoring window, so a pool player needs no roster row and no second
-read; a row with no key reports `unavailable` with the reason instead of a guessed count, and the
-result's `gamesRemaining` section states the window and observation time or why the league has no
-game source. Pass `gamesWindow: { start, end }` instead to count each row's game days over dates a
-client chooses, as `gameDays` with the exact dates the player's team plays and the section's window
-and read time in `gamesWindow`. The window is built from the league's own schedule wherever a
+as `proTeam`, the same abbreviation a roster entry carries. `gamesWindow` asks for each row's games
+in the league's own unit. `{kind: "current"}` is the league's current scoring window; `{start,
+end}` is inclusive dates for a league with a professional-game source; `{kind: "next_weeks",
+weeks: N}` is this scoring week and the next N-1 for a league that counts games by scoring week. A
+date window publishes `gameDays` with the exact dates the player's team plays; a week window
+publishes `gameWeeks`, one entry per week with the opponent and home/away, omitting a bye. The
+result's `gamesWindow` section states the basis, the window or week range, and the read time, or
+why the league cannot answer. The date window is built from the league's own schedule wherever a
 professional-game source covers the league, so it is not bounded by the provider's roster read; a
-window longer than one season (366 dates) is refused with that limit rather than truncated. A league
-that counts games by scoring week refuses a date window and names `includeGames: true` instead.
-Omit both for a cheaper search that does not
-read the league window or the professional calendar. The provider’s dated pool selector is not exposed: it projected one date’s
+window longer than one season (366 dates) or past the league's last scoring week is refused with
+that limit rather than truncated. A league that counts games by scoring week refuses a date window
+and names the week form instead. Omit `gamesWindow` for a cheaper search that does not read the
+league window or the professional calendar. The provider’s dated pool selector is not exposed: it projected one date’s
 opponent rather than filtering the pool, and no client used it. The probe and its results remain in
 [RESEARCH.md](RESEARCH.md#pool-player-schedule-shapes-2026-10-31).
 
@@ -341,10 +341,10 @@ order and its explanation.
 accepts it, and a season window on a recent-form sort is refused with the windows the league
 publishes. `get_league` publishes `playerSearch` — the `sorts` and `windows` that league actually
 publishes, its `games` capability, and a plain `detail` — so a client can see the options before
-calling. `games` is `date_window` when a professional-game source covers the league: the window is
-built from the league's own schedule and takes inclusive dates. It is `scoring_week` otherwise: the
-league counts games by scoring week, a date window cannot answer for it, and `includeGames: true` is
-the way to ask. A window the
+calling. `games` is `date_window` when a professional-game source covers the league: `gamesWindow`
+takes `{kind: "current"}` or inclusive `{start, end}` dates. It is `scoring_week` otherwise: the
+league counts games by scoring week, so `gamesWindow` takes `{kind: "current"}` or
+`{kind: "next_weeks", weeks}` and a date window is refused with the week form named. A window the
 league does not publish is refused with the nearest published window named; a league that publishes
 no recent-form rank does not offer `recent_rank`. A `recent_rank` request narrows plain position
 codes at the provider, so its first page is that narrowed pool; a roster-slot value stays a local

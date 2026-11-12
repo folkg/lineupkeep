@@ -202,8 +202,12 @@ than zero.
 _Avoid_: Remaining player-games (that is the provider's fantasy-team total), projected games
 
 **Game days**:
-The dates a player's professional team plays inside a schedule window a caller chose, published on a pool row as `gameDays` when the call passes `gamesWindow`. A game day is a date, not a count, so a client can place a player on the days that matter instead of assuming the scoring window. A window wider than one schedule read is refused with the limit rather than truncated, and a row whose team key is unknown or unresolved reports `unavailable` with the reason rather than an empty list.
+The dates a player's professional team plays inside a schedule window a caller chose, published on a pool row as `gameDays` when `gamesWindow` asks for `{kind: "current"}` or `{start, end}` dates in a league with a dated professional schedule. A game day is a date, not a count, so a client can place a player on the days that matter instead of assuming the scoring window. A window wider than one schedule read is refused with the limit rather than truncated, and a row whose team key is unknown or unresolved reports `unavailable` with the reason rather than an empty list.
 _Avoid_: Games remaining (that is a count over the scoring window), schedule when only the dates are meant
+
+**Game weeks**:
+The scoring weeks a player's professional team plays inside a week window a caller chose, published on a pool row as `gameWeeks` when `gamesWindow` asks for `{kind: "current"}` or `{kind: "next_weeks", weeks: N}` in a league that counts games by scoring week. Each entry carries the week, the opponent, and whether the game is home; a bye is absent, and a week past the league's last scoring week is refused rather than truncated.
+_Avoid_: Games remaining (that is a count), schedule when only the weeks are meant
 
 **Off night**:
 A date on which fewer than half of the league's professional teams play, by the declared

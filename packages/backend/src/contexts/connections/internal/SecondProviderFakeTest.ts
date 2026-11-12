@@ -156,6 +156,7 @@ export const secondProvider: ProviderShape = {
   readPlayerDetails: () => unsupported("read_player_details"),
   readPlayerHistory: () => unsupported("read_player_history"),
   readPlayerWeeks: () => unsupported("read_player_weeks"),
+  readPlayerWeekOpponents: () => unsupported("read_player_week_opponents"),
   readMatchups: () => unsupported("read_matchups"),
   readTransactions: () => unsupported("read_transactions"),
   readCompletedTrades: () => unsupported("read_completed_trades"),

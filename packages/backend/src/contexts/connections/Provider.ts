@@ -18,6 +18,7 @@ const ProviderOperation = Schema.Literals([
   "read_player_details",
   "read_player_history",
   "read_player_weeks",
+  "read_player_week_opponents",
   "search_players",
   "read_matchups",
   "read_transactions",
@@ -320,6 +321,13 @@ export type ProviderShape = {
       readonly week: ProviderScoringWeek;
     },
   ) => Effect.Effect<ReadonlyArray<ProviderPlayerWeekFact>, ProviderReadFailure>;
+  readonly readPlayerWeekOpponents: (
+    input: ProviderSessionMaterial & {
+      readonly providerLeagueKey: string;
+      readonly providerPlayerKeys: ReadonlyArray<string>;
+      readonly week: ProviderScoringWeek;
+    },
+  ) => Effect.Effect<ReadonlyArray<ProviderPlayerWeekOpponent>, ProviderReadFailure>;
   readonly readPlayerHistory: (
     input: ProviderSessionMaterial & {
       readonly providerLeagueKey: string;
@@ -569,6 +577,13 @@ export type ProviderPlayerWeekFact = {
   readonly plays: boolean;
   readonly opponent: PlayerWeekOpponent | undefined;
   readonly projectedRank: number | undefined;
+};
+
+export type ProviderPlayerWeekOpponent = {
+  readonly providerPlayerKey: string;
+  readonly week: number;
+  readonly plays: boolean;
+  readonly opponent: PlayerWeekOpponent | undefined;
 };
 
 export type ProviderRosterPlayer = {
