@@ -1,0 +1,25 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "79c73037-2f4d-414b-907d-81cf15e28000",
+  "prevIds": ["aad4c0ee-1c4a-4afb-9dfe-c044274ff979"],
+  "footprints": [
+    {
+      "statementType": "drop_column",
+      "statementTarget": ["column", "public", "transaction_proposal_sets", "expires_at"],
+      "writes": [
+        "s|col|public.transaction_proposal_sets.expires_at",
+        "n|col|public.transaction_proposal_sets.expires_at",
+        "e|col|public.transaction_proposal_sets.expires_at"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_sets", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_sets\",\"expires_at\"]"
+    }
+  ]
+}

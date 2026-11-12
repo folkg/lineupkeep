@@ -66,9 +66,9 @@ export function describeTradeWithdrawalFailure(error: unknown): TransactionFailu
           kind: "failure",
           message: "This trade is not available to the current account, so nothing was withdrawn.",
         };
-      case "transactions.already_submitted":
       case "transactions.submission_in_progress":
-      case "transactions.set_expired":
+      case "transactions.set_closed":
+      case "transactions.items_not_open":
       case "transactions.nothing_included":
       case "transactions.persistence_failed":
         return {
@@ -84,6 +84,62 @@ export function describeTradeWithdrawalFailure(error: unknown): TransactionFailu
   };
 }
 
+export function describeTransactionDismissalFailure(error: unknown): TransactionFailureDescription {
+  if (error instanceof TransactionReviewAuthenticationFailure) {
+    return {
+      kind: "authentication",
+      message: "Your session ended before this move could be dismissed. Sign in again to continue.",
+    };
+  }
+  if (error instanceof TransactionReviewFailure) {
+    switch (error.reason) {
+      case "transactions.submission_in_progress":
+      case "transactions.set_closed":
+        return {
+          kind: "conflict",
+          message:
+            "This plan is changing, so the move was not dismissed. Reload the plan to see where it stands.",
+        };
+      case "transactions.items_not_open":
+        return {
+          kind: "conflict",
+          message:
+            "That move is no longer open, so nothing was dismissed. Reload the plan to see its state.",
+        };
+      case "transactions.set_not_found":
+      case "transactions.input_invalid":
+        return {
+          kind: "failure",
+          message: "This plan is not available to the current account, so nothing was dismissed.",
+        };
+      case "transactions.unavailable":
+        return {
+          kind: "failure",
+          message:
+            "The dismissal could not be checked against current state, so nothing was dismissed. Refresh the plan and try a current move.",
+        };
+      case "transactions.persistence_failed":
+        return {
+          kind: "failure",
+          message:
+            "The dismissal could not be recorded. Refresh the plan to see whether it applied.",
+        };
+      case "transactions.nothing_included":
+      case "transactions.trade_not_found":
+      case "transactions.trade_not_pending":
+        return {
+          kind: "failure",
+          message:
+            "The dismissal could not be completed. Refresh the plan before deciding what to do next.",
+        };
+    }
+  }
+  return {
+    kind: "failure",
+    message: "The move could not be dismissed. Refresh the plan before deciding what to do next.",
+  };
+}
+
 export function describeTransactionSubmissionFailure(
   error: unknown,
 ): TransactionFailureDescription {
@@ -96,11 +152,11 @@ export function describeTransactionSubmissionFailure(
   }
   if (error instanceof TransactionReviewFailure) {
     switch (error.reason) {
-      case "transactions.already_submitted":
+      case "transactions.set_closed":
         return {
           kind: "conflict",
           message:
-            "Every move in this proposal has settled, so it is an audit record and nothing else was sent. Propose a fresh set for another move.",
+            "This plan is closed: every move has settled or been dismissed, so nothing was sent. Ask the agent to propose a new plan for another move.",
         };
       case "transactions.submission_in_progress":
         return {
@@ -108,11 +164,11 @@ export function describeTransactionSubmissionFailure(
           message:
             "This proposal is already being submitted, so nothing else was sent. Reload the review in a moment to see the outcome.",
         };
-      case "transactions.set_expired":
+      case "transactions.items_not_open":
         return {
-          kind: "conflict",
+          kind: "failure",
           message:
-            "This proposal expired before it could be submitted. Nothing was sent; propose the moves again.",
+            "That move is no longer open, so nothing else was sent. Reload the review to see its state.",
         };
       case "transactions.nothing_included":
         return {

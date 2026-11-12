@@ -5,6 +5,8 @@ import type { Accessor } from "solid-js";
 import { useSignInRecovery } from "#browser/session/signInRecovery.ts";
 import type { ActionFeedbackState, RecoveryAction } from "#browser/shared-ui/ActionFeedback.tsx";
 import type {
+  DismissTransactionProposalData,
+  DismissTransactionProposalRequest,
   TransactionReviewData,
   TransactionReviewItemView,
   TransactionReviewTeamView,
@@ -16,6 +18,7 @@ import type {
 import { readWaiverBid, waiverBidBudgetError } from "./transactionBids";
 import {
   describeTradeWithdrawalFailure,
+  describeTransactionDismissalFailure,
   describeTransactionSubmissionFailure,
 } from "./transactionFailure";
 import { transactionMutations } from "./transactionMutations";
@@ -35,6 +38,13 @@ export function useTransactionReviewPage(
   const [feedback, setFeedback] = createSignal<ActionFeedbackState>();
   const [justSubmitted, setJustSubmitted] = createSignal(false);
   const [withdrawingKey, setWithdrawingKey] = createSignal<string>();
+  const [dismissFailures, setDismissFailures] = createSignal<ReadonlyMap<string, string>>(
+    new Map(),
+  );
+  const [dismissFocus, setDismissFocus] = createSignal<DismissFocus>();
+  let dismissedLabel = "";
+  let dismissedTeam = "";
+  let dismissedFocusIndex = -1;
 
   createEffect(
     () => justSubmitted(),
@@ -49,6 +59,22 @@ export function useTransactionReviewPage(
       result.scrollIntoView({ block: "start" });
       result.focus();
       setJustSubmitted(false);
+    },
+  );
+
+  createEffect(
+    () => ({ request: dismissFocus(), data: review.data }),
+    ({ request }) => {
+      if (request === undefined) {
+        return;
+      }
+      const buttons = [...document.querySelectorAll<HTMLElement>("[data-dismiss-item]")];
+      const target =
+        request.index < buttons.length
+          ? buttons[request.index]
+          : document.getElementById(`team-${request.team}`);
+      target?.focus();
+      setDismissFocus(undefined);
     },
   );
 
@@ -94,6 +120,58 @@ export function useTransactionReviewPage(
     };
   });
 
+  const dismiss = useMutation(() => {
+    const options = transactionMutations.dismiss(props.remote());
+    return {
+      ...options,
+      onSuccess: (
+        data: DismissTransactionProposalData,
+        variables: DismissTransactionProposalRequest,
+        onMutateResult: unknown,
+        context: Parameters<NonNullable<typeof options.onSuccess>>[3],
+      ) => {
+        options.onSuccess?.(data, variables, onMutateResult, context);
+        if (data.outcome === "refused") {
+          setDismissFailures((current) => {
+            const next = new Map(current);
+            for (const refusal of data.refusals) {
+              next.set(refusal.item, refusal.detail);
+            }
+            return next;
+          });
+          const detail = data.refusals[0]?.detail ?? data.detail;
+          setFeedback({ type: "attention", message: `That move was not dismissed. ${detail}` });
+          return;
+        }
+        setDismissFailures((current) => {
+          const next = new Map(current);
+          for (const item of variables.items) {
+            next.delete(item);
+          }
+          return next;
+        });
+        setFeedback({
+          type: "success",
+          message: `Dismissed ${dismissedLabel === "" ? "the move" : dismissedLabel}.`,
+        });
+        if (dismissedFocusIndex >= 0) {
+          setDismissFocus({ team: dismissedTeam, index: dismissedFocusIndex });
+        }
+      },
+      onError: (error: Error) => {
+        const failure = describeTransactionDismissalFailure(error);
+        setFeedback({
+          type: "attention",
+          message: failure.message,
+          ...(failure.kind === "authentication" ? { recovery: signIn } : {}),
+        });
+        if (failure.kind === "conflict") {
+          void review.refetch();
+        }
+      },
+    };
+  });
+
   const withdraw = useMutation(() => {
     const options = transactionMutations.withdraw(props.remote());
     return {
@@ -123,6 +201,19 @@ export function useTransactionReviewPage(
       },
     };
   });
+
+  const dismissItem = (team: string, item: string, label: string): void => {
+    const current = model();
+    if (current === undefined || dismiss.isPending || submit.isPending) {
+      return;
+    }
+    const buttons = [...document.querySelectorAll<HTMLElement>("[data-dismiss-item]")];
+    const index = buttons.findIndex((button) => button.dataset["dismissItem"] === item);
+    dismissedLabel = label;
+    dismissedTeam = team;
+    dismissedFocusIndex = index >= 0 && document.activeElement === buttons[index] ? index : -1;
+    void dismiss.mutate({ set: current.review.set.id, items: [item] });
+  };
 
   const withdrawItem = (team: string, item: string): void => {
     if (withdraw.isPending) {
@@ -162,7 +253,7 @@ export function useTransactionReviewPage(
         const proposed = item.bid ?? 0;
         const value = drafts.get(item.id) ?? String(proposed);
         const sentBid = sent.get(item.id);
-        const editable = item.state === "proposed" && !data.set.expired && !data.set.settled;
+        const editable = item.state === "proposed" && !data.set.closed;
         if (!editable) {
           readings.set(item.id, {
             field: { value, proposed, editable, ...(sentBid === undefined ? {} : { sentBid }) },
@@ -255,7 +346,7 @@ export function useTransactionReviewPage(
         return bid === undefined ? [] : [{ item: item.id, bid }];
       }),
       submitted: data.set.submissions.length > 0,
-      settled: data.set.settled,
+      closed: data.set.closed,
       submissions: data.set.submissions,
       ...(latestSubmission === undefined ? {} : { latestSubmission }),
       finished: latestSubmission?.completedAt !== undefined,
@@ -271,6 +362,9 @@ export function useTransactionReviewPage(
 
   const send = (): void => {
     const current = model();
+    if (dismiss.isPending) {
+      return;
+    }
     if (current === undefined || current.includedCount === 0 || submit.isPending) {
       setFeedback({
         type: "attention",
@@ -306,6 +400,9 @@ export function useTransactionReviewPage(
     signIn,
     submit: send,
     submitting: () => submit.isPending,
+    dismissItem,
+    dismissing: () => (dismiss.isPending ? dismiss.variables?.items[0] : undefined),
+    dismissFailure: (item: string) => dismissFailures().get(item),
     withdrawItem,
     withdrawOffer,
     withdrawing: withdrawingKey,
@@ -345,6 +442,9 @@ export type TransactionReviewPageController = {
   readonly signIn: RecoveryAction;
   readonly submit: () => void;
   readonly submitting: Accessor<boolean>;
+  readonly dismissItem: (team: string, item: string, label: string) => void;
+  readonly dismissing: Accessor<string | undefined>;
+  readonly dismissFailure: (item: string) => string | undefined;
   readonly withdrawItem: (team: string, item: string) => void;
   readonly withdrawOffer: (team: string, offer: string) => void;
   readonly withdrawing: Accessor<string | undefined>;
@@ -370,7 +470,7 @@ export type TransactionReviewModel = {
   readonly includedFaab: number;
   readonly includedBids: ReadonlyArray<{ readonly item: string; readonly bid: number }>;
   readonly submitted: boolean;
-  readonly settled: boolean;
+  readonly closed: boolean;
   readonly submissions: TransactionReviewView["set"]["submissions"];
   readonly latestSubmission?: TransactionReviewView["set"]["submissions"][number];
   readonly finished: boolean;
@@ -381,6 +481,11 @@ export type TransactionReviewModel = {
     readonly skipped: number;
     readonly unknown: number;
   };
+};
+
+type DismissFocus = {
+  readonly team: string;
+  readonly index: number;
 };
 
 type TransactionReviewPageOptions = {

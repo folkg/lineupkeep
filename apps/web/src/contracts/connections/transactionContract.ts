@@ -146,6 +146,7 @@ export type TransactionReviewItemView = {
   readonly bid?: number;
   readonly reason: string;
   readonly state: ProposalItemState;
+  readonly outcomeDetail?: string;
   readonly staleness: {
     readonly status: ProposalStalenessStatus;
     readonly checkedAt?: string;
@@ -227,13 +228,12 @@ export type TransactionReviewView = {
       readonly surface: "app" | "mcp";
     };
     readonly createdAt: string;
-    readonly expiresAt: string;
-    readonly expired: boolean;
+    readonly updatedAt: string;
     readonly submissions: ReadonlyArray<{
       readonly submittedAt: string;
       readonly completedAt?: string;
     }>;
-    readonly settled: boolean;
+    readonly closed: boolean;
   };
   readonly teams: ReadonlyArray<TransactionReviewTeamView>;
 };
@@ -248,6 +248,23 @@ export type SubmitTransactionReviewRequest = {
   readonly include: ReadonlyArray<string>;
   readonly bids: ReadonlyArray<{ readonly item: string; readonly bid: number }>;
 };
+
+export type DismissTransactionProposalRequest = {
+  readonly set: string;
+  readonly items: ReadonlyArray<string>;
+  readonly reason?: string;
+};
+
+export type DismissTransactionProposalData =
+  | {
+      readonly outcome: "dismissed";
+      readonly review: TransactionReviewView;
+    }
+  | {
+      readonly outcome: "refused";
+      readonly detail: string;
+      readonly refusals: ReadonlyArray<{ readonly item: string; readonly detail: string }>;
+    };
 
 export type WithdrawTradeData = {
   readonly status: "withdrawn" | "not_pending";
@@ -265,8 +282,8 @@ export type TransactionReviewError = {
     | "transactions.persistence_failed"
     | "transactions.unavailable"
     | "transactions.input_invalid"
-    | "transactions.set_expired"
-    | "transactions.already_submitted"
+    | "transactions.set_closed"
+    | "transactions.items_not_open"
     | "transactions.submission_in_progress"
     | "transactions.nothing_included"
     | "transactions.trade_not_found"

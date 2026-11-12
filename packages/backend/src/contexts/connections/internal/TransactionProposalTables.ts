@@ -54,7 +54,6 @@ export const transactionProposalSets = pgTable(
     orders: jsonb("orders"),
     lineups: jsonb("lineups"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -119,6 +118,7 @@ export const transactionProposalItems = pgTable(
         "accepted",
         "withdrawn",
         "expired",
+        "dismissed",
       ],
     }).notNull(),
     settled: boolean("settled").notNull().default(false),
@@ -189,7 +189,6 @@ const ProposalSetSelect = createSelectSchema(transactionProposalSets, {
   orders: Schema.Unknown,
   lineups: Schema.Unknown,
   createdAt: Schema.DateTimeUtcFromDate,
-  expiresAt: Schema.DateTimeUtcFromDate,
   updatedAt: Schema.DateTimeUtcFromDate,
 });
 
@@ -226,7 +225,6 @@ export const ProposalSetRow = ProposalSetSelect.pipe(
             orders,
             lineups,
             createdAt: row.createdAt,
-            expiresAt: row.expiresAt,
             updatedAt: row.updatedAt,
           };
         }),
@@ -245,7 +243,6 @@ export const ProposalSetRow = ProposalSetSelect.pipe(
             orders: record.orders.length === 0 ? null : record.orders,
             lineups: record.lineups.length === 0 ? null : record.lineups,
             createdAt: record.createdAt,
-            expiresAt: record.expiresAt,
             updatedAt: record.updatedAt,
           };
         }),

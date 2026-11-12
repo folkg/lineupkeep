@@ -481,12 +481,12 @@ test("proposes transactions without writing to the provider and reads pending of
     Schema.Struct({
       created: Schema.Boolean,
       reviewUrl: Schema.String,
-      set: Schema.Struct({ id: Schema.String, expired: Schema.Boolean }),
+      set: Schema.Struct({ id: Schema.String, closed: Schema.Boolean }),
       items: Schema.Array(Schema.Struct({ outcome: Schema.String })),
     }),
   )(proposed.structuredContent);
   expect(set.created).toBe(true);
-  expect(set.set.expired).toBe(false);
+  expect(set.set.closed).toBe(false);
   expect(set.reviewUrl).toBe(`${origin}/transactions/${set.set.id}`);
   expect(set.items).toMatchObject([{ outcome: "accepted" }]);
 

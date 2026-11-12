@@ -27,7 +27,8 @@ import type {
 } from "@lineupkeep/backend/connections/TransactionProposals";
 import {
   ProposalItem,
-  ProposalSetExpired,
+  ProposalItemsNotOpen,
+  ProposalSetClosed,
   ProposalSetId,
   TransactionProposals,
 } from "@lineupkeep/backend/connections/TransactionProposals";
@@ -841,10 +842,9 @@ it("proposes a transaction set under the review scope and returns the review lin
     id: Schema.decodeSync(ProposalSetId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164d0"),
     proposedBy: { kind: "agent", reference: "mcp", surface: "mcp" },
     createdAt: at,
-    expiresAt: DateTime.addDuration(at, 86_400_000),
-    expired: false,
+    updatedAt: at,
     submissions: [],
-    settled: false,
+    closed: false,
     reviewPath: "/transactions/018f79ea-7d86-7c18-9b4a-8b4d0c9164d0",
   };
   const providerRefusal =
@@ -908,8 +908,17 @@ it("proposes a transaction set under the review scope and returns the review lin
   let revalidations = 0;
   const proposals: TransactionProposalsShape = {
     ...unavailableProposals,
-    propose: (userId, proposer) => {
+    propose: (userId, proposer, input) => {
       proposed.push({ userId, proposer });
+      if (input.set !== undefined && input.set !== null) {
+        return Effect.fail(
+          ProposalSetClosed.make({
+            set: set.id,
+            detail:
+              "Every move in this plan has been executed, dismissed, or withdrawn, so the plan is closed and takes no new moves or submissions. Propose a fresh set to start a new plan.",
+          }),
+        );
+      }
       return Effect.succeed({
         set,
         created: true,
@@ -922,10 +931,22 @@ it("proposes a transaction set under the review scope and returns the review lin
     read: () => Effect.succeed(review),
     revalidate: () => {
       revalidations += 1;
-      return revalidations === 1
-        ? Effect.fail(ProposalSetExpired.make({ set: set.id, expiresAt: set.expiresAt }))
-        : Effect.succeed(review);
+      return Effect.succeed(review);
     },
+    withdrawItems: () =>
+      Effect.fail(
+        ProposalItemsNotOpen.make({
+          items: [
+            {
+              item: failedItem.id,
+              state: "failed",
+              detail:
+                "This move is failed and can no longer be withdrawn. It was attempted and failed; its outcome is part of the record.",
+            },
+          ],
+          detail: "Nothing was withdrawn. Fix the refused moves and withdraw again.",
+        }),
+      ),
     readPendingOffers: () => Effect.die(new Error("pending offers are not read here")),
   };
   const services = Layer.mergeAll(
@@ -966,7 +987,7 @@ it("proposes a transaction set under the review scope and returns the review lin
       structuredContent: {
         created: true,
         reviewUrl: "https://connections.example/transactions/018f79ea-7d86-7c18-9b4a-8b4d0c9164d0",
-        set: { id: "018f79ea-7d86-7c18-9b4a-8b4d0c9164d0", expired: false },
+        set: { id: "018f79ea-7d86-7c18-9b4a-8b4d0c9164d0", closed: false },
       },
     },
   });
@@ -998,17 +1019,34 @@ it("proposes a transaction set under the review scope and returns the review lin
   expect(JSON.stringify(readBody)).toContain(providerRefusal);
   expect(JSON.stringify(readBody)).toContain(illegalDetail);
 
-  const expired = await call(
+  const closed = await call(
     request(
       "tools/call",
-      { name: "revalidate_transaction_proposal_set", arguments: { set: set.id } },
+      { name: "propose_transactions", arguments: { ...arguments_, set: set.id } },
       "review",
     ),
   );
-  const expiredBody = await json(expired);
-  expect(expiredBody).toMatchObject({ result: { isError: true } });
-  expect(JSON.stringify(expiredBody)).toContain("expired");
-  expect(JSON.stringify(expiredBody)).not.toContain("cause");
+  const closedBody = await json(closed);
+  expect(closedBody).toMatchObject({ result: { isError: true } });
+  expect(JSON.stringify(closedBody)).toContain("set_closed");
+  expect(JSON.stringify(closedBody)).toContain("Propose a fresh");
+  expect(JSON.stringify(closedBody)).not.toContain("set_expired");
+
+  const refused = await call(
+    request(
+      "tools/call",
+      {
+        name: "withdraw_transaction_proposal_items",
+        arguments: { set: set.id, items: [failedItem.id] },
+      },
+      "review",
+    ),
+  );
+  const refusedBody = await json(refused);
+  expect(refusedBody).toMatchObject({ result: { isError: true } });
+  expect(JSON.stringify(refusedBody)).toContain("items_not_open");
+  expect(JSON.stringify(refusedBody)).toContain("attempted and failed");
+  expect(JSON.stringify(refusedBody)).not.toContain("items_not_withdrawable");
 });
 
 it("returns a durable queued lineup reference without claiming success", async () => {
@@ -1495,6 +1533,7 @@ const unavailableProposals: TransactionProposalsShape = {
   propose: () => Effect.die(new Error("proposals unavailable")),
   revalidate: () => Effect.die(new Error("proposals unavailable")),
   withdrawItems: () => Effect.die(new Error("proposals unavailable")),
+  dismissItems: () => Effect.die(new Error("proposals unavailable")),
   read: () => Effect.die(new Error("proposals unavailable")),
   submit: () => Effect.die(new Error("proposals unavailable")),
   readPendingOffers: () => Effect.die(new Error("proposals unavailable")),
@@ -1547,6 +1586,23 @@ function request(
     }),
   });
 }
+
+it("publishes a closed plan and a dismissed move without a set lifetime", async () => {
+  const response = await handle(request("tools/list", {}, "read"));
+  const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
+  const proposalSet = listed.result.tools.find(
+    (tool) => tool.name === "get_transaction_proposal_set",
+  );
+  if (proposalSet === undefined) {
+    throw new Error("Expected the tool list to include get_transaction_proposal_set");
+  }
+  const published = JSON.stringify(proposalSet);
+
+  expect(published).toContain('"closed"');
+  expect(published).toContain("dismissed");
+  expect(published).not.toContain("expiresAt");
+  expect(published).not.toContain("24 hours");
+});
 
 it("keeps every published description inside its budget", async () => {
   const response = await handle(request("tools/list", {}, "read"));

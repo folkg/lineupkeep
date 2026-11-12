@@ -119,7 +119,6 @@ export const ProposalSetRecord = Schema.Struct({
   orders: Schema.Array(StoredProposalOrder),
   lineups: Schema.Array(StoredProposalLineup),
   createdAt: Schema.DateTimeUtc,
-  expiresAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,
 }).pipe(Schema.toType);
 export type ProposalSetRecord = typeof ProposalSetRecord.Type;
@@ -254,13 +253,16 @@ export function isSettledItem(item: {
     item.state === "accepted" ||
     item.state === "withdrawn" ||
     item.state === "expired" ||
+    item.state === "dismissed" ||
+    item.state === "skipped" ||
     item.settled
   );
 }
 
-export function isSettledSet(
-  submissions: ReadonlyArray<StoredProposalSubmission>,
-  items: ReadonlyArray<ProposalItemRecord>,
-): boolean {
-  return submissions.length > 0 && items.every(isSettledItem);
+export function isClosedSet(items: ReadonlyArray<ProposalItemRecord>): boolean {
+  return items.every(isSettledItem);
+}
+
+export function isDismissibleItem(state: ProposalItemState): boolean {
+  return state === "proposed" || state === "failed";
 }

@@ -85,6 +85,9 @@ export function TransactionReviewPage(props: TransactionReviewPageProps): JSX.El
                 onSubmit={page.submit}
                 onToggle={page.toggleItem}
                 submitting={page.submitting()}
+                dismissItem={page.dismissItem}
+                dismissing={page.dismissing()}
+                dismissFailure={page.dismissFailure}
                 withdrawItem={page.withdrawItem}
                 withdrawOffer={page.withdrawOffer}
                 withdrawing={page.withdrawing()}
@@ -146,9 +149,8 @@ function isNotFoundFailure(error: unknown): boolean {
 function Review(props: ReviewProps): JSX.Element {
   const settling = createSettle(() => props.model.latestSubmission !== undefined);
   const submitted = (): boolean => props.model.submitted;
-  const settled = (): boolean => props.model.settled;
-  const canSubmit = (): boolean =>
-    !props.model.review.set.expired && !settled() && props.model.proposedCount > 0;
+  const closed = (): boolean => props.model.closed;
+  const canSubmit = (): boolean => !closed() && props.model.proposedCount > 0;
   const pendingOffers = (): ReadonlyArray<{
     readonly team: TransactionReviewTeamView;
     readonly offer: TransactionReviewPendingOfferView;
@@ -163,14 +165,21 @@ function Review(props: ReviewProps): JSX.Element {
       <Stack gap="sm">
         <Show
           fallback={
-            <ProposalSummary
-              checkedAt={props.model.checkedAt}
-              review={props.model.review}
-              staleCount={props.model.staleCount}
-              illegalCount={props.model.illegalCount}
-              total={props.model.total}
-              teamCount={props.model.teamsWithItems.length}
-            />
+            <Show
+              fallback={
+                <ProposalSummary
+                  checkedAt={props.model.checkedAt}
+                  review={props.model.review}
+                  staleCount={props.model.staleCount}
+                  illegalCount={props.model.illegalCount}
+                  total={props.model.total}
+                  teamCount={props.model.teamsWithItems.length}
+                />
+              }
+              when={closed()}
+            >
+              <ClosedSummary review={props.model.review} total={props.model.total} />
+            </Show>
           }
           when={props.model.latestSubmission}
         >
@@ -180,14 +189,11 @@ function Review(props: ReviewProps): JSX.Element {
               settling={settling()}
               finished={props.model.finished}
               review={props.model.review}
-              settled={settled()}
+              closed={closed()}
               submissionCount={props.model.submissions.length}
               submittedAt={submission().submittedAt}
             />
           )}
-        </Show>
-        <Show when={props.model.review.set.expired && !submitted()}>
-          <ExpiredNotice expiresAt={props.model.review.set.expiresAt} />
         </Show>
       </Stack>
 
@@ -206,15 +212,17 @@ function Review(props: ReviewProps): JSX.Element {
               {(team) => (
                 <TeamProposal
                   bidFor={props.bidFor}
-                  expired={props.model.review.set.expired}
+                  closed={closed()}
                   submitted={submitted()}
-                  settled={settled()}
                   submitting={props.submitting}
                   isItemIncluded={props.isItemIncluded}
                   team={team}
+                  dismissing={props.dismissing}
+                  dismissFailure={props.dismissFailure}
                   withdrawing={props.withdrawing}
                   onBid={props.onBid}
                   onToggle={props.onToggle}
+                  onDismiss={props.dismissItem}
                   onWithdraw={props.withdrawItem}
                 />
               )}
@@ -238,6 +246,7 @@ function Review(props: ReviewProps): JSX.Element {
             staleCount={props.model.staleCount}
             illegalCount={props.model.illegalCount}
             submitting={props.submitting}
+            dismissing={props.dismissing !== undefined}
             total={props.model.proposedCount}
             waivers={props.model.includedWaivers}
             onSubmit={props.onSubmit}
@@ -271,13 +280,6 @@ function ProposalSummary(props: ProposalSummaryProps): JSX.Element {
                 <Time datetime={checkedAt()}>{formatReaderTime(checkedAt())}</Time>.
               </>
             )}
-          </Show>{" "}
-          <Show when={!props.review.set.expired}>
-            Expires{" "}
-            <Time datetime={props.review.set.expiresAt}>
-              {formatReaderTime(props.review.set.expiresAt)}
-            </Time>
-            .
           </Show>
         </Text>
         <Show when={props.staleCount > 0}>
@@ -306,7 +308,7 @@ function SubmittedSummary(props: SubmittedSummaryProps): JSX.Element {
         <Stack gap="sm">
           <SectionTitle
             id="submitted-title"
-            action={props.settled ? <Badge tone="accent">Audit record</Badge> : undefined}
+            action={props.closed ? <Badge tone="accent">Audit record</Badge> : undefined}
           >
             Submitted
           </SectionTitle>
@@ -343,9 +345,9 @@ function SubmittedSummary(props: SubmittedSummaryProps): JSX.Element {
             </Notice>
           </Show>
           <Text size="caption" tone="faint">
-            {props.settled
-              ? "Every move in this set has settled. This set is an audit record; propose a new set for another move."
-              : "This set stays open while a move has not settled. A failed or skipped move keeps its outcome here; ask the agent to add a replacement to this set to try again."}
+            {props.closed
+              ? "Every move in this plan has settled or been dismissed. This plan is an audit record; ask the agent to propose a new plan for another move."
+              : "This plan stays open while a move has not settled. A failed or skipped move keeps its outcome here; ask the agent to add a replacement to this plan to try again."}
           </Text>
         </Stack>
       </Box>
@@ -353,20 +355,24 @@ function SubmittedSummary(props: SubmittedSummaryProps): JSX.Element {
   );
 }
 
-function ExpiredNotice(props: ExpiredNoticeProps): JSX.Element {
+function ClosedSummary(props: ClosedSummaryProps): JSX.Element {
   return (
-    <Notice
-      tone="neutral"
-      title={
-        <>
-          Expired <Time datetime={props.expiresAt}>{formatReaderTime(props.expiresAt)}</Time>.
-        </>
-      }
-    >
-      <Text size="body" tone="muted">
-        Nothing can be submitted from this set. Ask the agent to propose these moves again.
-      </Text>
-    </Notice>
+    <Box rule="bottom" space="lg">
+      <Stack gap="sm">
+        <SectionTitle action={<Badge tone="accent">Audit record</Badge>}>Closed plan</SectionTitle>
+        <Text size="body" weight="semibold">
+          Every move in this plan has ended.
+        </Text>
+        <Text size="caption" tone="muted">
+          {moveCount(props.total)} proposed by {proposerLabel(props.review.set.proposedBy.kind)}{" "}
+          <Time datetime={props.review.set.createdAt}>
+            {formatReaderTime(props.review.set.createdAt)}
+          </Time>
+          . Nothing can be submitted from this plan; ask the agent to propose a new plan for another
+          move.
+        </Text>
+      </Stack>
+    </Box>
   );
 }
 
@@ -491,7 +497,7 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
   return (
     <Stack as="section" gap="sm" labelledBy={headingId()}>
       <Stack gap="xs">
-        <SectionTitle id={headingId()}>
+        <SectionTitle id={headingId()} focusable>
           <TextLink params={{ teamId: props.team.team.id }} size="item" to="/teams/$teamId">
             {props.team.team.name}
           </TextLink>
@@ -514,7 +520,7 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
             </Text>
           )}
         </Show>
-        <Show when={!props.expired && !props.settled && props.team.order}>
+        <Show when={!props.closed && props.team.order}>
           {(order) => <TeamOrder order={order()} />}
         </Show>
         <Show when={props.submitted}>
@@ -550,15 +556,18 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
           {(item) => (
             <ProposalItem
               bid={props.bidFor(item)}
-              expired={props.expired}
+              closed={props.closed}
               submitting={props.submitting}
               included={props.isItemIncluded(item)}
               item={item}
               tradeProposal={props.team.tradeProposal}
               tradeRules={props.team.tradeRules}
+              dismissing={props.dismissing === item.id}
+              dismissFailure={props.dismissFailure(item.id)}
               withdrawing={props.withdrawing === item.id}
               onBid={(value) => props.onBid(item.id, value)}
               onToggle={(includedNow) => props.onToggle(item.id, includedNow)}
+              onDismiss={() => props.onDismiss(props.team.team.id, item.id, moveSummary(item))}
               onWithdraw={() => props.onWithdraw(props.team.team.id, item.id)}
             />
           )}
@@ -619,10 +628,10 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
       : "Include";
   return (
     <RuleListItem layout={result() !== undefined || blocked() ? "stack" : "leading"}>
-      <Show when={!props.expired && props.item.state === "proposed"}>
+      <Show when={!props.closed && props.item.state === "proposed"}>
         <CheckboxField
           checked={props.included}
-          disabled={blocked() || props.submitting}
+          disabled={blocked() || props.submitting || props.dismissing}
           label={checkLabel()}
           ariaLabel={`${checkLabel()}: ${moveSummary(props.item)}`}
           describedBy={blocked() ? checkId() : undefined}
@@ -645,6 +654,9 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
                 {tradeStateLabel(state().state)}
               </Badge>
             )}
+          </Show>
+          <Show when={props.item.state === "dismissed"}>
+            <Badge tone="neutral">Dismissed</Badge>
           </Show>
           <Show when={trade() === undefined ? result() : undefined}>
             {(execution) => (
@@ -721,7 +733,7 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
                 step="1"
                 inputmode="numeric"
                 value={bid().value}
-                disabled={props.submitting}
+                disabled={props.submitting || props.dismissing}
                 onInput={(event) => props.onBid(event.currentTarget.value)}
               />
             </Show>
@@ -907,6 +919,52 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
               already accepted.
             </Text>
           </Inline>
+        </Show>
+
+        <Show when={props.item.state === "dismissed" && props.item.outcomeDetail}>
+          {(detail) => (
+            <Notice tone="neutral" title="Dismissed from this plan">
+              <Text size="caption" tone="muted">
+                {detail()}
+              </Text>
+            </Notice>
+          )}
+        </Show>
+
+        <Show
+          when={!props.closed && (props.item.state === "proposed" || props.item.state === "failed")}
+        >
+          <Form gap="sm" onSubmit={props.onDismiss}>
+            <Inline gap="sm" align="baseline" collapse>
+              <Button
+                type="submit"
+                variant="secondary"
+                state={props.dismissing ? "working" : "idle"}
+                disabled={props.submitting}
+                data-dismiss-item={props.item.id}
+                aria-label={`${props.dismissing ? "Dismissing" : "Dismiss"}: ${moveSummary(props.item)}`}
+              >
+                {props.dismissing ? "Dismissing move" : "Dismiss"}
+              </Button>
+              <Text size="caption" tone="muted">
+                Dismissing removes this move from the plan without changing your team.
+              </Text>
+            </Inline>
+          </Form>
+        </Show>
+
+        <Show when={!props.dismissing && props.dismissFailure}>
+          {(failure) => (
+            <Notice
+              id={`dismiss-${props.item.id}`}
+              tone="danger"
+              title="This move was not dismissed"
+            >
+              <Text size="caption" tone="danger">
+                {failure()}
+              </Text>
+            </Notice>
+          )}
         </Show>
 
         <Show when={shownResult()}>
@@ -1231,7 +1289,7 @@ function SubmissionPanel(props: SubmissionPanelProps): JSX.Element {
               <Button
                 type="submit"
                 state={props.submitting ? "working" : "idle"}
-                disabled={props.included === 0 || props.submitting}
+                disabled={props.included === 0 || props.submitting || props.dismissing}
                 aria-describedby="submission-note"
               >
                 {submitLabel(props.included)}
@@ -1513,6 +1571,9 @@ type ReviewProps = {
   readonly onToggle: (item: string, included: boolean) => void;
   readonly onSubmit: () => void;
   readonly submitting: boolean;
+  readonly dismissItem: (team: string, item: string, label: string) => void;
+  readonly dismissing: string | undefined;
+  readonly dismissFailure: (item: string) => string | undefined;
   readonly withdrawItem: (team: string, item: string) => void;
   readonly withdrawOffer: (team: string, offer: string) => void;
   readonly withdrawing: string | undefined;
@@ -1539,26 +1600,29 @@ type SubmittedSummaryProps = {
   readonly settling: boolean;
   readonly submittedAt: string;
   readonly submissionCount: number;
-  readonly settled: boolean;
+  readonly closed: boolean;
   readonly finished: boolean;
   readonly counts: TransactionReviewModel["counts"];
 };
 
-type ExpiredNoticeProps = {
-  readonly expiresAt: string;
+type ClosedSummaryProps = {
+  readonly review: TransactionReviewView;
+  readonly total: number;
 };
 
 type TeamProposalProps = {
   readonly team: TransactionReviewTeamView;
-  readonly expired: boolean;
+  readonly closed: boolean;
   readonly submitted: boolean;
-  readonly settled: boolean;
   readonly submitting: boolean;
   readonly bidFor: (item: TransactionReviewItemView) => TransactionReviewBidField | undefined;
   readonly isItemIncluded: (item: TransactionReviewItemView) => boolean;
+  readonly dismissing: string | undefined;
+  readonly dismissFailure: (item: string) => string | undefined;
   readonly withdrawing: string | undefined;
   readonly onBid: (item: string, value: string) => void;
   readonly onToggle: (item: string, included: boolean) => void;
+  readonly onDismiss: (team: string, item: string, label: string) => void;
   readonly onWithdraw: (team: string, item: string) => void;
 };
 
@@ -1579,12 +1643,15 @@ type ProposalItemProps = {
   readonly bid: TransactionReviewBidField | undefined;
   readonly tradeProposal: TransactionReviewTeamView["tradeProposal"];
   readonly tradeRules: TransactionReviewTradeRulesView | undefined;
-  readonly expired: boolean;
+  readonly closed: boolean;
   readonly submitting: boolean;
   readonly included: boolean;
+  readonly dismissing: boolean;
+  readonly dismissFailure: string | undefined;
   readonly withdrawing: boolean;
   readonly onBid: (value: string) => void;
   readonly onToggle: (included: boolean) => void;
+  readonly onDismiss: () => void;
   readonly onWithdraw: () => void;
 };
 
@@ -1620,5 +1687,6 @@ type SubmissionPanelProps = {
   readonly staleCount: number;
   readonly illegalCount: number;
   readonly submitting: boolean;
+  readonly dismissing: boolean;
   readonly onSubmit: () => void;
 };

@@ -171,10 +171,10 @@ export const seedOwnedAccount = Effect.gen(function* () {
   );
   yield* run(
     sql`insert into ${sql.identifier("transaction_proposal_sets")}
-      (id, user_id, proposer_kind, proposer_reference, surface, fingerprint, teams, expires_at)
+      (id, user_id, proposer_kind, proposer_reference, surface, fingerprint, teams)
       values
       (${owner.proposalSetId}, ${owner.id}, ${"user"}, ${"web"}, ${"app"}, ${"fingerprint-owner"},
-        ${`["${owner.teamId}"]`}::jsonb, ${instant})`,
+        ${`["${owner.teamId}"]`}::jsonb)`,
   );
   yield* run(
     sql`insert into ${sql.identifier("transaction_proposal_submissions")}

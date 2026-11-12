@@ -30,15 +30,14 @@ export function toTransactionReviewView(review: ProposalSetReview): TransactionR
         surface: review.set.proposedBy.surface,
       },
       createdAt: DateTime.formatIso(review.set.createdAt),
-      expiresAt: DateTime.formatIso(review.set.expiresAt),
-      expired: review.set.expired,
+      updatedAt: DateTime.formatIso(review.set.updatedAt),
       submissions: review.set.submissions.map((submission) => ({
         submittedAt: DateTime.formatIso(submission.submittedAt),
         ...(submission.completedAt === undefined
           ? {}
           : { completedAt: DateTime.formatIso(submission.completedAt) }),
       })),
-      settled: review.set.settled,
+      closed: review.set.closed,
     },
     teams: review.teams.map(toTeamView),
   };
@@ -148,6 +147,7 @@ function toItemView(
     ...(item.bid === undefined ? {} : { bid: item.bid }),
     reason: item.reason,
     state: item.state,
+    ...(item.outcomeDetail === undefined ? {} : { outcomeDetail: item.outcomeDetail }),
     staleness: {
       status: item.staleness.status,
       ...(item.staleness.checkedAt === undefined
@@ -344,8 +344,8 @@ export function mapTransactionReviewError(
   | "transactions.persistence_failed"
   | "transactions.unavailable"
   | "transactions.input_invalid"
-  | "transactions.set_expired"
-  | "transactions.already_submitted"
+  | "transactions.set_closed"
+  | "transactions.items_not_open"
   | "transactions.submission_in_progress"
   | "transactions.nothing_included"
   | "transactions.trade_not_found"
@@ -356,18 +356,17 @@ export function mapTransactionReviewError(
       return { type: "transactions.set_not_found", outcome: "rejected" };
     case "proposal.content_invalid":
     case "proposal.nothing_accepted":
-    case "proposal.items_not_withdrawable":
       return { type: "transactions.input_invalid", outcome: "rejected" };
+    case "proposal.items_not_open":
+      return { type: "transactions.items_not_open", outcome: "rejected" };
     case "proposal.nothing_included":
       return { type: "transactions.nothing_included", outcome: "rejected" };
     case "proposal.trade_not_found":
       return { type: "transactions.trade_not_found", outcome: "rejected" };
     case "proposal.trade_not_pending":
       return { type: "transactions.trade_not_pending", outcome: "conflict" };
-    case "proposal.set_expired":
-      return { type: "transactions.set_expired", outcome: "rejected" };
-    case "proposal.already_submitted":
-      return { type: "transactions.already_submitted", outcome: "conflict" };
+    case "proposal.set_closed":
+      return { type: "transactions.set_closed", outcome: "conflict" };
     case "proposal.submission_in_progress":
       return { type: "transactions.submission_in_progress", outcome: "conflict" };
     case "proposal.team_not_found":

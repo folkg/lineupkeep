@@ -342,8 +342,9 @@ collided, and the owner's ruling that an action waits rather than being refused.
 
 ## Round 17 - Plans outlive the day, and windows a client chooses
 
-Status: partly implemented. Windowed game days shipped; the plan lifecycle and scheduled items are
-next. The owner answered three design questions on 12 November.
+Status: partly implemented. Windowed game days shipped, and plans no longer expire: an owner can
+dismiss an item and the plan closes when every item has ended. Scheduled items are next. The owner
+answered three design questions on 12 November.
 
 1. **Accepted: proposal sets stay, as durable plans rather than expiring sets.** A set is still one
    reviewed unit with one fingerprint, one provenance trail, and one review link, because that is what

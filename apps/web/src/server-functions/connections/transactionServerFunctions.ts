@@ -1,6 +1,7 @@
 import { TeamId } from "@lineupkeep/backend/connections/FantasyTeam";
 import { TradeOfferRef } from "@lineupkeep/backend/connections/QueryValues";
 import {
+  DismissProposalItemsInput,
   ProposalItemId,
   ProposalSetId,
   TransactionProposals,
@@ -10,6 +11,7 @@ import { getRequest } from "@tanstack/solid-start/server";
 import { Effect, Schema } from "effect";
 
 import type {
+  DismissTransactionProposalData,
   TransactionReviewData,
   WithdrawTradeData,
 } from "#contracts/connections/transactionContract.ts";
@@ -35,9 +37,7 @@ export const readTransactionReviewServerFn = createServerFn({ method: "POST" })
             Effect.mapError(() => TransactionInputInvalid.make({})),
           );
           const proposals = yield* TransactionProposals;
-          const review = yield* proposals
-            .revalidate(userId, input)
-            .pipe(Effect.catchTag("proposal.set_expired", () => proposals.read(userId, input)));
+          const review = yield* proposals.revalidate(userId, input);
           return { review: toTransactionReviewView(review) } satisfies TransactionReviewData;
         }),
       (error) =>
@@ -89,6 +89,51 @@ export const submitTransactionReviewServerFn = createServerFn({ method: "POST" }
             review: toTransactionReviewView(submission),
             submittedBids: submission.submittedBids,
           } satisfies TransactionReviewData;
+        }),
+      (error) =>
+        error._tag === "TransactionInputInvalid"
+          ? { type: "transactions.input_invalid", outcome: "rejected" }
+          : mapTransactionReviewError(error),
+    );
+  });
+
+export const dismissTransactionProposalItemsServerFn = createServerFn({ method: "POST" })
+  .validator(
+    (raw: {
+      readonly set: string;
+      readonly items: ReadonlyArray<string>;
+      readonly reason?: string;
+    }) => Schema.decodeResult(DismissProposalItemsInput)(raw),
+  )
+  .handler(({ data }) => {
+    const request = getRequest();
+    return runUseCase(
+      request,
+      "transactions.dismiss",
+      (userId) =>
+        Effect.gen(function* () {
+          const input = yield* Effect.fromResult(data).pipe(
+            Effect.mapError(() => TransactionInputInvalid.make({})),
+          );
+          const proposals = yield* TransactionProposals;
+          const outcome = yield* Effect.result(proposals.dismissItems(userId, input));
+          if (outcome._tag === "Failure") {
+            if (outcome.failure._tag === "proposal.items_not_open") {
+              return {
+                outcome: "refused",
+                detail: outcome.failure.detail,
+                refusals: outcome.failure.items.map((entry) => ({
+                  item: entry.item,
+                  detail: entry.detail,
+                })),
+              } satisfies DismissTransactionProposalData;
+            }
+            return yield* outcome.failure;
+          }
+          return {
+            outcome: "dismissed",
+            review: toTransactionReviewView(outcome.success),
+          } satisfies DismissTransactionProposalData;
         }),
       (error) =>
         error._tag === "TransactionInputInvalid"

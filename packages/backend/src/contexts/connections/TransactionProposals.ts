@@ -13,8 +13,6 @@ import {
   TradeOfferRef,
 } from "./QueryValues.ts";
 
-export const proposalSetLifetimeMillis = 24 * 60 * 60 * 1000;
-
 const LineupgradeId = Schema.Union([
   Schema.String.pipe(Schema.check(Schema.isUUID())),
   Schema.String.pipe(Schema.check(Schema.isULID())),
@@ -50,6 +48,7 @@ export const ProposalItemState = Schema.Literals([
   "accepted",
   "withdrawn",
   "expired",
+  "dismissed",
 ]);
 export type ProposalItemState = typeof ProposalItemState.Type;
 
@@ -233,6 +232,9 @@ export const ProposalItem = Schema.Struct({
     description: "Whether the move will never run again; a failed move is not settled.",
   }),
   staleness: ProposalStaleness,
+  outcomeDetail: Schema.optional(Schema.NonEmptyString).annotate({
+    description: "What the owner recorded when dismissing the move.",
+  }),
   execution: Schema.optional(ProposalItemExecution),
   reserveMove: Schema.optional(ProposalReserveMove),
   slotMove: Schema.optional(ProposalSlotMove),
@@ -420,16 +422,14 @@ export const ProposalSet = Schema.Struct({
   id: ProposalSetId,
   proposedBy: ProposalSetProvenance,
   createdAt: Schema.DateTimeUtc,
-  expiresAt: Schema.DateTimeUtc.annotate({
-    description: "24 hours after the set was created.",
+  updatedAt: Schema.DateTimeUtc.annotate({
+    description: "When the plan last changed.",
   }),
-  expired: Schema.Boolean,
   submissions: Schema.Array(ProposalSubmission).annotate({
     description: "Every submission, oldest first; more than one when a move failed or was skipped.",
   }),
-  settled: Schema.Boolean.annotate({
-    description:
-      "Submitted, with every move settled; a settled set refuses new items and submissions.",
+  closed: Schema.Boolean.annotate({
+    description: "Whether every move has ended, so the plan refuses new moves and submissions.",
   }),
   reviewPath: Schema.NonEmptyString,
 });
@@ -623,12 +623,23 @@ export const WithdrawProposalItemsInput = Schema.Struct({
 });
 export type WithdrawProposalItemsInput = typeof WithdrawProposalItemsInput.Type;
 
-export const ProposalItemWithdrawalRefusal = Schema.Struct({
+export const DismissProposalItemsInput = Schema.Struct({
+  set: ProposalSetId,
+  items: Schema.Array(ProposalItemId).pipe(
+    Schema.check(Schema.isMinLength(1), Schema.isMaxLength(25)),
+  ),
+  reason: Schema.optional(ProposalReason).annotate({
+    description: "Why the move was dismissed, kept with it.",
+  }),
+});
+export type DismissProposalItemsInput = typeof DismissProposalItemsInput.Type;
+
+export const ProposalItemNotOpenRefusal = Schema.Struct({
   item: ProposalItemId,
   state: Schema.optional(ProposalItemState),
   detail: Schema.NonEmptyString,
 });
-export type ProposalItemWithdrawalRefusal = typeof ProposalItemWithdrawalRefusal.Type;
+export type ProposalItemNotOpenRefusal = typeof ProposalItemNotOpenRefusal.Type;
 
 const ProposalBidSubmission = Schema.Struct({
   item: ProposalItemId,
@@ -707,6 +718,11 @@ export type TransactionProposalsShape = {
     input: WithdrawProposalItemsInput,
   ) => Effect.Effect<ProposalSetReview, ProposalError>;
 
+  readonly dismissItems: (
+    userId: UserId,
+    input: DismissProposalItemsInput,
+  ) => Effect.Effect<ProposalSetReview, ProposalError>;
+
   readonly read: (
     userId: UserId,
     input: ProposalSetInput,
@@ -733,13 +749,12 @@ export type ProposalError =
   | ProposalNothingAccepted
   | ProposalNothingIncluded
   | ProposalSetNotFound
-  | ProposalSetExpired
-  | ProposalSetAlreadySubmitted
+  | ProposalSetClosed
   | ProposalSubmissionInProgress
   | ProposalTeamNotFound
   | ProposalTradeNotFound
   | ProposalTradeNotPending
-  | ProposalItemsNotWithdrawable
+  | ProposalItemsNotOpen
   | ProposalConnectionNotReady
   | ProposalProviderUnavailable
   | ProposalPersistenceFailed;
@@ -767,12 +782,12 @@ export class ProposalNothingIncluded extends Schema.TaggedError<
   detail: Schema.NonEmptyString,
 }) {}
 
-export class ProposalSetAlreadySubmitted extends Schema.TaggedError<
-  ProposalSetAlreadySubmitted,
+export class ProposalSetClosed extends Schema.TaggedError<
+  ProposalSetClosed,
   { readonly brand: unique symbol }
->()("proposal.already_submitted", {
+>()("proposal.set_closed", {
   set: ProposalSetId,
-  submittedAt: Schema.DateTimeUtc,
+  detail: Schema.NonEmptyString,
 }) {}
 
 export class ProposalSubmissionInProgress extends Schema.TaggedError<
@@ -804,11 +819,11 @@ export class ProposalTradeNotPending extends Schema.TaggedError<
   detail: Schema.NonEmptyString,
 }) {}
 
-export class ProposalItemsNotWithdrawable extends Schema.TaggedError<
-  ProposalItemsNotWithdrawable,
+export class ProposalItemsNotOpen extends Schema.TaggedError<
+  ProposalItemsNotOpen,
   { readonly brand: unique symbol }
->()("proposal.items_not_withdrawable", {
-  items: Schema.Array(ProposalItemWithdrawalRefusal),
+>()("proposal.items_not_open", {
+  items: Schema.Array(ProposalItemNotOpenRefusal),
   detail: Schema.NonEmptyString,
 }) {}
 
@@ -832,14 +847,6 @@ export class ProposalSetNotFound extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()("proposal.set_not_found", {
   set: ProposalSetId,
-}) {}
-
-export class ProposalSetExpired extends Schema.TaggedError<
-  ProposalSetExpired,
-  { readonly brand: unique symbol }
->()("proposal.set_expired", {
-  set: ProposalSetId,
-  expiresAt: Schema.DateTimeUtc,
 }) {}
 
 export class ProposalPersistenceFailed extends Schema.TaggedError<

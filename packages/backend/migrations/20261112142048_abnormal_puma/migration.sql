@@ -1,0 +1,1 @@
+ALTER TABLE "transaction_proposal_sets" DROP COLUMN "expires_at";

@@ -824,10 +824,10 @@ refused and named. Repeating the identical set returns the existing set with `cr
 rather than stacking a duplicate. Once a set is extended or a stored move is withdrawn, its contents
 no longer match the original request, so proposing the original items again creates a new set.
 
-Passing `set` appends the items after an existing set that is still open. A set is open until it has
-been submitted and every move in it has settled: a move settles when it executed, its trade offer
-is no longer available, or it was skipped for a reason that cannot change. A set whose submission
-left a move failed, or that was never submitted, is open. Every team that receives an item is
+Passing `set` appends the items after an existing plan that is still open. A plan is open while any
+move in it can still run: a move ends when it executed, was dismissed by the owner, was withdrawn, its
+trade offer is no longer available, or it was skipped for a reason that cannot change. A plan whose
+submission left a move failed, or that was never submitted, is open. Every team that receives an item is
 validated again against the current roster together with the moves in the set that are still proposed,
 and that team's stored order is recomputed. A move whose attempt failed or that was skipped is replaced
 by a new item, so proposing that move again in the same set is accepted; the earlier item stays as a
@@ -837,10 +837,14 @@ twenty item ids, removes the moves that are still proposed, revalidates the rema
 returns the set with its new order and review link. Removing the last move for a team is allowed. A
 move that already ran, is pending, failed, or was skipped cannot be withdrawn: it keeps its outcome
 and is replaced by a new item. A set that stayed open after a submission still accepts a withdrawal
-of a move that is still proposed; a set whose moves have all settled is an audit record and refuses both
-new moves and withdrawals.
+of a move that is still proposed; a plan whose moves have all ended is an audit record and refuses both
+new moves and withdrawals. A plan never expires; it stops when every move has ended.
 
-A set expires 24 hours after creation. `revalidate_transaction_proposal_set` re-reads current state
+A signed-in owner dismisses one move from the review page. The move becomes `dismissed`, keeps the
+owner's reason in `outcomeDetail`, and never runs; dismissing the last open move closes the plan. No
+MCP tool dismisses: an agent withdraws the moves it still controls.
+
+`revalidate_transaction_proposal_set` re-reads current state
 once per team (its roster, its league rules, the pool state of the players it adds, and its FAAB
 balance when a bid is present) and marks each open item `current`, `stale`, or `illegal` with
 reasons: the added player is no longer in the pool, a dropped player is no longer on the roster, the
@@ -877,17 +881,18 @@ current state back to the review. Staleness and illegality are recorded beside t
 are never failures; a move that is still proposed stays `proposed`. A set stores only moves that passed the check when they
 were proposed, so a fresh set is current; a later check can still make a stored move stale. A team
 whose state cannot be read marks only its own items, and the review reports the failure beside that
-team. An expired set refuses re-validation
-instead of re-checking or executing, so a set that sat overnight cannot be executed from facts nobody
-re-checked. `get_transaction_proposal_set` reads the set back with every team, including the teams
-that had nothing proposed, each item's state and `settled` flag, last check, each team's planned
+team. A plan that sat overnight is re-checked before anything runs: revalidation reads current state,
+and a submission runs the same check immediately before writing. `get_transaction_proposal_set` reads
+the plan back with every team, including the teams
+that had nothing proposed, whether the plan is `closed`, each item's state and `settled` flag, last check, each team's planned
 `order` with its positions, an item's server roster move as `reserveMove`, every submission in
 order, and each move's position and step outcomes, and the same review link. It contacts no
 provider: the order is the one the last check planned and saved. A rejected write carries the provider's exact wording, and that wording reaches
 both the review page and this tool result. Another account's set is reported as not
 found.
 
-The item state vocabulary is `proposed`, `executed`, `pending`, `failed`, `skipped`, and `unknown`.
+The item state vocabulary is `proposed`, `executed`, `pending`, `failed`, `skipped`, `unknown`, and
+`dismissed`, plus a trade's `accepted`, `withdrawn`, and `expired`.
 No MCP tool submits, accepts, or spends anything. Execution happens only when a signed-in owner
 submits the moves that are still proposed from the review page. Each submission claims the set in the
 database, re-runs the same revalidation immediately before writing, and skips an item that went stale

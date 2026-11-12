@@ -163,11 +163,8 @@ function mapFailure<A>(
           return reject("content_invalid", error.detail);
         case "proposal.nothing_included":
           return reject("nothing_included", error.detail);
-        case "proposal.already_submitted":
-          return reject(
-            "already_submitted",
-            "Every move in this proposal set has settled, so it is an audit record and cannot change or be submitted again; propose a fresh set for a new move.",
-          );
+        case "proposal.set_closed":
+          return reject("set_closed", error.detail);
         case "proposal.submission_in_progress":
           return reject(
             "submission_in_progress",
@@ -186,9 +183,9 @@ function mapFailure<A>(
               ),
             ].join(" "),
           );
-        case "proposal.items_not_withdrawable":
+        case "proposal.items_not_open":
           return reject(
-            "items_not_withdrawable",
+            "items_not_open",
             [
               error.detail,
               ...error.items.map(
@@ -201,11 +198,6 @@ function mapFailure<A>(
           return reject(
             "set_not_found",
             "The selected proposal set is not available to this account. Propose the set again or read your own set id.",
-          );
-        case "proposal.set_expired":
-          return reject(
-            "set_expired",
-            "This proposal set expired and refuses re-validation rather than executing stale or illegal moves. Propose the transactions again to create a fresh set.",
           );
         case "proposal.trade_not_found":
           return reject(

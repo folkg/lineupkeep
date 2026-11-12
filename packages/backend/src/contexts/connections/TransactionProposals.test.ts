@@ -48,14 +48,12 @@ import type { CounterpartyRef, PlayerRef } from "./QueryValues.ts";
 import {
   ProposalContentInvalid,
   ProposalItemDraft,
-  ProposalItemsNotWithdrawable,
+  ProposalItemsNotOpen,
   ProposalNothingIncluded,
-  ProposalSetAlreadySubmitted,
-  ProposalSetExpired,
+  ProposalSetClosed,
   ProposalSetNotFound,
   ProposalSetReview,
   TransactionProposals,
-  proposalSetLifetimeMillis,
 } from "./TransactionProposals.ts";
 
 const lineupgradeUlid = /^[0-9A-HJKMNP-TV-Z]{26}$/u;
@@ -89,7 +87,11 @@ it.effect("stores an owner-scoped proposal set after checking it against current
 
     assert.isTrue(result.created);
     assert.isFalse(result.extended);
-    assert.strictEqual(result.set.expired, false);
+    assert.strictEqual(result.set.closed, false);
+    assert.strictEqual(
+      result.set.updatedAt.epochMilliseconds,
+      result.set.createdAt.epochMilliseconds,
+    );
     assert.strictEqual(result.set.proposedBy.kind, "agent");
     assert.strictEqual(result.set.proposedBy.surface, "mcp");
     assert.isTrue(lineupgradeUlid.test(result.set.id));
@@ -855,16 +857,17 @@ it.effect("refuses an add whose professional team does not play in the week it w
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect("refuses to revalidate an expired set and keeps it readable", () =>
+it.effect("keeps a plan older than a day readable, revalidatable, and open for a new move", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;
     const fake = yield* FakeProviderWorld;
     const tokens = yield* QueryTokens;
     const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line", "nhl")]);
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
     const result = yield* proposals.propose(owner, proposer, {
       items: [
         {
-          team: teamId(seeded, "nhl.l.1.t.1"),
+          team: redLine,
           kind: "drop",
           adds: [],
           drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
@@ -874,13 +877,34 @@ it.effect("refuses to revalidate an expired set and keeps it readable", () =>
     });
 
     const reads = (yield* fake.rosterPeriods).length;
-    yield* TestClock.adjust(proposalSetLifetimeMillis);
-    const expired = yield* Effect.flip(proposals.revalidate(owner, { set: result.set.id }));
-    assert.instanceOf(expired, ProposalSetExpired);
-    assert.strictEqual((yield* fake.rosterPeriods).length, reads);
+    yield* TestClock.adjust("2 days");
+    const revalidated = yield* proposals.revalidate(owner, { set: result.set.id });
+    assert.isFalse(revalidated.set.closed);
+    assert.strictEqual((yield* fake.rosterPeriods).length, reads + 1);
+    assert.deepStrictEqual(
+      itemsOf(revalidated).map((item) => item.state),
+      ["proposed"],
+    );
 
-    const review = yield* proposals.read(owner, { set: result.set.id });
-    assert.isTrue(review.set.expired);
+    const extended = yield* proposals.propose(owner, proposer, {
+      set: result.set.id,
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          reason: "A second drop after a day.",
+        },
+      ],
+    });
+    assert.isFalse(extended.created);
+    assert.isTrue(extended.extended);
+    assert.deepStrictEqual(
+      itemsOf(yield* proposals.read(owner, { set: result.set.id })).map((item) => item.state),
+      ["proposed", "proposed"],
+    );
+
     const foreign = yield* Effect.flip(proposals.revalidate(other, { set: result.set.id }));
     assert.instanceOf(foreign, ProposalSetNotFound);
   }).pipe(Effect.provide(TestLayer)),
@@ -1099,7 +1123,7 @@ it.effect(
       );
       assert.strictEqual(submitted.set.submissions.length, 1);
       assert.strictEqual(submitted.set.submissions[0]?.completedAt !== undefined, true);
-      assert.strictEqual(submitted.set.settled, false);
+      assert.strictEqual(submitted.set.closed, false);
       const staleItem = submittedItems.find((item) => item.id === stale);
       assert.include(staleItem?.execution?.detail ?? "", "already rostered in this league");
       const excludedItem = submittedItems.find((item) => item.id === excluded);
@@ -1180,7 +1204,7 @@ it.effect("refuses a duplicate submission without a second provider write", () =
     const duplicate = yield* Effect.flip(
       proposals.submit(owner, { set: result.set.id, include: [item.id] }),
     );
-    assert.instanceOf(duplicate, ProposalSetAlreadySubmitted);
+    assert.instanceOf(duplicate, ProposalSetClosed);
     assert.strictEqual((yield* fake.transactionRequests).length, before);
   }).pipe(Effect.provide(TestLayer)),
 );
@@ -1238,7 +1262,7 @@ it.effect("replaces a failed move in the same set and sends only the replacement
     assert.strictEqual(failed?.state, "failed");
     assert.strictEqual(failed?.settled, false);
     assert.include(failed?.execution?.detail ?? "", "That player is locked for this week.");
-    assert.strictEqual(first.set.settled, false);
+    assert.strictEqual(first.set.closed, false);
     assert.strictEqual((yield* fake.transactionRequests).length, 2);
 
     yield* TestClock.adjust(60_000);
@@ -1270,7 +1294,7 @@ it.effect("replaces a failed move in the same set and sends only the replacement
     const refusedWithdrawal = yield* Effect.flip(
       proposals.withdrawItems(owner, { set: result.set.id, items: [failedId] }),
     );
-    assert.instanceOf(refusedWithdrawal, ProposalItemsNotWithdrawable);
+    assert.instanceOf(refusedWithdrawal, ProposalItemsNotOpen);
     assert.strictEqual(Array.getUnsafe(refusedWithdrawal.items, 0).state, "failed");
     assert.include(Array.getUnsafe(refusedWithdrawal.items, 0).detail, "attempted and failed");
 
@@ -1291,7 +1315,7 @@ it.effect("replaces a failed move in the same set and sends only the replacement
       DateTime.toEpochMillis(secondSubmission.submittedAt) >
         DateTime.toEpochMillis(firstSubmission.submittedAt),
     );
-    assert.strictEqual(second.set.settled, false);
+    assert.strictEqual(second.set.closed, false);
 
     const read = yield* proposals.read(owner, { set: result.set.id });
     assert.deepStrictEqual(
@@ -1364,7 +1388,7 @@ it.effect("refuses new items once every move in a set has settled", () =>
       set: created.set.id,
       include: [item.id],
     });
-    assert.strictEqual(submitted.set.settled, true);
+    assert.strictEqual(submitted.set.closed, true);
     assert.strictEqual(Array.getUnsafe(itemsOf(submitted), 0).settled, true);
 
     const refused = yield* Effect.flip(
@@ -1381,16 +1405,14 @@ it.effect("refuses new items once every move in a set has settled", () =>
         ],
       }),
     );
-    assert.instanceOf(refused, ProposalSetAlreadySubmitted);
-    assert.isTrue(
-      DateTime.toEpochMillis(refused.submittedAt) ===
-        DateTime.toEpochMillis(Array.getUnsafe(submitted.set.submissions, 0).submittedAt),
-    );
+    assert.instanceOf(refused, ProposalSetClosed);
+    assert.strictEqual(refused.set, created.set.id);
+    assert.include(refused.detail, "closed");
     assert.strictEqual(itemsOf(yield* proposals.read(owner, { set: created.set.id })).length, 1);
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect("refuses an expired set, a foreign set, and an empty selection without writing", () =>
+it.effect("refuses a foreign set and an empty selection without writing", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;
     const fake = yield* FakeProviderWorld;
@@ -1419,11 +1441,6 @@ it.effect("refuses an expired set, a foreign set, and an empty selection without
     assert.instanceOf(foreign, ProposalSetNotFound);
     assert.deepStrictEqual(yield* fake.transactionRequests, []);
 
-    yield* TestClock.adjust(proposalSetLifetimeMillis);
-    const expired = yield* Effect.flip(
-      proposals.submit(owner, { set: fresh.set.id, include: [freshItem.id] }),
-    );
-    assert.instanceOf(expired, ProposalSetExpired);
     assert.deepStrictEqual(yield* fake.transactionRequests, []);
   }).pipe(Effect.provide(TestLayer)),
 );
@@ -1774,7 +1791,7 @@ it.effect("refuses an item that names more adds than your league's request allow
     const item = Array.getUnsafe(itemsOf(submitted), 0);
     assert.strictEqual(item.state, "skipped");
     assert.strictEqual(item.settled, true);
-    assert.strictEqual(submitted.set.settled, true);
+    assert.strictEqual(submitted.set.closed, true);
     assert.include(item.execution?.detail ?? "", "at most 1 add and 1 drop");
 
     const refused = yield* Effect.flip(
@@ -1791,7 +1808,7 @@ it.effect("refuses an item that names more adds than your league's request allow
         ],
       }),
     );
-    assert.instanceOf(refused, ProposalSetAlreadySubmitted);
+    assert.instanceOf(refused, ProposalSetClosed);
   }).pipe(Effect.provide(TestLayer)),
 );
 
@@ -5162,7 +5179,7 @@ it.effect("refuses to withdraw a move that already ran", () =>
     const refused = yield* Effect.flip(
       proposals.withdrawItems(owner, { set: created.set.id, items: [item.id] }),
     );
-    assert.instanceOf(refused, ProposalItemsNotWithdrawable);
+    assert.instanceOf(refused, ProposalItemsNotOpen);
     const entry = Array.getUnsafe(refused.items, 0);
     assert.strictEqual(entry.item, item.id);
     assert.strictEqual(entry.state, "executed");
@@ -5205,11 +5222,254 @@ it.effect("refuses to withdraw a move that already ran from a submitted set", ()
     const refused = yield* Effect.flip(
       proposals.withdrawItems(owner, { set: created.set.id, items: [item.id] }),
     );
-    assert.instanceOf(refused, ProposalItemsNotWithdrawable);
+    assert.instanceOf(refused, ProposalItemsNotOpen);
     assert.strictEqual(Array.getUnsafe(refused.items, 0).state, "executed");
     assert.include(Array.getUnsafe(refused.items, 0).detail, "already run");
     assert.strictEqual((yield* fake.transactionRequests).length, writes);
     assert.strictEqual(itemsOf(yield* proposals.read(owner, { set: created.set.id })).length, 1);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("dismisses moves with a reason and closes the plan after the last open one", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seedTwoTeams(fake);
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const created = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          reason: "Drop the first center.",
+        },
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          reason: "Drop the second center.",
+        },
+      ],
+    });
+    const [first, second] = itemsOf(yield* proposals.read(owner, { set: created.set.id }));
+    assert.isDefined(first);
+    assert.isDefined(second);
+
+    const dismissed = yield* proposals.dismissItems(owner, {
+      set: created.set.id,
+      items: [first.id],
+      reason: "Not this week.",
+    });
+    assert.isFalse(dismissed.set.closed);
+    const dismissedItem = itemsOf(dismissed).find((item) => item.id === first.id);
+    assert.isDefined(dismissedItem);
+    assert.strictEqual(dismissedItem.state, "dismissed");
+    assert.isTrue(dismissedItem.settled);
+    assert.strictEqual(dismissedItem.outcomeDetail, "Not this week.");
+    assert.strictEqual(dismissedItem.staleness.status, "current");
+    assert.strictEqual(itemsOf(dismissed).find((item) => item.id === second.id)?.state, "proposed");
+
+    const read = yield* proposals.read(owner, { set: created.set.id });
+    assert.isFalse(read.set.closed);
+    assert.strictEqual(
+      itemsOf(read).find((item) => item.id === first.id)?.outcomeDetail,
+      "Not this week.",
+    );
+
+    const closed = yield* proposals.dismissItems(owner, {
+      set: created.set.id,
+      items: [second.id],
+    });
+    assert.isTrue(closed.set.closed);
+    assert.deepStrictEqual(
+      itemsOf(closed).map((item) => [item.state, item.settled]),
+      [
+        ["dismissed", true],
+        ["dismissed", true],
+      ],
+    );
+    assert.isUndefined(Array.getUnsafe(closed.teams, 0).order);
+
+    const refusedPropose = yield* Effect.flip(
+      proposals.propose(owner, proposer, {
+        set: created.set.id,
+        items: [
+          {
+            team: redLine,
+            kind: "drop",
+            adds: [],
+            drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90003"]),
+            reason: "A move after the plan closed.",
+          },
+        ],
+      }),
+    );
+    assert.instanceOf(refusedPropose, ProposalSetClosed);
+    assert.include(refusedPropose.detail, "Propose a fresh set");
+
+    const refusedSubmit = yield* Effect.flip(
+      proposals.submit(owner, { set: created.set.id, include: [second.id] }),
+    );
+    assert.instanceOf(refusedSubmit, ProposalSetClosed);
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+    assert.isTrue((yield* proposals.read(owner, { set: created.set.id })).set.closed);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("refuses to dismiss a move that is not open and changes nothing", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const database = yield* ConnectionsDatabase;
+    const seeded = yield* seedTwoTeams(fake);
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const created = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          reason: "Dismiss this one twice.",
+        },
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          reason: "This one already ran.",
+        },
+      ],
+    });
+    const [first, second] = itemsOf(yield* proposals.read(owner, { set: created.set.id }));
+    assert.isDefined(first);
+    assert.isDefined(second);
+    yield* proposals.dismissItems(owner, { set: created.set.id, items: [first.id] });
+    yield* database
+      .update(transactionProposalItems)
+      .set({ state: "executed", settled: true })
+      .where(eq(transactionProposalItems.id, second.id));
+
+    const dismissedTwice = yield* Effect.flip(
+      proposals.dismissItems(owner, { set: created.set.id, items: [first.id] }),
+    );
+    assert.instanceOf(dismissedTwice, ProposalItemsNotOpen);
+    const dismissedEntry = Array.getUnsafe(dismissedTwice.items, 0);
+    assert.strictEqual(dismissedEntry.state, "dismissed");
+    assert.include(dismissedEntry.detail, "already dismissed");
+    assert.include(dismissedTwice.detail, "Nothing was dismissed");
+
+    const executed = yield* Effect.flip(
+      proposals.dismissItems(owner, { set: created.set.id, items: [second.id] }),
+    );
+    assert.instanceOf(executed, ProposalItemsNotOpen);
+    const executedEntry = Array.getUnsafe(executed.items, 0);
+    assert.strictEqual(executedEntry.state, "executed");
+    assert.include(executedEntry.detail, "already run");
+
+    const after = itemsOf(yield* proposals.read(owner, { set: created.set.id }));
+    assert.deepStrictEqual(
+      after.map((item) => item.state),
+      ["dismissed", "executed"],
+    );
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("refuses a move from another plan and a plan owned by someone else", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seedTwoTeams(fake);
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const first = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          reason: "The first plan.",
+        },
+      ],
+    });
+    const second = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          reason: "The second plan.",
+        },
+      ],
+    });
+    const foreignItem = Array.getUnsafe(
+      itemsOf(yield* proposals.read(owner, { set: second.set.id })),
+      0,
+    );
+
+    const refused = yield* Effect.flip(
+      proposals.dismissItems(owner, { set: first.set.id, items: [foreignItem.id] }),
+    );
+    assert.instanceOf(refused, ProposalItemsNotOpen);
+    const entry = Array.getUnsafe(refused.items, 0);
+    assert.strictEqual(entry.item, foreignItem.id);
+    assert.isUndefined(entry.state);
+    assert.include(entry.detail, "does not belong to the plan");
+    assert.strictEqual(
+      itemsOf(yield* proposals.read(owner, { set: second.set.id }))[0]?.state,
+      "proposed",
+    );
+
+    const foreignSet = yield* Effect.flip(
+      proposals.dismissItems(other, { set: first.set.id, items: [foreignItem.id] }),
+    );
+    assert.instanceOf(foreignSet, ProposalSetNotFound);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("dismisses a failed move so its plan can close", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seedTwoTeams(fake);
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const created = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          reason: "A drop that fails.",
+        },
+      ],
+    });
+    const item = Array.getUnsafe(itemsOf(yield* proposals.read(owner, { set: created.set.id })), 0);
+    yield* fake.setTransactionAction("reject", "That player is locked.");
+    const submitted = yield* proposals.submit(owner, { set: created.set.id, include: [item.id] });
+    const failed = Array.getUnsafe(itemsOf(submitted), 0);
+    assert.strictEqual(failed.state, "failed");
+    assert.isFalse(submitted.set.closed);
+
+    const dismissed = yield* proposals.dismissItems(owner, {
+      set: created.set.id,
+      items: [failed.id],
+      reason: "No longer needed.",
+    });
+    const after = Array.getUnsafe(itemsOf(dismissed), 0);
+    assert.strictEqual(after.state, "dismissed");
+    assert.isTrue(after.settled);
+    assert.strictEqual(after.outcomeDetail, "No longer needed.");
+    assert.isTrue(dismissed.set.closed);
   }).pipe(Effect.provide(TestLayer)),
 );
 

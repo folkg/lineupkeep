@@ -17,6 +17,7 @@ import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
 import type {
+  DismissTransactionProposalData,
   TransactionReviewData,
   TransactionReviewItemView,
   TransactionReviewPlayerView,
@@ -35,7 +36,6 @@ const gammaId = "018f79ea-7d86-7c18-9b4a-8b4d0c9165a4";
 
 const now = new Date().toISOString();
 const oneHourAgo = new Date(Date.now() - 60 * 60 * 1_000).toISOString();
-const twentyThreeHours = new Date(Date.now() + 23 * 60 * 60 * 1_000).toISOString();
 const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1_000).toISOString();
 
 it("renders a two-team proposal, a quiet team, and one disabled action", async () => {
@@ -306,21 +306,153 @@ it("keeps teams with nothing proposed in a quiet section at the end", async () =
   await expect.element(page.getByText("Beta, Gamma, Delta")).toBeVisible();
 });
 
-it("says an expired set offers nothing to do", async () => {
+it("shows a closed plan as an audit record with nothing to submit", async () => {
   using _app = setupReviewPage({
     ...reviewFixture(),
     set: {
       ...reviewFixture().set,
-      expired: true,
-      expiresAt: twoHoursAgo,
+      closed: true,
     },
+    teams: [
+      teamFixture(alphaId, "Alpha", "nfl", "football", [
+        {
+          ...dropItem(),
+          state: "dismissed",
+          outcomeDetail: "Not this week.",
+        },
+      ]),
+    ],
   });
 
-  await expect.element(page.getByText(/Nothing can be submitted from this set/u)).toBeVisible();
-  await expect.element(page.getByText(/^Expired/u)).toBeVisible();
+  await expect.element(page.getByText("Audit record", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Every move in this plan has ended.")).toBeVisible();
+  await expect.element(page.getByText("Dismissed from this plan")).toBeVisible();
+  await expect.element(page.getByText("Not this week.", { exact: true })).toBeVisible();
   expect(page.getByRole("checkbox").elements()).toHaveLength(0);
-  await expect.element(page.getByRole("heading", { name: "Submission" })).not.toBeInTheDocument();
   expect(page.getByRole("button", { name: /Submit/u }).elements()).toHaveLength(0);
+  expect(page.getByRole("button", { name: /Dismiss/u }).elements()).toHaveLength(0);
+  expect(page.getByText(/Expires/u).elements()).toHaveLength(0);
+});
+
+it("dismisses a move with a pending label, keeps the plan usable, then closes it", async () => {
+  const base = reviewFixture();
+  const first = dropItem();
+  const second: TransactionReviewItemView = {
+    ...dropItem(),
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165b9",
+    drops: [player("Owen Park", "D", "TOR")],
+    reason: "Open another roster spot.",
+  };
+  const withOneDismissed: TransactionReviewView = {
+    ...base,
+    teams: [
+      teamFixture(alphaId, "Alpha", "nfl", "football", [{ ...first, state: "dismissed" }, second]),
+    ],
+  };
+  const closedPlan: TransactionReviewView = {
+    ...withOneDismissed,
+    set: { ...withOneDismissed.set, closed: true },
+    teams: withOneDismissed.teams.map((team) => ({
+      ...team,
+      items: team.items.map((item) => ({
+        ...item,
+        state: "dismissed" as const,
+      })),
+    })),
+  };
+  const requests: Array<{
+    readonly set: string;
+    readonly items: ReadonlyArray<string>;
+    readonly reason?: string;
+  }> = [];
+  let resolveFirst = (_data: DismissTransactionProposalData): void => {};
+  const firstDismissal = new Promise<DismissTransactionProposalData>((resolve) => {
+    resolveFirst = resolve;
+  });
+  let calls = 0;
+  using _app = setupReviewPage(
+    {
+      ...base,
+      teams: [teamFixture(alphaId, "Alpha", "nfl", "football", [first, second])],
+    },
+    {
+      dismiss: (input) => {
+        requests.push(input);
+        calls += 1;
+        return calls === 1
+          ? firstDismissal
+          : Promise.resolve({ outcome: "dismissed" as const, review: closedPlan });
+      },
+    },
+  );
+
+  const firstButton = page.getByRole("button", { name: /Dismiss: Drop Riley Chen/u });
+  await firstButton.click();
+
+  expect(requests).toStrictEqual([{ set: setId, items: [first.id] }]);
+  await expect
+    .element(page.getByRole("button", { name: /Dismissing: Drop Riley Chen/u }))
+    .toHaveAttribute("aria-busy", "true");
+  await expect.element(page.getByText("Dismissing move", { exact: true })).toBeVisible();
+  await expect
+    .element(page.getByRole("checkbox", { name: /Include: Drop Riley Chen/u }))
+    .toBeDisabled();
+  await expect
+    .element(page.getByRole("button", { name: /Dismiss: Drop Owen Park/u }))
+    .not.toHaveAttribute("aria-disabled");
+  await expect
+    .element(page.getByRole("checkbox", { name: /Include: Drop Owen Park/u }))
+    .not.toBeDisabled();
+
+  resolveFirst({ outcome: "dismissed", review: withOneDismissed });
+
+  await expect.element(page.getByText("Dismissed from this plan")).not.toBeInTheDocument();
+  await expect.element(page.getByText("Dismissed", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Dismissed Drop Riley Chen.")).toBeVisible();
+  expect(document.activeElement).toBe(
+    page.getByRole("button", { name: /Dismiss: Drop Owen Park/u }).element(),
+  );
+
+  await page.getByRole("button", { name: /Dismiss: Drop Owen Park/u }).click();
+
+  await expect.element(page.getByText("Audit record", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Every move in this plan has ended.")).toBeVisible();
+  expect(page.getByRole("button", { name: /Submit/u }).elements()).toHaveLength(0);
+  expect(page.getByRole("button", { name: /Dismiss/u }).elements()).toHaveLength(0);
+  expect(document.activeElement).toBe(page.getByRole("heading", { name: "Alpha" }).element());
+});
+
+it("shows the reason a refused dismissal left the move in place", async () => {
+  const base = reviewFixture();
+  const item = dropItem();
+  const detail = "This move is executed and cannot be dismissed. It has already run.";
+  using _app = setupReviewPage(
+    {
+      ...base,
+      teams: [teamFixture(alphaId, "Alpha", "nfl", "football", [item])],
+    },
+    {
+      dismiss: () =>
+        Promise.resolve({
+          outcome: "refused" as const,
+          detail: "Nothing was dismissed. Fix the refused moves and dismiss again.",
+          refusals: [{ item: item.id, detail }],
+        }),
+    },
+  );
+
+  await page.getByRole("button", { name: /Dismiss: Drop Riley Chen/u }).click();
+
+  await expect.element(page.getByText("This move was not dismissed")).toBeVisible();
+  await expect.element(page.getByText(detail, { exact: true })).toBeVisible();
+  await expect.element(page.getByText(`That move was not dismissed. ${detail}`)).toBeVisible();
+  await expect
+    .element(page.getByRole("checkbox", { name: /Include: Drop Riley Chen/u }))
+    .toBeChecked();
+  await expect.element(page.getByText("Dismissed", { exact: true })).not.toBeInTheDocument();
+  await expect
+    .element(page.getByRole("button", { name: /Dismiss: Drop Riley Chen/u }))
+    .not.toHaveAttribute("aria-busy");
 });
 
 it("says nothing was proposed for an empty set", async () => {
@@ -434,7 +566,7 @@ function pendingTradeReviewFixture(): TransactionReviewView {
     set: {
       ...reviewFixture().set,
       submissions: [{ submittedAt: now, completedAt: now }],
-      settled: false,
+      closed: false,
     },
     teams: [tradeTeam(tradeItem("pending"))],
   };
@@ -446,7 +578,7 @@ function withdrawnTradeReviewFixture(): TransactionReviewView {
     set: {
       ...reviewFixture().set,
       submissions: [{ submittedAt: now, completedAt: now }],
-      settled: true,
+      closed: true,
     },
     teams: [tradeTeam(tradeItem("withdrawn"))],
   };
@@ -490,10 +622,9 @@ function reviewFixture(): TransactionReviewView {
       id: setId,
       proposedBy: { kind: "agent", surface: "mcp" },
       createdAt: oneHourAgo,
-      expiresAt: twentyThreeHours,
-      expired: false,
+      updatedAt: now,
       submissions: [],
-      settled: false,
+      closed: false,
     },
     teams: [
       teamFixture(alphaId, "Alpha", "nfl", "football", [
@@ -764,7 +895,7 @@ it("reports a settled lineup separately from the moves", async () => {
     set: {
       ...base.set,
       submissions: [{ submittedAt: now, completedAt: now }],
-      settled: true,
+      closed: true,
     },
     teams: [
       {
@@ -795,7 +926,7 @@ it("shows what was sent and why a later move stopped", async () => {
     set: {
       ...base.set,
       submissions: [{ submittedAt: now, completedAt: now }],
-      settled: false,
+      closed: false,
     },
     teams: [
       teamFixture(alphaId, "Alpha", "nhl", "hockey", [
@@ -981,7 +1112,7 @@ it("submits the included moves once, keeps the action visible on a phone, and sh
     await expect.element(page.getByText("Executed", { exact: true }).first()).toBeVisible();
     expect(page.getByRole("button", { name: /Submit/u }).elements()).toHaveLength(0);
     expect(page.getByRole("checkbox").elements()).toHaveLength(0);
-    await expect.element(page.getByText(/This set stays open while a move/u)).toBeVisible();
+    await expect.element(page.getByText(/This plan stays open while a move/u)).toBeVisible();
     expect(document.activeElement).toBe(document.getElementById("submission-result"));
 
     await captureViewport("result-390-light");
@@ -1009,7 +1140,7 @@ it("offers another submission for a move that has not run while an earlier outco
       set: {
         ...base.set,
         submissions: [{ submittedAt: now, completedAt: now }],
-        settled: false,
+        closed: false,
       },
       teams: [teamFixture(alphaId, "Alpha", "nfl", "football", [failedAddItem(), replacement])],
     },
@@ -1022,7 +1153,7 @@ it("offers another submission for a move that has not run while an earlier outco
   );
 
   await expect.element(page.getByRole("heading", { name: "Submitted" })).toBeVisible();
-  await expect.element(page.getByText(/This set stays open while a move/u)).toBeVisible();
+  await expect.element(page.getByText(/This plan stays open while a move/u)).toBeVisible();
   await expect.element(page.getByText("That player is no longer available.")).toBeVisible();
   await expect
     .element(page.getByRole("checkbox", { name: /Include: Add Owen Park/u }))
@@ -1274,7 +1405,7 @@ function resultFixture(): TransactionReviewView {
     set: {
       ...reviewFixture().set,
       submissions: [{ submittedAt: now, completedAt: now }],
-      settled: false,
+      closed: false,
     },
     teams: [
       teamFixture(alphaId, "Alpha", "nfl", "football", [
@@ -1424,6 +1555,7 @@ function setupReviewPage(
   review: TransactionReviewView,
   options: {
     readonly submit?: TransactionRemote["submit"];
+    readonly dismiss?: TransactionRemote["dismiss"];
     readonly withdraw?: TransactionRemote["withdraw"];
   } = {},
 ): { [Symbol.dispose](): void } {
@@ -1431,6 +1563,7 @@ function setupReviewPage(
   const remote: TransactionRemote = {
     read: () => Promise.resolve(review),
     submit: options.submit ?? (() => Promise.resolve({ review })),
+    dismiss: options.dismiss ?? (() => Promise.resolve({ outcome: "dismissed" as const, review })),
     withdraw:
       options.withdraw ??
       (() =>

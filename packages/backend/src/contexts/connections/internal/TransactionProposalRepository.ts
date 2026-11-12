@@ -13,7 +13,6 @@ import {
   ProposalPersistenceFailed,
   ProposalSetId,
   ProposalSetProvenance,
-  proposalSetLifetimeMillis,
 } from "#contexts/connections/TransactionProposals.ts";
 import { anyOf, maxInsertRows, mutateRows } from "#database/dbUtilities.ts";
 import { chunked } from "#utilities/collections.ts";
@@ -37,7 +36,7 @@ import type {
   StoredProposalTradePick,
   StoredReserveMove,
 } from "./TransactionProposalRecord.ts";
-import { isSettledItem } from "./TransactionProposalRecord.ts";
+import { isDismissibleItem, isSettledItem } from "./TransactionProposalRecord.ts";
 import {
   ProposalItemRow,
   ProposalSetRow,
@@ -161,9 +160,6 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
                     teams,
                     orders: input.orders.length === 0 ? null : [...input.orders],
                     createdAt: DateTime.toDateUtc(input.at),
-                    expiresAt: DateTime.toDateUtc(
-                      DateTime.addDuration(input.at, proposalSetLifetimeMillis),
-                    ),
                     updatedAt: DateTime.toDateUtc(input.at),
                   })
                   .onConflictDoNothing({
@@ -261,7 +257,7 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
                       eq(transactionProposalItems.setId, input.setId),
                     ),
                   );
-                if (submissionRows.length > 0 && positionRows.every(isSettledItem)) {
+                if (positionRows.every(isSettledItem)) {
                   return { status: "closed" as const };
                 }
                 const nextPosition = positionRows.reduce(
@@ -404,6 +400,110 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
           )
           .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
       });
+
+      const dismissItems = Effect.fn("TransactionProposalRepository.dismissItems")(
+        function* (input: {
+          readonly userId: UserId;
+          readonly setId: ProposalSetId;
+          readonly items: ReadonlyArray<ProposalItemId>;
+          readonly reason: string | undefined;
+          readonly orders: ReadonlyArray<StoredProposalOrder>;
+          readonly at: DateTime.Utc;
+        }) {
+          const ids = [...new Set(input.items)];
+          if (!Array.isArrayNonEmpty(ids)) {
+            return yield* ProposalPersistenceFailed.make({
+              cause: new Error("A dismissal names no items"),
+            });
+          }
+          const at = DateTime.toDateUtc(input.at);
+          return yield* database
+            .transaction((tx) =>
+              Effect.gen(function* () {
+                const setRows = yield* tx
+                  .select({ id: transactionProposalSets.id })
+                  .from(transactionProposalSets)
+                  .where(
+                    and(
+                      eq(transactionProposalSets.userId, input.userId),
+                      eq(transactionProposalSets.id, input.setId),
+                    ),
+                  )
+                  .for("update");
+                if (setRows[0] === undefined) {
+                  return { status: "missing" as const };
+                }
+                const submissions = yield* tx
+                  .select({ completedAt: transactionProposalSubmissions.completedAt })
+                  .from(transactionProposalSubmissions)
+                  .where(
+                    and(
+                      eq(transactionProposalSubmissions.userId, input.userId),
+                      eq(transactionProposalSubmissions.setId, input.setId),
+                    ),
+                  );
+                if (submissions.some((row) => row.completedAt === null)) {
+                  return { status: "in_flight" as const };
+                }
+                const locked = yield* tx
+                  .select({
+                    id: transactionProposalItems.id,
+                    state: transactionProposalItems.state,
+                  })
+                  .from(transactionProposalItems)
+                  .where(
+                    and(
+                      eq(transactionProposalItems.userId, input.userId),
+                      eq(transactionProposalItems.setId, input.setId),
+                      anyOf(transactionProposalItems.id, ids),
+                    ),
+                  )
+                  .for("update");
+                const lockedById = new Map(locked.map((row) => [row.id, row.state] as const));
+                const notOpen = ids.flatMap((id) => {
+                  const state = lockedById.get(id);
+                  return state !== undefined && isDismissibleItem(state)
+                    ? []
+                    : [{ item: id, ...(state === undefined ? {} : { state }) }];
+                });
+                if (notOpen.length > 0) {
+                  return { status: "not_open" as const, items: notOpen };
+                }
+                const updated = yield* tx
+                  .update(transactionProposalItems)
+                  .set({
+                    state: "dismissed",
+                    settled: true,
+                    outcomeDetail: input.reason ?? null,
+                    updatedAt: at,
+                  })
+                  .where(
+                    and(
+                      eq(transactionProposalItems.userId, input.userId),
+                      eq(transactionProposalItems.setId, input.setId),
+                      anyOf(transactionProposalItems.id, ids),
+                    ),
+                  )
+                  .returning();
+                yield* tx
+                  .update(transactionProposalSets)
+                  .set({
+                    orders: input.orders.length === 0 ? null : [...input.orders],
+                    updatedAt: at,
+                  })
+                  .where(
+                    and(
+                      eq(transactionProposalSets.userId, input.userId),
+                      eq(transactionProposalSets.id, input.setId),
+                    ),
+                  );
+                const records = yield* Effect.forEach(updated, decodeItem);
+                return { status: "dismissed" as const, items: records };
+              }),
+            )
+            .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
+        },
+      );
 
       const load = Effect.fn("TransactionProposalRepository.load")(function* (
         userId: UserId,
@@ -596,7 +696,7 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
             .transaction((tx) =>
               Effect.gen(function* () {
                 const setRows = yield* tx
-                  .select({ expiresAt: transactionProposalSets.expiresAt })
+                  .select({ id: transactionProposalSets.id })
                   .from(transactionProposalSets)
                   .where(
                     and(
@@ -608,9 +708,6 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
                 const setRow = setRows[0];
                 if (setRow === undefined) {
                   return { status: "missing" as const };
-                }
-                if (DateTime.toEpochMillis(input.at) >= setRow.expiresAt.getTime()) {
-                  return { status: "expired" as const };
                 }
                 const inFlight = yield* tx
                   .select({ id: transactionProposalSubmissions.id })
@@ -821,6 +918,7 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
         create,
         append,
         withdraw,
+        dismissItems,
         newItemId,
         newSetId,
         load,

@@ -332,6 +332,81 @@ describe("lineupgrade identifier storage migration", () => {
   );
 });
 
+describe("plan lifetime removal migration", () => {
+  const planMigration = "20261112142048_abnormal_puma";
+
+  it.effect("drops the set expiry and keeps the plan and its moves", () =>
+    Effect.gen(function* () {
+      const sql = yield* PgliteClient.PgliteClient;
+
+      for (const statement of migrationStatements((name) => name < planMigration)) {
+        yield* sql.unsafe(statement);
+      }
+
+      yield* sql.unsafe(`
+        insert into transaction_proposal_sets
+          (id, user_id, proposer_kind, proposer_reference, surface, fingerprint, teams,
+            created_at, expires_at, updated_at)
+        values
+          ('11111111-1111-4111-8111-111111111111', 'owner', 'agent', 'mcp', 'mcp', 'plan',
+            '[]'::jsonb, '2026-11-01T10:00:00Z', '2026-11-02T10:00:00Z',
+            '2026-11-01T10:00:00Z')
+      `);
+      yield* sql.unsafe(`
+        insert into transaction_proposal_items
+          (id, set_id, position, user_id, team_id, connection_id, kind, add_players,
+            drop_players, reason, state, staleness, stale_reasons)
+        values
+          ('22222222-2222-4222-8222-111111111111', '11111111-1111-4111-8111-111111111111', 0,
+            'owner', '33333333-3333-4333-8333-111111111111', 'connection', 'drop',
+            '[]'::jsonb, '[]'::jsonb, 'Still open', 'proposed', 'current', '[]'::jsonb),
+          ('22222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111', 1,
+            'owner', '33333333-3333-4333-8333-111111111111', 'connection', 'drop',
+            '[]'::jsonb, '[]'::jsonb, 'Already ran', 'executed', 'current', '[]'::jsonb)
+      `);
+
+      for (const statement of migrationStatements((name) => name === planMigration)) {
+        yield* sql.unsafe(statement);
+      }
+
+      const columns = yield* sql.unsafe<{ readonly column_name: string }>(
+        "select column_name from information_schema.columns where table_name = 'transaction_proposal_sets'",
+      );
+      expect(columns.map((row) => row.column_name)).not.toContain("expires_at");
+
+      const sets = yield* sql.unsafe<{ readonly id: string; readonly surface: string }>(
+        "select id, surface from transaction_proposal_sets",
+      );
+      expect(sets).toEqual([{ id: "11111111-1111-4111-8111-111111111111", surface: "mcp" }]);
+
+      const items = yield* sql.unsafe<{
+        readonly reason: string;
+        readonly state: string;
+        readonly settled: boolean;
+      }>("select reason, state, settled from transaction_proposal_items order by position");
+      expect(items).toEqual([
+        { reason: "Still open", state: "proposed", settled: false },
+        { reason: "Already ran", state: "executed", settled: false },
+      ]);
+
+      yield* sql.unsafe(`
+        insert into transaction_proposal_items
+          (id, set_id, position, user_id, team_id, connection_id, kind, add_players,
+            drop_players, reason, state, settled, staleness, stale_reasons)
+        values
+          ('22222222-2222-4222-8222-333333333333', '11111111-1111-4111-8111-111111111111', 2,
+            'owner', '33333333-3333-4333-8333-111111111111', 'connection', 'drop',
+            '[]'::jsonb, '[]'::jsonb, 'Dismissed by the owner', 'dismissed', true,
+            'current', '[]'::jsonb)
+      `);
+      const dismissed = yield* sql.unsafe<{ readonly state: string; readonly settled: boolean }>(
+        "select state, settled from transaction_proposal_items where id = '22222222-2222-4222-8222-333333333333'",
+      );
+      expect(dismissed).toEqual([{ state: "dismissed", settled: true }]);
+    }).pipe(Effect.provide(PgliteClient.layer())),
+  );
+});
+
 function migrationStatements(select: (name: string) => boolean): ReadonlyArray<string> {
   const statements: string[] = [];
   for (const name of readdirSync(migrationsFolder).filter(select).sort()) {

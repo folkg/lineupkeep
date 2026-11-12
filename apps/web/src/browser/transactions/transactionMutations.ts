@@ -2,6 +2,8 @@ import { mutationOptions } from "@tanstack/solid-query";
 import type { MutationFunctionContext } from "@tanstack/solid-query";
 
 import type {
+  DismissTransactionProposalData,
+  DismissTransactionProposalRequest,
   SubmitTransactionReviewRequest,
   TransactionReviewData,
   WithdrawTradeData,
@@ -17,6 +19,26 @@ export const transactionMutations = {
       mutationKey: ["transactions", "submit"],
       mutationFn: (input: SubmitTransactionReviewRequest) => remote.submit(input),
       onSuccess: storeSubmittedReview,
+    }),
+  dismiss: (remote: Pick<TransactionRemote, "dismiss">) =>
+    mutationOptions({
+      mutationKey: ["transactions", "dismiss"],
+      mutationFn: (
+        input: DismissTransactionProposalRequest,
+      ): Promise<DismissTransactionProposalData> => remote.dismiss(input),
+      onSuccess: (
+        data: DismissTransactionProposalData,
+        _variables: DismissTransactionProposalRequest,
+        _onMutateResult: unknown,
+        context: MutationFunctionContext,
+      ) => {
+        if (data.outcome === "dismissed") {
+          void context.client.setQueryData(
+            transactionQueries.reviewKey(data.review.set.id),
+            data.review,
+          );
+        }
+      },
     }),
   withdraw: (remote: Pick<TransactionRemote, "withdraw">) =>
     mutationOptions({
