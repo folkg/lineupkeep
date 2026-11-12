@@ -47,8 +47,9 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
   and the cause was closed rather than papered over.
 - **One run at a time is a database rule.** A partial unique index allows one running run per team and one
   waiting run per team and target period; a second request joins the waiting run. A finished run releases its
-  lease and dispatches whatever was waiting, so the hand-off is seconds rather than the next hour. Repair runs
-  every five minutes for the paths a crash can still strand, and Cloud Tasks enqueue failures retry in place.
+  lease and dispatches whatever was waiting, so the hand-off is seconds rather than the next hour. Cloud Tasks
+  retries a failed delivery itself, and the hourly tick repairs whatever a crash can still strand, so there is
+  no second clock and the worker still returns to zero between hours.
 - **A queued run no longer claims to be checking.** The team row said "Checking now. This usually takes under a
   minute" for any unfinished run, including one that had never started; it now says a check is waiting to start.
 

@@ -58,7 +58,7 @@ import { LineupObservation } from "./LineupRunWorkflow.ts";
 import type { LineupLeaseRef, LineupRunEvent } from "./LineupRunWorkflow.ts";
 import { TeamAutomationState } from "./TeamAutomationWorkflow.ts";
 
-const lineupLeaseDurationMillis = 45_000;
+const lineupLeaseDurationMillis = 10 * 60_000;
 const lineupDeliveryStaleMillis = 60_000;
 const lineupQueuedStaleMillis = 120_000;
 
