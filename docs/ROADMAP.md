@@ -32,7 +32,7 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 | Restore              | Drill passed 2026-10-29; RPO 15 minutes, RTO 4 hours, owner executes recovery (ruled 10 November) |
 | Dependencies         | Fresh audit and disposition in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md)                         |
 | Security             | Audit and disposition in [SECURITY-AUDIT.md](SECURITY-AUDIT.md); deferred work is group J         |
-| Checks               | 1909 node, 197 browser, 10 chromium; container end to end 58 passed, nothing skipped              |
+| Checks               | 1948 node, 201 browser, 10 chromium; container end to end 58 passed, nothing skipped              |
 
 ---
 
