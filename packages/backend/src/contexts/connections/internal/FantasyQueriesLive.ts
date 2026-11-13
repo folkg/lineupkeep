@@ -116,7 +116,11 @@ import {
   type StatRef,
   type TeamOwnerNote,
 } from "#contexts/connections/QueryValues.ts";
-import { rosterOccupancy, rosterRuleOf } from "#contexts/connections/RosterSlots.ts";
+import {
+  rosterOccupancy,
+  rosterPlayerInjured,
+  rosterRuleOf,
+} from "#contexts/connections/RosterSlots.ts";
 import {
   describeStatWindow,
   nearestStatWindow,
@@ -3632,6 +3636,7 @@ export const FantasyQueriesLive = Layer.effect(
                 name: player.name,
                 slot: player.slot.status === "verified" ? player.slot.slot : undefined,
                 positions: player.eligiblePositions,
+                injured: rosterPlayerInjured(player),
               })),
             });
       const illegalSlots: ReadonlyArray<SummaryIllegalSlot> = (

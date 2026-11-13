@@ -9,6 +9,7 @@ import { DateTime, Schema } from "effect";
 import type {
   TransactionProposalListData,
   TransactionProposalSetSummaryView,
+  TransactionReviewIllegalRosterView,
   TransactionReviewItemView,
   TransactionReviewOrderView,
   TransactionReviewPlayerView,
@@ -78,6 +79,9 @@ function toProposalSetSummaryView(
     teams: set.teams.map((entry) => ({
       team: toListTeam(entry.team),
       items: entry.items.map((item) => ({ ...toItemView(item), settled: item.settled })),
+      ...(entry.illegalRoster === undefined
+        ? {}
+        : { illegalRoster: entry.illegalRoster.map(toIllegalRosterView) }),
     })),
   };
 }
@@ -128,6 +132,9 @@ function toTeamView(team: ProposalSetReview["teams"][number]): TransactionReview
           },
         }),
     ...(team.order === undefined ? {} : { order: toOrderView(team.order) }),
+    ...(team.illegalRoster === undefined
+      ? {}
+      : { illegalRoster: team.illegalRoster.map(toIllegalRosterView) }),
     ...(team.today === undefined ? {} : { today: team.today }),
     ...(team.lineup === undefined
       ? {}
@@ -143,6 +150,14 @@ function toTeamView(team: ProposalSetReview["teams"][number]): TransactionReview
     items: team.items.map(toItemView),
     pendingOffers: team.pendingOffers.map(toPendingOfferView),
   };
+}
+
+function toIllegalRosterView(occupant: {
+  readonly name: string;
+  readonly slot: string;
+  readonly detail: string;
+}): TransactionReviewIllegalRosterView {
+  return { name: occupant.name, slot: occupant.slot, detail: occupant.detail };
 }
 
 function toOrderView(

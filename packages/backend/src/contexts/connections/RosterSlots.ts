@@ -1,4 +1,4 @@
-import type { ProviderRosterConstraints } from "./Provider.ts";
+import type { ProviderReserveEligibility, ProviderRosterConstraints } from "./Provider.ts";
 
 export type RosterSlot = {
   readonly position: string;
@@ -36,7 +36,7 @@ export type SlotPlacement =
 export function slotPlacement(
   rule: RosterRule,
   slot: string | undefined,
-  positions: ReadonlyArray<string>,
+  player: RosterPlaceFacts,
 ): SlotPlacement {
   const declared = slot === undefined ? undefined : rule.byPosition.get(slot);
   if (declared === undefined) {
@@ -47,7 +47,7 @@ export function slotPlacement(
       return {
         kind: "starting",
         countsAsPlace: true,
-        legal: acceptsPositions(declared.eligibility, positions),
+        legal: acceptsPositions(declared.eligibility, player.positions),
       };
     case "bench":
       return { kind: "bench", countsAsPlace: true, legal: true };
@@ -55,11 +55,23 @@ export function slotPlacement(
       return {
         kind: "reserve",
         countsAsPlace: false,
-        legal:
-          rule.reserveEligibility.kind === "published_positions"
-            ? acceptsPositions(declared.eligibility, positions)
-            : "unknown",
+        legal: reserveLegality(rule.reserveEligibility, declared.eligibility, player),
       };
+  }
+}
+
+function reserveLegality(
+  eligibility: ProviderReserveEligibility,
+  slotEligibility: ReadonlyArray<string>,
+  player: RosterPlaceFacts,
+): boolean | "unknown" {
+  switch (eligibility.kind) {
+    case "published_positions":
+      return acceptsPositions(slotEligibility, player.positions);
+    case "injury_status":
+      return player.injured;
+    case "not_published":
+      return "unknown";
   }
 }
 
@@ -95,11 +107,13 @@ export function rosterOccupancy(input: {
   readonly players: ReadonlyArray<RosterPlayerPlace>;
 }): RosterOccupancy {
   const occupancy = new Map<string, number>();
-  const illegal: Array<IneligibleSlotOccupant> = [];
+  const mismatched: Array<
+    RosterPlayerPlace & { readonly slot: string; readonly kind: "starting" | "bench" | "reserve" }
+  > = [];
   let occupied = 0;
   let reserved = 0;
   for (const player of input.players) {
-    const placement = slotPlacement(input.rule, player.slot, player.positions);
+    const placement = slotPlacement(input.rule, player.slot, player);
     if (placement.countsAsPlace) {
       occupied += 1;
     } else {
@@ -111,21 +125,26 @@ export function rosterOccupancy(input: {
     }
     occupancy.set(declared.position, (occupancy.get(declared.position) ?? 0) + 1);
     if (placement.legal === false) {
-      illegal.push({
-        key: player.key,
-        name: player.name,
+      mismatched.push({
+        ...player,
         slot: declared.position,
         kind: declared.kind,
-        positions: player.positions,
-        detail: slotMismatchDetail({
-          name: player.name,
-          slot: declared.position,
-          kind: declared.kind,
-          positions: player.positions,
-        }),
       });
     }
   }
+  const rosterFull = occupied >= input.rule.rosterMaximum;
+  const illegal = mismatched.map((player) => ({
+    ...player,
+    detail: slotMismatchDetail({
+      name: player.name,
+      slot: player.slot,
+      kind: player.kind,
+      positions: player.positions,
+      reserveEligibility: input.rule.reserveEligibility,
+      injured: player.injured,
+      mismatch: { kind: "occupied" as const, rosterFull },
+    }),
+  }));
   const overflow: Array<RosterSlotShortfall> = [];
   for (const slot of input.rule.slots) {
     const occupants = occupancy.get(slot.position) ?? 0;
@@ -148,7 +167,18 @@ export function slotMismatchDetail(input: {
   readonly slot: string;
   readonly kind: "starting" | "bench" | "reserve";
   readonly positions: ReadonlyArray<string>;
+  readonly reserveEligibility: ProviderReserveEligibility;
+  readonly injured: boolean;
+  readonly mismatch: SlotMismatch;
 }): string {
+  if (input.kind === "reserve" && input.reserveEligibility.kind === "injury_status") {
+    switch (input.mismatch.kind) {
+      case "occupied":
+        return `${input.name} is no longer injured, and the ${input.slot} reserve list only accepts an injured player. Activate them.${input.mismatch.rosterFull ? " Your roster is full, so a drop is required." : ""}`;
+      case "destination":
+        return `${input.name} is not injured, and the ${input.slot} reserve list only accepts an injured player.`;
+    }
+  }
   const where =
     input.kind === "reserve"
       ? `on the ${input.slot} reserve list`
@@ -156,12 +186,27 @@ export function slotMismatchDetail(input: {
   return `${input.name} is ${where}, but it does not accept their positions (${input.positions.join(", ")}).`;
 }
 
-export type RosterPlayerPlace = {
+export function rosterPlayerInjured(player: {
+  readonly injuryCode: string | undefined;
+  readonly injuryDetail: string | undefined;
+}): boolean {
+  return player.injuryCode !== undefined || player.injuryDetail !== undefined;
+}
+
+export type RosterPlaceFacts = {
+  readonly positions: ReadonlyArray<string>;
+  readonly injured: boolean;
+};
+
+export type RosterPlayerPlace = RosterPlaceFacts & {
   readonly key: string;
   readonly name: string;
   readonly slot: string | undefined;
-  readonly positions: ReadonlyArray<string>;
 };
+
+type SlotMismatch =
+  | { readonly kind: "occupied"; readonly rosterFull: boolean }
+  | { readonly kind: "destination" };
 
 export type RosterOccupancy = {
   readonly maximum: number;

@@ -109,7 +109,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("list_transaction_proposals", {
     description:
-      "List one team's plans, newest first, as open or closed, with their moves and review links. It reads stored state only, so each move's check and time are as last recorded.",
+      "List one team's plans, newest first, as open or closed, with moves, review links, and last checks. An open list reads the current roster to name a player the league places in a slot it does not accept.",
     parameters: ListProposalSetsInput,
     success: Schema.toCodecJson(ProposalSetList),
     failure: ToolFailure,

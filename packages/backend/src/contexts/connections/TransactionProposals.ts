@@ -406,6 +406,16 @@ const ProposalTradeRules = Schema.Struct({
 });
 type ProposalTradeRules = typeof ProposalTradeRules.Type;
 
+export const ProposalIllegalRosterOccupant = Schema.Struct({
+  name: Schema.NonEmptyString,
+  slot: Schema.NonEmptyString,
+  detail: Schema.NonEmptyString,
+}).annotate({
+  description:
+    "A player the league places in a slot that does not accept them, with the cause and the fix.",
+});
+export type ProposalIllegalRosterOccupant = typeof ProposalIllegalRosterOccupant.Type;
+
 export const ProposalTeam = Schema.Struct({
   team: QueryTeam,
   budget: Schema.optional(ProposalBudget),
@@ -416,6 +426,10 @@ export const ProposalTeam = Schema.Struct({
   today: Schema.optional(ProposalDate).annotate({
     description:
       "Today in this league's own fantasy day, so a move's window can be read against it.",
+  }),
+  illegalRoster: Schema.optional(Schema.Array(ProposalIllegalRosterOccupant)).annotate({
+    description:
+      "Players on this team's current roster that the league places in a slot it does not accept. Present when current state was checked.",
   }),
   failure: Schema.optional(Schema.NonEmptyString).annotate({
     description:
@@ -460,6 +474,10 @@ const ProposalSetSummary = Schema.Struct({
       }),
       items: Schema.Array(ProposalItem).annotate({
         description: "This team's moves in the plan, with their state and last recorded check.",
+      }),
+      illegalRoster: Schema.optional(Schema.Array(ProposalIllegalRosterOccupant)).annotate({
+        description:
+          "Players on this team's current roster that the league places in a slot it does not accept. Present when current state was read.",
       }),
     }),
   ).annotate({

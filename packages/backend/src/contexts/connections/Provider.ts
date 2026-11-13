@@ -425,8 +425,9 @@ export type ProviderRosterPosition = {
   readonly eligibility: ReadonlyArray<string>;
 };
 
-type ProviderReserveEligibility =
+export type ProviderReserveEligibility =
   | { readonly kind: "published_positions" }
+  | { readonly kind: "injury_status" }
   | { readonly kind: "not_published"; readonly detail: string };
 
 export type ProviderRosterConstraints = {

@@ -1130,7 +1130,8 @@ owner's read is that the transaction API asks clients to do our job.
       publish about its own keeper rules is the league's, and the owner's note stays where that intent lives.
 - [ ] Correct the roster model to what a provider enforces, described as declared capabilities rather than
       assumptions: the total roster maximum, whether the bench is generic or per-slot, whether a starting slot
-      may stand empty, and how reserve eligibility is established (for us, published positions only). Each
+      may stand empty, and how reserve eligibility is established (published positions, injury status, or
+      not published). Each
       provider declares its own values and the rule reads them, so a second provider needs no branch in the
       backend. A drop frees a roster place, not a place in a kind of slot.
 - [ ] Judge a set against the roster on the date its moves apply, read from the league's declared timing, not

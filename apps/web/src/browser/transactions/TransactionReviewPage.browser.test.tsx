@@ -103,6 +103,28 @@ it("starts an illegal move excluded and names the player, slot, and choice", asy
   await expect.element(page.getByText(/choosing which player to drop is yours/u)).toBeVisible();
 });
 
+it("shows one team roster notice above submit and keeps the move's own reason", async () => {
+  using _app = setupReviewPage({
+    ...reviewFixture(),
+    teams: [
+      teamFixture(
+        alphaId,
+        "Alpha",
+        "nfl",
+        "football",
+        [illegalItem(), freeAgentItem()],
+        [rosterOccupant()],
+      ),
+    ],
+  });
+
+  await expect.element(page.getByText("Alpha roster is illegal")).toBeVisible();
+  await expect.element(page.getByText(/Linus Ullmark is no longer injured/u)).toBeVisible();
+  await expect.element(page.getByText("Illegal roster position")).toBeVisible();
+  await expect.element(page.getByText(/Travis Konecny is in the IR slot/u)).toBeVisible();
+  await expect.element(page.getByRole("button", { name: "Submit 1 move" })).toBeVisible();
+});
+
 it("names both sides of every draft pick and says it cannot be sent", async () => {
   using _app = setupReviewPage({
     ...reviewFixture(),
@@ -648,14 +670,33 @@ function teamFixture(
   league: "nfl" | "nhl",
   sport: "football" | "hockey",
   items: ReadonlyArray<TransactionReviewItemView>,
+  illegalRoster?: ReadonlyArray<{
+    readonly name: string;
+    readonly slot: string;
+    readonly detail: string;
+  }>,
 ): TransactionReviewTeamView {
   return {
     team: { id, name, league, sport, season: 2026 },
     ...(items.some((item) => item.kind === "waiver_claim")
       ? { budget: { status: "published" as const, remaining: 50 } }
       : {}),
+    ...(illegalRoster === undefined ? {} : { illegalRoster }),
     items,
     pendingOffers: [],
+  };
+}
+
+function rosterOccupant(): {
+  readonly name: string;
+  readonly slot: string;
+  readonly detail: string;
+} {
+  return {
+    name: "Linus Ullmark",
+    slot: "IR+",
+    detail:
+      "Linus Ullmark is no longer injured, and the IR+ reserve list only accepts an injured player. Activate them. Your roster is full, so a drop is required.",
   };
 }
 

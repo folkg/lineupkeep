@@ -42,6 +42,7 @@ import {
   rosterOccupancy,
   rosterPlaceChange,
   rosterPlaceCount,
+  rosterPlayerInjured,
   rosterRuleOf,
   slotCapacity,
   slotMismatchDetail,
@@ -56,6 +57,7 @@ import type {
   ProposalItemDraft,
   ProposalItemId,
   ProposalItemRefusal,
+  ProposalIllegalRosterOccupant,
   ProposalItemRefused,
   ProposalItemState,
   ProposalItemToWithdraw,
@@ -1007,6 +1009,12 @@ export const TransactionProposalsLive = Layer.effect(
         if (offset > listed.total) {
           return yield* ProposalContentInvalid.make({ detail: listInvalidDetail });
         }
+        const teamData =
+          state === "open" && listed.sets.length > 0
+            ? yield* loadTeamData(userId, team, [])
+            : undefined;
+        const illegalRoster =
+          teamData?.status === "ready" ? illegalRosterOf(teamData.facts) : undefined;
         const sets = yield* Effect.forEach(listed.sets, ({ set, items }) =>
           Effect.gen(function* () {
             const views = yield* Effect.forEach(items, (item) =>
@@ -1019,7 +1027,13 @@ export const TransactionProposalsLive = Layer.effect(
               updatedAt: set.updatedAt,
               closed: state === "closed",
               reviewPath: reviewPath(set.id),
-              teams: [{ team: teamView(team), items: views }],
+              teams: [
+                {
+                  team: teamView(team),
+                  items: views,
+                  ...(illegalRoster === undefined ? {} : { illegalRoster }),
+                },
+              ],
             };
           }),
         );
@@ -3394,7 +3408,7 @@ function placeTeam(
       positions: player.eligiblePositions,
       slot: player.slot.status === "verified" ? player.slot.slot : undefined,
       editable: player.isEditable === true,
-      injured: player.injuryCode !== undefined || player.injuryDetail !== undefined,
+      injured: rosterPlayerInjured(player),
     })),
     items: placementItems,
   });
@@ -3483,7 +3497,7 @@ function orderFor(
     positions: player.eligiblePositions,
     slot: player.slot.status === "verified" ? player.slot.slot : undefined,
     editable: player.isEditable === true,
-    injured: player.injuryCode !== undefined || player.injuryDetail !== undefined,
+    injured: rosterPlayerInjured(player),
   }));
   const slots = facts.league.rosterPositions.map((slot) => ({
     position: slot.position,
@@ -3816,6 +3830,7 @@ function buildReview(
       const check = checks?.get(teamId);
       const order = check?.order ?? set.orders.find((entry) => entry.team === teamId)?.order;
       const lineup = set.lineups.find((entry) => entry.team === teamId);
+      const illegalRoster = check?.facts === undefined ? undefined : illegalRosterOf(check.facts);
       const fantasyDay = fantasyDaysByProvider?.get(team.provider);
       const teamItems = [];
       for (const item of itemsByTeam.get(teamId) ?? []) {
@@ -3854,6 +3869,7 @@ function buildReview(
                 },
               }),
           ...(check?.failure === undefined ? {} : { failure: check.failure }),
+          ...(illegalRoster === undefined ? {} : { illegalRoster }),
           ...(order === undefined ? {} : { order }),
           ...(lineup === undefined ? {} : { lineup: lineupView(lineup) }),
           ...(fantasyDay === undefined ? {} : { today: fantasyDayLabel(now, fantasyDay) }),
@@ -4101,7 +4117,11 @@ function evaluateSlotMoveItem(
     });
   } else {
     const rule = rosterRuleOf(facts.league.rosterConstraints, facts.league.rosterPositions);
-    const placement = slotPlacement(rule, slot.position, player.eligiblePositions);
+    const injured = rosterPlayerInjured(player);
+    const placement = slotPlacement(rule, slot.position, {
+      positions: player.eligiblePositions,
+      injured,
+    });
     if (placement.legal === "unknown") {
       illegal.push({
         code: "state_unavailable",
@@ -4117,6 +4137,9 @@ function evaluateSlotMoveItem(
           slot: slot.position,
           kind: slot.kind,
           positions: player.eligiblePositions,
+          reserveEligibility: rule.reserveEligibility,
+          injured,
+          mismatch: { kind: "destination" },
         }),
       });
     }
@@ -5993,6 +6016,16 @@ function rosterPlacesOf(facts: TeamFacts): ReadonlyArray<RosterPlayerPlace> {
     name: player.name,
     slot: player.slot.status === "verified" ? player.slot.slot : undefined,
     positions: player.eligiblePositions,
+    injured: rosterPlayerInjured(player),
+  }));
+}
+
+function illegalRosterOf(facts: TeamFacts): ReadonlyArray<ProposalIllegalRosterOccupant> {
+  const rule = rosterRuleOf(facts.league.rosterConstraints, facts.league.rosterPositions);
+  return rosterOccupancy({ rule, players: rosterPlacesOf(facts) }).illegal.map((occupant) => ({
+    name: occupant.name,
+    slot: occupant.slot,
+    detail: occupant.detail,
   }));
 }
 

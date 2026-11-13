@@ -21,6 +21,12 @@ export type TransactionReviewStaleReasonView = {
   readonly detail: string;
 };
 
+export type TransactionReviewIllegalRosterView = {
+  readonly name: string;
+  readonly slot: string;
+  readonly detail: string;
+};
+
 export type TransactionReviewStepView = {
   readonly kind: "reserve_move" | "slot_move" | "add" | "drop";
   readonly playerName?: string;
@@ -218,6 +224,7 @@ export type TransactionReviewTeamView = {
   readonly tradeRules?: TransactionReviewTradeRulesView;
   readonly order?: TransactionReviewOrderView;
   readonly lineup?: TransactionReviewLineupView;
+  readonly illegalRoster?: ReadonlyArray<TransactionReviewIllegalRosterView>;
   readonly today?: string;
   readonly failure?: string;
   readonly items: ReadonlyArray<TransactionReviewItemView>;
@@ -266,6 +273,7 @@ export type TransactionProposalSetSummaryView = {
   readonly teams: ReadonlyArray<{
     readonly team: TransactionReviewTeamView["team"];
     readonly items: ReadonlyArray<TransactionProposalItemView>;
+    readonly illegalRoster?: ReadonlyArray<TransactionReviewIllegalRosterView>;
   }>;
 };
 

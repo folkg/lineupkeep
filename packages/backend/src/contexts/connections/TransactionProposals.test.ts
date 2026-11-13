@@ -703,6 +703,53 @@ it.effect("allows a drop that resolves an illegal reserve player", () =>
   }).pipe(Effect.provide(TestLayer)),
 );
 
+it.effect(
+  "names the injury cause on the review and the plan list for an injury-based reserve list",
+  () =>
+    Effect.gen(function* () {
+      const proposals = yield* TransactionProposals;
+      const fake = yield* FakeProviderWorld;
+      const tokens = yield* QueryTokens;
+      const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+        league: injuryReserveLeague,
+        roster: rosterWithSlots("nhl.l.1.t.1", [
+          { slot: "C", eligible: ["C"] },
+          { slot: "BN", eligible: ["C"] },
+          { slot: "IR+", eligible: ["G"] },
+        ]),
+        playerDetails,
+      });
+      const redLine = teamId(seeded, "nhl.l.1.t.1");
+      const proposed = yield* proposals.propose(owner, proposer, {
+        items: [
+          {
+            team: redLine,
+            kind: "drop",
+            adds: [],
+            drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+            reason: "Drop a center to open a place.",
+          },
+        ],
+      });
+
+      const review = yield* proposals.revalidate(owner, { set: proposed.set.id });
+      const reviewed = Array.getUnsafe(review.teams, 0);
+      assert.deepStrictEqual(reviewed.illegalRoster, [
+        {
+          name: "Roster Three",
+          slot: "IR+",
+          detail:
+            "Roster Three is no longer injured, and the IR+ reserve list only accepts an injured player. Activate them. Your roster is full, so a drop is required.",
+        },
+      ]);
+      const listed = yield* proposals.list(owner, { team: redLine });
+      assert.deepStrictEqual(
+        Array.getUnsafe(Array.getUnsafe(listed.sets, 0).teams, 0).illegalRoster,
+        reviewed.illegalRoster,
+      );
+    }).pipe(Effect.provide(TestLayer)),
+);
+
 it.effect("names the HTTP status beside your league's exact refusal wording", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;
@@ -7525,6 +7572,20 @@ const reserveLeague = leagueFixture({
     { position: "BN", positionType: "B", count: 1, kind: "bench", eligibility: [] },
     { position: "IR", positionType: "I", count: 1, kind: "reserve", eligibility: ["IR"] },
   ],
+});
+
+const injuryReserveLeague = leagueFixture({
+  rosterPositions: [
+    { position: "C", positionType: "O", count: 1, kind: "starting", eligibility: ["C"] },
+    { position: "BN", positionType: "B", count: 1, kind: "bench", eligibility: [] },
+    { position: "IR+", positionType: "I", count: 1, kind: "reserve", eligibility: ["IR+"] },
+  ],
+  rosterConstraints: {
+    rosterMaximum: 2,
+    benchCapacity: "generic",
+    startingSlotsMayStandEmpty: true,
+    reserveEligibility: { kind: "injury_status" },
+  },
 });
 
 const fullReserveLeague = leagueFixture({

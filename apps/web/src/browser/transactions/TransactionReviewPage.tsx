@@ -151,6 +151,8 @@ function Review(props: ReviewProps): JSX.Element {
   const submitted = (): boolean => props.model.submitted;
   const closed = (): boolean => props.model.closed;
   const canSubmit = (): boolean => !closed() && props.model.proposedCount > 0;
+  const illegalTeams = (): ReadonlyArray<TransactionReviewTeamView> =>
+    props.model.teamsWithItems.filter((team) => (team.illegalRoster?.length ?? 0) > 0);
   const pendingOffers = (): ReadonlyArray<{
     readonly team: TransactionReviewTeamView;
     readonly offer: TransactionReviewPendingOfferView;
@@ -243,6 +245,7 @@ function Review(props: ReviewProps): JSX.Element {
         <Show when={canSubmit()}>
           <SubmissionPanel
             faab={props.model.includedFaab}
+            illegalTeams={illegalTeams()}
             included={props.model.includedCount}
             includedDue={props.model.includedDueCount}
             includedWaiting={props.model.includedWaitingCount}
@@ -1317,6 +1320,19 @@ function SubmissionPanel(props: SubmissionPanelProps): JSX.Element {
   return (
     <Dock id="submission-panel">
       <Box rule="top" space="lg">
+        <Show when={props.illegalTeams.length > 0}>
+          <Stack gap="sm">
+            <For each={props.illegalTeams}>
+              {(team) => (
+                <Notice
+                  tone="danger"
+                  title={`${team.team.name} roster is illegal`}
+                  items={(team.illegalRoster ?? []).map((occupant) => occupant.detail)}
+                />
+              )}
+            </For>
+          </Stack>
+        </Show>
         <Form gap="sm" onSubmit={props.onSubmit}>
           <Stack as="section" gap="sm" labelledBy="submission-title">
             <SectionTitle id="submission-title">Submit</SectionTitle>
@@ -1760,6 +1776,7 @@ type PendingOffersProps = {
 };
 
 type SubmissionPanelProps = {
+  readonly illegalTeams: ReadonlyArray<TransactionReviewTeamView>;
   readonly included: number;
   readonly includedDue: number;
   readonly includedWaiting: number;

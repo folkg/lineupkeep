@@ -43,6 +43,7 @@ import type {
   ProviderPlayerWeekOpponent,
   ProviderReadFailure,
   ProviderRosterChange,
+  ProviderReserveEligibility,
   ProviderRosterConstraints,
   ProviderRosterCoverage,
   ProviderRosterPlayer,
@@ -1190,6 +1191,27 @@ function rosterSlotKind(position: string, isStarting: boolean): "starting" | "be
   return position === "BN" ? "bench" : "reserve";
 }
 
+const yahooInjuryReservePositions: ReadonlySet<string> = new Set([
+  "IR",
+  "IR+",
+  "IR-LT",
+  "IR-NR",
+  "IR-R",
+  "IL",
+  "IL+",
+  "NA",
+]);
+
+function yahooReserveEligibility(
+  positions: ReadonlyArray<ProviderRosterPosition>,
+): ProviderReserveEligibility {
+  const reservePositions = positions.filter((position) => position.kind === "reserve");
+  return reservePositions.length > 0 &&
+    reservePositions.every((position) => yahooInjuryReservePositions.has(position.position))
+    ? { kind: "injury_status" }
+    : { kind: "published_positions" };
+}
+
 function yahooRosterConstraints(
   positions: ReadonlyArray<ProviderRosterPosition>,
 ): ProviderRosterConstraints {
@@ -1199,7 +1221,7 @@ function yahooRosterConstraints(
       .reduce((total, position) => total + position.count, 0),
     benchCapacity: "generic",
     startingSlotsMayStandEmpty: true,
-    reserveEligibility: { kind: "published_positions" },
+    reserveEligibility: yahooReserveEligibility(positions),
   };
 }
 

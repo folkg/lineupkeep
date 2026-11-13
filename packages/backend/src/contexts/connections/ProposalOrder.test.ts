@@ -491,6 +491,28 @@ it("refuses a reserve list that does not accept the player's positions", () => {
   }
 });
 
+it("refuses an injury-based reserve list for a player who is not injured", () => {
+  const decision = plan({
+    slots: [starting("C", 1), bench("BN", 1), reserve("IR+", 1)],
+    constraints: { reserveEligibility: { kind: "injury_status" } },
+    players: [player("p1", "Roster One", "BN", ["C"]), player("p2", "Roster Two", "C", ["C"])],
+    timing: skate,
+    items: [move("move-one-to-reserve", ref("p1", "Roster One"), "IR+")],
+  });
+
+  assert.strictEqual(decision.status, "conflict");
+  if (decision.status === "conflict") {
+    assert.deepStrictEqual(
+      decision.conflicts[0]?.reasons?.map((reason) => reason.code),
+      ["slot_illegal"],
+    );
+    const detail = decision.conflicts[0]?.detail ?? "";
+    assert.include(detail, "Roster One cannot move to the IR+ reserve list");
+    assert.include(detail, "it only accepts an injured player");
+    assert.notInclude(detail, "positions");
+  }
+});
+
 it("refuses a reserve list whose eligibility the league does not publish", () => {
   const decision = plan({
     slots: [starting("C", 1), bench("BN", 1), reserve("IR", 1)],
@@ -701,7 +723,7 @@ it("names a reserve-slot player whose positions the slot does not accept", () =>
       bench("BN", 3),
       reserve("IR", 1),
     ]),
-    players: [{ key: "p1", name: "Marcus Reserve", slot: "IR", positions: ["C"] }],
+    players: [{ key: "p1", name: "Marcus Reserve", slot: "IR", positions: ["C"], injured: false }],
   });
 
   assert.deepStrictEqual(occupancy.illegal, [
@@ -711,6 +733,7 @@ it("names a reserve-slot player whose positions the slot does not accept", () =>
       slot: "IR",
       kind: "reserve",
       positions: ["C"],
+      injured: false,
       detail:
         "Marcus Reserve is on the IR reserve list, but it does not accept their positions (C).",
     },
@@ -723,7 +746,9 @@ it("accepts a player whose positions include one the slot accepts", () => {
   const slots = [starting("C", 2), bench("BN", 3), reserve("IR", 1)];
   const occupancy = rosterOccupancy({
     rule: rosterRuleOf(leagueOf(slots), slots),
-    players: [{ key: "p1", name: "Legal Reserve", slot: "IR", positions: ["C", "IR"] }],
+    players: [
+      { key: "p1", name: "Legal Reserve", slot: "IR", positions: ["C", "IR"], injured: false },
+    ],
   });
 
   assert.deepStrictEqual(occupancy.illegal, []);
@@ -734,7 +759,7 @@ it("accepts any player the league puts on its bench", () => {
   const slots = [starting("C", 2), bench("BN", 3)];
   const occupancy = rosterOccupancy({
     rule: rosterRuleOf(leagueOf(slots), slots),
-    players: [{ key: "p1", name: "Benched Player", slot: "BN", positions: ["LW"] }],
+    players: [{ key: "p1", name: "Benched Player", slot: "BN", positions: ["LW"], injured: false }],
   });
 
   assert.deepStrictEqual(occupancy.illegal, []);
@@ -745,7 +770,7 @@ it("ignores a slot the league does not declare", () => {
   const slots = [starting("C", 2)];
   const occupancy = rosterOccupancy({
     rule: rosterRuleOf(leagueOf(slots), slots),
-    players: [{ key: "p1", name: "Unknown Slot", slot: "TAXI", positions: ["C"] }],
+    players: [{ key: "p1", name: "Unknown Slot", slot: "TAXI", positions: ["C"], injured: false }],
   });
 
   assert.deepStrictEqual(occupancy.illegal, []);
@@ -756,7 +781,9 @@ it("names a starting slot the player is not eligible for", () => {
   const slots = [starting("C", 1), starting("LW", 1)];
   const occupancy = rosterOccupancy({
     rule: rosterRuleOf(leagueOf(slots), slots),
-    players: [{ key: "p1", name: "Wing In The Middle", slot: "C", positions: ["LW"] }],
+    players: [
+      { key: "p1", name: "Wing In The Middle", slot: "C", positions: ["LW"], injured: false },
+    ],
   });
 
   assert.deepStrictEqual(
@@ -771,7 +798,9 @@ it("uses the league's own name for a reserve list", () => {
   ];
   const occupancy = rosterOccupancy({
     rule: rosterRuleOf(leagueOf(slots), slots),
-    players: [{ key: "p1", name: "Eve Reserve", slot: "RESERVE", positions: ["SF"] }],
+    players: [
+      { key: "p1", name: "Eve Reserve", slot: "RESERVE", positions: ["SF"], injured: false },
+    ],
   });
 
   assert.deepStrictEqual(

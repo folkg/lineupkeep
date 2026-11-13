@@ -283,7 +283,7 @@ describe("provider-neutral lineup placement", () => {
     ]);
   });
 
-  it("lets published eligibility, not the injury code, decide reserve occupancy", () => {
+  it("lets published eligibility decide reserve occupancy when the league declares positions", () => {
     const result = planned(
       planAssignments({
         gamesPlayed: [],
@@ -309,6 +309,56 @@ describe("provider-neutral lineup placement", () => {
     expect(result.assignments).toContainEqual({ providerPlayerKey: "better", slot: "C" });
     expect(result.assignments).toContainEqual({ providerPlayerKey: "hurt", slot: "BN" });
     expect(result.assignments).toContainEqual({ providerPlayerKey: "incumbent", slot: "IR" });
+  });
+
+  it("moves a healthy player out of an injury-based reserve list", () => {
+    const result = planned(
+      planAssignments({
+        gamesPlayed: [],
+        league: injuryLeague([
+          { position: "C", kind: "starting", count: 1, eligibility: ["C"] },
+          { position: "IR", kind: "reserve", count: 1, eligibility: ["IR"] },
+          { position: "BN", kind: "bench", count: 1, eligibility: [] },
+        ]),
+        roster: roster([
+          member("starter", "C", "C", ["C"], "will-play"),
+          member("healthy", "C", "IR", ["C", "IR"], "will-play"),
+        ]),
+        values: values([
+          ["starter", 900, "will-play"],
+          ["healthy", 100, "will-play"],
+        ]),
+      }),
+    );
+
+    expect(result.assignments).toEqual([{ providerPlayerKey: "healthy", slot: "BN" }]);
+  });
+
+  it("keeps an injured player on an injury-based reserve list", () => {
+    const result = planned(
+      planAssignments({
+        gamesPlayed: [],
+        league: injuryLeague([
+          { position: "C", kind: "starting", count: 1, eligibility: ["C"] },
+          { position: "IR", kind: "reserve", count: 1, eligibility: ["IR"] },
+          { position: "BN", kind: "bench", count: 1, eligibility: [] },
+        ]),
+        roster: roster([
+          member("starter", "C", "C", ["C"], "will-play"),
+          {
+            ...member("hurt", "C", "IR", ["C"], "will-not-play"),
+            injuryCode: "O",
+            injuryDetail: "Out",
+          },
+        ]),
+        values: values([
+          ["starter", 900, "will-play"],
+          ["hurt", 100, "will-not-play"],
+        ]),
+      }),
+    );
+
+    expect(result.assignments).toEqual([]);
   });
 
   it("never places a player in a reserve list they are not published as eligible for", () => {
@@ -697,6 +747,19 @@ function league(
     ),
     statCategories: [],
     statModifiers: [],
+  };
+}
+
+function injuryLeague(
+  positions: ReadonlyArray<Omit<ProviderRosterPosition, "positionType">>,
+): ProviderLeagueSettings {
+  const base = league(positions);
+  return {
+    ...base,
+    rosterConstraints: {
+      ...base.rosterConstraints,
+      reserveEligibility: { kind: "injury_status" },
+    },
   };
 }
 

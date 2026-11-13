@@ -64,6 +64,19 @@ it("renders open and stale sections with their reasons", async () => {
   await expect.element(page.getByText(/Proposed by an agent from Draft Desk/u)).toBeVisible();
 });
 
+it("shows the team's illegal roster once above the open plans", async () => {
+  using _app = setupTransactionsPage(
+    listData([
+      plan({ items: [item()], illegalRoster: [rosterOccupant()] }),
+      plan({ id: secondPlanId, items: [item()], illegalRoster: [rosterOccupant()] }),
+    ]),
+  );
+
+  await expect.element(page.getByText("Alpha roster is illegal")).toBeVisible();
+  await expect.element(page.getByText(/Linus Ullmark is no longer injured/u)).toBeVisible();
+  await expect.element(page.getByText("Drop Riley Chen", { exact: true }).first()).toBeVisible();
+});
+
 it("dismisses one item from the list, keeps the others, and moves focus to the next control", async () => {
   const first = item({ id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c1" });
   const second = item({
@@ -469,9 +482,14 @@ function historyList(): TransactionProposalListData {
 function plan(
   overrides: Partial<TransactionProposalSetSummaryView> & {
     readonly items?: ReadonlyArray<TransactionProposalItemView>;
+    readonly illegalRoster?: ReadonlyArray<{
+      readonly name: string;
+      readonly slot: string;
+      readonly detail: string;
+    }>;
   } = {},
 ): TransactionProposalSetSummaryView {
-  const { items = [], ...rest } = overrides;
+  const { items = [], illegalRoster, ...rest } = overrides;
   const id = overrides.id ?? openPlanId;
   return {
     id,
@@ -490,9 +508,23 @@ function plan(
           season: 2026,
         },
         items,
+        ...(illegalRoster === undefined ? {} : { illegalRoster }),
       },
     ],
     ...rest,
+  };
+}
+
+function rosterOccupant(): {
+  readonly name: string;
+  readonly slot: string;
+  readonly detail: string;
+} {
+  return {
+    name: "Linus Ullmark",
+    slot: "IR+",
+    detail:
+      "Linus Ullmark is no longer injured, and the IR+ reserve list only accepts an injured player. Activate them. Your roster is full, so a drop is required.",
   };
 }
 

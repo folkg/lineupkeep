@@ -332,10 +332,11 @@ the failure mode this document exists to correct, and because the reference's or
 
 ### The rule that makes it correct
 
-**RR1.** Reserve eligibility is read from the provider's published eligibility and never inferred from
-the injury code. A player the provider stops listing as `IR`-eligible may not be placed on `IR`.
-**RR2.** A player may be placed in a reserve slot only when eligible for that named list, and may occupy
-only that list.
+**RR1.** Reserve eligibility comes from the league's declared rule: a reserve list either accepts the
+published positions that name it, or accepts only a player the provider reports as injured. Neither
+the generic layer nor the adapter infers a rule from what a status code usually means.
+**RR2.** A player may be placed in a reserve slot only when the declared rule accepts them, and may
+occupy only that list.
 **RR3.** A reserve player who will play competes for starting slots on the same terms as a bench player:
 the availability ladder decides contested slots, then value. Being on a reserve list is not a reason to
 be skipped, and never adds or removes value.

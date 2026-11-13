@@ -87,6 +87,11 @@ export function TransactionsPage(props: TransactionsPageProps): JSX.Element {
 }
 
 function OpenPlans(props: OpenPlansProps): JSX.Element {
+  const illegalRoster = (): ReadonlyArray<{
+    readonly name: string;
+    readonly slot: string;
+    readonly detail: string;
+  }> => dedupeOccupants(props.page.openPlans().flatMap((plan) => plan.teams));
   return (
     <Stack as="section" gap="md" labelledBy={openPlansTitleId}>
       <SectionTitle id={openPlansTitleId} focusable>
@@ -101,6 +106,13 @@ function OpenPlans(props: OpenPlansProps): JSX.Element {
         when={props.page.openPlans().length > 0}
       >
         <Stack gap="xl">
+          <Show when={illegalRoster().length > 0}>
+            <Notice
+              tone="danger"
+              title={`${props.teamName} roster is illegal`}
+              items={illegalRoster().map((occupant) => occupant.detail)}
+            />
+          </Show>
           <For each={props.page.openPlans()}>
             {(plan) => (
               <PlanSummary
@@ -401,6 +413,22 @@ function itemNeedsAttention(item: TransactionProposalItemView): boolean {
     item.staleness.status === "illegal" ||
     item.state === "failed" ||
     item.state === "unknown"
+  );
+}
+
+function dedupeOccupants(
+  teams: ReadonlyArray<TransactionProposalSetSummaryView["teams"][number]>,
+): ReadonlyArray<{ readonly name: string; readonly slot: string; readonly detail: string }> {
+  const seen = new Set<string>();
+  return teams.flatMap((team) =>
+    (team.illegalRoster ?? []).filter((occupant) => {
+      const key = `${occupant.name}|${occupant.slot}|${occupant.detail}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    }),
   );
 }
 

@@ -363,9 +363,9 @@ ordered ladder and each player's rung, so it stays provider-neutral.
 The adapter's table is explicit, because the mapping is provider knowledge rather than something to
 derive: every code it knows reaches one tier, and every code it does not know reaches `might-play` as
 a recorded uncertainty. The `reserve list` column records the reference's reading of which statuses
-normally park a player on an inactive list. It is evidence, not a rule: reserve eligibility is read
-from the provider's published `eligible_positions` and is **never** inferred from a status code
-([RR1](#slots-eligibility-and-locks)).
+normally park a player on an inactive list. It is evidence, not a rule: which reserve lists accept
+which players is the league's declared reserve rule, either its published positions or an injury
+requirement ([RR1](#slots-eligibility-and-locks)).
 
 | Status         | Tier            | Reserve list | Note                                                       |
 | -------------- | --------------- | ------------ | ---------------------------------------------------------- |
@@ -431,14 +431,16 @@ position name means:
   pinned to the slot they already occupy. An unrecognised status does not pin anyone.
 - **Reserve lists stay distinct**: a player eligible for one reserve list is not automatically
   eligible for another.
-- **A reserve list is a legal destination only for a player published as eligible for it.** The
-  provider accepted a reserve transit in both directions on 2026-10-27
+- **A reserve list's rule is published by the league.** It either accepts players whose published
+  positions name it, or accepts only a player the provider reports as injured. A provider that
+  publishes neither is treated as unknown. The provider accepted a reserve transit in both
+  directions on 2026-10-27
   ([record](RESEARCH.md#reserve-transit-acceptance-2026-10-27)), so the plan writes reserve moves the
-  same way it writes starting and bench moves. A player can be moved onto a named reserve list they
-  are eligible for, and off one they are not. Nothing is inferred from the injury code. A player the
-  league no longer lists as eligible for the reserve slot they hold is moved out when the rest of the
-  roster has room; when it does not, the plan leaves them in place, keeps that slot occupied, and
-  plans everyone else, and the run names them.
+  same way it writes starting and bench moves. A player can be moved onto a reserve list whose rule
+  accepts them, and off one whose rule does not. A player the league no longer accepts for the
+  reserve slot they hold is moved out when the rest of the roster has room; when it does not, the
+  plan leaves them in place, keeps that slot occupied, and plans everyone else, and the run names
+  them.
 
 Two readings the provider evidence does not settle, stated so they can be corrected:
 

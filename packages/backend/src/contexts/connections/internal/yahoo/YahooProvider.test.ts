@@ -1351,6 +1351,9 @@ it.effect("reads an NFL league whose settings publish extra and renamed fields",
         ["IR", 1, "reserve"],
       ],
     );
+    assert.deepStrictEqual(league.rosterConstraints.reserveEligibility, {
+      kind: "injury_status",
+    });
     assert.deepStrictEqual(
       league.statCategories.map((category) => [
         category.statId,
@@ -1372,6 +1375,96 @@ it.effect("reads an NFL league whose settings publish extra and renamed fields",
     ]);
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
+
+it.effect("keeps published position eligibility for a league without a reserve list", () => {
+  const internet = recordingInternet(() =>
+    jsonResponse(
+      yahooNflLeagueSettingsWithSettings({
+        roster_positions: [
+          {
+            roster_position: {
+              position: "QB",
+              position_type: "O",
+              count: 1,
+              is_starting_position: 1,
+            },
+          },
+          {
+            roster_position: {
+              position: "BN",
+              position_type: "B",
+              count: 2,
+              is_starting_position: 0,
+            },
+          },
+        ],
+      }),
+    ),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const league = yield* provider.readLeague({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      sport: "football",
+    });
+
+    assert.deepStrictEqual(league.rosterConstraints.reserveEligibility, {
+      kind: "published_positions",
+    });
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect(
+  "keeps published position eligibility for a reserve list that is not injury based",
+  () => {
+    const internet = recordingInternet(() =>
+      jsonResponse(
+        yahooNflLeagueSettingsWithSettings({
+          roster_positions: [
+            {
+              roster_position: {
+                position: "QB",
+                position_type: "O",
+                count: 1,
+                is_starting_position: 1,
+              },
+            },
+            {
+              roster_position: {
+                position: "BN",
+                position_type: "B",
+                count: 2,
+                is_starting_position: 0,
+              },
+            },
+            {
+              roster_position: {
+                position: "RESERVE",
+                count: 1,
+                is_starting_position: 0,
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    return Effect.gen(function* () {
+      const provider = yield* testProvider;
+
+      const league = yield* provider.readLeague({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+        sport: "football",
+      });
+
+      assert.deepStrictEqual(league.rosterConstraints.reserveEligibility, {
+        kind: "published_positions",
+      });
+    }).pipe(Effect.provide(yahooLayer(internet)));
+  },
+);
 
 it.effect("reads the league's declared acquisition, trade, and games-cap rules", () => {
   const internet = recordingInternet(() =>
@@ -1515,6 +1608,9 @@ it.effect("reads a rotisserie league that publishes no scoring-week window", () 
       league.rosterPositions.map((position) => position.position),
       ["C", "LW", "D", "BN", "IR"],
     );
+    assert.deepStrictEqual(league.rosterConstraints.reserveEligibility, {
+      kind: "injury_status",
+    });
     assert.deepStrictEqual(league.statModifiers, []);
     assert.deepStrictEqual(
       league.statCategories.map((category) => [

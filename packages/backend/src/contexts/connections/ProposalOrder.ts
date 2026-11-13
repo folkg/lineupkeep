@@ -179,15 +179,19 @@ export function placeIntentItems(input: ProposalPlacementInput): ProposalPlaceme
       refused.push({
         item: intent.item,
         code: destination.status === "unknown" ? "state_unavailable" : "reserve_unavailable",
-        detail: reserveRefusalDetail(intent.player.name, destination),
+        detail: reserveRefusalDetail(intent.player.name, destination, league.rule),
       });
       continue;
     }
     const slot = destination.slot;
     state.set(intent.player.key, { ...intent.player, slot: slot.position });
+    const accepts =
+      league.rule.reserveEligibility.kind === "injury_status"
+        ? "accepts an injured player"
+        : "accepts their positions";
     const detail = intent.added
-      ? `${intent.player.name} goes to the ${slot.position} reserve list after the add, which accepts their positions and has a free place.`
-      : `${intent.player.name} moves to the ${slot.position} reserve list, which accepts their positions and has a free place.`;
+      ? `${intent.player.name} goes to the ${slot.position} reserve list after the add, which ${accepts} and has a free place.`
+      : `${intent.player.name} moves to the ${slot.position} reserve list, which ${accepts} and has a free place.`;
     placements.push({
       item: intent.item,
       playerKey: intent.player.key,
@@ -369,7 +373,7 @@ function reserveDestination(
 ): ReserveDestination {
   const placements = league.slots
     .filter((slot) => slot.kind === "reserve")
-    .map((slot) => ({ slot, legal: slotPlacement(league.rule, slot.position, player.positions) }));
+    .map((slot) => ({ slot, legal: slotPlacement(league.rule, slot.position, player) }));
   const eligible = placements.filter((entry) => entry.legal.legal === true);
   if (eligible.length === 0) {
     return placements.some((entry) => entry.legal.legal === "unknown")
@@ -388,10 +392,16 @@ function reserveDestination(
   return { status: "full", lists: eligible.map((entry) => entry.slot.position) };
 }
 
-function reserveRefusalDetail(name: string, destination: ReserveDestination): string {
+function reserveRefusalDetail(
+  name: string,
+  destination: ReserveDestination,
+  rule: RosterRule,
+): string {
   switch (destination.status) {
     case "none":
-      return `${name} cannot sit on a reserve list: the league lists none they are eligible for.`;
+      return rule.reserveEligibility.kind === "injury_status"
+        ? `${name} cannot sit on a reserve list: the league's reserve lists only accept an injured player, and ${name} is not injured.`
+        : `${name} cannot sit on a reserve list: the league lists none they are eligible for.`;
     case "full":
       return `${name} cannot sit on a reserve list: the league's ${nameList(destination.lists)} ${destination.lists.length === 1 ? "reserve list has" : "reserve lists have"} no free place.`;
     case "unknown":
@@ -928,7 +938,7 @@ function applyDeclared(state: RosterState, item: ProposalOrderItem, league: Leag
         `The league does not declare a ${item.move.toSlot} slot, so ${moving.name} cannot move there.`,
       );
     }
-    const placement = slotPlacement(league.rule, slot.position, moving.positions);
+    const placement = slotPlacement(league.rule, slot.position, moving);
     if (placement.legal === "unknown") {
       return refused(
         "state_unavailable",
@@ -936,10 +946,7 @@ function applyDeclared(state: RosterState, item: ProposalOrderItem, league: Leag
       );
     }
     if (!placement.legal) {
-      return refused(
-        "slot_illegal",
-        `${moving.name} cannot move to the ${slotLabel(slot)}: it does not accept their positions (${moving.positions.join(", ")}).`,
-      );
+      return refused("slot_illegal", slotMoveMismatchDetail(moving, slot, league.rule));
     }
     const capacity = slotCapacity(league.rule, slot);
     if (capacity !== undefined && occupancyOf(next, slot.position) >= capacity) {
@@ -986,10 +993,7 @@ function planRepair(
       continue;
     }
     const slot = league.byPosition.get(player.slot);
-    if (
-      slot === undefined ||
-      slotPlacement(league.rule, slot.position, player.positions).legal !== false
-    ) {
+    if (slot === undefined || slotPlacement(league.rule, slot.position, player).legal !== false) {
       continue;
     }
     for (const destination of openSlots(state, league, player)) {
@@ -1051,11 +1055,11 @@ function applyPlaceAfter(
       detail: `The league does not declare a ${repair.toSlot} slot, so ${player.name} cannot move there.`,
     };
   }
-  if (slotPlacement(league.rule, slot.position, player.positions).legal !== true) {
+  if (slotPlacement(league.rule, slot.position, player).legal !== true) {
     return {
       status: "refused",
       code: "slot_illegal",
-      detail: `${player.name} cannot move to the ${slotLabel(slot)}: it does not accept their positions (${player.positions.join(", ")}).`,
+      detail: slotMoveMismatchDetail(player, slot, league.rule),
     };
   }
   const capacity = slotCapacity(league.rule, slot);
@@ -1090,7 +1094,13 @@ function openSlot(
   if (capacity !== undefined && occupancyOf(state, slot.position) >= capacity) {
     return false;
   }
-  return slotPlacement(league.rule, slot.position, player.positions).legal === true;
+  return slotPlacement(league.rule, slot.position, player).legal === true;
+}
+
+function slotMoveMismatchDetail(player: RosterMember, slot: LeagueSlot, rule: RosterRule): string {
+  return slot.kind === "reserve" && rule.reserveEligibility.kind === "injury_status"
+    ? `${player.name} cannot move to the ${slotLabel(slot)}: it only accepts an injured player.`
+    : `${player.name} cannot move to the ${slotLabel(slot)}: it does not accept their positions (${player.positions.join(", ")}).`;
 }
 
 function slotLabel(slot: ProposalOrderSlot): string {
@@ -1295,8 +1305,7 @@ function solverPlayer(player: RosterMember, league: League, pin: boolean): Roste
 function reserveEligible(player: RosterMember, league: League): boolean {
   return league.slots.some(
     (slot) =>
-      slot.kind === "reserve" &&
-      slotPlacement(league.rule, slot.position, player.positions).legal === true,
+      slot.kind === "reserve" && slotPlacement(league.rule, slot.position, player).legal === true,
   );
 }
 
@@ -1349,7 +1358,7 @@ function illegalOccupant(state: RosterState, playerKey: string, league: League):
   return (
     player !== undefined &&
     player.slot !== undefined &&
-    slotPlacement(league.rule, player.slot, player.positions).legal === false
+    slotPlacement(league.rule, player.slot, player).legal === false
   );
 }
 
@@ -1611,7 +1620,7 @@ type ConflictReason = {
   readonly detail: string;
 };
 
-type RosterMember = ProposalOrderPlayer;
+type RosterMember = Omit<ProposalOrderPlayer, "injured"> & { readonly injured: boolean };
 
 type RosterState = ReadonlyMap<string, RosterMember>;
 

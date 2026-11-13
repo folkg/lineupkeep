@@ -28,6 +28,12 @@ import type {
   ProviderRoster,
   ProviderRosterPosition,
 } from "#contexts/connections/Provider.ts";
+import {
+  rosterPlayerInjured,
+  rosterRuleOf,
+  slotPlacement,
+} from "#contexts/connections/RosterSlots.ts";
+import type { RosterRule } from "#contexts/connections/RosterSlots.ts";
 
 const selectionBasis: SelectionBasis = makeSelectionBasis("provider-score");
 
@@ -43,17 +49,18 @@ const availabilityLadder: ReadonlyArray<AvailabilityTier> = [
 ];
 
 export function planAssignments(input: PlanAssignmentsInput): PlanAssignmentsResult {
+  const rule = rosterRuleOf(input.league.rosterConstraints, input.league.rosterPositions);
   const limits = new Map(input.gamesPlayed.map((entry) => [entry.position, entry]));
   const lockedBySlot = lockedCounts(input.roster);
   const slots = input.league.rosterPositions.flatMap((position) =>
-    rosterSlots(position, limits, lockedBySlot.get(position.position) ?? 0),
+    rosterSlots(position, limits, lockedBySlot.get(position.position) ?? 0, rule),
   );
   const values = new Map(input.values.map((value) => [value.providerPlayerKey, value]));
   const solved = solveLineup({
     selectionBasis,
     availabilityTiers: availabilityLadder,
     slots,
-    players: solverPlayers(input.roster.players, values, slots),
+    players: solverPlayers(input.roster.players, values, slots, rule),
   });
   if (solved.kind === "refusal") {
     return { kind: "refused", detail: solverRefusalDetail(solved.refusal) };
@@ -61,7 +68,7 @@ export function planAssignments(input: PlanAssignmentsInput): PlanAssignmentsRes
   return {
     kind: "planned",
     assignments: assignments(input.roster, solved.plan.assignments),
-    leftInPlace: leftInPlaceReports(input.roster, slots, solved.plan.leftInPlace),
+    leftInPlace: leftInPlaceReports(input.roster, slots, rule, solved.plan.leftInPlace),
   };
 }
 
@@ -89,6 +96,7 @@ function assignments(
 function leftInPlaceReports(
   roster: ProviderRoster,
   slots: ReadonlyArray<RosterSlot>,
+  rule: RosterRule,
   leftInPlace: ReadonlyArray<PlayerId>,
 ): ReadonlyArray<LineupLeftInPlacePlayer> {
   const left = new Set(leftInPlace.map(String));
@@ -100,7 +108,7 @@ function leftInPlaceReports(
       {
         name: player.name,
         slot: player.slot.slot,
-        reason: leftInPlaceReason(player, slots),
+        reason: leftInPlaceReason(player, slots, rule),
       },
     ];
   });
@@ -109,22 +117,54 @@ function leftInPlaceReports(
 function leftInPlaceReason(
   player: ProviderRoster["players"][number],
   slots: ReadonlyArray<RosterSlot>,
+  rule: RosterRule,
 ): string {
-  const accepts = (slot: RosterSlot): boolean =>
-    slotAccepts(slot.eligibility, player.eligiblePositions);
-  return slots.some(accepts)
+  const place = rosterPlaceOf(player);
+  const current =
+    player.slot.status === "verified" ? rule.byPosition.get(player.slot.slot) : undefined;
+  if (
+    current?.kind === "reserve" &&
+    rule.reserveEligibility.kind === "injury_status" &&
+    !place.injured
+  ) {
+    return "The league's reserve list only accepts an injured player, and they are no longer injured, so the plan leaves them there.";
+  }
+  return acceptsSlot(slots, rule, place)
     ? "The league no longer lists them as eligible for this reserve slot, so the plan leaves them there."
     : "No slot in this league's lineup accepts them, so the plan leaves them there.";
+}
+
+function acceptsSlot(
+  slots: ReadonlyArray<RosterSlot>,
+  rule: RosterRule,
+  place: { readonly positions: ReadonlyArray<string>; readonly injured: boolean },
+): boolean {
+  return (
+    slots.some(
+      (slot) => slot.kind !== "reserve" && slotAccepts(slot.eligibility, place.positions),
+    ) ||
+    rule.slots.some(
+      (slot) => slot.kind === "reserve" && slotPlacement(rule, slot.position, place).legal === true,
+    )
+  );
+}
+
+function slotAccepts(eligibility: SlotEligibility, positions: ReadonlyArray<string>): boolean {
+  return (
+    eligibility.kind === "any" ||
+    eligibility.positions.some((position) => positions.includes(position))
+  );
 }
 
 function solverPlayers(
   members: ProviderRoster["players"],
   values: ReadonlyMap<string, ProviderPlayerScore>,
   slots: ReadonlyArray<RosterSlot>,
+  rule: RosterRule,
 ): ReadonlyArray<RosterPlayer> {
   return members.flatMap((player) =>
     player.slot.status === "verified"
-      ? [rosterPlayer(player, player.slot.slot, values.get(player.providerPlayerKey), slots)]
+      ? [rosterPlayer(player, player.slot.slot, values.get(player.providerPlayerKey), slots, rule)]
       : [],
   );
 }
@@ -134,36 +174,49 @@ function rosterPlayer(
   slot: string,
   value: ProviderPlayerScore | undefined,
   slots: ReadonlyArray<RosterSlot>,
+  rule: RosterRule,
 ): RosterPlayer {
   if (value === undefined) {
     throw new Error("A provider lineup score must cover every roster player.");
   }
-  const eligibility = player.eligiblePositions;
+  const place = rosterPlaceOf(player);
   return {
     id: makePlayerId(player.providerPlayerKey),
-    eligiblePositions: eligibility,
+    eligiblePositions: place.positions,
     availabilityTier: makeAvailabilityTier(value.availability),
     selection: selection(value.score),
-    reserveEligible: slots.some(
-      (slot) => slot.kind === "reserve" && slotAccepts(slot.eligibility, eligibility),
+    reserveEligible: rule.slots.some(
+      (entry) =>
+        entry.kind === "reserve" && slotPlacement(rule, entry.position, place).legal === true,
     ),
     lockedSlotId: player.isEditable === true ? undefined : makeSlotId(slot),
     currentSlotId: slots.some((entry) => String(entry.id) === slot) ? makeSlotId(slot) : undefined,
-    mayBeLeftInPlace: mayBeLeftInPlace(player, slots),
+    mayBeLeftInPlace: mayBeLeftInPlace(player, slots, rule),
   };
 }
 
 function mayBeLeftInPlace(
   player: ProviderRoster["players"][number],
   slots: ReadonlyArray<RosterSlot>,
+  rule: RosterRule,
 ): boolean {
-  const currentSlot = player.slot.status === "verified" ? player.slot.slot : undefined;
-  const current = slots.find((slot) => String(slot.id) === currentSlot);
-  const accepted = slots.some((slot) => slotAccepts(slot.eligibility, player.eligiblePositions));
+  const place = rosterPlaceOf(player);
+  const current =
+    player.slot.status === "verified" ? rule.byPosition.get(player.slot.slot) : undefined;
   return (
-    !accepted ||
-    (current?.kind === "reserve" && !slotAccepts(current.eligibility, player.eligiblePositions))
+    !acceptsSlot(slots, rule, place) ||
+    (current?.kind === "reserve" && slotPlacement(rule, current.position, place).legal !== true)
   );
+}
+
+function rosterPlaceOf(player: ProviderRoster["players"][number]): {
+  readonly positions: ReadonlyArray<string>;
+  readonly injured: boolean;
+} {
+  return {
+    positions: player.eligiblePositions,
+    injured: rosterPlayerInjured(player),
+  };
 }
 
 function selection(score: number | null): PlayerSelection {
@@ -186,9 +239,13 @@ function rosterSlots(
   position: ProviderRosterPosition,
   limits: ReadonlyMap<string, ProviderGamesPlayed>,
   locked: number,
+  rule: RosterRule,
 ): ReadonlyArray<RosterSlot> {
   const id = makeSlotId(position.position);
-  const eligibility = slotEligibility(position.eligibility);
+  const eligibility =
+    position.kind === "reserve" && rule.reserveEligibility.kind === "injury_status"
+      ? slotEligibility([])
+      : slotEligibility(position.eligibility);
   if (position.kind !== "starting") {
     return [{ kind: position.kind, id, capacity: position.count, eligibility }];
   }
@@ -224,13 +281,6 @@ function slotEligibility(positions: ReadonlyArray<string>): SlotEligibility {
   return positions.length === 0
     ? { kind: "any" }
     : { kind: "positions", positions: [...positions] };
-}
-
-function slotAccepts(eligibility: SlotEligibility, positions: ReadonlyArray<string>): boolean {
-  return (
-    eligibility.kind === "any" ||
-    eligibility.positions.some((position) => positions.includes(position))
-  );
 }
 
 function solverRefusalDetail(refusal: LineupRefusal): string {
