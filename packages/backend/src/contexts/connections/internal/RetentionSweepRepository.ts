@@ -1,4 +1,4 @@
-import { and, eq, isNull, lte, or } from "drizzle-orm";
+import { and, eq, exists, isNull, lte, not, or } from "drizzle-orm";
 import { Array, DateTime, Effect, Layer } from "effect";
 
 import { AccountRetention } from "#contexts/auth/AccountRetention.ts";
@@ -19,6 +19,12 @@ import {
   lineupWriteIntents,
 } from "./LineupRunTables.ts";
 import { scheduleObservations } from "./ScheduleObservationTables.ts";
+import {
+  transactionProposalItems,
+  transactionProposalSets,
+  transactionProposalSteps,
+  transactionProposalSubmissions,
+} from "./TransactionProposalTables.ts";
 
 const terminalOutcomeStatuses = [
   "completed",
@@ -44,6 +50,9 @@ export const RetentionSweepLive = Layer.effect(
       );
       const hostedLinkingBefore = DateTime.toDateUtc(
         DateTime.subtractDuration(now, retentionPolicy.hostedLinkingSession.millis),
+      );
+      const plansBefore = DateTime.toDateUtc(
+        DateTime.subtractDuration(now, retentionPolicy.closedPlan.millis),
       );
       const connections = yield* database
         .transaction((tx) =>
@@ -127,6 +136,35 @@ export const RetentionSweepLive = Layer.effect(
               .limit(limit);
             const hosted = yield* deleteIds(tx, hostedLinkingSessions, oldHostedLinkingSessions);
 
+            const closedPlanIds = yield* tx
+              .select({ id: transactionProposalSets.id })
+              .from(transactionProposalSets)
+              .where(
+                and(
+                  lte(transactionProposalSets.updatedAt, plansBefore),
+                  not(
+                    exists(
+                      tx
+                        .select({ id: transactionProposalItems.id })
+                        .from(transactionProposalItems)
+                        .where(
+                          and(
+                            eq(transactionProposalItems.setId, transactionProposalSets.id),
+                            eq(transactionProposalItems.settled, false),
+                          ),
+                        ),
+                    ),
+                  ),
+                ),
+              )
+              .orderBy(transactionProposalSets.updatedAt)
+              .limit(limit);
+            const planIds = closedPlanIds.map((row) => row.id);
+            yield* deleteSetChildren(tx, transactionProposalSteps, planIds);
+            yield* deleteSetChildren(tx, transactionProposalItems, planIds);
+            yield* deleteSetChildren(tx, transactionProposalSubmissions, planIds);
+            const plans = yield* deleteIds(tx, transactionProposalSets, closedPlanIds);
+
             const summary = {
               diagnostics: diagnostics + runDiagnostics,
               attempts,
@@ -136,6 +174,7 @@ export const RetentionSweepLive = Layer.effect(
               deliveries,
               scheduleObservations: observations,
               hostedLinkingSessions: hosted,
+              plans,
             };
             return summary;
           }),
@@ -153,6 +192,7 @@ export const RetentionSweepLive = Layer.effect(
         "retention.requests": summary.requests,
         "retention.schedule_observations": summary.scheduleObservations,
         "retention.hosted_linking_sessions": summary.hostedLinkingSessions,
+        "retention.plans": summary.plans,
         "retention.sessions": summary.sessions,
         "retention.verifications": summary.verifications,
         "retention.consents": summary.consents,
@@ -173,7 +213,8 @@ function deleteIds(
     | typeof lineupRunDiagnostics
     | typeof lineupRuns
     | typeof lineupDeliveries
-    | typeof hostedLinkingSessions,
+    | typeof hostedLinkingSessions
+    | typeof transactionProposalSets,
   rows: ReadonlyArray<{ readonly id: string }>,
 ): Effect.Effect<number, never> {
   const ids = rows.map((row) => row.id);
@@ -203,6 +244,28 @@ function deleteRunChildren(
     .delete(table)
     .where(anyOf(table.runId, ids))
     .returning({ runId: table.runId })
+    .pipe(
+      Effect.orDie,
+      Effect.map((deleted) => deleted.length),
+    );
+}
+
+function deleteSetChildren(
+  tx: Transaction,
+  table:
+    | typeof transactionProposalSteps
+    | typeof transactionProposalItems
+    | typeof transactionProposalSubmissions,
+  setIds: ReadonlyArray<string>,
+): Effect.Effect<number, never> {
+  const ids = [...setIds];
+  if (!Array.isArrayNonEmpty(ids)) {
+    return Effect.succeed(0);
+  }
+  return tx
+    .delete(table)
+    .where(anyOf(table.setId, ids))
+    .returning({ setId: table.setId })
     .pipe(
       Effect.orDie,
       Effect.map((deleted) => deleted.length),

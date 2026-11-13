@@ -10,6 +10,7 @@ export const RetentionSummary = Schema.Struct({
   deliveries: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   scheduleObservations: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   hostedLinkingSessions: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  plans: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   sessions: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   verifications: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   consents: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),

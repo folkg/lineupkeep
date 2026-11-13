@@ -32,7 +32,7 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 | Restore              | Drill passed 2026-10-29; RPO 15 minutes, RTO 4 hours, owner executes recovery (ruled 10 November) |
 | Dependencies         | Fresh audit and disposition in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md)                         |
 | Security             | Audit and disposition in [SECURITY-AUDIT.md](SECURITY-AUDIT.md); deferred work is group J         |
-| Checks               | 1966 node, 210 browser, 10 chromium; container end to end 59 passed, nothing skipped              |
+| Checks               | 1968 node, 210 browser, 10 chromium; container end to end 59 passed, nothing skipped              |
 
 ---
 
@@ -46,6 +46,10 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
   by open or closed in one SQL pass and paged by cursor, so an agent sees the plan a person sees. The page
   reads its lists and controls on the client; server-rendered, the hydrated disclosure and dismissal
   controls kept the markup they arrived with, so that route opts out of server rendering.
+- **A closed plan is swept after 90 days, by the same policy table as everything else.** The retention
+  policy gains one rule for closed transaction plans; the hourly sweep deletes a plan whose moves have all
+  ended and whose last change is older than 90 days, with its moves, submissions, and steps. An open plan is
+  current work and stays. No feature-specific expiry code and no second clock.
 - **A ready connection always carries the time it was approved.** Rows written before the approval column
   existed decoded as ready with a null approval time, and reading that connection refused the whole team
   list. The migration records the row's last write as its approval time; every other state keeps its null

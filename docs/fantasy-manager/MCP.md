@@ -855,7 +855,7 @@ returns the set with its new order and review link. Removing the last move for a
 move that already ran, is pending, failed, or was skipped cannot be withdrawn: it keeps its outcome
 and is replaced by a new item. A set that stayed open after a submission still accepts a withdrawal
 of a move that is still proposed; a plan whose moves have all ended is an audit record and refuses both
-new moves and withdrawals. A plan never expires; it stops when every move has ended.
+new moves and withdrawals. A plan never expires; it stops when every move has ended. A closed plan stays readable for 90 days as the audit record of what was proposed, then the retention sweep removes it with its moves, submissions, and steps.
 
 `list_transaction_proposals` returns one team's plans, newest change first, filtered by `state`:
 `open` (the default, a plan with at least one move that can still run) or `closed` (every move has

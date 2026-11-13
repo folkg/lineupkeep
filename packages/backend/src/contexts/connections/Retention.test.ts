@@ -37,6 +37,12 @@ import { QueryRepository } from "./internal/QueryRepository.ts";
 import { RetentionSweepLive } from "./internal/RetentionSweepRepository.ts";
 import { ScheduleGateTest } from "./internal/ScheduleGateTest.ts";
 import { ScheduleObservationRepository } from "./internal/ScheduleObservationRepository.ts";
+import {
+  transactionProposalItems,
+  transactionProposalSets,
+  transactionProposalSteps,
+  transactionProposalSubmissions,
+} from "./internal/TransactionProposalTables.ts";
 import { LineupRequestInput } from "./LineupRun.ts";
 import { LineupRuns } from "./LineupRuns.ts";
 import type { ProviderLeagueSettings, ProviderRoster, ProviderTeam } from "./Provider.ts";
@@ -204,6 +210,83 @@ it.effect("removes finished hosted linking sessions after a day and keeps a live
   }).pipe(Effect.provide(RetentionTestLayer)),
 );
 
+it.effect("removes a closed plan with its moves after 90 days and keeps an open plan", () =>
+  Effect.gen(function* () {
+    const database = yield* ConnectionsDatabase;
+    const retention = yield* RetentionSweep;
+    const at = DateTime.makeUnsafe("2026-06-30T12:00:00.000Z");
+    const removedAt = DateTime.subtractDuration(at, 90 * 86_400_000);
+    const keptAt = DateTime.subtractDuration(at, 89 * 86_400_000);
+    const team = decodeTeamId("01M78N7S52R6HJ5T2J308GG98S");
+
+    yield* database
+      .insert(transactionProposalSets)
+      .values([
+        proposalSet("closed-removed", removedAt),
+        proposalSet("closed-kept", keptAt),
+        proposalSet("open-kept", removedAt),
+      ]);
+    yield* database
+      .insert(transactionProposalItems)
+      .values([
+        proposalItem("closed-removed-item", "closed-removed", team, true, removedAt),
+        proposalItem("closed-kept-item", "closed-kept", team, true, keptAt),
+        proposalItem("open-kept-item", "open-kept", team, false, removedAt),
+      ]);
+    yield* database.insert(transactionProposalSubmissions).values([
+      {
+        id: "closed-removed-submission",
+        setId: "closed-removed",
+        userId: owner,
+        ordinal: 1,
+        submittedAt: DateTime.toDateUtc(removedAt),
+        completedAt: DateTime.toDateUtc(removedAt),
+      },
+    ]);
+    yield* database.insert(transactionProposalSteps).values([
+      {
+        id: "closed-removed-step",
+        setId: "closed-removed",
+        itemId: "closed-removed-item",
+        userId: owner,
+        position: 0,
+        kind: "drop" as const,
+        playerKey: "461.p.1",
+        outcome: "executed" as const,
+        decidedAt: DateTime.toDateUtc(removedAt),
+      },
+    ]);
+
+    const summary = yield* retention.run(10, at);
+    const sets = yield* database
+      .select({ id: transactionProposalSets.id })
+      .from(transactionProposalSets)
+      .orderBy(transactionProposalSets.id);
+    const items = yield* database
+      .select({ setId: transactionProposalItems.setId })
+      .from(transactionProposalItems)
+      .orderBy(transactionProposalItems.setId);
+    const submissions = yield* database
+      .select({ id: transactionProposalSubmissions.id })
+      .from(transactionProposalSubmissions);
+    const steps = yield* database
+      .select({ id: transactionProposalSteps.id })
+      .from(transactionProposalSteps);
+
+    assert.strictEqual(summary.plans, 1);
+    assert.deepStrictEqual(
+      sets.map((set) => set.id),
+      ["closed-kept", "open-kept"],
+    );
+    assert.deepStrictEqual(
+      items.map((item) => item.setId),
+      ["closed-kept", "open-kept"],
+    );
+    assert.deepStrictEqual(submissions, []);
+    assert.deepStrictEqual(steps, []);
+  }).pipe(Effect.provide(RetentionTestLayer)),
+);
+
 it.effect("keeps an in-flight run and its write intent at the retention boundary", () =>
   Effect.gen(function* () {
     const database = yield* ConnectionsDatabase;
@@ -237,6 +320,48 @@ it.effect("keeps an in-flight run and its write intent at the retention boundary
     );
   }).pipe(Effect.provide(RetentionTestLayer)),
 );
+
+function proposalSet(id: string, at: DateTime.Utc): typeof transactionProposalSets.$inferInsert {
+  return {
+    id,
+    userId: owner,
+    proposerKind: "agent",
+    proposerReference: "mcp",
+    surface: "mcp",
+    fingerprint: id,
+    teams: [],
+    createdAt: DateTime.toDateUtc(at),
+    updatedAt: DateTime.toDateUtc(at),
+  };
+}
+
+function proposalItem(
+  id: string,
+  setId: string,
+  team: TeamId,
+  settled: boolean,
+  at: DateTime.Utc,
+): typeof transactionProposalItems.$inferInsert {
+  return {
+    id,
+    setId,
+    position: 0,
+    userId: owner,
+    teamId: team,
+    connectionId: "connection-1",
+    kind: "drop",
+    addPlayers: [],
+    dropPlayers: [],
+    picks: [],
+    reason: "Retention probe.",
+    state: settled ? "dismissed" : "proposed",
+    settled,
+    staleness: "current",
+    staleReasons: [],
+    createdAt: DateTime.toDateUtc(at),
+    updatedAt: DateTime.toDateUtc(at),
+  };
+}
 
 function terminalRun(id: string, at: DateTime.Utc): typeof lineupRuns.$inferInsert {
   return {

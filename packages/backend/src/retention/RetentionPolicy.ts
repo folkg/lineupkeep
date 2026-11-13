@@ -11,6 +11,12 @@ export const retentionPolicy = {
     countedFrom: "the run's end state",
     millis: 90 * millisecondsPerDay,
   },
+  closedPlan: {
+    appliesTo:
+      "transaction plans whose moves have all ended, and their moves, submissions and steps",
+    countedFrom: "the plan's last change",
+    millis: 90 * millisecondsPerDay,
+  },
   scheduleObservation: {
     appliesTo: "stored schedule observations",
     countedFrom: "the end of the covered window",
