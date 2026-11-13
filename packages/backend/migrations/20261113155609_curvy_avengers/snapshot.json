@@ -1,0 +1,37 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "1f2bf910-2cfb-488e-b0e7-a428072d1a3e",
+  "prevIds": ["0a9974f6-4565-4ec5-a2b3-a8641dccc298"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_proposal_items", "effective_date"],
+      "writes": [
+        "s|col|public.transaction_proposal_items.effective_date",
+        "n|col|public.transaction_proposal_items.effective_date",
+        "e|col|public.transaction_proposal_items.effective_date"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_items", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_items",
+        "name": "effective_date",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

@@ -166,6 +166,8 @@ export type TransactionReviewItemView = {
   readonly counterparty?: TransactionReviewCounterpartyView;
   readonly trade?: TransactionReviewTradeView;
   readonly window?: string;
+  readonly effectiveDate?: string;
+  readonly effectiveWarning?: string;
   readonly approvedAt?: string;
 };
 

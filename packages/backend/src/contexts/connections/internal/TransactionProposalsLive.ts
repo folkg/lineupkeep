@@ -6,6 +6,7 @@ import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
 import type { LineupError, LineupRun } from "#contexts/connections/LineupRun.ts";
 import { LineupRuns } from "#contexts/connections/LineupRuns.ts";
 import {
+  effectiveDateOf,
   placeIntentItems,
   planProposalOrder,
   rosterChangeDate,
@@ -817,6 +818,7 @@ export const TransactionProposalsLive = Layer.effect(
         check: candidate.change.staleness,
         reserveMove: candidate.change.reserveMove,
         placement: candidate.change.placement,
+        effectiveDate: candidate.change.effectiveDate,
       }));
 
       let currentSet: ProposalSetRecord;
@@ -3216,9 +3218,18 @@ export const TransactionProposalsLive = Layer.effect(
         return failedCheck(teamId, items, data.detail, at);
       }
       const budget = budgetOf(data.facts, items);
-      const changes = items.map((item) =>
-        evaluateItem(item, data.facts, budget, at, data.tradeFeed),
-      );
+      const timing = {
+        rule: data.facts.league.rosterChange?.rule,
+        currentDate: data.facts.league.currentDate,
+      };
+      const changes = items.map((item) => {
+        const change = evaluateItem(item, data.facts, budget, at, data.tradeFeed);
+        const effectiveDate =
+          item.kind === "trade"
+            ? undefined
+            : effectiveDateOf(item.window, timing, data.facts.league.currentDate);
+        return effectiveDate === undefined ? change : { ...change, effectiveDate };
+      });
       const placed = placeTeam(data.facts, items, changes, at);
       const plan = orderFor(data.facts, items, placed.changes, placed.resolutions);
       const ordered = orderChanges(placed.changes, items, plan, at);
@@ -5395,6 +5406,12 @@ function toItem(
             ),
             detail: record.placement.detail,
           };
+    const effectiveWarning =
+      record.window === undefined ||
+      record.effectiveDate === undefined ||
+      record.effectiveDate === record.window
+        ? undefined
+        : `This move runs on ${record.window} and takes effect on ${record.effectiveDate}.`;
     return yield* Schema.decodeEffect(ProposalItemSchema)({
       id: record.id,
       team: record.team,
@@ -5452,6 +5469,8 @@ function toItem(
       picks,
       ...(record.bid === undefined ? {} : { bid: record.bid }),
       ...(record.window === undefined ? {} : { window: record.window }),
+      ...(record.effectiveDate === undefined ? {} : { effectiveDate: record.effectiveDate }),
+      ...(effectiveWarning === undefined ? {} : { effectiveWarning }),
       ...(record.approvedAt === undefined ? {} : { approvedAt: record.approvedAt }),
       reason: record.reason,
       state: record.state,

@@ -162,6 +162,25 @@ it("shows the date a move waits for and says when it was approved", async () => 
     .toBeVisible();
 });
 
+it("shows the date a plan move takes effect beside the day it runs", async () => {
+  using _app = setupTransactionsPage(
+    listData([
+      plan({
+        items: [{ ...item({ window: "2026-11-14" }), effectiveDate: "2026-11-15" }],
+      }),
+    ]),
+  );
+
+  await expect
+    .element(
+      page.getByText(
+        `Waits for ${formatCalendarDate("2026-11-14")}. Takes effect on ${formatCalendarDate("2026-11-15")}.`,
+        { exact: true },
+      ),
+    )
+    .toBeVisible();
+});
+
 it("shows the fallback choices a plan carries", async () => {
   using _app = setupTransactionsPage(
     listData([

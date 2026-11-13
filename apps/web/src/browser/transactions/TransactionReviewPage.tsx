@@ -615,9 +615,13 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
       return undefined;
     }
     const date = formatCalendarDate(window);
+    const effective =
+      props.item.effectiveDate === undefined
+        ? ""
+        : ` Takes effect on ${formatCalendarDate(props.item.effectiveDate)}.`;
     return props.item.approvedAt === undefined
-      ? `Runs on ${date} once you submit.`
-      : `Waits for ${date}. Approved ${formatCalendarDate(props.item.approvedAt)}.`;
+      ? `Runs on ${date} once you submit.${effective}`
+      : `Waits for ${date}. Approved ${formatCalendarDate(props.item.approvedAt)}.${effective}`;
   };
   const fallbackLine = (): string | undefined => {
     if (props.item.state !== "proposed") {

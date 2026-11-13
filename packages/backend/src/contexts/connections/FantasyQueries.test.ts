@@ -548,6 +548,40 @@ it.effect("carries the owning team's acquisition usage on the team summary", () 
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+it.effect("carries the league's roster-change timing on the team summary", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const detail =
+      "Your league's weekly_deadline is empty and its edit_key is 2026-10-26, the day after your league's current_date 2026-10-25, so a roster move takes effect the next day.";
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      league: {
+        ...leagueFixture,
+        currentDate: "2026-10-25",
+        weeklyDeadline: "",
+        waiverDays: 2,
+        rosterChange: { rule: "next_day", source: ["weekly_deadline", "edit_key"], detail },
+      },
+    });
+
+    const summary = yield* queries.getTeamSummary(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      groups: ["league"],
+    });
+
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok" || summary.league?.status !== "available") {
+      assert.fail("expected the summary's league facts");
+      return;
+    }
+    assert.deepStrictEqual(summary.league.transactionTiming, {
+      weeklyDeadline: "",
+      rosterChange: "next_day",
+      waiverDays: 2,
+    });
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
 it.effect("publishes an innings cap only for a league that declares one", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;

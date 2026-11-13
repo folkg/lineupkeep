@@ -71,6 +71,7 @@ type ProposalItemStore = {
   readonly check: StoredProposalStaleness;
   readonly reserveMove: StoredReserveMove | undefined;
   readonly placement: StoredProposalPlacement | undefined;
+  readonly effectiveDate: string | undefined;
 };
 
 type LoadedProposalSet = {
@@ -91,6 +92,7 @@ export type ProposalItemChange = {
   readonly trade?: StoredProposalTrade;
   readonly state?: ProposalItemState;
   readonly approvedAt?: DateTime.Utc;
+  readonly effectiveDate?: string;
 };
 
 export type ProposalStepCommand = {
@@ -1094,6 +1096,9 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
                   staleness: change.staleness,
                   ...(change.trade === undefined ? {} : { trade: change.trade }),
                   ...(change.state === undefined ? {} : { state: change.state }),
+                  ...(change.effectiveDate === undefined
+                    ? {}
+                    : { effectiveDate: change.effectiveDate }),
                   ...(change.approvedAt === undefined || record.approvedAt !== undefined
                     ? {}
                     : { approvedAt: change.approvedAt }),
@@ -1186,6 +1191,7 @@ function storeRow(
     counterpartyName: command.counterpartyName ?? null,
     bid: command.bid ?? null,
     windowDate: command.window ?? null,
+    effectiveDate: item.effectiveDate ?? null,
     reason: command.reason,
     state: "proposed" as const,
     settled: false,

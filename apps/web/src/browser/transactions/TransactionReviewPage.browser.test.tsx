@@ -1297,6 +1297,25 @@ it("says a waiting move was approved and when", async () => {
     .toBeVisible();
 });
 
+it("shows the date a waiting move takes effect beside the day it runs", async () => {
+  const team = teamFixture(alphaId, "Alpha", "nfl", "football", [
+    { ...dropItem(), window: "2026-11-14", effectiveDate: "2026-11-15" },
+  ]);
+  using _app = setupReviewPage({
+    ...reviewFixture(),
+    teams: [{ ...team, today: "2026-11-12" }],
+  });
+
+  await expect
+    .element(
+      page.getByText(
+        `Runs on ${formatCalendarDate("2026-11-14")} once you submit. Takes effect on ${formatCalendarDate("2026-11-15")}.`,
+        { exact: true },
+      ),
+    )
+    .toBeVisible();
+});
+
 it("lists every fallback choice a plan could use if the first is gone", async () => {
   const team = teamFixture(alphaId, "Alpha", "nfl", "football", [
     {

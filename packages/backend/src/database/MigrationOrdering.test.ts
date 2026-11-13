@@ -631,6 +631,65 @@ describe("proposal fallback players migration", () => {
   );
 });
 
+describe("proposal effective date migration", () => {
+  const effectiveDateMigration = "20261113155609_curvy_avengers";
+
+  it.effect("leaves an old move without an effective date and stores a derived one", () =>
+    Effect.gen(function* () {
+      const sql = yield* PgliteClient.PgliteClient;
+
+      for (const statement of migrationStatements((name) => name < effectiveDateMigration)) {
+        yield* sql.unsafe(statement);
+      }
+
+      yield* sql.unsafe(`
+        insert into transaction_proposal_sets
+          (id, user_id, proposer_kind, proposer_reference, surface, fingerprint, teams)
+        values
+          ('11111111-1111-4111-8111-666666666666', 'owner', 'agent', 'mcp', 'mcp', 'effective',
+            '[]'::jsonb)
+      `);
+      yield* sql.unsafe(`
+        insert into transaction_proposal_items
+          (id, set_id, position, user_id, team_id, connection_id, kind, add_players,
+            drop_players, reason, state, staleness, stale_reasons)
+        values
+          ('22222222-2222-4222-8222-666666666666', '11111111-1111-4111-8111-666666666666', 0,
+            'owner', '33333333-3333-4333-8333-111111111111', 'connection', 'drop',
+            '[]'::jsonb, '[]'::jsonb, 'Drop the center next week.', 'proposed',
+            'current', '[]'::jsonb)
+      `);
+
+      for (const statement of migrationStatements((name) => name === effectiveDateMigration)) {
+        yield* sql.unsafe(statement);
+      }
+
+      const columns = yield* sql.unsafe<{ readonly column_name: string }>(
+        "select column_name from information_schema.columns where table_name = 'transaction_proposal_items'",
+      );
+      expect(columns.map((row) => row.column_name)).toContain("effective_date");
+
+      const older = yield* sql.unsafe<{ readonly effective_date: string | null }>(
+        "select effective_date from transaction_proposal_items where id = '22222222-2222-4222-8222-666666666666'",
+      );
+      expect(older).toEqual([{ effective_date: null }]);
+
+      yield* sql.unsafe(`
+        update transaction_proposal_items
+        set window_date = '2026-11-14', effective_date = '2026-11-15'
+        where id = '22222222-2222-4222-8222-666666666666'
+      `);
+      const stored = yield* sql.unsafe<{
+        readonly window_date: string | null;
+        readonly effective_date: string | null;
+      }>(
+        "select window_date, effective_date from transaction_proposal_items where id = '22222222-2222-4222-8222-666666666666'",
+      );
+      expect(stored).toEqual([{ window_date: "2026-11-14", effective_date: "2026-11-15" }]);
+    }).pipe(Effect.provide(PgliteClient.layer())),
+  );
+});
+
 function migrationStatements(select: (name: string) => boolean): ReadonlyArray<string> {
   const statements: string[] = [];
   for (const name of readdirSync(migrationsFolder).filter(select).sort()) {

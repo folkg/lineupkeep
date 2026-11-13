@@ -98,6 +98,11 @@ const ProposalDate = Schema.String.pipe(
   }),
 );
 
+const EffectiveDate = Schema.String.pipe(
+  Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)),
+  Schema.annotate({ description: "When it takes effect." }),
+);
+
 const ProposalProposerKind = Schema.Literals(["user", "agent"]);
 type ProposalProposerKind = typeof ProposalProposerKind.Type;
 
@@ -256,8 +261,10 @@ export const ProposalItem = Schema.Struct({
   trade: Schema.optional(ProposalTrade),
   window: Schema.optional(ProposalDate).annotate({
     description:
-      "The calendar date this move waits for, in the league's fantasy day; absent when it runs on submission.",
+      "The date this move runs, not when it takes effect; absent when it runs on submission.",
   }),
+  effectiveDate: Schema.optional(EffectiveDate),
+  effectiveWarning: Schema.optional(Schema.NonEmptyString),
   approvedAt: Schema.optional(Schema.DateTimeUtc).annotate({
     description: "When a submission approved a move that waits for a later date.",
   }),
@@ -660,7 +667,7 @@ export const ProposalItemDraft = Schema.Struct({
   }),
   window: Schema.optional(Schema.NullOr(Schema.String)).annotate({
     description:
-      "The date (`YYYY-MM-DD`, in the league's fantasy day) this move waits for; omit it to run on submission. A trade carries no window.",
+      "The date (`YYYY-MM-DD`, in the league's fantasy day) the move runs, not when it takes effect; a next_day league applies it the next day. Omit it to run on submission; a trade carries none.",
   }),
   reason: ProposalReason,
 });

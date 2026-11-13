@@ -1607,8 +1607,18 @@ export const GetTeamSummaryInput = Schema.Struct({
 });
 export type GetTeamSummaryInput = typeof GetTeamSummaryInput.Type;
 
+const SummaryTransactionTiming = Schema.Struct({
+  weeklyDeadline: Schema.optional(Schema.String),
+  rosterChange: Schema.optional(Schema.Literals(["same_day", "next_day", "weekly_lock"])),
+  waiverDays: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+}).annotate({ description: "The league's roster-change timing." });
+
 const SummaryLeague = Schema.Union([
-  Schema.Struct({ status: Schema.Literal("available"), ...LeagueOverview.fields }),
+  Schema.Struct({
+    status: Schema.Literal("available"),
+    ...LeagueOverview.fields,
+    transactionTiming: SummaryTransactionTiming,
+  }),
   Schema.Struct({ status: Schema.Literal("degraded"), detail: Schema.String }),
   Schema.Struct({ status: Schema.Literal("unsupported"), detail: Schema.String }),
 ]);

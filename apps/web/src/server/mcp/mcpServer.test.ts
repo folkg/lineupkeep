@@ -1726,6 +1726,8 @@ it("publishes fallback choices on a proposed move and accepts them on a proposal
   expect(JSON.stringify(propose.inputSchema)).toContain('"fallbacks"');
   expect(JSON.stringify(review.outputSchema)).toContain('"fallbacks"');
   expect(JSON.stringify(review.outputSchema)).toContain("Other players to use in order");
+  expect(JSON.stringify(review.outputSchema)).toContain('"effectiveDate"');
+  expect(JSON.stringify(review.outputSchema)).toContain("not when it takes effect");
 });
 
 it("keeps every published description inside its budget", async () => {
@@ -1827,6 +1829,8 @@ it("publishes the accepted player-statistics periods and the compact standings f
   expect(summaryOutput).not.toContain("probableStarters");
   expect(summaryOutput).toContain("could not be identified");
   expect(summaryOutput).toContain('"unknown"');
+  expect(summaryOutput).toContain("transactionTiming");
+  expect(summaryOutput).toContain("rosterChange");
   expect(searchWindow).toContain("gamesWindow");
   expect(searchWindow).toContain("next_weeks");
   expect(JSON.stringify(tool("search_players").outputSchema)).toContain("gameDays");

@@ -212,6 +212,8 @@ function toItemView(
     })),
     ...(item.bid === undefined ? {} : { bid: item.bid }),
     ...(item.window === undefined ? {} : { window: item.window }),
+    ...(item.effectiveDate === undefined ? {} : { effectiveDate: item.effectiveDate }),
+    ...(item.effectiveWarning === undefined ? {} : { effectiveWarning: item.effectiveWarning }),
     ...(item.approvedAt === undefined ? {} : { approvedAt: DateTime.formatIso(item.approvedAt) }),
     reason: item.reason,
     state: item.state,

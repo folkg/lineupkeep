@@ -526,9 +526,13 @@ function windowLine(item: TransactionProposalItemView): string | undefined {
     return undefined;
   }
   const date = formatCalendarDate(item.window);
+  const effective =
+    item.effectiveDate === undefined
+      ? ""
+      : ` Takes effect on ${formatCalendarDate(item.effectiveDate)}.`;
   return item.approvedAt === undefined
-    ? `Waits for ${date}.`
-    : `Waits for ${date}. Approved ${formatCalendarDate(item.approvedAt)}.`;
+    ? `Waits for ${date}.${effective}`
+    : `Waits for ${date}. Approved ${formatCalendarDate(item.approvedAt)}.${effective}`;
 }
 
 function fallbackLine(item: TransactionProposalItemView): string | undefined {

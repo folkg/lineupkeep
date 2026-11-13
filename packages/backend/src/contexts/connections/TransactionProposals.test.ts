@@ -6476,6 +6476,230 @@ it.effect("keeps the date a move waits for and reads it back with the league's t
   }).pipe(Effect.provide(TestLayer)),
 );
 
+it.effect("says the date a move runs and the date it takes effect in a same-day league", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      league: leagueFixture({
+        rosterChange: {
+          rule: "same_day",
+          source: ["weekly_deadline"],
+          detail:
+            'Your league\'s weekly_deadline is "intraday", which means a roster move takes effect the same day.',
+        },
+      }),
+      playerDetails,
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          window: "2026-11-14",
+          reason: "Drop the first center next week.",
+        },
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          reason: "Drop the second center now.",
+        },
+      ],
+    });
+    const windowed = proposed.items.find(
+      (entry) => entry.item.reason === "Drop the first center next week.",
+    )?.item;
+    if (windowed === undefined) {
+      throw new Error("missing the windowed move");
+    }
+    assert.strictEqual(windowed.window, "2026-11-14");
+    assert.strictEqual(windowed.effectiveDate, "2026-11-14");
+    assert.isUndefined(windowed.effectiveWarning);
+    const immediate = proposed.items.find(
+      (entry) => entry.item.reason === "Drop the second center now.",
+    )?.item;
+    if (immediate === undefined) {
+      throw new Error("missing the immediate move");
+    }
+    assert.isUndefined(immediate.window);
+    assert.strictEqual(immediate.effectiveDate, "2026-10-31");
+    assert.isUndefined(immediate.effectiveWarning);
+
+    const review = yield* proposals.read(owner, { set: proposed.set.id });
+    assert.deepStrictEqual(
+      itemsOf(review).map((item) => [item.window, item.effectiveDate]),
+      [
+        ["2026-11-14", "2026-11-14"],
+        [undefined, "2026-10-31"],
+      ],
+    );
+    const listed = yield* proposals.list(owner, { team: redLine });
+    assert.deepStrictEqual(
+      Array.getUnsafe(Array.getUnsafe(listed.sets, 0).teams, 0).items.map(
+        (item) => item.effectiveDate,
+      ),
+      ["2026-11-14", "2026-10-31"],
+    );
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("names the day after the window and warns in a next-day league", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      league: leagueFixture({
+        rosterChange: {
+          rule: "next_day",
+          source: ["weekly_deadline", "edit_key"],
+          detail:
+            "Your league's weekly_deadline is empty and its edit_key is 2026-11-01, the day after your league's current_date 2026-10-31, so a roster move takes effect the next day.",
+        },
+      }),
+      roster: {
+        ...rosterFixture(["nhl.p.90001", "nhl.p.90002"]),
+        coverage: { type: "date", date: "2026-11-01" },
+      },
+      playerDetails,
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          window: "2026-11-14",
+          reason: "Drop the center next week.",
+        },
+      ],
+    });
+    const item = Array.getUnsafe(proposed.items, 0).item;
+    assert.strictEqual(item.window, "2026-11-14");
+    assert.strictEqual(item.effectiveDate, "2026-11-15");
+    assert.strictEqual(
+      item.effectiveWarning,
+      "This move runs on 2026-11-14 and takes effect on 2026-11-15.",
+    );
+
+    const review = yield* proposals.read(owner, { set: proposed.set.id });
+    assert.strictEqual(Array.getUnsafe(itemsOf(review), 0).effectiveDate, "2026-11-15");
+    const listed = yield* proposals.list(owner, { team: redLine });
+    assert.strictEqual(
+      Array.getUnsafe(Array.getUnsafe(listed.sets, 0).teams, 0).items[0]?.effectiveDate,
+      "2026-11-15",
+    );
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("uses the league's published locked week date in a weekly-lock league", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-14T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      league: leagueFixture({
+        currentDate: "2026-11-15",
+        rosterCoverage: "week",
+        periodWindow: { current: 5, start: 1, end: 20 },
+        rosterChange: {
+          rule: "weekly_lock",
+          source: ["weekly_deadline"],
+          detail:
+            'Your league\'s weekly_deadline is "1", which names the weekly deadline day, so the league locks roster changes once a week.',
+        },
+      }),
+      roster: {
+        ...rosterFixture(["nhl.p.90001", "nhl.p.90002"]),
+        coverage: { type: "week", week: 5 },
+      },
+      playerDetails,
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          window: "2026-11-14",
+          reason: "Drop the center when the league locks.",
+        },
+      ],
+    });
+    const item = Array.getUnsafe(proposed.items, 0).item;
+    assert.strictEqual(item.effectiveDate, "2026-11-15");
+    assert.strictEqual(
+      item.effectiveWarning,
+      "This move runs on 2026-11-14 and takes effect on 2026-11-15.",
+    );
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("moves a move without a window to the submission day's effective date", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const league = leagueFixture({
+      rosterChange: {
+        rule: "next_day",
+        source: ["weekly_deadline", "edit_key"],
+        detail:
+          "Your league's weekly_deadline is empty and its edit_key is 2026-11-01, the day after your league's current_date 2026-10-31, so a roster move takes effect the next day.",
+      },
+    });
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      league,
+      roster: {
+        ...rosterFixture(["nhl.p.90001", "nhl.p.90002"]),
+        coverage: { type: "date", date: "2026-11-01" },
+      },
+      playerDetails,
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          reason: "Drop the center now.",
+        },
+      ],
+    });
+    assert.strictEqual(Array.getUnsafe(proposed.items, 0).item.effectiveDate, "2026-11-01");
+
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-02T18:00:00Z")));
+    yield* fake.setLeague({ ...league, currentDate: "2026-11-02" });
+    yield* fake.setRoster({
+      ...rosterFixture(["nhl.p.90001", "nhl.p.90002"]),
+      coverage: { type: "date", date: "2026-11-03" },
+    });
+    const submitted = yield* proposals.submit(owner, {
+      set: proposed.set.id,
+      include: proposed.items.map((entry) => entry.item.id),
+    });
+    const executed = Array.getUnsafe(itemsOf(submitted), 0);
+    assert.strictEqual(executed.state, "executed");
+    assert.strictEqual(executed.effectiveDate, "2026-11-03");
+  }).pipe(Effect.provide(TestLayer)),
+);
+
 it.effect("refuses a window that is not a calendar date and names the shape", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;

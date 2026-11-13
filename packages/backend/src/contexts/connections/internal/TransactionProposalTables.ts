@@ -108,6 +108,7 @@ export const transactionProposalItems = pgTable(
     counterpartyName: text("counterparty_name"),
     bid: integer("bid"),
     windowDate: text("window_date"),
+    effectiveDate: text("effective_date"),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     reason: text("reason").notNull(),
     state: text("state", {
@@ -275,6 +276,9 @@ const ProposalItemSelect = createSelectSchema(transactionProposalItems, {
   windowDate: Schema.NullOr(
     Schema.String.pipe(Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u))),
   ),
+  effectiveDate: Schema.NullOr(
+    Schema.String.pipe(Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u))),
+  ),
   approvedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
   reason: Schema.NonEmptyString,
   state: ProposalItemState,
@@ -397,6 +401,7 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             ...(row.counterpartyName === null ? {} : { counterpartyName: row.counterpartyName }),
             ...(row.bid === null ? {} : { bid: row.bid }),
             ...(row.windowDate === null ? {} : { window: row.windowDate }),
+            ...(row.effectiveDate === null ? {} : { effectiveDate: row.effectiveDate }),
             ...(row.approvedAt === null ? {} : { approvedAt: row.approvedAt }),
             reason: row.reason,
             state: row.state,
@@ -463,6 +468,7 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             counterpartyName: record.counterpartyName ?? null,
             bid: record.bid ?? null,
             windowDate: record.window ?? null,
+            effectiveDate: record.effectiveDate ?? null,
             approvedAt: record.approvedAt ?? null,
             reason: record.reason,
             state: record.state,

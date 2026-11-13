@@ -2824,7 +2824,21 @@ export const FantasyQueriesLive = Layer.effect(
       const leagueSection: TeamSummaryData["league"] = !includes("league")
         ? undefined
         : leagueOutcome._tag === "ok"
-          ? { status: "available", ...leagueFacts(leagueOutcome.value) }
+          ? {
+              status: "available",
+              ...leagueFacts(leagueOutcome.value),
+              transactionTiming: {
+                ...(leagueOutcome.value.weeklyDeadline === undefined
+                  ? {}
+                  : { weeklyDeadline: leagueOutcome.value.weeklyDeadline }),
+                ...(leagueOutcome.value.rosterChange === undefined
+                  ? {}
+                  : { rosterChange: leagueOutcome.value.rosterChange.rule }),
+                ...(leagueOutcome.value.waiverDays === undefined
+                  ? {}
+                  : { waiverDays: leagueOutcome.value.waiverDays }),
+              },
+            }
           : leagueOutcome._tag === "unsupported"
             ? { status: "unsupported", detail: leagueOutcome.detail }
             : { status: "degraded", detail: leagueOutcome.failure.message };

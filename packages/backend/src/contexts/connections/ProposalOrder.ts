@@ -59,6 +59,24 @@ export function rosterChangeDate(timing: ProposalOrderTiming): string | undefine
   return timingOf(timing).effectiveDate ?? timing.currentDate;
 }
 
+export function effectiveDateOf(
+  window: string | undefined,
+  timing: ProposalOrderTiming,
+  runDate: string | undefined,
+): string | undefined {
+  const runsOn = window ?? runDate;
+  switch (timing.rule) {
+    case "same_day":
+      return runsOn;
+    case "next_day":
+      return runsOn === undefined ? undefined : nextCalendarDate(runsOn);
+    case "weekly_lock":
+      return timing.currentDate;
+    case undefined:
+      return undefined;
+  }
+}
+
 export function placeIntentItems(input: ProposalPlacementInput): ProposalPlacementResult {
   const league = leagueOf(input.slots, input.constraints);
   const state = new Map(initialState(input.players));
