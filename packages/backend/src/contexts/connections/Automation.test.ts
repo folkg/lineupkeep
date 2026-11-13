@@ -45,7 +45,12 @@ import { TransactionProposalsLive } from "./internal/TransactionProposalsLive.ts
 import { LineupRequestId, LineupRequestInput } from "./LineupRun.ts";
 import { LineupRuns } from "./LineupRuns.ts";
 import { LineupDispatcher } from "./LineupWork.ts";
-import type { ProviderLeagueSettings, ProviderRoster, ProviderTeam } from "./Provider.ts";
+import type {
+  ProviderLeagueSettings,
+  ProviderPlayerDetail,
+  ProviderRoster,
+  ProviderTeam,
+} from "./Provider.ts";
 import { Teams } from "./Teams.ts";
 import { TransactionProposals } from "./TransactionProposals.ts";
 
@@ -204,6 +209,77 @@ it.effect("runs an approved move when its date arrives on the hourly tick", () =
     assert.strictEqual(summary.approvedInProgress, 0);
     assert.strictEqual(review.teams.flatMap((entry) => entry.items)[0]?.state, "executed");
     assert.strictEqual((yield* fake.transactionRequests).length, 1);
+  }).pipe(Effect.provide(AutomationTestLayer)),
+);
+
+it.effect("promotes an approved move's fallback and runs it in the same tick", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const automation = yield* Automation;
+    const proposals = yield* TransactionProposals;
+    const tokens = yield* QueryTokens;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
+    yield* fake.setPlayerDetails([
+      playerDetail("461.p.20001", "First Choice", "free_agent"),
+      playerDetail("461.p.20002", "Second Choice", "free_agent"),
+      playerDetail("461.p.20003", "Third Choice", "free_agent"),
+    ]);
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team,
+          kind: "free_agent_add",
+          adds: yield* tokens.sealPlayerRefs({
+            userId: owner,
+            leagueKey: "461.l.1000",
+            playerKeys: ["461.p.20001"],
+          }),
+          fallbacks: yield* tokens.sealPlayerRefs({
+            userId: owner,
+            leagueKey: "461.l.1000",
+            playerKeys: ["461.p.20002", "461.p.20003"],
+          }),
+          drops: yield* tokens.sealPlayerRefs({
+            userId: owner,
+            leagueKey: "461.l.1000",
+            playerKeys: ["461.p.10002"],
+          }),
+          window: "2026-11-01",
+          reason: "Cover the bench quarterback tomorrow.",
+        },
+      ],
+    });
+    yield* proposals.submit(owner, {
+      set: proposed.set.id,
+      include: proposed.items.map((entry) => entry.item.id),
+    });
+    yield* fake.setPlayerDetails([
+      playerDetail("461.p.20001", "First Choice", "rostered"),
+      playerDetail("461.p.20002", "Second Choice", "free_agent"),
+      playerDetail("461.p.20003", "Third Choice", "free_agent"),
+    ]);
+
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-01T18:00:00Z")));
+    const summary = yield* automation.run(10);
+    const review = yield* proposals.read(owner, { set: proposed.set.id });
+    const item = Array.getUnsafe(
+      review.teams.flatMap((entry) => entry.items),
+      0,
+    );
+
+    assert.strictEqual(summary.approvedDue, 1);
+    assert.strictEqual(summary.approvedIncluded, 1);
+    assert.strictEqual(item.state, "executed");
+    assert.strictEqual(item.adds[0]?.name, "Second Choice");
+    assert.include(
+      item.execution?.detail ?? "",
+      "First choice First Choice was gone, so Second Choice was used.",
+    );
+    assert.deepStrictEqual(
+      (yield* fake.transactionRequests).map((request) => request.adds),
+      [["461.p.20002"]],
+    );
   }).pipe(Effect.provide(AutomationTestLayer)),
 );
 
@@ -580,6 +656,25 @@ beforeEach(() => {
   ownerSerial += 1;
   owner = decodeUserId(`automation-tick-owner-${String(ownerSerial)}`);
 });
+
+function playerDetail(
+  providerPlayerKey: string,
+  name: string,
+  rosterStatus: ProviderPlayerDetail["rosterStatus"],
+): ProviderPlayerDetail {
+  return {
+    providerPlayerKey,
+    name,
+    primaryPosition: "QB",
+    displayPosition: "QB",
+    proTeam: "SYN",
+    availabilityDetail: undefined,
+    eligiblePositions: ["QB"],
+    rosterStatus,
+    actual: undefined,
+    projected: undefined,
+  };
+}
 
 const teamFixture: ProviderTeam = {
   provider: decodeProviderKey("yahoo"),

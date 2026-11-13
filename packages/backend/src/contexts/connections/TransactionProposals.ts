@@ -233,6 +233,9 @@ export const ProposalItem = Schema.Struct({
   team: TeamId,
   kind: ProposalItemKind,
   adds: Schema.Array(ProposalPlayer),
+  fallbacks: Schema.Array(ProposalPlayer).annotate({
+    description: "Other players to use in order if the first choice cannot be added.",
+  }),
   drops: Schema.Array(ProposalPlayer),
   picks: Schema.Array(ProposalTradePick).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   bid: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
@@ -608,6 +611,9 @@ export const ProposalItemDraft = Schema.Struct({
     Schema.check(Schema.isMaxLength(10)),
     Schema.withDecodingDefaultKey(Effect.succeed([])),
   ),
+  fallbacks: Schema.optional(Schema.NullOr(Schema.Array(PlayerRef))).annotate({
+    description: "Other players to use in order if the first choice cannot be added.",
+  }),
   drops: Schema.Array(PlayerRef).pipe(
     Schema.check(Schema.isMaxLength(10)),
     Schema.withDecodingDefaultKey(Effect.succeed([])),
@@ -657,6 +663,7 @@ export const ProposalItemRefusal = Schema.Literals([
   "bid_invalid",
   "player_in_both",
   "duplicate_item",
+  "fallbacks_not_allowed",
   "trade_counterparty_invalid",
   "trade_player_not_rostered",
   "trade_pick_team_not_party",

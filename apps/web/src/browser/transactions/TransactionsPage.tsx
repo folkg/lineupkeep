@@ -321,6 +321,20 @@ function PlanItem(props: PlanItemProps): JSX.Element {
             </Text>
           )}
         </Show>
+        <Show when={fallbackLine(props.item)}>
+          {(line) => (
+            <Text size="caption" tone="muted">
+              {line()}
+            </Text>
+          )}
+        </Show>
+        <Show when={props.item.execution?.detail}>
+          {(detail) => (
+            <Text size="caption" tone="muted">
+              {detail()}
+            </Text>
+          )}
+        </Show>
         <Show when={props.item.staleness.status !== "current"}>
           <Notice
             tone="danger"
@@ -487,6 +501,16 @@ function windowLine(item: TransactionProposalItemView): string | undefined {
   return item.approvedAt === undefined
     ? `Waits for ${date}.`
     : `Waits for ${date}. Approved ${formatCalendarDate(item.approvedAt)}.`;
+}
+
+function fallbackLine(item: TransactionProposalItemView): string | undefined {
+  if (item.state !== "proposed") {
+    return undefined;
+  }
+  const names = (item.fallbacks ?? []).flatMap((player) =>
+    player.name === undefined ? [] : [player.name],
+  );
+  return names.length === 0 ? undefined : `If the first choice is gone: ${names.join(", ")}.`;
 }
 
 function playerNames(players: TransactionProposalItemView["adds"]): string | undefined {

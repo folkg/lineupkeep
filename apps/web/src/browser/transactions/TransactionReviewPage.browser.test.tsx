@@ -1256,6 +1256,43 @@ it("says a waiting move was approved and when", async () => {
     .toBeVisible();
 });
 
+it("lists every fallback choice a plan could use if the first is gone", async () => {
+  const team = teamFixture(alphaId, "Alpha", "nfl", "football", [
+    {
+      ...freeAgentItem(),
+      fallbacks: [player("Nils Berg", "RW", "BOS"), player("Owen Park", "C", "TOR")],
+    },
+  ]);
+  using _app = setupReviewPage({ ...reviewFixture(), teams: [team] });
+
+  await expect
+    .element(page.getByText("If the first choice is gone: Nils Berg, Owen Park.", { exact: true }))
+    .toBeVisible();
+});
+
+it("shows the promotion outcome detail with the player that ran", async () => {
+  const team = teamFixture(alphaId, "Alpha", "nfl", "football", [
+    {
+      ...freeAgentItem(),
+      state: "executed",
+      adds: [player("Sam Jones", "RW", "BOS")],
+      execution: {
+        outcome: "executed",
+        detail: "First choice Mika Olsen was gone, so Sam Jones was used.",
+        decidedAt: now,
+        steps: [{ kind: "add", playerName: "Sam Jones", outcome: "executed", decidedAt: now }],
+      },
+    },
+  ]);
+  using _app = setupReviewPage({ ...reviewFixture(), teams: [team] });
+
+  await expect
+    .element(
+      page.getByText("First choice Mika Olsen was gone, so Sam Jones was used.", { exact: true }),
+    )
+    .toBeVisible();
+});
+
 it("does not send a submission when every move is left out", async () => {
   let submissions = 0;
   using _app = setupReviewPage(reviewFixture(), {

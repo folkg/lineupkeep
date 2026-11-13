@@ -97,6 +97,7 @@ export const transactionProposalItems = pgTable(
       enum: ["free_agent_add", "waiver_claim", "drop", "trade", "activate", "stash", "slot_move"],
     }).notNull(),
     addPlayers: jsonb("add_players").notNull(),
+    fallbackPlayers: jsonb("fallback_players").notNull().default([]),
     dropPlayers: jsonb("drop_players").notNull(),
     picks: jsonb("picks").notNull().default([]),
     slotMove: jsonb("slot_move"),
@@ -261,6 +262,7 @@ const ProposalItemSelect = createSelectSchema(transactionProposalItems, {
   connectionId: ConnectionId,
   kind: ProposalItemKind,
   addPlayers: Schema.Unknown,
+  fallbackPlayers: Schema.Unknown,
   dropPlayers: Schema.Unknown,
   picks: Schema.Unknown,
   slotMove: Schema.Unknown,
@@ -303,6 +305,9 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
           const adds = yield* SchemaParser.decodeUnknownEffect(Schema.Array(StoredProposalPlayer))(
             row.addPlayers,
           );
+          const fallbacks = yield* SchemaParser.decodeUnknownEffect(
+            Schema.Array(StoredProposalPlayer),
+          )(row.fallbackPlayers);
           const drops = yield* SchemaParser.decodeUnknownEffect(Schema.Array(StoredProposalPlayer))(
             row.dropPlayers,
           );
@@ -379,6 +384,7 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             connection: row.connectionId,
             kind: row.kind,
             adds,
+            fallbacks,
             drops,
             picks,
             ...(slotMove === null ? {} : { slotMove }),
@@ -428,6 +434,9 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
           const drops = yield* SchemaParser.encodeEffect(Schema.Array(StoredProposalPlayer))(
             record.drops,
           );
+          const fallbacks = yield* SchemaParser.encodeEffect(Schema.Array(StoredProposalPlayer))(
+            record.fallbacks,
+          );
           const picks = yield* SchemaParser.encodeEffect(Schema.Array(StoredProposalTradePick))(
             record.picks,
           );
@@ -443,6 +452,7 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             connectionId: record.connection,
             kind: record.kind,
             addPlayers: adds,
+            fallbackPlayers: fallbacks,
             dropPlayers: drops,
             picks,
             slotMove: record.slotMove ?? null,

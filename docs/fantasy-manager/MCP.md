@@ -851,6 +851,14 @@ selected moves wait, and a plan whose only selected moves wait still records a c
 `list_transaction_proposals` and `get_transaction_proposal_set` publish an item's `window` and, once
 approved, its `approvedAt`.
 
+A one-player add or waiver claim may also name `fallbacks`: an ordered list of player references to try
+when the first choice cannot be added at submission. A plan never promotes on propose or on a read.
+When a submission, or the hourly pass that submits for an approved plan, finds the first choice gone, it
+uses the first fallback that the league's player pool lists as available, records the chosen player as the
+move's add, and names both players in the move's outcome. If no fallback can be added, the move keeps its
+normal refusal. A trade, another kind, several adds, or a fallback that repeats a choice is refused with a
+plain reason. The published item carries `fallbacks` with names beside its `adds`.
+
 Passing `set` appends the items after an existing plan that is still open. A plan is open while any
 move in it can still run: a move ends when it executed, was dismissed by the owner, was withdrawn, its
 trade offer is no longer available, or it was skipped for a reason that cannot change. A plan whose

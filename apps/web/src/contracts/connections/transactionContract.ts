@@ -141,6 +141,7 @@ export type TransactionReviewItemView = {
   readonly id: string;
   readonly kind: ProposalItemKind;
   readonly adds: ReadonlyArray<TransactionReviewPlayerView>;
+  readonly fallbacks?: ReadonlyArray<TransactionReviewPlayerView>;
   readonly drops: ReadonlyArray<TransactionReviewPlayerView>;
   readonly picks: ReadonlyArray<TransactionReviewTradePickView>;
   readonly bid?: number;

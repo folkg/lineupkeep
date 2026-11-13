@@ -53,6 +53,7 @@ export type ProposalItemCommand = {
   readonly connection: ConnectionId;
   readonly kind: ProposalItemKind;
   readonly adds: ReadonlyArray<StoredProposalPlayer>;
+  readonly fallbacks: ReadonlyArray<StoredProposalPlayer>;
   readonly drops: ReadonlyArray<StoredProposalPlayer>;
   readonly picks: ReadonlyArray<StoredProposalTradePick>;
   readonly slotMove: StoredSlotMove | undefined;
@@ -1174,6 +1175,7 @@ function storeRow(
     connectionId: command.connection,
     kind: command.kind,
     addPlayers: command.adds,
+    fallbackPlayers: command.fallbacks,
     dropPlayers: command.drops,
     picks: command.picks,
     slotMove: command.slotMove ?? null,

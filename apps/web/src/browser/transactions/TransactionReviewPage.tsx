@@ -612,6 +612,15 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
       ? `Runs on ${date} once you submit.`
       : `Waits for ${date}. Approved ${formatCalendarDate(props.item.approvedAt)}.`;
   };
+  const fallbackLine = (): string | undefined => {
+    if (props.item.state !== "proposed") {
+      return undefined;
+    }
+    const names = (props.item.fallbacks ?? []).flatMap((player) =>
+      player.name === undefined ? [] : [player.name],
+    );
+    return names.length === 0 ? undefined : `If the first choice is gone: ${names.join(", ")}.`;
+  };
   const result = (): TransactionReviewExecutionView | undefined => props.item.execution;
   const shownResult = (): TransactionReviewExecutionView | undefined => {
     const execution = result();
@@ -702,6 +711,14 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
         </Inline>
 
         <Show when={waitingLine()}>
+          {(line) => (
+            <Text size="caption" tone="muted">
+              {line()}
+            </Text>
+          )}
+        </Show>
+
+        <Show when={fallbackLine()}>
           {(line) => (
             <Text size="caption" tone="muted">
               {line()}
@@ -1020,6 +1037,11 @@ function ExecutionResult(props: {
   readonly execution: TransactionReviewExecutionView;
   readonly isTrade: boolean;
 }): JSX.Element {
+  const note = (): string | undefined =>
+    props.execution.detail !== undefined &&
+    !props.execution.steps.some((step) => step.detail === props.execution.detail)
+      ? props.execution.detail
+      : undefined;
   return (
     <Stack gap="sm">
       <Show when={props.execution.position !== undefined}>
@@ -1052,7 +1074,7 @@ function ExecutionResult(props: {
           </For>
         </RuleList>
       </Show>
-      <Show when={props.execution.steps.length === 0 && props.execution.detail}>
+      <Show when={note()}>
         {(detail) => (
           <Text size="caption" tone="muted">
             {detail()}

@@ -149,6 +149,61 @@ it("shows the date a move waits for and says when it was approved", async () => 
     .toBeVisible();
 });
 
+it("shows the fallback choices a plan carries", async () => {
+  using _app = setupTransactionsPage(
+    listData([
+      plan({
+        items: [
+          item({
+            kind: "free_agent_add",
+            adds: [player("Mika Olsen", "LW", "NYR", "Free agent")],
+            drops: [],
+            fallbacks: [player("Nils Berg", "RW", "BOS"), player("Owen Park", "C", "TOR")],
+          }),
+        ],
+      }),
+    ]),
+  );
+
+  await expect
+    .element(page.getByText("If the first choice is gone: Nils Berg, Owen Park.", { exact: true }))
+    .toBeVisible();
+});
+
+it("shows the promotion outcome detail with the player that ran", async () => {
+  using _app = setupTransactionsPage(
+    listData([]),
+    listData([
+      plan({
+        id: historyPlanId,
+        closed: true,
+        items: [
+          item({
+            kind: "free_agent_add",
+            adds: [player("Sam Jones", "RW", "BOS")],
+            drops: [],
+            state: "executed",
+            settled: true,
+            execution: {
+              outcome: "executed",
+              detail: "First choice Mika Olsen was gone, so Sam Jones was used.",
+              decidedAt: now,
+              steps: [],
+            },
+          }),
+        ],
+      }),
+    ]),
+  );
+  await page.getByRole("button", { name: "Show history" }).click();
+
+  await expect
+    .element(
+      page.getByText("First choice Mika Olsen was gone, so Sam Jones was used.", { exact: true }),
+    )
+    .toBeVisible();
+});
+
 it("stops saying a move waits once it has run", async () => {
   using _app = setupTransactionsPage(
     listData([]),

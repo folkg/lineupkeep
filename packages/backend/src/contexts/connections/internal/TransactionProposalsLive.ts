@@ -177,6 +177,7 @@ type OpenedDraft = {
   readonly team: ProposalTeamRecord;
   readonly draft: ProposalItemDraft;
   readonly adds: ReadonlyArray<string>;
+  readonly fallbacks: ReadonlyArray<string>;
   readonly drops: ReadonlyArray<string>;
   readonly slotMoveKey: string | undefined;
   readonly intentPlayerKey: string | undefined;
@@ -373,6 +374,13 @@ export const TransactionProposalsLive = Layer.effect(
           );
           continue;
         }
+        const fallbackIssue = fallbackProblem(index, draft);
+        if (fallbackIssue !== undefined) {
+          refusals.push(
+            refusedItem(index, "fallbacks_not_allowed", fallbackIssue.detail, fallbackIssue.fix),
+          );
+          continue;
+        }
         prepared.push({ index, team, draft });
       }
 
@@ -394,6 +402,7 @@ export const TransactionProposalsLive = Layer.effect(
           ...(entry.draft.player === undefined || entry.draft.player === null
             ? []
             : [entry.draft.player]),
+          ...draftFallbacks(entry.draft),
         ]),
       }));
       const openedGroups = yield* tokens.openPlayerRefGroups({
@@ -409,7 +418,8 @@ export const TransactionProposalsLive = Layer.effect(
             entry.draft.adds.length +
             entry.draft.drops.length +
             (entry.draft.slotMove === undefined || entry.draft.slotMove === null ? 0 : 1) +
-            (entry.draft.player === undefined || entry.draft.player === null ? 0 : 1);
+            (entry.draft.player === undefined || entry.draft.player === null ? 0 : 1) +
+            draftFallbacks(entry.draft).length;
           openedByIndex.set(entry.index, opened.slice(offset, offset + count));
           offset += count;
         }
@@ -461,9 +471,20 @@ export const TransactionProposalsLive = Layer.effect(
           draft.drops.length +
           (draft.slotMove === undefined || draft.slotMove === null ? 0 : 1);
         const intentPlayerRef = opened[intentPlayerIndex];
+        const fallbackStart =
+          intentPlayerIndex + (draft.player === undefined || draft.player === null ? 0 : 1);
+        const fallbackKeys = opened.slice(
+          fallbackStart,
+          fallbackStart + draftFallbacks(draft).length,
+        );
         const adds = addKeys.filter(isPlayerKey);
         const drops = dropKeys.filter(isPlayerKey);
-        if (adds.length !== addKeys.length || drops.length !== dropKeys.length) {
+        const fallbacks = fallbackKeys.filter(isPlayerKey);
+        if (
+          adds.length !== addKeys.length ||
+          drops.length !== dropKeys.length ||
+          fallbacks.length !== fallbackKeys.length
+        ) {
           refusals.push(
             refusedItem(
               index,
@@ -529,6 +550,7 @@ export const TransactionProposalsLive = Layer.effect(
           team,
           draft,
           adds,
+          fallbacks,
           drops,
           slotMoveKey: isPlayerKey(moveRef) ? moveRef : undefined,
           intentPlayerKey: isPlayerKey(intentPlayerRef) ? intentPlayerRef : undefined,
@@ -644,6 +666,7 @@ export const TransactionProposalsLive = Layer.effect(
             connection: team.connection,
             kind: draft.kind,
             adds: staged?.outcome === "staged" ? staged.adds : adds.map((add) => ({ key: add })),
+            fallbacks: candidate.fallbacks.map((fallback) => ({ key: fallback })),
             drops:
               staged?.outcome === "staged" ? staged.drops : drops.map((drop) => ({ key: drop })),
             picks: staged?.outcome === "staged" ? staged.picks : [],
@@ -1365,6 +1388,12 @@ export const TransactionProposalsLive = Layer.effect(
         ([teamId, items]) => checkTeam(userId, teamId, teamsById.get(teamId), items, now),
         { concurrency: 3 },
       );
+      const promoted = promoteFromFallbacks({
+        checks,
+        itemsByTeam,
+        included: dueIds,
+        at: now,
+      });
       yield* Effect.annotateCurrentSpan({ "proposal.items_waiting": waiting.length });
       const claimed = yield* repository.claimSubmission({
         userId,
@@ -1380,8 +1409,8 @@ export const TransactionProposalsLive = Layer.effect(
         }
       }
 
-      const changes = checks.flatMap((check) => check.changes);
-      const orders = yield* storedOrders(loaded.set.orders, checks);
+      const changes = promoted.checks.flatMap((check) => check.changes);
+      const orders = yield* storedOrders(loaded.set.orders, promoted.checks);
       const saved = yield* repository.saveChecks({
         userId,
         setId: loaded.set.id,
@@ -1398,7 +1427,7 @@ export const TransactionProposalsLive = Layer.effect(
         }),
       );
       const changeById = new Map(changes.map((change) => [change.id, change] as const));
-      const checkByTeam = new Map(checks.map((check) => [check.team, check] as const));
+      const checkByTeam = new Map(promoted.checks.map((check) => [check.team, check] as const));
 
       const sequenceByTeam = new Map<TeamId, ReadonlyArray<ProposalItemRecord>>();
       const positionByItem = new Map<string, number>();
@@ -1493,10 +1522,14 @@ export const TransactionProposalsLive = Layer.effect(
             facts: check.facts,
             context: check.context,
           });
+          const promotedItem = promoted.promotions.get(current.id);
           outcomes.push({
             itemId: current.id,
             outcome: execution.outcome,
-            detail: execution.detail,
+            detail:
+              promotedItem === undefined
+                ? execution.detail
+                : promotionDetail(promotedItem, execution.detail),
             at: yield* DateTime.now,
             position,
             steps: execution.steps,
@@ -1565,6 +1598,7 @@ export const TransactionProposalsLive = Layer.effect(
         "proposal.items_failed": final.items.filter((item) => item.outcome === "failed").length,
         "proposal.items_unknown": final.items.filter((item) => item.outcome === "unknown").length,
         "proposal.items_held": held,
+        "proposal.items_promoted": promoted.promotions.size,
       });
       return yield* Schema.decodeEffect(SubmitTransactionProposalResult)({
         ...(yield* buildReview(
@@ -2925,7 +2959,10 @@ export const TransactionProposalsLive = Layer.effect(
           ...new Set(
             items
               .filter((item) => item.kind !== "trade")
-              .flatMap((item) => item.adds.map((add) => add.key)),
+              .flatMap((item) => [
+                ...item.adds.map((add) => add.key),
+                ...item.fallbacks.map((fallback) => fallback.key),
+              ]),
           ),
         ];
         const needsBudget = items.some((item) => item.bid !== undefined);
@@ -3194,8 +3231,91 @@ export const TransactionProposalsLive = Layer.effect(
         Effect.map((data) => evaluateTeam(teamId, data, items, at)),
       );
     }
+
+    function promoteFromFallbacks(input: {
+      readonly checks: ReadonlyArray<TeamCheck>;
+      readonly itemsByTeam: ReadonlyMap<TeamId, ReadonlyArray<ProposalItemRecord>>;
+      readonly included: ReadonlySet<ProposalItemId>;
+      readonly at: DateTime.Utc;
+    }): {
+      readonly checks: ReadonlyArray<TeamCheck>;
+      readonly promotions: ReadonlyMap<ProposalItemId, FallbackPromotion>;
+    } {
+      const promotions = new Map<ProposalItemId, FallbackPromotion>();
+      const checks = input.checks.map((check) => {
+        if (check.facts === undefined || check.context === undefined) {
+          return check;
+        }
+        const facts = check.facts;
+        const items = input.itemsByTeam.get(check.team) ?? [];
+        const canAdd = (key: string): boolean => {
+          const detail = facts.players.get(key);
+          return (
+            detail !== undefined &&
+            (detail.rosterStatus === "free_agent" || detail.rosterStatus === "waiver")
+          );
+        };
+        const replacements = new Map<ProposalItemId, StoredProposalPlayer>();
+        for (const item of items) {
+          if (!input.included.has(item.id) || item.fallbacks.length === 0) {
+            continue;
+          }
+          const first = item.adds[0];
+          const change = check.changes.find((entry) => entry.id === item.id);
+          if (first === undefined || change === undefined) {
+            continue;
+          }
+          const gone = change.staleness.reasons.some(
+            (reason) => reason.code === "player_unavailable" && reason.playerKey === first.key,
+          );
+          const chosen = gone ? item.fallbacks.find((fallback) => canAdd(fallback.key)) : undefined;
+          if (chosen === undefined) {
+            continue;
+          }
+          replacements.set(item.id, chosen);
+        }
+        if (replacements.size === 0) {
+          return check;
+        }
+        const revised = items.map((item) => {
+          const chosen = replacements.get(item.id);
+          return chosen === undefined ? item : { ...item, adds: [chosen] };
+        });
+        const recheck = evaluateTeam(
+          check.team,
+          {
+            status: "ready",
+            facts,
+            context: check.context,
+            tradeFeed: check.tradeFeed,
+          },
+          revised,
+          input.at,
+        );
+        const adopted = [...replacements.keys()].every(
+          (id) => recheck.changes.find((entry) => entry.id === id)?.staleness.status === "current",
+        );
+        if (!adopted) {
+          return check;
+        }
+        for (const [id, chosen] of replacements) {
+          const first = items.find((item) => item.id === id)?.adds[0];
+          promotions.set(id, {
+            first: first?.name ?? "the first choice",
+            chosen: chosen.name ?? "the next choice",
+          });
+        }
+        return recheck;
+      });
+      return { checks, promotions };
+    }
   }),
 );
+
+type FallbackPromotion = {
+  readonly first: string;
+  readonly chosen: string;
+};
 
 type TeamPlan = {
   readonly plan: ProposalOrderPlan | undefined;
@@ -4405,6 +4525,10 @@ function draftPicks(
   return draft.picks ?? [];
 }
 
+function draftFallbacks(draft: ProposalItemDraft): ReadonlyArray<PlayerRef> {
+  return draft.fallbacks ?? [];
+}
+
 function roundsByTeam(
   picks: ReadonlyArray<ProviderAvailableDraftPick>,
 ): ReadonlyMap<string, ReadonlyArray<number>> {
@@ -4686,6 +4810,43 @@ function proposalShape(
     }
   }
 }
+function fallbackProblem(
+  index: number,
+  draft: ProposalItemDraft,
+): { readonly detail: string; readonly fix: string } | undefined {
+  const fallbacks = draftFallbacks(draft);
+  if (fallbacks.length === 0) {
+    return undefined;
+  }
+  const position = String(index + 1);
+  if (draft.kind !== "free_agent_add" && draft.kind !== "waiver_claim") {
+    return {
+      detail: `Item ${position} carries fallback players on a ${draft.kind.replaceAll("_", " ")} item. A fallback replaces the one player an add or waiver claim brings in, so no other kind can use one.`,
+      fix: "Remove the fallbacks from this item, or use an add or waiver claim for the players it names.",
+    };
+  }
+  if (draft.adds.length !== 1) {
+    return {
+      detail: `Item ${position} carries fallbacks but adds ${String(draft.adds.length)} players. A fallback replaces the one player being added, so name exactly one first choice.`,
+      fix: "Name one player to add on this item, and put the other players in its fallbacks.",
+    };
+  }
+  const first = draft.adds[0];
+  if (first !== undefined && fallbacks.includes(first)) {
+    return {
+      detail: `Item ${position} names its first choice as a fallback too.`,
+      fix: "Remove that fallback; the first choice is already used first.",
+    };
+  }
+  if (new Set(fallbacks).size !== fallbacks.length) {
+    return {
+      detail: `Item ${position} names the same fallback more than once.`,
+      fix: "Remove the repeat, so each fallback is a different player.",
+    };
+  }
+  return undefined;
+}
+
 function proposalItemKey(input: {
   readonly team: string;
   readonly kind: string;
@@ -4944,14 +5105,36 @@ function namedCommand(
             ? command
             : { ...command, slotMove: { ...command.slotMove, playerName: name } };
         })();
-  const player = withMove.intent?.player;
+  const withFallbacks = {
+    ...withMove,
+    fallbacks: withMove.fallbacks.map((fallback) => poolPlayerOf(fallback, facts)),
+  };
+  const player = withFallbacks.intent?.player;
   if (player === undefined) {
-    return withMove;
+    return withFallbacks;
   }
   const name = nameOf(player.key);
-  return name === undefined || withMove.intent === undefined
-    ? withMove
-    : { ...withMove, intent: { ...withMove.intent, player: { ...player, name } } };
+  return name === undefined || withFallbacks.intent === undefined
+    ? withFallbacks
+    : { ...withFallbacks, intent: { ...withFallbacks.intent, player: { ...player, name } } };
+}
+
+function poolPlayerOf(
+  player: StoredProposalPlayer,
+  facts: TeamFacts | undefined,
+): StoredProposalPlayer {
+  const detail = facts?.players.get(player.key);
+  if (detail === undefined) {
+    return player;
+  }
+  const availability = addAvailability(detail);
+  return {
+    key: player.key,
+    ...(detail.name === undefined ? {} : { name: detail.name }),
+    ...(detail.displayPosition === undefined ? {} : { position: detail.displayPosition }),
+    ...(detail.proTeam === undefined ? {} : { proTeam: detail.proTeam }),
+    ...(availability === undefined ? {} : { availability }),
+  };
 }
 
 function commandRecord(input: {
@@ -4972,6 +5155,7 @@ function commandRecord(input: {
     connection: command.connection,
     kind: command.kind,
     adds: command.adds,
+    fallbacks: command.fallbacks,
     drops: command.drops,
     picks: command.picks,
     ...(command.slotMove === undefined ? {} : { slotMove: command.slotMove }),
@@ -5069,6 +5253,11 @@ function toItem(
       userId,
       leagueKey,
       playerKeys: record.adds.map((add) => add.key),
+    });
+    const fallbackRefs = yield* tokens.sealPlayerRefs({
+      userId,
+      leagueKey,
+      playerKeys: record.fallbacks.map((fallback) => fallback.key),
     });
     const dropRefs = yield* tokens.sealPlayerRefs({
       userId,
@@ -5208,6 +5397,19 @@ function toItem(
           ...(availability === undefined ? {} : { availability }),
         };
       }),
+      fallbacks: record.fallbacks.map((fallback, index) => {
+        const detail = facts?.players.get(fallback.key);
+        const availability = detail === undefined ? fallback.availability : addAvailability(detail);
+        const position = displayValue(detail?.displayPosition, fallback.position);
+        const proTeam = displayValue(detail?.proTeam, fallback.proTeam);
+        return {
+          ref: Array.getUnsafe(fallbackRefs, index),
+          ...(fallback.name === undefined ? {} : { name: fallback.name }),
+          ...(position === undefined ? {} : { position }),
+          ...(proTeam === undefined ? {} : { proTeam }),
+          ...(availability === undefined ? {} : { availability }),
+        };
+      }),
       drops: record.drops.map((drop, index) => {
         const player = rostered.get(drop.key);
         const availability =
@@ -5335,6 +5537,11 @@ function checkOutcomeDetail(staleness: StoredProposalStaleness | undefined): str
     ),
   ];
   return [reasons, ...fixes].join(" ").slice(0, 800);
+}
+
+function promotionDetail(promotion: FallbackPromotion, detail: string | undefined): string {
+  const sentence = `First choice ${promotion.first} was gone, so ${promotion.chosen} was used.`;
+  return detail === undefined ? sentence : `${sentence} ${detail}`;
 }
 
 function submittedBidProblem(bid: number): string | undefined {

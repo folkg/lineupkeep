@@ -858,6 +858,7 @@ it("proposes a transaction set under the review scope and returns the review lin
     team,
     kind: "drop",
     adds: [],
+    fallbacks: [],
     drops: [],
     reason: "A stated reason.",
     state: "failed",
@@ -877,6 +878,7 @@ it("proposes a transaction set under the review scope and returns the review lin
     team,
     kind: "drop",
     adds: [],
+    fallbacks: [],
     drops: [],
     reason: "A stated reason.",
     state: "proposed",
@@ -1659,6 +1661,20 @@ it("publishes a closed plan and a dismissed move without a set lifetime", async 
   expect(published).toContain("dismissed");
   expect(published).not.toContain("expiresAt");
   expect(published).not.toContain("24 hours");
+});
+
+it("publishes fallback choices on a proposed move and accepts them on a proposal", async () => {
+  const response = await handle(request("tools/list", {}, "read"));
+  const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
+  const propose = listed.result.tools.find((tool) => tool.name === "propose_transactions");
+  const review = listed.result.tools.find((tool) => tool.name === "get_transaction_proposal_set");
+  if (propose === undefined || review === undefined) {
+    throw new Error("Expected the tool list to include both proposal tools");
+  }
+
+  expect(JSON.stringify(propose.inputSchema)).toContain('"fallbacks"');
+  expect(JSON.stringify(review.outputSchema)).toContain('"fallbacks"');
+  expect(JSON.stringify(review.outputSchema)).toContain("Other players to use in order");
 });
 
 it("keeps every published description inside its budget", async () => {

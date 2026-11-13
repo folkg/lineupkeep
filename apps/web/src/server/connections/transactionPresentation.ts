@@ -188,6 +188,7 @@ function toItemView(
     id: item.id,
     kind: item.kind,
     adds: item.adds.map(toPlayerView),
+    ...(item.fallbacks.length === 0 ? {} : { fallbacks: item.fallbacks.map(toPlayerView) }),
     drops: item.drops.map(toPlayerView),
     picks: item.picks.map((pick) => ({
       round: pick.round,

@@ -193,6 +193,7 @@ export const ProposalItemRecord = Schema.Struct({
   connection: ConnectionId,
   kind: ProposalItemKind,
   adds: Schema.Array(StoredProposalPlayer),
+  fallbacks: Schema.Array(StoredProposalPlayer),
   drops: Schema.Array(StoredProposalPlayer),
   picks: Schema.Array(StoredProposalTradePick),
   slotMove: Schema.optional(StoredSlotMove),

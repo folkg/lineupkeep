@@ -1,0 +1,1 @@
+ALTER TABLE "transaction_proposal_items" ADD COLUMN "fallback_players" jsonb DEFAULT '[]' NOT NULL;

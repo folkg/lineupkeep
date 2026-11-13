@@ -576,6 +576,61 @@ describe("plan window migration", () => {
   );
 });
 
+describe("proposal fallback players migration", () => {
+  const fallbackMigration = "20261113014041_fast_swordsman";
+
+  it.effect("gives an old move an empty fallback list and stores a fallback list", () =>
+    Effect.gen(function* () {
+      const sql = yield* PgliteClient.PgliteClient;
+
+      for (const statement of migrationStatements((name) => name < fallbackMigration)) {
+        yield* sql.unsafe(statement);
+      }
+
+      yield* sql.unsafe(`
+        insert into transaction_proposal_sets
+          (id, user_id, proposer_kind, proposer_reference, surface, fingerprint, teams)
+        values
+          ('11111111-1111-4111-8111-444444444444', 'owner', 'agent', 'mcp', 'mcp', 'fallbacks',
+            '[]'::jsonb)
+      `);
+      yield* sql.unsafe(`
+        insert into transaction_proposal_items
+          (id, set_id, position, user_id, team_id, connection_id, kind, add_players,
+            drop_players, reason, state, staleness, stale_reasons)
+        values
+          ('22222222-2222-4222-8222-555555555555', '11111111-1111-4111-8111-444444444444', 0,
+            'owner', '33333333-3333-4333-8333-111111111111', 'connection', 'free_agent_add',
+            '[{"key": "nhl.p.1"}]'::jsonb, '[]'::jsonb, 'Add the first choice.', 'proposed',
+            'current', '[]'::jsonb)
+      `);
+
+      for (const statement of migrationStatements((name) => name === fallbackMigration)) {
+        yield* sql.unsafe(statement);
+      }
+
+      const older = yield* sql.unsafe<{ readonly empty: boolean }>(
+        "select fallback_players = '[]'::jsonb as empty from transaction_proposal_items where id = '22222222-2222-4222-8222-555555555555'",
+      );
+      expect(older).toEqual([{ empty: true }]);
+
+      yield* sql.unsafe(`
+        update transaction_proposal_items
+        set fallback_players = '[{"key": "nhl.p.2", "name": "Second Choice"},
+          {"key": "nhl.p.3", "name": "Third Choice"}]'::jsonb
+        where id = '22222222-2222-4222-8222-555555555555'
+      `);
+      const stored = yield* sql.unsafe<{ readonly key: string; readonly name: string }>(
+        "select entry->>'key' as key, entry->>'name' as name from transaction_proposal_items, jsonb_array_elements(fallback_players) as entry where id = '22222222-2222-4222-8222-555555555555' order by entry->>'key'",
+      );
+      expect(stored).toEqual([
+        { key: "nhl.p.2", name: "Second Choice" },
+        { key: "nhl.p.3", name: "Third Choice" },
+      ]);
+    }).pipe(Effect.provide(PgliteClient.layer())),
+  );
+});
+
 function migrationStatements(select: (name: string) => boolean): ReadonlyArray<string> {
   const statements: string[] = [];
   for (const name of readdirSync(migrationsFolder).filter(select).sort()) {

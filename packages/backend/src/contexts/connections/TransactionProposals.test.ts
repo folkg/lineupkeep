@@ -6571,7 +6571,7 @@ it.effect("runs an approved move when its date arrives", () =>
     const now = yield* DateTime.now;
     const summary = yield* proposals.runApproved(10, now);
 
-    assert.deepStrictEqual(summary, { due: 1,  included: 1, waiting: 0, refused: 0, inProgress: 0 });
+    assert.deepStrictEqual(summary, { due: 1, included: 1, waiting: 0, refused: 0, inProgress: 0 });
     const item = Array.getUnsafe(
       itemsOf(yield* proposals.read(owner, { set: proposed.set.id })),
       0,
@@ -6609,7 +6609,7 @@ it.effect("leaves an approved move alone while its date is still ahead", () =>
     const now = yield* DateTime.now;
     const summary = yield* proposals.runApproved(10, now);
 
-    assert.deepStrictEqual(summary, { due: 0,  included: 0, waiting: 0, refused: 0, inProgress: 0 });
+    assert.deepStrictEqual(summary, { due: 0, included: 0, waiting: 0, refused: 0, inProgress: 0 });
     const item = Array.getUnsafe(
       itemsOf(yield* proposals.read(owner, { set: proposed.set.id })),
       0,
@@ -6645,7 +6645,7 @@ it.effect("never runs a move nobody approved, however long its date has passed",
     const now = yield* DateTime.now;
     const summary = yield* proposals.runApproved(10, now);
 
-    assert.deepStrictEqual(summary, { due: 0,  included: 0, waiting: 0, refused: 0, inProgress: 0 });
+    assert.deepStrictEqual(summary, { due: 0, included: 0, waiting: 0, refused: 0, inProgress: 0 });
     const item = Array.getUnsafe(
       itemsOf(yield* proposals.read(owner, { set: proposed.set.id })),
       0,
@@ -6685,7 +6685,7 @@ it.effect("runs an approved move whose date passed while the clock was missed", 
     const now = yield* DateTime.now;
     const summary = yield* proposals.runApproved(10, now);
 
-    assert.deepStrictEqual(summary, { due: 1,  included: 1, waiting: 0, refused: 0, inProgress: 0 });
+    assert.deepStrictEqual(summary, { due: 1, included: 1, waiting: 0, refused: 0, inProgress: 0 });
     const item = Array.getUnsafe(
       itemsOf(yield* proposals.read(owner, { set: proposed.set.id })),
       0,
@@ -6732,7 +6732,7 @@ it.effect("skips a plan whose submission is already in progress", () =>
 
     const summary = yield* proposals.runApproved(10, now);
 
-    assert.deepStrictEqual(summary, { due: 1,  included: 0, waiting: 0, refused: 0, inProgress: 1 });
+    assert.deepStrictEqual(summary, { due: 1, included: 0, waiting: 0, refused: 0, inProgress: 1 });
     const item = Array.getUnsafe(
       itemsOf(yield* proposals.read(owner, { set: proposed.set.id })),
       0,
@@ -6786,7 +6786,13 @@ it.effect("does not attempt again a move the pass settled as skipped", () =>
     const review = yield* proposals.read(owner, { set: proposed.set.id });
     const skipped = Array.getUnsafe(itemsOf(review), 0);
 
-    assert.deepStrictEqual(firstPass, { due: 1,  included: 1, waiting: 0, refused: 0, inProgress: 0 });
+    assert.deepStrictEqual(firstPass, {
+      due: 1,
+      included: 1,
+      waiting: 0,
+      refused: 0,
+      inProgress: 0,
+    });
     assert.strictEqual(skipped.state, "skipped");
     assert.isTrue(skipped.settled);
     assert.include(skipped.execution?.detail ?? "", "different connection");
@@ -6798,9 +6804,367 @@ it.effect("does not attempt again a move the pass settled as skipped", () =>
       0,
     );
 
-    assert.deepStrictEqual(secondPass, { due: 0,  included: 0, waiting: 0, refused: 0, inProgress: 0 });
+    assert.deepStrictEqual(secondPass, {
+      due: 0,
+      included: 0,
+      waiting: 0,
+      refused: 0,
+      inProgress: 0,
+    });
     assert.strictEqual(again.state, "skipped");
     assert.deepStrictEqual(yield* fake.transactionRequests, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("stores fallback choices and publishes their names in the review and the plan list", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "free_agent_add",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
+          fallbacks: yield* refs(tokens, "nhl.l.1", ["nhl.p.90007", "nhl.p.90008"]),
+          drops: [],
+          reason: "Cover center with the first available forward.",
+        },
+      ],
+    });
+    const item = Array.getUnsafe(proposed.items, 0).item;
+
+    assert.deepStrictEqual(
+      item.fallbacks.map((fallback) => fallback.name),
+      ["Pool Seven", "Pool Eight"],
+    );
+    assert.isTrue(item.fallbacks.every((fallback) => fallback.ref.length > 0));
+    assert.notStrictEqual(item.fallbacks[0]?.ref, item.adds[0]?.ref);
+
+    const review = yield* proposals.read(owner, { set: proposed.set.id });
+    assert.deepStrictEqual(
+      Array.getUnsafe(itemsOf(review), 0).fallbacks.map((fallback) => fallback.name),
+      ["Pool Seven", "Pool Eight"],
+    );
+
+    const listed = yield* proposals.list(owner, { team: redLine });
+    const listedItems = Array.getUnsafe(Array.getUnsafe(listed.sets, 0).teams, 0).items;
+    assert.deepStrictEqual(
+      Array.getUnsafe(listedItems, 0).fallbacks.map((fallback) => fallback.name),
+      ["Pool Seven", "Pool Eight"],
+    );
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("refuses fallbacks on a trade, on several adds, or on another kind", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      playerDetails,
+      leagueTeams: [leagueTeam("nhl.l.1.t.1", "Red Line"), leagueTeam("nhl.l.1.t.2", "Blue Line")],
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const fallbacks = yield* refs(tokens, "nhl.l.1", ["nhl.p.90007"]);
+    const refused = yield* Effect.flip(
+      proposals.propose(owner, proposer, {
+        items: [
+          {
+            team: redLine,
+            kind: "trade",
+            counterparty: yield* counterpartyRef(tokens, "nhl.l.1.t.2"),
+            adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
+            drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+            fallbacks,
+            reason: "Offer for the pool forward.",
+          },
+          {
+            team: redLine,
+            kind: "free_agent_add",
+            adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004", "nhl.p.90008"]),
+            fallbacks,
+            drops: [],
+            reason: "Add two forwards.",
+          },
+          {
+            team: redLine,
+            kind: "drop",
+            adds: [],
+            drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+            fallbacks,
+            reason: "Drop the center.",
+          },
+        ],
+      }),
+    );
+
+    assert.strictEqual(refused._tag, "proposal.nothing_accepted");
+    if (refused._tag === "proposal.nothing_accepted") {
+      assert.deepStrictEqual(
+        refused.refusals.map((refusal) => refusal.refusal),
+        ["fallbacks_not_allowed", "fallbacks_not_allowed", "fallbacks_not_allowed"],
+      );
+      assert.include(Array.getUnsafe(refused.refusals, 0).reason, "trade item");
+      assert.include(Array.getUnsafe(refused.refusals, 1).reason, "adds 2 players");
+      assert.include(Array.getUnsafe(refused.refusals, 2).reason, "drop item");
+    }
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("refuses a fallback that repeats the first choice or another fallback", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const firstChoice = yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]);
+    const fallback = yield* refs(tokens, "nhl.l.1", ["nhl.p.90007"]);
+
+    const repeatedFirst = yield* Effect.flip(
+      proposals.propose(owner, proposer, {
+        items: [
+          {
+            team: redLine,
+            kind: "free_agent_add",
+            adds: firstChoice,
+            fallbacks: [...firstChoice, ...fallback],
+            drops: [],
+            reason: "Add a forward with a repeated first choice.",
+          },
+        ],
+      }),
+    );
+    const repeatedFallback = yield* Effect.flip(
+      proposals.propose(owner, proposer, {
+        items: [
+          {
+            team: redLine,
+            kind: "free_agent_add",
+            adds: firstChoice,
+            fallbacks: [...fallback, ...fallback],
+            drops: [],
+            reason: "Add a forward with a repeated fallback.",
+          },
+        ],
+      }),
+    );
+
+    assert.strictEqual(repeatedFirst._tag, "proposal.nothing_accepted");
+    assert.strictEqual(repeatedFallback._tag, "proposal.nothing_accepted");
+    if (repeatedFirst._tag === "proposal.nothing_accepted") {
+      const refusal = Array.getUnsafe(repeatedFirst.refusals, 0);
+      assert.strictEqual(refusal.refusal, "fallbacks_not_allowed");
+      assert.include(refusal.reason, "first choice as a fallback");
+    }
+    if (repeatedFallback._tag === "proposal.nothing_accepted") {
+      const refusal = Array.getUnsafe(repeatedFallback.refusals, 0);
+      assert.strictEqual(refusal.refusal, "fallbacks_not_allowed");
+      assert.include(refusal.reason, "same fallback more than once");
+    }
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("promotes the second choice when the first is on another roster and names both", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      playerDetails,
+      roster: rosterFixture(["nhl.p.90001", "nhl.p.90002", "nhl.p.90003"]),
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "free_agent_add",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
+          fallbacks: yield* refs(tokens, "nhl.l.1", ["nhl.p.90007", "nhl.p.90008"]),
+          drops: [],
+          reason: "Add a forward for the bench.",
+        },
+      ],
+    });
+    yield* fake.setPlayerDetails(
+      playerDetailsWith([{ key: "nhl.p.90004", rosterStatus: "rostered" }]),
+    );
+
+    const submitted = yield* proposals.submit(owner, {
+      set: proposed.set.id,
+      include: [Array.getUnsafe(proposed.items, 0).item.id],
+    });
+    const item = Array.getUnsafe(itemsOf(submitted), 0);
+
+    assert.strictEqual(item.state, "executed");
+    assert.strictEqual(item.adds[0]?.name, "Pool Seven");
+    assert.include(
+      item.execution?.detail ?? "",
+      "First choice Pool Forward was gone, so Pool Seven was used.",
+    );
+    assert.deepStrictEqual(
+      (yield* fake.transactionRequests).map((request) => request.adds),
+      [["nhl.p.90007"]],
+    );
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("leaves a move with every choice gone refused and writes no promotion detail", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      playerDetails,
+      roster: rosterFixture(["nhl.p.90001", "nhl.p.90002", "nhl.p.90003"]),
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "free_agent_add",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
+          fallbacks: yield* refs(tokens, "nhl.l.1", ["nhl.p.90007", "nhl.p.90008"]),
+          drops: [],
+          reason: "Add a forward for the bench.",
+        },
+      ],
+    });
+    yield* fake.setPlayerDetails(
+      playerDetailsWith([
+        { key: "nhl.p.90004", rosterStatus: "rostered" },
+        { key: "nhl.p.90007", rosterStatus: "rostered" },
+        { key: "nhl.p.90008", rosterStatus: "rostered" },
+      ]),
+    );
+
+    const submitted = yield* proposals.submit(owner, {
+      set: proposed.set.id,
+      include: [Array.getUnsafe(proposed.items, 0).item.id],
+    });
+    const item = Array.getUnsafe(itemsOf(submitted), 0);
+
+    assert.strictEqual(item.state, "skipped");
+    assert.strictEqual(item.adds[0]?.name, "Pool Forward");
+    assert.include(item.execution?.detail ?? "", "is already rostered in this league");
+    assert.notInclude(item.execution?.detail ?? "", "First choice");
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("does not promote or rewrite a move on a review or a plan list read", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      playerDetails,
+      roster: rosterFixture(["nhl.p.90001", "nhl.p.90002", "nhl.p.90003"]),
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "free_agent_add",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
+          fallbacks: yield* refs(tokens, "nhl.l.1", ["nhl.p.90007", "nhl.p.90008"]),
+          drops: [],
+          reason: "Add a forward for the bench.",
+        },
+      ],
+    });
+    const accepted = Array.getUnsafe(proposed.items, 0).item;
+    yield* fake.setPlayerDetails(
+      playerDetailsWith([{ key: "nhl.p.90004", rosterStatus: "rostered" }]),
+    );
+
+    const reviewed = Array.getUnsafe(
+      itemsOf(yield* proposals.read(owner, { set: proposed.set.id })),
+      0,
+    );
+    const listed = yield* proposals.list(owner, { team: redLine });
+    const listedItem = Array.getUnsafe(
+      Array.getUnsafe(Array.getUnsafe(listed.sets, 0).teams, 0).items,
+      0,
+    );
+
+    assert.strictEqual(reviewed.state, "proposed");
+    assert.strictEqual(reviewed.adds[0]?.name, "Pool Forward");
+    assert.isUndefined(reviewed.execution);
+    assert.strictEqual(reviewed.updatedAt.epochMilliseconds, accepted.updatedAt.epochMilliseconds);
+    assert.strictEqual(listedItem.state, "proposed");
+    assert.strictEqual(listedItem.adds[0]?.name, "Pool Forward");
+    assert.deepStrictEqual(
+      listedItem.fallbacks.map((fallback) => fallback.name),
+      ["Pool Seven", "Pool Eight"],
+    );
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("promotes once, so a second submission reads the chosen player as its add", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      playerDetails,
+      roster: rosterFixture(["nhl.p.90001", "nhl.p.90002", "nhl.p.90003"]),
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "free_agent_add",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
+          fallbacks: yield* refs(tokens, "nhl.l.1", ["nhl.p.90007", "nhl.p.90008"]),
+          drops: [],
+          reason: "Add a forward for the bench.",
+        },
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          reason: "Drop a center another day.",
+        },
+      ],
+    });
+    const addItem = Array.getUnsafe(proposed.items, 0).item;
+    yield* fake.setPlayerDetails(
+      playerDetailsWith([{ key: "nhl.p.90004", rosterStatus: "rostered" }]),
+    );
+
+    const submitted = yield* proposals.submit(owner, {
+      set: proposed.set.id,
+      include: [addItem.id],
+    });
+    assert.strictEqual(itemByReason(submitted, "Add a forward for the bench.").state, "executed");
+
+    const again = yield* Effect.flip(
+      proposals.submit(owner, { set: proposed.set.id, include: [addItem.id] }),
+    );
+    const after = itemByReason(
+      yield* proposals.read(owner, { set: proposed.set.id }),
+      "Add a forward for the bench.",
+    );
+
+    assert.strictEqual(again._tag, "proposal.nothing_included");
+    assert.strictEqual(after.adds[0]?.name, "Pool Seven");
+    assert.include(
+      after.execution?.detail ?? "",
+      "First choice Pool Forward was gone, so Pool Seven was used.",
+    );
+    assert.strictEqual((yield* fake.transactionRequests).length, 1);
   }).pipe(Effect.provide(TestLayer)),
 );
 
@@ -7281,6 +7645,19 @@ function lockedPlayer(roster: ProviderRoster, playerKey: string): ProviderRoster
       player.providerPlayerKey === playerKey ? { ...player, isEditable: false } : player,
     ),
   };
+}
+
+function playerDetailsWith(
+  changes: ReadonlyArray<{
+    readonly key: string;
+    readonly rosterStatus: ProviderPlayerDetail["rosterStatus"];
+  }>,
+): ReadonlyArray<ProviderPlayerDetail> {
+  const byKey = new Map(changes.map((change) => [change.key, change.rosterStatus] as const));
+  return playerDetails.map((player) => {
+    const rosterStatus = byKey.get(player.providerPlayerKey);
+    return rosterStatus === undefined ? player : { ...player, rosterStatus };
+  });
 }
 
 const playerDetails: ReadonlyArray<ProviderPlayerDetail> = [
