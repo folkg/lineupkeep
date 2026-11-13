@@ -208,6 +208,7 @@ const AutomationLayer = AutomationLive.pipe(
   Layer.provide(TeamRepositoryLayer),
   Layer.provide(LineupRepositoryLayer),
   Layer.provide(LineupDispatcherLayer),
+  Layer.provide(ProposalsLayer),
   Layer.provide(RetentionSweepLayer),
   Layer.provide(CredentialCensusLayer),
 );

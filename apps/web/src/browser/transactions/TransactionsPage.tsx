@@ -314,10 +314,10 @@ function PlanItem(props: PlanItemProps): JSX.Element {
         <Text size="body" weight="semibold">
           {itemSummary(props.item)}
         </Text>
-        <Show when={props.item.window}>
-          {(window) => (
+        <Show when={windowLine(props.item)}>
+          {(line) => (
             <Text size="caption" tone="muted">
-              {windowLine(props.item, window())}
+              {line()}
             </Text>
           )}
         </Show>
@@ -479,8 +479,11 @@ function itemSummary(item: TransactionProposalItemView): string {
   return "This move";
 }
 
-function windowLine(item: TransactionProposalItemView, window: string): string {
-  const date = formatCalendarDate(window);
+function windowLine(item: TransactionProposalItemView): string | undefined {
+  if (item.state !== "proposed" || item.window === undefined) {
+    return undefined;
+  }
+  const date = formatCalendarDate(item.window);
   return item.approvedAt === undefined
     ? `Waits for ${date}.`
     : `Waits for ${date}. Approved ${formatCalendarDate(item.approvedAt)}.`;

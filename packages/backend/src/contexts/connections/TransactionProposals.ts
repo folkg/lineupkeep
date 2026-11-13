@@ -544,6 +544,26 @@ export const SubmitTransactionProposalResult = Schema.Struct({
 });
 export type SubmitTransactionProposalResult = typeof SubmitTransactionProposalResult.Type;
 
+const RunApprovedSummary = Schema.Struct({
+  due: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
+    description: "How many approved moves had reached their date.",
+  }),
+  included: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
+    description: "How many due moves a submission included.",
+  }),
+  waiting: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
+    description: "How many due moves a submission still judged to be waiting for a later date.",
+  }),
+  refused: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
+    description: "How many due moves an expected refusal left for a later pass.",
+  }),
+  inProgress: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
+    description:
+      "How many due moves were skipped because their plan already had a submission in progress.",
+  }),
+});
+type RunApprovedSummary = typeof RunApprovedSummary.Type;
+
 const ProposalReason = Schema.Trim.pipe(
   Schema.check(Schema.isMinLength(1), Schema.isMaxLength(500)),
 );
@@ -832,6 +852,11 @@ export type TransactionProposalsShape = {
     userId: UserId,
     input: SubmitTransactionProposalInput,
   ) => Effect.Effect<SubmitTransactionProposalResult, ProposalError>;
+
+  readonly runApproved: (
+    limit: number,
+    at: import("effect").DateTime.Utc,
+  ) => Effect.Effect<RunApprovedSummary, ProposalPersistenceFailed>;
 
   readonly readPendingOffers: (
     userId: UserId,

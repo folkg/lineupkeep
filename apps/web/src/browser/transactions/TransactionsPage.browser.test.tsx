@@ -149,6 +149,32 @@ it("shows the date a move waits for and says when it was approved", async () => 
     .toBeVisible();
 });
 
+it("stops saying a move waits once it has run", async () => {
+  using _app = setupTransactionsPage(
+    listData([]),
+    listData([
+      plan({
+        id: historyPlanId,
+        closed: true,
+        items: [
+          item({
+            state: "executed",
+            settled: true,
+            window: "2026-11-14",
+            approvedAt: "2026-11-12T10:00:00.000Z",
+          }),
+        ],
+      }),
+    ]),
+  );
+  await page.getByRole("button", { name: "Show history" }).click();
+
+  await expect.element(page.getByText("Executed", { exact: true })).toBeVisible();
+  await expect
+    .element(page.getByText(new RegExp(`Waits for ${formatCalendarDate("2026-11-14")}`, "u")))
+    .not.toBeInTheDocument();
+});
+
 it("shows more plans without losing the first page", async () => {
   const first = plan({ id: openPlanId, items: [item()] });
   const second = plan({

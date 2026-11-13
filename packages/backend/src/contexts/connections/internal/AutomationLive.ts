@@ -7,6 +7,7 @@ import { CredentialKeyCensus } from "#contexts/connections/CredentialKeyCensus.t
 import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
 import { LineupDispatcher } from "#contexts/connections/LineupWork.ts";
 import { RetentionSweep } from "#contexts/connections/Retention.ts";
+import { TransactionProposals } from "#contexts/connections/TransactionProposals.ts";
 
 import { LineupRunRepository } from "./LineupRunRepository.ts";
 import type { NewScheduledLineupRun } from "./LineupRunRepository.ts";
@@ -18,6 +19,7 @@ export const AutomationLive = Layer.effect(
     const teams = yield* TeamRepository;
     const runs = yield* LineupRunRepository;
     const dispatcher = yield* LineupDispatcher;
+    const proposals = yield* TransactionProposals;
     const retention = yield* RetentionSweep;
     const credentialKeys = yield* CredentialKeyCensus;
 
@@ -40,6 +42,7 @@ export const AutomationLive = Layer.effect(
       );
       const scheduledRuns = scheduled.reduce((total, result) => total + result.runs.length, 0);
       const repaired = yield* dispatcher.repair(limit);
+      const approved = yield* proposals.runApproved(limit, now);
       const retained = yield* retention.run(limit, now);
       const credentialKeyReport = yield* credentialKeys.report;
       const summary: AutomationSummary = {
@@ -48,6 +51,11 @@ export const AutomationLive = Layer.effect(
         scheduledRuns,
         delivered: repaired.delivered,
         pending: repaired.pending,
+        approvedDue: approved.due,
+        approvedIncluded: approved.included,
+        approvedWaiting: approved.waiting,
+        approvedRefused: approved.refused,
+        approvedInProgress: approved.inProgress,
         retention: retained,
         credentialKeys: credentialKeyReport,
       };
@@ -55,6 +63,11 @@ export const AutomationLive = Layer.effect(
         "automation.eligible_teams": summary.eligibleTeams,
         "automation.scheduled_runs": summary.scheduledRuns,
         "automation.pauses_expired": summary.pausesExpired,
+        "automation.approved_due": summary.approvedDue,
+        "automation.approved_included": summary.approvedIncluded,
+        "automation.approved_waiting": summary.approvedWaiting,
+        "automation.approved_refused": summary.approvedRefused,
+        "automation.approved_in_progress": summary.approvedInProgress,
       });
       return summary;
     });

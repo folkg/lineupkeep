@@ -35,15 +35,19 @@ import {
   refuseCustomPlanning,
 } from "./internal/ProviderFakeTest.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
+import { QueryTokens } from "./internal/QueryTokens.ts";
 import { RetentionSweepLive } from "./internal/RetentionSweepRepository.ts";
 import { ScheduleGateTest } from "./internal/ScheduleGateTest.ts";
 import { TeamRepository } from "./internal/TeamRepository.ts";
 import { TeamsLive } from "./internal/TeamsLive.ts";
+import { TransactionProposalRepository } from "./internal/TransactionProposalRepository.ts";
+import { TransactionProposalsLive } from "./internal/TransactionProposalsLive.ts";
 import { LineupRequestId, LineupRequestInput } from "./LineupRun.ts";
 import { LineupRuns } from "./LineupRuns.ts";
 import { LineupDispatcher } from "./LineupWork.ts";
 import type { ProviderLeagueSettings, ProviderRoster, ProviderTeam } from "./Provider.ts";
 import { Teams } from "./Teams.ts";
+import { TransactionProposals } from "./TransactionProposals.ts";
 
 it.effect("runs one current-period automation per team per hour", () =>
   Effect.gen(function* () {
@@ -156,6 +160,50 @@ it.effect("collapses several missed hourly ticks into one current run", () =>
     assert.strictEqual(summary.scheduledRuns, 1);
     assert.strictEqual(summary.delivered, 1);
     assert.strictEqual(yield* fake.nativeCallCount, 1);
+  }).pipe(Effect.provide(AutomationTestLayer)),
+);
+
+it.effect("runs an approved move when its date arrives on the hourly tick", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const automation = yield* Automation;
+    const proposals = yield* TransactionProposals;
+    const tokens = yield* QueryTokens;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
+    yield* refuseCustomPlanning(fake);
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team,
+          kind: "drop",
+          adds: [],
+          drops: yield* tokens.sealPlayerRefs({
+            userId: owner,
+            leagueKey: "461.l.1000",
+            playerKeys: ["461.p.10002"],
+          }),
+          window: "2026-11-01",
+          reason: "Drop the bench quarterback tomorrow.",
+        },
+      ],
+    });
+    yield* proposals.submit(owner, {
+      set: proposed.set.id,
+      include: proposed.items.map((entry) => entry.item.id),
+    });
+
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-01T18:00:00Z")));
+    const summary = yield* automation.run(10);
+    const review = yield* proposals.read(owner, { set: proposed.set.id });
+
+    assert.strictEqual(summary.approvedDue, 1);
+    assert.strictEqual(summary.approvedIncluded, 1);
+    assert.strictEqual(summary.approvedWaiting, 0);
+    assert.strictEqual(summary.approvedRefused, 0);
+    assert.strictEqual(summary.approvedInProgress, 0);
+    assert.strictEqual(review.teams.flatMap((entry) => entry.items)[0]?.state, "executed");
+    assert.strictEqual((yield* fake.transactionRequests).length, 1);
   }).pipe(Effect.provide(AutomationTestLayer)),
 );
 
@@ -526,6 +574,7 @@ function seedTeam(
 let owner = decodeUserId("automation-tick-owner-1");
 let ownerSerial = 0;
 const session = Redacted.make("A1=test-session-cookie");
+const proposer = { kind: "agent", reference: "mcp", surface: "mcp" } as const;
 
 beforeEach(() => {
   ownerSerial += 1;
@@ -822,15 +871,30 @@ const CredentialCensusTest = CredentialKeyCensusLive.pipe(
   Layer.provide(CredentialRepositoryTest),
   Layer.provide(EncryptionTestLayer),
 );
+const ProposalRepositoryTest = TransactionProposalRepository.layer.pipe(
+  Layer.provide(DatabaseLayer),
+);
+const QueryTokensTest = QueryTokens.fromSecret("automation-query-token-secret-at-least-32-chars");
+const ProposalsTest = TransactionProposalsLive.pipe(
+  Layer.provide(ProposalRepositoryTest),
+  Layer.provide(QueryRepositoryTest),
+  Layer.provide(EncryptionTestLayer),
+  Layer.provide(ProviderFakeTest),
+  Layer.provide(QueryTokensTest),
+  Layer.provide(RunsTest),
+);
 const AutomationTest = AutomationLive.pipe(
   Layer.provide(TeamRepositoryTest),
   Layer.provide(LineupRepositoryTest),
   Layer.provide(DispatcherTest),
   Layer.provide(RetentionTest),
   Layer.provide(CredentialCensusTest),
+  Layer.provide(ProposalsTest),
 );
 const AutomationTestLayer = Layer.mergeAll(
   AutomationTest,
+  ProposalsTest,
+  QueryTokensTest,
   TeamsTest,
   TeamRepositoryTest,
   RunsTest,

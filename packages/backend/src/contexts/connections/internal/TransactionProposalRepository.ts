@@ -1,8 +1,8 @@
-import { and, asc, count, desc, eq, exists, isNull, not } from "drizzle-orm";
+import { and, asc, count, desc, eq, exists, isNotNull, isNull, lte, not } from "drizzle-orm";
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
 import { Array, Context, Crypto, DateTime, Effect, Layer, Schema } from "effect";
 
-import type { UserId } from "#contexts/auth/User.ts";
+import { UserId } from "#contexts/auth/User.ts";
 import { ConnectionId, ProviderKey } from "#contexts/connections/Connection.ts";
 import { FantasyLeague, FantasySport, TeamId } from "#contexts/connections/FantasyTeam.ts";
 import {
@@ -642,6 +642,44 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
         return row === undefined ? undefined : yield* decodeItem(row);
       });
 
+      const listDueApproved = Effect.fn("TransactionProposalRepository.listDueApproved")(
+        function* (input: { readonly before: string; readonly limit: number }) {
+          const rows = yield* database
+            .select({
+              item: transactionProposalItems.id,
+              set: transactionProposalItems.setId,
+              team: transactionProposalItems.teamId,
+              user: transactionProposalItems.userId,
+              provider: providerTeams.provider,
+              window: transactionProposalItems.windowDate,
+            })
+            .from(transactionProposalItems)
+            .innerJoin(
+              providerTeams,
+              and(
+                eq(providerTeams.id, transactionProposalItems.teamId),
+                eq(providerTeams.userId, transactionProposalItems.userId),
+              ),
+            )
+            .where(
+              and(
+                eq(transactionProposalItems.state, "proposed"),
+                isNotNull(transactionProposalItems.approvedAt),
+                isNotNull(transactionProposalItems.windowDate),
+                lte(transactionProposalItems.windowDate, input.before),
+              ),
+            )
+            .orderBy(asc(transactionProposalItems.windowDate), asc(transactionProposalItems.id))
+            .limit(input.limit)
+            .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
+          return yield* Effect.forEach(rows, (row) =>
+            Schema.decodeUnknownEffect(DueProposalSelected)(row).pipe(
+              Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })),
+            ),
+          );
+        },
+      );
+
       const saveChecks = Effect.fn("TransactionProposalRepository.saveChecks")(function* (input: {
         readonly userId: UserId;
         readonly setId: ProposalSetId;
@@ -1004,6 +1042,7 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
         newSetId,
         load,
         loadItem,
+        listDueApproved,
         listForTeam,
         listTeams,
         loadTeams,
@@ -1166,6 +1205,15 @@ const teamColumns = {
   sport: providerTeams.sport,
   season: providerTeams.season,
 };
+
+const DueProposalSelected = Schema.Struct({
+  item: ProposalItemId,
+  set: ProposalSetId,
+  team: TeamId,
+  user: UserId,
+  provider: ProviderKey,
+  window: Schema.String.pipe(Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u))),
+});
 
 const ProposalTeamSelected = Schema.Struct({
   id: Schema.String,

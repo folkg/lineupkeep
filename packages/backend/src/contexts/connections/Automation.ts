@@ -10,6 +10,11 @@ export const AutomationSummary = Schema.Struct({
   scheduledRuns: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   delivered: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   pending: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  approvedDue: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  approvedIncluded: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  approvedWaiting: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  approvedRefused: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  approvedInProgress: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   retention: RetentionSummary,
   credentialKeys: CredentialKeyReport,
 });

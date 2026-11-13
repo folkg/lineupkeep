@@ -6538,6 +6538,272 @@ it.effect("keeps a waiting move's first approval time when a later submission in
   }).pipe(Effect.provide(TestLayer)),
 );
 
+it.effect("runs an approved move when its date arrives", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      playerDetails,
+      roster: rosterFixture(["nhl.p.90001", "nhl.p.90002", "nhl.p.90003"]),
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          window: "2026-11-01",
+          reason: "Drop the second center tomorrow.",
+        },
+      ],
+    });
+    const submitted = yield* proposals.submit(owner, {
+      set: proposed.set.id,
+      include: proposed.items.map((entry) => entry.item.id),
+    });
+    assert.strictEqual(submitted.waiting, 1);
+
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-01T18:00:00Z")));
+    const now = yield* DateTime.now;
+    const summary = yield* proposals.runApproved(10, now);
+
+    assert.deepStrictEqual(summary, { due: 1,  included: 1, waiting: 0, refused: 0, inProgress: 0 });
+    const item = Array.getUnsafe(
+      itemsOf(yield* proposals.read(owner, { set: proposed.set.id })),
+      0,
+    );
+    assert.strictEqual(item.state, "executed");
+    assert.strictEqual((yield* fake.transactionRequests).length, 1);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("leaves an approved move alone while its date is still ahead", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          window: "2026-11-01",
+          reason: "Drop the center tomorrow.",
+        },
+      ],
+    });
+    yield* proposals.submit(owner, {
+      set: proposed.set.id,
+      include: proposed.items.map((entry) => entry.item.id),
+    });
+
+    const now = yield* DateTime.now;
+    const summary = yield* proposals.runApproved(10, now);
+
+    assert.deepStrictEqual(summary, { due: 0,  included: 0, waiting: 0, refused: 0, inProgress: 0 });
+    const item = Array.getUnsafe(
+      itemsOf(yield* proposals.read(owner, { set: proposed.set.id })),
+      0,
+    );
+    assert.strictEqual(item.state, "proposed");
+    assert.isDefined(item.approvedAt);
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("never runs a move nobody approved, however long its date has passed", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          window: "2026-11-01",
+          reason: "Drop the center tomorrow.",
+        },
+      ],
+    });
+
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-03T18:00:00Z")));
+    const now = yield* DateTime.now;
+    const summary = yield* proposals.runApproved(10, now);
+
+    assert.deepStrictEqual(summary, { due: 0,  included: 0, waiting: 0, refused: 0, inProgress: 0 });
+    const item = Array.getUnsafe(
+      itemsOf(yield* proposals.read(owner, { set: proposed.set.id })),
+      0,
+    );
+    assert.strictEqual(item.state, "proposed");
+    assert.isUndefined(item.approvedAt);
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("runs an approved move whose date passed while the clock was missed", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          window: "2026-11-01",
+          reason: "Drop the center tomorrow.",
+        },
+      ],
+    });
+    yield* proposals.submit(owner, {
+      set: proposed.set.id,
+      include: proposed.items.map((entry) => entry.item.id),
+    });
+
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-03T18:00:00Z")));
+    const now = yield* DateTime.now;
+    const summary = yield* proposals.runApproved(10, now);
+
+    assert.deepStrictEqual(summary, { due: 1,  included: 1, waiting: 0, refused: 0, inProgress: 0 });
+    const item = Array.getUnsafe(
+      itemsOf(yield* proposals.read(owner, { set: proposed.set.id })),
+      0,
+    );
+    assert.strictEqual(item.state, "executed");
+    assert.strictEqual((yield* fake.transactionRequests).length, 1);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("skips a plan whose submission is already in progress", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const repository = yield* TransactionProposalRepository;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          window: "2026-11-01",
+          reason: "Drop the center tomorrow.",
+        },
+      ],
+    });
+    yield* proposals.submit(owner, {
+      set: proposed.set.id,
+      include: proposed.items.map((entry) => entry.item.id),
+    });
+
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-01T18:00:00Z")));
+    const now = yield* DateTime.now;
+    const claimed = yield* repository.claimSubmission({
+      userId: owner,
+      setId: proposed.set.id,
+      at: now,
+    });
+    assert.strictEqual(claimed.status, "claimed");
+
+    const summary = yield* proposals.runApproved(10, now);
+
+    assert.deepStrictEqual(summary, { due: 1,  included: 0, waiting: 0, refused: 0, inProgress: 1 });
+    const item = Array.getUnsafe(
+      itemsOf(yield* proposals.read(owner, { set: proposed.set.id })),
+      0,
+    );
+    assert.strictEqual(item.state, "proposed");
+    assert.isDefined(item.approvedAt);
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("does not attempt again a move the pass settled as skipped", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const connections = yield* Connections;
+    const database = yield* ConnectionsDatabase;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          window: "2026-11-01",
+          reason: "Drop the center tomorrow.",
+        },
+      ],
+    });
+    yield* proposals.submit(owner, {
+      set: proposed.set.id,
+      include: proposed.items.map((entry) => entry.item.id),
+    });
+    const secondLink = Array.getUnsafe(
+      yield* connections.link(owner, [
+        { provider: decodeProviderKey("yahoo"), session: Redacted.make("A1=second-session") },
+      ]),
+      0,
+    );
+    yield* database
+      .update(providerTeams)
+      .set({ connectionId: secondLink.id })
+      .where(eq(providerTeams.id, redLine));
+
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-01T18:00:00Z")));
+    const now = yield* DateTime.now;
+    const firstPass = yield* proposals.runApproved(10, now);
+    const review = yield* proposals.read(owner, { set: proposed.set.id });
+    const skipped = Array.getUnsafe(itemsOf(review), 0);
+
+    assert.deepStrictEqual(firstPass, { due: 1,  included: 1, waiting: 0, refused: 0, inProgress: 0 });
+    assert.strictEqual(skipped.state, "skipped");
+    assert.isTrue(skipped.settled);
+    assert.include(skipped.execution?.detail ?? "", "different connection");
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+
+    const secondPass = yield* proposals.runApproved(10, now);
+    const again = Array.getUnsafe(
+      itemsOf(yield* proposals.read(owner, { set: proposed.set.id })),
+      0,
+    );
+
+    assert.deepStrictEqual(secondPass, { due: 0,  included: 0, waiting: 0, refused: 0, inProgress: 0 });
+    assert.strictEqual(again.state, "skipped");
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
 function seedTradeTeams(
   fake: FakeProviderWorld["Service"],
   options: { readonly league?: ProviderLeagueSettings } = {},

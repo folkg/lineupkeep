@@ -62,6 +62,7 @@ import type {
   ProposalItemNotOpenRefusal,
   ProposalOutcome,
   ProposalSet,
+  ProposalSetId,
   ProposalSetProvenance,
   ProposalSetReview,
   ProposalStaleCode,
@@ -242,6 +243,12 @@ type ItemExecution = {
   readonly trade?: StoredProposalTrade;
 };
 
+type ProposalDueGroup = {
+  readonly user: UserId;
+  readonly set: ProposalSetId;
+  readonly items: Array<ProposalItemId>;
+};
+
 export const TransactionProposalsLive = Layer.effect(
   TransactionProposals,
   Effect.gen(function* () {
@@ -262,14 +269,19 @@ export const TransactionProposalsLive = Layer.effect(
           .map((entry) => [entry.key, entry.capabilities.tradeProposal] as const),
       );
 
-    const fantasyDaysOf = (
-      teams: ReadonlyArray<ProposalTeamRecord>,
+    const fantasyDaysByProvider = (
+      providers: ReadonlyArray<ProposalTeamRecord["provider"]>,
     ): ReadonlyMap<ProposalTeamRecord["provider"], ProviderFantasyDay> =>
       new Map(
         registry
-          .capabilitiesOf([...new Set(teams.map((team) => team.provider))])
+          .capabilitiesOf([...new Set(providers)])
           .map((entry) => [entry.key, entry.capabilities.fantasyDay] as const),
       );
+
+    const fantasyDaysOf = (
+      teams: ReadonlyArray<ProposalTeamRecord>,
+    ): ReadonlyMap<ProposalTeamRecord["provider"], ProviderFantasyDay> =>
+      fantasyDaysByProvider(teams.map((team) => team.provider));
 
     const propose: TransactionProposals["Service"]["propose"] = Effect.fn(
       "TransactionProposals.propose",
@@ -1573,6 +1585,69 @@ export const TransactionProposalsLive = Layer.effect(
       }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
     });
 
+    const runApproved: TransactionProposals["Service"]["runApproved"] = Effect.fn(
+      "TransactionProposals.runApproved",
+    )(function* (limit: number, at: DateTime.Utc) {
+      const candidates = yield* repository.listDueApproved({
+        before: DateTime.formatIsoDateUtc(DateTime.add(at, { days: 1 })),
+        limit,
+      });
+      const fantasyDays = fantasyDaysByProvider(candidates.map((candidate) => candidate.provider));
+      const due = candidates.filter((candidate) => {
+        const fantasyDay = fantasyDays.get(candidate.provider);
+        return fantasyDay !== undefined && fantasyDayLabel(at, fantasyDay) >= candidate.window;
+      });
+      const groups = new Map<string, ProposalDueGroup>();
+      for (const candidate of due) {
+        const key = `${candidate.user}:${candidate.set}`;
+        const group = groups.get(key) ?? {
+          user: candidate.user,
+          set: candidate.set,
+          items: [],
+        };
+        group.items.push(candidate.item);
+        groups.set(key, group);
+      }
+      let includedCount = 0;
+      let waiting = 0;
+      let refused = 0;
+      let inProgress = 0;
+      for (const group of groups.values()) {
+        const outcome = yield* submit(group.user, {
+          set: group.set,
+          include: group.items,
+        }).pipe(
+          Effect.map((result) => ({ status: "submitted" as const, result })),
+          Effect.catch((failure) =>
+            failure._tag === "proposal.persistence_failed"
+              ? Effect.fail(failure)
+              : Effect.succeed({ status: "refused" as const, failure }),
+          ),
+        );
+        if (outcome.status === "refused") {
+          if (outcome.failure._tag === "proposal.submission_in_progress") {
+            inProgress += group.items.length;
+          } else {
+            refused += group.items.length;
+          }
+          continue;
+        }
+        const included = new Set<ProposalItemId>(group.items);
+        includedCount += outcome.result.teams
+          .flatMap((team) => team.items)
+          .filter((item) => included.has(item.id)).length;
+        waiting += outcome.result.waiting;
+      }
+      yield* Effect.annotateCurrentSpan({
+        "proposal.approved_due": due.length,
+        "proposal.approved_included": includedCount,
+        "proposal.approved_waiting": waiting,
+        "proposal.approved_refused": refused,
+        "proposal.approved_in_progress": inProgress,
+      });
+      return { due: due.length, included: includedCount, waiting, refused, inProgress };
+    });
+
     function executeItem(input: {
       readonly userId: UserId;
       readonly item: ProposalItemRecord;
@@ -2490,6 +2565,7 @@ export const TransactionProposalsLive = Layer.effect(
       read,
       list,
       submit,
+      runApproved,
       readPendingOffers,
       withdrawTrade,
     });
