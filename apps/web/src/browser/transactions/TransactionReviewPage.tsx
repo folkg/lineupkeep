@@ -458,18 +458,22 @@ function OrderedNotice(props: OrderedNoticeProps): JSX.Element {
         <Text size="caption" tone="muted">
           {orderEffectiveLine(props.order)}
         </Text>
-        <Text size="caption" tone="faint">
-          {rosterPlacesLine(props.order)}
-        </Text>
+        <Show when={props.order.rosterPlaces}>
+          {(places) => (
+            <Text size="caption" tone="faint">
+              {rosterPlacesLine(places())}
+            </Text>
+          )}
+        </Show>
       </Stack>
     </Notice>
   );
 }
 
 function rosterPlacesLine(
-  order: Extract<TransactionReviewOrderView, { status: "ordered" }>,
+  places: NonNullable<Extract<TransactionReviewOrderView, { status: "ordered" }>["rosterPlaces"]>,
 ): string {
-  const { maximum, occupied, net } = order.rosterPlaces;
+  const { maximum, occupied, net } = places;
   const change =
     net === 0
       ? "leaves the count unchanged"

@@ -2,7 +2,7 @@ import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { eq } from "drizzle-orm";
-import { Array, DateTime, Effect, Layer, Redacted } from "effect";
+import { Array, DateTime, Effect, Layer, Redacted, Schema } from "effect";
 import { TestClock } from "effect/testing";
 
 import { Connections } from "./Connections.ts";
@@ -51,6 +51,7 @@ import {
   ProposalItemsNotOpen,
   ProposalNothingIncluded,
   ProposalSetClosed,
+  ProposalSetId,
   ProposalSetNotFound,
   ProposalSetReview,
   ProposalTeamNotFound,
@@ -5581,6 +5582,126 @@ it.effect("lists a team's plans newest first and pages without duplicates or gap
   }).pipe(Effect.provide(TestLayer)),
 );
 
+it.effect("serves an open plan stored before the order recorded roster places", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const database = yield* ConnectionsDatabase;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const connection = Array.getUnsafe(seeded, 0).connectionId;
+    const at = DateTime.makeUnsafe("2026-11-06T19:55:54.316Z");
+    const legacySet = "01M6XSAX974NDA9S6A24ZXSWX2";
+    const legacyItem = "01M6XSAX96W7519D70CA4321GW";
+    const fresh = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          reason: "A plan stored after the order recorded roster places.",
+        },
+      ],
+    });
+
+    yield* database.insert(transactionProposalSets).values([
+      {
+        id: legacySet,
+        userId: owner,
+        proposerKind: "agent",
+        proposerReference: "mcp",
+        surface: "mcp",
+        clientLabel: null,
+        fingerprint: "b887724f7b0a5d42810898b8ccb1cb5e597ac676bb070be4e9c3f2824b8db258",
+        teams: [redLine],
+        orders: [
+          {
+            team: redLine,
+            order: {
+              steps: [{ item: legacyItem, position: 0 }],
+              status: "ordered",
+              timing: "next_day",
+              effectiveDate: "2026-11-07",
+            },
+          },
+        ],
+        lineups: null,
+        createdAt: DateTime.toDateUtc(at),
+        updatedAt: DateTime.toDateUtc(at),
+      },
+    ]);
+    yield* database.insert(transactionProposalItems).values([
+      {
+        id: legacyItem,
+        setId: legacySet,
+        position: 0,
+        userId: owner,
+        teamId: redLine,
+        connectionId: connection,
+        kind: "drop",
+        addPlayers: [],
+        fallbackPlayers: [],
+        dropPlayers: [{ key: "nhl.p.90001", name: "Roster One", proTeam: "SYN", position: "C" }],
+        picks: [],
+        slotMove: null,
+        reserveMove: null,
+        intent: null,
+        placement: null,
+        counterpartyTeamKey: null,
+        counterpartyName: null,
+        bid: null,
+        windowDate: null,
+        approvedAt: null,
+        reason: "Drop the lowest-volume center.",
+        state: "proposed",
+        settled: false,
+        staleness: "current",
+        staleReasons: [],
+        checkedAt: DateTime.toDateUtc(at),
+        outcome: null,
+        outcomeDetail: null,
+        outcomeAt: null,
+        executionPosition: null,
+        tradeProviderKey: null,
+        tradeState: null,
+        tradeRequestedAt: null,
+        tradeProposedAt: null,
+        tradeSettledAt: null,
+        tradeDetail: null,
+        createdAt: DateTime.toDateUtc(at),
+        updatedAt: DateTime.toDateUtc(at),
+      },
+    ]);
+
+    const listed = yield* proposals.list(owner, { team: redLine, state: "open", limit: 2 });
+    assert.deepStrictEqual(
+      listed.sets.map((set) => String(set.id)).sort(),
+      [String(fresh.set.id), legacySet].sort(),
+    );
+    const legacy = listed.sets.find((set) => set.id === legacySet);
+    assert.isDefined(legacy);
+    const entry = Array.getUnsafe(legacy.teams, 0);
+    assert.deepStrictEqual(
+      entry.items.map((item) => String(item.id)),
+      [legacyItem],
+    );
+
+    const review = yield* proposals.read(owner, {
+      set: yield* Schema.decodeEffect(ProposalSetId)(legacySet),
+    });
+    const reviewed = review.teams.find((team) => team.team.id === redLine);
+    assert.isDefined(reviewed);
+    const order = reviewed.order;
+    assert.strictEqual(order?.status, "ordered");
+    if (order?.status !== "ordered") {
+      throw new Error("Expected the legacy plan to publish its order");
+    }
+    assert.isUndefined(order.rosterPlaces);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
 it.effect("filters open and closed plans and keeps a failed move open", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;
@@ -5861,7 +5982,7 @@ it.effect("adds a reserve-eligible player to a reserve list on a full active ros
     const order = Array.getUnsafe(review.teams, 0).order;
     assert.strictEqual(order?.status, "ordered");
     if (order?.status === "ordered") {
-      assert.strictEqual(order.rosterPlaces.net, 0);
+      assert.strictEqual(order.rosterPlaces?.net, 0);
     }
     const submitted = yield* proposals.submit(owner, { set: result.set.id, include: [item.id] });
     const executed = Array.getUnsafe(itemsOf(submitted), 0);

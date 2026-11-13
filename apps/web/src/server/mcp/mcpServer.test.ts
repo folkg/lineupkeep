@@ -29,6 +29,7 @@ import type {
 import {
   ProposalItem,
   ProposalItemsNotOpen,
+  ProposalPersistenceFailed,
   ProposalSetClosed,
   ProposalSetId,
   TransactionProposals,
@@ -57,6 +58,15 @@ const DiscoveryDocument = Schema.Struct({
     capabilities: Schema.Record(Schema.String, Schema.Unknown),
   }),
 });
+
+const ToolErrorResult = Schema.Struct({
+  result: Schema.Struct({
+    isError: Schema.Boolean,
+    content: Schema.Array(Schema.Struct({ type: Schema.String, text: Schema.String })),
+  }),
+});
+
+const ToolFailure = Schema.Struct({ code: Schema.String, message: Schema.String });
 
 it("identifies the product during protocol discovery", async () => {
   const response = await handle(request("server/discover", {}, "read"));
@@ -1104,6 +1114,47 @@ it("proposes a transaction set under the review scope and returns the review lin
   expect(JSON.stringify(refusedBody)).toContain("items_not_open");
   expect(JSON.stringify(refusedBody)).toContain("attempted and failed");
   expect(JSON.stringify(refusedBody)).not.toContain("items_not_withdrawable");
+});
+
+it("returns a coded remedy instead of a 500 when a plan list cannot be read", async () => {
+  const team = decodeTeamId("018f79ea-7d86-7c18-9b4a-8b4d0c9164b0");
+  const proposals: TransactionProposalsShape = {
+    ...unavailableProposals,
+    list: () =>
+      Effect.fail(
+        ProposalPersistenceFailed.make({ cause: new Error("private database password") }),
+      ),
+  };
+  const response = await handleMcpRequest(
+    request("tools/call", { name: "list_transaction_proposals", arguments: { team } }, "fantasy"),
+    (_request, _operation, program) =>
+      Effect.runPromise(
+        Effect.provide(
+          program,
+          Layer.mergeAll(
+            authentication,
+            permissiveQuota,
+            Layer.succeed(Connections)(unavailableConnections),
+            Layer.succeed(FantasyQueries)(unavailableQueries),
+            Layer.succeed(TransactionProposals)(proposals),
+            Layer.succeed(LineupRuns)(unavailableLineups),
+            Layer.succeed(Teams)(unavailableTeams),
+            Layer.succeed(Feedback)(unavailableFeedback),
+          ),
+        ),
+      ),
+  );
+  const body = await json(response);
+  const decoded = Schema.decodeUnknownSync(ToolErrorResult)(body);
+  const text = decoded.result.content.map((entry) => entry.text).join(" ");
+  const failure = Schema.decodeSync(Schema.fromJsonString(ToolFailure))(text);
+  expect(decoded.result.isError).toBe(true);
+  expect(failure.code).toBe("list_unavailable");
+  expect(failure.message).toContain("Narrow the filter");
+  expect(failure.message).toContain("start again from the first page");
+  expect(new TextEncoder().encode(failure.message).length).toBeLessThanOrEqual(320);
+  expect(failure.message).not.toContain("private database");
+  expect(failure.message).not.toContain("internal server error");
 });
 
 it("returns a durable queued lineup reference without claiming success", async () => {

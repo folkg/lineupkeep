@@ -186,7 +186,7 @@ export type TransactionReviewOrderView =
       readonly status: "ordered";
       readonly timing: "same_day" | "next_day" | "weekly_lock" | "not_published";
       readonly effectiveDate?: string;
-      readonly rosterPlaces: TransactionReviewRosterPlacesView;
+      readonly rosterPlaces?: TransactionReviewRosterPlacesView;
       readonly steps: ReadonlyArray<{
         readonly item: string;
         readonly position: number;

@@ -61,11 +61,13 @@ export const StoredProposalOrderPlan = Schema.Union([
     status: Schema.Literal("ordered"),
     timing: StoredProposalOrderTiming,
     effectiveDate: Schema.optional(Schema.NonEmptyString),
-    rosterPlaces: Schema.Struct({
-      maximum: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-      occupied: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-      net: Schema.Int,
-    }),
+    rosterPlaces: Schema.optional(
+      Schema.Struct({
+        maximum: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+        occupied: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+        net: Schema.Int,
+      }),
+    ),
     steps: Schema.Array(StoredProposalOrderStep),
   }),
   Schema.Struct({

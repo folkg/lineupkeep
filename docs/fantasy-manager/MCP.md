@@ -886,6 +886,13 @@ plan appears once for the team whose moves are asked for, and a team the account
 refused rather than answered as empty. The read writes nothing and never changes a plan. The team
 transactions page uses the same read, so a person and an agent see the same plans.
 
+A plan page that cannot be read from stored state answers one coded failure rather than a bare
+internal error:
+
+| Code               | Remedy                                                                                                 | Message budget |
+| ------------------ | ------------------------------------------------------------------------------------------------------ | -------------- |
+| `list_unavailable` | Narrow the filter by reading `open` and `closed` plans separately, or start again from the first page. | 320 bytes      |
+
 A signed-in owner dismisses one move from the review page. The move becomes `dismissed`, keeps the
 owner's reason in `outcomeDetail`, and never runs; dismissing the last open move closes the plan. No
 MCP tool dismisses: an agent withdraws the moves it still controls.

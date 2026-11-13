@@ -359,7 +359,12 @@ const ProposalOrderDecision = Schema.Union([
     status: Schema.Literal("ordered"),
     timing: ProposalOrderTiming,
     effectiveDate: Schema.optional(Schema.NonEmptyString),
-    rosterPlaces: ProposalOrderRosterPlaces,
+    rosterPlaces: Schema.optional(
+      ProposalOrderRosterPlaces.annotate({
+        description:
+          "Places held at the last check; absent for a plan stored before the count was recorded.",
+      }),
+    ),
     steps: Schema.Array(ProposalOrderStep),
   }),
   Schema.Struct({

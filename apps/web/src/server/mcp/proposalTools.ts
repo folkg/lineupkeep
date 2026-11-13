@@ -23,6 +23,9 @@ import { RequiredScope } from "./toolAuthorization";
 
 const ToolFailure = Schema.Struct({ code: Schema.String, message: Schema.String });
 
+const listUnavailableDetail =
+  "One or more plans on this page could not be read, so the page was not returned. Narrow the filter by reading open and closed plans separately, or start again from the first page, and try once more.";
+
 const ProposedTransactions = Schema.Struct({
   set: ProposeTransactionsResult.fields.set,
   created: ProposeTransactionsResult.fields.created,
@@ -163,7 +166,11 @@ export function proposalToolHandlers(
           proposals.withdrawItems(agent.userId, input).pipe(Effect.map(toReview), mapFailure),
         get_pending_trade_offers: (input) =>
           proposals.readPendingOffers(agent.userId, input).pipe(mapFailure),
-        list_transaction_proposals: (input) => proposals.list(agent.userId, input).pipe(mapFailure),
+        list_transaction_proposals: (input) =>
+          mapFailure(proposals.list(agent.userId, input), {
+            code: "list_unavailable",
+            message: listUnavailableDetail,
+          }),
       });
     }),
   );
@@ -171,6 +178,7 @@ export function proposalToolHandlers(
 
 function mapFailure<A>(
   program: Effect.Effect<A, ProposalError>,
+  persistence?: { readonly code: string; readonly message: string },
 ): Effect.Effect<A, { code: string; message: string }, never> {
   return program.pipe(
     Effect.catch((error) => {
@@ -232,14 +240,16 @@ function mapFailure<A>(
         case "proposal.provider_unavailable":
           return reject("provider_unavailable", error.detail);
         case "proposal.persistence_failed":
-          return Effect.annotateCurrentSpan({
-            "app.outcome": "failure",
-            "error.type": error._tag,
-          }).pipe(
-            Effect.andThen(
-              Effect.die(new Error("The proposal could not be stored or read. Try again.")),
-            ),
-          );
+          return persistence === undefined
+            ? Effect.annotateCurrentSpan({
+                "app.outcome": "failure",
+                "error.type": error._tag,
+              }).pipe(
+                Effect.andThen(
+                  Effect.die(new Error("The proposal could not be stored or read. Try again.")),
+                ),
+              )
+            : reject(persistence.code, persistence.message);
       }
     }),
   );
