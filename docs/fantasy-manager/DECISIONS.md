@@ -382,3 +382,31 @@ Status: implemented. Two acceptance findings and one repair, on 12 November.
    failed that requirement on read. The repair records each row's last write as its approval time; a
    null is still refused for a ready connection, because a connection that was approved always was
    approved at some time.
+
+## Round 19 - A move that waits runs on its date, from the one clock
+
+Status: implemented. Scheduled plan items and their fallbacks, on 13 November.
+
+1. **Accepted: submitting a plan is the approval.** A selected move whose window is still ahead stays
+   in the plan as proposed with an approval time, and a move with no window, or whose window has
+   arrived, runs on that submission. A plan whose only selected moves wait still completes a
+   submission, and the result says how many wait. Nothing is approved before a person submits it.
+2. **Accepted: the hourly tick runs an approved move when its date arrives.** One bounded read per
+   tick finds approved proposed moves, decides which are due in the league's own fantasy day, and
+   runs each plan through the ordinary submission. Ordering, revalidation, settling, and the
+   single-slot submission claim stay one path, so an hourly run and a person's run cannot disagree.
+   A submission already in progress is skipped; a transient failure leaves the move proposed for the
+   next tick; a failure that settles the move stops it. A missed tick is late, not lost.
+3. **Accepted: promotion is part of submission, and it uses what was already read.** When an included
+   add's first choice can no longer be added, the server takes the first ordered fallback the pool
+   lists as available, re-evaluates the team once with the same facts, and records the chosen player
+   and the reason. Nothing promotes on a review or a list read, and a fallback that fails the single
+   re-evaluation does not promote. The item's stored add becomes the chosen player, so a later
+   submission sees what happened rather than promoting again.
+4. **Accepted: fallbacks are visible before approval.** The review and the plan list show the ordered
+   fallbacks a person is approving. A plan that would silently run a different player than the one
+   shown is not a plan a person can approve.
+5. **Accepted: an included move that cannot run is skipped, not left proposed.** The ordinary submit
+   path already settles a move it refuses for a reason that cannot change; scheduled execution keeps
+   that behaviour rather than adding a second notion of "refused". Only a reason that can change leaves
+   a move proposed for the next tick.

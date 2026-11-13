@@ -200,9 +200,11 @@ Use Postgres snapshots, short atomic transitions, a delivery outbox, and Cloud T
 2. Use a stable request identity, rejecting reuse with different intent. In one transaction, persist the run and enqueue intent.
 3. Dispatch the outbox promptly with deterministic delivery identity. Record success; duplicate task creation/delivery must be harmless.
 4. The hourly scheduler also repairs undispatched intents and stale work: pending
-   deliveries, runs waiting to retry, and queued runs nobody claimed. Cloud Tasks
-   retries a failed delivery itself. Do not add a high-frequency database polling
-   daemon that prevents Neon suspension.
+   deliveries, runs waiting to retry, and queued runs nobody claimed. The same tick
+   runs approved transaction moves whose date has arrived, through the ordinary
+   submission, and promotes an ordered fallback when the first choice can no longer
+   be added. Cloud Tasks retries a failed delivery itself. Do not add a
+   high-frequency database polling daemon that prevents Neon suspension.
 5. Worker delivery contains run references, never cookies. Load and authorize stored work rather than trusting incoming owner/team fields.
 6. Manual MCP waits for a bounded interval, then returns current status/run reference. Request cancellation does not cancel committed durable work. `BackgroundWork` is not a substitute for durable enqueue.
 

@@ -846,7 +846,9 @@ day. It is how a move is scheduled for a later date instead of running when the 
 trade carries no window, because the other manager decides when a trade runs; a window in the past, or
 one this league's day cannot interpret, is refused with a plain reason. Submitting a plan is the approval:
 an item whose date is still ahead stays in the plan with an approval time and runs on its date, while an
-item with no window, or whose date has arrived, runs on that submission. The result reports how many
+item with no window, or whose date has arrived, runs on that submission. The hourly tick runs an approved
+move on its date through the same submission, so a plan already submitting is skipped and a transient
+failure is retried on the next tick. The result reports how many
 selected moves wait, and a plan whose only selected moves wait still records a completed submission.
 `list_transaction_proposals` and `get_transaction_proposal_set` publish an item's `window` and, once
 approved, its `approvedAt`.
