@@ -158,6 +158,8 @@ export type TransactionReviewItemView = {
   readonly placement?: TransactionReviewPlacementView;
   readonly counterparty?: TransactionReviewCounterpartyView;
   readonly trade?: TransactionReviewTradeView;
+  readonly window?: string;
+  readonly approvedAt?: string;
 };
 
 export type TransactionReviewTradeRulesView = {
@@ -215,6 +217,7 @@ export type TransactionReviewTeamView = {
   readonly tradeRules?: TransactionReviewTradeRulesView;
   readonly order?: TransactionReviewOrderView;
   readonly lineup?: TransactionReviewLineupView;
+  readonly today?: string;
   readonly failure?: string;
   readonly items: ReadonlyArray<TransactionReviewItemView>;
   readonly pendingOffers: ReadonlyArray<TransactionReviewPendingOfferView>;
@@ -241,6 +244,7 @@ export type TransactionReviewView = {
 export type TransactionReviewData = {
   readonly review: TransactionReviewView;
   readonly submittedBids?: ReadonlyArray<{ readonly item: string; readonly bid: number }>;
+  readonly waiting?: number;
 };
 
 export type TransactionProposalItemView = TransactionReviewItemView & {

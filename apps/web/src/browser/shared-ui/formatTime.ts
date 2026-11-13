@@ -17,6 +17,12 @@ const relativeTimeFormat = new Intl.RelativeTimeFormat(undefined, { numeric: "au
 
 const weekdayFormat = new Intl.DateTimeFormat(undefined, { weekday: "long" });
 
+const calendarDateFormat = new Intl.DateTimeFormat(undefined, {
+  day: "numeric",
+  month: "long",
+  timeZone: "UTC",
+});
+
 const minuteMillis = 60_000;
 const hourMillis = 60 * minuteMillis;
 const dayMillis = 24 * hourMillis;
@@ -63,6 +69,10 @@ export function formatReaderTime(value: string | Date, now: Date = new Date()): 
 
 export function formatWeekday(value: string | Date): string {
   return weekdayFormat.format(toDate(value));
+}
+
+export function formatCalendarDate(value: string): string {
+  return calendarDateFormat.format(new Date(`${value.slice(0, 10)}T00:00:00Z`));
 }
 
 export function formatClockTime(value: string | Date, reader: ClockReader = {}): string {

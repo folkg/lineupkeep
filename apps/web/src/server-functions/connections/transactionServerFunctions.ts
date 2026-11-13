@@ -91,6 +91,7 @@ export const submitTransactionReviewServerFn = createServerFn({ method: "POST" }
           return {
             review: toTransactionReviewView(submission),
             submittedBids: submission.submittedBids,
+            waiting: submission.waiting,
           } satisfies TransactionReviewData;
         }),
       (error) =>

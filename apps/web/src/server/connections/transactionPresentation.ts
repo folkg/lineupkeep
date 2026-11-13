@@ -128,6 +128,7 @@ function toTeamView(team: ProposalSetReview["teams"][number]): TransactionReview
           },
         }),
     ...(team.order === undefined ? {} : { order: toOrderView(team.order) }),
+    ...(team.today === undefined ? {} : { today: team.today }),
     ...(team.lineup === undefined
       ? {}
       : {
@@ -194,6 +195,8 @@ function toItemView(
       to: { ref: pick.to.ref, name: pick.to.name },
     })),
     ...(item.bid === undefined ? {} : { bid: item.bid }),
+    ...(item.window === undefined ? {} : { window: item.window }),
+    ...(item.approvedAt === undefined ? {} : { approvedAt: DateTime.formatIso(item.approvedAt) }),
     reason: item.reason,
     state: item.state,
     ...(item.outcomeDetail === undefined ? {} : { outcomeDetail: item.outcomeDetail }),

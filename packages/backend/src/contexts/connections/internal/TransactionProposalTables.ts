@@ -106,6 +106,8 @@ export const transactionProposalItems = pgTable(
     counterpartyTeamKey: text("counterparty_team_key"),
     counterpartyName: text("counterparty_name"),
     bid: integer("bid"),
+    windowDate: text("window_date"),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
     reason: text("reason").notNull(),
     state: text("state", {
       enum: [
@@ -268,6 +270,10 @@ const ProposalItemSelect = createSelectSchema(transactionProposalItems, {
   counterpartyTeamKey: Schema.NullOr(Schema.NonEmptyString),
   counterpartyName: Schema.NullOr(Schema.NonEmptyString),
   bid: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+  windowDate: Schema.NullOr(
+    Schema.String.pipe(Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u))),
+  ),
+  approvedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
   reason: Schema.NonEmptyString,
   state: ProposalItemState,
   settled: Schema.Boolean,
@@ -384,6 +390,8 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
               : { counterpartyKey: row.counterpartyTeamKey }),
             ...(row.counterpartyName === null ? {} : { counterpartyName: row.counterpartyName }),
             ...(row.bid === null ? {} : { bid: row.bid }),
+            ...(row.windowDate === null ? {} : { window: row.windowDate }),
+            ...(row.approvedAt === null ? {} : { approvedAt: row.approvedAt }),
             reason: row.reason,
             state: row.state,
             settled: row.settled,
@@ -444,6 +452,8 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             counterpartyTeamKey: record.counterpartyKey ?? null,
             counterpartyName: record.counterpartyName ?? null,
             bid: record.bid ?? null,
+            windowDate: record.window ?? null,
+            approvedAt: record.approvedAt ?? null,
             reason: record.reason,
             state: record.state,
             settled: record.settled,

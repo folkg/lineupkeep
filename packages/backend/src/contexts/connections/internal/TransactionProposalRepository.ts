@@ -60,6 +60,7 @@ export type ProposalItemCommand = {
   readonly counterpartyKey: string | undefined;
   readonly counterpartyName: string | undefined;
   readonly bid: number | undefined;
+  readonly window: string | undefined;
   readonly reason: string;
 };
 
@@ -88,6 +89,7 @@ export type ProposalItemChange = {
   readonly placement?: StoredProposalPlacement;
   readonly trade?: StoredProposalTrade;
   readonly state?: ProposalItemState;
+  readonly approvedAt?: DateTime.Utc;
 };
 
 export type ProposalStepCommand = {
@@ -1052,6 +1054,9 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
                   staleness: change.staleness,
                   ...(change.trade === undefined ? {} : { trade: change.trade }),
                   ...(change.state === undefined ? {} : { state: change.state }),
+                  ...(change.approvedAt === undefined || record.approvedAt !== undefined
+                    ? {}
+                    : { approvedAt: change.approvedAt }),
                   updatedAt: input.at,
                 });
               }
@@ -1139,6 +1144,7 @@ function storeRow(
     counterpartyTeamKey: command.counterpartyKey ?? null,
     counterpartyName: command.counterpartyName ?? null,
     bid: command.bid ?? null,
+    windowDate: command.window ?? null,
     reason: command.reason,
     state: "proposed" as const,
     settled: false,

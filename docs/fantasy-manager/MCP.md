@@ -841,6 +841,16 @@ refused and named. Repeating the identical set returns the existing set with `cr
 rather than stacking a duplicate. Once a set is extended or a stored move is withdrawn, its contents
 no longer match the original request, so proposing the original items again creates a new set.
 
+An item may name `window`, one calendar date written `YYYY-MM-DD` and read in the league's own fantasy
+day. It is how a move is scheduled for a later date instead of running when the plan is submitted. A
+trade carries no window, because the other manager decides when a trade runs; a window in the past, or
+one this league's day cannot interpret, is refused with a plain reason. Submitting a plan is the approval:
+an item whose date is still ahead stays in the plan with an approval time and runs on its date, while an
+item with no window, or whose date has arrived, runs on that submission. The result reports how many
+selected moves wait, and a plan whose only selected moves wait still records a completed submission.
+`list_transaction_proposals` and `get_transaction_proposal_set` publish an item's `window` and, once
+approved, its `approvedAt`.
+
 Passing `set` appends the items after an existing plan that is still open. A plan is open while any
 move in it can still run: a move ends when it executed, was dismissed by the owner, was withdrawn, its
 trade offer is no longer available, or it was skipped for a reason that cannot change. A plan whose

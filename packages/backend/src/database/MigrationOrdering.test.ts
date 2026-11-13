@@ -450,6 +450,132 @@ describe("ready connection approval backfill", () => {
   );
 });
 
+describe("proposal window and approval migration", () => {
+  const windowMigration = "20261113003301_curly_silhouette";
+
+  it.effect("keeps an old move valid and stores a waiting move's date and approval", () =>
+    Effect.gen(function* () {
+      const sql = yield* PgliteClient.PgliteClient;
+
+      for (const statement of migrationStatements((name) => name < windowMigration)) {
+        yield* sql.unsafe(statement);
+      }
+
+      yield* sql.unsafe(`
+        insert into transaction_proposal_sets
+          (id, user_id, proposer_kind, proposer_reference, surface, fingerprint, teams)
+        values
+          ('11111111-1111-4111-8111-111111111111', 'owner', 'agent', 'mcp', 'mcp', 'windowed',
+            '[]'::jsonb)
+      `);
+      yield* sql.unsafe(`
+        insert into transaction_proposal_items
+          (id, set_id, position, user_id, team_id, connection_id, kind, add_players,
+            drop_players, reason, state, staleness, stale_reasons)
+        values
+          ('22222222-2222-4222-8222-111111111111', '11111111-1111-4111-8111-111111111111', 0,
+            'owner', '33333333-3333-4333-8333-111111111111', 'connection', 'drop',
+            '[]'::jsonb, '[]'::jsonb, 'Old move', 'proposed', 'current', '[]'::jsonb)
+      `);
+
+      for (const statement of migrationStatements((name) => name === windowMigration)) {
+        yield* sql.unsafe(statement);
+      }
+
+      const old = yield* sql.unsafe<{
+        readonly window_date: string | null;
+        readonly approved_at: Date | null;
+      }>(
+        "select window_date, approved_at from transaction_proposal_items where id = '22222222-2222-4222-8222-111111111111'",
+      );
+      expect(old).toEqual([{ window_date: null, approved_at: null }]);
+
+      yield* sql.unsafe(`
+        insert into transaction_proposal_items
+          (id, set_id, position, user_id, team_id, connection_id, kind, add_players,
+            drop_players, reason, state, staleness, stale_reasons, window_date, approved_at)
+        values
+          ('22222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111', 1,
+            'owner', '33333333-3333-4333-8333-111111111111', 'connection', 'drop',
+            '[]'::jsonb, '[]'::jsonb, 'Waiting move', 'proposed', 'current', '[]'::jsonb,
+            '2026-11-14', '2026-11-12T10:00:00Z')
+      `);
+
+      const waiting = yield* sql.unsafe<{
+        readonly window_date: string | null;
+        readonly approved_at: string | null;
+      }>(
+        "select window_date, coalesce(to_char(approved_at at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS'), '') as approved_at from transaction_proposal_items where id = '22222222-2222-4222-8222-222222222222'",
+      );
+      expect(waiting).toEqual([{ window_date: "2026-11-14", approved_at: "2026-11-12T10:00:00" }]);
+    }).pipe(Effect.provide(PgliteClient.layer())),
+  );
+});
+
+describe("plan window migration", () => {
+  const windowMigration = "20261113003301_curly_silhouette";
+
+  it.effect("adds a window and an approval time and leaves an old move with neither", () =>
+    Effect.gen(function* () {
+      const sql = yield* PgliteClient.PgliteClient;
+
+      for (const statement of migrationStatements((name) => name < windowMigration)) {
+        yield* sql.unsafe(statement);
+      }
+
+      yield* sql.unsafe(`
+        insert into transaction_proposal_sets
+          (id, user_id, proposer_kind, proposer_reference, surface, fingerprint, teams,
+            created_at, updated_at)
+        values
+          ('11111111-1111-4111-8111-333333333333', 'owner', 'agent', 'mcp', 'mcp', 'window',
+            '[]'::jsonb, '2026-11-01T10:00:00Z', '2026-11-01T10:00:00Z')
+      `);
+      yield* sql.unsafe(`
+        insert into transaction_proposal_items
+          (id, set_id, position, user_id, team_id, connection_id, kind, add_players,
+            drop_players, reason, state, staleness, stale_reasons)
+        values
+          ('22222222-2222-4222-8222-444444444444', '11111111-1111-4111-8111-333333333333', 0,
+            'owner', '33333333-3333-4333-8333-111111111111', 'connection', 'drop',
+            '[]'::jsonb, '[]'::jsonb, 'Drop the center next week.', 'proposed', 'current',
+            '[]'::jsonb)
+      `);
+
+      for (const statement of migrationStatements((name) => name === windowMigration)) {
+        yield* sql.unsafe(statement);
+      }
+
+      const columns = yield* sql.unsafe<{ readonly column_name: string }>(
+        "select column_name from information_schema.columns where table_name = 'transaction_proposal_items'",
+      );
+      expect(columns.map((row) => row.column_name)).toContain("window_date");
+      expect(columns.map((row) => row.column_name)).toContain("approved_at");
+
+      const legacy = yield* sql.unsafe<{
+        readonly window_date: string | null;
+        readonly approved: boolean;
+      }>(
+        "select window_date, approved_at is not null as approved from transaction_proposal_items where id = '22222222-2222-4222-8222-444444444444'",
+      );
+      expect(legacy).toEqual([{ window_date: null, approved: false }]);
+
+      yield* sql.unsafe(`
+        update transaction_proposal_items
+        set window_date = '2026-11-14', approved_at = '2026-11-01T10:00:00Z'
+        where id = '22222222-2222-4222-8222-444444444444'
+      `);
+      const scheduled = yield* sql.unsafe<{
+        readonly window_date: string | null;
+        readonly approved: boolean;
+      }>(
+        "select window_date, approved_at is not null as approved from transaction_proposal_items where id = '22222222-2222-4222-8222-444444444444'",
+      );
+      expect(scheduled).toEqual([{ window_date: "2026-11-14", approved: true }]);
+    }).pipe(Effect.provide(PgliteClient.layer())),
+  );
+});
+
 function migrationStatements(select: (name: string) => boolean): ReadonlyArray<string> {
   const statements: string[] = [];
   for (const name of readdirSync(migrationsFolder).filter(select).sort()) {

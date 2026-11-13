@@ -1,6 +1,7 @@
-import { Array, Crypto, DateTime, Effect, Layer, Result, Schema } from "effect";
+import { Array, Crypto, DateTime, Effect, Layer, Option, Result, Schema } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
+import { fantasyDayLabel } from "#contexts/connections/FantasyDay.ts";
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
 import type { LineupError, LineupRun } from "#contexts/connections/LineupRun.ts";
 import { LineupRuns } from "#contexts/connections/LineupRuns.ts";
@@ -20,6 +21,7 @@ import type {
 import type {
   ProviderAvailableDraftPick,
   ProviderCapabilities,
+  ProviderFantasyDay,
   ProviderLeagueSettings,
   ProviderLeagueTeam,
   ProviderPendingTrade,
@@ -91,6 +93,7 @@ import {
   ProposeTransactionsInput,
   ProposeTransactionsResult as ProposeTransactionsResultSchema,
   SubmitTransactionProposalInput,
+  SubmitTransactionProposalResult,
   TransactionProposals,
   WithdrawProposalItemsInput,
   WithdrawTradeInput,
@@ -259,6 +262,15 @@ export const TransactionProposalsLive = Layer.effect(
           .map((entry) => [entry.key, entry.capabilities.tradeProposal] as const),
       );
 
+    const fantasyDaysOf = (
+      teams: ReadonlyArray<ProposalTeamRecord>,
+    ): ReadonlyMap<ProposalTeamRecord["provider"], ProviderFantasyDay> =>
+      new Map(
+        registry
+          .capabilitiesOf([...new Set(teams.map((team) => team.provider))])
+          .map((entry) => [entry.key, entry.capabilities.fantasyDay] as const),
+      );
+
     const propose: TransactionProposals["Service"]["propose"] = Effect.fn(
       "TransactionProposals.propose",
     )(function* (userId: UserId, proposer: ProposalSetProvenance, input) {
@@ -287,6 +299,7 @@ export const TransactionProposalsLive = Layer.effect(
 
       const refusals: Array<ProposalItemRefused> = [];
       const accepted: Array<AcceptedDraft> = [];
+      const fantasyDays = fantasyDaysOf(ownedTeams);
       const firstIndexByKey = new Map<string, number>();
       const existingByMove = new Map(
         (existing?.items ?? []).flatMap((item, position) =>
@@ -308,6 +321,14 @@ export const TransactionProposalsLive = Layer.effect(
             ),
           );
           continue;
+        }
+        const windowDate = draft.window ?? undefined;
+        if (windowDate !== undefined) {
+          const problem = windowProblem(index, draft, team, fantasyDays, now);
+          if (problem !== undefined) {
+            refusals.push(refusedItem(index, problem.refusal, problem.detail, problem.fix));
+            continue;
+          }
         }
         const picks = draft.picks ?? [];
         if (picks.length > 0 && draft.kind !== "trade") {
@@ -622,6 +643,7 @@ export const TransactionProposalsLive = Layer.effect(
                 ? undefined
                 : { playerKey: slotMove.player, toSlot: slotMove.toSlot },
             bid: draft.bid ?? undefined,
+            window: candidate.draft.window ?? undefined,
             reason: draft.reason,
           },
         });
@@ -891,6 +913,7 @@ export const TransactionProposalsLive = Layer.effect(
           undefined,
           undefined,
           tradeProposalsOf(teams),
+          fantasyDaysOf(teams),
         );
       },
     );
@@ -1049,6 +1072,7 @@ export const TransactionProposalsLive = Layer.effect(
         checkedByTeam,
         offersByTeam,
         tradeProposalsOf(teams),
+        fantasyDaysOf(teams),
       );
     });
 
@@ -1142,6 +1166,7 @@ export const TransactionProposalsLive = Layer.effect(
         checkedByTeam,
         undefined,
         tradeProposalsOf(teams),
+        fantasyDaysOf(teams),
       );
     });
 
@@ -1221,6 +1246,7 @@ export const TransactionProposalsLive = Layer.effect(
         undefined,
         undefined,
         tradeProposalsOf(teams),
+        fantasyDaysOf(teams),
       );
     });
 
@@ -1291,10 +1317,31 @@ export const TransactionProposalsLive = Layer.effect(
       }
       const teams = yield* repository.loadTeams(userId, loaded.set.teams);
       const teamsById = new Map(teams.map((team) => [team.id, team] as const));
-      const sendableTeams = new Set(sendable.map((item) => item.team));
+      const fantasyDays = fantasyDaysOf(teams);
+      const todayOf = (item: ProposalItemRecord): string | undefined => {
+        const team = teamsById.get(item.team);
+        const fantasyDay = team === undefined ? undefined : fantasyDays.get(team.provider);
+        return fantasyDay === undefined ? undefined : fantasyDayLabel(now, fantasyDay);
+      };
+      const waiting = sendable.filter((item) => {
+        const today = todayOf(item);
+        return item.window !== undefined && today !== undefined && item.window > today;
+      });
+      const waitingIds = new Set(waiting.map((item) => item.id));
+      const due = sendable.filter((item) => !waitingIds.has(item.id));
+      const dueIds = new Set(due.map((item) => item.id));
+      const dueTeams = new Set(due.map((item) => item.team));
+      const approvals: ReadonlyArray<ProposalItemChange> = waiting.map((item) => ({
+        id: item.id,
+        staleness: item.staleness,
+        adds: item.adds,
+        drops: item.drops,
+        approvedAt: now,
+      }));
       const itemsByTeam = new Map<TeamId, Array<ProposalItemRecord>>();
       for (const item of loaded.items.filter(
-        (entry) => entry.state === "proposed" && sendableTeams.has(entry.team),
+        (entry) =>
+          entry.state === "proposed" && dueTeams.has(entry.team) && !waitingIds.has(entry.id),
       )) {
         const current = effectiveById.get(item.id) ?? item;
         const teamItems = itemsByTeam.get(current.team) ?? [];
@@ -1306,6 +1353,7 @@ export const TransactionProposalsLive = Layer.effect(
         ([teamId, items]) => checkTeam(userId, teamId, teamsById.get(teamId), items, now),
         { concurrency: 3 },
       );
+      yield* Effect.annotateCurrentSpan({ "proposal.items_waiting": waiting.length });
       const claimed = yield* repository.claimSubmission({
         userId,
         setId: loaded.set.id,
@@ -1325,7 +1373,7 @@ export const TransactionProposalsLive = Layer.effect(
       const saved = yield* repository.saveChecks({
         userId,
         setId: loaded.set.id,
-        changes,
+        changes: [...changes, ...approvals],
         orders,
         at: now,
       });
@@ -1357,7 +1405,7 @@ export const TransactionProposalsLive = Layer.effect(
       const outcomes: Array<ProposalOutcomeCommand> = [];
       const submittedBids: Array<{ readonly item: ProposalItemId; readonly bid: number }> = [];
 
-      for (const item of sendable) {
+      for (const item of due) {
         const current = itemById.get(item.id) ?? item;
         const change = changeById.get(current.id);
         if (change === undefined || change.staleness.status !== "current") {
@@ -1373,7 +1421,6 @@ export const TransactionProposalsLive = Layer.effect(
         }
       }
 
-      const sendableIds = new Set(sendable.map((item) => item.id));
       let held = 0;
       for (const teamId of loaded.set.teams) {
         const check = checkByTeam.get(teamId);
@@ -1384,7 +1431,7 @@ export const TransactionProposalsLive = Layer.effect(
             : runStateOf({
                 facts: check.facts,
                 items: loaded.items,
-                current: sendableIds,
+                current: dueIds,
                 team: teamId,
               });
         for (const item of teamItems) {
@@ -1475,7 +1522,7 @@ export const TransactionProposalsLive = Layer.effect(
       const settledLineups = yield* settleLineups({
         userId,
         submissionId: claimed.submissionId,
-        items: sendable,
+        items: due,
         outcomes,
         checks: checkByTeam,
         at: completedAt,
@@ -1499,7 +1546,7 @@ export const TransactionProposalsLive = Layer.effect(
         });
       }
       yield* Effect.annotateCurrentSpan({
-        "proposal.items_submitted": sendable.length,
+        "proposal.items_submitted": due.length,
         "proposal.items_skipped": final.items.filter((item) => item.outcome === "skipped").length,
         "proposal.items_executed": final.items.filter((item) => item.outcome === "executed").length,
         "proposal.items_pending": final.items.filter((item) => item.outcome === "pending").length,
@@ -1507,7 +1554,7 @@ export const TransactionProposalsLive = Layer.effect(
         "proposal.items_unknown": final.items.filter((item) => item.outcome === "unknown").length,
         "proposal.items_held": held,
       });
-      return {
+      return yield* Schema.decodeEffect(SubmitTransactionProposalResult)({
         ...(yield* buildReview(
           tokens,
           userId,
@@ -1519,9 +1566,11 @@ export const TransactionProposalsLive = Layer.effect(
           undefined,
           undefined,
           tradeProposalsOf(teams),
+          fantasyDaysOf(teams),
         )),
         submittedBids,
-      };
+        waiting: waiting.length,
+      }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
     });
 
     function executeItem(input: {
@@ -3545,8 +3594,10 @@ function buildReview(
     ProposalTeamRecord["provider"],
     ProviderCapabilities["tradeProposal"]
   >,
+  fantasyDaysByProvider?: ReadonlyMap<ProposalTeamRecord["provider"], ProviderFantasyDay>,
 ): Effect.Effect<ProposalSetReview, ProposalPersistenceFailed> {
   return Effect.gen(function* () {
+    const now = yield* DateTime.now;
     const teamsById = new Map(teams.map((team) => [team.id, team] as const));
     const itemsByTeam = new Map<TeamId, Array<ProposalItemRecord>>();
     for (const item of items) {
@@ -3569,6 +3620,7 @@ function buildReview(
       const check = checks?.get(teamId);
       const order = check?.order ?? set.orders.find((entry) => entry.team === teamId)?.order;
       const lineup = set.lineups.find((entry) => entry.team === teamId);
+      const fantasyDay = fantasyDaysByProvider?.get(team.provider);
       const teamItems = [];
       for (const item of itemsByTeam.get(teamId) ?? []) {
         teamItems.push(
@@ -3608,6 +3660,7 @@ function buildReview(
           ...(check?.failure === undefined ? {} : { failure: check.failure }),
           ...(order === undefined ? {} : { order }),
           ...(lineup === undefined ? {} : { lineup: lineupView(lineup) }),
+          ...(fantasyDay === undefined ? {} : { today: fantasyDayLabel(now, fantasyDay) }),
           items: teamItems,
           pendingOffers: offersByTeam?.get(teamId) ?? [],
         }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause }))),
@@ -4680,6 +4733,63 @@ function refusedItem(
   return { position: index + 1, outcome: "refused", refusal, reason, fix };
 }
 
+function windowProblem(
+  index: number,
+  draft: ProposalItemDraft,
+  team: ProposalTeamRecord,
+  fantasyDays: ReadonlyMap<ProposalTeamRecord["provider"], ProviderFantasyDay>,
+  at: DateTime.Utc,
+):
+  | { readonly refusal: ProposalItemRefusal; readonly detail: string; readonly fix: string }
+  | undefined {
+  const windowDate = draft.window ?? undefined;
+  if (windowDate === undefined) {
+    return undefined;
+  }
+  const position = String(index + 1);
+  const date = calendarDate(windowDate);
+  if (date === undefined) {
+    return {
+      refusal: "window_invalid",
+      detail: `Item ${position} names a window that is not a calendar date.`,
+      fix: "Write the window as one date in YYYY-MM-DD form, such as 2026-11-14, or leave it out to run the move when the plan is submitted.",
+    };
+  }
+  if (draft.kind === "trade") {
+    return {
+      refusal: "window_not_allowed",
+      detail: `Item ${position} puts a window on a trade. The other manager decides when a trade runs.`,
+      fix: "Remove the window from this item; a trade is offered when the plan is submitted.",
+    };
+  }
+  const fantasyDay = fantasyDays.get(team.provider);
+  if (fantasyDay === undefined) {
+    return {
+      refusal: "state_unavailable",
+      detail: `Item ${position} names a window, but this team's provider publishes no fantasy day, so the date cannot be interpreted.`,
+      fix: "Remove the window, or read this team again once its provider publishes its day.",
+    };
+  }
+  const today = fantasyDayLabel(at, fantasyDay);
+  if (date < today) {
+    return {
+      refusal: "window_past",
+      detail: `Item ${position} names ${windowDate}, which is before today, ${today}, in this league's fantasy day.`,
+      fix: "Name today's date or a later one, or leave the window out to run the move when the plan is submitted.",
+    };
+  }
+  return undefined;
+}
+
+function calendarDate(value: string): string | undefined {
+  const parsed = DateTime.make(value);
+  if (Option.isNone(parsed)) {
+    return undefined;
+  }
+  const date = DateTime.formatIsoDateUtc(parsed.value);
+  return date === value ? date : undefined;
+}
+
 function refusalFromCheck(position: number, change: ProposalItemChange): ProposalItemRefused {
   const reasons = change.staleness.reasons;
   const first = reasons[0];
@@ -4795,6 +4905,7 @@ function commandRecord(input: {
       ? {}
       : { counterpartyName: command.counterpartyName }),
     ...(command.bid === undefined ? {} : { bid: command.bid }),
+    ...(command.window === undefined ? {} : { window: command.window }),
     reason: command.reason,
     state: "proposed",
     settled: false,
@@ -5039,6 +5150,8 @@ function toItem(
       }),
       picks,
       ...(record.bid === undefined ? {} : { bid: record.bid }),
+      ...(record.window === undefined ? {} : { window: record.window }),
+      ...(record.approvedAt === undefined ? {} : { approvedAt: record.approvedAt }),
       reason: record.reason,
       state: record.state,
       settled: isSettledItem(record),

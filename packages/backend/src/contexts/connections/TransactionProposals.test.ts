@@ -6275,6 +6275,269 @@ it.effect("keeps an item's outcome when its lineup run fails", () =>
   }).pipe(Effect.provide(TestLayer)),
 );
 
+it.effect("keeps the date a move waits for and reads it back with the league's today", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          window: "2026-11-14",
+          reason: "Drop the center next week.",
+        },
+      ],
+    });
+
+    const item = Array.getUnsafe(proposed.items, 0).item;
+    assert.strictEqual(item.window, "2026-11-14");
+    assert.isUndefined(item.approvedAt);
+
+    const review = yield* proposals.read(owner, { set: proposed.set.id });
+    const reviewed = Array.getUnsafe(itemsOf(review), 0);
+    assert.strictEqual(reviewed.window, "2026-11-14");
+    assert.isUndefined(reviewed.approvedAt);
+    assert.strictEqual(review.teams[0]?.today, "2026-10-31");
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("refuses a window that is not a calendar date and names the shape", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const refused = yield* Effect.flip(
+      proposals.propose(owner, proposer, {
+        items: [
+          {
+            team: redLine,
+            kind: "drop",
+            adds: [],
+            drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+            window: "14 November",
+            reason: "Drop the center next week.",
+          },
+        ],
+      }),
+    );
+
+    assert.strictEqual(refused._tag, "proposal.nothing_accepted");
+    if (refused._tag === "proposal.nothing_accepted") {
+      const refusal = Array.getUnsafe(refused.refusals, 0);
+      assert.strictEqual(refusal.refusal, "window_invalid");
+      assert.include(refusal.reason, "not a calendar date");
+      assert.include(refusal.fix, "YYYY-MM-DD");
+    }
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("refuses a window before today in the league's fantasy day and names today", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const refused = yield* Effect.flip(
+      proposals.propose(owner, proposer, {
+        items: [
+          {
+            team: redLine,
+            kind: "drop",
+            adds: [],
+            drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+            window: "2026-10-30",
+            reason: "Drop the center yesterday.",
+          },
+        ],
+      }),
+    );
+
+    assert.strictEqual(refused._tag, "proposal.nothing_accepted");
+    if (refused._tag === "proposal.nothing_accepted") {
+      const refusal = Array.getUnsafe(refused.refusals, 0);
+      assert.strictEqual(refusal.refusal, "window_past");
+      assert.include(refusal.reason, "2026-10-30");
+      assert.include(refusal.reason, "2026-10-31");
+    }
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("refuses a window on a trade because the other manager decides its timing", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const refused = yield* Effect.flip(
+      proposals.propose(owner, proposer, {
+        items: [
+          {
+            team: redLine,
+            kind: "trade",
+            counterparty: yield* counterpartyRef(tokens, "nhl.l.1.t.2"),
+            adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+            drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+            window: "2026-11-14",
+            reason: "Offer for the center next week.",
+          },
+        ],
+      }),
+    );
+
+    assert.strictEqual(refused._tag, "proposal.nothing_accepted");
+    if (refused._tag === "proposal.nothing_accepted") {
+      const refusal = Array.getUnsafe(refused.refusals, 0);
+      assert.strictEqual(refusal.refusal, "window_not_allowed");
+      assert.include(refusal.reason, "other manager decides when a trade runs");
+    }
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("runs a due move and approves a waiting one without attempting it", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      playerDetails,
+      roster: rosterFixture(["nhl.p.90001", "nhl.p.90002", "nhl.p.90003"]),
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          reason: "Drop the first center now.",
+        },
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          window: "2026-11-14",
+          reason: "Drop the second center next week.",
+        },
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90003"]),
+          window: "2026-11-21",
+          reason: "Drop the third center later.",
+        },
+      ],
+    });
+    const selected = proposed.items
+      .filter((entry) => entry.item.reason !== "Drop the third center later.")
+      .map((entry) => entry.item.id);
+
+    const submitted = yield* proposals.submit(owner, { set: proposed.set.id, include: selected });
+
+    assert.strictEqual(submitted.waiting, 1);
+    const due = itemByReason(submitted, "Drop the first center now.");
+    assert.strictEqual(due.state, "executed");
+    const waiting = itemByReason(submitted, "Drop the second center next week.");
+    assert.strictEqual(waiting.state, "proposed");
+    assert.isUndefined(waiting.execution);
+    assert.strictEqual(waiting.window, "2026-11-14");
+    assert.isDefined(waiting.approvedAt);
+    assert.isUndefined(itemByReason(submitted, "Drop the third center later.").approvedAt);
+    assert.strictEqual((yield* fake.transactionRequests).length, 1);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("completes a submission that only approves a waiting move", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          window: "2026-11-14",
+          reason: "Drop the center next week.",
+        },
+      ],
+    });
+
+    const submitted = yield* proposals.submit(owner, {
+      set: proposed.set.id,
+      include: proposed.items.map((entry) => entry.item.id),
+    });
+
+    assert.strictEqual(submitted.waiting, 1);
+    assert.strictEqual(submitted.set.submissions.length, 1);
+    assert.isDefined(submitted.set.submissions[0]?.completedAt);
+    assert.deepStrictEqual(submitted.submittedBids, []);
+    const waiting = Array.getUnsafe(itemsOf(submitted), 0);
+    assert.strictEqual(waiting.state, "proposed");
+    assert.isUndefined(waiting.execution);
+    assert.isDefined(waiting.approvedAt);
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("keeps a waiting move's first approval time when a later submission includes it", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          window: "2026-11-14",
+          reason: "Drop the center next week.",
+        },
+      ],
+    });
+    const include = proposed.items.map((entry) => entry.item.id);
+    const first = yield* proposals.submit(owner, { set: proposed.set.id, include });
+    const firstApproval = Array.getUnsafe(itemsOf(first), 0).approvedAt;
+    assert.isDefined(firstApproval);
+
+    yield* TestClock.adjust("2 hours");
+    const second = yield* proposals.submit(owner, { set: proposed.set.id, include });
+
+    assert.strictEqual(second.waiting, 1);
+    assert.strictEqual(
+      Array.getUnsafe(itemsOf(second), 0).approvedAt?.epochMilliseconds,
+      firstApproval.epochMilliseconds,
+    );
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
 function seedTradeTeams(
   fake: FakeProviderWorld["Service"],
   options: { readonly league?: ProviderLeagueSettings } = {},

@@ -91,6 +91,13 @@ export const ProposalStaleCode = Schema.Literals([
 ]);
 export type ProposalStaleCode = typeof ProposalStaleCode.Type;
 
+const ProposalDate = Schema.String.pipe(
+  Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)),
+  Schema.annotate({
+    description: "A calendar date given as `YYYY-MM-DD` and read in the league's own fantasy day.",
+  }),
+);
+
 const ProposalProposerKind = Schema.Literals(["user", "agent"]);
 type ProposalProposerKind = typeof ProposalProposerKind.Type;
 
@@ -244,6 +251,13 @@ export const ProposalItem = Schema.Struct({
   placement: Schema.optional(ProposalItemPlacement),
   counterparty: Schema.optional(ProposalCounterparty),
   trade: Schema.optional(ProposalTrade),
+  window: Schema.optional(ProposalDate).annotate({
+    description:
+      "The calendar date this move waits for, in the league's fantasy day; absent when it runs on submission.",
+  }),
+  approvedAt: Schema.optional(Schema.DateTimeUtc).annotate({
+    description: "When a submission approved a move that waits for a later date.",
+  }),
   createdAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,
 });
@@ -396,6 +410,10 @@ export const ProposalTeam = Schema.Struct({
   tradeRules: Schema.optional(ProposalTradeRules),
   order: Schema.optional(ProposalOrderDecision),
   lineup: Schema.optional(ProposalTeamLineup),
+  today: Schema.optional(ProposalDate).annotate({
+    description:
+      "Today in this league's own fantasy day, so a move's window can be read against it.",
+  }),
   failure: Schema.optional(Schema.NonEmptyString).annotate({
     description:
       "Why this team's state could not be read; its items are stale, other teams unaffected.",
@@ -517,9 +535,14 @@ const SubmittedProposalBid = Schema.Struct({
 });
 type SubmittedProposalBid = typeof SubmittedProposalBid.Type;
 
-type SubmitTransactionProposalResult = ProposalSetReview & {
-  readonly submittedBids: ReadonlyArray<SubmittedProposalBid>;
-};
+export const SubmitTransactionProposalResult = Schema.Struct({
+  ...ProposalSetReview.fields,
+  submittedBids: Schema.Array(SubmittedProposalBid),
+  waiting: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
+    description: "How many selected moves wait for a later date instead of running now.",
+  }),
+});
+export type SubmitTransactionProposalResult = typeof SubmitTransactionProposalResult.Type;
 
 const ProposalReason = Schema.Trim.pipe(
   Schema.check(Schema.isMinLength(1), Schema.isMaxLength(500)),
@@ -586,6 +609,10 @@ export const ProposalItemDraft = Schema.Struct({
   bid: Schema.optional(Schema.NullOr(ProposalBid)).annotate({
     description: "A FAAB bid on a free-agent add.",
   }),
+  window: Schema.optional(Schema.NullOr(Schema.String)).annotate({
+    description:
+      "The date (`YYYY-MM-DD`, in the league's fantasy day) this move waits for; omit it to run on submission. A trade carries no window.",
+  }),
   reason: ProposalReason,
 });
 export type ProposalItemDraft = typeof ProposalItemDraft.Type;
@@ -634,6 +661,9 @@ export const ProposalItemRefusal = Schema.Literals([
   "reserve_unavailable",
   "intent_invalid",
   "trade_counterparty_missing",
+  "window_invalid",
+  "window_past",
+  "window_not_allowed",
 ]);
 export type ProposalItemRefusal = typeof ProposalItemRefusal.Type;
 

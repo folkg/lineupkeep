@@ -202,6 +202,8 @@ export const ProposalItemRecord = Schema.Struct({
   counterpartyKey: Schema.optional(Schema.NonEmptyString),
   counterpartyName: Schema.optional(Schema.NonEmptyString),
   bid: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+  window: Schema.optional(Schema.NonEmptyString),
+  approvedAt: Schema.optional(Schema.DateTimeUtc),
   reason: Schema.NonEmptyString,
   state: ProposalItemState,
   settled: Schema.Boolean,

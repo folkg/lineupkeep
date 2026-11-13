@@ -16,6 +16,7 @@ import "#web/styles.css";
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
+import { formatCalendarDate } from "#browser/shared-ui/formatTime.ts";
 import type {
   DismissTransactionProposalData,
   DismissTransactionProposalRequest,
@@ -121,6 +122,31 @@ it("shows a closed plan with the reason a dismissed move carries", async () => {
   await expect.element(page.getByText("Dismissed from this plan")).toBeVisible();
   await expect.element(page.getByText("Executed", { exact: true })).toBeVisible();
   expect(page.getByRole("button", { name: /Dismiss/u }).elements()).toHaveLength(3);
+});
+
+it("shows the date a move waits for and says when it was approved", async () => {
+  using _app = setupTransactionsPage(
+    listData([
+      plan({
+        items: [
+          item({ window: "2026-11-14", approvedAt: "2026-11-12T10:00:00.000Z" }),
+          item({ id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d2", window: "2026-11-20" }),
+        ],
+      }),
+    ]),
+  );
+
+  await expect
+    .element(
+      page.getByText(
+        `Waits for ${formatCalendarDate("2026-11-14")}. Approved ${formatCalendarDate("2026-11-12T10:00:00.000Z")}.`,
+        { exact: true },
+      ),
+    )
+    .toBeVisible();
+  await expect
+    .element(page.getByText(`Waits for ${formatCalendarDate("2026-11-20")}.`, { exact: true }))
+    .toBeVisible();
 });
 
 it("shows more plans without losing the first page", async () => {

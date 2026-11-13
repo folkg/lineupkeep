@@ -318,6 +318,21 @@ export function useTransactionReviewPage(
     const readings = bidReadings();
     const items = data.teams.flatMap((team) => team.items);
     const included = items.filter(isItemIncluded);
+    const todayByItem = new Map<string, string>();
+    for (const team of data.teams) {
+      const today = team.today;
+      if (today === undefined) {
+        continue;
+      }
+      for (const item of team.items) {
+        todayByItem.set(item.id, today);
+      }
+    }
+    const waits = (item: TransactionReviewItemView): boolean => {
+      const today = todayByItem.get(item.id);
+      return item.window !== undefined && today !== undefined && item.window > today;
+    };
+    const includedWaiting = included.filter(waits);
     const checkedTimes = items.flatMap((item) =>
       item.staleness.checkedAt === undefined ? [] : [item.staleness.checkedAt],
     );
@@ -335,6 +350,12 @@ export function useTransactionReviewPage(
       includedItems: included,
       includedIds: included.map((item) => item.id),
       includedCount: included.length,
+      includedDueCount: included.length - includedWaiting.length,
+      includedWaitingCount: includedWaiting.length,
+      waitingCount: items.filter(waits).length,
+      waitsUntil: includedWaiting
+        .flatMap((item) => (item.window === undefined ? [] : [item.window]))
+        .sort()[0],
       includedWaivers: included.filter((item) => item.kind === "waiver_claim").length,
       includedFaab: included.reduce(
         (total, item) =>
@@ -466,6 +487,10 @@ export type TransactionReviewModel = {
   readonly includedItems: ReadonlyArray<TransactionReviewItemView>;
   readonly includedIds: ReadonlyArray<string>;
   readonly includedCount: number;
+  readonly includedDueCount: number;
+  readonly includedWaitingCount: number;
+  readonly waitingCount: number;
+  readonly waitsUntil: string | undefined;
   readonly includedWaivers: number;
   readonly includedFaab: number;
   readonly includedBids: ReadonlyArray<{ readonly item: string; readonly bid: number }>;

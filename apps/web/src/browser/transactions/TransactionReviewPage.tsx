@@ -13,7 +13,7 @@ import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx
 import { Dock, DockSpacer } from "#browser/shared-ui/Dock.tsx";
 import { FocusRegion } from "#browser/shared-ui/FocusRegion.tsx";
 import { Form } from "#browser/shared-ui/Form.tsx";
-import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
+import { formatCalendarDate, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Notice } from "#browser/shared-ui/Notice.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
@@ -190,6 +190,7 @@ function Review(props: ReviewProps): JSX.Element {
               finished={props.model.finished}
               review={props.model.review}
               closed={closed()}
+              waiting={props.model.waitingCount}
               submissionCount={props.model.submissions.length}
               submittedAt={submission().submittedAt}
             />
@@ -243,6 +244,9 @@ function Review(props: ReviewProps): JSX.Element {
           <SubmissionPanel
             faab={props.model.includedFaab}
             included={props.model.includedCount}
+            includedDue={props.model.includedDueCount}
+            includedWaiting={props.model.includedWaitingCount}
+            waitsUntil={props.model.waitsUntil}
             staleCount={props.model.staleCount}
             illegalCount={props.model.illegalCount}
             submitting={props.submitting}
@@ -313,7 +317,7 @@ function SubmittedSummary(props: SubmittedSummaryProps): JSX.Element {
             Submitted
           </SectionTitle>
           <Text size="body" weight="semibold" live="polite">
-            {outcomeSummary(props.counts, props.review)}
+            {outcomeSummary(props.counts, props.review, props.waiting)}
           </Text>
           <Text size="caption" tone="muted">
             Submitted by you{" "}
@@ -572,6 +576,7 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
               submitting={props.submitting}
               included={props.isItemIncluded(item)}
               item={item}
+              today={props.team.today}
               tradeProposal={props.team.tradeProposal}
               tradeRules={props.team.tradeRules}
               dismissing={props.dismissing === item.id}
@@ -593,6 +598,20 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
   const stale = (): boolean => props.item.staleness.status === "stale";
   const illegal = (): boolean => props.item.staleness.status === "illegal";
   const blocked = (): boolean => stale() || illegal();
+  const waiting = (): boolean => {
+    const window = props.item.window;
+    return window !== undefined && props.today !== undefined && window > props.today;
+  };
+  const waitingLine = (): string | undefined => {
+    const window = props.item.window;
+    if (window === undefined || !waiting()) {
+      return undefined;
+    }
+    const date = formatCalendarDate(window);
+    return props.item.approvedAt === undefined
+      ? `Runs on ${date} once you submit.`
+      : `Waits for ${date}. Approved ${formatCalendarDate(props.item.approvedAt)}.`;
+  };
   const result = (): TransactionReviewExecutionView | undefined => props.item.execution;
   const shownResult = (): TransactionReviewExecutionView | undefined => {
     const execution = result();
@@ -681,6 +700,14 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
             {consequenceLine(props.item, props.bid)}
           </Text>
         </Inline>
+
+        <Show when={waitingLine()}>
+          {(line) => (
+            <Text size="caption" tone="muted">
+              {line()}
+            </Text>
+          )}
+        </Show>
 
         <Show when={props.item.counterparty}>
           {(counterparty) => (
@@ -1263,6 +1290,8 @@ function QuietTeams(props: QuietTeamsProps): JSX.Element {
 }
 
 function SubmissionPanel(props: SubmissionPanelProps): JSX.Element {
+  const waitsUntil = (): string | undefined =>
+    props.waitsUntil === undefined ? undefined : formatCalendarDate(props.waitsUntil);
   return (
     <Dock id="submission-panel">
       <Box rule="top" space="lg">
@@ -1285,6 +1314,18 @@ function SubmissionPanel(props: SubmissionPanelProps): JSX.Element {
                   waivers run. A trade becomes a real offer to another manager: submitting again or
                   reloading will not undo it, and only withdrawing removes it before it is accepted.
                 </Text>
+                <Show when={props.includedWaiting > 0}>
+                  <Text size="caption" tone="muted">
+                    {props.includedWaiting}{" "}
+                    {props.includedWaiting === 1 ? "move waits" : "moves wait"}
+                    {waitsUntil() === undefined ? "" : ` until ${waitsUntil()}`}. Submitting
+                    approves {props.includedWaiting === 1 ? "it" : "them"};{" "}
+                    {props.includedWaiting === 1
+                      ? "it still runs on its date"
+                      : "they still run on their dates"}
+                    .
+                  </Text>
+                </Show>
                 <Show when={props.staleCount > 0}>
                   <Text size="caption" tone="muted">
                     {props.staleCount} stale {props.staleCount === 1 ? "move is" : "moves are"}{" "}
@@ -1304,7 +1345,7 @@ function SubmissionPanel(props: SubmissionPanelProps): JSX.Element {
                 disabled={props.included === 0 || props.submitting || props.dismissing}
                 aria-describedby="submission-note"
               >
-                {submitLabel(props.included)}
+                {submitLabel(props.includedDue, props.includedWaiting, waitsUntil())}
               </Button>
             </Inline>
           </Stack>
@@ -1482,11 +1523,12 @@ function includedTally(
   return submitting ? `${base} ${spending} Sending now.` : `${base} ${spending}`;
 }
 
-function submitLabel(included: number): string {
-  if (included === 0) {
-    return "Submit moves";
+function submitLabel(due: number, waiting: number, waitsUntil: string | undefined): string {
+  const base = due === 0 ? "Submit moves" : `Submit ${String(due)} ${due === 1 ? "move" : "moves"}`;
+  if (waiting === 0 || waitsUntil === undefined) {
+    return base;
   }
-  return `Submit ${String(included)} ${included === 1 ? "move" : "moves"}`;
+  return `${base}; ${String(waiting)} ${waiting === 1 ? "waits" : "wait"} until ${waitsUntil}`;
 }
 
 function outcomeLabel(outcome: TransactionReviewModelOutcome): string {
@@ -1534,6 +1576,7 @@ function stepLabel(step: TransactionReviewStepView): string {
 function outcomeSummary(
   counts: TransactionReviewModel["counts"],
   review: TransactionReviewView,
+  waiting: number,
 ): string {
   const trades = review.teams.flatMap((team) => team.items).filter((item) => item.kind === "trade");
   const tradeExecutionPending = trades.filter(
@@ -1554,6 +1597,7 @@ function outcomeSummary(
     counts.failed > 0 ? `${String(counts.failed)} failed` : undefined,
     counts.unknown > 0 ? `${String(counts.unknown)} unknown` : undefined,
     counts.skipped > 0 ? `${String(counts.skipped)} skipped` : undefined,
+    waiting > 0 ? `${String(waiting)} waiting for a later date` : undefined,
   ].flatMap((part) => (part === undefined ? [] : [part]));
   return parts.length === 0 ? "No outcome was recorded." : `${parts.join(" · ")}.`;
 }
@@ -1614,6 +1658,7 @@ type SubmittedSummaryProps = {
   readonly submissionCount: number;
   readonly closed: boolean;
   readonly finished: boolean;
+  readonly waiting: number;
   readonly counts: TransactionReviewModel["counts"];
 };
 
@@ -1652,6 +1697,7 @@ type ExecutedOrderProps = {
 
 type ProposalItemProps = {
   readonly item: TransactionReviewItemView;
+  readonly today: string | undefined;
   readonly bid: TransactionReviewBidField | undefined;
   readonly tradeProposal: TransactionReviewTeamView["tradeProposal"];
   readonly tradeRules: TransactionReviewTradeRulesView | undefined;
@@ -1693,6 +1739,9 @@ type PendingOffersProps = {
 
 type SubmissionPanelProps = {
   readonly included: number;
+  readonly includedDue: number;
+  readonly includedWaiting: number;
+  readonly waitsUntil: string | undefined;
   readonly total: number;
   readonly waivers: number;
   readonly faab: number;

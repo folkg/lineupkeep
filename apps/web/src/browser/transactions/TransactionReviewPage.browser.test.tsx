@@ -16,6 +16,7 @@ import "#web/styles.css";
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
+import { formatCalendarDate } from "#browser/shared-ui/formatTime.ts";
 import type {
   DismissTransactionProposalData,
   TransactionReviewData,
@@ -1208,6 +1209,51 @@ it("keeps the status and the provider's raw words when the refusal is unreadable
 
   await expect.element(page.getByText(detail)).toBeVisible();
   expect(page.getByText(/No reason was given/u).elements()).toHaveLength(0);
+});
+
+it("says a waiting move runs on its date and counts only the moves that run now", async () => {
+  const team = teamFixture(alphaId, "Alpha", "nfl", "football", [
+    { ...freeAgentItem(), window: "2026-11-12" },
+    { ...dropItem(), window: "2026-11-14" },
+  ]);
+  using _app = setupReviewPage({
+    ...reviewFixture(),
+    teams: [{ ...team, today: "2026-11-12" }],
+  });
+
+  await expect
+    .element(
+      page.getByText(`Runs on ${formatCalendarDate("2026-11-14")} once you submit.`, {
+        exact: true,
+      }),
+    )
+    .toBeVisible();
+  await expect
+    .element(
+      page.getByRole("button", {
+        name: `Submit 1 move; 1 waits until ${formatCalendarDate("2026-11-14")}`,
+      }),
+    )
+    .not.toHaveAttribute("aria-disabled");
+});
+
+it("says a waiting move was approved and when", async () => {
+  const team = teamFixture(alphaId, "Alpha", "nfl", "football", [
+    { ...dropItem(), window: "2026-11-14", approvedAt: twoHoursAgo },
+  ]);
+  using _app = setupReviewPage({
+    ...reviewFixture(),
+    teams: [{ ...team, today: "2026-11-12" }],
+  });
+
+  await expect
+    .element(
+      page.getByText(
+        `Waits for ${formatCalendarDate("2026-11-14")}. Approved ${formatCalendarDate(twoHoursAgo)}.`,
+        { exact: true },
+      ),
+    )
+    .toBeVisible();
 });
 
 it("does not send a submission when every move is left out", async () => {

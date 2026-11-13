@@ -8,7 +8,7 @@ import { Box } from "#browser/shared-ui/Box.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { Form } from "#browser/shared-ui/Form.tsx";
-import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
+import { formatCalendarDate, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Notice } from "#browser/shared-ui/Notice.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
@@ -314,6 +314,13 @@ function PlanItem(props: PlanItemProps): JSX.Element {
         <Text size="body" weight="semibold">
           {itemSummary(props.item)}
         </Text>
+        <Show when={props.item.window}>
+          {(window) => (
+            <Text size="caption" tone="muted">
+              {windowLine(props.item, window())}
+            </Text>
+          )}
+        </Show>
         <Show when={props.item.staleness.status !== "current"}>
           <Notice
             tone="danger"
@@ -470,6 +477,13 @@ function itemSummary(item: TransactionProposalItemView): string {
     return `Drop ${drops}`;
   }
   return "This move";
+}
+
+function windowLine(item: TransactionProposalItemView, window: string): string {
+  const date = formatCalendarDate(window);
+  return item.approvedAt === undefined
+    ? `Waits for ${date}.`
+    : `Waits for ${date}. Approved ${formatCalendarDate(item.approvedAt)}.`;
 }
 
 function playerNames(players: TransactionProposalItemView["adds"]): string | undefined {
