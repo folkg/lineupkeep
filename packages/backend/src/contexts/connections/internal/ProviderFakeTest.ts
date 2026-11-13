@@ -101,6 +101,7 @@ type FakeProviderState = {
   readonly playerScores: ReadonlyArray<FakePlayerScore>;
   readonly gamesPlayed: ReadonlyArray<ProviderGamesPlayed>;
   readonly playerDetailsFailure: ProviderPeriodMismatch | undefined;
+  readonly refusedPlayerDetailKeys: ReadonlySet<string>;
   readonly matchups: ReadonlyArray<ProviderMatchup>;
   readonly transactions: ReadonlyArray<ProviderTransaction>;
   readonly pendingTrades: ReadonlyArray<ProviderPendingTrade>;
@@ -175,6 +176,7 @@ export type FakeProviderWorldShape = {
   readonly setPlayerScores: (scores: ReadonlyArray<FakePlayerScore>) => Effect.Effect<void>;
   readonly setGamesPlayed: (gamesPlayed: ReadonlyArray<ProviderGamesPlayed>) => Effect.Effect<void>;
   readonly failPlayerDetails: (failure: ProviderPeriodMismatch | undefined) => Effect.Effect<void>;
+  readonly refusePlayerDetailKeys: (keys: ReadonlyArray<string>) => Effect.Effect<void>;
   readonly setMatchups: (matchups: ReadonlyArray<ProviderMatchup>) => Effect.Effect<void>;
   readonly setTransactions: (
     transactions: ReadonlyArray<ProviderTransaction>,
@@ -270,6 +272,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         playerScores: [],
         gamesPlayed: [],
         playerDetailsFailure: undefined,
+        refusedPlayerDetailKeys: new Set(),
         matchups: [],
         transactions: [],
         pendingTrades: [],
@@ -370,6 +373,8 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         setGamesPlayed: (gamesPlayed) => modify((current) => ({ ...current, gamesPlayed })),
         failPlayerDetails: (playerDetailsFailure) =>
           modify((current) => ({ ...current, playerDetailsFailure })),
+        refusePlayerDetailKeys: (keys) =>
+          modify((current) => ({ ...current, refusedPlayerDetailKeys: new Set(keys) })),
         setMatchups: (matchups) => modify((current) => ({ ...current, matchups })),
         setTransactions: (transactions) => modify((current) => ({ ...current, transactions })),
         setPendingTrades: (pendingTrades) => modify((current) => ({ ...current, pendingTrades })),
@@ -836,6 +841,15 @@ const providerFake = Effect.gen(function* () {
           operation: "read_player_details",
           requested: current.playerDetailsFailure.requested,
           covered: current.playerDetailsFailure.covered,
+        });
+      }
+      if (
+        new Set(input.providerPlayerKeys).size !== input.providerPlayerKeys.length ||
+        input.providerPlayerKeys.some((key) => current.refusedPlayerDetailKeys.has(key))
+      ) {
+        return yield* ProviderResponseInvalid.make({
+          operation: "read_player_details",
+          field: "playerKeys",
         });
       }
       const basis = yield* fakePlayerBasis(input.period, input.sport, input.currentPeriod);

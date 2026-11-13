@@ -1957,7 +1957,7 @@ export const FantasyQueriesLive = Layer.effect(
       const draft = yield* draftProvenance(
         context,
         fetchedAt,
-        groups.includes("identity") ? valid.map((row) => row.providerPlayerKey) : [],
+        groups.includes("identity") ? playerKeysOf(valid) : [],
         "players",
       );
       if (draft.coverage !== undefined) {
@@ -2026,23 +2026,22 @@ export const FantasyQueriesLive = Layer.effect(
       );
       const requestedPeriod = normalizeStatPeriod(input.period);
       const includesActualStats = groups.includes("actual_stats");
+      const validKeys = playerKeysOf(valid);
       const detailKeys = includesActualStats
-        ? valid.map((row) => row.providerPlayerKey)
+        ? validKeys
         : groups.includes("availability")
-          ? valid
-              .filter((row) => !rosterByKey.has(row.providerPlayerKey))
-              .map((row) => row.providerPlayerKey)
+          ? validKeys.filter((key) => !rosterByKey.has(key))
           : [];
-      let details: ReadonlyArray<ProviderPlayerDetail> = [];
-      let detailsUnsupported: string | undefined;
-      if (includesActualStats || detailKeys.length > 0) {
-        const detailsOutcome = yield* readOutcome(
+      const readDetails = (
+        providerPlayerKeys: ReadonlyArray<string>,
+      ): Effect.Effect<ReadOutcome<ReadonlyArray<ProviderPlayerDetail>>, QueryPersistenceFailed> =>
+        readOutcome(
           context,
           "players",
           context.provider.readPlayerDetails({
             ...providerIdentity(context),
             providerLeagueKey: leagueKey,
-            providerPlayerKeys: detailKeys,
+            providerPlayerKeys,
             sport: context.owned.team.sport,
             period: requestedPeriod,
             currentPeriod: league?.periodWindow?.current,
@@ -2050,6 +2049,11 @@ export const FantasyQueriesLive = Layer.effect(
             seasonEnd: league?.endDate,
           }),
         );
+      let details: ReadonlyArray<ProviderPlayerDetail> = [];
+      const unverifiedPlayers = new Set<string>();
+      let detailsUnsupported: string | undefined;
+      if (includesActualStats || detailKeys.length > 0) {
+        const detailsOutcome = yield* readDetails(detailKeys);
         if (detailsOutcome._tag === "ok") {
           details = detailsOutcome.value;
           const basis = includesActualStats
@@ -2062,6 +2066,34 @@ export const FantasyQueriesLive = Layer.effect(
               fetchedAt,
               undefined,
               basis === undefined ? undefined : statBasisDetail(basis),
+            ),
+          );
+        } else if (
+          detailsOutcome._tag === "failed" &&
+          detailsOutcome.failure.code === "provider_invalid_response"
+        ) {
+          const isolated = yield* Effect.forEach(
+            detailKeys,
+            (providerPlayerKey) =>
+              readDetails([providerPlayerKey]).pipe(
+                Effect.map((outcome) => ({ providerPlayerKey, outcome })),
+              ),
+            { concurrency: 1 },
+          );
+          details = isolated.flatMap(({ outcome }) =>
+            outcome._tag === "ok" ? [...outcome.value] : [],
+          );
+          for (const { providerPlayerKey, outcome } of isolated) {
+            if (outcome._tag !== "ok") {
+              unverifiedPlayers.add(providerPlayerKey);
+            }
+          }
+          coverageEntries.push(
+            degradedCoverage(
+              "players",
+              "player_details",
+              fetchedAt,
+              detailsOutcome.failure.message,
             ),
           );
         } else {
@@ -2103,13 +2135,11 @@ export const FantasyQueriesLive = Layer.effect(
         context,
         fetchedAt,
         coverageEntries,
-        valid
-          .map((row) => row.providerPlayerKey)
-          .filter(
-            (key) =>
-              playerIdentity(rosterByKey.get(key)) === undefined &&
-              playerIdentity(detailsByKey.get(key)) === undefined,
-          ),
+        validKeys.filter(
+          (key) =>
+            playerIdentity(rosterByKey.get(key)) === undefined &&
+            playerIdentity(detailsByKey.get(key)) === undefined,
+        ),
       );
       const statRefs = new Map<number, StatRef>();
       const dictionaryStatIds = new Set<number>();
@@ -2207,7 +2237,7 @@ export const FantasyQueriesLive = Layer.effect(
         groups.includes("projections") &&
         projectionsSupported &&
         projectionWeek !== undefined &&
-        valid.length > 0
+        validKeys.length > 0
       ) {
         const weekOutcome = yield* readOutcome(
           context,
@@ -2215,7 +2245,7 @@ export const FantasyQueriesLive = Layer.effect(
           context.provider.readPlayerWeeks({
             ...providerIdentity(context),
             providerLeagueKey: leagueKey,
-            providerPlayerKeys: valid.map((row) => row.providerPlayerKey),
+            providerPlayerKeys: validKeys,
             week: { week: projectionWeek },
           }),
         );
@@ -2236,6 +2266,7 @@ export const FantasyQueriesLive = Layer.effect(
           Effect.gen(function* () {
             const rosterPlayer = rosterByKey.get(row.providerPlayerKey);
             const detail = detailsByKey.get(row.providerPlayerKey);
+            const unverified = unverifiedPlayers.has(row.providerPlayerKey);
             const transactionIdentity = transactionIdentities.get(row.providerPlayerKey);
             const identity =
               playerIdentity(rosterPlayer) ??
@@ -2253,7 +2284,7 @@ export const FantasyQueriesLive = Layer.effect(
                 : detail === undefined
                   ? undefined
                   : { rosterStatus: detail.rosterStatus, injury: injuryOfDetail(detail) };
-            if (groups.includes("availability") && availability === undefined) {
+            if (groups.includes("availability") && availability === undefined && !unverified) {
               failures.push({
                 code: "player_availability_unavailable",
                 resource: row.ref,
@@ -2261,16 +2292,17 @@ export const FantasyQueriesLive = Layer.effect(
                   "Your league returned no roster or selected-player status for this player.",
               });
             }
-            const actualStats = !groups.includes("actual_stats")
-              ? undefined
-              : detailsUnsupported !== undefined
-                ? { status: "unsupported" as const, detail: detailsUnsupported }
-                : detail?.actual === undefined
-                  ? {
-                      status: "unsupported" as const,
-                      detail: "Your league reported no actual statistics for this player.",
-                    }
-                  : yield* statGroup(detail.actual);
+            const actualStats =
+              !groups.includes("actual_stats") || unverified
+                ? undefined
+                : detailsUnsupported !== undefined
+                  ? { status: "unsupported" as const, detail: detailsUnsupported }
+                  : detail?.actual === undefined
+                    ? {
+                        status: "unsupported" as const,
+                        detail: "Your league reported no actual statistics for this player.",
+                      }
+                    : yield* statGroup(detail.actual);
             const projections = !groups.includes("projections")
               ? undefined
               : projectionsSupported && projectionWeek !== undefined && !projectionUnavailable
@@ -2292,7 +2324,14 @@ export const FantasyQueriesLive = Layer.effect(
                 dictionaryStatIds.add(stat.statId);
               }
             }
-            if (identity === undefined) {
+            if (unverified) {
+              failures.push({
+                code: "player_details_unavailable",
+                resource: row.ref,
+                message:
+                  "Your league's data for this player could not be verified. Ask again for this player alone.",
+              });
+            } else if (identity === undefined) {
               failures.push({
                 code: "player_identity_unavailable",
                 resource: row.ref,
@@ -2325,6 +2364,12 @@ export const FantasyQueriesLive = Layer.effect(
           row.actualStats?.status === "available" ||
           row.scoringContext?.status === "available",
       );
+      if (unverifiedPlayers.size > 0 && !hasData) {
+        return yield* QuerySelectionInvalid.make({
+          detail:
+            "Your league's data for every requested player could not be verified. Ask again for one player per call.",
+        });
+      }
       const status: QueryStatus = valid.length === 0 ? "failed" : hasData ? "ok" : "unsupported";
       const fingerprintValue = yield* queryFingerprint(
         [
@@ -4141,6 +4186,12 @@ function queryTeam(owned: OwnedTeam): QueryTeam {
     sport: team.sport,
     season: team.season,
   };
+}
+
+function playerKeysOf(
+  rows: ReadonlyArray<{ readonly providerPlayerKey: string }>,
+): ReadonlyArray<string> {
+  return [...new Set(rows.map((row) => row.providerPlayerKey))];
 }
 
 function coverage(

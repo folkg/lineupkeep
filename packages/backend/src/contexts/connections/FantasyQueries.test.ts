@@ -58,7 +58,12 @@ import {
   TeamSummaryResult,
 } from "./QueryResults.ts";
 import { StatRef } from "./QueryValues.ts";
-import { type QueryError, QuerySelectionInvalid, QueryTeamNotFound } from "./QueryValues.ts";
+import {
+  type PlayerRef,
+  type QueryError,
+  QuerySelectionInvalid,
+  QueryTeamNotFound,
+} from "./QueryValues.ts";
 
 it.effect("lists owned teams with stable paging and owner-bound continuations", () =>
   Effect.gen(function* () {
@@ -2335,6 +2340,102 @@ it.effect("returns every explicitly requested player reference in one response",
     }
     assert.strictEqual(hydrated.players.length, 25);
     assert.deepStrictEqual(hydrated.page, { returned: 25, complete: true, remaining: 0 });
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("answers a batch when one player's details fail verification", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      playerDetails: poolPlayerDetails([
+        "461.p.20001",
+        "461.p.20002",
+        "461.p.20003",
+        "461.p.20004",
+      ]),
+    });
+    const refs = yield* sealedPlayerRefs([
+      "461.p.20001",
+      "461.p.20002",
+      "461.p.20003",
+      "461.p.20004",
+    ]);
+    yield* fake.refusePlayerDetailKeys(["461.p.20003"]);
+
+    const hydrated = yield* queries.getPlayers(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      players: refs,
+      groups: ["identity", "availability"],
+    });
+
+    assert.strictEqual(hydrated.status, "ok");
+    if (hydrated.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(
+      hydrated.players.map((row) => row.identity?.name),
+      ["Pool Player 1", "Pool Player 2", undefined, "Pool Player 4"],
+    );
+    assert.deepStrictEqual(
+      hydrated.failures.map((failure) => failure.code),
+      ["player_details_unavailable"],
+    );
+    const [failure] = hydrated.failures;
+    assert.strictEqual(failure?.resource, Array.getUnsafe(refs, 2));
+    assert.include(failure?.message, "Ask again for this player alone");
+    assert.strictEqual(yield* fake.readCount("read_player_details"), 5);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("answers a repeated player reference from one detail read", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      playerDetails: poolPlayerDetails(["461.p.20001", "461.p.20002"]),
+    });
+    const refs = yield* sealedPlayerRefs(["461.p.20001", "461.p.20002", "461.p.20001"]);
+
+    const hydrated = yield* queries.getPlayers(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      players: refs,
+      groups: ["identity", "availability"],
+    });
+
+    assert.strictEqual(hydrated.status, "ok");
+    if (hydrated.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(
+      hydrated.players.map((row) => row.identity?.name),
+      ["Pool Player 1", "Pool Player 2", "Pool Player 1"],
+    );
+    assert.deepStrictEqual(hydrated.failures, []);
+    assert.strictEqual(yield* fake.readCount("read_player_details"), 1);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("refuses a batch when no requested player's details can be verified", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      playerDetails: poolPlayerDetails(["461.p.20001", "461.p.20002"]),
+    });
+    const refs = yield* sealedPlayerRefs(["461.p.20001", "461.p.20002"]);
+    yield* fake.refusePlayerDetailKeys(["461.p.20001", "461.p.20002"]);
+
+    const refused = yield* Effect.flip(
+      queries.getPlayers(owner, {
+        team: Array.getUnsafe(seeded, 0).id,
+        players: refs,
+        groups: ["identity", "availability"],
+      }),
+    );
+
+    assert.instanceOf(refused, QuerySelectionInvalid);
+    assert.include(refused.detail, "Ask again for one player per call");
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
@@ -7641,6 +7742,36 @@ const playerDetails = [
     communityStartRate: undefined,
   },
 ];
+
+function poolPlayerDetails(playerKeys: ReadonlyArray<string>): ReadonlyArray<ProviderPlayerDetail> {
+  return playerKeys.map((providerPlayerKey, index) => ({
+    providerPlayerKey,
+    name: `Pool Player ${String(index + 1)}`,
+    primaryPosition: "RB",
+    displayPosition: "RB",
+    proTeam: undefined,
+    availabilityDetail: undefined,
+    eligiblePositions: ["RB"],
+    rosterStatus: "free_agent" as const,
+    actual: {
+      basis: { type: "week" as const, week: 3 },
+      stats: [{ statId: 4, value: index }],
+      notAggregated: [],
+    },
+    projected: undefined,
+  }));
+}
+
+function sealedPlayerRefs(
+  playerKeys: ReadonlyArray<string>,
+): Effect.Effect<ReadonlyArray<PlayerRef>> {
+  return Effect.provide(
+    Effect.flatMap(QueryTokens, (tokens) =>
+      tokens.sealPlayerRefs({ userId: owner, leagueKey: "461.l.1000", playerKeys }),
+    ),
+    QueryTokens.fromSecret("test-query-token-secret-at-least-32-chars"),
+  );
+}
 
 function includesText(value: unknown, needle: string): boolean {
   if (typeof value === "string") {
