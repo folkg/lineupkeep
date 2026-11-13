@@ -62,7 +62,7 @@ it("renders a two-team proposal, a quiet team, and one disabled action", async (
 
   await expect.element(page.getByRole("checkbox", { name: /Add Sam Rivers/u })).toBeChecked();
   await expect
-    .element(page.getByRole("button", { name: "Submit 3 moves" }))
+    .element(page.getByRole("button", { name: "Submit 3 moves today" }))
     .not.toHaveAttribute("aria-disabled");
   await expect
     .element(page.getByText("3 of 4 moves included. 1 waiver claim spends 25 FAAB."))
@@ -122,7 +122,7 @@ it("shows one team roster notice above submit and keeps the move's own reason", 
   await expect.element(page.getByText(/Linus Ullmark is no longer injured/u)).toBeVisible();
   await expect.element(page.getByText("Illegal roster position")).toBeVisible();
   await expect.element(page.getByText(/Travis Konecny is in the IR slot/u)).toBeVisible();
-  await expect.element(page.getByRole("button", { name: "Submit 1 move" })).toBeVisible();
+  await expect.element(page.getByRole("button", { name: "Submit 1 move today" })).toBeVisible();
 });
 
 it("names both sides of every draft pick and says it cannot be sent", async () => {
@@ -178,13 +178,13 @@ it("updates the tally when a person leaves out a current move", async () => {
   await expect.element(waiver).not.toBeChecked();
   await expect.element(page.getByText("2 of 4 moves included. No FAAB is spent.")).toBeVisible();
   await expect
-    .element(page.getByRole("button", { name: "Submit 2 moves" }))
+    .element(page.getByRole("button", { name: "Submit 2 moves today" }))
     .not.toHaveAttribute("aria-disabled");
 
   await waiver.click();
   await expect.element(waiver).toBeChecked();
   await expect
-    .element(page.getByRole("button", { name: "Submit 3 moves" }))
+    .element(page.getByRole("button", { name: "Submit 3 moves today" }))
     .not.toHaveAttribute("aria-disabled");
 });
 
@@ -224,7 +224,7 @@ it("sends the bids raised at review for two claims proposed at 0", async () => {
     .element(page.getByText("2 of 2 moves included. 2 waiver claims spend 15 FAAB."))
     .toBeVisible();
 
-  await page.getByRole("button", { name: "Submit 2 moves" }).click();
+  await page.getByRole("button", { name: "Submit 2 moves today" }).click();
   expect(submissions).toStrictEqual([
     {
       set: review.set.id,
@@ -253,7 +253,7 @@ it("shows a bid above the remaining budget before submitting and sends nothing",
     "The bid of 60 exceeds this team's remaining FAAB budget of 50. Lower the bid to 50 or less, then submit again.";
   await expect.element(page.getByText(refusal)).toBeVisible();
 
-  await page.getByRole("button", { name: "Submit 2 moves" }).click();
+  await page.getByRole("button", { name: "Submit 2 moves today" }).click();
   expect(submissions).toBe(0);
   await expect.element(page.getByText(refusal).first()).toBeVisible();
 });
@@ -282,7 +282,7 @@ it("says what a FAAB bid is when it is not whole or below the league minimum", a
     )
     .toBeVisible();
 
-  await page.getByRole("button", { name: "Submit 2 moves" }).click();
+  await page.getByRole("button", { name: "Submit 2 moves today" }).click();
   expect(submissions).toBe(0);
 });
 
@@ -1107,12 +1107,12 @@ it("submits the included moves once, keeps the action visible on a phone, and sh
 
   await page.viewport(390, 844);
   try {
-    await page.getByRole("button", { name: "Submit 3 moves" }).click();
+    await page.getByRole("button", { name: "Submit 3 moves today" }).click();
 
     expect(submittedInputs).toHaveLength(1);
     expect(submittedInputs[0]?.bids).toStrictEqual([{ item: waiverItem().id, bid: 25 }]);
     await expect
-      .element(page.getByRole("button", { name: "Submit 3 moves" }))
+      .element(page.getByRole("button", { name: "Submit 3 moves today" }))
       .toHaveAttribute("aria-busy", "true");
     await expect.element(page.getByText(/Sending now/u)).toBeVisible();
     await expect
@@ -1207,7 +1207,7 @@ it("offers another submission for a move that has not run while an earlier outco
     0,
   );
 
-  await page.getByRole("button", { name: "Submit 1 move" }).click();
+  await page.getByRole("button", { name: "Submit 1 move today" }).click();
   expect(includes).toStrictEqual([[replacement.id]]);
 });
 
@@ -1252,66 +1252,75 @@ it("keeps the status and the provider's raw words when the refusal is unreadable
   expect(page.getByText(/No reason was given/u).elements()).toHaveLength(0);
 });
 
-it("says a waiting move runs on its date and counts only the moves that run now", async () => {
-  const team = teamFixture(alphaId, "Alpha", "nfl", "football", [
-    { ...freeAgentItem(), window: "2026-11-12" },
-    { ...dropItem(), window: "2026-11-14" },
-  ]);
+it("groups the review by the day each move runs and says what today's submit commits", async () => {
+  const todayItem = { ...dropItem(), window: "2026-11-12" };
+  const laterItem = { ...freeAgentItem(), window: "2026-11-14" };
+  const team = teamFixture(alphaId, "Alpha", "nfl", "football", [todayItem, laterItem]);
   using _app = setupReviewPage({
     ...reviewFixture(),
-    teams: [{ ...team, today: "2026-11-12" }],
+    teams: [
+      {
+        ...team,
+        today: "2026-11-12",
+        groups: [
+          {
+            date: "2026-11-12",
+            triggerAt: "2026-11-12T08:00:00.000Z",
+            effectiveRule: "same_day",
+            items: [todayItem.id],
+          },
+          {
+            date: "2026-11-14",
+            triggerAt: "2026-11-14T08:00:00.000Z",
+            effectiveRule: "same_day",
+            items: [laterItem.id],
+          },
+        ],
+      },
+    ],
   });
 
+  await expect.element(page.getByRole("heading", { name: "Runs today" })).toBeVisible();
   await expect
-    .element(
-      page.getByText(`Runs on ${formatCalendarDate("2026-11-14")} once you submit.`, {
-        exact: true,
-      }),
-    )
+    .element(page.getByRole("heading", { name: `Runs on ${formatCalendarDate("2026-11-14")}` }))
     .toBeVisible();
   await expect
     .element(
       page.getByRole("button", {
-        name: `Submit 1 move; 1 waits until ${formatCalendarDate("2026-11-14")}`,
+        name: `Submit 1 move today; 1 stays scheduled for ${formatCalendarDate("2026-11-14")}`,
       }),
     )
     .not.toHaveAttribute("aria-disabled");
+  await expect.element(page.getByText(/stays open until its day/u)).toBeVisible();
 });
 
-it("says a waiting move was approved and when", async () => {
-  const team = teamFixture(alphaId, "Alpha", "nfl", "football", [
-    { ...dropItem(), window: "2026-11-14", approvedAt: twoHoursAgo },
-  ]);
+it("shows when a scheduled move takes effect beside the day it runs", async () => {
+  const item = { ...dropItem(), window: "2026-11-14", effectiveDate: "2026-11-15" };
+  const team = teamFixture(alphaId, "Alpha", "nfl", "football", [item]);
   using _app = setupReviewPage({
     ...reviewFixture(),
-    teams: [{ ...team, today: "2026-11-12" }],
+    teams: [
+      {
+        ...team,
+        today: "2026-11-12",
+        groups: [
+          {
+            date: "2026-11-14",
+            triggerAt: "2026-11-14T08:00:00.000Z",
+            effectiveRule: "next_day",
+            items: [item.id],
+          },
+        ],
+      },
+    ],
   });
 
   await expect
-    .element(
-      page.getByText(
-        `Waits for ${formatCalendarDate("2026-11-14")}. Approved ${formatCalendarDate(twoHoursAgo)}.`,
-        { exact: true },
-      ),
-    )
+    .element(page.getByRole("heading", { name: `Runs on ${formatCalendarDate("2026-11-14")}` }))
     .toBeVisible();
-});
-
-it("shows the date a waiting move takes effect beside the day it runs", async () => {
-  const team = teamFixture(alphaId, "Alpha", "nfl", "football", [
-    { ...dropItem(), window: "2026-11-14", effectiveDate: "2026-11-15" },
-  ]);
-  using _app = setupReviewPage({
-    ...reviewFixture(),
-    teams: [{ ...team, today: "2026-11-12" }],
-  });
-
   await expect
     .element(
-      page.getByText(
-        `Runs on ${formatCalendarDate("2026-11-14")} once you submit. Takes effect on ${formatCalendarDate("2026-11-15")}.`,
-        { exact: true },
-      ),
+      page.getByText(`Takes effect on ${formatCalendarDate("2026-11-15")}.`, { exact: true }),
     )
     .toBeVisible();
 });
@@ -1371,7 +1380,7 @@ it("does not send a submission when every move is left out", async () => {
   await page.getByRole("checkbox", { name: /Include: Drop Riley Chen/u }).click();
   await expect.element(page.getByText("0 of 4 moves included. No FAAB is spent.")).toBeVisible();
   await expect
-    .element(page.getByRole("button", { name: "Submit moves" }))
+    .element(page.getByRole("button", { name: "Nothing runs today" }))
     .toHaveAttribute("aria-disabled", "true");
   expect(submissions).toBe(0);
 });

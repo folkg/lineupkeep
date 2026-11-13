@@ -8,7 +8,11 @@ import { Box } from "#browser/shared-ui/Box.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { Form } from "#browser/shared-ui/Form.tsx";
-import { formatCalendarDate, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
+import {
+  formatCalendarDate,
+  formatReaderTime,
+  formatRunDay,
+} from "#browser/shared-ui/formatTime.ts";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Notice } from "#browser/shared-ui/Notice.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
@@ -225,12 +229,15 @@ function History(props: HistoryProps): JSX.Element {
 }
 
 function PlanSummary(props: PlanSummaryProps): JSX.Element {
-  const items = (): ReadonlyArray<TransactionProposalItemView> =>
-    props.plan.teams.flatMap((team) => team.items.filter((item) => props.history || !item.settled));
-  const current = (): ReadonlyArray<TransactionProposalItemView> =>
-    items().filter((item) => item.staleness.status === "current");
-  const stale = (): ReadonlyArray<TransactionProposalItemView> =>
-    items().filter((item) => item.staleness.status !== "current");
+  const groups = (): ReadonlyArray<PlanDayGroup> =>
+    props.plan.teams.flatMap((team) =>
+      planGroups(team)
+        .map((group) => ({
+          ...group,
+          items: group.items.filter((item) => props.history || !item.settled),
+        }))
+        .filter((group) => group.items.length > 0),
+    );
   return (
     <Box rule="bottom" space="lg">
       <Stack gap="md">
@@ -253,39 +260,67 @@ function PlanSummary(props: PlanSummaryProps): JSX.Element {
                 : "Every move in this plan has ended."}
             </EmptyState>
           }
-          when={items().length > 0}
+          when={groups().length > 0}
         >
-          <Stack gap="md">
-            <Show when={current().length > 0}>
-              <ItemList
-                dismissing={props.dismissing}
-                dismissFailure={props.dismissFailure}
-                history={props.history}
-                items={current()}
-                onDismiss={props.onDismiss}
-                plan={props.plan}
-              />
-            </Show>
-            <Show when={stale().length > 0}>
-              <Stack gap="sm">
-                <SectionTitle id={`stale-${props.plan.id}`} level={3}>
-                  Stale
-                </SectionTitle>
-                <ItemList
-                  dismissing={props.dismissing}
-                  dismissFailure={props.dismissFailure}
-                  history={props.history}
-                  items={stale()}
-                  onDismiss={props.onDismiss}
-                  plan={props.plan}
-                />
-              </Stack>
-            </Show>
-          </Stack>
+          <For each={groups()}>
+            {(group) => (
+              <Show
+                fallback={
+                  <ItemList
+                    dismissing={props.dismissing}
+                    dismissFailure={props.dismissFailure}
+                    history={props.history}
+                    items={group.items}
+                    onDismiss={props.onDismiss}
+                    plan={props.plan}
+                    runDate={undefined}
+                  />
+                }
+                when={group.date}
+              >
+                {(date) => (
+                  <Stack gap="sm">
+                    <SectionTitle level={3}>{formatRunDay(date(), group.today)}</SectionTitle>
+                    <ItemList
+                      dismissing={props.dismissing}
+                      dismissFailure={props.dismissFailure}
+                      history={props.history}
+                      items={group.items}
+                      onDismiss={props.onDismiss}
+                      plan={props.plan}
+                      runDate={date()}
+                    />
+                  </Stack>
+                )}
+              </Show>
+            )}
+          </For>
         </Show>
       </Stack>
     </Box>
   );
+}
+
+function planGroups(
+  team: TransactionProposalSetSummaryView["teams"][number],
+): ReadonlyArray<PlanDayGroup> {
+  if (team.groups === undefined) {
+    return [{ items: team.items }];
+  }
+  const byId = new Map(team.items.map((item) => [item.id, item] as const));
+  return team.groups.map((group) => ({
+    date: group.date,
+    today: team.today,
+    items: group.items.map((id) => groupItem(byId, id)),
+  }));
+}
+
+function groupItem<Item>(byId: ReadonlyMap<string, Item>, id: string): Item {
+  const item = byId.get(id);
+  if (item === undefined) {
+    throw new Error(`A run-day group names a move outside the plan: ${id}`);
+  }
+  return item;
 }
 
 function ItemList(props: ItemListProps): JSX.Element {
@@ -298,6 +333,7 @@ function ItemList(props: ItemListProps): JSX.Element {
             dismissFailure={props.dismissFailure(item.id)}
             history={props.history}
             item={item}
+            runDate={props.runDate}
             onDismiss={() => props.onDismiss(props.plan.id, item, itemSummary(item))}
           />
         )}
@@ -326,7 +362,7 @@ function PlanItem(props: PlanItemProps): JSX.Element {
         <Text size="body" weight="semibold">
           {itemSummary(props.item)}
         </Text>
-        <Show when={windowLine(props.item)}>
+        <Show when={effectiveLine(props.item, props.runDate)}>
           {(line) => (
             <Text size="caption" tone="muted">
               {line()}
@@ -521,18 +557,18 @@ function itemSummary(item: TransactionProposalItemView): string {
   return "This move";
 }
 
-function windowLine(item: TransactionProposalItemView): string | undefined {
-  if (item.state !== "proposed" || item.window === undefined) {
+function effectiveLine(
+  item: TransactionProposalItemView,
+  runDate: string | undefined,
+): string | undefined {
+  if (
+    item.state !== "proposed" ||
+    item.effectiveDate === undefined ||
+    item.effectiveDate === runDate
+  ) {
     return undefined;
   }
-  const date = formatCalendarDate(item.window);
-  const effective =
-    item.effectiveDate === undefined
-      ? ""
-      : ` Takes effect on ${formatCalendarDate(item.effectiveDate)}.`;
-  return item.approvedAt === undefined
-    ? `Waits for ${date}.${effective}`
-    : `Waits for ${date}. Approved ${formatCalendarDate(item.approvedAt)}.${effective}`;
+  return `Takes effect on ${formatCalendarDate(item.effectiveDate)}.`;
 }
 
 function fallbackLine(item: TransactionProposalItemView): string | undefined {
@@ -578,9 +614,16 @@ type PlanSummaryProps = {
   readonly onDismiss: (plan: string, item: TransactionProposalItemView, label: string) => void;
 };
 
+type PlanDayGroup = {
+  readonly date?: string;
+  readonly today?: string;
+  readonly items: ReadonlyArray<TransactionProposalItemView>;
+};
+
 type ItemListProps = {
   readonly plan: TransactionProposalSetSummaryView;
   readonly items: ReadonlyArray<TransactionProposalItemView>;
+  readonly runDate: string | undefined;
   readonly history: boolean;
   readonly dismissing: string | undefined;
   readonly dismissFailure: (item: string) => string | undefined;
@@ -589,6 +632,7 @@ type ItemListProps = {
 
 type PlanItemProps = {
   readonly item: TransactionProposalItemView;
+  readonly runDate: string | undefined;
   readonly history: boolean;
   readonly dismissing: boolean;
   readonly dismissFailure: string | undefined;

@@ -94,7 +94,7 @@ export type ProposalStaleCode = typeof ProposalStaleCode.Type;
 const ProposalDate = Schema.String.pipe(
   Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)),
   Schema.annotate({
-    description: "A calendar date given as `YYYY-MM-DD` and read in the league's own fantasy day.",
+    description: "A date (`YYYY-MM-DD`) in the league's own fantasy day.",
   }),
 );
 
@@ -178,7 +178,7 @@ const ProposalItemPlacement = Schema.Struct({
     description: "Why the place was chosen, in one sentence.",
   }),
 }).annotate({
-  description: "The place chosen for an intent item, such as an add, activate, or stash.",
+  description: "The place chosen for an add, activate, or stash.",
 });
 type ProposalItemPlacement = typeof ProposalItemPlacement.Type;
 
@@ -239,7 +239,7 @@ export const ProposalItem = Schema.Struct({
   kind: ProposalItemKind,
   adds: Schema.Array(ProposalPlayer),
   fallbacks: Schema.Array(ProposalPlayer).annotate({
-    description: "Other players to use in order if the first choice cannot be added.",
+    description: "Other players to try in order if the first cannot be added.",
   }),
   drops: Schema.Array(ProposalPlayer),
   picks: Schema.Array(ProposalTradePick).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
@@ -266,7 +266,7 @@ export const ProposalItem = Schema.Struct({
   effectiveDate: Schema.optional(EffectiveDate),
   effectiveWarning: Schema.optional(Schema.NonEmptyString),
   approvedAt: Schema.optional(Schema.DateTimeUtc).annotate({
-    description: "When a submission approved a move that waits for a later date.",
+    description: "When a submission approved and attempted this move.",
   }),
   createdAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,
@@ -388,7 +388,25 @@ const ProposalOrderDecision = Schema.Union([
   }),
 ]).annotate({
   description:
-    "The plan for a team: an order, a conflict between moves, or a bound the search hit; a trade follows the roster moves.",
+    "The plan for a team: an order, a conflict, or a search bound; a trade follows the roster moves.",
+});
+
+const ProposalRunGroup = Schema.Struct({
+  date: ProposalDate.annotate({
+    description: "The day this group runs.",
+  }),
+  triggerAt: Schema.DateTimeUtc.annotate({
+    description: "When that day begins in the league's day.",
+  }),
+  effectiveRule: ProposalOrderTiming.annotate({
+    description:
+      "When the league applies these moves: same day, next, its weekly lock, or unpublished.",
+  }),
+  items: Schema.Array(ProposalItemId).annotate({
+    description: "Their move identifiers, in plan order.",
+  }),
+}).annotate({
+  description: "One day of the plan: today first, then later dates.",
 });
 
 export const ProposalTeamLineup = Schema.Struct({
@@ -423,8 +441,7 @@ export const ProposalIllegalRosterOccupant = Schema.Struct({
   slot: Schema.NonEmptyString,
   detail: Schema.NonEmptyString,
 }).annotate({
-  description:
-    "A player the league places in a slot that does not accept them, with the cause and the fix.",
+  description: "A player in a slot that does not accept them, with the cause and the fix.",
 });
 export type ProposalIllegalRosterOccupant = typeof ProposalIllegalRosterOccupant.Type;
 
@@ -436,18 +453,21 @@ export const ProposalTeam = Schema.Struct({
   order: Schema.optional(ProposalOrderDecision),
   lineup: Schema.optional(ProposalTeamLineup),
   today: Schema.optional(ProposalDate).annotate({
-    description:
-      "Today in this league's own fantasy day, so a move's window can be read against it.",
+    description: "Today in the league's own fantasy day.",
   }),
   illegalRoster: Schema.optional(Schema.Array(ProposalIllegalRosterOccupant)).annotate({
     description:
-      "Players on this team's current roster that the league places in a slot it does not accept. Present when current state was checked.",
+      "Players the league places in a slot it does not accept. Present when current state was checked.",
   }),
   failure: Schema.optional(Schema.NonEmptyString).annotate({
     description:
       "Why this team's state could not be read; its items are stale, other teams unaffected.",
   }),
   items: Schema.Array(ProposalItem),
+  groups: Schema.optional(Schema.Array(ProposalRunGroup)).annotate({
+    description:
+      "The same moves split by run day, today first; present when the league publishes a fantasy day.",
+  }),
   pendingOffers: Schema.Array(PendingTradeOffer),
 });
 export type ProposalTeam = typeof ProposalTeam.Type;
@@ -484,12 +504,19 @@ const ProposalSetSummary = Schema.Struct({
       team: QueryTeam.annotate({
         description: "The team whose moves this summary carries.",
       }),
+      today: Schema.optional(ProposalDate).annotate({
+        description: "Today in the league's own fantasy day.",
+      }),
       items: Schema.Array(ProposalItem).annotate({
         description: "This team's moves in the plan, with their state and last recorded check.",
       }),
+      groups: Schema.optional(Schema.Array(ProposalRunGroup)).annotate({
+        description:
+          "The same moves split by run day, today first; present when the league publishes a fantasy day.",
+      }),
       illegalRoster: Schema.optional(Schema.Array(ProposalIllegalRosterOccupant)).annotate({
         description:
-          "Players on this team's current roster that the league places in a slot it does not accept. Present when current state was read.",
+          "Players the league places in a slot it does not accept. Present when current state was read.",
       }),
     }),
   ).annotate({
@@ -571,21 +598,24 @@ type SubmittedProposalBid = typeof SubmittedProposalBid.Type;
 export const SubmitTransactionProposalResult = Schema.Struct({
   ...ProposalSetReview.fields,
   submittedBids: Schema.Array(SubmittedProposalBid),
-  waiting: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
-    description: "How many selected moves wait for a later date instead of running now.",
+  scheduled: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
+    description: "How many included moves are scheduled for a later day and did not run.",
+  }),
+  nextRun: Schema.optional(ProposalDate).annotate({
+    description: "The earliest day a scheduled included move runs; absent when none is scheduled.",
+  }),
+  detail: Schema.NonEmptyString.annotate({
+    description: "What this submission did today, and where a scheduled move next runs.",
   }),
 });
 export type SubmitTransactionProposalResult = typeof SubmitTransactionProposalResult.Type;
 
-const RunApprovedSummary = Schema.Struct({
+const RunDueSummary = Schema.Struct({
   due: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
-    description: "How many approved moves had reached their date.",
+    description: "How many proposed moves had reached their run day.",
   }),
   included: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
     description: "How many due moves a submission included.",
-  }),
-  waiting: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
-    description: "How many due moves a submission still judged to be waiting for a later date.",
   }),
   refused: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
     description: "How many due moves an expected refusal left for a later pass.",
@@ -595,7 +625,7 @@ const RunApprovedSummary = Schema.Struct({
       "How many due moves were skipped because their plan already had a submission in progress.",
   }),
 });
-type RunApprovedSummary = typeof RunApprovedSummary.Type;
+type RunDueSummary = typeof RunDueSummary.Type;
 
 const ProposalReason = Schema.Trim.pipe(
   Schema.check(Schema.isMinLength(1), Schema.isMaxLength(500)),
@@ -642,7 +672,7 @@ export const ProposalItemDraft = Schema.Struct({
     Schema.withDecodingDefaultKey(Effect.succeed([])),
   ),
   fallbacks: Schema.optional(Schema.NullOr(Schema.Array(PlayerRef))).annotate({
-    description: "Other players to use in order if the first choice cannot be added.",
+    description: "Other players to try in order if the first cannot be added.",
   }),
   drops: Schema.Array(PlayerRef).pipe(
     Schema.check(Schema.isMaxLength(10)),
@@ -890,10 +920,10 @@ export type TransactionProposalsShape = {
     input: SubmitTransactionProposalInput,
   ) => Effect.Effect<SubmitTransactionProposalResult, ProposalError>;
 
-  readonly runApproved: (
+  readonly runDue: (
     limit: number,
     at: import("effect").DateTime.Utc,
-  ) => Effect.Effect<RunApprovedSummary, ProposalPersistenceFailed>;
+  ) => Effect.Effect<RunDueSummary, ProposalPersistenceFailed>;
 
   readonly readPendingOffers: (
     userId: UserId,

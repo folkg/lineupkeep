@@ -330,9 +330,16 @@ export function useTransactionReviewPage(
     }
     const waits = (item: TransactionReviewItemView): boolean => {
       const today = todayByItem.get(item.id);
-      return item.window !== undefined && today !== undefined && item.window > today;
+      return item.window !== undefined && (today === undefined || item.window > today);
     };
-    const includedWaiting = included.filter(waits);
+    const includedScheduled = included.filter(waits);
+    const scheduled = items.filter(waits);
+    const nextRun = scheduled
+      .flatMap((item) => (item.window === undefined ? [] : [item.window]))
+      .sort()[0];
+    const includedNextRun = includedScheduled
+      .flatMap((item) => (item.window === undefined ? [] : [item.window]))
+      .sort()[0];
     const checkedTimes = items.flatMap((item) =>
       item.staleness.checkedAt === undefined ? [] : [item.staleness.checkedAt],
     );
@@ -350,12 +357,11 @@ export function useTransactionReviewPage(
       includedItems: included,
       includedIds: included.map((item) => item.id),
       includedCount: included.length,
-      includedDueCount: included.length - includedWaiting.length,
-      includedWaitingCount: includedWaiting.length,
-      waitingCount: items.filter(waits).length,
-      waitsUntil: includedWaiting
-        .flatMap((item) => (item.window === undefined ? [] : [item.window]))
-        .sort()[0],
+      includedDueCount: included.length - includedScheduled.length,
+      includedScheduledCount: includedScheduled.length,
+      scheduledCount: scheduled.length,
+      nextRun,
+      includedNextRun,
       includedWaivers: included.filter((item) => item.kind === "waiver_claim").length,
       includedFaab: included.reduce(
         (total, item) =>
@@ -488,9 +494,10 @@ export type TransactionReviewModel = {
   readonly includedIds: ReadonlyArray<string>;
   readonly includedCount: number;
   readonly includedDueCount: number;
-  readonly includedWaitingCount: number;
-  readonly waitingCount: number;
-  readonly waitsUntil: string | undefined;
+  readonly includedScheduledCount: number;
+  readonly scheduledCount: number;
+  readonly nextRun: string | undefined;
+  readonly includedNextRun: string | undefined;
   readonly includedWaivers: number;
   readonly includedFaab: number;
   readonly includedBids: ReadonlyArray<{ readonly item: string; readonly bid: number }>;

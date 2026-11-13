@@ -42,7 +42,7 @@ export const AutomationLive = Layer.effect(
       );
       const scheduledRuns = scheduled.reduce((total, result) => total + result.runs.length, 0);
       const repaired = yield* dispatcher.repair(limit);
-      const approved = yield* proposals.runApproved(limit, now);
+      const due = yield* proposals.runDue(limit, now);
       const retained = yield* retention.run(limit, now);
       const credentialKeyReport = yield* credentialKeys.report;
       const summary: AutomationSummary = {
@@ -51,11 +51,10 @@ export const AutomationLive = Layer.effect(
         scheduledRuns,
         delivered: repaired.delivered,
         pending: repaired.pending,
-        approvedDue: approved.due,
-        approvedIncluded: approved.included,
-        approvedWaiting: approved.waiting,
-        approvedRefused: approved.refused,
-        approvedInProgress: approved.inProgress,
+        dueMoves: due.due,
+        dueIncluded: due.included,
+        dueRefused: due.refused,
+        dueInProgress: due.inProgress,
         retention: retained,
         credentialKeys: credentialKeyReport,
       };
@@ -63,11 +62,10 @@ export const AutomationLive = Layer.effect(
         "automation.eligible_teams": summary.eligibleTeams,
         "automation.scheduled_runs": summary.scheduledRuns,
         "automation.pauses_expired": summary.pausesExpired,
-        "automation.approved_due": summary.approvedDue,
-        "automation.approved_included": summary.approvedIncluded,
-        "automation.approved_waiting": summary.approvedWaiting,
-        "automation.approved_refused": summary.approvedRefused,
-        "automation.approved_in_progress": summary.approvedInProgress,
+        "automation.due_moves": summary.dueMoves,
+        "automation.due_included": summary.dueIncluded,
+        "automation.due_refused": summary.dueRefused,
+        "automation.due_in_progress": summary.dueInProgress,
       });
       return summary;
     });

@@ -76,12 +76,12 @@ test("reviews and submits a proposed transaction set across the owner's teams", 
 
   const checkbox = page.getByRole("checkbox", { name: /Drop Riverside Receiver/u });
   await expect(checkbox).toBeChecked();
-  await expect(page.getByRole("button", { name: "Submit 1 move" })).not.toHaveAttribute(
+  await expect(page.getByRole("button", { name: "Submit 1 move today" })).not.toHaveAttribute(
     "aria-disabled",
   );
   await expect(page.getByText(/Each move is sent once, with no retries./u)).toBeVisible();
 
-  await page.getByRole("button", { name: "Submit 1 move" }).click();
+  await page.getByRole("button", { name: "Submit 1 move today" }).click();
 
   await expect(page.getByRole("heading", { name: "Submitted" })).toBeVisible();
   await expect(page.getByText("1 executed.")).toBeVisible();
@@ -175,8 +175,8 @@ test("shows one league refusal in the review page and in the MCP result", async 
   )(proposed.structuredContent);
 
   await page.goto(created.reviewUrl);
-  await expect(page.getByRole("button", { name: "Submit 1 move" })).toBeVisible();
-  await page.getByRole("button", { name: "Submit 1 move" }).click();
+  await expect(page.getByRole("button", { name: "Submit 1 move today" })).toBeVisible();
+  await page.getByRole("button", { name: "Submit 1 move today" }).click();
   await expect(page.getByRole("heading", { name: "Submitted" })).toBeVisible();
 
   const read = await client.callTool("get_transaction_proposal_set", { set: created.set.id });

@@ -47,7 +47,7 @@ type ProposalReview = typeof ProposalReview.Type;
 export const proposalTools = Toolkit.make(
   Tool.make("propose_transactions", {
     description:
-      "Propose player moves across this account's teams for a person to review, returning the set and a review link. Proposals are stored only: nothing reaches the league's site, nothing is submitted, executed, or spent. A refused item returns in `refused` with its position, reason, and fix, and is not stored.",
+      "Propose player moves across this account's teams for a person to review, returning the set and a review link. Proposals are stored only: nothing reaches the league's site, nothing is submitted, executed, or spent. A refused item returns in `refused` with its position, reason, and fix, and is not stored. Editing a stored move means withdrawing it and proposing its replacement.",
     parameters: ProposeTransactionsInput,
     success: Schema.toCodecJson(ProposedTransactions),
     failure: ToolFailure,
@@ -60,7 +60,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_transaction_proposal_set", {
     description:
-      "Read one stored proposal set: its items by team with state, last check, planned order, and submissions. It reads stored state only, so a set can be stale.",
+      "Read one stored proposal set: its moves grouped by the day each runs, with state, last check, planned order, and submissions. It reads stored state only, so a set can be stale.",
     parameters: ProposalSetInput,
     success: Schema.toCodecJson(ProposalReview),
     failure: ToolFailure,
@@ -86,7 +86,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("withdraw_transaction_proposal_items", {
     description:
-      "Withdraw still-proposed moves from one set and return it with its order recomputed. A move that already ran, is pending, failed, or was skipped cannot be withdrawn.",
+      "Withdraw still-proposed moves from one set and return it with its order recomputed. A move that already ran, is pending, failed, or was skipped cannot be withdrawn; a scheduled move stays withdrawable until its day.",
     parameters: WithdrawProposalItemsInput,
     success: Schema.toCodecJson(ProposalReview),
     failure: ToolFailure,
@@ -112,7 +112,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("list_transaction_proposals", {
     description:
-      "List one team's plans, newest first, as open or closed, with moves, review links, and last checks. An open list reads the current roster to name a player the league places in a slot it does not accept.",
+      "List one team's plans, newest first, as open or closed, with moves grouped by run day, review links, and last checks. An open list reads the current roster to name a player the league places in an illegal slot.",
     parameters: ListProposalSetsInput,
     success: Schema.toCodecJson(ProposalSetList),
     failure: ToolFailure,

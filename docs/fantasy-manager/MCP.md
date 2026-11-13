@@ -844,18 +844,21 @@ no longer match the original request, so proposing the original items again crea
 An item may name `window`, one calendar date written `YYYY-MM-DD` and read in the league's own fantasy
 day. It is how a move is scheduled for a later date instead of running when the plan is submitted. A
 trade carries no window, because the other manager decides when a trade runs; a window in the past, or
-one this league's day cannot interpret, is refused with a plain reason. Submitting a plan is the approval:
-an item whose date is still ahead stays in the plan with an approval time and runs on its date, while an
-item with no window, or whose date has arrived, runs on that submission. The hourly tick runs an approved
-move on its date through the same submission, so a plan already submitting is skipped and a transient
-failure is retried on the next tick. The result reports how many
-selected moves wait, and a plan whose only selected moves wait still records a completed submission.
-`list_transaction_proposals` and `get_transaction_proposal_set` publish an item's `window` and, once
-approved, its `approvedAt`.
+one this league's day cannot interpret, is refused with a plain reason. Submitting commits only the
+moves due today: an item with no window, or whose date has arrived, runs on that submission, while an
+item whose date is still ahead stays proposed with no approval time and no record against it. The read
+groups the plan by run day, today first, and each group names the day, the league's rollover for that
+day, and when the league applies the moves. The hourly tick runs a proposed move whose day has arrived
+through the same submission without a separate approval, so a plan already submitting is skipped and a
+transient failure is tried again on the next tick. The result reports how many included moves stay
+scheduled and the day the next one runs; a submission whose included moves are all scheduled runs
+nothing and says so. A scheduled move stays withdrawable until its day, and editing it means
+withdrawing it and proposing its replacement. `list_transaction_proposals` and
+`get_transaction_proposal_set` publish each item's `window` and the team's run-day `groups`.
 
 A one-player add or waiver claim may also name `fallbacks`: an ordered list of player references to try
 when the first choice cannot be added at submission. A plan never promotes on propose or on a read.
-When a submission, or the hourly pass that submits for an approved plan, finds the first choice gone, it
+When a submission, or the hourly tick that runs a scheduled move on its day, finds the first choice gone, it
 uses the first fallback that the league's player pool lists as available, records the chosen player as the
 move's add, and names both players in the move's outcome. If no fallback can be added, the move keeps its
 normal refusal. A trade, another kind, several adds, or a fallback that repeats a choice is refused with a
@@ -947,7 +950,8 @@ found.
 The item state vocabulary is `proposed`, `executed`, `pending`, `failed`, `skipped`, `unknown`, and
 `dismissed`, plus a trade's `accepted`, `withdrawn`, and `expired`.
 No MCP tool submits, accepts, or spends anything. Execution happens only when a signed-in owner
-submits the moves that are still proposed from the review page. Each submission claims the set in the
+submits the moves due today from the review page, or when the hourly tick reaches a scheduled move's
+day. Each submission claims the set in the
 database, re-runs the same revalidation immediately before writing, and skips an item that went stale
 with its reason rather than attempting it. It sends only the included moves that are still
 `proposed`; a move that already ran, failed, or was skipped keeps its outcome. The included moves for

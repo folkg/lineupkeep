@@ -1687,7 +1687,7 @@ export type ProposalOrderItem = {
   readonly placeAfter?: ProposalOrderRepair;
 };
 
-type ProposalOrderTimingRule = "same_day" | "next_day" | "weekly_lock" | "not_published";
+export type ProposalOrderTimingRule = "same_day" | "next_day" | "weekly_lock" | "not_published";
 
 export type ProposalOrderTiming = {
   readonly rule: "same_day" | "next_day" | "weekly_lock" | undefined;

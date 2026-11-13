@@ -211,8 +211,7 @@ export const GetLeagueInput = Schema.Struct({
 });
 export type GetLeagueInput = typeof GetLeagueInput.Type;
 
-const declaredStateDetail =
-  "`published` carries the league's value; `not_set` means the league declares none, not zero.";
+const declaredStateDetail = "The league's value; `not_set` means none, not zero.";
 
 const DeclaredNumber = Schema.Union([
   Schema.Struct({

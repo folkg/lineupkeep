@@ -3,7 +3,12 @@ import { env } from "node:process";
 import { assert, it } from "@effect/vitest";
 import { DateTime } from "effect";
 
-import { currentFantasyDayStart, endOfFantasyDay, nextFantasyDayBoundary } from "./FantasyDay.ts";
+import {
+  currentFantasyDayStart,
+  endOfFantasyDay,
+  nextFantasyDayBoundary,
+  startOfFantasyDay,
+} from "./FantasyDay.ts";
 
 const policy = {
   timeZone: "America/Los_Angeles",
@@ -31,6 +36,17 @@ it("expires at the next Pacific midnight rather than a fixed offset", () => {
 
   assert.strictEqual(DateTime.formatIso(beforeMidnight), "2026-10-25T07:00:00.000Z");
   assert.strictEqual(DateTime.formatIso(boundary), "2026-10-26T07:00:00.000Z");
+});
+
+it("starts a run day at the provider's local midnight, including across DST", () => {
+  assert.strictEqual(
+    DateTime.formatIso(startOfFantasyDay("2026-11-01", policy)),
+    "2026-11-01T07:00:00.000Z",
+  );
+  assert.strictEqual(
+    DateTime.formatIso(startOfFantasyDay("2026-11-02", policy)),
+    "2026-11-02T08:00:00.000Z",
+  );
 });
 
 it("ends a covered date at the next provider-local midnight, including across DST", () => {

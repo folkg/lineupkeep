@@ -6798,7 +6798,7 @@ it.effect("refuses a window on a trade because the other manager decides its tim
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect("runs a due move and approves a waiting one without attempting it", () =>
+it.effect("submits today's included moves and leaves a future move planned for its day", () =>
   Effect.gen(function* () {
     yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
     const proposals = yield* TransactionProposals;
@@ -6842,20 +6842,26 @@ it.effect("runs a due move and approves a waiting one without attempting it", ()
 
     const submitted = yield* proposals.submit(owner, { set: proposed.set.id, include: selected });
 
-    assert.strictEqual(submitted.waiting, 1);
+    assert.strictEqual(submitted.scheduled, 1);
+    assert.strictEqual(submitted.nextRun, "2026-11-14");
+    assert.strictEqual(
+      submitted.detail,
+      "Submitted 1 move today; 1 move stays scheduled for 2026-11-14.",
+    );
+    assert.strictEqual(submitted.set.submissions.length, 1);
     const due = itemByReason(submitted, "Drop the first center now.");
     assert.strictEqual(due.state, "executed");
-    const waiting = itemByReason(submitted, "Drop the second center next week.");
-    assert.strictEqual(waiting.state, "proposed");
-    assert.isUndefined(waiting.execution);
-    assert.strictEqual(waiting.window, "2026-11-14");
-    assert.isDefined(waiting.approvedAt);
+    const planned = itemByReason(submitted, "Drop the second center next week.");
+    assert.strictEqual(planned.state, "proposed");
+    assert.isUndefined(planned.execution);
+    assert.strictEqual(planned.window, "2026-11-14");
+    assert.isUndefined(planned.approvedAt);
     assert.isUndefined(itemByReason(submitted, "Drop the third center later.").approvedAt);
     assert.strictEqual((yield* fake.transactionRequests).length, 1);
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect("completes a submission that only approves a waiting move", () =>
+it.effect("completes a submission of nothing when every included move is planned", () =>
   Effect.gen(function* () {
     yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
     const proposals = yield* TransactionProposals;
@@ -6881,19 +6887,23 @@ it.effect("completes a submission that only approves a waiting move", () =>
       include: proposed.items.map((entry) => entry.item.id),
     });
 
-    assert.strictEqual(submitted.waiting, 1);
-    assert.strictEqual(submitted.set.submissions.length, 1);
-    assert.isDefined(submitted.set.submissions[0]?.completedAt);
+    assert.strictEqual(submitted.scheduled, 1);
+    assert.strictEqual(submitted.nextRun, "2026-11-14");
+    assert.strictEqual(
+      submitted.detail,
+      "Nothing runs today. 1 move stays scheduled for 2026-11-14.",
+    );
+    assert.deepStrictEqual(submitted.set.submissions, []);
     assert.deepStrictEqual(submitted.submittedBids, []);
-    const waiting = Array.getUnsafe(itemsOf(submitted), 0);
-    assert.strictEqual(waiting.state, "proposed");
-    assert.isUndefined(waiting.execution);
-    assert.isDefined(waiting.approvedAt);
+    const planned = Array.getUnsafe(itemsOf(submitted), 0);
+    assert.strictEqual(planned.state, "proposed");
+    assert.isUndefined(planned.execution);
+    assert.isUndefined(planned.approvedAt);
     assert.deepStrictEqual(yield* fake.transactionRequests, []);
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect("keeps a waiting move's first approval time when a later submission includes it", () =>
+it.effect("keeps a planned move unapproved when a later submission includes it", () =>
   Effect.gen(function* () {
     yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
     const proposals = yield* TransactionProposals;
@@ -6915,22 +6925,20 @@ it.effect("keeps a waiting move's first approval time when a later submission in
     });
     const include = proposed.items.map((entry) => entry.item.id);
     const first = yield* proposals.submit(owner, { set: proposed.set.id, include });
-    const firstApproval = Array.getUnsafe(itemsOf(first), 0).approvedAt;
-    assert.isDefined(firstApproval);
+    assert.strictEqual(first.scheduled, 1);
+    assert.isUndefined(Array.getUnsafe(itemsOf(first), 0).approvedAt);
 
     yield* TestClock.adjust("2 hours");
     const second = yield* proposals.submit(owner, { set: proposed.set.id, include });
 
-    assert.strictEqual(second.waiting, 1);
-    assert.strictEqual(
-      Array.getUnsafe(itemsOf(second), 0).approvedAt?.epochMilliseconds,
-      firstApproval.epochMilliseconds,
-    );
+    assert.strictEqual(second.scheduled, 1);
+    assert.isUndefined(Array.getUnsafe(itemsOf(second), 0).approvedAt);
+    assert.deepStrictEqual(second.set.submissions, []);
     assert.deepStrictEqual(yield* fake.transactionRequests, []);
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect("runs an approved move when its date arrives", () =>
+it.effect("runs a planned move on its day without a prior approval", () =>
   Effect.gen(function* () {
     yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
     const proposals = yield* TransactionProposals;
@@ -6957,23 +6965,24 @@ it.effect("runs an approved move when its date arrives", () =>
       set: proposed.set.id,
       include: proposed.items.map((entry) => entry.item.id),
     });
-    assert.strictEqual(submitted.waiting, 1);
+    assert.strictEqual(submitted.scheduled, 1);
 
     yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-01T18:00:00Z")));
     const now = yield* DateTime.now;
-    const summary = yield* proposals.runApproved(10, now);
+    const summary = yield* proposals.runDue(10, now);
 
-    assert.deepStrictEqual(summary, { due: 1, included: 1, waiting: 0, refused: 0, inProgress: 0 });
+    assert.deepStrictEqual(summary, { due: 1, included: 1, refused: 0, inProgress: 0 });
     const item = Array.getUnsafe(
       itemsOf(yield* proposals.read(owner, { set: proposed.set.id })),
       0,
     );
     assert.strictEqual(item.state, "executed");
+    assert.strictEqual(DateTime.formatIso(item.approvedAt ?? now), "2026-11-01T18:00:00.000Z");
     assert.strictEqual((yield* fake.transactionRequests).length, 1);
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect("leaves an approved move alone while its date is still ahead", () =>
+it.effect("leaves a planned move alone while its day is still ahead", () =>
   Effect.gen(function* () {
     yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
     const proposals = yield* TransactionProposals;
@@ -6999,45 +7008,9 @@ it.effect("leaves an approved move alone while its date is still ahead", () =>
     });
 
     const now = yield* DateTime.now;
-    const summary = yield* proposals.runApproved(10, now);
+    const summary = yield* proposals.runDue(10, now);
 
-    assert.deepStrictEqual(summary, { due: 0, included: 0, waiting: 0, refused: 0, inProgress: 0 });
-    const item = Array.getUnsafe(
-      itemsOf(yield* proposals.read(owner, { set: proposed.set.id })),
-      0,
-    );
-    assert.strictEqual(item.state, "proposed");
-    assert.isDefined(item.approvedAt);
-    assert.deepStrictEqual(yield* fake.transactionRequests, []);
-  }).pipe(Effect.provide(TestLayer)),
-);
-
-it.effect("never runs a move nobody approved, however long its date has passed", () =>
-  Effect.gen(function* () {
-    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
-    const proposals = yield* TransactionProposals;
-    const fake = yield* FakeProviderWorld;
-    const tokens = yield* QueryTokens;
-    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
-    const redLine = teamId(seeded, "nhl.l.1.t.1");
-    const proposed = yield* proposals.propose(owner, proposer, {
-      items: [
-        {
-          team: redLine,
-          kind: "drop",
-          adds: [],
-          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
-          window: "2026-11-01",
-          reason: "Drop the center tomorrow.",
-        },
-      ],
-    });
-
-    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-03T18:00:00Z")));
-    const now = yield* DateTime.now;
-    const summary = yield* proposals.runApproved(10, now);
-
-    assert.deepStrictEqual(summary, { due: 0, included: 0, waiting: 0, refused: 0, inProgress: 0 });
+    assert.deepStrictEqual(summary, { due: 0, included: 0, refused: 0, inProgress: 0 });
     const item = Array.getUnsafe(
       itemsOf(yield* proposals.read(owner, { set: proposed.set.id })),
       0,
@@ -7048,7 +7021,43 @@ it.effect("never runs a move nobody approved, however long its date has passed",
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect("runs an approved move whose date passed while the clock was missed", () =>
+it.effect("runs a proposed move when its day arrives without any submission", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          window: "2026-11-01",
+          reason: "Drop the center tomorrow.",
+        },
+      ],
+    });
+
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-03T18:00:00Z")));
+    const now = yield* DateTime.now;
+    const summary = yield* proposals.runDue(10, now);
+
+    assert.deepStrictEqual(summary, { due: 1, included: 1, refused: 0, inProgress: 0 });
+    const item = Array.getUnsafe(
+      itemsOf(yield* proposals.read(owner, { set: proposed.set.id })),
+      0,
+    );
+    assert.strictEqual(item.state, "executed");
+    assert.isDefined(item.approvedAt);
+    assert.strictEqual((yield* fake.transactionRequests).length, 1);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("runs a planned move whose day passed while the check was missed", () =>
   Effect.gen(function* () {
     yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
     const proposals = yield* TransactionProposals;
@@ -7075,9 +7084,9 @@ it.effect("runs an approved move whose date passed while the clock was missed", 
 
     yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-03T18:00:00Z")));
     const now = yield* DateTime.now;
-    const summary = yield* proposals.runApproved(10, now);
+    const summary = yield* proposals.runDue(10, now);
 
-    assert.deepStrictEqual(summary, { due: 1, included: 1, waiting: 0, refused: 0, inProgress: 0 });
+    assert.deepStrictEqual(summary, { due: 1, included: 1, refused: 0, inProgress: 0 });
     const item = Array.getUnsafe(
       itemsOf(yield* proposals.read(owner, { set: proposed.set.id })),
       0,
@@ -7122,15 +7131,15 @@ it.effect("skips a plan whose submission is already in progress", () =>
     });
     assert.strictEqual(claimed.status, "claimed");
 
-    const summary = yield* proposals.runApproved(10, now);
+    const summary = yield* proposals.runDue(10, now);
 
-    assert.deepStrictEqual(summary, { due: 1, included: 0, waiting: 0, refused: 0, inProgress: 1 });
+    assert.deepStrictEqual(summary, { due: 1, included: 0, refused: 0, inProgress: 1 });
     const item = Array.getUnsafe(
       itemsOf(yield* proposals.read(owner, { set: proposed.set.id })),
       0,
     );
     assert.strictEqual(item.state, "proposed");
-    assert.isDefined(item.approvedAt);
+    assert.isUndefined(item.approvedAt);
     assert.deepStrictEqual(yield* fake.transactionRequests, []);
   }).pipe(Effect.provide(TestLayer)),
 );
@@ -7174,14 +7183,13 @@ it.effect("does not attempt again a move the pass settled as skipped", () =>
 
     yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-01T18:00:00Z")));
     const now = yield* DateTime.now;
-    const firstPass = yield* proposals.runApproved(10, now);
+    const firstPass = yield* proposals.runDue(10, now);
     const review = yield* proposals.read(owner, { set: proposed.set.id });
     const skipped = Array.getUnsafe(itemsOf(review), 0);
 
     assert.deepStrictEqual(firstPass, {
       due: 1,
       included: 1,
-      waiting: 0,
       refused: 0,
       inProgress: 0,
     });
@@ -7190,7 +7198,7 @@ it.effect("does not attempt again a move the pass settled as skipped", () =>
     assert.include(skipped.execution?.detail ?? "", "different connection");
     assert.deepStrictEqual(yield* fake.transactionRequests, []);
 
-    const secondPass = yield* proposals.runApproved(10, now);
+    const secondPass = yield* proposals.runDue(10, now);
     const again = Array.getUnsafe(
       itemsOf(yield* proposals.read(owner, { set: proposed.set.id })),
       0,
@@ -7199,11 +7207,146 @@ it.effect("does not attempt again a move the pass settled as skipped", () =>
     assert.deepStrictEqual(secondPass, {
       due: 0,
       included: 0,
-      waiting: 0,
       refused: 0,
       inProgress: 0,
     });
     assert.strictEqual(again.state, "skipped");
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("groups a plan by the day each move runs, today first", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "free_agent_add",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
+          drops: [],
+          reason: "Run it today.",
+        },
+        {
+          team: redLine,
+          kind: "free_agent_add",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90007"]),
+          drops: [],
+          window: "2026-10-31",
+          reason: "Run it today by its date.",
+        },
+        {
+          team: redLine,
+          kind: "free_agent_add",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90008"]),
+          drops: [],
+          window: "2026-11-02",
+          reason: "Run it in two days.",
+        },
+        {
+          team: redLine,
+          kind: "free_agent_add",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90010"]),
+          drops: [],
+          window: "2026-11-14",
+          reason: "Run it later.",
+        },
+      ],
+    });
+
+    const review = yield* proposals.read(owner, { set: proposed.set.id });
+    const reviewed = Array.getUnsafe(review.teams, 0);
+    const byId = new Map(reviewed.items.map((item) => [item.id, item] as const));
+    const reasons = (group: NonNullable<typeof reviewed.groups>[number]): ReadonlyArray<string> =>
+      group.items.flatMap((id) => {
+        const item = byId.get(id);
+        return item === undefined ? [] : [item.reason];
+      });
+    assert.strictEqual(reviewed.today, "2026-10-31");
+    assert.deepStrictEqual(
+      reviewed.groups?.map((group) => [group.date, group.effectiveRule, reasons(group)]),
+      [
+        ["2026-10-31", "not_published", ["Run it today.", "Run it today by its date."]],
+        ["2026-11-02", "not_published", ["Run it in two days."]],
+        ["2026-11-14", "not_published", ["Run it later."]],
+      ],
+    );
+    assert.deepStrictEqual(
+      reviewed.groups?.map((group) => DateTime.formatIso(group.triggerAt)),
+      ["2026-10-31T07:00:00.000Z", "2026-11-02T08:00:00.000Z", "2026-11-14T08:00:00.000Z"],
+    );
+    assert.strictEqual(reviewed.items.length, 4);
+
+    const listed = yield* proposals.list(owner, { team: redLine });
+    const listedTeam = Array.getUnsafe(Array.getUnsafe(listed.sets, 0).teams, 0);
+    const listedById = new Map(listedTeam.items.map((item) => [item.id, item] as const));
+    assert.strictEqual(listedTeam.today, "2026-10-31");
+    assert.deepStrictEqual(
+      listedTeam.groups?.map((group) =>
+        group.items.flatMap((id) => {
+          const item = listedById.get(id);
+          return item === undefined ? [] : [item.reason];
+        }),
+      ),
+      [["Run it today.", "Run it today by its date."], ["Run it in two days."], ["Run it later."]],
+    );
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("withdraws a future move and leaves the plan open", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          window: "2026-11-14",
+          reason: "Drop the first center next week.",
+        },
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          window: "2026-11-21",
+          reason: "Drop the second center later.",
+        },
+      ],
+    });
+    const submitted = yield* proposals.submit(owner, {
+      set: proposed.set.id,
+      include: proposed.items.map((entry) => entry.item.id),
+    });
+    assert.strictEqual(submitted.scheduled, 2);
+    assert.strictEqual(submitted.nextRun, "2026-11-14");
+
+    const withdrawn = yield* proposals.withdrawItems(owner, {
+      set: proposed.set.id,
+      items: [Array.getUnsafe(proposed.items, 0).item.id],
+    });
+
+    assert.strictEqual(withdrawn.set.closed, false);
+    const remaining = itemsOf(withdrawn);
+    assert.deepStrictEqual(
+      remaining.map((item) => item.reason),
+      ["Drop the second center later."],
+    );
+    assert.strictEqual(Array.getUnsafe(remaining, 0).state, "proposed");
+    assert.isUndefined(Array.getUnsafe(remaining, 0).approvedAt);
     assert.deepStrictEqual(yield* fake.transactionRequests, []);
   }).pipe(Effect.provide(TestLayer)),
 );

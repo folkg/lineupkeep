@@ -202,11 +202,10 @@ it.effect("runs an approved move when its date arrives on the hourly tick", () =
     const summary = yield* automation.run(10);
     const review = yield* proposals.read(owner, { set: proposed.set.id });
 
-    assert.strictEqual(summary.approvedDue, 1);
-    assert.strictEqual(summary.approvedIncluded, 1);
-    assert.strictEqual(summary.approvedWaiting, 0);
-    assert.strictEqual(summary.approvedRefused, 0);
-    assert.strictEqual(summary.approvedInProgress, 0);
+    assert.strictEqual(summary.dueMoves, 1);
+    assert.strictEqual(summary.dueIncluded, 1);
+    assert.strictEqual(summary.dueRefused, 0);
+    assert.strictEqual(summary.dueInProgress, 0);
     assert.strictEqual(review.teams.flatMap((entry) => entry.items)[0]?.state, "executed");
     assert.strictEqual((yield* fake.transactionRequests).length, 1);
   }).pipe(Effect.provide(AutomationTestLayer)),
@@ -268,8 +267,8 @@ it.effect("promotes an approved move's fallback and runs it in the same tick", (
       0,
     );
 
-    assert.strictEqual(summary.approvedDue, 1);
-    assert.strictEqual(summary.approvedIncluded, 1);
+    assert.strictEqual(summary.dueMoves, 1);
+    assert.strictEqual(summary.dueIncluded, 1);
     assert.strictEqual(item.state, "executed");
     assert.strictEqual(item.adds[0]?.name, "Second Choice");
     assert.include(

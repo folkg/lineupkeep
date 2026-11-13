@@ -17,6 +17,8 @@ import type {
   TransactionReviewPendingOfferView,
   TransactionReviewTeamView,
   TransactionReviewView,
+  TransactionRunGroupView,
+  TransactionRunTiming,
 } from "#contracts/connections/transactionContract.ts";
 import type { ExpectedFailure } from "#server/backendEntry.ts";
 
@@ -65,6 +67,12 @@ export function toTransactionProposalListView(list: ProposalSetList): Transactio
 function toProposalSetSummaryView(
   set: ProposalSetList["sets"][number],
 ): TransactionProposalSetSummaryView {
+  const summaryItem = (
+    item: ProposalSetList["sets"][number]["teams"][number]["items"][number],
+  ): TransactionProposalSetSummaryView["teams"][number]["items"][number] => ({
+    ...toItemView(item),
+    settled: item.settled,
+  });
   return {
     id: set.id,
     proposedBy: {
@@ -78,7 +86,9 @@ function toProposalSetSummaryView(
     reviewPath: set.reviewPath,
     teams: set.teams.map((entry) => ({
       team: toListTeam(entry.team),
-      items: entry.items.map((item) => ({ ...toItemView(item), settled: item.settled })),
+      ...(entry.today === undefined ? {} : { today: entry.today }),
+      items: entry.items.map(summaryItem),
+      ...(entry.groups === undefined ? {} : { groups: entry.groups.map(toRunGroupView) }),
       ...(entry.illegalRoster === undefined
         ? {}
         : { illegalRoster: entry.illegalRoster.map(toIllegalRosterView) }),
@@ -136,6 +146,9 @@ function toTeamView(team: ProposalSetReview["teams"][number]): TransactionReview
       ? {}
       : { illegalRoster: team.illegalRoster.map(toIllegalRosterView) }),
     ...(team.today === undefined ? {} : { today: team.today }),
+    ...(team.groups === undefined
+      ? {}
+      : { groups: team.groups.map((group) => toRunGroupView(group)) }),
     ...(team.lineup === undefined
       ? {}
       : {
@@ -158,6 +171,20 @@ function toIllegalRosterView(occupant: {
   readonly detail: string;
 }): TransactionReviewIllegalRosterView {
   return { name: occupant.name, slot: occupant.slot, detail: occupant.detail };
+}
+
+function toRunGroupView(group: {
+  readonly date: string;
+  readonly triggerAt: DateTime.Utc;
+  readonly effectiveRule: TransactionRunTiming;
+  readonly items: ReadonlyArray<string>;
+}): TransactionRunGroupView {
+  return {
+    date: group.date,
+    triggerAt: DateTime.formatIso(group.triggerAt),
+    effectiveRule: group.effectiveRule,
+    items: [...group.items],
+  };
 }
 
 function toOrderView(

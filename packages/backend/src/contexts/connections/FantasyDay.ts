@@ -17,6 +17,15 @@ export function fantasyDayLabel(now: DateTime.Utc, day: ProviderFantasyDay): str
   return DateTime.formatIsoDate(DateTime.setZoneNamedUnsafe(now, day.timeZone));
 }
 
+export function startOfFantasyDay(date: string, day: ProviderFantasyDay): DateTime.Utc {
+  return DateTime.toUtc(
+    DateTime.makeZonedUnsafe(`${date}T00:00:00`, {
+      timeZone: day.timeZone,
+      adjustForTimeZone: true,
+    }),
+  );
+}
+
 export function endOfFantasyDay(date: string, day: ProviderFantasyDay): DateTime.Utc {
   const start = DateTime.makeZonedUnsafe(`${date}T00:00:00`, {
     timeZone: day.timeZone,

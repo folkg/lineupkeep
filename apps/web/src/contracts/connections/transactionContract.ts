@@ -177,6 +177,15 @@ export type TransactionReviewTradeRulesView = {
   readonly objectionDays?: number;
 };
 
+export type TransactionRunTiming = "same_day" | "next_day" | "weekly_lock" | "not_published";
+
+export type TransactionRunGroupView = {
+  readonly date: string;
+  readonly triggerAt: string;
+  readonly effectiveRule: TransactionRunTiming;
+  readonly items: ReadonlyArray<string>;
+};
+
 type TransactionReviewRosterPlacesView = {
   readonly maximum: number;
   readonly occupied: number;
@@ -230,6 +239,7 @@ export type TransactionReviewTeamView = {
   readonly today?: string;
   readonly failure?: string;
   readonly items: ReadonlyArray<TransactionReviewItemView>;
+  readonly groups?: ReadonlyArray<TransactionRunGroupView>;
   readonly pendingOffers: ReadonlyArray<TransactionReviewPendingOfferView>;
 };
 
@@ -254,7 +264,9 @@ export type TransactionReviewView = {
 export type TransactionReviewData = {
   readonly review: TransactionReviewView;
   readonly submittedBids?: ReadonlyArray<{ readonly item: string; readonly bid: number }>;
-  readonly waiting?: number;
+  readonly scheduled?: number;
+  readonly nextRun?: string;
+  readonly detail?: string;
 };
 
 export type TransactionProposalItemView = TransactionReviewItemView & {
@@ -274,7 +286,9 @@ export type TransactionProposalSetSummaryView = {
   readonly reviewPath: string;
   readonly teams: ReadonlyArray<{
     readonly team: TransactionReviewTeamView["team"];
+    readonly today?: string;
     readonly items: ReadonlyArray<TransactionProposalItemView>;
+    readonly groups?: ReadonlyArray<TransactionRunGroupView>;
     readonly illegalRoster?: ReadonlyArray<TransactionReviewIllegalRosterView>;
   }>;
 };

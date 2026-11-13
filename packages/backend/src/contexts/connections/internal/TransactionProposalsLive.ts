@@ -19,6 +19,7 @@ import type {
   ProposalPlacementIntent,
   ProposalPlacementResult,
 } from "#contexts/connections/ProposalOrder.ts";
+import { proposalRunDayGroups } from "#contexts/connections/ProposalRunDays.ts";
 import type {
   ProviderAvailableDraftPick,
   ProviderCapabilities,
@@ -1017,11 +1018,24 @@ export const TransactionProposalsLive = Layer.effect(
             : undefined;
         const illegalRoster =
           teamData?.status === "ready" ? illegalRosterOf(teamData.facts) : undefined;
+        const fantasyDay = fantasyDaysByProvider([team.provider]).get(team.provider);
+        const today = fantasyDay === undefined ? undefined : fantasyDayLabel(now, fantasyDay);
         const sets = yield* Effect.forEach(listed.sets, ({ set, items }) =>
           Effect.gen(function* () {
             const views = yield* Effect.forEach(items, (item) =>
               toItem(tokens, userId, team, item, undefined, item.reserveMove, undefined),
             );
+            const groups =
+              fantasyDay === undefined || today === undefined
+                ? undefined
+                : proposalRunDayGroups({
+                    items: views,
+                    today,
+                    effectiveRule:
+                      set.orders.find((entry) => entry.team === team.id)?.order.timing ??
+                      "not_published",
+                    fantasyDay,
+                  }).map((group) => ({ ...group, items: group.items.map((item) => item.id) }));
             return {
               id: set.id,
               proposedBy: set.proposedBy,
@@ -1032,7 +1046,9 @@ export const TransactionProposalsLive = Layer.effect(
               teams: [
                 {
                   team: teamView(team),
+                  ...(today === undefined ? {} : { today }),
                   items: views,
+                  ...(groups === undefined ? {} : { groups }),
                   ...(illegalRoster === undefined ? {} : { illegalRoster }),
                 },
               ],
@@ -1374,25 +1390,50 @@ export const TransactionProposalsLive = Layer.effect(
         const fantasyDay = team === undefined ? undefined : fantasyDays.get(team.provider);
         return fantasyDay === undefined ? undefined : fantasyDayLabel(now, fantasyDay);
       };
-      const waiting = sendable.filter((item) => {
+      const scheduled = sendable.filter((item) => {
+        if (item.window === undefined) {
+          return false;
+        }
         const today = todayOf(item);
-        return item.window !== undefined && today !== undefined && item.window > today;
+        return today === undefined || item.window > today;
       });
-      const waitingIds = new Set(waiting.map((item) => item.id));
-      const due = sendable.filter((item) => !waitingIds.has(item.id));
+      const scheduledIds = new Set(scheduled.map((item) => item.id));
+      const due = sendable.filter((item) => !scheduledIds.has(item.id));
       const dueIds = new Set(due.map((item) => item.id));
       const dueTeams = new Set(due.map((item) => item.team));
-      const approvals: ReadonlyArray<ProposalItemChange> = waiting.map((item) => ({
-        id: item.id,
-        staleness: item.staleness,
-        adds: item.adds,
-        drops: item.drops,
-        approvedAt: now,
-      }));
+      const nextRun = scheduled
+        .flatMap((item) => (item.window === undefined ? [] : [item.window]))
+        .sort()[0];
+      yield* Effect.annotateCurrentSpan({
+        "proposal.items_due": due.length,
+        "proposal.items_scheduled": scheduled.length,
+      });
+      if (due.length === 0) {
+        const review = yield* buildReview(
+          tokens,
+          userId,
+          teams,
+          loaded.set,
+          loaded.submissions,
+          loaded.items,
+          loaded.steps,
+          undefined,
+          undefined,
+          tradeProposalsOf(teams),
+          fantasyDaysOf(teams),
+        );
+        return yield* Schema.decodeEffect(SubmitTransactionProposalResult)({
+          ...review,
+          submittedBids: [],
+          scheduled: scheduled.length,
+          ...(nextRun === undefined ? {} : { nextRun }),
+          detail: submissionDetail(0, scheduled.length, nextRun),
+        }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
+      }
       const itemsByTeam = new Map<TeamId, Array<ProposalItemRecord>>();
       for (const item of loaded.items.filter(
         (entry) =>
-          entry.state === "proposed" && dueTeams.has(entry.team) && !waitingIds.has(entry.id),
+          entry.state === "proposed" && dueTeams.has(entry.team) && !scheduledIds.has(entry.id),
       )) {
         const current = effectiveById.get(item.id) ?? item;
         const teamItems = itemsByTeam.get(current.team) ?? [];
@@ -1410,7 +1451,6 @@ export const TransactionProposalsLive = Layer.effect(
         included: dueIds,
         at: now,
       });
-      yield* Effect.annotateCurrentSpan({ "proposal.items_waiting": waiting.length });
       const claimed = yield* repository.claimSubmission({
         userId,
         setId: loaded.set.id,
@@ -1426,11 +1466,18 @@ export const TransactionProposalsLive = Layer.effect(
       }
 
       const changes = promoted.checks.flatMap((check) => check.changes);
+      const attempted = changes.map((change) =>
+        dueIds.has(change.id) &&
+        change.staleness.status === "current" &&
+        change.approvedAt === undefined
+          ? { ...change, approvedAt: now }
+          : change,
+      );
       const orders = yield* storedOrders(loaded.set.orders, promoted.checks);
       const saved = yield* repository.saveChecks({
         userId,
         setId: loaded.set.id,
-        changes: [...changes, ...approvals],
+        changes: attempted,
         orders,
         at: now,
       });
@@ -1631,14 +1678,16 @@ export const TransactionProposalsLive = Layer.effect(
           fantasyDaysOf(teams),
         )),
         submittedBids,
-        waiting: waiting.length,
+        scheduled: scheduled.length,
+        ...(nextRun === undefined ? {} : { nextRun }),
+        detail: submissionDetail(due.length, scheduled.length, nextRun),
       }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
     });
 
-    const runApproved: TransactionProposals["Service"]["runApproved"] = Effect.fn(
-      "TransactionProposals.runApproved",
+    const runDue: TransactionProposals["Service"]["runDue"] = Effect.fn(
+      "TransactionProposals.runDue",
     )(function* (limit: number, at: DateTime.Utc) {
-      const candidates = yield* repository.listDueApproved({
+      const candidates = yield* repository.listDue({
         before: DateTime.formatIsoDateUtc(DateTime.add(at, { days: 1 })),
         limit,
       });
@@ -1659,7 +1708,6 @@ export const TransactionProposalsLive = Layer.effect(
         groups.set(key, group);
       }
       let includedCount = 0;
-      let waiting = 0;
       let refused = 0;
       let inProgress = 0;
       for (const group of groups.values()) {
@@ -1686,16 +1734,14 @@ export const TransactionProposalsLive = Layer.effect(
         includedCount += outcome.result.teams
           .flatMap((team) => team.items)
           .filter((item) => included.has(item.id)).length;
-        waiting += outcome.result.waiting;
       }
       yield* Effect.annotateCurrentSpan({
-        "proposal.approved_due": due.length,
-        "proposal.approved_included": includedCount,
-        "proposal.approved_waiting": waiting,
-        "proposal.approved_refused": refused,
-        "proposal.approved_in_progress": inProgress,
+        "proposal.due_moves": due.length,
+        "proposal.due_included": includedCount,
+        "proposal.due_refused": refused,
+        "proposal.due_in_progress": inProgress,
       });
-      return { due: due.length, included: includedCount, waiting, refused, inProgress };
+      return { due: due.length, included: includedCount, refused, inProgress };
     });
 
     function executeItem(input: {
@@ -2615,7 +2661,7 @@ export const TransactionProposalsLive = Layer.effect(
       read,
       list,
       submit,
-      runApproved,
+      runDue,
       readPendingOffers,
       withdrawTrade,
     });
@@ -3843,6 +3889,7 @@ function buildReview(
       const lineup = set.lineups.find((entry) => entry.team === teamId);
       const illegalRoster = check?.facts === undefined ? undefined : illegalRosterOf(check.facts);
       const fantasyDay = fantasyDaysByProvider?.get(team.provider);
+      const today = fantasyDay === undefined ? undefined : fantasyDayLabel(now, fantasyDay);
       const teamItems = [];
       for (const item of itemsByTeam.get(teamId) ?? []) {
         teamItems.push(
@@ -3857,6 +3904,15 @@ function buildReview(
           ),
         );
       }
+      const groups =
+        fantasyDay === undefined || today === undefined
+          ? undefined
+          : proposalRunDayGroups({
+              items: teamItems,
+              today,
+              effectiveRule: order?.timing ?? "not_published",
+              fantasyDay,
+            }).map((group) => ({ ...group, items: group.items.map((item) => item.id) }));
       reviewed.push(
         yield* Schema.decodeEffect(ProposalTeamSchema)({
           team: teamView(team),
@@ -3883,8 +3939,9 @@ function buildReview(
           ...(illegalRoster === undefined ? {} : { illegalRoster }),
           ...(order === undefined ? {} : { order }),
           ...(lineup === undefined ? {} : { lineup: lineupView(lineup) }),
-          ...(fantasyDay === undefined ? {} : { today: fantasyDayLabel(now, fantasyDay) }),
+          ...(today === undefined ? {} : { today }),
           items: teamItems,
+          ...(groups === undefined ? {} : { groups }),
           pendingOffers: offersByTeam?.get(teamId) ?? [],
         }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause }))),
       );
@@ -5059,6 +5116,20 @@ function calendarDate(value: string): string | undefined {
   }
   const date = DateTime.formatIsoDateUtc(parsed.value);
   return date === value ? date : undefined;
+}
+
+function submissionDetail(due: number, scheduled: number, nextRun: string | undefined): string {
+  const moves = (count: number): string => `${String(count)} ${count === 1 ? "move" : "moves"}`;
+  if (scheduled === 0) {
+    return `Submitted ${moves(due)} today.`;
+  }
+  if (nextRun === undefined) {
+    throw new Error("A scheduled move carries no run date");
+  }
+  const stays = scheduled === 1 ? "stays" : "stay";
+  return due === 0
+    ? `Nothing runs today. ${moves(scheduled)} ${stays} scheduled for ${nextRun}.`
+    : `Submitted ${moves(due)} today; ${moves(scheduled)} ${stays} scheduled for ${nextRun}.`;
 }
 
 function refusalFromCheck(position: number, change: ProposalItemChange): ProposalItemRefused {

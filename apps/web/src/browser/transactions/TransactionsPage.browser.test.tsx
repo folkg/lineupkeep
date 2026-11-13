@@ -26,6 +26,7 @@ import type {
   TransactionProposalSetSummaryView,
   TransactionReviewPlayerView,
   TransactionReviewView,
+  TransactionRunGroupView,
 } from "#contracts/connections/transactionContract.ts";
 
 import { TransactionReviewFailure } from "./transactionFailure";
@@ -40,14 +41,13 @@ const historyPlanId = "018f79ea-7d86-7c18-9b4a-8b4d0c9165b3";
 const now = new Date().toISOString();
 const oneHourAgo = new Date(Date.now() - 60 * 60 * 1_000).toISOString();
 
-it("renders open and stale sections with their reasons", async () => {
+it("renders open moves and names the stale ones", async () => {
   using _app = setupTransactionsPage(openList());
 
   await expect.element(page.getByRole("heading", { name: "Alpha" })).toBeVisible();
   await expect.element(page.getByRole("link", { name: "Back to Alpha" })).toBeVisible();
   await expect.element(page.getByRole("heading", { name: "Open plans" })).toBeVisible();
   await expect.element(page.getByText("Drop Riley Chen", { exact: true })).toBeVisible();
-  await expect.element(page.getByRole("heading", { name: "Stale" })).toBeVisible();
   await expect.element(page.getByText("Add Jordan Lee", { exact: true })).toBeVisible();
   await expect
     .element(
@@ -137,46 +137,69 @@ it("shows a closed plan with the reason a dismissed move carries", async () => {
   expect(page.getByRole("button", { name: /Dismiss/u }).elements()).toHaveLength(3);
 });
 
-it("shows the date a move waits for and says when it was approved", async () => {
+it("groups a plan's moves by the day each one runs", async () => {
+  const todayItem = item();
+  const laterItem = item({
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d2",
+    window: "2026-11-20",
+    drops: [player("Owen Park", "D", "TOR")],
+  });
   using _app = setupTransactionsPage(
     listData([
       plan({
-        items: [
-          item({ window: "2026-11-14", approvedAt: "2026-11-12T10:00:00.000Z" }),
-          item({ id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d2", window: "2026-11-20" }),
+        today: "2026-11-12",
+        items: [todayItem, laterItem],
+        groups: [
+          {
+            date: "2026-11-12",
+            triggerAt: "2026-11-12T08:00:00.000Z",
+            effectiveRule: "same_day",
+            items: [todayItem.id],
+          },
+          {
+            date: "2026-11-20",
+            triggerAt: "2026-11-20T08:00:00.000Z",
+            effectiveRule: "same_day",
+            items: [laterItem.id],
+          },
+        ],
+      }),
+    ]),
+  );
+
+  await expect.element(page.getByRole("heading", { name: "Runs today" })).toBeVisible();
+  await expect
+    .element(page.getByRole("heading", { name: `Runs on ${formatCalendarDate("2026-11-20")}` }))
+    .toBeVisible();
+  await expect.element(page.getByText("Drop Riley Chen", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Drop Owen Park", { exact: true })).toBeVisible();
+});
+
+it("shows when a plan move takes effect beside the day it runs", async () => {
+  const laterItem = item({ window: "2026-11-14", effectiveDate: "2026-11-15" });
+  using _app = setupTransactionsPage(
+    listData([
+      plan({
+        today: "2026-11-12",
+        items: [laterItem],
+        groups: [
+          {
+            date: "2026-11-14",
+            triggerAt: "2026-11-14T08:00:00.000Z",
+            effectiveRule: "next_day",
+            items: [laterItem.id],
+          },
         ],
       }),
     ]),
   );
 
   await expect
-    .element(
-      page.getByText(
-        `Waits for ${formatCalendarDate("2026-11-14")}. Approved ${formatCalendarDate("2026-11-12T10:00:00.000Z")}.`,
-        { exact: true },
-      ),
-    )
+    .element(page.getByRole("heading", { name: `Runs on ${formatCalendarDate("2026-11-14")}` }))
     .toBeVisible();
   await expect
-    .element(page.getByText(`Waits for ${formatCalendarDate("2026-11-20")}.`, { exact: true }))
-    .toBeVisible();
-});
-
-it("shows the date a plan move takes effect beside the day it runs", async () => {
-  using _app = setupTransactionsPage(
-    listData([
-      plan({
-        items: [{ ...item({ window: "2026-11-14" }), effectiveDate: "2026-11-15" }],
-      }),
-    ]),
-  );
-
-  await expect
     .element(
-      page.getByText(
-        `Waits for ${formatCalendarDate("2026-11-14")}. Takes effect on ${formatCalendarDate("2026-11-15")}.`,
-        { exact: true },
-      ),
+      page.getByText(`Takes effect on ${formatCalendarDate("2026-11-15")}.`, { exact: true }),
     )
     .toBeVisible();
 });
@@ -258,7 +281,7 @@ it("stops saying a move waits once it has run", async () => {
 
   await expect.element(page.getByText("Executed", { exact: true })).toBeVisible();
   await expect
-    .element(page.getByText(new RegExp(`Waits for ${formatCalendarDate("2026-11-14")}`, "u")))
+    .element(page.getByText(new RegExp(`Takes effect on ${formatCalendarDate("2026-11-14")}`, "u")))
     .not.toBeInTheDocument();
 });
 
@@ -501,6 +524,8 @@ function historyList(): TransactionProposalListData {
 function plan(
   overrides: Partial<TransactionProposalSetSummaryView> & {
     readonly items?: ReadonlyArray<TransactionProposalItemView>;
+    readonly today?: string;
+    readonly groups?: ReadonlyArray<TransactionRunGroupView>;
     readonly illegalRoster?: ReadonlyArray<{
       readonly name: string;
       readonly slot: string;
@@ -508,7 +533,7 @@ function plan(
     }>;
   } = {},
 ): TransactionProposalSetSummaryView {
-  const { items = [], illegalRoster, ...rest } = overrides;
+  const { items = [], illegalRoster, today, groups, ...rest } = overrides;
   const id = overrides.id ?? openPlanId;
   return {
     id,
@@ -526,7 +551,9 @@ function plan(
           sport: "football",
           season: 2026,
         },
+        ...(today === undefined ? {} : { today }),
         items,
+        ...(groups === undefined ? {} : { groups }),
         ...(illegalRoster === undefined ? {} : { illegalRoster }),
       },
     ],

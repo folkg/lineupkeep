@@ -1645,7 +1645,7 @@ const unavailableProposals: TransactionProposalsShape = {
   read: () => Effect.die(new Error("proposals unavailable")),
   list: () => Effect.die(new Error("proposals unavailable")),
   submit: () => Effect.die(new Error("proposals unavailable")),
-  runApproved: () => Effect.die(new Error("proposals unavailable")),
+  runDue: () => Effect.die(new Error("proposals unavailable")),
   readPendingOffers: () => Effect.die(new Error("proposals unavailable")),
   withdrawTrade: () => Effect.die(new Error("proposals unavailable")),
 };
@@ -1725,9 +1725,12 @@ it("publishes fallback choices on a proposed move and accepts them on a proposal
 
   expect(JSON.stringify(propose.inputSchema)).toContain('"fallbacks"');
   expect(JSON.stringify(review.outputSchema)).toContain('"fallbacks"');
-  expect(JSON.stringify(review.outputSchema)).toContain("Other players to use in order");
+  expect(JSON.stringify(review.outputSchema)).toContain("Other players to try in order");
   expect(JSON.stringify(review.outputSchema)).toContain('"effectiveDate"');
   expect(JSON.stringify(review.outputSchema)).toContain("not when it takes effect");
+  expect(JSON.stringify(review.outputSchema)).toContain('"groups"');
+  expect(JSON.stringify(review.outputSchema)).toContain('"triggerAt"');
+  expect(JSON.stringify(review.outputSchema)).toContain('"effectiveRule"');
 });
 
 it("keeps every published description inside its budget", async () => {
@@ -1893,7 +1896,7 @@ it("publishes the accepted player-statistics periods and the compact standings f
   expect(scoring).toContain("published but does not count");
 
   const cursor = JSON.stringify(tool("get_team_summary").inputSchema);
-  expect(cursor).toContain("bound to the issuing call's arguments");
+  expect(cursor).toContain("bound to the call's arguments");
 });
 
 function json(response: Response): Promise<unknown> {

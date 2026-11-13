@@ -75,6 +75,10 @@ export function formatCalendarDate(value: string): string {
   return calendarDateFormat.format(new Date(`${value.slice(0, 10)}T00:00:00Z`));
 }
 
+export function formatRunDay(date: string, today: string | undefined): string {
+  return date === today ? "Runs today" : `Runs on ${formatCalendarDate(date)}`;
+}
+
 export function formatClockTime(value: string | Date, reader: ClockReader = {}): string {
   const format =
     reader.locale === undefined && reader.timeZone === undefined

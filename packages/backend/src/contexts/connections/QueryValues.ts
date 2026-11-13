@@ -159,7 +159,7 @@ export const QueryPage = Schema.Struct({
   total: Schema.optional(
     Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
       Schema.annotate({
-        description: "Rows in the resource before paging; absent when unknown.",
+        description: "Rows before paging; absent when unknown.",
       }),
     ),
   ),
@@ -252,7 +252,7 @@ export type TeamOwnerNote = typeof TeamOwnerNote.Type;
 export const Cursor = Schema.String.pipe(
   Schema.check(Schema.isMaxLength(2_048)),
   Schema.annotate({
-    description: "A `page.next` token; bound to the issuing call's arguments, valid 15 minutes.",
+    description: "A `page.next` token, bound to the call's arguments, valid 15 minutes.",
   }),
 );
 export const PageLimit = Schema.Int.check(
