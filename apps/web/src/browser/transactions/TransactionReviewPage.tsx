@@ -18,10 +18,13 @@ import {
   formatReaderTime,
   formatRunDay,
 } from "#browser/shared-ui/formatTime.ts";
+import { IconButton } from "#browser/shared-ui/IconButton.tsx";
+import { ChevronsDownIcon } from "#browser/shared-ui/icons.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Notice } from "#browser/shared-ui/Notice.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
 import { Quote } from "#browser/shared-ui/Quote.tsx";
+import { ResponsiveContent } from "#browser/shared-ui/ResponsiveContent.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { createSettle } from "#browser/shared-ui/settle.ts";
@@ -53,6 +56,7 @@ import {
 } from "./transactionFailure";
 import type { TransactionReviewQueryOptions } from "./transactionQueries";
 import type { TransactionRemote } from "./transactionRemote";
+import { useSubmissionSheet } from "./useSubmissionSheet";
 import { resultSummaryId, useTransactionReviewPage } from "./useTransactionReviewPage";
 import type {
   TransactionReviewBidField,
@@ -244,6 +248,14 @@ function Review(props: ReviewProps): JSX.Element {
             </Show>
             <Show when={props.model.quietTeams.length > 0}>
               <QuietTeams teams={props.model.quietTeams} />
+            </Show>
+            <Show when={canSubmit()}>
+              <Text id="submission-note" size="caption" tone="muted">
+                Each move is sent once, with no retries.
+                <Show when={props.model.includedScheduledCount > 0}>
+                  {" A move scheduled for a later day waits until its day."}
+                </Show>
+              </Text>
             </Show>
           </Stack>
         </DockSpacer>
@@ -1357,11 +1369,17 @@ function QuietTeams(props: QuietTeamsProps): JSX.Element {
 }
 
 function SubmissionPanel(props: SubmissionPanelProps): JSX.Element {
+  const sheet = useSubmissionSheet();
   const nextRun = (): string | undefined =>
     props.nextRun === undefined ? undefined : formatCalendarDate(props.nextRun);
+  const consequence = (): string => {
+    const line = submissionLine(props.includedDue, props.includedScheduled, props.nextRun);
+    return props.submitting ? `${line} Sending now.` : line;
+  };
+  const label = (): string => submitLabel(props.includedDue, props.includedScheduled, nextRun());
   return (
     <Dock id="submission-panel">
-      <Box rule="top" space="lg">
+      <Box rule="top" ruleOn="wide" space="lg">
         <Show when={props.illegalTeams.length > 0}>
           <Stack gap="sm">
             <For each={props.illegalTeams}>
@@ -1377,64 +1395,90 @@ function SubmissionPanel(props: SubmissionPanelProps): JSX.Element {
         </Show>
         <Form gap="sm" onSubmit={props.onSubmit}>
           <Stack as="section" gap="sm" labelledBy="submission-title">
-            <SectionTitle id="submission-title">Submit</SectionTitle>
-            <Inline gap="lg" justify="between" collapse>
+            <Stack gap="none" hide="phone">
+              <SectionTitle id="submission-title">Submit</SectionTitle>
+            </Stack>
+            <Inline gap="lg" justify="between" growFirst>
               <Stack gap="xs">
-                <Text size="body" weight="semibold" live="polite">
-                  {includedTally(
-                    props.included,
-                    props.total,
-                    props.waivers,
-                    props.faab,
-                    props.submitting,
-                  )}
-                </Text>
-                <Text id="submission-note" size="caption" tone="muted">
-                  Each move is sent once, with no retries. A waiver claim stays pending until
-                  waivers run. A trade becomes a real offer to another manager: submitting again or
-                  reloading will not undo it, and only withdrawing removes it before it is accepted.
-                </Text>
-                <Show when={props.includedScheduled > 0}>
-                  <Text size="caption" tone="muted">
-                    {props.includedScheduled}{" "}
-                    {props.includedScheduled === 1 ? "move stays" : "moves stay"} scheduled
-                    {nextRun() === undefined ? "" : ` for ${nextRun()}`}. Submitting runs only the
-                    moves due today; a scheduled move stays open until its day, and you can withdraw
-                    it and propose a different one.
+                <Stack gap="xs" hide="phone">
+                  <Text size="body" weight="semibold" live="polite">
+                    {includedTally(
+                      props.included,
+                      props.total,
+                      props.waivers,
+                      props.faab,
+                      props.submitting,
+                    )}
                   </Text>
-                </Show>
-                <Show when={props.staleCount > 0}>
-                  <Text size="caption" tone="muted">
-                    {props.staleCount} stale {props.staleCount === 1 ? "move is" : "moves are"}{" "}
-                    excluded.
+                  <Show when={props.includedScheduled > 0}>
+                    <Text size="caption" tone="muted">
+                      {scheduledLine(props.includedScheduled, props.nextRun)}
+                    </Text>
+                  </Show>
+                  <Show when={props.staleCount > 0}>
+                    <Text size="caption" tone="muted">
+                      {props.staleCount} stale {props.staleCount === 1 ? "move is" : "moves are"}{" "}
+                      excluded.
+                    </Text>
+                  </Show>
+                  <Show when={props.illegalCount > 0}>
+                    <Text size="caption" tone="muted">
+                      {props.illegalCount} illegal{" "}
+                      {props.illegalCount === 1 ? "move is" : "moves are"} excluded.
+                    </Text>
+                  </Show>
+                </Stack>
+                <Stack gap="none" hide="wide">
+                  <Text size="caption" tone="muted" live="polite">
+                    {consequence()}
                   </Text>
-                </Show>
-                <Show when={props.illegalCount > 0}>
-                  <Text size="caption" tone="muted">
-                    {props.illegalCount} illegal{" "}
-                    {props.illegalCount === 1 ? "move is" : "moves are"} excluded.
-                  </Text>
-                </Show>
+                </Stack>
               </Stack>
-              <Button
-                type="submit"
-                state={props.submitting ? "working" : "idle"}
-                disabled={
-                  props.included === 0 ||
-                  props.includedDue === 0 ||
-                  props.submitting ||
-                  props.dismissing
-                }
-                aria-describedby="submission-note"
-              >
-                {submitLabel(props.includedDue, props.includedScheduled, nextRun())}
-              </Button>
+              <Inline gap="xs" nowrap>
+                <Button
+                  type="submit"
+                  aria-label={label()}
+                  state={props.submitting ? "working" : "idle"}
+                  disabled={
+                    props.included === 0 ||
+                    props.includedDue === 0 ||
+                    props.submitting ||
+                    props.dismissing
+                  }
+                  aria-describedby="submission-note"
+                >
+                  <ResponsiveContent phone={compactSubmitLabel(props.includedDue)} wide={label()} />
+                </Button>
+                <Stack gap="none" hide="wide">
+                  <Show when={sheet.pageIsLong()}>
+                    <IconButton label="Go to the end of the page" onClick={sheet.scrollToPageEnd}>
+                      <ChevronsDownIcon size="sm" />
+                    </IconButton>
+                  </Show>
+                </Stack>
+              </Inline>
             </Inline>
           </Stack>
         </Form>
       </Box>
     </Dock>
   );
+}
+
+function compactSubmitLabel(due: number): string {
+  return due === 0 ? "Nothing runs today" : `Submit ${String(due)} ${due === 1 ? "move" : "moves"}`;
+}
+
+function submissionLine(due: number, scheduled: number, next: string | undefined): string {
+  if (due === 0 && scheduled === 0) {
+    return "Nothing included.";
+  }
+  const nextLine = next === undefined ? "" : ` for ${formatCalendarDate(next)}`;
+  if (due === 0) {
+    return `Nothing today, ${String(scheduled)} scheduled${nextLine}.`;
+  }
+  const today = `${String(due)} ${due === 1 ? "move" : "moves"} today`;
+  return scheduled === 0 ? `${today}.` : `${today}, ${String(scheduled)} scheduled${nextLine}.`;
 }
 
 function budgetLine(budget: NonNullable<TransactionReviewTeamView["budget"]>): string {

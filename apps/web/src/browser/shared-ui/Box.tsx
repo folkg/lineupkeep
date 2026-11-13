@@ -11,6 +11,10 @@ export function Box(props: BoxProps): JSX.Element {
         props.rule === "top" ? "border-t" : "border-b",
         props.ruleTone === "ink" ? "border-rule-strong" : "border-rule",
         props.rule === "top" ? paddingTop[props.space] : paddingBottom[props.space],
+        props.ruleOn === "wide" &&
+          (props.rule === "top"
+            ? "max-sm:border-t-0 max-sm:pt-0"
+            : "max-sm:border-b-0 max-sm:pb-0"),
       )}
     >
       {props.children}
@@ -43,6 +47,7 @@ const paddingBottom: Record<Space, string> = {
 type BoxProps = {
   readonly rule: "top" | "bottom";
   readonly ruleTone?: "strong" | "ink";
+  readonly ruleOn?: "wide";
   readonly space: Space;
   readonly children: Element;
 };

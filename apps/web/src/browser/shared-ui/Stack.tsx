@@ -19,6 +19,8 @@ export function Stack(props: StackProps): JSX.Element {
         gapClass[props.gap],
         props.align === "start" && "justify-items-start",
         props.measure === "control" && "max-w-[24rem]",
+        props.hide === "phone" && "max-sm:hidden",
+        props.hide === "wide" && "sm:hidden",
       )}
     >
       {props.children}
@@ -31,6 +33,7 @@ type StackProps = {
 
   readonly align?: "start";
   readonly as?: "div" | "section";
+  readonly hide?: "phone" | "wide";
   readonly id?: string;
   readonly hidden?: boolean;
   readonly label?: string;

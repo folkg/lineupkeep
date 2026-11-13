@@ -9,7 +9,7 @@ import {
   createRouter,
 } from "@tanstack/solid-router";
 import { expect, it } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { cdp, page, userEvent } from "vitest/browser";
 
 import "#web/styles.css";
 
@@ -64,9 +64,7 @@ it("renders a two-team proposal, a quiet team, and one disabled action", async (
   await expect
     .element(page.getByRole("button", { name: "Submit 3 moves today" }))
     .not.toHaveAttribute("aria-disabled");
-  await expect
-    .element(page.getByText("3 of 4 moves included. 1 waiver claim spends 25 FAAB."))
-    .toBeVisible();
+  await expect.element(page.getByText("3 moves today.")).toBeVisible();
   await expect.element(page.getByText(/Each move is sent once, with no retries/u)).toBeVisible();
 });
 
@@ -84,9 +82,7 @@ it("starts a stale move excluded, marks its reason, and does not let it be inclu
       ),
     )
     .toBeVisible();
-  await expect
-    .element(page.getByText("3 of 4 moves included. 1 waiver claim spends 25 FAAB."))
-    .toBeVisible();
+  await expect.element(page.getByText("3 moves today.")).toBeVisible();
 });
 
 it("starts an illegal move excluded and names the player, slot, and choice", async () => {
@@ -169,14 +165,14 @@ it("shows the provider's exact refusal wording on a failed move", async () => {
   await expect.element(page.getByText(providerRefusal).first()).toBeVisible();
 });
 
-it("updates the tally when a person leaves out a current move", async () => {
+it("updates the phone submit line when a person leaves out a current move", async () => {
   using _app = setupReviewPage(reviewFixture());
 
   const waiver = page.getByRole("checkbox", { name: /Add Sam Rivers/u });
   await expect.element(waiver).toBeChecked();
   await waiver.click();
   await expect.element(waiver).not.toBeChecked();
-  await expect.element(page.getByText("2 of 4 moves included. No FAAB is spent.")).toBeVisible();
+  await expect.element(page.getByText("2 moves today.")).toBeVisible();
   await expect
     .element(page.getByRole("button", { name: "Submit 2 moves today" }))
     .not.toHaveAttribute("aria-disabled");
@@ -220,9 +216,7 @@ it("sends the bids raised at review for two claims proposed at 0", async () => {
 
   await firstBid.fill("12");
   await secondBid.fill("3");
-  await expect
-    .element(page.getByText("2 of 2 moves included. 2 waiver claims spend 15 FAAB."))
-    .toBeVisible();
+  await expect.element(page.getByText("2 moves today.")).toBeVisible();
 
   await page.getByRole("button", { name: "Submit 2 moves today" }).click();
   expect(submissions).toStrictEqual([
@@ -309,7 +303,7 @@ it("toggles a move from the keyboard", async () => {
   waiver.element().focus();
   await userEvent.keyboard(" ");
   await expect.element(waiver).not.toBeChecked();
-  await expect.element(page.getByText("2 of 4 moves included. No FAAB is spent.")).toBeVisible();
+  await expect.element(page.getByText("2 moves today.")).toBeVisible();
 
   await userEvent.keyboard(" ");
   await expect.element(waiver).toBeChecked();
@@ -1114,10 +1108,7 @@ it("submits the included moves once, keeps the action visible on a phone, and sh
     await expect
       .element(page.getByRole("button", { name: "Submit 3 moves today" }))
       .toHaveAttribute("aria-busy", "true");
-    await expect.element(page.getByText(/Sending now/u)).toBeVisible();
-    await expect
-      .element(page.getByText(/3 of 4 moves included. 1 waiver claim spends 25 FAAB./u))
-      .toBeVisible();
+    await expect.element(page.getByText("3 moves today. Sending now.")).toBeVisible();
     await expect.element(page.getByRole("checkbox", { name: /Add Sam Rivers/u })).toBeDisabled();
 
     const panel = document.getElementById("submission-panel");
@@ -1166,6 +1157,64 @@ it("submits the included moves once, keeps the action visible on a phone, and sh
     document.documentElement.classList.remove("dark");
   } finally {
     document.documentElement.classList.remove("dark");
+    await page.viewport(1280, 720);
+  }
+});
+
+it("keeps the phone submit sheet to one line and scrolls to the page end", async () => {
+  await page.viewport(390, 844);
+  try {
+    using _app = setupReviewPage(reviewFixture());
+
+    const line = page.getByText("3 moves today.");
+    await expect.element(line).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Submit 3 moves today" })).toBeVisible();
+
+    const panel = document.getElementById("submission-panel");
+    expect(panel, "the submit sheet").not.toBeNull();
+    expect(getComputedStyle(panel ?? document.body).position).toBe("fixed");
+    expect(panel?.getBoundingClientRect().height ?? Number.POSITIVE_INFINITY).toBeLessThan(844 / 4);
+    expect(panel?.contains(line.element()), "the line sits in the sheet").toBe(true);
+
+    const note = page.getByText(/Each move is sent once, with no retries/u).element();
+    expect(panel?.contains(note), "the help text sits in the page, not the sheet").toBe(false);
+
+    const settle = document.querySelector("#submission-panel[data-sheet-settle]");
+    expect(getComputedStyle(settle ?? document.body).animationName).toBe("settle-in");
+
+    const end = page.getByRole("button", { name: "Go to the end of the page" });
+    await expect.element(end).toBeVisible();
+    const pageEnd = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+    await end.click();
+    await expect
+      .poll(() => Math.round(window.scrollY), { timeout: 2_000 })
+      .toBeGreaterThanOrEqual(pageEnd - 2);
+  } finally {
+    window.scrollTo(0, 0);
+    await page.viewport(1280, 720);
+  }
+});
+
+it("settles the phone submit sheet without motion when the reader asks for less", async () => {
+  const session = cdp();
+  if (!hasSend(session)) {
+    throw new Error("The browser test session cannot emulate media.");
+  }
+  await session.send("Emulation.setEmulatedMedia", {
+    features: [{ name: "prefers-reduced-motion", value: "reduce" }],
+  });
+  await page.viewport(390, 844);
+  try {
+    using _app = setupReviewPage(reviewFixture());
+
+    await expect.element(page.getByText("3 moves today.")).toBeVisible();
+    const settle = document.querySelector("#submission-panel[data-sheet-settle]");
+    const style = getComputedStyle(settle ?? document.body);
+    expect(style.animationName, "the arrival is removed rather than shortened").toBe("none");
+    expect(style.opacity, "the sheet is not held transparent").toBe("1");
+    expect(style.transform, "the sheet is not held off its place").toBe("none");
+  } finally {
+    await session.send("Emulation.setEmulatedMedia", { features: [] });
     await page.viewport(1280, 720);
   }
 });
@@ -1291,7 +1340,7 @@ it("groups the review by the day each move runs and says what today's submit com
       }),
     )
     .not.toHaveAttribute("aria-disabled");
-  await expect.element(page.getByText(/stays open until its day/u)).toBeVisible();
+  await expect.element(page.getByText(/waits until its day/u)).toBeVisible();
 });
 
 it("shows when a scheduled move takes effect beside the day it runs", async () => {
@@ -1704,6 +1753,17 @@ function executedDropItem(): TransactionReviewItemView {
       ],
     },
   };
+}
+
+function hasSend(value: unknown): value is {
+  readonly send: (method: string, params?: unknown) => Promise<unknown>;
+} {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "send" in value &&
+    typeof value.send === "function"
+  );
 }
 
 function setupReviewPage(

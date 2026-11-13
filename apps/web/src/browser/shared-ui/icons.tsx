@@ -1,6 +1,7 @@
 import type { JSX } from "@solidjs/web";
 import ArrowUpRight from "~icons/lucide/arrow-up-right";
 import ChevronRight from "~icons/lucide/chevron-right";
+import ChevronsDown from "~icons/lucide/chevrons-down";
 import LoaderCircle from "~icons/lucide/loader-circle";
 import RefreshCw from "~icons/lucide/refresh-cw";
 import X from "~icons/lucide/x";
@@ -10,6 +11,7 @@ import { cx } from "./cx";
 
 export const ArrowUpRightIcon = icon(ArrowUpRight);
 export const ChevronRightIcon = icon(ChevronRight);
+export const ChevronsDownIcon = icon(ChevronsDown);
 export const LoaderCircleIcon = icon(LoaderCircle);
 export const PauseIcon = icon(PauseGlyph);
 export const PlayIcon = icon(PlayGlyph);

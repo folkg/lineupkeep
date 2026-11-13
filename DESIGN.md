@@ -287,6 +287,11 @@ hosted browser viewport, or a dialog. Prose, lists, notices, and empty states us
 **The Rule, Not a Box Rule.** A section title owns one hairline. List rows own one hairline between
 them. Status and empty states use a leading rule or plain text, never a dashed or bordered card.
 
+**The Phone Submit Sheet.** Below 560px the submit controls sit in a sheet fixed to the bottom with
+no rule of their own. A 16px canvas fade above it takes the rule's place, so the page blends into
+the action instead of stacking a second panel on top of it. The fade is the one gradient in the
+product, and it exists only at that edge.
+
 ## Motion
 
 Most of the interface does not move. Motion is spent on the few moments a person meets rarely: a
@@ -301,6 +306,9 @@ looks nice, it stays still.
 - An arrival settles in once: `opacity` from 0 with a 4px rise, on `--theme-duration-reveal` with
   `--theme-ease-out`. It plays when content becomes populated while the page is open; a page load or
   a navigation never animates.
+- The phone submit sheet settles in once when it first appears at the bottom: the same 4px rise and
+  `opacity` entrance on the reveal token, and it holds still after that. It is the one fixed element
+  that animates, and it holds still under reduced motion.
 - Only `transform` and `opacity` move. Nothing animates a width, a height, a margin, a padding, or an
   offset.
 - The working hairline travels in container units — a length, never a percentage of its own box — and

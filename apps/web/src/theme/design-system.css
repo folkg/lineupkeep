@@ -241,6 +241,12 @@
   animation: settle-in var(--theme-duration-reveal) var(--theme-ease-out) both;
 }
 
+@media (width < 37.5rem) {
+  [data-sheet-settle] {
+    animation: settle-in var(--theme-duration-reveal) var(--theme-ease-out) both;
+  }
+}
+
 [data-action-mark="tick"] {
   animation: action-tick-hold var(--theme-duration-confirm) step-end forwards;
 }
@@ -281,6 +287,10 @@
   }
 
   [data-motion="settle"] {
+    animation: none;
+  }
+
+  [data-sheet-settle] {
     animation: none;
   }
 
