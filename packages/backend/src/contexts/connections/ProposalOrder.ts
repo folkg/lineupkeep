@@ -530,7 +530,17 @@ function orderSteps(input: ProposalOrderInput, league: League, timing: Timing): 
     let chosen: { readonly entry: DeclaredItem; readonly state: RosterState } | undefined;
     const refused: Array<BlockedItem> = [];
     const waiting: Array<BlockedItem> = [];
+    const illegal = illegalRosterRefusal(state, league);
     for (const entry of candidates) {
+      if (
+        illegal !== undefined &&
+        (entry.item.adds.length > 0 || entry.item.drops.length > 0) &&
+        !curesPlacement(state, entry.item, league) &&
+        !pending.some((other) => other !== entry && curesPlacement(state, other.item, league))
+      ) {
+        refused.push({ entry, refusal: illegal });
+        continue;
+      }
       const applied = applyDeclared(state, entry.item, league);
       if (applied.status === "refused") {
         if (
@@ -595,7 +605,12 @@ function orderSteps(input: ProposalOrderInput, league: League, timing: Timing): 
       let reserveMove: OrderedRepair | undefined =
         hold === undefined ? undefined : { ...hold, order: "before" };
       hold = undefined;
-      if (chosen.entry.item.mayRepair && reserveMove === undefined && !isLegal(state, league)) {
+      if (
+        chosen.entry.item.mayRepair &&
+        reserveMove === undefined &&
+        !isLegal(state, league) &&
+        (illegal === undefined || curesPlacement(before, chosen.entry.item, league))
+      ) {
         const repaired = planRepair(state, league, blocked, declaredMoveKeys);
         if (repaired !== undefined) {
           state = repaired.state;
@@ -697,7 +712,9 @@ function awaitItem(
   if (
     item.adds.length > 0 &&
     before !== undefined &&
-    !repairsBefore(state, applied, item, league, declaredMoveKeys)
+    !curesPlacement(state, item, league) &&
+    (before.code === "slot_illegal" ||
+      !repairsBefore(state, applied, item, league, declaredMoveKeys))
   ) {
     return others.some((other) => curesPlacement(state, other, league))
       ? { status: "wait", refusal: before }
@@ -820,7 +837,7 @@ function rankOf(
   league: League,
 ): number {
   if (item.move === undefined) {
-    return 1;
+    return item.drops.some((drop) => illegalOccupant(state, drop.key, league)) ? 0 : 1;
   }
   const key = item.move.player.key;
   return dropsOfPlayer.has(key) || illegalOccupant(state, key, league) ? 0 : 1;
@@ -1204,23 +1221,7 @@ function placementFailure(
   }
   const illegal = occupancy.illegal[0];
   if (illegal !== undefined) {
-    const already =
-      context !== undefined &&
-      context.items.some(
-        (item) =>
-          item.drops.some((drop) => drop.key === illegal.key) ||
-          item.move?.player.key === illegal.key,
-      );
-    const resolution =
-      occupancy.occupied >= occupancy.maximum
-        ? `The team already holds all ${String(occupancy.maximum)} roster places, so free one by dropping a player or moving a reserve-eligible player to a reserve list.`
-        : already
-          ? "This set already names their drop or a slot move for them."
-          : "Add a slot move that gives them a legal slot, or a drop for them, to this set.";
-    return {
-      code: "slot_illegal",
-      detail: `${illegal.detail} ${resolution} Choosing which player to drop is yours.`,
-    };
+    return { code: "slot_illegal", detail: illegal.detail };
   }
   const overflow = occupancy.overflow[0];
   if (overflow !== undefined) {
@@ -1378,6 +1379,14 @@ function illegalOccupant(state: RosterState, playerKey: string, league: League):
     player.slot !== undefined &&
     slotPlacement(league.rule, player.slot, player).legal === false
   );
+}
+
+function illegalRosterRefusal(state: RosterState, league: League): Refusal | undefined {
+  const occupant = rosterOccupancy({
+    rule: league.rule,
+    players: [...state.values()],
+  }).illegal[0];
+  return occupant === undefined ? undefined : { code: "slot_illegal", detail: occupant.detail };
 }
 
 function occupancyOf(state: RosterState, slot: string): number {

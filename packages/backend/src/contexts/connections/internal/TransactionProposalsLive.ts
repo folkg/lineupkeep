@@ -6596,21 +6596,15 @@ function illegalSlots(
   droppedKeys: ReadonlySet<string>,
 ): ReadonlyArray<StoredProposalStaleReason> {
   const rule = rosterRuleOf(facts.league.rosterConstraints, facts.league.rosterPositions);
-  const byKey = new Map(
-    facts.roster.players.map((player) => [player.providerPlayerKey, player] as const),
-  );
   return rosterOccupancy({ rule, players: rosterPlacesOf(facts) }).illegal.flatMap((occupant) => {
     if (droppedKeys.has(occupant.key)) {
       return [];
     }
-    const player = byKey.get(occupant.key);
-    const providerNote =
-      player?.injuryDetail === undefined ? "" : ` Your league reports "${player.injuryDetail}".`;
     return [
       {
         code: "slot_illegal" as const,
         playerKey: occupant.key,
-        detail: `${occupant.detail}${providerNote} Move them to a legal slot in your league, then revalidate this set.`,
+        detail: occupant.detail,
       },
     ];
   });

@@ -1291,7 +1291,7 @@ it.effect(
             slot: "IR",
             eligiblePositions: ["QB"],
             detail:
-              "Synthetic 0 is on the IR reserve list, but it does not accept their positions (QB).",
+              "Synthetic 0 sits in IR, but IR does not accept their positions (QB). This roster is illegal, so all adds and drops are blocked until it is cured. Activate them, or drop them.",
           },
         ],
       );

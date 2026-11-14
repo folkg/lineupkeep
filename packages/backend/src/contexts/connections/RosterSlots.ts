@@ -132,7 +132,6 @@ export function rosterOccupancy(input: {
       });
     }
   }
-  const rosterFull = occupied >= input.rule.rosterMaximum;
   const illegal = mismatched.map((player) => ({
     ...player,
     detail: slotMismatchDetail({
@@ -142,7 +141,11 @@ export function rosterOccupancy(input: {
       positions: player.positions,
       reserveEligibility: input.rule.reserveEligibility,
       injured: player.injured,
-      mismatch: { kind: "occupied" as const, rosterFull },
+      mismatch: {
+        kind: "occupied" as const,
+        occupied,
+        maximum: input.rule.rosterMaximum,
+      },
     }),
   }));
   const overflow: Array<RosterSlotShortfall> = [];
@@ -172,18 +175,38 @@ export function slotMismatchDetail(input: {
   readonly mismatch: SlotMismatch;
 }): string {
   if (input.kind === "reserve" && input.reserveEligibility.kind === "injury_status") {
-    switch (input.mismatch.kind) {
-      case "occupied":
-        return `${input.name} is no longer injured, and the ${input.slot} reserve list only accepts an injured player. Activate them.${input.mismatch.rosterFull ? " Your roster is full, so a drop is required." : ""}`;
-      case "destination":
-        return `${input.name} is not injured, and the ${input.slot} reserve list only accepts an injured player.`;
+    if (input.mismatch.kind === "destination") {
+      return `${input.name} is not injured, so they cannot move to ${input.slot}: it only accepts an injured player.`;
     }
+    return illegalRosterDetail({
+      fact: `${input.name} is no longer injured but sits in ${input.slot}.`,
+      cure: reserveCure(input.mismatch.occupied, input.mismatch.maximum),
+    });
   }
-  const where =
-    input.kind === "reserve"
-      ? `on the ${input.slot} reserve list`
-      : `in the ${input.slot} starting slot`;
-  return `${input.name} is ${where}, but it does not accept their positions (${input.positions.join(", ")}).`;
+  const fact = `${input.name} sits in ${input.slot}, but ${input.slot} does not accept their positions (${input.positions.join(", ")}).`;
+  if (input.mismatch.kind === "destination") {
+    return `${input.name} cannot move to ${input.slot}: it does not accept their positions (${input.positions.join(", ")}).`;
+  }
+  return illegalRosterDetail({
+    fact,
+    cure:
+      input.kind === "reserve"
+        ? reserveCure(input.mismatch.occupied, input.mismatch.maximum)
+        : "Move them to a place that accepts their positions, or drop them.",
+  });
+}
+
+function illegalRosterDetail(input: { readonly fact: string; readonly cure: string }): string {
+  return `${input.fact} This roster is illegal, so all adds and drops are blocked until it is cured. ${input.cure}`;
+}
+
+function reserveCure(occupied: number, maximum: number): string {
+  if (maximum === 0) {
+    return "Drop them.";
+  }
+  return occupied >= maximum
+    ? `Activate them, and at ${String(occupied)} of ${String(maximum)} places a drop is required, or drop them.`
+    : "Activate them, or drop them.";
 }
 
 export function rosterPlayerInjured(player: {
@@ -205,7 +228,7 @@ export type RosterPlayerPlace = RosterPlaceFacts & {
 };
 
 type SlotMismatch =
-  | { readonly kind: "occupied"; readonly rosterFull: boolean }
+  | { readonly kind: "occupied"; readonly occupied: number; readonly maximum: number }
   | { readonly kind: "destination" };
 
 export type RosterOccupancy = {

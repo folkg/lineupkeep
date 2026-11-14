@@ -85,7 +85,7 @@ it("starts a stale move excluded, marks its reason, and does not let it be inclu
   await expect.element(page.getByText("3 moves today.")).toBeVisible();
 });
 
-it("starts an illegal move excluded and names the player, slot, and choice", async () => {
+it("starts an illegal move excluded and names the player, the block, and the cure", async () => {
   using _app = setupReviewPage({
     ...reviewFixture(),
     teams: [teamFixture(alphaId, "Alpha", "nfl", "football", [waiverItem(), illegalItem()])],
@@ -95,11 +95,16 @@ it("starts an illegal move excluded and names the player, slot, and choice", asy
   await expect.element(illegal).not.toBeChecked();
   await expect.element(illegal).toBeDisabled();
   await expect.element(page.getByText("Illegal roster position")).toBeVisible();
-  await expect.element(page.getByText(/Travis Konecny is in the IR slot/u)).toBeVisible();
-  await expect.element(page.getByText(/choosing which player to drop is yours/u)).toBeVisible();
+  await expect
+    .element(
+      page.getByText(
+        "Travis Konecny sits in IR, but IR does not accept their positions (C). This roster is illegal, so all adds and drops are blocked until it is cured. Activate them, or drop them.",
+      ),
+    )
+    .toBeVisible();
 });
 
-it("shows one team roster notice above submit and keeps the move's own reason", async () => {
+it("names the illegal roster player, the block, and the cure above submit", async () => {
   using _app = setupReviewPage({
     ...reviewFixture(),
     teams: [
@@ -115,9 +120,21 @@ it("shows one team roster notice above submit and keeps the move's own reason", 
   });
 
   await expect.element(page.getByText("Alpha roster is illegal")).toBeVisible();
-  await expect.element(page.getByText(/Linus Ullmark is no longer injured/u)).toBeVisible();
+  await expect
+    .element(
+      page.getByText(
+        "Linus Ullmark is no longer injured but sits in IR+. This roster is illegal, so all adds and drops are blocked until it is cured. Activate them, and at 19 of 19 places a drop is required, or drop them.",
+      ),
+    )
+    .toBeVisible();
   await expect.element(page.getByText("Illegal roster position")).toBeVisible();
-  await expect.element(page.getByText(/Travis Konecny is in the IR slot/u)).toBeVisible();
+  await expect
+    .element(
+      page.getByText(
+        "Travis Konecny sits in IR, but IR does not accept their positions (C). This roster is illegal, so all adds and drops are blocked until it is cured. Activate them, or drop them.",
+      ),
+    )
+    .toBeVisible();
   await expect.element(page.getByRole("button", { name: "Submit 1 move today" })).toBeVisible();
 });
 
@@ -710,7 +727,7 @@ function rosterOccupant(): {
     name: "Linus Ullmark",
     slot: "IR+",
     detail:
-      "Linus Ullmark is no longer injured, and the IR+ reserve list only accepts an injured player. Activate them. Your roster is full, so a drop is required.",
+      "Linus Ullmark is no longer injured but sits in IR+. This roster is illegal, so all adds and drops are blocked until it is cured. Activate them, and at 19 of 19 places a drop is required, or drop them.",
   };
 }
 
@@ -829,7 +846,7 @@ function illegalItem(): TransactionReviewItemView {
         {
           code: "slot_illegal",
           detail:
-            "Travis Konecny is in the IR slot, but the provider no longer accepts him there. No open slot accepts him, and choosing which player to drop is yours. Drop a player to make room, then propose this transaction again.",
+            "Travis Konecny sits in IR, but IR does not accept their positions (C). This roster is illegal, so all adds and drops are blocked until it is cured. Activate them, or drop them.",
         },
       ],
     },

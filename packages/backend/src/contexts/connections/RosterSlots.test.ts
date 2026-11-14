@@ -32,7 +32,7 @@ it("names a healthy player on an injury-based reserve list and requires a drop w
   assert.deepStrictEqual(
     occupancy.illegal.map((occupant) => occupant.detail),
     [
-      "Linus Ullmark is no longer injured, and the IR+ reserve list only accepts an injured player. Activate them. Your roster is full, so a drop is required.",
+      "Linus Ullmark is no longer injured but sits in IR+. This roster is illegal, so all adds and drops are blocked until it is cured. Activate them, and at 2 of 2 places a drop is required, or drop them.",
     ],
   );
   assert.strictEqual(occupancy.occupied, 2);
@@ -64,7 +64,7 @@ it("asks for an activation without a drop when the roster has room", () => {
   assert.deepStrictEqual(
     occupancy.illegal.map((occupant) => occupant.detail),
     [
-      "Linus Ullmark is no longer injured, and the IR+ reserve list only accepts an injured player. Activate them.",
+      "Linus Ullmark is no longer injured but sits in IR+. This roster is illegal, so all adds and drops are blocked until it is cured. Activate them, or drop them.",
     ],
   );
 });
@@ -86,7 +86,9 @@ it("keeps the position wording for a reserve list that publishes positions", () 
 
   assert.deepStrictEqual(
     occupancy.illegal.map((occupant) => occupant.detail),
-    ["Linus Ullmark is on the IR+ reserve list, but it does not accept their positions (G)."],
+    [
+      "Linus Ullmark sits in IR+, but IR+ does not accept their positions (G). This roster is illegal, so all adds and drops are blocked until it is cured. Activate them, or drop them.",
+    ],
   );
 });
 

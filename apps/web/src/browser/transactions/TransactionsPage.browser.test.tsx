@@ -57,14 +57,20 @@ it("renders open moves and names the stale ones", async () => {
     )
     .toBeVisible();
   await expect.element(page.getByText("Illegal roster position")).toBeVisible();
-  await expect.element(page.getByText(/choosing which player to drop is yours/u)).toBeVisible();
+  await expect
+    .element(
+      page.getByText(
+        "Morgan Reed sits in IR, but IR does not accept their positions (D). This roster is illegal, so all adds and drops are blocked until it is cured. Activate them, or drop them.",
+      ),
+    )
+    .toBeVisible();
   await expect
     .element(page.getByRole("link", { name: "Review and submit" }))
     .toHaveAttribute("href", `/transactions/${openPlanId}`);
   await expect.element(page.getByText(/Proposed by an agent from Draft Desk/u)).toBeVisible();
 });
 
-it("shows the team's illegal roster once above the open plans", async () => {
+it("names the illegal roster player, the block, and the cure above the open plans", async () => {
   using _app = setupTransactionsPage(
     listData([
       plan({ items: [item()], illegalRoster: [rosterOccupant()] }),
@@ -73,7 +79,13 @@ it("shows the team's illegal roster once above the open plans", async () => {
   );
 
   await expect.element(page.getByText("Alpha roster is illegal")).toBeVisible();
-  await expect.element(page.getByText(/Linus Ullmark is no longer injured/u)).toBeVisible();
+  await expect
+    .element(
+      page.getByText(
+        "Linus Ullmark is no longer injured but sits in IR+. This roster is illegal, so all adds and drops are blocked until it is cured. Activate them, and at 19 of 19 places a drop is required, or drop them.",
+      ),
+    )
+    .toBeVisible();
   await expect.element(page.getByText("Drop Riley Chen", { exact: true }).first()).toBeVisible();
 });
 
@@ -519,7 +531,7 @@ function openList(): TransactionProposalListData {
               {
                 code: "slot_illegal",
                 detail:
-                  "Morgan Reed is in the IR slot, but it does not accept his positions. No open slot accepts him, and choosing which player to drop is yours.",
+                  "Morgan Reed sits in IR, but IR does not accept their positions (D). This roster is illegal, so all adds and drops are blocked until it is cured. Activate them, or drop them.",
               },
             ],
           },
@@ -602,7 +614,7 @@ function rosterOccupant(): {
     name: "Linus Ullmark",
     slot: "IR+",
     detail:
-      "Linus Ullmark is no longer injured, and the IR+ reserve list only accepts an injured player. Activate them. Your roster is full, so a drop is required.",
+      "Linus Ullmark is no longer injured but sits in IR+. This roster is illegal, so all adds and drops are blocked until it is cured. Activate them, and at 19 of 19 places a drop is required, or drop them.",
   };
 }
 

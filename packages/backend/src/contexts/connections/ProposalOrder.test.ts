@@ -735,7 +735,7 @@ it("names a reserve-slot player whose positions the slot does not accept", () =>
       positions: ["C"],
       injured: false,
       detail:
-        "Marcus Reserve is on the IR reserve list, but it does not accept their positions (C).",
+        "Marcus Reserve sits in IR, but IR does not accept their positions (C). This roster is illegal, so all adds and drops are blocked until it is cured. Activate them, or drop them.",
     },
   ]);
   assert.strictEqual(occupancy.occupied, 0);
@@ -788,11 +788,13 @@ it("names a starting slot the player is not eligible for", () => {
 
   assert.deepStrictEqual(
     occupancy.illegal.map((occupant) => occupant.detail),
-    ["Wing In The Middle is in the C starting slot, but it does not accept their positions (LW)."],
+    [
+      "Wing In The Middle sits in C, but C does not accept their positions (LW). This roster is illegal, so all adds and drops are blocked until it is cured. Move them to a place that accepts their positions, or drop them.",
+    ],
   );
 });
 
-it("uses the league's own name for a reserve list", () => {
+it("uses the league's own name for a reserve place", () => {
   const slots: ReadonlyArray<Slot> = [
     { position: "RESERVE", kind: "reserve", count: 1, eligibility: ["PG"] },
   ];
@@ -808,7 +810,7 @@ it("uses the league's own name for a reserve list", () => {
     [
       [
         "RESERVE",
-        "Eve Reserve is on the RESERVE reserve list, but it does not accept their positions (SF).",
+        "Eve Reserve sits in RESERVE, but RESERVE does not accept their positions (SF). This roster is illegal, so all adds and drops are blocked until it is cured. Drop them.",
       ],
     ],
   );
