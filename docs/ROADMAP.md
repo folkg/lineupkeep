@@ -983,8 +983,9 @@ The drill proved point-in-time restore produces a usable database. What remains 
 
 ### N3 — Muse acceptance against the deployed origin
 
-- [ ] Run the client's rounds against the deployed server rather than a local instance.
-- [ ] Confirm paging, cursors, scope enforcement and pending outcomes behave the same there.
+- [x] Run the client's rounds against the deployed server rather than a local instance. Accepted against
+      the production origin on 13 November with the recorded harness report: no findings.
+- [x] Confirm paging, cursors, scope enforcement and pending outcomes behave the same there.
 
 **Verify**: a recorded acceptance pass with the tool results. `S`
 
