@@ -97,15 +97,16 @@ open but is never retried automatically.
 
 ### Groups
 
-One propose call may put moves in one group by giving them the same group label. A move without a
-label is a group of one. A group is one or more moves attempted together in the server's order. No
-group spans teams or run days. A group lands whole or not at all: if a move in it is refused, none of
-that group is stored, while a move outside it can still land. A group is a marker on moves, not a
-review unit. A person chooses a group whole, so a partial group cannot be submitted; independent moves
-are chosen one by one. All moves in a group share one run day; editing the day moves the group.
-Discarding or editing one move leaves the rest of its group together. If a move in a group is stale
-before it starts, the group does not run and each move records why. If a move fails during the run, the
-rest of the group is skipped and records why.
+The propose input takes an optional group label for each move; the label is only input, and the server
+assigns the group id. One propose call may put moves in one group by giving them the same label. A move
+without a label is a group of one. A group is one or more moves attempted together in the server's
+order. No group spans teams or run days. A group lands whole or not at all: if a move in it is refused,
+none of that group is stored, while a move outside it can still land. A group is a marker on moves,
+not a review unit. A person chooses a group whole, so a partial group cannot be submitted;
+independent moves are chosen one by one. All moves in a group share one run day; editing the day
+moves the group. Discarding or editing one move leaves the rest of its group together. If a move in a
+group is stale before it starts, the group does not run and each move records why. If a move fails
+during the run, the rest of the group is skipped and records why.
 
 ### Transitions
 
@@ -134,8 +135,8 @@ claims each team's plan separately; a plan already running is skipped and the ot
 
 **Timeline page.** One query for the signed-in owner over open moves, joined to plans and teams,
 ordered by run day, team, and position. The application groups rows by run day and team. The read
-returns the stored validation and its check time. It does not read the league and never presents an old
-check as current; a saved move is rechecked when its day is claimed.
+returns the stored validation and its check time, labelled as the last check rather than the current
+state; it does not read the league. A saved move is rechecked when its day is claimed.
 
 **MCP list.** The same query with an optional team and state: today, saved, or ended. A per-plan read
 takes one team and returns every move in plan order, grouped by run day, including recent ended moves.
