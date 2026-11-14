@@ -597,11 +597,11 @@ it("blocks the moves that consume a fact a failed move would have produced", () 
   );
 });
 
-it("waits on a pending claim that would bring the player a later move drops", () => {
+it("assumes a pending waiver claim succeeds before a move that drops the player", () => {
   const evaluation = evaluate({
     facts: facts({
-      slots: [bench("BN", 2)],
-      constraints: constraints(2),
+      slots: [bench("BN", 3)],
+      constraints: constraints(3),
       roster: [rostered("a1", "Runner A", "BN", ["RB"]), rostered("x1", "Bench X", "BN", ["WR"])],
       pool: [waived("c1", "Runner C", ["RB"])],
       budget: 20,
@@ -620,23 +620,69 @@ it("waits on a pending claim that would bring the player a later move drops", ()
   assert.deepStrictEqual(
     evaluation.moves.map((entry) => [entry.validation.status, entry.runPosition]),
     [
-      ["stale", undefined],
-      ["stale", undefined],
+      ["current", 0],
+      ["current", 1],
     ],
   );
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) => entry.validation.reasons.map((reason) => reason.code)),
-    [["pending_outcome"], ["pending_outcome"]],
+    evaluation.moves.map((entry) => entry.validation.reasons),
+    [[], []],
   );
   assert.deepStrictEqual(
-    evaluation.moves[1]?.validation.reasons[0]?.detail,
-    "Drop Runner C waits on Add Runner C, which is waiting on the league's answer.",
-  );
-  assert.deepStrictEqual(
-    evaluation.moves[0]?.projectedRoster.map((member) => member.key),
+    evaluation.moves[1]?.projectedRoster.map((member) => member.key),
     ["a1", "x1"],
   );
-  assert.deepStrictEqual(evaluation.order.steps, []);
+  assert.deepStrictEqual(
+    evaluation.order.steps.map((step) => step.move),
+    [moveId("claim-c"), moveId("drop-c")],
+  );
+});
+
+it("blocks only a failed waiver claim's dependents", () => {
+  const evaluation = evaluate({
+    facts: facts({
+      slots: [bench("BN", 4)],
+      constraints: constraints(4),
+      roster: [
+        rostered("a1", "Runner A", "BN", ["RB"]),
+        rostered("x1", "Bench X", "BN", ["WR"]),
+        rostered("y1", "Bench Y", "BN", ["WR"]),
+      ],
+      pool: [waived("c1", "Runner C", ["RB"])],
+      budget: 20,
+    }),
+    moves: [
+      move("claim-c", {
+        kind: "waiver_claim",
+        adds: [player("c1", "Runner C")],
+        bid: 5,
+        result: "failed",
+      }),
+      move("drop-c", { kind: "drop", drops: [player("c1", "Runner C")] }),
+      move("drop-x", { kind: "drop", drops: [player("x1", "Bench X")] }),
+    ],
+  });
+
+  assert.deepStrictEqual(
+    evaluation.moves.map((entry) => [entry.validation.status, entry.runPosition]),
+    [
+      ["current", undefined],
+      ["stale", undefined],
+      ["current", 0],
+    ],
+  );
+  assert.deepStrictEqual(
+    evaluation.moves[1]?.validation.reasons.map((reason) => reason.code),
+    ["drop_not_rostered"],
+  );
+  assert.deepStrictEqual(
+    evaluation.moves[2]?.projectedRoster.map((member) => member.key),
+    ["a1", "y1"],
+  );
+  assert.deepStrictEqual(
+    evaluation.order.steps.map((step) => step.move),
+    [moveId("drop-x")],
+  );
 });
 
 it("waits on a pending trade that would bring the player a later move drops", () => {

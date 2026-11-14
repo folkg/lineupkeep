@@ -110,15 +110,15 @@ during the run, the rest of the group is skipped and records why.
 
 ### Transitions
 
-| Action | What happens | Move after |
-| --- | --- | --- |
-| Propose | Create or lock the plan, check claims and roster, append; today starts undecided, a later day saved | Undecided or saved, current |
-| Save or edit | Change in place, set a day today or later, replace claims | Saved, checked again |
-| Discard | Release claims, end the move, no write | Discarded |
-| Submit | Mark selected groups `now`, lock, recheck every open move, set run order, write each group | Now, then result |
-| Run on its day | Hourly check locks, rechecks, writes each due group | Now, then result |
-| Revalidate | Replace validation, placement, dates, claims, run order | Unchanged |
-| Settle | Record result and steps, release claims if ended | Result set |
+| Action         | What happens                                                                                        | Move after                  |
+| -------------- | --------------------------------------------------------------------------------------------------- | --------------------------- |
+| Propose        | Create or lock the plan, check claims and roster, append; today starts undecided, a later day saved | Undecided or saved, current |
+| Save or edit   | Change in place, set a day today or later, replace claims                                           | Saved, checked again        |
+| Discard        | Release claims, end the move, no write                                                              | Discarded                   |
+| Submit         | Mark selected groups `now`, lock, recheck every open move, set run order, write each group          | Now, then result            |
+| Run on its day | Hourly check locks, rechecks, writes each due group                                                 | Now, then result            |
+| Revalidate     | Replace validation, placement, dates, claims, run order                                             | Unchanged                   |
+| Settle         | Record result and steps, release claims if ended                                                    | Result set                  |
 
 A saved move stays editable until its day is claimed. A pending move stays until the league answers; it
 cannot be edited, discarded, or retried. A move with an unknown result cannot be edited or retried; the
@@ -174,15 +174,15 @@ tables join account export and erasure from the slice that creates them.
 Each slice is shippable and ends with the project checks. The new path stays behind one switch until
 slice 6, so no slice leaves two write paths.
 
-| Slice | Work | Evidence |
-| --- | --- | --- |
-| 1. Tables and repository | Add the migration, four tables, plan lock, append, decision, run claim, result, and privacy entries. | One plan, claim collision refused, concurrent appends wait, plan removal cleans up. |
-| 2. Validation and order | Pure functions turn team facts and open moves into claims, validation, placement, dates, and run order. | Double drop, double add, reserve place, illegal slot, stale saved move, order. Not connected yet. |
-| 3. Propose, save, edit, discard | New service behind the switch: groups, whole group or none, claim collisions refused, edit in place, discard per move. | Service tests against a fake league. Old path unchanged. |
-| 4. Reads | Timeline, per-plan review, MCP list, counts, and paging; stored reads show the last check. | Grouping, paging, counts, no set ids. Not visible until the switch. |
-| 5. Submit and run | Plan lock, recheck, group order, league writes, steps, results, hourly run, stale claim recovery. | Success, refusal, partial group, pending, unknown, overdue move. Complete but not visible. |
-| 6. Switch over | Switch page, MCP, and runner to the new model; stop using old tables. | Page, MCP, runner acceptance. Old plans are discarded by the owner's decision. |
-| 7. Remove old storage | Drop the four tables. Delete the old types, repository, MCP tools, set route, timeline adapter, retention, and switch; update the glossary and MCP document. | Migration test, no remaining references, container end-to-end run. |
+| Slice                           | Work                                                                                                                                                         | Evidence                                                                                          |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| 1. Tables and repository        | Add the migration, four tables, plan lock, append, decision, run claim, result, and privacy entries.                                                         | One plan, claim collision refused, concurrent appends wait, plan removal cleans up.               |
+| 2. Validation and order         | Pure functions turn team facts and open moves into claims, validation, placement, dates, and run order.                                                      | Double drop, double add, reserve place, illegal slot, stale saved move, order. Not connected yet. |
+| 3. Propose, save, edit, discard | New service behind the switch: groups, whole group or none, claim collisions refused, edit in place, discard per move.                                       | Service tests against a fake league. Old path unchanged.                                          |
+| 4. Reads                        | Timeline, per-plan review, MCP list, counts, and paging; stored reads show the last check.                                                                   | Grouping, paging, counts, no set ids. Not visible until the switch.                               |
+| 5. Submit and run               | Plan lock, recheck, group order, league writes, steps, results, hourly run, stale claim recovery.                                                            | Success, refusal, partial group, pending, unknown, overdue move. Complete but not visible.        |
+| 6. Switch over                  | Switch page, MCP, and runner to the new model; stop using old tables.                                                                                        | Page, MCP, runner acceptance. Old plans are discarded by the owner's decision.                    |
+| 7. Remove old storage           | Drop the four tables. Delete the old types, repository, MCP tools, set route, timeline adapter, retention, and switch; update the glossary and MCP document. | Migration test, no remaining references, container end-to-end run.                                |
 
 ## 7. Open questions
 

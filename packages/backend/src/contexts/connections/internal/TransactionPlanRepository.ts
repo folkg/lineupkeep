@@ -71,6 +71,12 @@ type TransactionMoveEdit = {
   readonly claims: ReadonlyArray<StoredMoveClaim>;
 };
 
+type TransactionMoveDay = {
+  readonly move: TransactionMoveId;
+  readonly runDay: StoredMoveDate | undefined;
+  readonly effectiveDate: StoredMoveDate | undefined;
+};
+
 type TransactionRunClaim =
   | { readonly status: "claimed"; readonly plan: TransactionPlanRecord }
   | { readonly status: "held"; readonly plan: TransactionPlanRecord };
@@ -179,6 +185,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
         readonly team: TeamId;
         readonly move: TransactionMoveId;
         readonly edit: TransactionMoveEdit;
+        readonly groupDays: ReadonlyArray<TransactionMoveDay>;
         readonly at: DateTime.Utc;
       }) {
         const at = DateTime.toDateUtc(input.at);
@@ -217,6 +224,24 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                     createdAt: at,
                   })),
                 );
+              }
+              for (const day of input.groupDays) {
+                yield* tx
+                  .update(transactionMoves)
+                  .set({
+                    runDay: day.runDay ?? null,
+                    effectiveDate: day.effectiveDate ?? null,
+                    decision: day.runDay === undefined ? "now" : "saved",
+                    decidedAt: at,
+                    updatedAt: at,
+                  })
+                  .where(
+                    and(
+                      eq(transactionMoves.userId, input.userId),
+                      eq(transactionMoves.teamId, input.team),
+                      eq(transactionMoves.id, day.move),
+                    ),
+                  );
               }
               yield* tx
                 .update(transactionPlans)

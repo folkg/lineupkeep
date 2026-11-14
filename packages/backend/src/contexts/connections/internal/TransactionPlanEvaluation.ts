@@ -118,6 +118,10 @@ export function claimTransactionPlanMoves(input: TransactionPlanClaimInput): Tra
   return { moves: claimed, refused };
 }
 
+export function describeTransactionPlanMove(move: TransactionPlanMove): string {
+  return moveLabel(move);
+}
+
 function replayPlan(input: {
   readonly facts: TransactionPlanTeamFacts;
   readonly rule: RosterRule;
@@ -179,10 +183,14 @@ function evaluateReplayMove(input: ReplayMoveInput): ReplayStep {
   const dependencies = dependsOn.map((id) => input.steps.get(id));
   const waitingOn = dependencies.find((dependency) => dependency?.pending === true);
   const brokenBy = dependencies.find(
-    (dependency) => dependency !== undefined && !dependency.pending && !dependency.applied,
+    (dependency) =>
+      dependency !== undefined &&
+      !dependency.pending &&
+      !dependency.applied &&
+      !holdsClaimsWithoutEffect(dependency.move.result),
   );
 
-  if (move.result === "pending") {
+  if (move.result === "pending" && move.kind === "trade") {
     step.pending = true;
     stale(
       step,
@@ -190,7 +198,7 @@ function evaluateReplayMove(input: ReplayMoveInput): ReplayStep {
       undefined,
       `${moveLabel(move)} waits on the league's answer before it can run.`,
     );
-    holdPendingClaims(step, projection);
+    holdClaims(step, projection, true, undefined);
     step.projectedRoster = projectionRoster(projection);
     return step;
   }
@@ -263,8 +271,12 @@ function evaluateReplayMove(input: ReplayMoveInput): ReplayStep {
     step.claims = claimCandidates(move, step.placement, projection.roster)
       .map((candidate) => candidate.claim)
       .sort(compareClaims);
-    applyMove(step, projection, facts);
-    step.applied = true;
+    if (holdsClaimsWithoutEffect(move.result)) {
+      holdClaims(step, projection, false, step.placement);
+    } else {
+      applyMove(step, projection, facts);
+      step.applied = true;
+    }
   }
   step.projectedRoster = projectionRoster(projection);
   return step;
@@ -722,15 +734,20 @@ function applyMove(
   }
 }
 
-function holdPendingClaims(step: ReplayStep, projection: TeamProjection): void {
-  for (const candidate of claimCandidates(step.move, undefined, projection.roster)) {
+function holdClaims(
+  step: ReplayStep,
+  projection: TeamProjection,
+  pending: boolean,
+  placement: StoredMovePlacement | undefined,
+): void {
+  for (const candidate of claimCandidates(step.move, placement, projection.roster)) {
     projection.claims.set(claimKey(candidate.claim), {
       move: step.move.id,
       adds:
         candidate.claim.kind === "player" &&
         (step.move.adds.some((add) => add.key === candidate.claim.key) ||
           step.move.fallbacks.some((fallback) => fallback.key === candidate.claim.key)),
-      pending: true,
+      pending,
     });
   }
 }
@@ -1467,6 +1484,10 @@ function isAddKind(kind: TransactionPlanMove["kind"]): boolean {
   return kind === "free_agent_add" || kind === "waiver_claim";
 }
 
+function holdsClaimsWithoutEffect(result: TransactionPlanMove["result"]): boolean {
+  return result === "failed" || result === "skipped" || result === "unknown";
+}
+
 function nameOf(player: { readonly key: string; readonly name?: string }): string {
   return player.name ?? player.key;
 }
@@ -1569,7 +1590,6 @@ type HeldClaim = {
   readonly adds: boolean;
   readonly pending: boolean;
 };
-
 type ClaimCheck = {
   readonly refused: ReadonlyArray<StoredMoveValidationReason>;
   readonly waiting: { readonly move: TransactionMoveId; readonly label: string } | undefined;

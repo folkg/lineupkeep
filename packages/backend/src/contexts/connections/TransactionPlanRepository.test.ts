@@ -193,6 +193,7 @@ it.effect("edits a move in place and replaces the claims it holds", () =>
         }),
         claims: [{ kind: "player", key: "nhl.p.2" }],
       },
+      groupDays: [],
     });
 
     assert.isTrue(Option.isSome(edited));
