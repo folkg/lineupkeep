@@ -28,87 +28,50 @@ export function evaluateTransactionPlan(
 ): TransactionPlanEvaluation {
   const facts = input.facts;
   const rule = rosterRuleOf(facts.constraints, facts.slots);
-  const roster = rosterOf(facts);
   const moves = [...input.moves].sort(comparePlanMoves);
-  const checked = new Map<TransactionMoveId, CheckedMove>(
-    moves.map((move) => [move.id, { move, placement: undefined, stale: [], illegal: [] }]),
+  const byId = movesById(moves);
+  const hints = planPlacementHints(moves, facts);
+  const entries = moves.map((move) => ({
+    move,
+    placement: hints.get(move.id),
+    runnable: true,
+  }));
+  const graph = planDependencies(entries, facts, rule);
+  const sequence = topologicalSequence(entries, graph);
+  const replay = replayPlan({ facts, rule, entries, byId, graph, sequence });
+  const explanations = sequence.blocked.filter(
+    (entry) => reasonCount(replay.steps.get(entry.move)) === 0,
   );
-  const identity = new Map(
-    moves.map((move) => [move.id, identityReasons(move, facts, rule, roster)] as const),
-  );
-  const qualified = moves.filter((move) => reasonCount(identity.get(move.id)) === 0);
-  const slotChecks = checkSlotMoves(qualified, facts, rule, roster);
-  const placement = placeMoves(qualified, facts, slotChecks.refused);
-  const claims = claimTransactionPlanMoves({ moves, placements: placement.placements, roster });
-
-  for (const move of moves) {
-    const entry = requireValue(checked.get(move.id), "A plan move was not checked");
-    appendReasons(entry.stale, identity.get(move.id)?.stale);
-    appendReasons(entry.illegal, identity.get(move.id)?.illegal);
-    appendReasons(entry.stale, slotChecks.reasons.get(move.id)?.stale);
-    appendReasons(entry.illegal, slotChecks.reasons.get(move.id)?.illegal);
-    appendReasons(entry.stale, placement.reasons.get(move.id)?.stale);
-    appendReasons(entry.illegal, placement.reasons.get(move.id)?.illegal);
-    entry.placement = placement.placements.get(move.id);
-    const illegality = rosterIllegality(entry, facts, rule, roster);
-    appendReasons(entry.stale, illegality.stale);
-    appendReasons(entry.illegal, illegality.illegal);
+  for (const explanation of explanations) {
+    requireValue(
+      replay.steps.get(explanation.move),
+      "A blocked plan move was not replayed",
+    ).stale.push({ code: "order_conflict", detail: explanation.detail });
   }
 
-  for (const refusal of claims.refused) {
-    const entry = checked.get(refusal.move);
-    entry?.stale.push({
-      code: refusal.code,
-      ...(refusal.claim.kind === "player" ? { playerKey: refusal.claim.key } : {}),
-      detail: refusal.detail,
-    });
-  }
-
-  for (const [id, reasons] of placeAccounting(moves, checked, facts, rule)) {
-    appendReasons(requireValue(checked.get(id), "A plan move was not checked").stale, reasons);
-  }
-
-  const claimsByMove = new Map(claims.moves.map((entry) => [entry.move, entry.claims] as const));
+  const positions = new Map(replay.applied.map((move, position) => [move, position] as const));
   const evaluated = moves.map((move) =>
     moveEvaluation(
-      requireValue(checked.get(move.id), "A plan move was not checked"),
-      claimsByMove.get(move.id) ?? [],
+      requireValue(replay.steps.get(move.id), "A plan move was not replayed"),
       facts,
       input.checkedAt,
+      positions.get(move.id),
     ),
   );
-  const evaluatedById = new Map(evaluated.map((entry) => [entry.move, entry] as const));
-  const order = orderTransactionPlanMoves({
-    facts,
-    moves: moves.map((move) => {
-      const evaluation = requireValue(evaluatedById.get(move.id), "A plan move was not evaluated");
-      return {
-        move,
-        placement: evaluation.placement,
-        runnable: evaluation.validation.status === "current",
-      };
-    }),
-  });
-  const blocked = new Map(order.blocked.map((entry) => [entry.move, entry.detail] as const));
-  const positioned = evaluated.map((entry) => {
-    const detail = blocked.get(entry.move);
-    const runPosition = order.steps.find((step) => step.move === entry.move)?.position;
-    return detail === undefined
-      ? { ...entry, runPosition }
-      : {
-          ...entry,
-          runPosition: undefined,
-          validation: {
-            status: "stale" as const,
-            checkedAt: input.checkedAt,
-            reasons: [...entry.validation.reasons, { code: "order_conflict", detail }],
-          },
-        };
-  });
+  const order: TransactionPlanOrder = {
+    steps: replay.applied.map((move, position) => ({
+      move,
+      position,
+      fundedBy: graph.fundedBy.get(move),
+      dependsOn: orderedDependencies(move, graph.dependencies, entries),
+    })),
+    excluded: moves.filter((move) => !positions.has(move.id)).map((move) => move.id),
+    blocked: explanations.map((entry) => ({ move: entry.move, detail: entry.detail })),
+  };
 
   return {
-    moves: positioned,
-    groups: groupEvaluations(positioned, moves),
+    moves: evaluated,
+    groups: groupEvaluations(evaluated, moves),
     order,
   };
 }
@@ -118,57 +81,9 @@ export function orderTransactionPlanMoves(input: TransactionPlanOrderInput): Tra
   const entries = [...input.moves].sort((left, right) => comparePlanMoves(left.move, right.move));
   const runnable = entries.filter((entry) => entry.runnable);
   const excluded = entries.filter((entry) => !entry.runnable).map((entry) => entry.move.id);
-  const dependencies = new Map<TransactionMoveId, Set<TransactionMoveId>>(
-    runnable.map((entry) => [entry.move.id, new Set<TransactionMoveId>()]),
-  );
-  const fundedBy = new Map<TransactionMoveId, TransactionMoveId>();
-  const blocked = new Map<TransactionMoveId, string>();
+  const sequence = topologicalSequence(runnable, planDependencies(runnable, input.facts, rule));
 
-  addDestinationDependencies(runnable, input.facts, rule, dependencies, fundedBy);
-  addCapacityDependencies(runnable, input.facts, rule, dependencies, fundedBy, blocked);
-
-  const done = new Set<TransactionMoveId>();
-  const steps: Array<TransactionPlanOrderStep> = [];
-  let progressed = true;
-  while (progressed && done.size < runnable.length) {
-    progressed = false;
-    for (const entry of runnable) {
-      if (done.has(entry.move.id) || blocked.has(entry.move.id)) {
-        continue;
-      }
-      const waiting = unmetDependencies(entry.move.id, dependencies, done);
-      if (waiting.length > 0) {
-        continue;
-      }
-      steps.push({
-        move: entry.move.id,
-        position: steps.length,
-        fundedBy: fundedBy.get(entry.move.id),
-        dependsOn: orderedDependencies(entry.move.id, dependencies, runnable),
-      });
-      done.add(entry.move.id);
-      progressed = true;
-    }
-  }
-
-  for (const entry of runnable) {
-    if (done.has(entry.move.id) || blocked.has(entry.move.id)) {
-      continue;
-    }
-    const waiting = unmetDependencies(entry.move.id, dependencies, done);
-    blocked.set(
-      entry.move.id,
-      `No order can run ${moveLabel(entry.move)}: it waits on ${waiting
-        .map((id) => moveLabel(moveById(runnable, id)))
-        .join(", ")}.`,
-    );
-  }
-
-  return {
-    steps,
-    excluded,
-    blocked: [...blocked.entries()].map(([move, detail]) => ({ move, detail })),
-  };
+  return { steps: sequence.steps, excluded, blocked: sequence.blocked };
 }
 
 export function claimTransactionPlanMoves(input: TransactionPlanClaimInput): TransactionPlanClaims {
@@ -191,7 +106,7 @@ export function claimTransactionPlanMoves(input: TransactionPlanClaimInput): Tra
         claim: candidate.claim,
         heldBy: holder,
         code: claimRefusalCode(candidate.claim.kind),
-        detail: `${candidate.label} is already claimed in this plan by another move. Two open moves cannot claim the same ${claimSubject(candidate.claim.kind)}; discard or change one of them.`,
+        detail: claimRefusalDetail(candidate),
       });
     }
     claimed.push({
@@ -203,22 +118,176 @@ export function claimTransactionPlanMoves(input: TransactionPlanClaimInput): Tra
   return { moves: claimed, refused };
 }
 
+function replayPlan(input: {
+  readonly facts: TransactionPlanTeamFacts;
+  readonly rule: RosterRule;
+  readonly entries: ReadonlyArray<TransactionPlanOrderMove>;
+  readonly byId: ReadonlyMap<TransactionMoveId, TransactionPlanMove>;
+  readonly graph: PlanGraph;
+  readonly sequence: PlanSequence;
+}): {
+  readonly steps: Map<TransactionMoveId, ReplayStep>;
+  readonly applied: ReadonlyArray<TransactionMoveId>;
+} {
+  const projection = initialProjection(input.facts);
+  const steps = new Map<TransactionMoveId, ReplayStep>();
+  const applied: Array<TransactionMoveId> = [];
+  const blocked = new Set(input.sequence.blocked.map((entry) => entry.move));
+  const runnable = [
+    ...input.sequence.steps.map((step) => step.move),
+    ...input.sequence.blocked.map((entry) => entry.move),
+  ];
+
+  for (const id of runnable) {
+    const move = requireValue(input.byId.get(id), "A replayed move was not declared in the plan");
+    const step = evaluateReplayMove({
+      move,
+      projection,
+      facts: input.facts,
+      rule: input.rule,
+      byId: input.byId,
+      dependencies: input.graph.dependencies,
+      entries: input.entries,
+      steps,
+      blocked: blocked.has(id),
+    });
+    steps.set(id, step);
+    if (step.applied) {
+      applied.push(id);
+    }
+  }
+
+  return { steps, applied };
+}
+
+function evaluateReplayMove(input: ReplayMoveInput): ReplayStep {
+  const { move, projection, facts, rule, byId } = input;
+  const dependsOn = orderedDependencies(move.id, input.dependencies, input.entries);
+  const step: ReplayStep = {
+    move,
+    dependsOn,
+    claims: claimCandidates(move, undefined, projection.roster)
+      .map((candidate) => candidate.claim)
+      .sort(compareClaims),
+    stale: [],
+    illegal: [],
+    placement: undefined,
+    applied: false,
+    pending: false,
+    projectedRoster: [],
+  };
+  const dependencies = dependsOn.map((id) => input.steps.get(id));
+  const waitingOn = dependencies.find((dependency) => dependency?.pending === true);
+  const brokenBy = dependencies.find(
+    (dependency) => dependency !== undefined && !dependency.pending && !dependency.applied,
+  );
+
+  if (move.result === "pending") {
+    step.pending = true;
+    stale(
+      step,
+      "pending_outcome",
+      undefined,
+      `${moveLabel(move)} waits on the league's answer before it can run.`,
+    );
+    holdPendingClaims(step, projection);
+    step.projectedRoster = projectionRoster(projection);
+    return step;
+  }
+  if (waitingOn !== undefined) {
+    stale(
+      step,
+      "pending_outcome",
+      undefined,
+      `${moveLabel(move)} waits on ${moveLabel(waitingOn.move)}, which is waiting on the league's answer.`,
+    );
+    step.projectedRoster = projectionRoster(projection);
+    return step;
+  }
+  if (brokenBy !== undefined) {
+    stale(
+      step,
+      "blocked_by_move",
+      undefined,
+      `${moveLabel(move)} cannot run because ${moveLabel(brokenBy.move)} did not pass its check.`,
+    );
+    step.projectedRoster = projectionRoster(projection);
+    return step;
+  }
+
+  const claims = checkClaims(move, projection);
+  if (claims.waiting !== undefined) {
+    const holder = requireValue(
+      byId.get(claims.waiting.move),
+      "A claiming move was not declared in the plan",
+    );
+    stale(
+      step,
+      "pending_outcome",
+      undefined,
+      `${claims.waiting.label} is claimed by ${moveLabel(holder)}, which is waiting on the league's answer.`,
+    );
+    step.projectedRoster = projectionRoster(projection);
+    return step;
+  }
+  if (claims.refused.length > 0) {
+    appendReasons(step.stale, claims.refused);
+    step.projectedRoster = projectionRoster(projection);
+    return step;
+  }
+
+  const identity = identityReasons(move, facts, rule, projection, byId);
+  appendReasons(step.stale, identity.stale);
+  appendReasons(step.illegal, identity.illegal);
+  if (reasonCount(step) === 0) {
+    step.placement = placeMove(move, projection, facts, rule, step);
+  }
+  if (reasonCount(step) === 0) {
+    const illegality = rosterIllegality(move, step.placement, rule, projection);
+    appendReasons(step.stale, illegality.stale);
+    appendReasons(step.illegal, illegality.illegal);
+  }
+  if (reasonCount(step) === 0) {
+    const destination = destinationRefusal(move, step.placement, projection, byId);
+    if (destination !== undefined) {
+      step.stale.push(destination);
+    }
+  }
+  if (reasonCount(step) === 0) {
+    const accounting = accountingReason(move, step.placement, projection, facts, rule);
+    if (accounting !== undefined) {
+      step.stale.push(accounting);
+    }
+  }
+  if (reasonCount(step) === 0 && !input.blocked) {
+    step.claims = claimCandidates(move, step.placement, projection.roster)
+      .map((candidate) => candidate.claim)
+      .sort(compareClaims);
+    applyMove(step, projection, facts);
+    step.applied = true;
+  }
+  step.projectedRoster = projectionRoster(projection);
+  return step;
+}
+
 function identityReasons(
   move: TransactionPlanMove,
   facts: TransactionPlanTeamFacts,
   rule: RosterRule,
-  roster: ReadonlyMap<string, TransactionPlanRosterPlayer>,
+  projection: TeamProjection,
+  byId: ReadonlyMap<TransactionMoveId, TransactionPlanMove>,
 ): Reasons {
   const reasons = emptyReasons();
   for (const drop of move.drops) {
-    if (!roster.has(drop.key)) {
-      stale(
-        reasons,
-        "drop_not_rostered",
-        drop.key,
-        `${nameOf(drop)} is no longer on the roster, so this move cannot drop them.`,
-      );
+    if (projection.roster.has(drop.key)) {
+      continue;
     }
+    stale(
+      reasons,
+      "drop_not_rostered",
+      drop.key,
+      leftRosterDetail(nameOf(drop), "drop them", drop.key, projection, byId),
+    );
   }
   if (isAddKind(move.kind)) {
     const wanted = move.kind === "free_agent_add" ? "free_agent" : "waiver";
@@ -262,12 +331,12 @@ function identityReasons(
         undefined,
         `This move names no player. An ${move.kind} names the rostered player to move.`,
       );
-    } else if (!roster.has(player.key)) {
+    } else if (!projection.roster.has(player.key)) {
       stale(
         reasons,
         "move_not_rostered",
         player.key,
-        `${nameOf(player)} is no longer on the roster, so this move cannot place them.`,
+        leftRosterDetail(nameOf(player), "place them", player.key, projection, byId),
       );
     }
   }
@@ -281,13 +350,19 @@ function identityReasons(
         "This move names no place. A slot move names the player to move and the place they move to.",
       );
     } else {
-      const player = roster.get(declared.playerKey);
+      const player = projection.roster.get(declared.playerKey);
       if (player === undefined) {
         stale(
           reasons,
           "move_not_rostered",
           declared.playerKey,
-          `${declared.playerName ?? declared.playerKey} is no longer on the roster, so this move cannot place them.`,
+          leftRosterDetail(
+            declared.playerName ?? declared.playerKey,
+            "place them",
+            declared.playerKey,
+            projection,
+            byId,
+          ),
         );
       } else {
         const destination = rule.byPosition.get(declared.toSlot);
@@ -330,19 +405,19 @@ function identityReasons(
   if (move.bid !== undefined) {
     if (move.kind !== "waiver_claim") {
       stale(reasons, "bid_not_available", undefined, "Only a waiver claim carries a FAAB bid.");
-    } else if (facts.budget === undefined) {
+    } else if (projection.budget === undefined) {
       stale(
         reasons,
         "bid_not_available",
         undefined,
         "The league does not publish the FAAB this team has left, so this bid cannot be checked.",
       );
-    } else if (move.bid > facts.budget) {
+    } else if (move.bid > projection.budget) {
       stale(
         reasons,
         "bid_exceeds_budget",
         undefined,
-        `A bid of ${String(move.bid)} is more than the ${String(facts.budget)} FAAB this team has left.`,
+        `A bid of ${String(move.bid)} is more than the ${String(projection.budget)} FAAB this team has left.`,
       );
     }
   }
@@ -357,75 +432,375 @@ function identityReasons(
   return reasons;
 }
 
-function checkSlotMoves(
-  moves: ReadonlyArray<TransactionPlanMove>,
-  facts: TransactionPlanTeamFacts,
-  rule: RosterRule,
-  roster: ReadonlyMap<string, TransactionPlanRosterPlayer>,
-): { readonly reasons: Map<TransactionMoveId, Reasons>; readonly refused: Set<TransactionMoveId> } {
-  const reasons = new Map<TransactionMoveId, Reasons>();
-  const refused = new Set<TransactionMoveId>();
-  const dropped = droppedKeys(moves);
-
-  for (const move of moves) {
-    const declared = move.kind === "slot_move" ? move.slotMove : undefined;
-    if (declared === undefined) {
-      continue;
-    }
-    const reasonsOfMove = reasons.get(move.id) ?? emptyReasons();
-    reasons.set(move.id, reasonsOfMove);
-    const player = roster.get(declared.playerKey);
-    if (player === undefined) {
-      continue;
-    }
-    const destination = rule.byPosition.get(declared.toSlot);
-    if (destination === undefined) {
-      continue;
-    }
-    if (dropped.has(player.key)) {
-      stale(
-        reasonsOfMove,
-        "move_not_rostered",
-        player.key,
-        `Another move in this plan drops ${player.name}, so this move cannot also place them.`,
-      );
-      refused.add(move.id);
-      continue;
-    }
-    const capacity = slotCapacity(rule, destination);
-    const occupants = facts.roster.filter(
-      (occupant) =>
-        occupant.slot === destination.position &&
-        occupant.key !== player.key &&
-        !dropped.has(occupant.key),
-    );
-    if (capacity !== undefined && occupants.length >= capacity) {
-      illegal(
-        reasonsOfMove,
-        "slot_illegal",
-        player.key,
-        `The ${destination.position} place already holds ${nameList(
-          occupants.map((occupant) => occupant.name),
-        )}. Move one of them first, or choose another place.`,
-      );
-      refused.add(move.id);
-    }
-  }
-  return { reasons, refused };
+function leftRosterDetail(
+  name: string,
+  action: string,
+  playerKey: string,
+  projection: TeamProjection,
+  byId: ReadonlyMap<TransactionMoveId, TransactionPlanMove>,
+): string {
+  const remover = projection.removedBy.get(playerKey);
+  return remover === undefined
+    ? `${name} is no longer on the roster, so this move cannot ${action}.`
+    : `${name} left the roster when ${moveLabel(requireValue(byId.get(remover), "A removing move was not declared in the plan"))} ran, so this move cannot ${action}.`;
 }
 
-function placeMoves(
+function checkClaims(move: TransactionPlanMove, projection: TeamProjection): ClaimCheck {
+  const leaving = leavingPlaces(move, projection);
+  const refused: Array<StoredMoveValidationReason> = [];
+  for (const candidate of claimCandidates(move, undefined, projection.roster)) {
+    const held = projection.claims.get(claimKey(candidate.claim));
+    if (held === undefined || held.move === move.id) {
+      continue;
+    }
+    if (candidate.claim.kind === "place" && leaving.has(candidate.claim.key)) {
+      continue;
+    }
+    if (held.pending) {
+      return { refused, waiting: { move: held.move, label: candidate.label } };
+    }
+    if (transfersClaim(held, candidate.claim, move)) {
+      continue;
+    }
+    refused.push({
+      code: claimRefusalCode(candidate.claim.kind),
+      ...(candidate.claim.kind === "player" ? { playerKey: candidate.claim.key } : {}),
+      detail: claimRefusalDetail(candidate),
+    });
+  }
+  return { refused, waiting: undefined };
+}
+
+function transfersClaim(
+  held: HeldClaim,
+  claim: StoredMoveClaim,
+  move: TransactionPlanMove,
+): boolean {
+  if (claim.kind !== "player") {
+    return false;
+  }
+  const adds =
+    move.adds.some((add) => add.key === claim.key) ||
+    move.fallbacks.some((fallback) => fallback.key === claim.key);
+  return held.adds !== adds;
+}
+
+function destinationRefusal(
+  move: TransactionPlanMove,
+  placement: StoredMovePlacement | undefined,
+  projection: TeamProjection,
+  byId: ReadonlyMap<TransactionMoveId, TransactionPlanMove>,
+): StoredMoveValidationReason | undefined {
+  if (move.kind !== "activate" && move.kind !== "stash") {
+    return undefined;
+  }
+  const toSlot = placement?.toSlot;
+  if (toSlot === undefined) {
+    return undefined;
+  }
+  const held = projection.claims.get(claimKey({ kind: "place", key: toSlot }));
+  if (held === undefined || held.move === move.id) {
+    return undefined;
+  }
+  if (held.pending) {
+    return {
+      code: "pending_outcome",
+      detail: `${moveLabel(move)} waits on ${moveLabel(requireValue(byId.get(held.move), "A claiming move was not declared in the plan"))}, which holds the ${toSlot} place and is waiting on the league's answer.`,
+    };
+  }
+  return {
+    code: "place_claimed",
+    detail: `The ${toSlot} place is already claimed in this plan by another move. Two open moves cannot claim the same place; discard or change one of them.`,
+  };
+}
+
+function placeMove(
+  move: TransactionPlanMove,
+  projection: TeamProjection,
+  facts: TransactionPlanTeamFacts,
+  rule: RosterRule,
+  step: ReplayStep,
+): StoredMovePlacement | undefined {
+  if (move.kind === "slot_move") {
+    checkSlotDestination(move, projection, rule, step);
+    return undefined;
+  }
+  const item = placementItem(move, facts);
+  if (item === undefined) {
+    return undefined;
+  }
+  const players = [...projection.roster.values()].filter(
+    (player) => !move.drops.some((drop) => drop.key === player.key),
+  );
+  const placed = placeIntentItems({
+    constraints: facts.constraints,
+    slots: facts.slots,
+    players,
+    items: [item],
+  });
+  for (const refusal of placed.refused) {
+    if (refusal.code === "slot_illegal") {
+      illegal(step, refusal.code, undefined, refusal.detail);
+    } else {
+      stale(step, refusal.code, undefined, refusal.detail);
+    }
+  }
+  const placement = placed.placements.find((entry) => entry.item === move.id);
+  return placement === undefined
+    ? undefined
+    : {
+        playerKey: placement.playerKey,
+        playerName: placement.playerName,
+        ...(placement.fromSlot === undefined ? {} : { fromSlot: placement.fromSlot }),
+        toSlot: placement.toSlot,
+        detail: placement.detail,
+      };
+}
+
+function checkSlotDestination(
+  move: TransactionPlanMove,
+  projection: TeamProjection,
+  rule: RosterRule,
+  step: ReplayStep,
+): void {
+  const declared = move.slotMove;
+  if (declared === undefined) {
+    return;
+  }
+  const destination = rule.byPosition.get(declared.toSlot);
+  if (destination === undefined) {
+    return;
+  }
+  const capacity = slotCapacity(rule, destination);
+  const occupants = [...projection.roster.values()].filter(
+    (occupant) => occupant.slot === destination.position && occupant.key !== declared.playerKey,
+  );
+  if (capacity !== undefined && occupants.length >= capacity) {
+    illegal(
+      step,
+      "slot_illegal",
+      declared.playerKey,
+      `The ${destination.position} place already holds ${nameList(occupants.map((occupant) => occupant.name))}. Move one of them first, or choose another place.`,
+    );
+  }
+}
+
+function rosterIllegality(
+  move: TransactionPlanMove,
+  placement: StoredMovePlacement | undefined,
+  rule: RosterRule,
+  projection: TeamProjection,
+): Reasons {
+  const reasons = emptyReasons();
+  const occupancy = rosterOccupancy({ rule, players: [...projection.roster.values()] });
+  for (const occupant of occupancy.illegal) {
+    if (curesPlacement(move, placement, occupant.key, rule, projection)) {
+      continue;
+    }
+    illegal(reasons, "slot_illegal", occupant.key, occupant.detail);
+  }
+  return reasons;
+}
+
+function curesPlacement(
+  move: TransactionPlanMove,
+  placement: StoredMovePlacement | undefined,
+  playerKey: string,
+  rule: RosterRule,
+  projection: TeamProjection,
+): boolean {
+  if (move.drops.some((drop) => drop.key === playerKey)) {
+    return true;
+  }
+  const declared = move.kind === "slot_move" ? move.slotMove : undefined;
+  const mover = moverKeyOf(move);
+  const destination = declared?.toSlot ?? placement?.toSlot;
+  const player = projection.roster.get(playerKey);
+  if (mover !== playerKey || destination === undefined || player === undefined) {
+    return false;
+  }
+  return slotPlacement(rule, destination, player).legal === true;
+}
+
+function accountingReason(
+  move: TransactionPlanMove,
+  placement: StoredMovePlacement | undefined,
+  projection: TeamProjection,
+  facts: TransactionPlanTeamFacts,
+  rule: RosterRule,
+): StoredMoveValidationReason | undefined {
+  const players = [...projection.roster.values()];
+  const change = placeChangeOf(move, placement, players, rule);
+  const occupancy = rosterOccupancy({ rule, players });
+  const free = Math.max(0, facts.constraints.rosterMaximum - occupancy.occupied);
+  const needed = Math.max(0, change.consumes - change.frees);
+  return needed > free
+    ? {
+        code: "roster_full",
+        detail: `${moveLabel(move)} needs a roster place, and this plan does not free one. Add a drop or a reserve move that frees a place, or remove this move.`,
+      }
+    : undefined;
+}
+
+function applyMove(
+  step: ReplayStep,
+  projection: TeamProjection,
+  facts: TransactionPlanTeamFacts,
+): void {
+  const move = step.move;
+  for (const place of leavingPlaces(move, projection)) {
+    projection.claims.delete(claimKey({ kind: "place", key: place }));
+  }
+  for (const drop of move.drops) {
+    projection.roster.delete(drop.key);
+    projection.removedBy.set(drop.key, move.id);
+    projection.claims.delete(claimKey({ kind: "player", key: drop.key }));
+  }
+  if (move.kind === "slot_move" && move.slotMove !== undefined) {
+    relocate(projection, move.slotMove.playerKey, move.slotMove.toSlot);
+  }
+  if ((move.kind === "activate" || move.kind === "stash") && step.placement !== undefined) {
+    relocate(projection, step.placement.playerKey, step.placement.toSlot);
+  }
+  if (isAddKind(move.kind)) {
+    const add = requireValue(move.adds[0], "An add move names one player");
+    const pooled = facts.pool.get(add.key);
+    projection.roster.set(add.key, {
+      key: add.key,
+      name: pooled?.name ?? nameOf(add),
+      positions: pooled?.positions ?? [],
+      slot: step.placement?.toSlot,
+      injured: false,
+      editable: true,
+    });
+  }
+  if (move.kind === "trade") {
+    for (const add of move.adds) {
+      projection.roster.set(add.key, {
+        key: add.key,
+        name: nameOf(add),
+        positions: [],
+        slot: undefined,
+        injured: false,
+        editable: true,
+      });
+    }
+  }
+  for (const drop of move.drops) {
+    projection.claims.set(claimKey({ kind: "player", key: drop.key }), {
+      move: move.id,
+      adds: false,
+      pending: false,
+    });
+  }
+  for (const add of [...move.adds, ...move.fallbacks]) {
+    projection.claims.set(claimKey({ kind: "player", key: add.key }), {
+      move: move.id,
+      adds: true,
+      pending: false,
+    });
+  }
+  for (const place of usedPlaces(move, step.placement)) {
+    projection.claims.set(claimKey({ kind: "place", key: place }), {
+      move: move.id,
+      adds: false,
+      pending: false,
+    });
+  }
+  for (const pick of move.picks) {
+    projection.claims.set(
+      claimKey({ kind: "draft_pick", key: pickKey(pick.round, pick.sourceTeamKey) }),
+      {
+        move: move.id,
+        adds: false,
+        pending: false,
+      },
+    );
+  }
+  if (move.bid !== undefined && projection.budget !== undefined) {
+    projection.budget -= move.bid;
+  }
+}
+
+function holdPendingClaims(step: ReplayStep, projection: TeamProjection): void {
+  for (const candidate of claimCandidates(step.move, undefined, projection.roster)) {
+    projection.claims.set(claimKey(candidate.claim), {
+      move: step.move.id,
+      adds:
+        candidate.claim.kind === "player" &&
+        (step.move.adds.some((add) => add.key === candidate.claim.key) ||
+          step.move.fallbacks.some((fallback) => fallback.key === candidate.claim.key)),
+      pending: true,
+    });
+  }
+}
+
+function relocate(projection: TeamProjection, playerKey: string, slot: string): void {
+  const player = projection.roster.get(playerKey);
+  if (player !== undefined) {
+    projection.roster.set(playerKey, { ...player, slot });
+  }
+}
+
+function leavingPlaces(move: TransactionPlanMove, projection: TeamProjection): Set<string> {
+  const places = new Set<string>();
+  for (const drop of move.drops) {
+    const player = projection.roster.get(drop.key);
+    if (player?.slot !== undefined) {
+      places.add(player.slot);
+    }
+  }
+  const mover = moverKeyOf(move);
+  const player = mover === undefined ? undefined : projection.roster.get(mover);
+  if (player?.slot !== undefined) {
+    places.add(player.slot);
+  }
+  return places;
+}
+
+function usedPlaces(
+  move: TransactionPlanMove,
+  placement: StoredMovePlacement | undefined,
+): ReadonlyArray<string> {
+  if (move.kind === "slot_move") {
+    return move.slotMove === undefined ? [] : [move.slotMove.toSlot];
+  }
+  if (move.kind === "activate" || move.kind === "stash") {
+    return placement === undefined ? [] : [placement.toSlot];
+  }
+  return [];
+}
+
+function moverKeyOf(move: TransactionPlanMove): string | undefined {
+  if (move.kind === "slot_move") {
+    return move.slotMove?.playerKey;
+  }
+  if (move.kind === "activate" || move.kind === "stash") {
+    return move.intent?.player?.key;
+  }
+  return undefined;
+}
+
+function initialProjection(facts: TransactionPlanTeamFacts): TeamProjection {
+  return {
+    roster: new Map(facts.roster.map((player) => [player.key, player] as const)),
+    budget: facts.budget,
+    claims: new Map(),
+    removedBy: new Map(),
+  };
+}
+
+function projectionRoster(projection: TeamProjection): ReadonlyArray<TransactionPlanRosterPlayer> {
+  return [...projection.roster.values()];
+}
+
+function planPlacementHints(
   moves: ReadonlyArray<TransactionPlanMove>,
   facts: TransactionPlanTeamFacts,
-  refusedSlotMoves: ReadonlySet<TransactionMoveId>,
-): {
-  readonly placements: Map<TransactionMoveId, StoredMovePlacement>;
-  readonly reasons: Map<TransactionMoveId, Reasons>;
-} {
-  const reasons = new Map<TransactionMoveId, Reasons>();
+): Map<TransactionMoveId, StoredMovePlacement> {
   const placements = new Map<TransactionMoveId, StoredMovePlacement>();
   const ids = new Map(moves.map((move) => [String(move.id), move.id] as const));
-  const dropped = droppedKeys(moves);
+  const dropped = new Set(moves.flatMap((move) => move.drops.map((drop) => drop.key)));
   const players = new Map(
     facts.roster
       .filter((player) => !dropped.has(player.key))
@@ -433,22 +808,20 @@ function placeMoves(
   );
   for (const move of moves) {
     const declared = move.kind === "slot_move" ? move.slotMove : undefined;
-    if (declared === undefined || refusedSlotMoves.has(move.id)) {
+    if (declared === undefined) {
       continue;
     }
     const player = players.get(declared.playerKey);
-    if (player === undefined) {
-      continue;
+    if (player !== undefined) {
+      players.set(player.key, { ...player, slot: declared.toSlot });
     }
-    players.set(player.key, { ...player, slot: declared.toSlot });
   }
-
   const items = moves.flatMap((move) => {
     const item = placementItem(move, facts);
     return item === undefined ? [] : [item];
   });
   if (items.length === 0) {
-    return { placements, reasons };
+    return placements;
   }
   const placed = placeIntentItems({
     constraints: facts.constraints,
@@ -458,30 +831,18 @@ function placeMoves(
   });
   for (const placement of placed.placements) {
     const id = ids.get(placement.item);
-    if (id !== undefined && !placements.has(id)) {
-      placements.set(id, {
-        playerKey: placement.playerKey,
-        playerName: placement.playerName,
-        ...(placement.fromSlot === undefined ? {} : { fromSlot: placement.fromSlot }),
-        toSlot: placement.toSlot,
-        detail: placement.detail,
-      });
-    }
-  }
-  for (const refusal of placed.refused) {
-    const id = ids.get(refusal.item);
-    if (id === undefined) {
+    if (id === undefined || placements.has(id)) {
       continue;
     }
-    const reasonsOfMove = reasons.get(id) ?? emptyReasons();
-    reasons.set(id, reasonsOfMove);
-    if (refusal.code === "slot_illegal") {
-      illegal(reasonsOfMove, refusal.code, undefined, refusal.detail);
-    } else {
-      stale(reasonsOfMove, refusal.code, undefined, refusal.detail);
-    }
+    placements.set(id, {
+      playerKey: placement.playerKey,
+      playerName: placement.playerName,
+      ...(placement.fromSlot === undefined ? {} : { fromSlot: placement.fromSlot }),
+      toSlot: placement.toSlot,
+      detail: placement.detail,
+    });
   }
-  return { placements, reasons };
+  return placements;
 }
 
 function placementItem(
@@ -521,76 +882,190 @@ function placementIntentOf(move: TransactionPlanMove): PlacementIntent | undefin
   return undefined;
 }
 
-function rosterIllegality(
-  entry: CheckedMove,
+function planDependencies(
+  entries: ReadonlyArray<TransactionPlanOrderMove>,
   facts: TransactionPlanTeamFacts,
   rule: RosterRule,
-  roster: ReadonlyMap<string, TransactionPlanRosterPlayer>,
-): Reasons {
-  const reasons = emptyReasons();
-  const occupancy = rosterOccupancy({ rule, players: facts.roster });
-  for (const occupant of occupancy.illegal) {
-    if (curesPlacement(entry, occupant.key, rule, roster)) {
+): PlanGraph {
+  const dependencies = new Map<TransactionMoveId, Set<TransactionMoveId>>(
+    entries.map((entry) => [entry.move.id, new Set<TransactionMoveId>()]),
+  );
+  const fundedBy = new Map<TransactionMoveId, TransactionMoveId>();
+  const blocked = new Map<TransactionMoveId, string>();
+
+  addProducerDependencies(entries, dependencies);
+  addDestinationDependencies(entries, facts, rule, dependencies, fundedBy);
+  addCapacityDependencies(entries, facts, rule, dependencies, fundedBy, blocked);
+
+  return { dependencies, fundedBy, blocked };
+}
+
+function topologicalSequence(
+  entries: ReadonlyArray<TransactionPlanOrderMove>,
+  graph: PlanGraph,
+): PlanSequence {
+  const done = new Set<TransactionMoveId>();
+  const steps: Array<TransactionPlanOrderStep> = [];
+  const blocked = new Map(graph.blocked);
+  let progressed = true;
+  while (progressed && done.size < entries.length) {
+    progressed = false;
+    for (const entry of entries) {
+      if (done.has(entry.move.id) || blocked.has(entry.move.id)) {
+        continue;
+      }
+      const waiting = unmetDependencies(entry.move.id, graph.dependencies, done);
+      if (waiting.length > 0) {
+        continue;
+      }
+      steps.push({
+        move: entry.move.id,
+        position: steps.length,
+        fundedBy: graph.fundedBy.get(entry.move.id),
+        dependsOn: orderedDependencies(entry.move.id, graph.dependencies, entries),
+      });
+      done.add(entry.move.id);
+      progressed = true;
+    }
+  }
+
+  for (const entry of entries) {
+    if (done.has(entry.move.id) || blocked.has(entry.move.id)) {
       continue;
     }
-    illegal(reasons, "slot_illegal", occupant.key, occupant.detail);
+    const waiting = unmetDependencies(entry.move.id, graph.dependencies, done);
+    blocked.set(
+      entry.move.id,
+      `No order can run ${moveLabel(entry.move)}: it waits on ${waiting
+        .map((id) => moveLabel(moveById(entries, id)))
+        .join(", ")}.`,
+    );
   }
-  return reasons;
+
+  return {
+    steps,
+    blocked: [...blocked.entries()].map(([move, detail]) => ({ move, detail })),
+  };
 }
 
-function curesPlacement(
-  entry: CheckedMove,
-  playerKey: string,
-  rule: RosterRule,
-  roster: ReadonlyMap<string, TransactionPlanRosterPlayer>,
-): boolean {
-  if (entry.move.drops.some((drop) => drop.key === playerKey)) {
-    return true;
+function addProducerDependencies(
+  entries: ReadonlyArray<TransactionPlanOrderMove>,
+  dependencies: Map<TransactionMoveId, Set<TransactionMoveId>>,
+): void {
+  const producers = new Map<string, TransactionMoveId>();
+  for (const entry of entries) {
+    for (const add of entry.move.adds) {
+      if (!producers.has(add.key)) {
+        producers.set(add.key, entry.move.id);
+      }
+    }
   }
-  const declared = entry.move.kind === "slot_move" ? entry.move.slotMove : undefined;
-  const mover =
-    declared?.playerKey ??
-    (entry.move.kind === "activate" || entry.move.kind === "stash"
-      ? entry.move.intent?.player?.key
-      : undefined);
-  const destination = declared?.toSlot ?? entry.placement?.toSlot;
-  const player = roster.get(playerKey);
-  if (mover !== playerKey || destination === undefined || player === undefined) {
-    return false;
+  for (const entry of entries) {
+    for (const key of consumedPlayers(entry.move)) {
+      const producer = producers.get(key);
+      if (producer !== undefined && producer !== entry.move.id) {
+        addDependency(dependencies, entry.move.id, producer);
+      }
+    }
   }
-  return slotPlacement(rule, destination, player).legal === true;
 }
 
-function placeAccounting(
-  moves: ReadonlyArray<TransactionPlanMove>,
-  checked: ReadonlyMap<TransactionMoveId, CheckedMove>,
+function consumedPlayers(move: TransactionPlanMove): ReadonlyArray<string> {
+  return [
+    ...move.drops.map((drop) => drop.key),
+    ...(move.slotMove === undefined ? [] : [move.slotMove.playerKey]),
+    ...(move.intent?.player === undefined ? [] : [move.intent.player.key]),
+  ];
+}
+
+function addDestinationDependencies(
+  entries: ReadonlyArray<TransactionPlanOrderMove>,
   facts: TransactionPlanTeamFacts,
   rule: RosterRule,
-): Map<TransactionMoveId, ReadonlyArray<StoredMoveValidationReason>> {
-  const clear = moves.filter((move) => {
-    const entry = checked.get(move.id);
-    return entry !== undefined && reasonCount(entry) === 0;
-  });
+  dependencies: Map<TransactionMoveId, Set<TransactionMoveId>>,
+  fundedBy: Map<TransactionMoveId, TransactionMoveId>,
+): void {
+  const leaves = new Map<string, TransactionMoveId>();
+  for (const entry of entries) {
+    for (const drop of entry.move.drops) {
+      if (!leaves.has(drop.key)) {
+        leaves.set(drop.key, entry.move.id);
+      }
+    }
+    const declared = entry.move.kind === "slot_move" ? entry.move.slotMove : undefined;
+    const mover =
+      declared?.playerKey ??
+      (entry.move.kind === "activate" || entry.move.kind === "stash"
+        ? entry.move.intent?.player?.key
+        : undefined);
+    const from =
+      entry.placement?.fromSlot ?? facts.roster.find((player) => player.key === mover)?.slot;
+    if (mover !== undefined && from !== undefined && from !== declared?.toSlot) {
+      if (!leaves.has(mover)) {
+        leaves.set(mover, entry.move.id);
+      }
+    }
+  }
+
+  for (const entry of entries) {
+    const destinations = planDestinations(entry, rule);
+    for (const destination of destinations) {
+      for (const occupant of facts.roster) {
+        if (occupant.slot !== destination) {
+          continue;
+        }
+        const remover = leaves.get(occupant.key);
+        if (remover === undefined || remover === entry.move.id) {
+          continue;
+        }
+        addDependency(dependencies, entry.move.id, remover);
+        if (
+          isAddKind(entry.move.kind) &&
+          fundedBy.get(entry.move.id) === undefined &&
+          consumesPlace(entry, rule)
+        ) {
+          fundedBy.set(entry.move.id, remover);
+        }
+      }
+    }
+  }
+}
+
+function addCapacityDependencies(
+  entries: ReadonlyArray<TransactionPlanOrderMove>,
+  facts: TransactionPlanTeamFacts,
+  rule: RosterRule,
+  dependencies: Map<TransactionMoveId, Set<TransactionMoveId>>,
+  fundedBy: Map<TransactionMoveId, TransactionMoveId>,
+  blocked: Map<TransactionMoveId, string>,
+): void {
+  const moves = entries.map((entry) => entry.move);
   const changes = new Map(
-    clear.map(
-      (move) =>
-        [move.id, placeChangeOf(move, checked.get(move.id)?.placement, facts, rule)] as const,
+    entries.map(
+      (entry) =>
+        [entry.move.id, placeChangeOf(entry.move, entry.placement, facts.roster, rule)] as const,
     ),
   );
-  const allocation = allocatePlaces(clear, changes, facts, rule);
-  const reasons = new Map<TransactionMoveId, ReadonlyArray<StoredMoveValidationReason>>();
-  for (const move of clear) {
-    if (!allocation.uncovered.has(move.id)) {
-      continue;
+  const allocation = allocatePlaces(moves, changes, facts, rule);
+  for (const entry of entries) {
+    for (const funding of allocation.funding.get(entry.move.id) ?? []) {
+      addDependency(dependencies, entry.move.id, funding);
     }
-    reasons.set(move.id, [
-      {
-        code: "roster_full",
-        detail: `${moveLabel(move)} needs a roster place, and this plan does not free one. Add a drop or a reserve move that frees a place, or remove this move.`,
-      },
-    ]);
+    const firstFunding = allocation.funding.get(entry.move.id)?.[0];
+    if (
+      firstFunding !== undefined &&
+      isAddKind(entry.move.kind) &&
+      fundedBy.get(entry.move.id) === undefined
+    ) {
+      fundedBy.set(entry.move.id, firstFunding);
+    }
+    if (allocation.uncovered.has(entry.move.id)) {
+      blocked.set(
+        entry.move.id,
+        `${moveLabel(entry.move)} needs a roster place, and the team has none free.`,
+      );
+    }
   }
-  return reasons;
 }
 
 type PlaceAllocation = {
@@ -657,13 +1132,14 @@ function allocatePlaces(
 function placeChangeOf(
   move: TransactionPlanMove,
   placement: StoredMovePlacement | undefined,
-  facts: TransactionPlanTeamFacts,
+  players: ReadonlyArray<TransactionPlanRosterPlayer>,
   rule: RosterRule,
 ): { readonly frees: number; readonly consumes: number } {
   let frees = 0;
   let consumes = 0;
   for (const drop of move.drops) {
-    if (rosterPlaceCount(rule, rosterSlotOf(facts, drop.key)) > 0) {
+    const slot = players.find((player) => player.key === drop.key)?.slot;
+    if (slot === undefined || rosterPlaceCount(rule, slot) > 0) {
       frees += 1;
     }
   }
@@ -677,11 +1153,8 @@ function placeChangeOf(
   }
   const declared = move.kind === "slot_move" ? move.slotMove : undefined;
   if (declared !== undefined) {
-    const change = rosterPlaceChange(
-      rule,
-      rosterSlotOf(facts, declared.playerKey),
-      declared.toSlot,
-    );
+    const from = players.find((player) => player.key === declared.playerKey)?.slot;
+    const change = rosterPlaceChange(rule, from, declared.toSlot);
     frees += change.frees;
     consumes += change.consumes;
   }
@@ -691,120 +1164,34 @@ function placeChangeOf(
   return { frees, consumes };
 }
 
-function addDestinationDependencies(
-  entries: ReadonlyArray<TransactionPlanOrderMove>,
-  facts: TransactionPlanTeamFacts,
-  rule: RosterRule,
-  dependencies: Map<TransactionMoveId, Set<TransactionMoveId>>,
-  fundedBy: Map<TransactionMoveId, TransactionMoveId>,
-): void {
-  const leaves = new Map<string, TransactionMoveId>();
-  for (const entry of entries) {
-    for (const drop of entry.move.drops) {
-      if (!leaves.has(drop.key)) {
-        leaves.set(drop.key, entry.move.id);
-      }
-    }
-    const declared = entry.move.kind === "slot_move" ? entry.move.slotMove : undefined;
-    const mover =
-      declared?.playerKey ??
-      (entry.move.kind === "activate" || entry.move.kind === "stash"
-        ? entry.move.intent?.player?.key
-        : undefined);
-    const from = entry.placement?.fromSlot ?? rosterSlotOf(facts, mover);
-    if (mover !== undefined && from !== undefined && from !== declared?.toSlot) {
-      if (!leaves.has(mover)) {
-        leaves.set(mover, entry.move.id);
-      }
-    }
-  }
-
-  for (const entry of entries) {
-    const destinations = planDestinations(entry);
-    for (const destination of destinations) {
-      for (const occupant of facts.roster) {
-        if (occupant.slot !== destination) {
-          continue;
-        }
-        const remover = leaves.get(occupant.key);
-        if (remover === undefined || remover === entry.move.id) {
-          continue;
-        }
-        addDependency(dependencies, entry.move.id, remover);
-        if (
-          isAddKind(entry.move.kind) &&
-          fundedBy.get(entry.move.id) === undefined &&
-          consumesPlace(entry, rule)
-        ) {
-          fundedBy.set(entry.move.id, remover);
-        }
-      }
-    }
-  }
-}
-
-function addCapacityDependencies(
-  entries: ReadonlyArray<TransactionPlanOrderMove>,
-  facts: TransactionPlanTeamFacts,
-  rule: RosterRule,
-  dependencies: Map<TransactionMoveId, Set<TransactionMoveId>>,
-  fundedBy: Map<TransactionMoveId, TransactionMoveId>,
-  blocked: Map<TransactionMoveId, string>,
-): void {
-  const moves = entries.map((entry) => entry.move);
-  const changes = new Map(
-    entries.map(
-      (entry) => [entry.move.id, placeChangeOf(entry.move, entry.placement, facts, rule)] as const,
-    ),
-  );
-  const allocation = allocatePlaces(moves, changes, facts, rule);
-  for (const entry of entries) {
-    for (const funding of allocation.funding.get(entry.move.id) ?? []) {
-      addDependency(dependencies, entry.move.id, funding);
-    }
-    const firstFunding = allocation.funding.get(entry.move.id)?.[0];
-    if (
-      firstFunding !== undefined &&
-      isAddKind(entry.move.kind) &&
-      fundedBy.get(entry.move.id) === undefined
-    ) {
-      fundedBy.set(entry.move.id, firstFunding);
-    }
-    if (allocation.uncovered.has(entry.move.id)) {
-      blocked.set(
-        entry.move.id,
-        `${moveLabel(entry.move)} needs a roster place, and the team has none free.`,
-      );
-    }
-  }
-}
-
 function moveEvaluation(
-  entry: CheckedMove,
-  claims: ReadonlyArray<StoredMoveClaim>,
+  step: ReplayStep,
   facts: TransactionPlanTeamFacts,
   checkedAt: DateTime.Utc,
+  runPosition: number | undefined,
 ): TransactionPlanMoveEvaluation {
-  const runDay = runDayOf(entry.move, facts.today);
+  const runDay = runDayOf(step.move, facts.today);
   return {
-    move: entry.move.id,
-    group: entry.move.group,
-    claims,
-    validation: validationOf(entry, checkedAt),
-    placement: entry.placement,
+    move: step.move.id,
+    group: step.move.group,
+    claims: step.claims,
+    validation: validationOf(step, checkedAt),
+    placement: step.placement,
     runDay,
-    effectiveDate: effectiveDateOf(entry.move.kind, runDay, facts.timing),
-    dueToday: runDay === facts.today && isDueDecision(entry.move.decision),
-    runPosition: undefined,
+    effectiveDate: effectiveDateOf(step.move.kind, runDay, facts.timing),
+    dueToday: runDay === facts.today && isDueDecision(step.move.decision),
+    runPosition,
+    dependsOn: step.dependsOn,
+    projectedRoster: step.projectedRoster,
   };
 }
 
-function validationOf(entry: CheckedMove, checkedAt: DateTime.Utc): StoredMoveValidation {
-  if (entry.illegal.length > 0) {
-    return { status: "illegal", checkedAt, reasons: [...entry.stale, ...entry.illegal] };
+function validationOf(step: ReplayStep, checkedAt: DateTime.Utc): StoredMoveValidation {
+  if (step.illegal.length > 0) {
+    return { status: "illegal", checkedAt, reasons: [...step.stale, ...step.illegal] };
   }
-  return entry.stale.length > 0
-    ? { status: "stale", checkedAt, reasons: [...entry.stale] }
+  return step.stale.length > 0
+    ? { status: "stale", checkedAt, reasons: [...step.stale] }
     : { status: "current", checkedAt, reasons: [] };
 }
 
@@ -988,6 +1375,10 @@ function claimRefusalCode(kind: StoredMoveClaim["kind"]): TransactionPlanClaimRe
   }
 }
 
+function claimRefusalDetail(candidate: ClaimCandidate): string {
+  return `${candidate.label} is already claimed in this plan by another move. Two open moves cannot claim the same ${claimSubject(candidate.claim.kind)}; discard or change one of them.`;
+}
+
 function claimSubject(kind: StoredMoveClaim["kind"]): string {
   switch (kind) {
     case "player":
@@ -1003,15 +1394,14 @@ function compareClaims(left: StoredMoveClaim, right: StoredMoveClaim): number {
   return left.kind.localeCompare(right.kind) || left.key.localeCompare(right.key);
 }
 
-function planDestinations(entry: TransactionPlanOrderMove): ReadonlyArray<string> {
+function planDestinations(
+  entry: TransactionPlanOrderMove,
+  rule: RosterRule,
+): ReadonlyArray<string> {
   const declared = entry.move.kind === "slot_move" ? entry.move.slotMove?.toSlot : undefined;
   const placed = entry.placement?.toSlot;
-  return [
-    ...new Set([
-      ...(declared === undefined ? [] : [declared]),
-      ...(placed === undefined ? [] : [placed]),
-    ]),
-  ];
+  const reserve = placed !== undefined && rosterPlaceCount(rule, placed) === 0 ? [placed] : [];
+  return [...new Set([...(declared === undefined ? [] : [declared]), ...reserve])];
 }
 
 function consumesPlace(entry: TransactionPlanOrderMove, rule: RosterRule): boolean {
@@ -1067,25 +1457,6 @@ function movesById(
   moves: ReadonlyArray<TransactionPlanMove>,
 ): ReadonlyMap<TransactionMoveId, TransactionPlanMove> {
   return new Map(moves.map((move) => [move.id, move] as const));
-}
-
-function rosterOf(
-  facts: TransactionPlanTeamFacts,
-): ReadonlyMap<string, TransactionPlanRosterPlayer> {
-  return new Map(facts.roster.map((player) => [player.key, player] as const));
-}
-
-function rosterSlotOf(
-  facts: TransactionPlanTeamFacts,
-  playerKey: string | undefined,
-): string | undefined {
-  return playerKey === undefined
-    ? undefined
-    : facts.roster.find((player) => player.key === playerKey)?.slot;
-}
-
-function droppedKeys(moves: ReadonlyArray<TransactionPlanMove>): ReadonlySet<string> {
-  return new Set(moves.flatMap((move) => move.drops.map((drop) => drop.key)));
 }
 
 function comparePlanMoves(left: TransactionPlanMove, right: TransactionPlanMove): number {
@@ -1171,6 +1542,72 @@ function illegal(
   reasons.illegal.push({ code, ...(playerKey === undefined ? {} : { playerKey }), detail });
 }
 
+type Reasons = {
+  readonly stale: Array<StoredMoveValidationReason>;
+  readonly illegal: Array<StoredMoveValidationReason>;
+};
+
+type ReplayStep = Reasons & {
+  readonly move: TransactionPlanMove;
+  readonly dependsOn: ReadonlyArray<TransactionMoveId>;
+  claims: ReadonlyArray<StoredMoveClaim>;
+  placement: StoredMovePlacement | undefined;
+  applied: boolean;
+  pending: boolean;
+  projectedRoster: ReadonlyArray<TransactionPlanRosterPlayer>;
+};
+
+type TeamProjection = {
+  readonly roster: Map<string, TransactionPlanRosterPlayer>;
+  budget: number | undefined;
+  readonly claims: Map<string, HeldClaim>;
+  readonly removedBy: Map<string, TransactionMoveId>;
+};
+
+type HeldClaim = {
+  readonly move: TransactionMoveId;
+  readonly adds: boolean;
+  readonly pending: boolean;
+};
+
+type ClaimCheck = {
+  readonly refused: ReadonlyArray<StoredMoveValidationReason>;
+  readonly waiting: { readonly move: TransactionMoveId; readonly label: string } | undefined;
+};
+
+type PlanGraph = {
+  readonly dependencies: Map<TransactionMoveId, Set<TransactionMoveId>>;
+  readonly fundedBy: Map<TransactionMoveId, TransactionMoveId>;
+  readonly blocked: Map<TransactionMoveId, string>;
+};
+
+type PlanSequence = {
+  readonly steps: ReadonlyArray<TransactionPlanOrderStep>;
+  readonly blocked: ReadonlyArray<TransactionPlanOrderBlockage>;
+};
+
+type ReplayMoveInput = {
+  readonly move: TransactionPlanMove;
+  readonly projection: TeamProjection;
+  readonly facts: TransactionPlanTeamFacts;
+  readonly rule: RosterRule;
+  readonly byId: ReadonlyMap<TransactionMoveId, TransactionPlanMove>;
+  readonly dependencies: ReadonlyMap<TransactionMoveId, ReadonlySet<TransactionMoveId>>;
+  readonly entries: ReadonlyArray<TransactionPlanOrderMove>;
+  readonly steps: ReadonlyMap<TransactionMoveId, ReplayStep>;
+  readonly blocked: boolean;
+};
+
+type ClaimCandidate = {
+  readonly claim: StoredMoveClaim;
+  readonly label: string;
+};
+
+type PlacementIntent =
+  | { readonly kind: "activate"; readonly player: { readonly key: string; readonly name: string } }
+  | { readonly kind: "stash"; readonly player: { readonly key: string; readonly name: string } }
+  | { readonly kind: "add"; readonly to: "active" | "reserve" };
+
 export type TransactionPlanConstraints = {
   readonly rosterMaximum: number;
   readonly benchCapacity: "generic" | "per_slot";
@@ -1233,6 +1670,7 @@ export type TransactionPlanMove = Pick<
   | "intent"
   | "bid"
   | "runDay"
+  | "result"
   | "decision"
 >;
 
@@ -1252,6 +1690,8 @@ export type TransactionPlanMoveEvaluation = {
   readonly effectiveDate: StoredMoveDate | undefined;
   readonly dueToday: boolean;
   readonly runPosition: number | undefined;
+  readonly dependsOn: ReadonlyArray<TransactionMoveId>;
+  readonly projectedRoster: ReadonlyArray<TransactionPlanRosterPlayer>;
 };
 
 export type TransactionPlanGroupEvaluation = {
@@ -1319,25 +1759,3 @@ export type TransactionPlanClaims = {
   readonly moves: ReadonlyArray<TransactionPlanMoveClaims>;
   readonly refused: ReadonlyArray<TransactionPlanClaimRefusal>;
 };
-
-type Reasons = {
-  readonly stale: Array<StoredMoveValidationReason>;
-  readonly illegal: Array<StoredMoveValidationReason>;
-};
-
-type CheckedMove = {
-  readonly move: TransactionPlanMove;
-  readonly stale: Array<StoredMoveValidationReason>;
-  readonly illegal: Array<StoredMoveValidationReason>;
-  placement: StoredMovePlacement | undefined;
-};
-
-type ClaimCandidate = {
-  readonly claim: StoredMoveClaim;
-  readonly label: string;
-};
-
-type PlacementIntent =
-  | { readonly kind: "activate"; readonly player: { readonly key: string; readonly name: string } }
-  | { readonly kind: "stash"; readonly player: { readonly key: string; readonly name: string } }
-  | { readonly kind: "add"; readonly to: "active" | "reserve" };

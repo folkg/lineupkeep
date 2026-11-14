@@ -138,7 +138,7 @@ it("refuses a bid the team cannot cover", () => {
   assert.strictEqual(evaluation.moves[1]?.validation.status, "stale");
   assert.deepStrictEqual(
     evaluation.moves[1]?.validation.reasons.map((reason) => [reason.code, reason.detail]),
-    [["bid_exceeds_budget", "A bid of 11 is more than the 10 FAAB this team has left."]],
+    [["bid_exceeds_budget", "A bid of 11 is more than the 0 FAAB this team has left."]],
   );
 });
 
@@ -442,6 +442,333 @@ it("orders a valid mixed plan", () => {
   );
 });
 
+it("replays a drop and add chain onto the projected roster", () => {
+  const plan = {
+    facts: facts({
+      slots: [bench("BN", 3)],
+      constraints: constraints(3),
+      roster: [
+        rostered("a1", "Runner A", "BN", ["RB"]),
+        rostered("x1", "Bench X", "BN", ["WR"]),
+        rostered("y1", "Bench Y", "BN", ["WR"]),
+      ],
+      pool: [
+        freeAgent("b1", "Runner B", ["RB"]),
+        freeAgent("c1", "Runner C", ["RB"]),
+        freeAgent("d1", "Runner D", ["RB"]),
+      ],
+    }),
+    moves: [
+      move("drop-a-add-b", {
+        kind: "free_agent_add",
+        drops: [player("a1", "Runner A")],
+        adds: [player("b1", "Runner B")],
+      }),
+      move("drop-b-add-c", {
+        kind: "free_agent_add",
+        drops: [player("b1", "Runner B")],
+        adds: [player("c1", "Runner C")],
+      }),
+      move("drop-c-add-d", {
+        kind: "free_agent_add",
+        drops: [player("c1", "Runner C")],
+        adds: [player("d1", "Runner D")],
+      }),
+    ],
+  };
+  const evaluation = evaluate(plan);
+
+  assert.deepStrictEqual(
+    evaluation.moves.map((entry) => [entry.move, entry.validation.status, entry.runPosition]),
+    [
+      [moveId("drop-a-add-b"), "current", 0],
+      [moveId("drop-b-add-c"), "current", 1],
+      [moveId("drop-c-add-d"), "current", 2],
+    ],
+  );
+  assert.deepStrictEqual(
+    evaluation.moves.map((entry) =>
+      entry.projectedRoster.map((member) => [member.key, member.slot]),
+    ),
+    [
+      [
+        ["x1", "BN"],
+        ["y1", "BN"],
+        ["b1", "BN"],
+      ],
+      [
+        ["x1", "BN"],
+        ["y1", "BN"],
+        ["c1", "BN"],
+      ],
+      [
+        ["x1", "BN"],
+        ["y1", "BN"],
+        ["d1", "BN"],
+      ],
+    ],
+  );
+  assert.deepStrictEqual(
+    evaluation.moves.map((entry) => entry.dependsOn),
+    [[], [moveId("drop-a-add-b")], [moveId("drop-b-add-c")]],
+  );
+
+  const order = orderTransactionPlanMoves({
+    facts: plan.facts,
+    moves: evaluation.moves.map((entry) => ({
+      move: requireMove(plan.moves, entry.move),
+      placement: entry.placement,
+      runnable: entry.validation.status === "current",
+    })),
+  });
+
+  assert.deepStrictEqual(
+    order.steps.map((step) => [step.move, step.position, step.dependsOn]),
+    evaluation.order.steps.map((step) => [step.move, step.position, step.dependsOn]),
+  );
+});
+
+it("blocks the moves that consume a fact a failed move would have produced", () => {
+  const evaluation = evaluate({
+    facts: facts({
+      slots: [bench("BN", 3)],
+      constraints: constraints(3),
+      roster: [
+        rostered("a1", "Runner A", "BN", ["RB"]),
+        rostered("x1", "Bench X", "BN", ["WR"]),
+        rostered("y1", "Bench Y", "BN", ["WR"]),
+      ],
+      pool: [
+        freeAgent("b1", "Runner B", ["RB"]),
+        freeAgent("d1", "Runner D", ["RB"]),
+        freeAgent("e1", "Runner E", ["RB"]),
+      ],
+    }),
+    moves: [
+      move("drop-a-add-b", {
+        kind: "free_agent_add",
+        drops: [player("a1", "Runner A")],
+        adds: [player("b1", "Runner B")],
+      }),
+      move("drop-b-add-c", {
+        kind: "free_agent_add",
+        drops: [player("b1", "Runner B")],
+        adds: [player("c1", "Runner C")],
+      }),
+      move("drop-c-add-d", {
+        kind: "free_agent_add",
+        drops: [player("c1", "Runner C")],
+        adds: [player("d1", "Runner D")],
+      }),
+      move("drop-x-add-e", {
+        kind: "free_agent_add",
+        drops: [player("x1", "Bench X")],
+        adds: [player("e1", "Runner E")],
+      }),
+    ],
+  });
+
+  assert.deepStrictEqual(
+    evaluation.moves.map((entry) => [entry.move, entry.validation.status, entry.runPosition]),
+    [
+      [moveId("drop-a-add-b"), "current", 0],
+      [moveId("drop-b-add-c"), "stale", undefined],
+      [moveId("drop-c-add-d"), "stale", undefined],
+      [moveId("drop-x-add-e"), "current", 1],
+    ],
+  );
+  assert.deepStrictEqual(
+    evaluation.moves[1]?.validation.reasons.map((reason) => reason.code),
+    ["player_unavailable"],
+  );
+  assert.deepStrictEqual(
+    evaluation.moves[2]?.validation.reasons.map((reason) => [reason.code, reason.detail]),
+    [
+      [
+        "blocked_by_move",
+        "Add Runner D and drop Runner C cannot run because Add Runner C and drop Runner B did not pass its check.",
+      ],
+    ],
+  );
+  assert.deepStrictEqual(evaluation.moves[2]?.dependsOn, [moveId("drop-b-add-c")]);
+  assert.deepStrictEqual(
+    evaluation.order.steps.map((step) => step.move),
+    [moveId("drop-a-add-b"), moveId("drop-x-add-e")],
+  );
+});
+
+it("waits on a pending claim that would bring the player a later move drops", () => {
+  const evaluation = evaluate({
+    facts: facts({
+      slots: [bench("BN", 2)],
+      constraints: constraints(2),
+      roster: [rostered("a1", "Runner A", "BN", ["RB"]), rostered("x1", "Bench X", "BN", ["WR"])],
+      pool: [waived("c1", "Runner C", ["RB"])],
+      budget: 20,
+    }),
+    moves: [
+      move("claim-c", {
+        kind: "waiver_claim",
+        adds: [player("c1", "Runner C")],
+        bid: 5,
+        result: "pending",
+      }),
+      move("drop-c", { kind: "drop", drops: [player("c1", "Runner C")] }),
+    ],
+  });
+
+  assert.deepStrictEqual(
+    evaluation.moves.map((entry) => [entry.validation.status, entry.runPosition]),
+    [
+      ["stale", undefined],
+      ["stale", undefined],
+    ],
+  );
+  assert.deepStrictEqual(
+    evaluation.moves.map((entry) => entry.validation.reasons.map((reason) => reason.code)),
+    [["pending_outcome"], ["pending_outcome"]],
+  );
+  assert.deepStrictEqual(
+    evaluation.moves[1]?.validation.reasons[0]?.detail,
+    "Drop Runner C waits on Add Runner C, which is waiting on the league's answer.",
+  );
+  assert.deepStrictEqual(
+    evaluation.moves[0]?.projectedRoster.map((member) => member.key),
+    ["a1", "x1"],
+  );
+  assert.deepStrictEqual(evaluation.order.steps, []);
+});
+
+it("waits on a pending trade that would bring the player a later move drops", () => {
+  const evaluation = evaluate({
+    facts: facts({
+      slots: [bench("BN", 2)],
+      constraints: constraints(2),
+      roster: [rostered("a1", "Runner A", "BN", ["RB"]), rostered("x1", "Bench X", "BN", ["WR"])],
+    }),
+    moves: [
+      move("trade-c", {
+        kind: "trade",
+        drops: [player("a1", "Runner A")],
+        adds: [player("c1", "Runner C")],
+        result: "pending",
+      }),
+      move("drop-c", { kind: "drop", drops: [player("c1", "Runner C")] }),
+    ],
+  });
+
+  assert.deepStrictEqual(
+    evaluation.moves.map((entry) => entry.validation.reasons.map((reason) => reason.code)),
+    [["pending_outcome"], ["pending_outcome"]],
+  );
+  assert.deepStrictEqual(
+    evaluation.moves[1]?.validation.reasons[0]?.detail,
+    "Drop Runner C waits on The trade, which is waiting on the league's answer.",
+  );
+  assert.deepStrictEqual(evaluation.order.steps, []);
+});
+
+it("revalidates later moves against a move inserted in the middle and names the break", () => {
+  const planFacts = facts({
+    slots: [bench("BN", 2), reserve("IR", ["RB"])],
+    constraints: constraints(2),
+    roster: [
+      rostered("a1", "Runner A", "BN", ["RB"]),
+      rostered("d1", "Reserve Runner", "IR", ["RB"]),
+    ],
+    pool: [freeAgent("b1", "Runner B", ["RB"])],
+  });
+  const before = evaluate({
+    facts: planFacts,
+    moves: [
+      move("drop-a-add-b", {
+        kind: "free_agent_add",
+        drops: [player("a1", "Runner A")],
+        adds: [player("b1", "Runner B")],
+      }),
+      move("activate-d", {
+        kind: "activate",
+        intent: { kind: "activate", player: player("d1", "Reserve Runner") },
+      }),
+    ],
+  });
+  const after = evaluate({
+    facts: planFacts,
+    moves: [
+      move("drop-a-add-b", {
+        kind: "free_agent_add",
+        drops: [player("a1", "Runner A")],
+        adds: [player("b1", "Runner B")],
+      }),
+      move("drop-d", { kind: "drop", drops: [player("d1", "Reserve Runner")] }),
+      move("activate-d", {
+        kind: "activate",
+        intent: { kind: "activate", player: player("d1", "Reserve Runner") },
+      }),
+    ],
+  });
+
+  assert.deepStrictEqual(
+    before.moves.map((entry) => entry.validation.status),
+    ["current", "current"],
+  );
+  assert.deepStrictEqual(
+    after.moves.map((entry) => entry.validation.status),
+    ["current", "current", "stale"],
+  );
+  assert.deepStrictEqual(
+    after.moves[2]?.validation.reasons.map((reason) => [reason.code, reason.detail]),
+    [
+      [
+        "move_not_rostered",
+        "Reserve Runner left the roster when Drop Reserve Runner ran, so this move cannot place them.",
+      ],
+    ],
+  );
+  assert.deepStrictEqual(
+    after.order.steps.map((step) => step.move),
+    [moveId("drop-a-add-b"), moveId("drop-d")],
+  );
+});
+
+it("lets a later add use a place an earlier move frees", () => {
+  const evaluation = evaluate({
+    facts: facts({
+      slots: [bench("BN", 2)],
+      constraints: constraints(2),
+      roster: [rostered("a1", "Runner A", "BN", ["RB"]), rostered("x1", "Bench X", "BN", ["WR"])],
+      pool: [freeAgent("b1", "Runner B", ["RB"])],
+    }),
+    moves: [
+      move("add-b", { kind: "free_agent_add", adds: [player("b1", "Runner B")] }),
+      move("drop-x", { kind: "drop", drops: [player("x1", "Bench X")] }),
+    ],
+  });
+
+  assert.deepStrictEqual(
+    evaluation.moves.map((entry) => [entry.validation.status, entry.runPosition]),
+    [
+      ["current", 1],
+      ["current", 0],
+    ],
+  );
+  assert.deepStrictEqual(evaluation.moves[0]?.dependsOn, [moveId("drop-x")]);
+  assert.deepStrictEqual(
+    evaluation.moves[0]?.projectedRoster.map((member) => [member.key, member.slot]),
+    [
+      ["a1", "BN"],
+      ["b1", "BN"],
+    ],
+  );
+  assert.deepStrictEqual(
+    evaluation.order.steps.map((step) => [step.move, step.fundedBy]),
+    [
+      [moveId("drop-x"), undefined],
+      [moveId("add-b"), moveId("drop-x")],
+    ],
+  );
+});
+
 it("claims a trade's outgoing players and picks but not its incoming player", () => {
   const input: TransactionPlanClaimInput = {
     moves: [
@@ -701,6 +1028,18 @@ function positioned(
   return { ...move(label, fields), position };
 }
 
+function requireMove(
+  moves: ReadonlyArray<Omit<TransactionPlanMove, "position">>,
+  id: TransactionMoveId,
+): TransactionPlanMove {
+  const found = moves.find((move) => move.id === id);
+  if (found === undefined) {
+    throw new Error("A test read a move it did not declare");
+  }
+  const position = moves.indexOf(found);
+  return { ...found, position };
+}
+
 function facts(input: {
   readonly slots: TransactionPlanTeamFacts["slots"];
   readonly constraints: TransactionPlanConstraints;
@@ -798,11 +1137,12 @@ function moveId(label: string): TransactionMoveId {
   if (existing !== undefined) {
     return existing;
   }
-  const code = idAlphabet[idsByLabel.size];
-  if (code === undefined) {
+  const high = idAlphabet[Math.floor(idsByLabel.size / idAlphabet.length)];
+  const low = idAlphabet[idsByLabel.size % idAlphabet.length];
+  if (high === undefined || low === undefined) {
     throw new Error("This test declared more moves than the identifier alphabet allows");
   }
-  const id = Schema.decodeSync(TransactionMoveIdSchema)(`01ARZ3NDEKTSV4RRFFQ69G5FA${code}`);
+  const id = Schema.decodeSync(TransactionMoveIdSchema)(`01ARZ3NDEKTSV4RRFFQ69G5F${high}${low}`);
   idsByLabel.set(label, id);
   return id;
 }
