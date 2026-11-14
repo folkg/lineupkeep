@@ -134,17 +134,19 @@ claims each team's plan separately; a plan already running is skipped and the ot
 ## 4. The reads
 
 **Timeline page.** One query for the signed-in owner over open moves, joined to plans and teams,
-ordered by run day, team, and position. The application groups rows by run day and team. The read
-returns the stored validation and its check time, labelled as the last check rather than the current
-state; it does not read the league. A saved move is rechecked when its day is claimed.
+ordered with today first, then later run days, and paged by `(run day, team, position, id)`. The
+application groups rows by run day and team. Every read revalidates each open move against the team's
+current state with one team check per team that has open moves, never one read per move, and returns
+the fresh validation with the time it was checked. When a team's state cannot be read, its moves carry
+the stored validation and the time it was checked, labelled as the last check and never as current.
+The ended section reads the same query with the ended state.
 
-**MCP list.** The same query with an optional team and state: today, saved, or ended. A per-plan read
-takes one team and returns every move in plan order, grouped by run day, including recent ended moves.
-No input or result carries a set id.
+**MCP list.** The same query with an optional team and state: today, saved, or ended. No input or
+result carries a set id.
 
-**Per-plan review.** One query for one team, ordered by `position`, grouped by run day. Team facts such
-as roster, budget, trade rules, and order are read only on revalidate or before a submission. The
-stored review does not contact the league.
+**Per-plan review.** One query for one team, ordered by `position`, grouped by run day, including
+recent ended moves. Open moves are revalidated with one team check against roster, budget, trade
+rules, and order; a failed check returns the stored validation as the last check.
 
 **Counts.** One grouped count gives open, today, saved, and ended totals, optionally per team.
 
@@ -179,7 +181,7 @@ slice 6, so no slice leaves two write paths.
 | 1. Tables and repository        | Add the migration, four tables, plan lock, append, decision, run claim, result, and privacy entries.                                                         | One plan, claim collision refused, concurrent appends wait, plan removal cleans up.               |
 | 2. Validation and order         | Pure functions turn team facts and open moves into claims, validation, placement, dates, and run order.                                                      | Double drop, double add, reserve place, illegal slot, stale saved move, order. Not connected yet. |
 | 3. Propose, save, edit, discard | New service behind the switch: groups, whole group or none, claim collisions refused, edit in place, discard per move.                                       | Service tests against a fake league. Old path unchanged.                                          |
-| 4. Reads                        | Timeline, per-plan review, MCP list, counts, and paging; stored reads show the last check.                                                                   | Grouping, paging, counts, no set ids. Not visible until the switch.                               |
+| 4. Reads                        | Timeline, per-plan review, MCP list, counts, and paging; each read revalidates open moves and a failed team check shows the stored last check.               | Grouping, paging, counts, no set ids. Not visible until the switch.                               |
 | 5. Submit and run               | Plan lock, recheck, group order, league writes, steps, results, hourly run, stale claim recovery.                                                            | Success, refusal, partial group, pending, unknown, overdue move. Complete but not visible.        |
 | 6. Switch over                  | Switch page, MCP, and runner to the new model; stop using old tables.                                                                                        | Page, MCP, runner acceptance. Old plans are discarded by the owner's decision.                    |
 | 7. Remove old storage           | Drop the four tables. Delete the old types, repository, MCP tools, set route, timeline adapter, retention, and switch; update the glossary and MCP document. | Migration test, no remaining references, container end-to-end run.                                |

@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
-import { TeamId } from "#contexts/connections/FantasyTeam.ts";
+import { FantasyLeague, FantasySport, TeamId } from "#contexts/connections/FantasyTeam.ts";
 
 const LineupgradeId = Schema.Union([
   Schema.String.pipe(Schema.check(Schema.isUUID())),
@@ -48,6 +48,27 @@ const TransactionMoveClaimKind = Schema.Literals(["player", "place", "draft_pick
 
 export const TransactionMoveReadState = Schema.Literals(["open", "today", "saved", "ended"]);
 export type TransactionMoveReadState = typeof TransactionMoveReadState.Type;
+
+export const TransactionMoveTeam = Schema.Struct({
+  id: TeamId,
+  name: Schema.NonEmptyString,
+  league: FantasyLeague,
+  sport: FantasySport,
+  season: Schema.Int.check(Schema.isGreaterThan(1900)),
+}).pipe(Schema.toType);
+export type TransactionMoveTeam = typeof TransactionMoveTeam.Type;
+
+export function isOpenMove(move: {
+  readonly decision: TransactionMoveDecision;
+  readonly result?: TransactionMoveResult;
+}): boolean {
+  return (
+    move.decision !== "discarded" &&
+    move.result !== "executed" &&
+    move.result !== "withdrawn" &&
+    move.result !== "expired"
+  );
+}
 
 export const StoredMoveDate = Schema.String.pipe(
   Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)),

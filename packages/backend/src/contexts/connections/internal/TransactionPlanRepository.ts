@@ -1,4 +1,17 @@
-import { and, asc, eq, gt, isNull, max, not, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  getTableColumns,
+  gt,
+  isNotNull,
+  isNull,
+  max,
+  not,
+  or,
+} from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
 import { Array, Context, Crypto, DateTime, Effect, Layer, Option, Schema } from "effect";
@@ -8,6 +21,7 @@ import { TeamId } from "#contexts/connections/FantasyTeam.ts";
 import { anyOf } from "#database/dbUtilities.ts";
 
 import { ConnectionsDatabase } from "./ConnectionsDatabase.ts";
+import { providerTeams } from "./ConnectionTables.ts";
 import {
   StoredMoveClaim,
   StoredMoveDate,
@@ -26,9 +40,11 @@ import {
   TransactionMoveReadState,
   TransactionMoveRecord,
   TransactionMoveResult,
+  TransactionMoveTeam,
   TransactionMoveValidationStatus,
   TransactionPlanPersistenceFailed,
   TransactionPlanRecord,
+  isOpenMove,
 } from "./TransactionPlanRecord.ts";
 import type { TransactionMoveRowRecord } from "./TransactionPlanRecord.ts";
 import {
@@ -64,6 +80,11 @@ export type TransactionMoveAppend = {
   readonly proposedBy: TransactionMoveProvenance;
   readonly content: TransactionMoveContent;
   readonly claims: ReadonlyArray<StoredMoveClaim>;
+};
+
+type TransactionMoveWithTeam = {
+  readonly move: TransactionMoveRecord;
+  readonly team: TransactionMoveTeam;
 };
 
 type TransactionMoveEdit = {
@@ -462,8 +483,28 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
         }) {
           return yield* Effect.gen(function* () {
             const rows = yield* database
-              .select()
+              .select({
+                ...getTableColumns(transactionMoves),
+                teamName: providerTeams.name,
+                teamLeague: providerTeams.league,
+                teamSport: providerTeams.sport,
+                teamSeason: providerTeams.season,
+              })
               .from(transactionMoves)
+              .innerJoin(
+                transactionPlans,
+                and(
+                  eq(transactionPlans.userId, transactionMoves.userId),
+                  eq(transactionPlans.teamId, transactionMoves.teamId),
+                ),
+              )
+              .innerJoin(
+                providerTeams,
+                and(
+                  eq(providerTeams.id, transactionMoves.teamId),
+                  eq(providerTeams.userId, transactionMoves.userId),
+                ),
+              )
               .where(
                 and(
                   eq(transactionMoves.userId, input.userId),
@@ -473,13 +514,93 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                 ),
               )
               .orderBy(
+                desc(isNull(transactionMoves.runDay)),
                 asc(transactionMoves.runDay),
                 asc(transactionMoves.teamId),
                 asc(transactionMoves.position),
                 asc(transactionMoves.id),
               )
               .limit(input.limit);
-            return yield* withClaims(database, rows, input);
+            return yield* withClaimsAndTeams(database, rows, input);
+          }).pipe(Effect.mapError(persistenceFailure));
+        },
+      );
+
+      const readOpenMovesForTeams = Effect.fn("TransactionPlanRepository.readOpenMovesForTeams")(
+        function* (input: { readonly userId: UserId; readonly teams: ReadonlyArray<TeamId> }) {
+          return yield* Effect.gen(function* () {
+            const teams = [...new Set(input.teams)];
+            if (!Array.isArrayNonEmpty(teams)) {
+              return [];
+            }
+            const rows = yield* database
+              .select()
+              .from(transactionMoves)
+              .where(
+                and(
+                  eq(transactionMoves.userId, input.userId),
+                  anyOf(transactionMoves.teamId, teams),
+                  openMovePredicate(transactionMoves),
+                ),
+              )
+              .orderBy(
+                asc(transactionMoves.teamId),
+                asc(transactionMoves.position),
+                asc(transactionMoves.id),
+              );
+            return yield* Effect.forEach(rows, decodeMove);
+          }).pipe(Effect.mapError(persistenceFailure));
+        },
+      );
+
+      const readTeam = Effect.fn("TransactionPlanRepository.readTeam")(function* (input: {
+        readonly userId: UserId;
+        readonly team: TeamId;
+      }) {
+        return yield* Effect.gen(function* () {
+          const rows = yield* database
+            .select(teamColumns)
+            .from(providerTeams)
+            .where(and(eq(providerTeams.userId, input.userId), eq(providerTeams.id, input.team)))
+            .limit(1);
+          const row = rows[0];
+          return row === undefined
+            ? Option.none<TransactionMoveTeam>()
+            : Option.some(yield* decodeTeam(row));
+        }).pipe(Effect.mapError(persistenceFailure));
+      });
+
+      const countOwnerMoves = Effect.fn("TransactionPlanRepository.countOwnerMoves")(
+        function* (input: { readonly userId: UserId; readonly team: TeamId | undefined }) {
+          return yield* Effect.gen(function* () {
+            const rows = yield* database
+              .select({
+                team: transactionMoves.teamId,
+                decision: transactionMoves.decision,
+                result: transactionMoves.result,
+                total: count(),
+              })
+              .from(transactionMoves)
+              .where(
+                and(
+                  eq(transactionMoves.userId, input.userId),
+                  input.team === undefined ? undefined : eq(transactionMoves.teamId, input.team),
+                ),
+              )
+              .groupBy(transactionMoves.teamId, transactionMoves.decision, transactionMoves.result)
+              .orderBy(asc(transactionMoves.teamId));
+            const byTeam = new Map<TeamId, MutableMoveCounts>();
+            for (const row of rows) {
+              const team = yield* Schema.decodeEffect(TeamId)(row.team);
+              const held = byTeam.get(team) ?? { open: 0, today: 0, saved: 0, ended: 0 };
+              const bucket = moveCountBucket(row.decision, row.result);
+              held[bucket] += row.total;
+              if (bucket !== "ended") {
+                held.open += row.total;
+              }
+              byTeam.set(team, held);
+            }
+            return [...byTeam.entries()].map(([team, counts]) => ({ team, ...counts }));
           }).pipe(Effect.mapError(persistenceFailure));
         },
       );
@@ -494,6 +615,9 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
         recordResult,
         readPlanMoves,
         readOwnerMoves,
+        readOpenMovesForTeams,
+        readTeam,
+        countOwnerMoves,
       };
     }),
   },
@@ -504,6 +628,27 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
 type Transaction = Parameters<Parameters<ConnectionsDatabase["Service"]["transaction"]>[0]>[0];
 type MoveReader = Pick<ConnectionsDatabase["Service"], "select">;
 type PersistenceError = EffectDrizzleQueryError | Schema.SchemaError;
+type MoveRowWithTeam = typeof transactionMoves.$inferSelect & {
+  readonly teamName: string;
+  readonly teamLeague: typeof providerTeams.$inferSelect.league;
+  readonly teamSport: typeof providerTeams.$inferSelect.sport;
+  readonly teamSeason: number;
+};
+
+type MutableMoveCounts = {
+  open: number;
+  today: number;
+  saved: number;
+  ended: number;
+};
+
+const teamColumns = {
+  id: providerTeams.id,
+  name: providerTeams.name,
+  league: providerTeams.league,
+  sport: providerTeams.sport,
+  season: providerTeams.season,
+};
 
 function ensurePlan(
   tx: Transaction,
@@ -559,28 +704,71 @@ function withClaims(
   },
 ): Effect.Effect<ReadonlyArray<TransactionMoveRecord>, PersistenceError> {
   return Effect.gen(function* () {
-    const ids = rows.map((row) => row.id);
-    const claims = Array.isArrayNonEmpty(ids)
-      ? yield* reader
-          .select()
-          .from(transactionMoveClaims)
-          .where(
-            and(
-              eq(transactionMoveClaims.userId, input.userId),
-              anyOf(transactionMoveClaims.moveId, ids),
-            ),
-          )
-          .orderBy(asc(transactionMoveClaims.claimKind), asc(transactionMoveClaims.claimKey))
-      : [];
+    const byMove = yield* claimsByMove(
+      reader,
+      input.userId,
+      rows.map((row) => row.id),
+    );
+    return yield* Effect.forEach(rows, (row) =>
+      decodeMove(row).pipe(Effect.map((move) => ({ ...move, claims: byMove.get(move.id) ?? [] }))),
+    );
+  });
+}
+
+function withClaimsAndTeams(
+  reader: MoveReader,
+  rows: ReadonlyArray<MoveRowWithTeam>,
+  input: { readonly userId: UserId },
+): Effect.Effect<ReadonlyArray<TransactionMoveWithTeam>, PersistenceError> {
+  return Effect.gen(function* () {
+    const byMove = yield* claimsByMove(
+      reader,
+      input.userId,
+      rows.map((row) => row.id),
+    );
+    return yield* Effect.forEach(rows, (row) =>
+      Effect.gen(function* () {
+        const move = yield* decodeMove(row);
+        const team = yield* decodeTeam({
+          id: row.teamId,
+          name: row.teamName,
+          league: row.teamLeague,
+          sport: row.teamSport,
+          season: row.teamSeason,
+        });
+        return {
+          move: { ...move, claims: byMove.get(move.id) ?? [] },
+          team,
+        };
+      }),
+    );
+  });
+}
+
+function claimsByMove(
+  reader: MoveReader,
+  userId: UserId,
+  moveIds: ReadonlyArray<string>,
+): Effect.Effect<ReadonlyMap<string, ReadonlyArray<StoredMoveClaim>>, EffectDrizzleQueryError> {
+  return Effect.gen(function* () {
+    const ids = [...new Set(moveIds)];
+    if (!Array.isArrayNonEmpty(ids)) {
+      return new Map<string, ReadonlyArray<StoredMoveClaim>>();
+    }
+    const claims = yield* reader
+      .select()
+      .from(transactionMoveClaims)
+      .where(
+        and(eq(transactionMoveClaims.userId, userId), anyOf(transactionMoveClaims.moveId, ids)),
+      )
+      .orderBy(asc(transactionMoveClaims.claimKind), asc(transactionMoveClaims.claimKey));
     const byMove = new Map<string, Array<StoredMoveClaim>>();
     for (const claim of claims) {
       const held = byMove.get(claim.moveId) ?? [];
       held.push({ kind: claim.claimKind, key: claim.claimKey });
       byMove.set(claim.moveId, held);
     }
-    return yield* Effect.forEach(rows, (row) =>
-      decodeMove(row).pipe(Effect.map((move) => ({ ...move, claims: byMove.get(move.id) ?? [] }))),
-    );
+    return byMove;
   });
 }
 
@@ -660,6 +848,10 @@ function decodeMove(row: unknown): Effect.Effect<TransactionMoveRowRecord, Schem
   return Schema.decodeUnknownEffect(TransactionMoveRow)(row);
 }
 
+function decodeTeam(row: unknown): Effect.Effect<TransactionMoveTeam, Schema.SchemaError> {
+  return Schema.decodeUnknownEffect(TransactionMoveTeam)(row);
+}
+
 function endsMove(result: TransactionMoveResult): boolean {
   return result === "executed" || result === "withdrawn" || result === "expired";
 }
@@ -681,6 +873,16 @@ function readStatePredicate(state: TransactionMoveReadState): SQL | undefined {
   }
 }
 
+function moveCountBucket(
+  decision: TransactionMoveDecision,
+  result: TransactionMoveResult | null,
+): "today" | "saved" | "ended" {
+  if (!isOpenMove({ decision, ...(result === null ? {} : { result }) })) {
+    return "ended";
+  }
+  return decision === "saved" ? "saved" : "today";
+}
+
 function afterCursorPredicate(cursor: TransactionMoveCursor): SQL | undefined {
   const withinTeam = or(
     gt(transactionMoves.teamId, cursor.team),
@@ -693,11 +895,10 @@ function afterCursorPredicate(cursor: TransactionMoveCursor): SQL | undefined {
     ),
   );
   return cursor.runDay === null
-    ? and(isNull(transactionMoves.runDay), withinTeam)
+    ? or(and(isNull(transactionMoves.runDay), withinTeam), isNotNull(transactionMoves.runDay))
     : or(
         gt(transactionMoves.runDay, cursor.runDay),
         and(eq(transactionMoves.runDay, cursor.runDay), withinTeam),
-        isNull(transactionMoves.runDay),
       );
 }
 

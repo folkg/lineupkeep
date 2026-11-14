@@ -356,10 +356,14 @@ it.effect("pages one owner's moves by state and orders them by run day, team, an
       limit: 50,
     });
     assert.deepStrictEqual(
-      all.map((move) => move.claims[0]?.key),
-      ["nhl.p.1", "nhl.p.3", "nhl.p.2", "nhl.p.4"],
+      all.map(({ move }) => move.claims[0]?.key),
+      ["nhl.p.4", "nhl.p.1", "nhl.p.3", "nhl.p.2"],
     );
-    assert.isTrue(all.every((move) => move.team === firstTeam));
+    assert.isTrue(all.every(({ move, team }) => move.team === firstTeam && team.id === firstTeam));
+    assert.deepStrictEqual(
+      all.map(({ team }) => team.name),
+      all.map(() => `Team ${firstTeam}`),
+    );
 
     const saved = yield* repository.readOwnerMoves({
       userId: owner,
@@ -369,7 +373,7 @@ it.effect("pages one owner's moves by state and orders them by run day, team, an
       limit: 50,
     });
     assert.deepStrictEqual(
-      saved.map((move) => move.claims[0]?.key),
+      saved.map(({ move }) => move.claims[0]?.key),
       ["nhl.p.3", "nhl.p.2"],
     );
 
@@ -381,8 +385,8 @@ it.effect("pages one owner's moves by state and orders them by run day, team, an
       limit: 50,
     });
     assert.deepStrictEqual(
-      today.map((move) => move.claims[0]?.key),
-      ["nhl.p.1", "nhl.p.4"],
+      today.map(({ move }) => move.claims[0]?.key),
+      ["nhl.p.4", "nhl.p.1"],
     );
 
     const ended = yield* repository.readOwnerMoves({
@@ -392,7 +396,7 @@ it.effect("pages one owner's moves by state and orders them by run day, team, an
       after: undefined,
       limit: 50,
     });
-    assert.deepStrictEqual(ended.map((move) => move.result ?? move.decision).sort(), [
+    assert.deepStrictEqual(ended.map(({ move }) => move.result ?? move.decision).sort(), [
       "discarded",
       "executed",
     ]);
@@ -410,16 +414,41 @@ it.effect("pages one owner's moves by state and orders them by run day, team, an
       team: undefined,
       state: "open",
       after: {
-        runDay: last.runDay ?? null,
-        team: last.team,
-        position: last.position,
-        move: last.id,
+        runDay: last.move.runDay ?? null,
+        team: last.move.team,
+        position: last.move.position,
+        move: last.move.id,
       },
       limit: 50,
     });
     assert.deepStrictEqual(
-      [...firstPage, ...secondPage].map((move) => move.claims[0]?.key),
-      ["nhl.p.1", "nhl.p.3", "nhl.p.2", "nhl.p.4"],
+      [...firstPage, ...secondPage].map(({ move }) => move.claims[0]?.key),
+      ["nhl.p.4", "nhl.p.1", "nhl.p.3", "nhl.p.2"],
+    );
+
+    const firstToday = yield* repository.readOwnerMoves({
+      userId: owner,
+      team: undefined,
+      state: "open",
+      after: undefined,
+      limit: 1,
+    });
+    const undated = Array.getUnsafe(firstToday, 0);
+    const afterUndated = yield* repository.readOwnerMoves({
+      userId: owner,
+      team: undefined,
+      state: "open",
+      after: {
+        runDay: undated.move.runDay ?? null,
+        team: undated.move.team,
+        position: undated.move.position,
+        move: undated.move.id,
+      },
+      limit: 50,
+    });
+    assert.deepStrictEqual(
+      [...firstToday, ...afterUndated].map(({ move }) => move.claims[0]?.key),
+      ["nhl.p.4", "nhl.p.1", "nhl.p.3", "nhl.p.2"],
     );
   }).pipe(Effect.provide(RepositoryTest)),
 );

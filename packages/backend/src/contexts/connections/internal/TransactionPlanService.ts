@@ -1,4 +1,4 @@
-import { Config, Context, Crypto, DateTime, Effect, Layer, Schema } from "effect";
+import { Config, Context, Crypto, DateTime, Effect, Layer, Option, Schema } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import { TeamId } from "#contexts/connections/FantasyTeam.ts";
@@ -18,9 +18,28 @@ import type {
   TransactionPlanTeamFacts,
 } from "./TransactionPlanEvaluation.ts";
 import {
+  countTotals,
+  moveCursor,
+  moveDays,
+  moveReadView,
+  moveReadViews,
+  planDays,
+} from "./TransactionPlanRead.ts";
+import type {
+  TransactionMoveList,
+  TransactionMoveListInput,
+  TransactionPlanCounts,
+  TransactionPlanCountsInput,
+  TransactionPlanRead,
+  TransactionPlanReadInput,
+  TransactionTeamCheck,
+  TransactionTimelineInput,
+} from "./TransactionPlanRead.ts";
+import {
   StoredMoveDate,
   TransactionMoveId as TransactionMoveIdSchema,
   TransactionPlanPersistenceFailed,
+  isOpenMove,
 } from "./TransactionPlanRecord.ts";
 import type {
   StoredMoveClaim,
@@ -30,12 +49,14 @@ import type {
   StoredMovePlayer,
   StoredMoveSlot,
   StoredMoveValidation,
-  TransactionMoveDecision,
+  TransactionMoveCursor,
   TransactionMoveId,
   TransactionMoveKind,
+  TransactionMovePageLimit,
   TransactionMoveProvenance,
+  TransactionMoveReadState,
   TransactionMoveRecord,
-  TransactionMoveResult,
+  TransactionMoveRowRecord,
 } from "./TransactionPlanRecord.ts";
 import type { TransactionMoveAppend, TransactionMoveContent } from "./TransactionPlanRepository.ts";
 import { TransactionPlanRepository } from "./TransactionPlanRepository.ts";
@@ -65,6 +86,13 @@ class TransactionPlanMoveNotFound extends Schema.TaggedError<
 >()("transaction_plan.move_not_found", {
   team: TeamId,
   move: TransactionMoveIdSchema,
+}) {}
+
+class TransactionPlanTeamNotFound extends Schema.TaggedError<
+  TransactionPlanTeamNotFound,
+  { readonly brand: unique symbol }
+>()("transaction_plan.team_not_found", {
+  team: TeamId,
 }) {}
 
 export type TransactionPlanFactsShape = {
@@ -434,7 +462,175 @@ export const TransactionPlanServiceLive = Layer.effect(
       return { plan: yield* readView({ userId, team: input.team, facts, at }), refused: [] };
     });
 
-    return { propose, save, edit, discard };
+    const teamSummary = Effect.fn("TransactionPlanService.teamSummary")(function* (
+      userId: UserId,
+      team: TeamId,
+    ) {
+      const loaded = yield* repository.readTeam({ userId, team });
+      if (Option.isNone(loaded)) {
+        return yield* TransactionPlanTeamNotFound.make({ team });
+      }
+      return loaded.value;
+    });
+
+    const checkTeams = Effect.fn("TransactionPlanService.checkTeams")(function* (input: {
+      readonly userId: UserId;
+      readonly at: DateTime.Utc;
+      readonly teams: ReadonlyArray<TeamId>;
+      readonly moves: ReadonlyArray<TransactionMoveRowRecord>;
+    }) {
+      const movesByTeam = new Map<TeamId, Array<TransactionMoveRowRecord>>();
+      for (const move of input.moves) {
+        const held = movesByTeam.get(move.team) ?? [];
+        held.push(move);
+        movesByTeam.set(move.team, held);
+      }
+      const checks = yield* Effect.forEach(
+        input.teams,
+        (team) =>
+          Effect.result(factsPort.read({ userId: input.userId, team, at: input.at })).pipe(
+            Effect.map((read): readonly [TeamId, TransactionTeamCheck] => {
+              if (read._tag === "Failure") {
+                return [team, { status: "unavailable" }];
+              }
+              const evaluation = evaluateTransactionPlan({
+                facts: read.success,
+                moves: movesByTeam.get(team) ?? [],
+                checkedAt: input.at,
+              });
+              return [
+                team,
+                {
+                  status: "checked",
+                  today: read.success.today,
+                  moves: new Map(evaluation.moves.map((entry) => [entry.move, entry] as const)),
+                },
+              ];
+            }),
+          ),
+        { concurrency: 3 },
+      );
+      return new Map(checks);
+    });
+
+    const countMoves = Effect.fn("TransactionPlanService.countMoves")(function* (
+      userId: UserId,
+      team: TeamId | undefined,
+    ) {
+      const teams = yield* repository.countOwnerMoves({ userId, team });
+      return { totals: countTotals(teams), teams };
+    });
+
+    const readMovePage = Effect.fn("TransactionPlanService.readMovePage")(function* (
+      userId: UserId,
+      input: {
+        readonly team: TeamId | undefined;
+        readonly state: TransactionMoveReadState;
+        readonly after: TransactionMoveCursor | undefined;
+        readonly limit: TransactionMovePageLimit;
+      },
+    ) {
+      const at = yield* DateTime.now;
+      const team = input.team === undefined ? undefined : yield* teamSummary(userId, input.team);
+      const rows = yield* repository.readOwnerMoves({
+        userId,
+        team: input.team,
+        state: input.state,
+        after: input.after,
+        limit: input.limit + 1,
+      });
+      const page = rows.slice(0, input.limit);
+      const openTeams = [
+        ...new Set(page.flatMap((row) => (isOpenMove(row.move) ? [row.move.team] : []))),
+      ];
+      const planMoves =
+        openTeams.length === 0
+          ? []
+          : yield* repository.readOpenMovesForTeams({ userId, teams: openTeams });
+      const checks = yield* checkTeams({ userId, at, teams: openTeams, moves: planMoves });
+      const moves = moveReadViews({ moves: page, checks });
+      const todayOf = new Map(
+        [...checks].flatMap(([teamId, check]) =>
+          check.status === "checked" ? [[teamId, check.today] as const] : [],
+        ),
+      );
+      const counts = yield* countMoves(userId, input.team);
+      const last = page[page.length - 1];
+      const complete = rows.length <= input.limit;
+      return {
+        status: "ok",
+        team,
+        moves,
+        days: moveDays({ moves, todayOf }),
+        counts: counts.totals,
+        page: {
+          returned: moves.length,
+          complete,
+          next: complete || last === undefined ? undefined : moveCursor(last.move),
+        },
+      } satisfies TransactionMoveList;
+    });
+
+    const timeline = Effect.fn("TransactionPlanService.timeline")(function* (
+      userId: UserId,
+      input: TransactionTimelineInput,
+    ) {
+      return yield* readMovePage(userId, {
+        team: undefined,
+        state: "open",
+        after: input.after,
+        limit: input.limit ?? 20,
+      });
+    });
+
+    const list = Effect.fn("TransactionPlanService.list")(function* (
+      userId: UserId,
+      input: TransactionMoveListInput,
+    ) {
+      return yield* readMovePage(userId, {
+        team: input.team,
+        state: input.state ?? "today",
+        after: input.after,
+        limit: input.limit ?? 20,
+      });
+    });
+
+    const plan = Effect.fn("TransactionPlanService.plan")(function* (
+      userId: UserId,
+      input: TransactionPlanReadInput,
+    ) {
+      const at = yield* DateTime.now;
+      const team = yield* teamSummary(userId, input.team);
+      const stored = yield* repository.readPlanMoves({ userId, team: input.team });
+      const open = stored.filter(isOpenMove);
+      const checks = yield* checkTeams({
+        userId,
+        at,
+        teams: open.length === 0 ? [] : [input.team],
+        moves: open,
+      });
+      const check = checks.get(input.team);
+      const moves = stored.map((move) => moveReadView({ move, team, check }));
+      const today = check?.status === "checked" ? check.today : undefined;
+      return {
+        team,
+        today,
+        moves,
+        days: planDays({ moves, today }),
+      } satisfies TransactionPlanRead;
+    });
+
+    const counts = Effect.fn("TransactionPlanService.counts")(function* (
+      userId: UserId,
+      input: TransactionPlanCountsInput,
+    ) {
+      if (input.team !== undefined) {
+        yield* teamSummary(userId, input.team);
+      }
+      return yield* countMoves(userId, input.team);
+    });
+
+    return { propose, save, edit, discard, timeline, list, plan, counts };
   }),
 );
 
@@ -1048,18 +1244,6 @@ function requireMove(
   return entry;
 }
 
-function isOpenMove(move: {
-  readonly decision: TransactionMoveDecision;
-  readonly result?: TransactionMoveResult;
-}): boolean {
-  return (
-    move.decision !== "discarded" &&
-    move.result !== "executed" &&
-    move.result !== "withdrawn" &&
-    move.result !== "expired"
-  );
-}
-
 function planDecision(move: TransactionMoveRecord): TransactionPlanDecision {
   if (move.decision === "discarded") {
     return "discarded";
@@ -1080,6 +1264,10 @@ const disabledService: TransactionPlanServiceShape = {
   save: () => plansDisabled("save"),
   edit: () => plansDisabled("edit"),
   discard: () => plansDisabled("discard"),
+  timeline: () => plansDisabled("read the timeline"),
+  list: () => plansDisabled("list the plan's moves"),
+  plan: () => plansDisabled("read a plan"),
+  counts: () => plansDisabled("count moves"),
 };
 
 function plansDisabled(operation: string): Effect.Effect<never, TransactionPlansDisabled> {
@@ -1181,6 +1369,7 @@ type TransactionPlanServiceError =
   | TransactionPlansDisabled
   | TransactionPlanFactsUnavailable
   | TransactionPlanMoveNotFound
+  | TransactionPlanTeamNotFound
   | TransactionPlanPersistenceFailed;
 
 export type TransactionPlanServiceShape = {
@@ -1203,6 +1392,26 @@ export type TransactionPlanServiceShape = {
     userId: UserId,
     input: TransactionPlanDiscardInput,
   ) => Effect.Effect<TransactionPlanResult, TransactionPlanServiceError>;
+
+  readonly timeline: (
+    userId: UserId,
+    input: TransactionTimelineInput,
+  ) => Effect.Effect<TransactionMoveList, TransactionPlanServiceError>;
+
+  readonly list: (
+    userId: UserId,
+    input: TransactionMoveListInput,
+  ) => Effect.Effect<TransactionMoveList, TransactionPlanServiceError>;
+
+  readonly plan: (
+    userId: UserId,
+    input: TransactionPlanReadInput,
+  ) => Effect.Effect<TransactionPlanRead, TransactionPlanServiceError>;
+
+  readonly counts: (
+    userId: UserId,
+    input: TransactionPlanCountsInput,
+  ) => Effect.Effect<TransactionPlanCounts, TransactionPlanServiceError>;
 };
 
 type CandidateMove = TransactionPlanMove & {
