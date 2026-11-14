@@ -6067,6 +6067,116 @@ it.effect("lists every owned team's open moves in one page with run days and cou
   }).pipe(Effect.provide(TestLayer)),
 );
 
+it.effect(
+  "marks a listed drop stale once the player leaves the roster and matches the review",
+  () =>
+    Effect.gen(function* () {
+      const proposals = yield* TransactionProposals;
+      const fake = yield* FakeProviderWorld;
+      const tokens = yield* QueryTokens;
+      const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+        roster: rosterFixture(["nhl.p.90001", "nhl.p.90002", "nhl.p.90003"]),
+        playerDetails,
+      });
+      const redLine = teamId(seeded, "nhl.l.1.t.1");
+      const proposed = yield* proposals.propose(owner, proposer, {
+        items: [
+          {
+            team: redLine,
+            kind: "drop",
+            adds: [],
+            drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+            reason: "Drop the first center.",
+          },
+          {
+            team: redLine,
+            kind: "drop",
+            adds: [],
+            drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+            reason: "Drop the second center.",
+          },
+        ],
+      });
+      yield* fake.setRoster(rosterFixture(["nhl.p.90002", "nhl.p.90003"]));
+
+      const readsBefore = yield* fake.readCount("read_roster");
+      const listed = yield* proposals.list(owner, { team: redLine });
+      const readsAfter = yield* fake.readCount("read_roster");
+      assert.strictEqual(readsAfter - readsBefore, 1);
+
+      const entry = Array.getUnsafe(Array.getUnsafe(listed.sets, 0).teams, 0);
+      const removed = entry.items.find((item) => item.drops[0]?.name === "Roster One");
+      assert.isDefined(removed);
+      assert.strictEqual(removed.staleness.status, "stale");
+      assert.deepStrictEqual(reasonCodes(removed), ["drop_not_rostered"]);
+      assert.strictEqual(
+        removed.staleness.reasons[0]?.detail,
+        "Roster One is no longer on this team's roster, so there is nothing to drop.",
+      );
+      const kept = entry.items.find((item) => item.reason === "Drop the second center.");
+      assert.strictEqual(kept?.staleness.status, "current");
+
+      const stalenessOf = (
+        item: ProposalItemView | undefined,
+      ):
+        | { readonly status: string; readonly reasons: ReadonlyArray<readonly [string, string]> }
+        | undefined =>
+        item === undefined
+          ? undefined
+          : {
+              status: item.staleness.status,
+              reasons: item.staleness.reasons.map(
+                (reason) => [reason.code, reason.detail] as const,
+              ),
+            };
+
+      const global = yield* proposals.list(owner, { state: "open", limit: 50 });
+      const globalRemoved = global.sets
+        .flatMap((set) => set.teams.flatMap((team) => team.items))
+        .find((item) => item.id === removed.id);
+      assert.deepStrictEqual(stalenessOf(globalRemoved), stalenessOf(removed));
+
+      const review = yield* proposals.revalidate(owner, { set: proposed.set.id });
+      const reviewed = itemsOf(review).find((item) => item.id === removed.id);
+      assert.deepStrictEqual(stalenessOf(reviewed), stalenessOf(removed));
+    }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("keeps a listed plan current while its facts stay current", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      roster: rosterFixture(["nhl.p.90001", "nhl.p.90002"]),
+      playerDetails,
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "free_agent_add",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          reason: "Swap in the pool forward.",
+        },
+      ],
+    });
+
+    const listed = yield* proposals.list(owner, { team: redLine });
+    const item = Array.getUnsafe(
+      Array.getUnsafe(Array.getUnsafe(listed.sets, 0).teams, 0).items,
+      0,
+    );
+    assert.strictEqual(item.staleness.status, "current");
+    assert.deepStrictEqual(reasonCodes(item), []);
+
+    const review = yield* proposals.revalidate(owner, { set: proposed.set.id });
+    assert.strictEqual(Array.getUnsafe(itemsOf(review), 0).staleness.status, "current");
+  }).pipe(Effect.provide(TestLayer)),
+);
+
 it.effect("lists an empty timeline before any team is linked", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;

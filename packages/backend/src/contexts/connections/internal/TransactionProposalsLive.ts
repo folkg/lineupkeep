@@ -1059,12 +1059,41 @@ export const TransactionProposalsLive = Layer.effect(
         if (offset > page.total) {
           return yield* ProposalContentInvalid.make({ detail: listInvalidDetail });
         }
-        const teamData =
-          state === "open" && requested !== undefined && page.sets.length > 0
-            ? yield* loadTeamData(userId, requested, [])
-            : undefined;
-        const illegalRoster =
-          teamData?.status === "ready" ? illegalRosterOf(teamData.facts) : undefined;
+        const openItemsByTeam = new Map<TeamId, Array<ProposalItemRecord>>();
+        for (const { items } of page.sets) {
+          for (const item of items) {
+            if (!isOpen(item.state)) {
+              continue;
+            }
+            const current = openItemsByTeam.get(item.team) ?? [];
+            current.push(item);
+            openItemsByTeam.set(item.team, current);
+          }
+        }
+        const budgetBids = yield* repository.listBudgetBids(userId, [...openItemsByTeam.keys()]);
+        const budgetByTeam = groupBidsByTeam(budgetBids);
+        const checks = yield* Effect.forEach(
+          [...openItemsByTeam.entries()],
+          ([teamId, items]) =>
+            checkTeam(
+              userId,
+              teamId,
+              teamsById.get(teamId),
+              items,
+              now,
+              budgetByTeam.get(teamId) ?? [],
+            ),
+          { concurrency: 3 },
+        );
+        const changesById = new Map(
+          checks.flatMap((check) => check.changes).map((change) => [change.id, change] as const),
+        );
+        const checksByTeam = new Map(checks.map((check) => [check.team, check] as const));
+        yield* Effect.annotateCurrentSpan({
+          "proposal.items_checked": [...openItemsByTeam.values()].flat().length,
+          "proposal.teams_checked": checks.length,
+          "proposal.teams_failed": checks.filter((check) => check.failure !== undefined).length,
+        });
         const sets = yield* Effect.forEach(page.sets, ({ set, items }) =>
           Effect.gen(function* () {
             const itemsByTeam = new Map<TeamId, Array<ProposalItemRecord>>();
@@ -1081,9 +1110,23 @@ export const TransactionProposalsLive = Layer.effect(
               }
               const fantasyDay = fantasyDays.get(team.provider);
               const today = todayOf(team);
-              const views = yield* Effect.forEach(teamItems, (item) =>
-                toItem(tokens, userId, team, item, undefined, item.reserveMove, undefined, today),
-              );
+              const check = checksByTeam.get(teamId);
+              const illegalRoster =
+                check?.facts === undefined ? undefined : illegalRosterOf(check.facts);
+              const views = yield* Effect.forEach(teamItems, (item) => {
+                const change = changesById.get(item.id);
+                const checked = change === undefined ? item : withCheckedItem(item, change);
+                return toItem(
+                  tokens,
+                  userId,
+                  team,
+                  checked,
+                  check?.facts,
+                  checked.reserveMove,
+                  undefined,
+                  today,
+                );
+              });
               const groups =
                 fantasyDay === undefined || today === undefined
                   ? undefined
@@ -1100,9 +1143,7 @@ export const TransactionProposalsLive = Layer.effect(
                 ...(today === undefined ? {} : { today }),
                 items: views,
                 ...(groups === undefined ? {} : { groups }),
-                ...(illegalRoster === undefined || requested?.id !== teamId
-                  ? {}
-                  : { illegalRoster }),
+                ...(illegalRoster === undefined ? {} : { illegalRoster }),
               });
             }
             return {
@@ -5906,6 +5947,19 @@ function toItem(
       updatedAt: record.updatedAt,
     }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
   });
+}
+
+function withCheckedItem(item: ProposalItemRecord, change: ProposalItemChange): ProposalItemRecord {
+  return {
+    ...item,
+    adds: change.adds,
+    drops: change.drops,
+    reserveMove: change.reserveMove,
+    placement: change.placement,
+    staleness: change.staleness,
+    ...(change.trade === undefined ? {} : { trade: change.trade }),
+    ...(change.effectiveDate === undefined ? {} : { effectiveDate: change.effectiveDate }),
+  };
 }
 
 function moveView(

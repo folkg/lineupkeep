@@ -141,6 +141,54 @@ it("renders day and team groups, counts, scheduled timing, and earlier moves", a
   await expect.element(page.getByText("Drop Owen Park", { exact: true })).toBeVisible();
 });
 
+it("shows why a stale move cannot run and disables its choice", async () => {
+  const stale = item({
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d4",
+    drops: [player("Riley Chen", "D", "TOR")],
+    staleness: {
+      status: "stale",
+      checkedAt: now,
+      reasons: [
+        {
+          code: "drop_not_rostered",
+          detail: "Riley Chen is no longer on this team's roster, so there is nothing to drop.",
+        },
+      ],
+    },
+  });
+  using _app = setupTransactionsPage({
+    open: listData([
+      plan({
+        id: openPlanId,
+        teams: [teamEntry(footballTeam, [stale], [day(stale.id, today, "same_day")])],
+      }),
+    ]),
+    closed: listData([]),
+  });
+
+  await expect.element(page.getByText("Drop Riley Chen", { exact: true })).toBeVisible();
+  await expect
+    .element(
+      page.getByText(
+        "Riley Chen is no longer on this team's roster, so there is nothing to drop.",
+        {
+          exact: true,
+        },
+      ),
+    )
+    .toBeVisible();
+  await expect
+    .element(page.getByRole("button", { name: /Do it now: Drop Riley Chen/u }))
+    .toBeDisabled();
+  await expect
+    .element(
+      page.getByText("This move needs another look before it can run. You can discard it here.", {
+        exact: true,
+      }),
+    )
+    .toBeVisible();
+});
+
 it("requires a choice for every today move and submits only the chosen moves", async () => {
   await page.viewport(1280, 720);
   const chosen = item({
