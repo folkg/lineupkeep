@@ -176,7 +176,11 @@ it("groups a plan's moves by the day each one runs", async () => {
 });
 
 it("shows when a plan move takes effect beside the day it runs", async () => {
-  const laterItem = item({ window: "2026-11-14", effectiveDate: "2026-11-15" });
+  const laterItem = item({
+    window: "2026-11-14",
+    effectiveDate: "2026-11-15",
+    lifecycle: "scheduled",
+  });
   using _app = setupTransactionsPage(
     listData([
       plan({
@@ -197,6 +201,7 @@ it("shows when a plan move takes effect beside the day it runs", async () => {
   await expect
     .element(page.getByRole("heading", { name: `Runs on ${formatCalendarDate("2026-11-14")}` }))
     .toBeVisible();
+  await expect.element(page.getByText("Scheduled", { exact: true })).toBeVisible();
   await expect
     .element(
       page.getByText(`Takes effect on ${formatCalendarDate("2026-11-15")}.`, { exact: true }),
@@ -222,6 +227,33 @@ it("shows the fallback choices a plan carries", async () => {
 
   await expect
     .element(page.getByText("If the first choice is gone: Nils Berg, Owen Park.", { exact: true }))
+    .toBeVisible();
+});
+
+it("states that a claim's fallback is added without the bid", async () => {
+  using _app = setupTransactionsPage(
+    listData([
+      plan({
+        items: [
+          item({
+            kind: "waiver_claim",
+            adds: [player("Sam Rivers", "WR", "SEA")],
+            drops: [],
+            bid: 12,
+            fallbacks: [player("Nils Berg", "RW", "BOS")],
+          }),
+        ],
+      }),
+    ]),
+  );
+
+  await expect
+    .element(
+      page.getByText(
+        "If the claim does not win because the first choice is gone: Nils Berg is added as a straight free-agent add in the same period. Your bid applies only to the claim, never to the fallback.",
+        { exact: true },
+      ),
+    )
     .toBeVisible();
 });
 
@@ -575,6 +607,14 @@ function rosterOccupant(): {
 }
 
 function item(overrides: Partial<TransactionProposalItemView> = {}): TransactionProposalItemView {
+  const state = overrides.state ?? "proposed";
+  const lifecycle =
+    overrides.lifecycle ??
+    (state === "proposed"
+      ? overrides.staleness !== undefined && overrides.staleness.status !== "current"
+        ? "stale"
+        : "proposed"
+      : state);
   return {
     id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d1",
     kind: "drop",
@@ -582,7 +622,12 @@ function item(overrides: Partial<TransactionProposalItemView> = {}): Transaction
     drops: [player("Riley Chen", "D", "TOR")],
     picks: [],
     reason: "Drop the open roster place.",
-    state: "proposed",
+    state,
+    lifecycle,
+    budgetPeriod: {
+      status: "none",
+      detail: "Only a waiver claim with a FAAB bid spends a budget.",
+    },
     settled: false,
     staleness: { status: "current", checkedAt: now, reasons: [] },
     ...overrides,

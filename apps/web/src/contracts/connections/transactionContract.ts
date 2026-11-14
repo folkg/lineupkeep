@@ -1,6 +1,7 @@
 import type { FantasyLeague, FantasySport } from "@lineupkeep/backend/connections/FantasyTeam";
 import type {
   ProposalItemKind,
+  ProposalItemLifecycle,
   ProposalItemState,
   ProposalOutcome,
   ProposalStalenessStatus,
@@ -143,6 +144,17 @@ export type TransactionReviewPendingOfferView = {
   readonly incomplete?: string;
 };
 
+type TransactionReviewBudgetPeriodView =
+  | { readonly status: "season"; readonly season: number; readonly detail: string }
+  | { readonly status: "none"; readonly detail: string };
+
+type TransactionReviewBudgetRollupView = {
+  readonly season: number;
+  readonly spent: number;
+  readonly scheduled: number;
+  readonly open: number;
+};
+
 export type TransactionReviewItemView = {
   readonly id: string;
   readonly kind: ProposalItemKind;
@@ -151,8 +163,10 @@ export type TransactionReviewItemView = {
   readonly drops: ReadonlyArray<TransactionReviewPlayerView>;
   readonly picks: ReadonlyArray<TransactionReviewTradePickView>;
   readonly bid?: number;
+  readonly budgetPeriod: TransactionReviewBudgetPeriodView;
   readonly reason: string;
   readonly state: ProposalItemState;
+  readonly lifecycle: ProposalItemLifecycle;
   readonly outcomeDetail?: string;
   readonly staleness: {
     readonly status: ProposalStalenessStatus;
@@ -229,7 +243,11 @@ export type TransactionReviewTeamView = {
     readonly season: number;
   };
   readonly budget?:
-    | { readonly status: "published"; readonly remaining: number }
+    | {
+        readonly status: "published";
+        readonly remaining: number;
+        readonly periods: ReadonlyArray<TransactionReviewBudgetRollupView>;
+      }
     | { readonly status: "not_published"; readonly detail: string };
   readonly tradeProposal?: TransactionReviewTradeSupportView;
   readonly tradeRules?: TransactionReviewTradeRulesView;
@@ -308,7 +326,7 @@ export type TransactionProposalListData = {
 
 export type TransactionProposalListRequest = {
   readonly team: string;
-  readonly state?: "open" | "closed";
+  readonly state?: "open" | "closed" | "scheduled";
   readonly cursor?: string;
   readonly limit?: number;
 };

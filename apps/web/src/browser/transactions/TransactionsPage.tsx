@@ -351,12 +351,19 @@ function PlanItem(props: PlanItemProps): JSX.Element {
             {kindLabel(props.item.kind)}
           </Badge>
           <Badge tone={props.item.state === "dismissed" ? "neutral" : "accent"}>
-            {stateLabel(props.item.state)}
+            {stateLabel(props.item.lifecycle)}
           </Badge>
           <Show when={props.item.bid !== undefined}>
             <Text size="caption" tone="muted">
               FAAB bid: {String(props.item.bid)}.
             </Text>
+          </Show>
+          <Show when={budgetPeriodLine(props.item)}>
+            {(line) => (
+              <Text size="caption" tone="muted">
+                {line()}
+              </Text>
+            )}
           </Show>
         </Inline>
         <Text size="body" weight="semibold">
@@ -444,12 +451,7 @@ function isDismissible(item: TransactionProposalItemView): boolean {
 }
 
 function itemNeedsAttention(item: TransactionProposalItemView): boolean {
-  return (
-    item.staleness.status === "stale" ||
-    item.staleness.status === "illegal" ||
-    item.state === "failed" ||
-    item.state === "unknown"
-  );
+  return item.lifecycle === "stale" || item.lifecycle === "failed" || item.lifecycle === "unknown";
 }
 
 function dedupeOccupants(
@@ -473,10 +475,14 @@ function proposerLine(plan: TransactionProposalSetSummaryView): string {
   return plan.proposedBy.client === undefined ? who : `${who} from ${plan.proposedBy.client}`;
 }
 
-function stateLabel(state: TransactionProposalItemView["state"]): string {
-  switch (state) {
+function stateLabel(lifecycle: TransactionProposalItemView["lifecycle"]): string {
+  switch (lifecycle) {
     case "proposed":
       return "Open";
+    case "scheduled":
+      return "Scheduled";
+    case "stale":
+      return "Stale";
     case "executed":
       return "Executed";
     case "pending":
@@ -578,7 +584,18 @@ function fallbackLine(item: TransactionProposalItemView): string | undefined {
   const names = (item.fallbacks ?? []).flatMap((player) =>
     player.name === undefined ? [] : [player.name],
   );
-  return names.length === 0 ? undefined : `If the first choice is gone: ${names.join(", ")}.`;
+  if (names.length === 0) {
+    return undefined;
+  }
+  return item.kind === "waiver_claim"
+    ? `If the claim does not win because the first choice is gone: ${names.join(", ")} is added as a straight free-agent add in the same period. Your bid applies only to the claim, never to the fallback.`
+    : `If the first choice is gone: ${names.join(", ")}.`;
+}
+
+function budgetPeriodLine(item: TransactionProposalItemView): string | undefined {
+  return item.budgetPeriod.status === "season"
+    ? `Spends the ${String(item.budgetPeriod.season)} season FAAB budget.`
+    : undefined;
 }
 
 function playerNames(players: TransactionProposalItemView["adds"]): string | undefined {

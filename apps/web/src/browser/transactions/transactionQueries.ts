@@ -13,13 +13,13 @@ export const transactionQueries = {
       refetchOnMount: false,
     }),
   listAll: () => ["transactions", "list"] as const,
-  listKey: (team: string, state: "open" | "closed" = "open") =>
+  listKey: (team: string, state: "open" | "closed" | "scheduled" = "open") =>
     ["transactions", "list", team, state] as const,
   list: (
     remote: Pick<TransactionRemote, "list">,
     input: {
       readonly team: string;
-      readonly state?: "open" | "closed";
+      readonly state?: "open" | "closed" | "scheduled";
       readonly limit?: number;
     },
   ) => {

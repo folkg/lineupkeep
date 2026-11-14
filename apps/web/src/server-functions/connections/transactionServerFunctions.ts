@@ -107,7 +107,7 @@ export const listTransactionProposalSetsServerFn = createServerFn({ method: "POS
   .validator(
     (raw: {
       readonly team: string;
-      readonly state?: "open" | "closed";
+      readonly state?: "open" | "closed" | "scheduled";
       readonly cursor?: string;
       readonly limit?: number;
     }) => Schema.decodeResult(ListProposalSetsInput)(raw),

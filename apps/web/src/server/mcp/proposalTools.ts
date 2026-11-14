@@ -112,7 +112,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("list_transaction_proposals", {
     description:
-      "List one team's plans, newest first, as open or closed, with moves grouped by run day, review links, and last checks. An open list reads the current roster to name a player the league places in an illegal slot.",
+      "List one team's plans, newest first, as open, scheduled, or closed, with moves by run day, review links, and last checks. An open list reads the current roster to name a player the league places in an illegal slot.",
     parameters: ListProposalSetsInput,
     success: Schema.toCodecJson(ProposalSetList),
     failure: ToolFailure,

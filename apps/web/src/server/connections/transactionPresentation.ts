@@ -118,7 +118,18 @@ function toTeamView(team: ProposalSetReview["teams"][number]): TransactionReview
     ...(team.budget === undefined
       ? {}
       : team.budget.status === "published"
-        ? { budget: { status: "published" as const, remaining: team.budget.remaining } }
+        ? {
+            budget: {
+              status: "published" as const,
+              remaining: team.budget.remaining,
+              periods: team.budget.periods.map((period) => ({
+                season: period.season,
+                spent: period.spent,
+                scheduled: period.scheduled,
+                open: period.open,
+              })),
+            },
+          }
         : { budget: { status: "not_published" as const, detail: team.budget.detail } }),
     ...(team.tradeProposal === undefined
       ? {}
@@ -238,12 +249,21 @@ function toItemView(
       to: { ref: pick.to.ref, name: pick.to.name },
     })),
     ...(item.bid === undefined ? {} : { bid: item.bid }),
+    budgetPeriod:
+      item.budgetPeriod.status === "season"
+        ? {
+            status: "season" as const,
+            season: item.budgetPeriod.season,
+            detail: item.budgetPeriod.detail,
+          }
+        : { status: "none" as const, detail: item.budgetPeriod.detail },
     ...(item.window === undefined ? {} : { window: item.window }),
     ...(item.effectiveDate === undefined ? {} : { effectiveDate: item.effectiveDate }),
     ...(item.effectiveWarning === undefined ? {} : { effectiveWarning: item.effectiveWarning }),
     ...(item.approvedAt === undefined ? {} : { approvedAt: DateTime.formatIso(item.approvedAt) }),
     reason: item.reason,
     state: item.state,
+    lifecycle: item.lifecycle,
     ...(item.outcomeDetail === undefined ? {} : { outcomeDetail: item.outcomeDetail }),
     staleness: {
       status: item.staleness.status,

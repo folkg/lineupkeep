@@ -7703,6 +7703,265 @@ it.effect("promotes once, so a second submission reads the chosen player as its 
   }).pipe(Effect.provide(TestLayer)),
 );
 
+it.effect("names the season budget a bid spends and no budget for a free-agent add", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "waiver_claim",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
+          drops: [],
+          bid: 12,
+          window: "2026-11-14",
+          reason: "Claim the pool forward next week.",
+        },
+        {
+          team: redLine,
+          kind: "free_agent_add",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90007"]),
+          drops: [],
+          window: "2026-11-14",
+          reason: "Add a pool forward next week.",
+        },
+      ],
+    });
+
+    const claimItem = proposed.items.find(
+      (entry) => entry.item.reason === "Claim the pool forward next week.",
+    );
+    assert.isDefined(claimItem);
+    const claim = claimItem.item;
+    assert.deepStrictEqual(claim.budgetPeriod, {
+      status: "season",
+      season: 2026,
+      detail:
+        "This bid spends the team's 2026 season FAAB budget for the move that runs on 2026-11-14.",
+    });
+    const addItem = proposed.items.find(
+      (entry) => entry.item.reason === "Add a pool forward next week.",
+    );
+    assert.isDefined(addItem);
+    const add = addItem.item;
+    assert.deepStrictEqual(add.budgetPeriod, {
+      status: "none",
+      detail: "Only a waiver claim with a FAAB bid spends a budget.",
+    });
+
+    const reread = itemByReason(
+      yield* proposals.read(owner, { set: proposed.set.id }),
+      "Claim the pool forward next week.",
+    );
+    assert.deepStrictEqual(reread.budgetPeriod, claim.budgetPeriod);
+    const listed = yield* proposals.list(owner, { team: redLine });
+    const listedClaim = listed.sets
+      .flatMap((set) => set.teams.flatMap((team) => team.items))
+      .find((item) => item.reason === "Claim the pool forward next week.");
+    assert.deepStrictEqual(listedClaim?.budgetPeriod, claim.budgetPeriod);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("rolls up a team's budget by period from its stored plans and the league balance", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      playerDetails,
+      leagueTeams: [
+        {
+          ...leagueTeam("nhl.l.1.t.1", "Red Line"),
+          remainingBudget: 50,
+        },
+      ],
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "waiver_claim",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
+          drops: [],
+          bid: 10,
+          window: "2026-11-14",
+          reason: "Claim the forward next week.",
+        },
+        {
+          team: redLine,
+          kind: "waiver_claim",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90007"]),
+          drops: [],
+          bid: 5,
+          reason: "Claim a forward today.",
+        },
+        {
+          team: redLine,
+          kind: "waiver_claim",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90008"]),
+          drops: [],
+          bid: 20,
+          reason: "Claim the other forward today.",
+        },
+      ],
+    });
+    const spent = proposed.items.find(
+      (entry) => entry.item.reason === "Claim the other forward today.",
+    );
+    assert.isDefined(spent);
+    yield* proposals.submit(owner, {
+      set: proposed.set.id,
+      include: [spent.item.id],
+    });
+
+    const reviewed = yield* proposals.revalidate(owner, { set: proposed.set.id });
+    const reviewedTeam = Array.getUnsafe(reviewed.teams, 0);
+    assert.deepStrictEqual(reviewedTeam.budget, {
+      status: "published",
+      remaining: 50,
+      periods: [{ season: 2026, spent: 20, scheduled: 10, open: 5 }],
+    });
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("publishes each move's lifecycle and lists the plans with a scheduled move", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      playerDetails,
+      roster: rosterFixture(["nhl.p.90001", "nhl.p.90002", "nhl.p.90003"]),
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const later = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          window: "2026-11-14",
+          reason: "Drop the second center next week.",
+        },
+      ],
+    });
+    const today = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          reason: "Drop the first center today.",
+        },
+      ],
+    });
+    const stale = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "free_agent_add",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
+          drops: [],
+          reason: "Add a forward who will be gone.",
+        },
+      ],
+    });
+
+    assert.strictEqual(Array.getUnsafe(later.items, 0).item.lifecycle, "scheduled");
+    assert.strictEqual(Array.getUnsafe(today.items, 0).item.lifecycle, "proposed");
+
+    yield* fake.setPlayerDetails(
+      playerDetailsWith([{ key: "nhl.p.90004", rosterStatus: "rostered" }]),
+    );
+    const reviewed = yield* proposals.revalidate(owner, { set: stale.set.id });
+    assert.strictEqual(Array.getUnsafe(itemsOf(reviewed), 0).lifecycle, "stale");
+
+    const scheduled = yield* proposals.list(owner, { team: redLine, state: "scheduled" });
+    assert.deepStrictEqual(
+      scheduled.sets.map((set) => set.id),
+      [later.set.id],
+    );
+    const listed = Array.getUnsafe(
+      Array.getUnsafe(Array.getUnsafe(scheduled.sets, 0).teams, 0).items,
+      0,
+    );
+    assert.strictEqual(listed.lifecycle, "scheduled");
+
+    const open = yield* proposals.list(owner, { team: redLine, state: "open" });
+    assert.deepStrictEqual(
+      open.sets.map((set) => set.id).sort(),
+      [later.set.id, today.set.id, stale.set.id].sort(),
+    );
+    const closed = yield* proposals.list(owner, { team: redLine, state: "closed" });
+    assert.deepStrictEqual(closed.sets, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("adds a failed claim's fallback as a free agent without sending the bid", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      playerDetails,
+      roster: rosterFixture(["nhl.p.90001", "nhl.p.90002", "nhl.p.90003"]),
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const proposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "waiver_claim",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
+          fallbacks: yield* refs(tokens, "nhl.l.1", ["nhl.p.90007"]),
+          drops: [],
+          bid: 20,
+          reason: "Claim a forward for the bench.",
+        },
+      ],
+    });
+    assert.include(proposed.detail, "The bid applies only to the claim, never to the fallback.");
+    yield* fake.setPlayerDetails(
+      playerDetailsWith([{ key: "nhl.p.90004", rosterStatus: "rostered" }]),
+    );
+
+    const submitted = yield* proposals.submit(owner, {
+      set: proposed.set.id,
+      include: [Array.getUnsafe(proposed.items, 0).item.id],
+    });
+    const item = Array.getUnsafe(itemsOf(submitted), 0);
+
+    assert.strictEqual(item.state, "executed");
+    assert.strictEqual(item.adds[0]?.name, "Pool Seven");
+    assert.include(
+      item.execution?.detail ?? "",
+      "First choice Pool Forward was gone, so Pool Seven was used.",
+    );
+    assert.include(
+      item.execution?.detail ?? "",
+      "The claim did not run, so the fallback was added without a bid.",
+    );
+    assert.deepStrictEqual(submitted.submittedBids, []);
+    assert.deepStrictEqual(
+      (yield* fake.transactionRequests).map((request) => ({
+        adds: request.adds,
+        faabBid: request.faabBid,
+      })),
+      [{ adds: ["nhl.p.90007"], faabBid: undefined }],
+    );
+  }).pipe(Effect.provide(TestLayer)),
+);
+
 function seedTradeTeams(
   fake: FakeProviderWorld["Service"],
   options: { readonly league?: ProviderLeagueSettings } = {},

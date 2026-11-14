@@ -870,8 +870,13 @@ it("proposes a transaction set under the review scope and returns the review lin
     adds: [],
     fallbacks: [],
     drops: [],
+    budgetPeriod: {
+      status: "none",
+      detail: "Only a waiver claim with a FAAB bid spends a budget.",
+    },
     reason: "A stated reason.",
     state: "failed",
+    lifecycle: "failed",
     settled: false,
     staleness: { status: "current", checkedAt: at, reasons: [] },
     execution: {
@@ -890,8 +895,13 @@ it("proposes a transaction set under the review scope and returns the review lin
     adds: [],
     fallbacks: [],
     drops: [],
+    budgetPeriod: {
+      status: "none",
+      detail: "Only a waiver claim with a FAAB bid spends a budget.",
+    },
     reason: "A stated reason.",
     state: "proposed",
+    lifecycle: "stale",
     settled: false,
     staleness: {
       status: "illegal",
@@ -1725,12 +1735,28 @@ it("publishes fallback choices on a proposed move and accepts them on a proposal
 
   expect(JSON.stringify(propose.inputSchema)).toContain('"fallbacks"');
   expect(JSON.stringify(review.outputSchema)).toContain('"fallbacks"');
-  expect(JSON.stringify(review.outputSchema)).toContain("Other players to try in order");
+  expect(JSON.stringify(review.outputSchema)).toContain("Other players to try");
   expect(JSON.stringify(review.outputSchema)).toContain('"effectiveDate"');
   expect(JSON.stringify(review.outputSchema)).toContain("not when it takes effect");
   expect(JSON.stringify(review.outputSchema)).toContain('"groups"');
   expect(JSON.stringify(review.outputSchema)).toContain('"triggerAt"');
   expect(JSON.stringify(review.outputSchema)).toContain('"effectiveRule"');
+  expect(JSON.stringify(review.outputSchema)).toContain('"budgetPeriod"');
+  expect(JSON.stringify(review.outputSchema)).toContain('"lifecycle"');
+  expect(JSON.stringify(review.outputSchema)).toContain('"periods"');
+});
+
+it("publishes the scheduled plan filter and each move's budget period and lifecycle", async () => {
+  const response = await handle(request("tools/list", {}, "read"));
+  const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
+  const list = listed.result.tools.find((tool) => tool.name === "list_transaction_proposals");
+  if (list === undefined) {
+    throw new Error("Expected the tool list to include list_transaction_proposals");
+  }
+
+  expect(JSON.stringify(list.inputSchema)).toContain('"scheduled"');
+  expect(JSON.stringify(list.outputSchema)).toContain('"budgetPeriod"');
+  expect(JSON.stringify(list.outputSchema)).toContain('"lifecycle"');
 });
 
 it("keeps every published description inside its budget", async () => {

@@ -143,6 +143,7 @@ it("shows the provider's exact refusal wording on a failed move", async () => {
         {
           ...freeAgentItem(),
           state: "failed",
+          lifecycle: "failed",
           execution: {
             outcome: "failed",
             detail: providerRefusal,
@@ -366,7 +367,10 @@ it("dismisses a move with a pending label, keeps the plan usable, then closes it
   const withOneDismissed: TransactionReviewView = {
     ...base,
     teams: [
-      teamFixture(alphaId, "Alpha", "nfl", "football", [{ ...first, state: "dismissed" }, second]),
+      teamFixture(alphaId, "Alpha", "nfl", "football", [
+        { ...first, state: "dismissed", lifecycle: "dismissed" },
+        second,
+      ]),
     ],
   };
   const closedPlan: TransactionReviewView = {
@@ -518,6 +522,11 @@ function tradeItem(state: "proposed" | "pending" | "withdrawn"): TransactionRevi
     counterparty: { ref: "r1.counterparty", name: "Beta", managerName: "Dana Ruiz" },
     reason: "Swap a center for a wing.",
     state,
+    lifecycle: state,
+    budgetPeriod: {
+      status: "none",
+      detail: "Only a waiver claim with a FAAB bid spends a budget.",
+    },
     staleness: { status: "current", checkedAt: now, reasons: [] },
     ...(trade === undefined
       ? {}
@@ -555,6 +564,11 @@ function pickTradeItem(): TransactionReviewItemView {
     counterparty: { ref: "r1.counterparty", name: "Beta", managerName: "Dana Ruiz" },
     reason: "Trade a first for a second.",
     state: "proposed",
+    lifecycle: "proposed",
+    budgetPeriod: {
+      status: "none",
+      detail: "Only a waiver claim with a FAAB bid spends a budget.",
+    },
     staleness: { status: "current", checkedAt: now, reasons: [] },
   };
 }
@@ -673,7 +687,13 @@ function teamFixture(
   return {
     team: { id, name, league, sport, season: 2026 },
     ...(items.some((item) => item.kind === "waiver_claim")
-      ? { budget: { status: "published" as const, remaining: 50 } }
+      ? {
+          budget: {
+            status: "published" as const,
+            remaining: 50,
+            periods: [{ season: 2026, spent: 0, scheduled: 0, open: 25 }],
+          },
+        }
       : {}),
     ...(illegalRoster === undefined ? {} : { illegalRoster }),
     items,
@@ -702,8 +722,15 @@ function waiverItem(): TransactionReviewItemView {
     drops: [player("Alex Vance", "RB", "SF", "Out")],
     picks: [],
     bid: 25,
+    budgetPeriod: {
+      status: "season",
+      season: 2026,
+      detail:
+        "This bid spends the team's 2026 season FAAB budget for the move that runs when it runs.",
+    },
     reason: "Cover the receiver spot before Sunday.",
     state: "proposed",
+    lifecycle: "proposed",
     staleness: { status: "current", checkedAt: now, reasons: [] },
   };
 }
@@ -741,6 +768,7 @@ function pendingReviewFrom(review: TransactionReviewView): TransactionReviewView
       items: team.items.map((item) => ({
         ...item,
         state: "pending" as const,
+        lifecycle: "pending" as const,
         execution: {
           outcome: "pending" as const,
           detail: "Waivers run later.",
@@ -761,6 +789,11 @@ function staleItem(): TransactionReviewItemView {
     picks: [],
     reason: "Add a center for the light night.",
     state: "proposed",
+    lifecycle: "stale",
+    budgetPeriod: {
+      status: "none",
+      detail: "Only a waiver claim with a FAAB bid spends a budget.",
+    },
     staleness: {
       status: "stale",
       checkedAt: now,
@@ -784,6 +817,11 @@ function illegalItem(): TransactionReviewItemView {
     picks: [],
     reason: "Open a roster spot.",
     state: "proposed",
+    lifecycle: "stale",
+    budgetPeriod: {
+      status: "none",
+      detail: "Only a waiver claim with a FAAB bid spends a budget.",
+    },
     staleness: {
       status: "illegal",
       checkedAt: now,
@@ -807,6 +845,11 @@ function freeAgentItem(): TransactionReviewItemView {
     picks: [],
     reason: "Take the better wing before the weekend.",
     state: "proposed",
+    lifecycle: "proposed",
+    budgetPeriod: {
+      status: "none",
+      detail: "Only a waiver claim with a FAAB bid spends a budget.",
+    },
     staleness: { status: "current", checkedAt: now, reasons: [] },
   };
 }
@@ -821,6 +864,11 @@ function slotMoveItem(): TransactionReviewItemView {
     slotMove: { playerName: "Casey Moss", fromSlot: "IR", toSlot: "BN" },
     reason: "Move the reserve center to the bench.",
     state: "proposed",
+    lifecycle: "proposed",
+    budgetPeriod: {
+      status: "none",
+      detail: "Only a waiver claim with a FAAB bid spends a budget.",
+    },
     staleness: { status: "current", checkedAt: now, reasons: [] },
   };
 }
@@ -834,6 +882,11 @@ function dropItem(): TransactionReviewItemView {
     picks: [],
     reason: "Open a roster spot.",
     state: "proposed",
+    lifecycle: "proposed",
+    budgetPeriod: {
+      status: "none",
+      detail: "Only a waiver claim with a FAAB bid spends a budget.",
+    },
     staleness: { status: "current", checkedAt: now, reasons: [] },
   };
 }
@@ -972,6 +1025,7 @@ it("shows what was sent and why a later move stopped", async () => {
         {
           ...slotMoveItem(),
           state: "skipped",
+          lifecycle: "skipped",
           execution: {
             position: 1,
             outcome: "skipped",
@@ -983,6 +1037,7 @@ it("shows what was sent and why a later move stopped", async () => {
         {
           ...dropItem(),
           state: "failed",
+          lifecycle: "failed",
           execution: {
             position: 0,
             outcome: "failed",
@@ -1393,6 +1448,7 @@ it("shows the promotion outcome detail with the player that ran", async () => {
     {
       ...freeAgentItem(),
       state: "executed",
+      lifecycle: "executed",
       adds: [player("Sam Jones", "RW", "BOS")],
       execution: {
         outcome: "executed",
@@ -1629,6 +1685,7 @@ function pendingWaiverItem(): TransactionReviewItemView {
   return {
     ...waiverItem(),
     state: "pending",
+    lifecycle: "pending",
     execution: {
       outcome: "pending",
       detail:
@@ -1658,6 +1715,7 @@ function skippedStaleItem(): TransactionReviewItemView {
   return {
     ...staleItem(),
     state: "skipped",
+    lifecycle: "skipped",
     execution: {
       outcome: "skipped",
       detail: "Jordan Lee is already rostered in this league, so the add can no longer be made.",
@@ -1671,6 +1729,7 @@ function failedAddItem(): TransactionReviewItemView {
   return {
     ...freeAgentItem(),
     state: "failed",
+    lifecycle: "failed",
     execution: {
       outcome: "failed",
       detail: "That player is no longer available.",
@@ -1697,6 +1756,11 @@ function unknownDropItem(): TransactionReviewItemView {
     picks: [],
     reason: "This response was lost.",
     state: "unknown",
+    lifecycle: "unknown",
+    budgetPeriod: {
+      status: "none",
+      detail: "Only a waiver claim with a FAAB bid spends a budget.",
+    },
     staleness: { status: "current", checkedAt: now, reasons: [] },
     execution: {
       outcome: "unknown",
@@ -1726,6 +1790,11 @@ function excludedDropItem(): TransactionReviewItemView {
     picks: [],
     reason: "Left out on purpose.",
     state: "skipped",
+    lifecycle: "skipped",
+    budgetPeriod: {
+      status: "none",
+      detail: "Only a waiver claim with a FAAB bid spends a budget.",
+    },
     staleness: { status: "current", checkedAt: now, reasons: [] },
     execution: {
       outcome: "skipped",
@@ -1740,6 +1809,7 @@ function executedDropItem(): TransactionReviewItemView {
   return {
     ...dropItem(),
     state: "executed",
+    lifecycle: "executed",
     execution: {
       outcome: "executed",
       decidedAt: now,

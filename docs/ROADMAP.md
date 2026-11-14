@@ -52,6 +52,14 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
   first choice can no longer be added, the server uses the facts it already read to take the first
   fallback the pool lists as available, re-evaluates the team once, and records the chosen player and
   why. Nothing promotes on a read; the review and the plan list show the fallbacks a person is approving.
+- **A move says which budget it spends and how far along it is, and a plan list can ask for scheduled
+  plans.** Every proposal item carries `budgetPeriod`, the league season for a waiver claim's bid and
+  no budget for every other kind, and `lifecycle`, which reads as scheduled while the run date is
+  ahead, stale when the last check no longer matches, and otherwise the stored state. The plan list
+  filter accepts scheduled alongside open and closed, in the same SQL pass. A team's budget read now
+  includes a per-period rollup of bids its stored plans already sent, have scheduled, or hold open,
+  from stored plans and the published balance only. A claim whose first choice is gone adds its
+  fallback as a straight free-agent add without the bid, and the propose result and item copy say so.
 
 ### 12 November 2026
 

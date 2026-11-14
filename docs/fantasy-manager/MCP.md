@@ -854,15 +854,22 @@ transient failure is tried again on the next tick. The result reports how many i
 scheduled and the day the next one runs; a submission whose included moves are all scheduled runs
 nothing and says so. A scheduled move stays withdrawable until its day, and editing it means
 withdrawing it and proposing its replacement. `list_transaction_proposals` and
-`get_transaction_proposal_set` publish each item's `window` and the team's run-day `groups`.
+`get_transaction_proposal_set` publish each item's `window` and the team's run-day `groups`. Every item
+also carries `lifecycle`: `scheduled` when its run date is still ahead, `stale` when its last check no
+longer matches, and otherwise its stored state, so a client never compares dates to know a move waits.
+`budgetPeriod` names the budget the move spends, which is the league season for a waiver claim's bid and
+none for every other kind.
 
 A one-player add or waiver claim may also name `fallbacks`: an ordered list of player references to try
 when the first choice cannot be added at submission. A plan never promotes on propose or on a read.
 When a submission, or the hourly tick that runs a scheduled move on its day, finds the first choice gone, it
 uses the first fallback that the league's player pool lists as available, records the chosen player as the
 move's add, and names both players in the move's outcome. If no fallback can be added, the move keeps its
-normal refusal. A trade, another kind, several adds, or a fallback that repeats a choice is refused with a
-plain reason. The published item carries `fallbacks` with names beside its `adds`.
+normal refusal. A fallback for a waiver claim runs as a straight free-agent add in the same budget
+period and never carries the claim's bid; a fallback still on waivers is not used, because adding it
+would be a second claim. A trade, another kind, several adds, or a fallback that repeats a choice is
+refused with a plain reason. The published item carries `fallbacks` with names beside its `adds`, and
+the propose result states the bid rule once a claim carries fallbacks.
 
 Passing `set` appends the items after an existing plan that is still open. A plan is open while any
 move in it can still run: a move ends when it executed, was dismissed by the owner, was withdrawn, its
@@ -881,9 +888,10 @@ of a move that is still proposed; a plan whose moves have all ended is an audit 
 new moves and withdrawals. A plan never expires; it stops when every move has ended. A closed plan stays readable for 90 days as the audit record of what was proposed, then the retention sweep removes it with its moves, submissions, and steps.
 
 `list_transaction_proposals` returns one team's plans, newest change first, filtered by `state`:
-`open` (the default, a plan with at least one move that can still run) or `closed` (every move has
-ended). Each plan carries who proposed it, when it was created and last changed, its review path, and
-that team's moves with their state, staleness, and outcome. The read is owner-scoped and paged: a
+`open` (the default, a plan with at least one move that can still run), `scheduled` (a plan with at
+least one proposed move whose run date is still ahead), or `closed` (every move has ended). Each plan
+carries who proposed it, when it was created and last changed, its review path, and that team's moves
+with their stored state, computed `lifecycle`, staleness, and outcome. The read is owner-scoped and paged: a
 `cursor` from the previous page fetches the next, and `limit` (1 to 50, default 20) sizes the page. A
 plan appears once for the team whose moves are asked for, and a team the account does not own is
 refused rather than answered as empty. The read writes nothing and never changes a plan. The team
@@ -906,7 +914,11 @@ balance when a bid is present) and marks each open item `current`, `stale`, or `
 reasons: the added player is no longer in the pool, a dropped player is no longer on the roster, the
 set has no way to give the add a roster place, a rostered player sits in a slot that does not accept
 him and the set cannot resolve it, the league's period has closed, the bid exceeds the team's
-remaining budget, the league has no FAAB budget, or the team's state could not be read. It validates
+remaining budget, the league has no FAAB budget, or the team's state could not be read. When the
+league publishes a remaining balance, that team's `budget` also carries `periods`: for each budget
+period, `spent` for bids its stored plans already sent, `scheduled` for bids on moves whose run date is
+ahead, and `open` for bids on moves that run now. The rollup is computed from stored plans and the
+published balance, never a new provider read, and it is not a cap. It validates
 one team's set as a set: it first chooses the team's order, then walks that team's items against a
 roster projected through the earlier ones. A drop already in the set is gone, an add is already
 rostered, and a declared slot move into or out of reserve has already changed what counts against

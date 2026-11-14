@@ -55,6 +55,24 @@ export const ProposalItemState = Schema.Literals([
 ]);
 export type ProposalItemState = typeof ProposalItemState.Type;
 
+export const ProposalItemLifecycle = Schema.Literals([
+  "proposed",
+  "scheduled",
+  "stale",
+  "executed",
+  "dismissed",
+  "withdrawn",
+  "skipped",
+  "failed",
+  "pending",
+  "unknown",
+  "accepted",
+  "expired",
+]).annotate({
+  description: "The move now: scheduled, stale, or its stored state.",
+});
+export type ProposalItemLifecycle = typeof ProposalItemLifecycle.Type;
+
 export const ProposalOutcome = Schema.Literals([
   "executed",
   "pending",
@@ -128,6 +146,21 @@ const ProposalBid = Schema.Int.check(
   Schema.isGreaterThanOrEqualTo(0),
   Schema.isLessThanOrEqualTo(1_000_000),
 );
+
+export const ProposalBudgetPeriod = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("season"),
+    season: Schema.Int.check(Schema.isGreaterThan(1900)),
+    detail: Schema.NonEmptyString,
+  }),
+  Schema.Struct({
+    status: Schema.Literal("none"),
+    detail: Schema.NonEmptyString,
+  }),
+]).annotate({
+  description: "The budget a move spends: its league season for a bid, otherwise none.",
+});
+export type ProposalBudgetPeriod = typeof ProposalBudgetPeriod.Type;
 
 const ProposalExecutionStep = Schema.Struct({
   kind: Schema.Literals(["reserve_move", "slot_move", "add", "drop"]),
@@ -244,8 +277,10 @@ export const ProposalItem = Schema.Struct({
   drops: Schema.Array(ProposalPlayer),
   picks: Schema.Array(ProposalTradePick).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   bid: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+  budgetPeriod: ProposalBudgetPeriod,
   reason: Schema.NonEmptyString,
   state: ProposalItemState,
+  lifecycle: ProposalItemLifecycle,
   settled: Schema.Boolean.annotate({
     description: "Whether the move will never run again; a failed move is not settled.",
   }),
@@ -260,8 +295,7 @@ export const ProposalItem = Schema.Struct({
   counterparty: Schema.optional(ProposalCounterparty),
   trade: Schema.optional(ProposalTrade),
   window: Schema.optional(ProposalDate).annotate({
-    description:
-      "The date this move runs, not when it takes effect; absent when it runs on submission.",
+    description: "The date this move runs, not when it takes effect.",
   }),
   effectiveDate: Schema.optional(EffectiveDate),
   effectiveWarning: Schema.optional(Schema.NonEmptyString),
@@ -273,10 +307,26 @@ export const ProposalItem = Schema.Struct({
 });
 export type ProposalItem = typeof ProposalItem.Type;
 
+const ProposalBudgetRollup = Schema.Struct({
+  season: Schema.Int.check(Schema.isGreaterThan(1900)),
+  spent: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
+    description: "Bids on moves already sent.",
+  }),
+  scheduled: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
+    description: "Bids on moves whose run date is ahead.",
+  }),
+  open: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
+    description: "Bids on moves that run now.",
+  }),
+});
+
 export const ProposalBudget = Schema.Union([
   Schema.Struct({
     status: Schema.Literal("published"),
     remaining: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    periods: Schema.Array(ProposalBudgetRollup).annotate({
+      description: "One entry per budget period.",
+    }),
   }),
   Schema.Struct({
     status: Schema.Literal("not_published"),
@@ -387,8 +437,7 @@ const ProposalOrderDecision = Schema.Union([
     detail: Schema.NonEmptyString,
   }),
 ]).annotate({
-  description:
-    "The plan for a team: an order, a conflict, or a search bound; a trade follows the roster moves.",
+  description: "The plan for a team: an order, a conflict, or a search bound.",
 });
 
 const ProposalRunGroup = Schema.Struct({
@@ -399,14 +448,13 @@ const ProposalRunGroup = Schema.Struct({
     description: "When that day begins in the league's day.",
   }),
   effectiveRule: ProposalOrderTiming.annotate({
-    description:
-      "When the league applies these moves: same day, next, its weekly lock, or unpublished.",
+    description: "When the league applies these moves.",
   }),
   items: Schema.Array(ProposalItemId).annotate({
     description: "Their move identifiers, in plan order.",
   }),
 }).annotate({
-  description: "One day of the plan: today first, then later dates.",
+  description: "One day of the plan: today first.",
 });
 
 export const ProposalTeamLineup = Schema.Struct({
@@ -424,8 +472,7 @@ export const ProposalTeamLineup = Schema.Struct({
   run: Schema.optional(Schema.NonEmptyString),
   at: Schema.optional(Schema.NonEmptyString),
 }).annotate({
-  description:
-    "The lineup run given after these items ran, and its outcome; a failed run changes no item.",
+  description: "The lineup run after these moves ran, and its outcome.",
 });
 export type ProposalTeamLineup = typeof ProposalTeamLineup.Type;
 
@@ -460,13 +507,11 @@ export const ProposalTeam = Schema.Struct({
       "Players the league places in a slot it does not accept. Present when current state was checked.",
   }),
   failure: Schema.optional(Schema.NonEmptyString).annotate({
-    description:
-      "Why this team's state could not be read; its items are stale, other teams unaffected.",
+    description: "Why this team's state could not be read.",
   }),
   items: Schema.Array(ProposalItem),
   groups: Schema.optional(Schema.Array(ProposalRunGroup)).annotate({
-    description:
-      "The same moves split by run day, today first; present when the league publishes a fantasy day.",
+    description: "The same moves split by run day, today first.",
   }),
   pendingOffers: Schema.Array(PendingTradeOffer),
 });
@@ -511,8 +556,7 @@ const ProposalSetSummary = Schema.Struct({
         description: "This team's moves in the plan, with their state and last recorded check.",
       }),
       groups: Schema.optional(Schema.Array(ProposalRunGroup)).annotate({
-        description:
-          "The same moves split by run day, today first; present when the league publishes a fantasy day.",
+        description: "The same moves split by run day, today first.",
       }),
       illegalRoster: Schema.optional(Schema.Array(ProposalIllegalRosterOccupant)).annotate({
         description:
@@ -529,8 +573,9 @@ export const ListProposalSetsInput = Schema.Struct({
   team: TeamId.annotate({
     description: "The owned team whose plans are listed.",
   }),
-  state: Schema.optional(Schema.Literals(["open", "closed"])).annotate({
-    description: "`open` lists plans with a move that has not settled; `closed` lists the rest.",
+  state: Schema.optional(Schema.Literals(["open", "closed", "scheduled"])).annotate({
+    description:
+      "`open` lists unsettled plans, `scheduled` those with a move whose run date is ahead, and `closed` the rest.",
   }),
   cursor: Schema.optional(Cursor),
   limit: Schema.optional(PageLimit),
@@ -672,7 +717,8 @@ export const ProposalItemDraft = Schema.Struct({
     Schema.withDecodingDefaultKey(Effect.succeed([])),
   ),
   fallbacks: Schema.optional(Schema.NullOr(Schema.Array(PlayerRef))).annotate({
-    description: "Other players to try in order if the first cannot be added.",
+    description:
+      "Other players to try if the first cannot be added; a claim's fallback is added with no bid.",
   }),
   drops: Schema.Array(PlayerRef).pipe(
     Schema.check(Schema.isMaxLength(10)),
@@ -697,7 +743,7 @@ export const ProposalItemDraft = Schema.Struct({
   }),
   window: Schema.optional(Schema.NullOr(Schema.String)).annotate({
     description:
-      "The date (`YYYY-MM-DD`, in the league's fantasy day) the move runs, not when it takes effect; a next_day league applies it the next day. Omit it to run on submission; a trade carries none.",
+      "The date (`YYYY-MM-DD`, league fantasy day) the move runs, not when it takes effect; a next_day league applies it the next day. Omit it to run on submission; a trade carries none.",
   }),
   reason: ProposalReason,
 });

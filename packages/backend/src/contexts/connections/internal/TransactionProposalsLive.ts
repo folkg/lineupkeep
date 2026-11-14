@@ -54,10 +54,12 @@ import type { RosterPlayerPlace } from "#contexts/connections/RosterSlots.ts";
 import type {
   PendingTradeOffer,
   ProposalBudget,
+  ProposalBudgetPeriod,
   ProposalExecutionStep,
   ProposalItem,
   ProposalItemDraft,
   ProposalItemId,
+  ProposalItemLifecycle,
   ProposalItemRefusal,
   ProposalIllegalRosterOccupant,
   ProposalItemRefused,
@@ -132,6 +134,7 @@ import {
 } from "./TransactionProposalRecord.ts";
 import { TransactionProposalRepository } from "./TransactionProposalRepository.ts";
 import type {
+  ProposalBudgetBid,
   ProposalItemChange,
   ProposalItemCommand,
   ProposalOutcomeCommand,
@@ -148,7 +151,7 @@ const withdrawInvalidDetail =
 const dismissInvalidDetail =
   "A dismissal names one plan and one to twenty-five of its moves, with an optional reason of at most 500 characters. Reload the plan and dismiss again.";
 const listInvalidDetail =
-  "A plan list names one owned team, an optional state of `open` or `closed`, an optional page cursor, and a limit from 1 to 50. Reload the team and try again.";
+  "A plan list names one owned team, an optional state of `open`, `closed`, or `scheduled`, an optional page cursor, and a limit from 1 to 50. Reload the team and try again.";
 const closedPlanDetail =
   "Every move in this plan has been executed, dismissed, or withdrawn, so the plan is closed and takes no new moves or submissions. Propose a fresh set to start a new plan.";
 const skippedMovementDetail =
@@ -252,6 +255,13 @@ type ProposalDueGroup = {
   readonly user: UserId;
   readonly set: ProposalSetId;
   readonly items: Array<ProposalItemId>;
+};
+
+type BudgetRollup = {
+  readonly season: number;
+  readonly spent: number;
+  readonly scheduled: number;
+  readonly open: number;
 };
 
 export const TransactionProposalsLive = Layer.effect(
@@ -715,17 +725,10 @@ export const TransactionProposalsLive = Layer.effect(
       for (const teamId of new Set(candidateRecords.map((entry) => entry.entry.team.id))) {
         const items = combinedByTeam.get(teamId) ?? [];
         const data = yield* loadTeamData(userId, teamsById.get(teamId), items);
-        checks.set(teamId, evaluateTeam(teamId, data, items, now));
+        checks.set(teamId, evaluateTeam(teamId, data, items, now, items));
         if (existing !== undefined) {
-          existingChecks.set(
-            teamId,
-            evaluateTeam(
-              teamId,
-              data,
-              unrunItems.filter((item) => item.team === teamId),
-              now,
-            ),
-          );
+          const unrunForTeam = unrunItems.filter((item) => item.team === teamId);
+          existingChecks.set(teamId, evaluateTeam(teamId, data, unrunForTeam, now, unrunForTeam));
         }
       }
       const changeByTeam = new Map(
@@ -895,6 +898,7 @@ export const TransactionProposalsLive = Layer.effect(
         if (team === undefined) {
           throw new Error("A stored proposal item names a team this account does not have");
         }
+        const fantasyDay = fantasyDays.get(team.provider);
         items.push({
           position: candidate.entry.index + 1,
           outcome: "accepted",
@@ -906,6 +910,7 @@ export const TransactionProposalsLive = Layer.effect(
             checks.get(record.team)?.facts,
             record.reserveMove,
             undefined,
+            fantasyDay === undefined ? undefined : fantasyDayLabel(now, fantasyDay),
           ),
         });
       }
@@ -913,12 +918,17 @@ export const TransactionProposalsLive = Layer.effect(
         refusals.length === 0
           ? ""
           : ` ${String(refusals.length)} item${refusals.length === 1 ? " could" : "s could"} not run and ${refusals.length === 1 ? "was" : "were"} not stored; each refusal gives its position, the reason, and what would make it valid.`;
+      const fallbackNote = items.some(
+        (entry) => entry.item.kind === "waiver_claim" && entry.item.fallbacks.length > 0,
+      )
+        ? " If a waiver claim does not win because its first choice is gone, the first fallback that can be added is added as a straight free-agent add in the same period. The bid applies only to the claim, never to the fallback."
+        : "";
       const detail =
         existing === undefined
           ? created
-            ? `Created proposal set ${currentSet.id} with ${String(items.length)} item${items.length === 1 ? "" : "s"}.${refusedNote} It is ready for the review screen; nothing has been sent to your league.`
-            : `This exact set was already proposed as ${currentSet.id}. The existing set is returned instead of a duplicate; nothing has been sent to your league.${refusedNote}`
-          : `Appended ${String(items.length)} item${items.length === 1 ? "" : "s"} to proposal set ${currentSet.id}.${refusedNote} The whole set was validated again and its order recomputed; nothing has been sent to your league.`;
+            ? `Created proposal set ${currentSet.id} with ${String(items.length)} item${items.length === 1 ? "" : "s"}.${refusedNote}${fallbackNote} It is ready for the review screen; nothing has been sent to your league.`
+            : `This exact set was already proposed as ${currentSet.id}. The existing set is returned instead of a duplicate; nothing has been sent to your league.${refusedNote}${fallbackNote}`
+          : `Appended ${String(items.length)} item${items.length === 1 ? "" : "s"} to proposal set ${currentSet.id}.${refusedNote}${fallbackNote} The whole set was validated again and its order recomputed; nothing has been sent to your league.`;
       yield* Effect.annotateCurrentSpan({
         "proposal.set_created": created,
         "proposal.set_extended": extended,
@@ -1003,12 +1013,26 @@ export const TransactionProposalsLive = Layer.effect(
                 .pipe(
                   Effect.mapError(() => ProposalContentInvalid.make({ detail: listInvalidDetail })),
                 );
-        const listed = yield* repository.listForTeam(userId, {
-          team: decoded.team,
-          state,
-          offset,
-          limit: decoded.limit ?? 20,
-        });
+        const fantasyDay = fantasyDaysByProvider([team.provider]).get(team.provider);
+        const today = fantasyDay === undefined ? undefined : fantasyDayLabel(now, fantasyDay);
+        const limit = decoded.limit ?? 20;
+        const listed =
+          state === "scheduled"
+            ? today === undefined
+              ? yield* ProposalContentInvalid.make({ detail: listInvalidDetail })
+              : yield* repository.listForTeam(userId, {
+                  team: decoded.team,
+                  state: "scheduled",
+                  today,
+                  offset,
+                  limit,
+                })
+            : yield* repository.listForTeam(userId, {
+                team: decoded.team,
+                state,
+                offset,
+                limit,
+              });
         if (offset > listed.total) {
           return yield* ProposalContentInvalid.make({ detail: listInvalidDetail });
         }
@@ -1018,12 +1042,10 @@ export const TransactionProposalsLive = Layer.effect(
             : undefined;
         const illegalRoster =
           teamData?.status === "ready" ? illegalRosterOf(teamData.facts) : undefined;
-        const fantasyDay = fantasyDaysByProvider([team.provider]).get(team.provider);
-        const today = fantasyDay === undefined ? undefined : fantasyDayLabel(now, fantasyDay);
         const sets = yield* Effect.forEach(listed.sets, ({ set, items }) =>
           Effect.gen(function* () {
             const views = yield* Effect.forEach(items, (item) =>
-              toItem(tokens, userId, team, item, undefined, item.reserveMove, undefined),
+              toItem(tokens, userId, team, item, undefined, item.reserveMove, undefined, today),
             );
             const groups =
               fantasyDay === undefined || today === undefined
@@ -1104,9 +1126,19 @@ export const TransactionProposalsLive = Layer.effect(
         current.push(item);
         itemsByTeam.set(item.team, current);
       }
+      const budgetBids = yield* repository.listBudgetBids(userId, loaded.set.teams);
+      const budgetByTeam = groupBidsByTeam(budgetBids);
       const checks = yield* Effect.forEach(
         [...itemsByTeam.entries()],
-        ([teamId, items]) => checkTeam(userId, teamId, teamsById.get(teamId), items, now),
+        ([teamId, items]) =>
+          checkTeam(
+            userId,
+            teamId,
+            teamsById.get(teamId),
+            items,
+            now,
+            budgetByTeam.get(teamId) ?? [],
+          ),
         { concurrency: 3 },
       );
       const changes = checks.flatMap((check) => check.changes);
@@ -1183,10 +1215,19 @@ export const TransactionProposalsLive = Layer.effect(
       const affectedTeams = [...new Set(requested.map((itemId) => byId.get(itemId)?.team))].flatMap(
         (team) => (team === undefined || (unrunByTeam.get(team)?.length ?? 0) === 0 ? [] : [team]),
       );
+      const budgetBids = yield* repository.listBudgetBids(userId, loaded.set.teams);
+      const budgetByTeam = groupBidsByTeam(budgetBids);
       const checks = yield* Effect.forEach(
         affectedTeams,
         (teamId) =>
-          checkTeam(userId, teamId, teamsById.get(teamId), unrunByTeam.get(teamId) ?? [], now),
+          checkTeam(
+            userId,
+            teamId,
+            teamsById.get(teamId),
+            unrunByTeam.get(teamId) ?? [],
+            now,
+            budgetByTeam.get(teamId) ?? [],
+          ),
         { concurrency: 3 },
       );
       const changes = checks.flatMap((check) => check.changes);
@@ -1440,9 +1481,19 @@ export const TransactionProposalsLive = Layer.effect(
         teamItems.push(current);
         itemsByTeam.set(current.team, teamItems);
       }
+      const budgetBids = yield* repository.listBudgetBids(userId, loaded.set.teams);
+      const budgetByTeam = groupBidsByTeam(budgetBids);
       const checks = yield* Effect.forEach(
         [...itemsByTeam.entries()],
-        ([teamId, items]) => checkTeam(userId, teamId, teamsById.get(teamId), items, now),
+        ([teamId, items]) =>
+          checkTeam(
+            userId,
+            teamId,
+            teamsById.get(teamId),
+            items,
+            now,
+            budgetByTeam.get(teamId) ?? [],
+          ),
         { concurrency: 3 },
       );
       const promoted = promoteFromFallbacks({
@@ -1577,22 +1628,26 @@ export const TransactionProposalsLive = Layer.effect(
             run.earlier.push(pendingEffectOf(current, change, check.facts, run.seats, "skipped"));
             continue;
           }
+          const promotedItem = promoted.promotions.get(current.id);
+          const promotedClaim = promotedItem !== undefined && current.kind === "waiver_claim";
+          const executionItem = promotedClaim
+            ? { ...current, kind: "free_agent_add" as const, bid: undefined }
+            : current;
           const execution = yield* executeItem({
             userId,
-            item: current,
+            item: executionItem,
             proposedBid: loadedById.get(current.id)?.bid,
             change,
             facts: check.facts,
             context: check.context,
           });
-          const promotedItem = promoted.promotions.get(current.id);
           outcomes.push({
             itemId: current.id,
             outcome: execution.outcome,
             detail:
               promotedItem === undefined
                 ? execution.detail
-                : promotionDetail(promotedItem, execution.detail),
+                : promotionDetail(promotedItem, promotedClaim, execution.detail),
             at: yield* DateTime.now,
             position,
             steps: execution.steps,
@@ -3259,11 +3314,13 @@ export const TransactionProposalsLive = Layer.effect(
       data: TeamData,
       items: ReadonlyArray<ProposalItemRecord>,
       at: DateTime.Utc,
+      budgetItems: ReadonlyArray<ProposalItemRecord | ProposalBudgetBid>,
     ): TeamCheck {
       if (data.status === "failed") {
         return failedCheck(teamId, items, data.detail, at);
       }
-      const budget = budgetOf(data.facts, items);
+      const today = fantasyDayLabel(at, data.context.provider.capabilities.fantasyDay);
+      const budget = budgetOf(data.facts, budgetItems, today);
       const timing = {
         rule: data.facts.league.rosterChange?.rule,
         currentDate: data.facts.league.currentDate,
@@ -3297,9 +3354,10 @@ export const TransactionProposalsLive = Layer.effect(
       team: ProposalTeamRecord | undefined,
       items: ReadonlyArray<ProposalItemRecord>,
       at: DateTime.Utc,
+      budgetItems: ReadonlyArray<ProposalItemRecord | ProposalBudgetBid>,
     ): Effect.Effect<TeamCheck> {
       return loadTeamData(userId, team, items).pipe(
-        Effect.map((data) => evaluateTeam(teamId, data, items, at)),
+        Effect.map((data) => evaluateTeam(teamId, data, items, at, budgetItems)),
       );
     }
 
@@ -3319,11 +3377,14 @@ export const TransactionProposalsLive = Layer.effect(
         }
         const facts = check.facts;
         const items = input.itemsByTeam.get(check.team) ?? [];
-        const canAdd = (key: string): boolean => {
+        const canAdd = (item: ProposalItemRecord, key: string): boolean => {
           const detail = facts.players.get(key);
+          if (detail === undefined) {
+            return false;
+          }
           return (
-            detail !== undefined &&
-            (detail.rosterStatus === "free_agent" || detail.rosterStatus === "waiver")
+            detail.rosterStatus === "free_agent" ||
+            (item.kind !== "waiver_claim" && detail.rosterStatus === "waiver")
           );
         };
         const replacements = new Map<ProposalItemId, StoredProposalPlayer>();
@@ -3339,7 +3400,9 @@ export const TransactionProposalsLive = Layer.effect(
           const gone = change.staleness.reasons.some(
             (reason) => reason.code === "player_unavailable" && reason.playerKey === first.key,
           );
-          const chosen = gone ? item.fallbacks.find((fallback) => canAdd(fallback.key)) : undefined;
+          const chosen = gone
+            ? item.fallbacks.find((fallback) => canAdd(item, fallback.key))
+            : undefined;
           if (chosen === undefined) {
             continue;
           }
@@ -3362,6 +3425,7 @@ export const TransactionProposalsLive = Layer.effect(
           },
           revised,
           input.at,
+          revised,
         );
         const adopted = [...replacements.keys()].every(
           (id) => recheck.changes.find((entry) => entry.id === id)?.staleness.status === "current",
@@ -3901,6 +3965,7 @@ function buildReview(
             check?.facts,
             check?.changes.find((change) => change.id === item.id)?.reserveMove ?? item.reserveMove,
             stepsByItem.get(item.id),
+            today,
           ),
         );
       }
@@ -4455,11 +4520,34 @@ function matchesAcceptedTrade(
   );
 }
 
+function groupBidsByTeam(
+  bids: ReadonlyArray<ProposalBudgetBid>,
+): ReadonlyMap<TeamId, ReadonlyArray<ProposalBudgetBid>> {
+  const byTeam = new Map<TeamId, Array<ProposalBudgetBid>>();
+  for (const bid of bids) {
+    const current = byTeam.get(bid.team) ?? [];
+    current.push(bid);
+    byTeam.set(bid.team, current);
+  }
+  return byTeam;
+}
+
 function budgetOf(
   facts: TeamFacts,
-  items: ReadonlyArray<ProposalItemRecord>,
+  items: ReadonlyArray<
+    | ProposalItemRecord
+    | {
+        readonly bid: number;
+        readonly state: ProposalItemState;
+        readonly window: string | undefined;
+      }
+  >,
+  today: string | undefined,
 ): ProposalBudget | undefined {
-  if (!items.some((item) => item.bid !== undefined)) {
+  const bids = items.flatMap((item) =>
+    item.bid === undefined ? [] : [{ bid: item.bid, state: item.state, window: item.window }],
+  );
+  if (bids.length === 0) {
     return undefined;
   }
   if (facts.league.usesFaab === false) {
@@ -4473,7 +4561,27 @@ function budgetOf(
         "Your league publishes no remaining FAAB balance for this team, so the bid cannot be checked against it.",
     };
   }
-  return { status: "published", remaining: own.remainingBudget };
+  let spent = 0;
+  let scheduled = 0;
+  let open = 0;
+  for (const item of bids) {
+    if (item.state === "executed" || item.state === "pending") {
+      spent += item.bid;
+      continue;
+    }
+    if (item.state !== "proposed") {
+      continue;
+    }
+    if (item.window !== undefined && (today === undefined || item.window > today)) {
+      scheduled += item.bid;
+    } else {
+      open += item.bid;
+    }
+  }
+  const periods: ReadonlyArray<BudgetRollup> = [
+    { season: facts.league.season, spent, scheduled, open },
+  ];
+  return { status: "published", remaining: own.remainingBudget, periods };
 }
 
 function currentCheck(at: DateTime.Utc): StoredProposalStaleness {
@@ -5325,6 +5433,31 @@ function isOpen(state: ProposalItemState): boolean {
   return state === "proposed";
 }
 
+function lifecycleOf(record: ProposalItemRecord, today: string | undefined): ProposalItemLifecycle {
+  if (record.state !== "proposed") {
+    return record.state;
+  }
+  if (record.staleness.status !== "current") {
+    return "stale";
+  }
+  if (record.window !== undefined && (today === undefined || record.window > today)) {
+    return "scheduled";
+  }
+  return "proposed";
+}
+
+function budgetPeriodOf(record: ProposalItemRecord, season: number): ProposalBudgetPeriod {
+  if (record.kind !== "waiver_claim" || record.bid === undefined) {
+    return { status: "none", detail: "Only a waiver claim with a FAAB bid spends a budget." };
+  }
+  const runs = record.window === undefined ? "when it is submitted" : `on ${record.window}`;
+  return {
+    status: "season",
+    season,
+    detail: `This bid spends the team's ${String(season)} season FAAB budget for the move that runs ${runs}.`,
+  };
+}
+
 function isPlayerKey(value: string | undefined): value is string {
   return value !== undefined;
 }
@@ -5351,6 +5484,7 @@ function toItem(
   facts: TeamFacts | undefined,
   repair: StoredReserveMove | undefined,
   steps: ReadonlyArray<ProposalStepRecord> | undefined,
+  today: string | undefined,
 ): Effect.Effect<ProposalItem, ProposalPersistenceFailed> {
   return Effect.gen(function* () {
     const leagueKey = team.providerLeagueKey;
@@ -5539,12 +5673,14 @@ function toItem(
       }),
       picks,
       ...(record.bid === undefined ? {} : { bid: record.bid }),
+      budgetPeriod: budgetPeriodOf(record, team.season),
       ...(record.window === undefined ? {} : { window: record.window }),
       ...(record.effectiveDate === undefined ? {} : { effectiveDate: record.effectiveDate }),
       ...(effectiveWarning === undefined ? {} : { effectiveWarning }),
       ...(record.approvedAt === undefined ? {} : { approvedAt: record.approvedAt }),
       reason: record.reason,
       state: record.state,
+      lifecycle: lifecycleOf(record, today),
       settled: isSettledItem(record),
       ...(record.state === "dismissed" && record.outcomeDetail !== undefined
         ? { outcomeDetail: record.outcomeDetail }
@@ -5652,8 +5788,15 @@ function checkOutcomeDetail(staleness: StoredProposalStaleness | undefined): str
   return [reasons, ...fixes].join(" ").slice(0, 800);
 }
 
-function promotionDetail(promotion: FallbackPromotion, detail: string | undefined): string {
-  const sentence = `First choice ${promotion.first} was gone, so ${promotion.chosen} was used.`;
+function promotionDetail(
+  promotion: FallbackPromotion,
+  claim: boolean,
+  detail: string | undefined,
+): string {
+  const used = `First choice ${promotion.first} was gone, so ${promotion.chosen} was used.`;
+  const sentence = claim
+    ? `${used} The claim did not run, so the fallback was added without a bid.`
+    : used;
   return detail === undefined ? sentence : `${sentence} ${detail}`;
 }
 

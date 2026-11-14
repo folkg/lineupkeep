@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, exists, isNotNull, isNull, lte, not } from "drizzle-orm";
+import { and, asc, count, desc, eq, exists, gt, isNotNull, isNull, lte, not } from "drizzle-orm";
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
 import { Array, Context, Crypto, DateTime, Effect, Layer, Schema } from "effect";
 
@@ -93,6 +93,13 @@ export type ProposalItemChange = {
   readonly state?: ProposalItemState;
   readonly approvedAt?: DateTime.Utc;
   readonly effectiveDate?: string;
+};
+
+export type ProposalBudgetBid = {
+  readonly team: TeamId;
+  readonly bid: number;
+  readonly state: ProposalItemState;
+  readonly window: string | undefined;
 };
 
 export type ProposalStepCommand = {
@@ -551,10 +558,12 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
         userId: UserId,
         input: {
           readonly team: TeamId;
-          readonly state: "open" | "closed";
           readonly offset: number;
           readonly limit: number;
-        },
+        } & (
+          | { readonly state: "open" | "closed" }
+          | { readonly state: "scheduled"; readonly today: string }
+        ),
       ) {
         const hasItemForTeam = exists(
           database
@@ -580,7 +589,30 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
               ),
             ),
         );
-        const stateFilter = input.state === "open" ? hasOpenItem : not(hasOpenItem);
+        const stateFilter = (() => {
+          switch (input.state) {
+            case "open":
+              return hasOpenItem;
+            case "closed":
+              return not(hasOpenItem);
+            case "scheduled":
+              return exists(
+                database
+                  .select({ id: transactionProposalItems.id })
+                  .from(transactionProposalItems)
+                  .where(
+                    and(
+                      eq(transactionProposalItems.setId, transactionProposalSets.id),
+                      eq(transactionProposalItems.userId, userId),
+                      eq(transactionProposalItems.teamId, input.team),
+                      eq(transactionProposalItems.state, "proposed"),
+                      isNotNull(transactionProposalItems.windowDate),
+                      gt(transactionProposalItems.windowDate, input.today),
+                    ),
+                  ),
+              );
+          }
+        })();
         const where = and(eq(transactionProposalSets.userId, userId), hasItemForTeam, stateFilter);
         const counted = yield* database
           .select({ total: count() })
@@ -624,6 +656,43 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
           sets: sets.map((set) => ({ set, items: itemsBySet.get(set.id) ?? [] })),
           total,
         };
+      });
+
+      const listBudgetBids = Effect.fn("TransactionProposalRepository.listBudgetBids")(function* (
+        userId: UserId,
+        teams: ReadonlyArray<TeamId>,
+      ) {
+        const teamIds = [...new Set(teams)];
+        if (!Array.isArrayNonEmpty(teamIds)) {
+          return [];
+        }
+        const rows = yield* database
+          .select({
+            team: transactionProposalItems.teamId,
+            bid: transactionProposalItems.bid,
+            state: transactionProposalItems.state,
+            window: transactionProposalItems.windowDate,
+          })
+          .from(transactionProposalItems)
+          .where(
+            and(
+              eq(transactionProposalItems.userId, userId),
+              anyOf(transactionProposalItems.teamId, teamIds),
+              isNotNull(transactionProposalItems.bid),
+            ),
+          )
+          .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
+        return yield* Effect.forEach(rows, (row) =>
+          Schema.decodeUnknownEffect(BudgetBidSelected)(row).pipe(
+            Effect.map((decoded) => ({
+              team: decoded.team,
+              bid: decoded.bid,
+              state: decoded.state,
+              window: decoded.window ?? undefined,
+            })),
+            Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })),
+          ),
+        );
       });
 
       const loadItem = Effect.fn("TransactionProposalRepository.loadItem")(function* (
@@ -1044,6 +1113,7 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
         newItemId,
         newSetId,
         load,
+        listBudgetBids,
         loadItem,
         listDue,
         listForTeam,
@@ -1213,6 +1283,13 @@ const teamColumns = {
   sport: providerTeams.sport,
   season: providerTeams.season,
 };
+
+const BudgetBidSelected = Schema.Struct({
+  team: TeamId,
+  bid: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  state: ProposalItemState,
+  window: Schema.NullOr(Schema.String),
+});
 
 const DueProposalSelected = Schema.Struct({
   item: ProposalItemId,

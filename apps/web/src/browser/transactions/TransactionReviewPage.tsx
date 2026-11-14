@@ -676,8 +676,17 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
     const names = (props.item.fallbacks ?? []).flatMap((player) =>
       player.name === undefined ? [] : [player.name],
     );
-    return names.length === 0 ? undefined : `If the first choice is gone: ${names.join(", ")}.`;
+    if (names.length === 0) {
+      return undefined;
+    }
+    return props.item.kind === "waiver_claim"
+      ? `If the claim does not win because the first choice is gone: ${names.join(", ")} is added as a straight free-agent add in the same period. Your bid applies only to the claim, never to the fallback.`
+      : `If the first choice is gone: ${names.join(", ")}.`;
   };
+  const budgetPeriodLine = (): string | undefined =>
+    props.item.budgetPeriod.status === "season"
+      ? `Spends the ${String(props.item.budgetPeriod.season)} season FAAB budget.`
+      : undefined;
   const result = (): TransactionReviewExecutionView | undefined => props.item.execution;
   const shownResult = (): TransactionReviewExecutionView | undefined => {
     const execution = result();
@@ -755,6 +764,9 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
           <Show when={props.item.state === "dismissed"}>
             <Badge tone="neutral">Dismissed</Badge>
           </Show>
+          <Show when={props.item.lifecycle === "scheduled"}>
+            <Badge tone="neutral">Scheduled</Badge>
+          </Show>
           <Show when={trade() === undefined ? result() : undefined}>
             {(execution) => (
               <Badge tone={isAttention(execution().outcome) ? "neutral" : "accent"}>
@@ -776,6 +788,14 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
         </Show>
 
         <Show when={fallbackLine()}>
+          {(line) => (
+            <Text size="caption" tone="muted">
+              {line()}
+            </Text>
+          )}
+        </Show>
+
+        <Show when={budgetPeriodLine()}>
           {(line) => (
             <Text size="caption" tone="muted">
               {line()}
@@ -1482,7 +1502,15 @@ function submissionLine(due: number, scheduled: number, next: string | undefined
 }
 
 function budgetLine(budget: NonNullable<TransactionReviewTeamView["budget"]>): string {
-  return budget.status === "published" ? `FAAB left: ${String(budget.remaining)}.` : budget.detail;
+  if (budget.status !== "published") {
+    return budget.detail;
+  }
+  const periods = budget.periods.map(
+    (period) =>
+      `In the ${String(period.season)} season: ${String(period.spent)} spent, ${String(period.scheduled)} scheduled, ${String(period.open)} open.`,
+  );
+  const rollup = periods.length === 0 ? "" : ` ${periods.join(" ")}`;
+  return `FAAB left: ${String(budget.remaining)}.${rollup}`;
 }
 
 function moveSummary(item: TransactionReviewItemView): string {
