@@ -89,6 +89,10 @@ const productionTestSeams: Record<string, Array<"exports" | "types">> = {
   "tools/local-stack/*.ts": ["exports", "types"],
   "packages/backend/src/**/*Test.ts": ["exports", "types"],
   "packages/backend/src/contexts/connections/internal/ProfessionalTeamMap.ts": ["exports", "types"],
+  "packages/backend/src/contexts/connections/internal/TransactionPlanEvaluation.ts": [
+    "exports",
+    "types",
+  ],
   "packages/backend/src/contexts/connections/internal/TransactionPlanRepository.ts": [
     "exports",
     "types",
