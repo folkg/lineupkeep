@@ -213,7 +213,7 @@ test("shows one league refusal in the review page and in the MCP result", async 
   expect(await page.content()).not.toContain("without giving a reason");
 });
 
-test("lists a team's open plans and moves a dismissed one into history", async ({
+test("shows one timeline across teams and moves a discarded move into earlier", async ({
   page,
   services,
   mcp,
@@ -264,24 +264,28 @@ test("lists a team's open plans and moves a dismissed one into history", async (
   });
   expect(proposed.isError).toBe(false);
 
-  await page.goto(`/teams/${football.id}/transactions`);
-  await expect(page.getByRole("heading", { name: "Open plans" })).toBeVisible();
+  await page.goto("/transactions");
+  await expect(page.getByRole("heading", { name: "Transactions" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
   const move = page.getByText("Drop Riverside Receiver", { exact: true });
   await expect(move).toBeVisible();
 
-  await page.locator("[data-dismiss-item]").first().click();
+  await page.getByRole("button", { name: /Discard: Drop Riverside Receiver/ }).click();
   await expect(move).toHaveCount(0);
 
-  const history = page.locator("button[aria-expanded]");
-  await expect(history).toHaveAttribute("aria-expanded", "false");
-  await history.click();
-  await expect(history).toHaveAttribute("aria-expanded", "true");
-  await expect(page.getByText("Dismissed", { exact: true })).toBeVisible();
+  const earlier = page.getByRole("button", { name: /earlier moves/u });
+  await expect(earlier).toHaveAttribute("aria-expanded", "false");
+  await earlier.click();
+  await expect(page.getByRole("button", { name: "Hide earlier moves" })).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  await expect(page.getByText("Discarded", { exact: true })).toBeVisible();
   await expect(page.getByText("Drop Riverside Receiver", { exact: true })).toBeVisible();
-  await expect(page.getByText("1 closed plan", { exact: true })).toBeVisible();
+  await expect(page.getByText("1 ended move", { exact: true })).toBeVisible();
 });
 
-test("opens a team's plans on the first visit from the team page", async ({ page, services }) => {
+test("opens the timeline on the first visit from the team page", async ({ page, services }) => {
   await signUp(page);
   await services.exercise(
     page,
@@ -293,11 +297,6 @@ test("opens a team's plans on the first visit from the team page", async ({ page
   await page.goto("/teams");
   await page.getByRole("link", { name: "Embedded Browser Team", exact: true }).click();
   await expect(page.getByRole("link", { name: "Back to teams" })).toBeVisible();
-  const teamId = new URL(page.url()).pathname.split("/").at(-1);
-  expect(teamId, "the team page URL").toBeDefined();
-  if (teamId === undefined) {
-    return;
-  }
 
   const release = Promise.withResolvers<void>();
   await page.route("**/_serverFn/**", async (route) => {
@@ -305,14 +304,18 @@ test("opens a team's plans on the first visit from the team page", async ({ page
     await route.continue();
   });
 
-  await page.getByRole("link", { name: "Transactions" }).click();
-  await page.waitForURL(`**/teams/${teamId}/transactions`);
+  await page.locator("main").getByRole("link", { name: "Transactions" }).click();
+  await page.waitForURL("**/transactions");
   await page.waitForTimeout(250);
-  await expect(page.getByRole("link", { name: "Back to teams" })).toBeVisible();
+  await expect(
+    page
+      .getByRole("navigation", { name: "Primary navigation" })
+      .getByRole("link", { name: /Transactions/u }),
+  ).toBeVisible();
   await expect(page.getByText(/Something went wrong/u)).toHaveCount(0);
 
   release.resolve();
   await page.unrouteAll({ behavior: "wait" });
 
-  await expect(page.getByRole("heading", { name: "Open plans" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
 });

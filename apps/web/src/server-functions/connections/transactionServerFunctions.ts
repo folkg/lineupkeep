@@ -5,6 +5,7 @@ import {
   ListProposalSetsInput,
   ProposalItemId,
   ProposalSetId,
+  RescheduleProposalItemsInput,
   TransactionProposals,
 } from "@lineupkeep/backend/connections/TransactionProposals";
 import { createServerFn } from "@tanstack/solid-start";
@@ -13,6 +14,7 @@ import { Effect, Schema } from "effect";
 
 import type {
   DismissTransactionProposalData,
+  RescheduleTransactionProposalData,
   TransactionProposalListData,
   TransactionReviewData,
   WithdrawTradeData,
@@ -106,7 +108,7 @@ export const submitTransactionReviewServerFn = createServerFn({ method: "POST" }
 export const listTransactionProposalSetsServerFn = createServerFn({ method: "POST" })
   .validator(
     (raw: {
-      readonly team: string;
+      readonly team?: string;
       readonly state?: "open" | "closed" | "scheduled";
       readonly cursor?: string;
       readonly limit?: number;
@@ -170,6 +172,57 @@ export const dismissTransactionProposalItemsServerFn = createServerFn({ method: 
             outcome: "dismissed",
             review: toTransactionReviewView(outcome.success),
           } satisfies DismissTransactionProposalData;
+        }),
+      (error) =>
+        error._tag === "TransactionInputInvalid"
+          ? { type: "transactions.input_invalid", outcome: "rejected" }
+          : mapTransactionReviewError(error),
+    );
+  });
+
+export const rescheduleTransactionProposalItemsServerFn = createServerFn({ method: "POST" })
+  .validator(
+    (raw: {
+      readonly set: string;
+      readonly items: ReadonlyArray<string>;
+      readonly window: string;
+    }) => Schema.decodeResult(RescheduleProposalItemsInput)(raw),
+  )
+  .handler(({ data }) => {
+    const request = getRequest();
+    return runUseCase(
+      request,
+      "transactions.reschedule",
+      (userId) =>
+        Effect.gen(function* () {
+          const input = yield* Effect.fromResult(data).pipe(
+            Effect.mapError(() => TransactionInputInvalid.make({})),
+          );
+          const proposals = yield* TransactionProposals;
+          const outcome = yield* Effect.result(proposals.rescheduleItems(userId, input));
+          if (outcome._tag === "Failure") {
+            if (outcome.failure._tag === "proposal.nothing_accepted") {
+              return {
+                status: "refused",
+                detail: outcome.failure.detail,
+                refusals: outcome.failure.refusals.map((entry) => ({
+                  reason: entry.reason,
+                  fix: entry.fix,
+                })),
+              } satisfies RescheduleTransactionProposalData;
+            }
+            return yield* outcome.failure;
+          }
+          return {
+            status: "saved",
+            set: outcome.success.set.id,
+            window: input.window,
+            saved: outcome.success.items.length,
+            refused: outcome.success.refused.map((entry) => ({
+              reason: entry.reason,
+              fix: entry.fix,
+            })),
+          } satisfies RescheduleTransactionProposalData;
         }),
       (error) =>
         error._tag === "TransactionInputInvalid"

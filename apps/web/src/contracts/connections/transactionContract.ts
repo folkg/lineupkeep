@@ -196,6 +196,7 @@ export type TransactionRunTiming = "same_day" | "next_day" | "weekly_lock" | "no
 export type TransactionRunGroupView = {
   readonly date: string;
   readonly triggerAt: string;
+  readonly timeZone: string;
   readonly effectiveRule: TransactionRunTiming;
   readonly items: ReadonlyArray<string>;
 };
@@ -313,8 +314,12 @@ export type TransactionProposalSetSummaryView = {
 
 export type TransactionProposalListData = {
   readonly status: "ok";
-  readonly team: TransactionReviewTeamView["team"];
+  readonly team?: TransactionReviewTeamView["team"];
   readonly sets: ReadonlyArray<TransactionProposalSetSummaryView>;
+  readonly counts: {
+    readonly open: number;
+    readonly ended: number;
+  };
   readonly page: {
     readonly returned: number;
     readonly complete: boolean;
@@ -325,7 +330,7 @@ export type TransactionProposalListData = {
 };
 
 export type TransactionProposalListRequest = {
-  readonly team: string;
+  readonly team?: string;
   readonly state?: "open" | "closed" | "scheduled";
   readonly cursor?: string;
   readonly limit?: number;
@@ -342,6 +347,26 @@ export type DismissTransactionProposalRequest = {
   readonly items: ReadonlyArray<string>;
   readonly reason?: string;
 };
+
+export type RescheduleTransactionProposalRequest = {
+  readonly set: string;
+  readonly items: ReadonlyArray<string>;
+  readonly window: string;
+};
+
+export type RescheduleTransactionProposalData =
+  | {
+      readonly status: "saved";
+      readonly set: string;
+      readonly window: string;
+      readonly saved: number;
+      readonly refused: ReadonlyArray<{ readonly reason: string; readonly fix: string }>;
+    }
+  | {
+      readonly status: "refused";
+      readonly detail: string;
+      readonly refusals: ReadonlyArray<{ readonly reason: string; readonly fix: string }>;
+    };
 
 export type DismissTransactionProposalData =
   | {

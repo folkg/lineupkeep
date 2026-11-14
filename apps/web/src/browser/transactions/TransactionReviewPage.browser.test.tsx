@@ -53,7 +53,7 @@ it("renders a two-team proposal, a quiet team, and one disabled action", async (
   await expect.element(page.getByText(/Checked against current state/u)).toBeVisible();
   await expect
     .element(page.getByRole("link", { name: "Transactions" }).first())
-    .toHaveAttribute("href", `/teams/${alphaId}/transactions`);
+    .toHaveAttribute("href", "/transactions");
 
   await expect
     .element(page.getByRole("heading", { name: "Teams with nothing proposed" }))
@@ -1387,12 +1387,14 @@ it("groups the review by the day each move runs and says what today's submit com
           {
             date: "2026-11-12",
             triggerAt: "2026-11-12T08:00:00.000Z",
+            timeZone: "America/Los_Angeles",
             effectiveRule: "same_day",
             items: [todayItem.id],
           },
           {
             date: "2026-11-14",
             triggerAt: "2026-11-14T08:00:00.000Z",
+            timeZone: "America/Los_Angeles",
             effectiveRule: "same_day",
             items: [laterItem.id],
           },
@@ -1428,6 +1430,7 @@ it("shows when a scheduled move takes effect beside the day it runs", async () =
           {
             date: "2026-11-14",
             triggerAt: "2026-11-14T08:00:00.000Z",
+            timeZone: "America/Los_Angeles",
             effectiveRule: "next_day",
             items: [item.id],
           },
@@ -1874,6 +1877,7 @@ function setupReviewPage(
           status: "withdrawn" as const,
           detail: "The provider confirmed the withdrawal.",
         })),
+    reschedule: () => Promise.reject(new Error("Unexpected reschedule")),
   };
   const reviewQuery = transactionQueries.review(remote, review.set.id);
   queryClient.setQueryData(reviewQuery.queryKey, review);
@@ -1902,7 +1906,7 @@ function setupReviewPage(
   });
   const teamTransactionsRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/teams/$teamId/transactions",
+    path: "/transactions",
     component: () => <p>Transactions</p>,
   });
   const teamsRoute = createRoute({

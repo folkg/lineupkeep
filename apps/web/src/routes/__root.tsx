@@ -5,7 +5,10 @@ import type { Element } from "solid-js";
 
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { themeBootstrapScript } from "#browser/app-shell/theme.ts";
+import { TransactionsNavContext } from "#browser/app-shell/transactionsNav.ts";
 import { sessionQueries } from "#browser/session/sessionQueries.ts";
+import { transactionRemote } from "#browser/transactions/transactionRemote.ts";
+import { TransactionsNavLink } from "#browser/transactions/TransactionsNavLink.tsx";
 
 import "#web/styles.css";
 
@@ -32,7 +35,13 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 });
 
 function AppRoot(): JSX.Element {
-  return <Outlet />;
+  return (
+    <TransactionsNavContext
+      value={{ render: () => <TransactionsNavLink remote={transactionRemote} /> }}
+    >
+      <Outlet />
+    </TransactionsNavContext>
+  );
 }
 
 function RootDocument(props: RootDocumentProps): JSX.Element {

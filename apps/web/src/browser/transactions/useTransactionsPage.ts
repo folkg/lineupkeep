@@ -1,240 +1,334 @@
 import { useInfiniteQuery, useMutation } from "@tanstack/solid-query";
-import { createEffect, createMemo, createSignal } from "solid-js";
+import type { MutationFunctionContext } from "@tanstack/solid-query";
+import { createMemo, createSignal } from "solid-js";
 import type { Accessor } from "solid-js";
 
 import { useSignInRecovery } from "#browser/session/signInRecovery.ts";
 import type { ActionFeedbackState, RecoveryAction } from "#browser/shared-ui/ActionFeedback.tsx";
-import type {
-  DismissTransactionProposalData,
-  DismissTransactionProposalRequest,
-  TransactionProposalItemView,
-  TransactionProposalListData,
-  TransactionProposalSetSummaryView,
-} from "#contracts/connections/transactionContract.ts";
+import { formatCalendarDate } from "#browser/shared-ui/formatTime.ts";
+import type { TransactionReviewData } from "#contracts/connections/transactionContract.ts";
 
-import { describeTransactionDismissalFailure } from "./transactionFailure";
-import { transactionMutations } from "./transactionMutations";
+import { buildTimeline, moveTotal } from "./timeline";
+import type { TimelineEarlierEntry, TimelineFutureDay, TimelineGroup } from "./timeline";
+import { moveCount } from "./transactionCopy";
+import {
+  describeTransactionDismissalFailure,
+  describeTransactionRescheduleFailure,
+  describeTransactionSubmissionFailure,
+} from "./transactionFailure";
 import { transactionQueries } from "./transactionQueries";
-import type { TransactionProposalListQueryOptions } from "./transactionQueries";
 import type { TransactionRemote } from "./transactionRemote";
 
-export const openPlansTitleId = "open-plans-title";
-
 export function useTransactionsPage(props: TransactionsPageOptions): TransactionsPageController {
-  const openQuery = (): TransactionProposalListQueryOptions =>
-    transactionQueries.list(props.remote(), { team: props.teamId(), state: "open" });
-  const historyQuery = (): TransactionProposalListQueryOptions =>
-    transactionQueries.list(props.remote(), { team: props.teamId(), state: "closed" });
-  const open = useInfiniteQuery(() => openQuery());
+  const open = useInfiniteQuery(() => transactionQueries.list(props.remote(), { state: "open" }));
   const signIn = useSignInRecovery();
-  const [historyEnabled, setHistoryEnabled] = createSignal(false);
-  const history = useInfiniteQuery(() => ({
-    ...historyQuery(),
-    enabled: historyEnabled(),
+  const [earlierEnabled, setEarlierEnabled] = createSignal(false);
+  const earlier = useInfiniteQuery(() => ({
+    ...transactionQueries.list(props.remote(), { state: "closed" }),
+    enabled: earlierEnabled(),
   }));
   const [feedback, setFeedback] = createSignal<ActionFeedbackState>();
-  const [dismissFailures, setDismissFailures] = createSignal<ReadonlyMap<string, string>>(
-    new Map(),
-  );
-  const [dismissFocus, setDismissFocus] = createSignal<DismissFocus>();
-  let dismissedLabel = "";
-  let dismissedFocusItem: string | undefined;
-  let dismissedShouldRefocus = false;
+  const [editing, setEditing] = createSignal<string>();
+  const [editingDate, setEditingDate] = createSignal("");
+  const [editingError, setEditingError] = createSignal<string>();
 
-  createEffect(
-    () => ({ request: dismissFocus(), data: open.data }),
-    ({ request }) => {
-      if (request === undefined) {
-        return;
-      }
-      const buttons = [...document.querySelectorAll<HTMLElement>("[data-dismiss-item]")];
-      const target =
-        (request.item === undefined
-          ? undefined
-          : buttons.find((button) => button.dataset["dismissItem"] === request.item)) ??
-        document.getElementById(openPlansTitleId);
-      target?.focus();
-      setDismissFocus(undefined);
-    },
+  const openSets = createMemo(() =>
+    open.isSuccess ? open.data.pages.flatMap((page) => page.sets) : [],
   );
-
-  const dismiss = useMutation(() => {
-    const options = transactionMutations.dismiss(props.remote());
-    return {
-      ...options,
-      onSuccess: (
-        data: DismissTransactionProposalData,
-        variables: DismissTransactionProposalRequest,
-        onMutateResult: unknown,
-        context: Parameters<NonNullable<typeof options.onSuccess>>[3],
-      ) => {
-        options.onSuccess?.(data, variables, onMutateResult, context);
-        if (data.outcome === "refused") {
-          setDismissFailures((current) => {
-            const next = new Map(current);
-            for (const refusal of data.refusals) {
-              next.set(refusal.item, refusal.detail);
-            }
-            return next;
-          });
-          const detail = data.refusals[0]?.detail ?? data.detail;
-          setFeedback({ type: "attention", message: `That move was not dismissed. ${detail}` });
-          return;
-        }
-        setDismissFailures((current) => {
-          const next = new Map(current);
-          for (const item of variables.items) {
-            next.delete(item);
-          }
-          return next;
-        });
-        setFeedback({
-          type: "success",
-          message: `Dismissed ${dismissedLabel === "" ? "the move" : dismissedLabel}.`,
-        });
-        if (dismissedFocusItem !== undefined || dismissedShouldRefocus) {
-          setDismissFocus({ item: dismissedFocusItem });
-        }
-        void open.refetch();
-        if (history.isFetched) {
-          void history.refetch();
-        }
-      },
-      onError: (error: Error, variables: DismissTransactionProposalRequest) => {
-        const failure = describeTransactionDismissalFailure(error);
-        setDismissFailures((current) => {
-          const next = new Map(current);
-          for (const item of variables.items) {
-            next.set(item, failure.message);
-          }
-          return next;
-        });
-        setFeedback({
-          type: "attention",
-          message: failure.message,
-          ...(failure.kind === "authentication" ? { recovery: signIn } : {}),
-        });
-        if (failure.kind === "conflict") {
-          void open.refetch();
-          if (history.isFetched) {
-            void history.refetch();
-          }
-        }
-      },
-    };
+  const earlierSets = createMemo(() =>
+    earlier.isSuccess ? earlier.data.pages.flatMap((page) => page.sets) : [],
+  );
+  const timeline = createMemo(() => buildTimeline(openSets(), earlierSets()));
+  const counts = createMemo(() => {
+    const first = open.isSuccess ? open.data.pages[0] : undefined;
+    return first?.counts ?? { open: 0, ended: 0 };
   });
 
-  const openPlans = createMemo<ReadonlyArray<TransactionProposalSetSummaryView>>(() =>
-    open.isSuccess ? open.data.pages.flatMap((page) => page.sets).filter(hasOpenItem) : [],
-  );
-  const historyPlans = createMemo<ReadonlyArray<TransactionProposalSetSummaryView>>(() =>
-    history.isSuccess ? history.data.pages.flatMap((page) => page.sets) : [],
-  );
-  const team = createMemo(() =>
-    open.isSuccess
-      ? open.data.pages[0]?.team
-      : history.isSuccess
-        ? history.data.pages[0]?.team
-        : undefined,
-  );
-  const openPage = createMemo<TransactionProposalListData["page"] | undefined>(() =>
-    open.isSuccess ? open.data.pages[open.data.pages.length - 1]?.page : undefined,
-  );
-  const historyPage = createMemo<TransactionProposalListData["page"] | undefined>(() =>
-    history.isSuccess ? history.data.pages[history.data.pages.length - 1]?.page : undefined,
-  );
+  const refresh = (): void => {
+    void open.refetch();
+    if (earlier.isFetched) {
+      void earlier.refetch();
+    }
+  };
 
-  const dismissItem = (plan: string, item: TransactionProposalItemView, label: string): void => {
-    if (dismiss.isPending) {
+  const submit = useMutation(() => ({
+    mutationKey: ["transactions", "submit"],
+    mutationFn: async (groups: ReadonlyArray<TimelineGroup>) => {
+      const results: Array<TransactionReviewData> = [];
+      for (const [set, include] of itemsBySet(groups)) {
+        results.push(await props.remote().submit({ set, include, bids: [] }));
+      }
+      return results;
+    },
+    onSuccess: (
+      results: ReadonlyArray<TransactionReviewData>,
+      groups: ReadonlyArray<TimelineGroup>,
+      _onMutateResult: unknown,
+      context: MutationFunctionContext,
+    ) => {
+      for (const result of results) {
+        void context.client.setQueryData(
+          transactionQueries.reviewKey(result.review.set.id),
+          result.review,
+        );
+      }
+      void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
+      setFeedback({ type: "success", message: submissionMessage(results, groups) });
+      refresh();
+    },
+    onError: (error: Error, _groups, _onMutateResult, context: MutationFunctionContext) => {
+      void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
+      const failure = describeTransactionSubmissionFailure(error);
+      setFeedback({
+        type: "attention",
+        message: failure.message,
+        ...(failure.kind === "authentication" ? { recovery: signIn } : {}),
+      });
+      refresh();
+    },
+  }));
+
+  const dismiss = useMutation(() => ({
+    mutationKey: ["transactions", "discard"],
+    mutationFn: (group: TimelineGroup) =>
+      props.remote().dismiss({ set: group.set, items: group.items.map((item) => item.id) }),
+    onSuccess: (
+      data: Awaited<ReturnType<TransactionRemote["dismiss"]>>,
+      group: TimelineGroup,
+      _onMutateResult: unknown,
+      context: MutationFunctionContext,
+    ) => {
+      void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
+      if (data.outcome === "refused") {
+        setFeedback({
+          type: "attention",
+          message: `That move was not discarded. ${data.detail}`,
+        });
+      } else {
+        void context.client.setQueryData(
+          transactionQueries.reviewKey(data.review.set.id),
+          data.review,
+        );
+        setFeedback({
+          type: "success",
+          message: `Discarded ${moveCount(group.items.length)}.`,
+        });
+      }
+      refresh();
+    },
+    onError: (error: Error, _group, _onMutateResult, context: MutationFunctionContext) => {
+      void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
+      const failure = describeTransactionDismissalFailure(error);
+      setFeedback({
+        type: "attention",
+        message: failure.message,
+        ...(failure.kind === "authentication" ? { recovery: signIn } : {}),
+      });
+      refresh();
+    },
+  }));
+
+  const reschedule = useMutation(() => ({
+    mutationKey: ["transactions", "reschedule"],
+    mutationFn: (input: { readonly group: TimelineGroup; readonly window: string }) =>
+      props.remote().reschedule({
+        set: input.group.set,
+        items: input.group.items.map((item) => item.id),
+        window: input.window,
+      }),
+    onSuccess: (
+      data: Awaited<ReturnType<TransactionRemote["reschedule"]>>,
+      _input,
+      _onMutateResult,
+      context: MutationFunctionContext,
+    ) => {
+      void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
+      if (data.status === "refused") {
+        setFeedback({
+          type: "attention",
+          message: `The saved moves were withdrawn, but no replacement could be saved. ${data.detail}`,
+        });
+      } else {
+        setEditing(undefined);
+        setEditingError(undefined);
+        const refused =
+          data.refused.length === 0
+            ? ""
+            : ` ${String(data.refused.length)} could not be saved, so ${
+                data.refused.length === 1 ? "that move is" : "those moves are"
+              } no longer open. ${data.refused.map((entry) => entry.reason).join(" ")}`;
+        setFeedback({
+          type: "success",
+          message: `Saved ${moveCount(data.saved)} for ${formatCalendarDate(data.window)}.${refused}`,
+        });
+      }
+      refresh();
+    },
+    onError: (error: Error, _input, _onMutateResult, context: MutationFunctionContext) => {
+      void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
+      const failure = describeTransactionRescheduleFailure(error);
+      setFeedback({
+        type: "attention",
+        message: failure.message,
+        ...(failure.kind === "authentication" ? { recovery: signIn } : {}),
+      });
+      refresh();
+    },
+  }));
+
+  const startEdit = (group: TimelineGroup): void => {
+    setFeedback(undefined);
+    setEditingError(undefined);
+    setEditing(group.key);
+    setEditingDate(group.runDate ?? "");
+  };
+
+  const cancelEdit = (): void => {
+    setEditing(undefined);
+    setEditingError(undefined);
+  };
+
+  const saveEdit = (): void => {
+    const group = timeline()
+      .future.flatMap((day) => day.groups)
+      .find((entry) => entry.key === editing());
+    if (group === undefined) {
       return;
     }
-    const buttons = [...document.querySelectorAll<HTMLElement>("[data-dismiss-item]")];
-    const index = buttons.findIndex((button) => button.dataset["dismissItem"] === item.id);
-    dismissedLabel = label;
-    dismissedShouldRefocus = index >= 0 && document.activeElement === buttons[index];
-    dismissedFocusItem = dismissedShouldRefocus
-      ? buttons[index + 1]?.dataset["dismissItem"]
-      : undefined;
-    setFeedback(undefined);
-    void dismiss.mutate({ set: plan, items: [item.id] });
-  };
-
-  const showMoreOpen = (): void => {
-    if (!open.isFetchingNextPage && open.hasNextPage) {
-      void open.fetchNextPage();
+    const date = editingDate();
+    if (group.today !== undefined && date <= group.today) {
+      setEditingError("Choose a date after today.");
+      return;
     }
-  };
-
-  const showMoreHistory = (): void => {
-    if (!history.isFetchingNextPage && history.hasNextPage) {
-      void history.fetchNextPage();
+    setEditingError(undefined);
+    if (!reschedule.isPending) {
+      void reschedule.mutate({ group, window: date });
     }
   };
 
   return {
-    team,
-    openPlans,
-    openPage,
-    hasMoreOpen: () => open.hasNextPage,
-    fetchingMoreOpen: () => open.isFetchingNextPage,
-    showMoreOpen,
-    historyEnabled,
-    toggleHistory: () => setHistoryEnabled((current) => !current),
-    historyPlans,
-    historyPage,
-    historyLoading: () => history.isPending,
-    historyFailure: () => history.error,
-    retryHistory: () => history.refetch().then(() => undefined),
-    hasMoreHistory: () => history.hasNextPage,
-    fetchingMoreHistory: () => history.isFetchingNextPage,
-    showMoreHistory,
+    today: () => timeline().today,
+    future: () => timeline().future,
+    earlier: () => timeline().earlier,
+    todayCount: () => moveTotal(timeline().today),
+    endedCount: () => counts().ended,
     isLoading: () => open.isPending,
     failure: () => open.error,
     retry: () => open.refetch().then(() => undefined),
     signIn,
-    dismissItem,
-    dismissing: () => (dismiss.isPending ? dismiss.variables?.items[0] : undefined),
-    dismissFailure: (item: string) => dismissFailures().get(item),
     feedback,
+    submitGroups: (groups: ReadonlyArray<TimelineGroup>) => {
+      if (!submit.isPending && groups.length > 0) {
+        setFeedback(undefined);
+        void submit.mutate(groups);
+      }
+    },
+    submitting: () => submit.isPending,
+    discardGroup: (group: TimelineGroup) => {
+      if (!dismiss.isPending) {
+        setFeedback(undefined);
+        void dismiss.mutate(group);
+      }
+    },
+    discarding: () => (dismiss.isPending ? dismiss.variables?.key : undefined),
+    startEdit,
+    cancelEdit,
+    saveEdit,
+    editing,
+    editingDate,
+    setEditingDate,
+    editingError,
+    saving: () => reschedule.isPending,
+    hasMoreOpen: () => open.hasNextPage,
+    fetchingMoreOpen: () => open.isFetchingNextPage,
+    showMoreOpen: () => {
+      if (!open.isFetchingNextPage && open.hasNextPage) {
+        void open.fetchNextPage();
+      }
+    },
+    earlierEnabled,
+    toggleEarlier: () => setEarlierEnabled((current) => !current),
+    earlierLoading: () => earlier.isPending,
+    earlierFailure: () => earlier.error,
+    retryEarlier: () => earlier.refetch().then(() => undefined),
+    hasMoreEarlier: () => earlier.hasNextPage,
+    fetchingMoreEarlier: () => earlier.isFetchingNextPage,
+    showMoreEarlier: () => {
+      if (!earlier.isFetchingNextPage && earlier.hasNextPage) {
+        void earlier.fetchNextPage();
+      }
+    },
   };
 }
 
-function hasOpenItem(plan: TransactionProposalSetSummaryView): boolean {
-  return plan.teams.some((team) => team.items.some((item) => !item.settled));
+function itemsBySet(
+  groups: ReadonlyArray<TimelineGroup>,
+): ReadonlyArray<readonly [string, ReadonlyArray<string>]> {
+  const bySet = new Map<string, Array<string>>();
+  for (const group of groups) {
+    const current = bySet.get(group.set) ?? [];
+    for (const item of group.items) {
+      current.push(item.id);
+    }
+    bySet.set(group.set, current);
+  }
+  return [...bySet.entries()];
 }
 
-type DismissFocus = {
-  readonly item: string | undefined;
-};
-
-type TransactionsPageOptions = {
-  readonly teamId: Accessor<string>;
-  readonly remote: Accessor<TransactionRemote>;
-};
+function submissionMessage(
+  results: ReadonlyArray<TransactionReviewData>,
+  groups: ReadonlyArray<TimelineGroup>,
+): string {
+  const sent = moveTotal(groups);
+  const scheduled = results.reduce((total, result) => total + (result.scheduled ?? 0), 0);
+  const nextRun = results.find((result) => result.nextRun !== undefined)?.nextRun;
+  if (scheduled === 0) {
+    return `Submitted ${moveCount(sent)} today.`;
+  }
+  const due = sent - scheduled;
+  const stays = scheduled === 1 ? "stays" : "stay";
+  const when = nextRun === undefined ? "a later day" : formatCalendarDate(nextRun);
+  return due === 0
+    ? `Nothing runs today. ${moveCount(scheduled)} ${stays} scheduled for ${when}.`
+    : `Submitted ${moveCount(due)} today. ${moveCount(scheduled)} ${stays} scheduled for ${when}.`;
+}
 
 export type TransactionsPageController = {
-  readonly team: Accessor<TransactionProposalListData["team"] | undefined>;
-  readonly openPlans: Accessor<ReadonlyArray<TransactionProposalSetSummaryView>>;
-  readonly openPage: Accessor<TransactionProposalListData["page"] | undefined>;
-  readonly hasMoreOpen: () => boolean;
-  readonly fetchingMoreOpen: () => boolean;
-  readonly showMoreOpen: () => void;
-  readonly historyEnabled: Accessor<boolean>;
-  readonly toggleHistory: () => void;
-  readonly historyPlans: Accessor<ReadonlyArray<TransactionProposalSetSummaryView>>;
-  readonly historyPage: Accessor<TransactionProposalListData["page"] | undefined>;
-  readonly historyLoading: () => boolean;
-  readonly historyFailure: () => Error | null;
-  readonly retryHistory: () => Promise<void>;
-  readonly hasMoreHistory: () => boolean;
-  readonly fetchingMoreHistory: () => boolean;
-  readonly showMoreHistory: () => void;
+  readonly today: Accessor<ReadonlyArray<TimelineGroup>>;
+  readonly future: Accessor<ReadonlyArray<TimelineFutureDay>>;
+  readonly earlier: Accessor<ReadonlyArray<TimelineEarlierEntry>>;
+  readonly todayCount: () => number;
+  readonly endedCount: () => number;
   readonly isLoading: () => boolean;
   readonly failure: () => Error | null;
   readonly retry: () => Promise<void>;
   readonly signIn: RecoveryAction;
-  readonly dismissItem: (plan: string, item: TransactionProposalItemView, label: string) => void;
-  readonly dismissing: Accessor<string | undefined>;
-  readonly dismissFailure: (item: string) => string | undefined;
   readonly feedback: Accessor<ActionFeedbackState | undefined>;
+  readonly submitGroups: (groups: ReadonlyArray<TimelineGroup>) => void;
+  readonly submitting: () => boolean;
+  readonly discardGroup: (group: TimelineGroup) => void;
+  readonly discarding: () => string | undefined;
+  readonly startEdit: (group: TimelineGroup) => void;
+  readonly cancelEdit: () => void;
+  readonly saveEdit: () => void;
+  readonly editing: Accessor<string | undefined>;
+  readonly editingDate: Accessor<string>;
+  readonly setEditingDate: (value: string) => void;
+  readonly editingError: Accessor<string | undefined>;
+  readonly saving: () => boolean;
+  readonly hasMoreOpen: () => boolean;
+  readonly fetchingMoreOpen: () => boolean;
+  readonly showMoreOpen: () => void;
+  readonly earlierEnabled: Accessor<boolean>;
+  readonly toggleEarlier: () => void;
+  readonly earlierLoading: () => boolean;
+  readonly earlierFailure: () => Error | null;
+  readonly retryEarlier: () => Promise<void>;
+  readonly hasMoreEarlier: () => boolean;
+  readonly fetchingMoreEarlier: () => boolean;
+  readonly showMoreEarlier: () => void;
+};
+
+type TransactionsPageOptions = {
+  readonly remote: Accessor<TransactionRemote>;
 };

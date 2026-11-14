@@ -447,6 +447,9 @@ const ProposalRunGroup = Schema.Struct({
   triggerAt: Schema.DateTimeUtc.annotate({
     description: "When that day begins in the league's day.",
   }),
+  timeZone: Schema.NonEmptyString.annotate({
+    description: "The league's time zone.",
+  }),
   effectiveRule: ProposalOrderTiming.annotate({
     description: "When the league applies these moves.",
   }),
@@ -570,8 +573,8 @@ const ProposalSetSummary = Schema.Struct({
 type ProposalSetSummary = typeof ProposalSetSummary.Type;
 
 export const ListProposalSetsInput = Schema.Struct({
-  team: TeamId.annotate({
-    description: "The owned team whose plans are listed.",
+  team: Schema.optional(TeamId).annotate({
+    description: "The owned team; omit to list every owned team.",
   }),
   state: Schema.optional(Schema.Literals(["open", "closed", "scheduled"])).annotate({
     description:
@@ -582,16 +585,28 @@ export const ListProposalSetsInput = Schema.Struct({
 });
 export type ListProposalSetsInput = typeof ListProposalSetsInput.Type;
 
+const ProposalSetListCounts = Schema.Struct({
+  open: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
+    description: "Open moves.",
+  }),
+  ended: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
+    description: "Ended moves.",
+  }),
+}).annotate({
+  description: "Move totals in scope.",
+});
+
 export const ProposalSetList = Schema.Struct({
   status: Schema.Literal("ok").annotate({
     description: "The read succeeded.",
   }),
-  team: QueryTeam.annotate({
-    description: "The team whose plans were listed.",
+  team: Schema.optional(QueryTeam).annotate({
+    description: "The listed team, when one team is listed.",
   }),
   sets: Schema.Array(ProposalSetSummary).annotate({
     description: "Plans on this page, newest change first.",
   }),
+  counts: ProposalSetListCounts,
   page: QueryPage.annotate({
     description: "How many plans this page returned, whether more remain, and the next cursor.",
   }),
@@ -851,6 +866,19 @@ export const WithdrawProposalItemsInput = Schema.Struct({
 });
 export type WithdrawProposalItemsInput = typeof WithdrawProposalItemsInput.Type;
 
+export const RescheduleProposalItemsInput = Schema.Struct({
+  set: ProposalSetId,
+  items: Schema.Array(ProposalItemId)
+    .pipe(Schema.check(Schema.isMinLength(1), Schema.isMaxLength(20)))
+    .annotate({
+      description: "The open moves to withdraw and replace together.",
+    }),
+  window: ProposalDate.annotate({
+    description: "The date the replacements run, after today in each team's league day.",
+  }),
+});
+export type RescheduleProposalItemsInput = typeof RescheduleProposalItemsInput.Type;
+
 export const DismissProposalItemsInput = Schema.Struct({
   set: ProposalSetId,
   items: Schema.Array(ProposalItemId).pipe(
@@ -945,6 +973,11 @@ export type TransactionProposalsShape = {
     userId: UserId,
     input: WithdrawProposalItemsInput,
   ) => Effect.Effect<ProposalSetReview, ProposalError>;
+
+  readonly rescheduleItems: (
+    userId: UserId,
+    input: RescheduleProposalItemsInput,
+  ) => Effect.Effect<ProposeTransactionsResult, ProposalError>;
 
   readonly dismissItems: (
     userId: UserId,

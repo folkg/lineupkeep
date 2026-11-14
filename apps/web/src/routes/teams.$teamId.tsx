@@ -1,6 +1,5 @@
 import type { JSX } from "@solidjs/web";
-import { Outlet, createFileRoute, useRouterState } from "@tanstack/solid-router";
-import { Show } from "solid-js";
+import { createFileRoute } from "@tanstack/solid-router";
 
 import { requireAuthenticatedSession } from "#browser/session/requireAuthenticatedSession.ts";
 import { sessionQueries } from "#browser/session/sessionQueries.ts";
@@ -23,23 +22,12 @@ export const Route = createFileRoute("/teams/$teamId")({
 function TeamDetailRoute(): JSX.Element {
   const context = Route.useRouteContext();
   const params = Route.useParams();
-  const showsTransactionPlans = useRouterState({
-    select: (state) =>
-      state.matches.some((match) => match.routeId === "/teams/$teamId/transactions"),
-  });
   return (
-    <Show
-      fallback={
-        <TeamDetailPage
-          teamId={params().teamId}
-          teamsQuery={() => context().teamsQuery}
-          remote={teamRemote}
-          onRefresh={() => refreshTeamLists(context().queryClient)}
-        />
-      }
-      when={showsTransactionPlans()}
-    >
-      <Outlet />
-    </Show>
+    <TeamDetailPage
+      teamId={params().teamId}
+      teamsQuery={() => context().teamsQuery}
+      remote={teamRemote}
+      onRefresh={() => refreshTeamLists(context().queryClient)}
+    />
   );
 }

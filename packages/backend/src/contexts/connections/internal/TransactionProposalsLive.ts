@@ -59,6 +59,7 @@ import type {
   ProposalItem,
   ProposalItemDraft,
   ProposalItemId,
+  ProposalItemKind,
   ProposalItemLifecycle,
   ProposalItemRefusal,
   ProposalIllegalRosterOccupant,
@@ -94,6 +95,7 @@ import {
   ProposalSetReview as ProposalSetReviewSchema,
   ProposalSubmissionInProgress,
   ProposalTeam as ProposalTeamSchema,
+  RescheduleProposalItemsInput,
   ProposalTeamNotFound,
   ProposalTradeNotFound,
   ProposalTradeNotPending,
@@ -150,8 +152,16 @@ const withdrawInvalidDetail =
   "A withdrawal names one proposal set and one to twenty of its move ids. Reload the set and withdraw again.";
 const dismissInvalidDetail =
   "A dismissal names one plan and one to twenty-five of its moves, with an optional reason of at most 500 characters. Reload the plan and dismiss again.";
+const rescheduleInvalidDetail =
+  "A reschedule names one plan, one to twenty of its open moves, and one run date. Reload the timeline and try again.";
+const rescheduleTeamsInvalidDetail =
+  "Edit one team's saved moves at a time. Reload the timeline and try again.";
+const rescheduleTradeDetail =
+  "A trade cannot be saved for a date, because the other manager decides when it runs.";
 const listInvalidDetail =
-  "A plan list names one owned team, an optional state of `open`, `closed`, or `scheduled`, an optional page cursor, and a limit from 1 to 50. Reload the team and try again.";
+  "A plan list names an optional owned team, an optional state of `open`, `closed`, or `scheduled`, an optional page cursor, and a limit from 1 to 50. A scheduled list names one team. Reload and try again.";
+const listScheduledNeedsTeamDetail =
+  "A scheduled list names one owned team, because each league keeps its own day. Read open or closed plans across every team, or name one team for scheduled moves.";
 const closedPlanDetail =
   "Every move in this plan has been executed, dismissed, or withdrawn, so the plan is closed and takes no new moves or submissions. Propose a fresh set to start a new plan.";
 const skippedMovementDetail =
@@ -974,18 +984,28 @@ export const TransactionProposalsLive = Layer.effect(
           Effect.mapError(() => ProposalContentInvalid.make({ detail: listInvalidDetail })),
         );
         const state = decoded.state ?? "open";
-        const teams = yield* repository.loadTeams(userId, [decoded.team]);
-        const team = teams[0];
-        if (team === undefined) {
+        const teams =
+          decoded.team === undefined
+            ? yield* repository.listTeams(userId)
+            : yield* repository.loadTeams(userId, [decoded.team]);
+        const requested = decoded.team === undefined ? undefined : teams[0];
+        if (decoded.team !== undefined && requested === undefined) {
           return yield* ProposalTeamNotFound.make({ team: decoded.team });
         }
+        const teamsById = new Map(teams.map((team) => [team.id, team] as const));
+        const now = yield* DateTime.now;
+        const fantasyDays = fantasyDaysOf(teams);
+        const todayOf = (team: ProposalTeamRecord): string | undefined => {
+          const fantasyDay = fantasyDays.get(team.provider);
+          return fantasyDay === undefined ? undefined : fantasyDayLabel(now, fantasyDay);
+        };
         const fingerprintValue = yield* crypto
           .digest(
             "SHA-256",
             new TextEncoder().encode(
               [
                 "list_proposal_sets",
-                `team=${decoded.team}`,
+                `team=${decoded.team ?? "*"}`,
                 `state=${state}`,
                 "order=updatedAt,id",
               ].join("|"),
@@ -999,7 +1019,6 @@ export const TransactionProposalsLive = Layer.effect(
             ),
             Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })),
           );
-        const now = yield* DateTime.now;
         const offset =
           decoded.cursor === undefined
             ? 0
@@ -1013,51 +1032,79 @@ export const TransactionProposalsLive = Layer.effect(
                 .pipe(
                   Effect.mapError(() => ProposalContentInvalid.make({ detail: listInvalidDetail })),
                 );
-        const fantasyDay = fantasyDaysByProvider([team.provider]).get(team.provider);
-        const today = fantasyDay === undefined ? undefined : fantasyDayLabel(now, fantasyDay);
         const limit = decoded.limit ?? 20;
         const listed =
           state === "scheduled"
-            ? today === undefined
-              ? yield* ProposalContentInvalid.make({ detail: listInvalidDetail })
-              : yield* repository.listForTeam(userId, {
-                  team: decoded.team,
-                  state: "scheduled",
-                  today,
-                  offset,
-                  limit,
-                })
-            : yield* repository.listForTeam(userId, {
-                team: decoded.team,
+            ? (() => {
+                const today = requested === undefined ? undefined : todayOf(requested);
+                return requested === undefined || today === undefined
+                  ? Effect.fail(
+                      ProposalContentInvalid.make({ detail: listScheduledNeedsTeamDetail }),
+                    )
+                  : repository.listForScope(userId, {
+                      team: requested.id,
+                      state: "scheduled",
+                      today,
+                      offset,
+                      limit,
+                    });
+              })()
+            : repository.listForScope(userId, {
+                ...(requested === undefined ? {} : { team: requested.id }),
                 state,
                 offset,
                 limit,
               });
-        if (offset > listed.total) {
+        const page = yield* listed;
+        if (offset > page.total) {
           return yield* ProposalContentInvalid.make({ detail: listInvalidDetail });
         }
         const teamData =
-          state === "open" && listed.sets.length > 0
-            ? yield* loadTeamData(userId, team, [])
+          state === "open" && requested !== undefined && page.sets.length > 0
+            ? yield* loadTeamData(userId, requested, [])
             : undefined;
         const illegalRoster =
           teamData?.status === "ready" ? illegalRosterOf(teamData.facts) : undefined;
-        const sets = yield* Effect.forEach(listed.sets, ({ set, items }) =>
+        const sets = yield* Effect.forEach(page.sets, ({ set, items }) =>
           Effect.gen(function* () {
-            const views = yield* Effect.forEach(items, (item) =>
-              toItem(tokens, userId, team, item, undefined, item.reserveMove, undefined, today),
-            );
-            const groups =
-              fantasyDay === undefined || today === undefined
-                ? undefined
-                : proposalRunDayGroups({
-                    items: views,
-                    today,
-                    effectiveRule:
-                      set.orders.find((entry) => entry.team === team.id)?.order.timing ??
-                      "not_published",
-                    fantasyDay,
-                  }).map((group) => ({ ...group, items: group.items.map((item) => item.id) }));
+            const itemsByTeam = new Map<TeamId, Array<ProposalItemRecord>>();
+            for (const item of items) {
+              const current = itemsByTeam.get(item.team) ?? [];
+              current.push(item);
+              itemsByTeam.set(item.team, current);
+            }
+            const entries = [];
+            for (const [teamId, teamItems] of itemsByTeam) {
+              const team = teamsById.get(teamId);
+              if (team === undefined) {
+                continue;
+              }
+              const fantasyDay = fantasyDays.get(team.provider);
+              const today = todayOf(team);
+              const views = yield* Effect.forEach(teamItems, (item) =>
+                toItem(tokens, userId, team, item, undefined, item.reserveMove, undefined, today),
+              );
+              const groups =
+                fantasyDay === undefined || today === undefined
+                  ? undefined
+                  : proposalRunDayGroups({
+                      items: views,
+                      today,
+                      effectiveRule:
+                        set.orders.find((entry) => entry.team === team.id)?.order.timing ??
+                        "not_published",
+                      fantasyDay,
+                    }).map((group) => ({ ...group, items: group.items.map((item) => item.id) }));
+              entries.push({
+                team: teamView(team),
+                ...(today === undefined ? {} : { today }),
+                items: views,
+                ...(groups === undefined ? {} : { groups }),
+                ...(illegalRoster === undefined || requested?.id !== teamId
+                  ? {}
+                  : { illegalRoster }),
+              });
+            }
             return {
               id: set.id,
               proposedBy: set.proposedBy,
@@ -1065,20 +1112,12 @@ export const TransactionProposalsLive = Layer.effect(
               updatedAt: set.updatedAt,
               closed: state === "closed",
               reviewPath: reviewPath(set.id),
-              teams: [
-                {
-                  team: teamView(team),
-                  ...(today === undefined ? {} : { today }),
-                  items: views,
-                  ...(groups === undefined ? {} : { groups }),
-                  ...(illegalRoster === undefined ? {} : { illegalRoster }),
-                },
-              ],
+              teams: entries,
             };
           }),
         );
         const returned = sets.length;
-        const remaining = Math.max(0, listed.total - offset - returned);
+        const remaining = Math.max(0, page.total - offset - returned);
         const next =
           remaining === 0
             ? undefined
@@ -1090,14 +1129,15 @@ export const TransactionProposalsLive = Layer.effect(
               });
         return yield* Schema.decodeEffect(ProposalSetListSchema)({
           status: "ok",
-          team: teamView(team),
+          ...(requested === undefined ? {} : { team: teamView(requested) }),
           sets,
+          counts: page.counts,
           page: {
             returned,
             complete: remaining === 0,
             remaining,
             ...(next === undefined ? {} : { next }),
-            total: listed.total,
+            total: page.total,
           },
         }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
       },
@@ -1275,6 +1315,125 @@ export const TransactionProposalsLive = Layer.effect(
         undefined,
         tradeProposalsOf(teams),
         fantasyDaysOf(teams),
+      );
+    });
+
+    const rescheduleItems: TransactionProposals["Service"]["rescheduleItems"] = Effect.fn(
+      "TransactionProposals.rescheduleItems",
+    )(function* (userId: UserId, input) {
+      const decoded = yield* Schema.decodeEffect(RescheduleProposalItemsInput)(input).pipe(
+        Effect.mapError(() => ProposalContentInvalid.make({ detail: rescheduleInvalidDetail })),
+      );
+      const now = yield* DateTime.now;
+      const loaded = yield* repository.load(userId, decoded.set);
+      if (loaded === undefined) {
+        return yield* ProposalSetNotFound.make({ set: decoded.set });
+      }
+      if (loaded.submissions.some((submission) => submission.completedAt === undefined)) {
+        return yield* ProposalSubmissionInProgress.make({ set: loaded.set.id });
+      }
+      const requested = [...new Set(decoded.items)];
+      const byId = new Map(loaded.items.map((item) => [item.id, item] as const));
+      const selected = requested.flatMap((id) => {
+        const item = byId.get(id);
+        return item === undefined ? [] : [item];
+      });
+      if (selected.length !== requested.length) {
+        return yield* ProposalContentInvalid.make({ detail: rescheduleInvalidDetail });
+      }
+      const notOpen = selected.flatMap((item) =>
+        item.state === "proposed" ? [] : [withdrawalRefusal(item.id, item.state)],
+      );
+      if (notOpen.length > 0) {
+        return yield* ProposalItemsNotOpen.make({
+          items: notOpen,
+          detail:
+            "Nothing changed. Only an open saved move can be edited; reload the timeline and try again.",
+        });
+      }
+      const teams = yield* repository.loadTeams(userId, loaded.set.teams);
+      const teamsById = new Map(teams.map((team) => [team.id, team] as const));
+      const fantasyDays = fantasyDaysOf(teams);
+      const teamIds = [...new Set(selected.map((item) => item.team))];
+      const teamId = teamIds[0];
+      if (teamId === undefined || teamIds.length > 1) {
+        return yield* ProposalContentInvalid.make({ detail: rescheduleTeamsInvalidDetail });
+      }
+      const team = teamsById.get(teamId);
+      if (team === undefined) {
+        return yield* ProposalTeamNotFound.make({ team: teamId });
+      }
+      for (const item of selected) {
+        if (item.picks.length > 0 || item.counterpartyKey !== undefined || item.kind === "trade") {
+          return yield* ProposalContentInvalid.make({ detail: rescheduleTradeDetail });
+        }
+        const problem = windowProblem(
+          0,
+          { kind: item.kind, window: decoded.window },
+          team,
+          fantasyDays,
+          now,
+          { afterToday: true },
+        );
+        if (problem !== undefined) {
+          return yield* ProposalContentInvalid.make({ detail: problem.detail });
+        }
+      }
+      const sorted = [...selected].sort((left, right) => left.position - right.position);
+      const playerKeys = [
+        ...new Set(
+          sorted.flatMap((item) => [
+            ...item.adds.map((player) => player.key),
+            ...item.fallbacks.map((player) => player.key),
+            ...item.drops.map((player) => player.key),
+            ...(item.intent?.player === undefined ? [] : [item.intent.player.key]),
+            ...(item.slotMove === undefined ? [] : [item.slotMove.playerKey]),
+          ]),
+        ),
+      ];
+      const refs = yield* tokens.sealPlayerRefs({
+        userId,
+        leagueKey: team.providerLeagueKey,
+        playerKeys,
+      });
+      const refIndex = new Map(playerKeys.map((key, index) => [key, index] as const));
+      const refOf = (key: string): PlayerRef => {
+        const index = refIndex.get(key);
+        if (index === undefined) {
+          throw new Error("A rescheduled move lost its player reference");
+        }
+        return Array.getUnsafe(refs, index);
+      };
+      const drafts = sorted.map((item): ProposalItemDraft => {
+        const slotMove = item.slotMove;
+        return {
+          team: item.team,
+          kind: item.kind,
+          adds: item.adds.map((player) => refOf(player.key)),
+          ...(item.fallbacks.length === 0
+            ? {}
+            : { fallbacks: item.fallbacks.map((player) => refOf(player.key)) }),
+          drops: item.drops.map((player) => refOf(player.key)),
+          ...(item.bid === undefined ? {} : { bid: item.bid }),
+          ...(slotMove === undefined
+            ? {}
+            : { slotMove: { player: refOf(slotMove.playerKey), toSlot: slotMove.toSlot } }),
+          ...(item.intent?.player === undefined ? {} : { player: refOf(item.intent.player.key) }),
+          ...(item.intent?.kind === "add" ? { to: item.intent.to ?? "active" } : {}),
+          window: decoded.window,
+          reason: item.reason,
+        };
+      });
+      const withdrawn = yield* withdrawItems(userId, { set: loaded.set.id, items: requested });
+      const target = withdrawn.set.closed ? null : loaded.set.id;
+      yield* Effect.annotateCurrentSpan({
+        "proposal.items_rescheduled": drafts.length,
+        "proposal.set_reopened": target !== null,
+      });
+      return yield* propose(
+        userId,
+        { kind: "user", reference: "app", surface: "app" },
+        { set: target, items: drafts },
       );
     });
 
@@ -2712,6 +2871,7 @@ export const TransactionProposalsLive = Layer.effect(
       propose,
       revalidate,
       withdrawItems,
+      rescheduleItems,
       dismissItems,
       read,
       list,
@@ -5171,10 +5331,11 @@ function refusedItem(
 
 function windowProblem(
   index: number,
-  draft: ProposalItemDraft,
+  draft: { readonly kind: ProposalItemKind; readonly window?: string | null },
   team: ProposalTeamRecord,
   fantasyDays: ReadonlyMap<ProposalTeamRecord["provider"], ProviderFantasyDay>,
   at: DateTime.Utc,
+  options: { readonly afterToday?: boolean } = {},
 ):
   | { readonly refusal: ProposalItemRefusal; readonly detail: string; readonly fix: string }
   | undefined {
@@ -5207,11 +5368,17 @@ function windowProblem(
     };
   }
   const today = fantasyDayLabel(at, fantasyDay);
-  if (date < today) {
+  if (date < today || (options.afterToday === true && date === today)) {
     return {
       refusal: "window_past",
-      detail: `Item ${position} names ${windowDate}, which is before today, ${today}, in this league's fantasy day.`,
-      fix: "Name today's date or a later one, or leave the window out to run the move when the plan is submitted.",
+      detail:
+        options.afterToday === true
+          ? `Item ${position} names ${windowDate}, which is not after today, ${today}, in this league's fantasy day.`
+          : `Item ${position} names ${windowDate}, which is before today, ${today}, in this league's fantasy day.`,
+      fix:
+        options.afterToday === true
+          ? "Name a date after today in this league's day, or leave the move as it is."
+          : "Name today's date or a later one, or leave the window out to run the move when the plan is submitted.",
     };
   }
   return undefined;

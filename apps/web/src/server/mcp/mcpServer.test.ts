@@ -946,9 +946,10 @@ it("proposes a transaction set under the review scope and returns the review lin
         teams: [{ team: listedTeam, items: [failedItem] }],
       },
     ],
+    counts: { open: 1, ended: 0 },
     page: { returned: 1, complete: true, remaining: 0, total: 1 },
   };
-  const listedInputs: Array<{ readonly team: string; readonly state?: string }> = [];
+  const listedInputs: Array<{ readonly team?: string; readonly state?: string }> = [];
   const proposed: Array<{ userId: string; proposer: unknown }> = [];
   let revalidations = 0;
   const proposals: TransactionProposalsShape = {
@@ -997,6 +998,7 @@ it("proposes a transaction set under the review scope and returns the review lin
           detail: "Nothing was withdrawn. Fix the refused moves and withdraw again.",
         }),
       ),
+    rescheduleItems: () => Effect.die(new Error("reschedule is not used here")),
     readPendingOffers: () => Effect.die(new Error("pending offers are not read here")),
   };
   const services = Layer.mergeAll(
@@ -1651,6 +1653,7 @@ const unavailableProposals: TransactionProposalsShape = {
   propose: () => Effect.die(new Error("proposals unavailable")),
   revalidate: () => Effect.die(new Error("proposals unavailable")),
   withdrawItems: () => Effect.die(new Error("proposals unavailable")),
+  rescheduleItems: () => Effect.die(new Error("proposals unavailable")),
   dismissItems: () => Effect.die(new Error("proposals unavailable")),
   read: () => Effect.die(new Error("proposals unavailable")),
   list: () => Effect.die(new Error("proposals unavailable")),

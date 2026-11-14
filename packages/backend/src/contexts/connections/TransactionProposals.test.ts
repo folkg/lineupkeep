@@ -6008,6 +6008,186 @@ it.effect("lists a two-team plan under each team with only its own summary", () 
   }).pipe(Effect.provide(TestLayer)),
 );
 
+it.effect("lists every owned team's open moves in one page with run days and counts", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seedTwoTeams(fake);
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const blueLine = teamId(seeded, "nhl.l.1.t.2");
+    const created = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          window: "2026-11-14",
+          reason: "Drop the red center later.",
+        },
+        {
+          team: blueLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          window: "2026-11-14",
+          reason: "Drop the blue center later.",
+        },
+      ],
+    });
+
+    const listed = yield* proposals.list(owner, { state: "open", limit: 50 });
+    assert.isUndefined(listed.team);
+    assert.strictEqual(listed.sets.length, 1);
+    const summary = Array.getUnsafe(listed.sets, 0);
+    assert.strictEqual(summary.id, created.set.id);
+    assert.deepStrictEqual(
+      summary.teams.map((entry) => entry.team.id).sort(),
+      [redLine, blueLine].sort(),
+    );
+    for (const entry of summary.teams) {
+      assert.strictEqual(entry.today, "2026-10-31");
+      const group = Array.getUnsafe(entry.groups ?? [], 0);
+      assert.strictEqual(group.date, "2026-11-14");
+      assert.strictEqual(group.timeZone, "America/Los_Angeles");
+      assert.strictEqual(group.effectiveRule, "not_published");
+      assert.deepStrictEqual(
+        group.items,
+        entry.items.map((item) => item.id),
+      );
+    }
+    assert.deepStrictEqual(listed.counts, { open: 2, ended: 0 });
+    assert.strictEqual(listed.page.total, 1);
+
+    const oneTeam = yield* proposals.list(owner, { team: redLine });
+    assert.strictEqual(oneTeam.team?.id, redLine);
+    assert.strictEqual(Array.getUnsafe(oneTeam.sets, 0).teams.length, 1);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("lists an empty timeline before any team is linked", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const listed = yield* proposals.list(owner, { state: "open", limit: 1 });
+    assert.isUndefined(listed.team);
+    assert.deepStrictEqual(listed.sets, []);
+    assert.deepStrictEqual(listed.counts, { open: 0, ended: 0 });
+    assert.strictEqual(listed.page.total, 0);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("edits saved moves by withdrawing them and proposing their replacements", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      roster: rosterFixture(["nhl.p.90001", "nhl.p.90002", "nhl.p.90003"]),
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const created = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          window: "2026-11-14",
+          reason: "Drop the first center later.",
+        },
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          window: "2026-11-14",
+          reason: "Drop the second center later.",
+        },
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90003"]),
+          window: "2026-11-14",
+          reason: "Drop the third center later.",
+        },
+      ],
+    });
+    const original = yield* proposals.read(owner, { set: created.set.id });
+    const editing = itemsOf(original).slice(0, 2);
+
+    const result = yield* proposals.rescheduleItems(owner, {
+      set: created.set.id,
+      items: editing.map((item) => item.id),
+      window: "2026-11-20",
+    });
+    assert.strictEqual(result.set.id, created.set.id);
+    assert.isFalse(result.set.closed);
+    assert.deepStrictEqual(
+      result.items.map((entry) => entry.item.window),
+      ["2026-11-20", "2026-11-20"],
+    );
+    assert.deepStrictEqual(result.refused, []);
+
+    const after = yield* proposals.read(owner, { set: created.set.id });
+    assert.deepStrictEqual(
+      itemsOf(after)
+        .map((item) => [item.window, item.reason])
+        .sort((left, right) =>
+          `${left[0] ?? ""}|${left[1]}`.localeCompare(`${right[0] ?? ""}|${right[1]}`),
+        ),
+      [
+        ["2026-11-14", "Drop the third center later."],
+        ["2026-11-20", "Drop the first center later."],
+        ["2026-11-20", "Drop the second center later."],
+      ],
+    );
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("proposes a replacement plan when the edited saved move was the only one", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      roster: rosterFixture(["nhl.p.90001", "nhl.p.90002"]),
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const created = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          window: "2026-11-14",
+          reason: "Drop the center later.",
+        },
+      ],
+    });
+    const original = Array.getUnsafe(
+      itemsOf(yield* proposals.read(owner, { set: created.set.id })),
+      0,
+    );
+
+    const result = yield* proposals.rescheduleItems(owner, {
+      set: created.set.id,
+      items: [original.id],
+      window: "2026-11-20",
+    });
+    assert.notStrictEqual(result.set.id, created.set.id);
+    assert.deepStrictEqual(Array.getUnsafe(result.items, 0).item.window, "2026-11-20");
+    const old = yield* proposals.read(owner, { set: created.set.id });
+    assert.isTrue(old.set.closed);
+    assert.deepStrictEqual(itemsOf(old), []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
 it.effect("returns an empty page for a quiet team and refuses another user's team", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;

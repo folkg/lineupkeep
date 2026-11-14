@@ -7,6 +7,7 @@ import type { ProviderFantasyDay } from "./Provider.ts";
 export type ProposalRunDayGroup<Item> = {
   readonly date: string;
   readonly triggerAt: DateTime.Utc;
+  readonly timeZone: string;
   readonly effectiveRule: ProposalOrderTimingRule;
   readonly items: ReadonlyArray<Item>;
 };
@@ -29,6 +30,7 @@ export function proposalRunDayGroups<Item extends { readonly window?: string }>(
     .map(([date, items]) => ({
       date,
       triggerAt: startOfFantasyDay(date, input.fantasyDay),
+      timeZone: input.fantasyDay.timeZone,
       effectiveRule: input.effectiveRule,
       items,
     }));

@@ -25,7 +25,7 @@ const authenticated: SessionView = { status: "authenticated", userId: "user-1" }
 
 const anonymous: SessionView = { status: "anonymous" };
 
-it("shows Teams and Account in the navigation and links Feedback from the footer", async () => {
+it("shows Teams, Transactions, and Account in the navigation and links Feedback from the footer", async () => {
   using _app = setupShell({ initialEntry: "/teams", session: authenticated });
 
   const navigation = page.getByRole("navigation", { name: "Primary navigation" });
@@ -35,7 +35,7 @@ it("shows Teams and Account in the navigation and links Feedback from the footer
       .getByRole("link")
       .elements()
       .map((link) => link.textContent),
-  ).toEqual(["Teams", "Account"]);
+  ).toEqual(["Teams", "Transactions", "Account"]);
   expect(navigation.getByRole("link", { name: "Connections" }).elements()).toHaveLength(0);
   expect(navigation.getByRole("link", { name: "Feedback" }).elements()).toHaveLength(0);
 

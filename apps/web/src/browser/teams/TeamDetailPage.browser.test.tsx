@@ -162,12 +162,12 @@ it("offers a way back to the teams list and shows the run time in the reader's z
   await expect.element(page.getByText(formatReaderTime(threeDaysAgo))).toBeVisible();
 });
 
-it("links to the team's transaction plans beside its other actions", async () => {
+it("links to the open moves beside its other actions", async () => {
   using _app = setupTeamDetailPage(team);
 
   await expect
     .element(page.getByRole("link", { name: "Transactions" }))
-    .toHaveAttribute("href", `/teams/${teamId}/transactions`);
+    .toHaveAttribute("href", "/transactions");
 });
 
 it("names the league context and keeps quiet states off the page", async () => {
@@ -655,7 +655,7 @@ function setupTeamDetailPage(
   });
   const transactionsRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/teams/$teamId/transactions",
+    path: "/transactions",
     component: () => <p>Transactions</p>,
   });
   const feedbackRoute = createRoute({

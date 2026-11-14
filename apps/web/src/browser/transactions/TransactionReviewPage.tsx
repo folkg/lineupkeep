@@ -534,11 +534,7 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
           id={headingId()}
           focusable
           action={
-            <TextLink
-              params={{ teamId: props.team.team.id }}
-              size="caption"
-              to="/teams/$teamId/transactions"
-            >
+            <TextLink size="caption" to="/transactions">
               Transactions
             </TextLink>
           }

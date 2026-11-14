@@ -1,6 +1,8 @@
 import type {
   DismissTransactionProposalData,
   DismissTransactionProposalRequest,
+  RescheduleTransactionProposalData,
+  RescheduleTransactionProposalRequest,
   SubmitTransactionReviewRequest,
   TransactionProposalListData,
   TransactionProposalListRequest,
@@ -13,6 +15,7 @@ import {
   dismissTransactionProposalItemsServerFn,
   listTransactionProposalSetsServerFn,
   readTransactionReviewServerFn,
+  rescheduleTransactionProposalItemsServerFn,
   submitTransactionReviewServerFn,
   withdrawTradeServerFn,
 } from "#server-functions/connections/transactionServerFunctions.ts";
@@ -40,6 +43,10 @@ export const transactionRemote: TransactionRemote = {
     withdrawTradeServerFn({ data: input, signal: options?.signal }).then((result) =>
       requireTransactionSuccess(result),
     ),
+  reschedule: (input, options) =>
+    rescheduleTransactionProposalItemsServerFn({ data: input, signal: options?.signal }).then(
+      (result) => requireTransactionSuccess(result),
+    ),
 };
 
 export type TransactionRemote = {
@@ -63,4 +70,8 @@ export type TransactionRemote = {
     input: WithdrawTradeRequest,
     options?: { readonly signal?: AbortSignal },
   ) => Promise<WithdrawTradeData>;
+  readonly reschedule: (
+    input: RescheduleTransactionProposalRequest,
+    options?: { readonly signal?: AbortSignal },
+  ) => Promise<RescheduleTransactionProposalData>;
 };

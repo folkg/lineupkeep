@@ -554,29 +554,60 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
         return { set, submissions, items, steps };
       });
 
-      const listForTeam = Effect.fn("TransactionProposalRepository.listForTeam")(function* (
+      const countItems = Effect.fn("TransactionProposalRepository.countItems")(function* (
+        userId: UserId,
+        team: TeamId | undefined,
+      ) {
+        const rows = yield* database
+          .select({ state: transactionProposalItems.state, total: count() })
+          .from(transactionProposalItems)
+          .where(
+            and(
+              eq(transactionProposalItems.userId, userId),
+              team === undefined ? undefined : eq(transactionProposalItems.teamId, team),
+            ),
+          )
+          .groupBy(transactionProposalItems.state)
+          .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
+        let open = 0;
+        let ended = 0;
+        for (const row of rows) {
+          if (row.state === "proposed") {
+            open += row.total;
+          } else {
+            ended += row.total;
+          }
+        }
+        return { open, ended };
+      });
+
+      const listForScope = Effect.fn("TransactionProposalRepository.listForScope")(function* (
         userId: UserId,
         input: {
-          readonly team: TeamId;
+          readonly team?: TeamId;
           readonly offset: number;
           readonly limit: number;
         } & (
           | { readonly state: "open" | "closed" }
-          | { readonly state: "scheduled"; readonly today: string }
+          | { readonly state: "scheduled"; readonly today: string; readonly team: TeamId }
         ),
       ) {
-        const hasItemForTeam = exists(
-          database
-            .select({ id: transactionProposalItems.id })
-            .from(transactionProposalItems)
-            .where(
-              and(
-                eq(transactionProposalItems.setId, transactionProposalSets.id),
-                eq(transactionProposalItems.userId, userId),
-                eq(transactionProposalItems.teamId, input.team),
-              ),
-            ),
-        );
+        const team = input.team;
+        const hasItemForTeam =
+          team === undefined
+            ? undefined
+            : exists(
+                database
+                  .select({ id: transactionProposalItems.id })
+                  .from(transactionProposalItems)
+                  .where(
+                    and(
+                      eq(transactionProposalItems.setId, transactionProposalSets.id),
+                      eq(transactionProposalItems.userId, userId),
+                      eq(transactionProposalItems.teamId, team),
+                    ),
+                  ),
+              );
         const hasOpenItem = exists(
           database
             .select({ id: transactionProposalItems.id })
@@ -620,6 +651,7 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
           .where(where)
           .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
         const total = counted[0]?.total ?? 0;
+        const counts = yield* countItems(userId, team);
         const rows = yield* database
           .select()
           .from(transactionProposalSets)
@@ -631,7 +663,7 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
         const sets = yield* Effect.forEach(rows, decodeSet);
         const ids = sets.map((set) => set.id);
         if (!Array.isArrayNonEmpty(ids)) {
-          return { sets: [], total };
+          return { sets: [], total, counts };
         }
         const itemRows = yield* database
           .select()
@@ -640,7 +672,7 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
             and(
               eq(transactionProposalItems.userId, userId),
               anyOf(transactionProposalItems.setId, ids),
-              eq(transactionProposalItems.teamId, input.team),
+              team === undefined ? undefined : eq(transactionProposalItems.teamId, team),
             ),
           )
           .orderBy(asc(transactionProposalItems.setId), asc(transactionProposalItems.position))
@@ -655,6 +687,7 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
         return {
           sets: sets.map((set) => ({ set, items: itemsBySet.get(set.id) ?? [] })),
           total,
+          counts,
         };
       });
 
@@ -1116,7 +1149,8 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
         listBudgetBids,
         loadItem,
         listDue,
-        listForTeam,
+        listForScope,
+        countItems,
         listTeams,
         loadTeams,
         saveChecks,

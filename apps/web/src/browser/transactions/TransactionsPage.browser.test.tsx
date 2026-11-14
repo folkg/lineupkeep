@@ -14,445 +14,383 @@ import { page } from "vitest/browser";
 import "#web/styles.css";
 
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
+import { TransactionsNavContext } from "#browser/app-shell/transactionsNav.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
 import { formatCalendarDate } from "#browser/shared-ui/formatTime.ts";
 import type {
   DismissTransactionProposalData,
   DismissTransactionProposalRequest,
+  RescheduleTransactionProposalData,
+  RescheduleTransactionProposalRequest,
+  SubmitTransactionReviewRequest,
   TransactionProposalItemView,
   TransactionProposalListData,
-  TransactionProposalListRequest,
   TransactionProposalSetSummaryView,
   TransactionReviewPlayerView,
   TransactionReviewView,
   TransactionRunGroupView,
 } from "#contracts/connections/transactionContract.ts";
 
-import { TransactionReviewFailure } from "./transactionFailure";
-import { transactionQueries } from "./transactionQueries";
-import type { TransactionRemote } from "./transactionRemote";
-import { TransactionsPage } from "./TransactionsPage";
+import { transactionQueries } from "./transactionQueries.ts";
+import type { TransactionRemote } from "./transactionRemote.ts";
+import { TransactionsNavLink } from "./TransactionsNavLink.tsx";
+import { TransactionsPage } from "./TransactionsPage.tsx";
 
-const teamId = "018f79ea-7d86-7c18-9b4a-8b4d0c9165a1";
+const footballTeam = {
+  id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165a1",
+  name: "Alpha",
+  league: "nfl" as const,
+  sport: "football" as const,
+  season: 2026,
+};
+const hockeyTeam = {
+  id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165a2",
+  name: "Beta",
+  league: "nhl" as const,
+  sport: "hockey" as const,
+  season: 2026,
+};
 const openPlanId = "018f79ea-7d86-7c18-9b4a-8b4d0c9165b1";
-const secondPlanId = "018f79ea-7d86-7c18-9b4a-8b4d0c9165b2";
-const historyPlanId = "018f79ea-7d86-7c18-9b4a-8b4d0c9165b3";
+const futurePlanId = "018f79ea-7d86-7c18-9b4a-8b4d0c9165b2";
+const endedPlanId = "018f79ea-7d86-7c18-9b4a-8b4d0c9165b3";
+const today = "2026-11-13";
 const now = new Date().toISOString();
-const oneHourAgo = new Date(Date.now() - 60 * 60 * 1_000).toISOString();
 
-it("renders open moves and names the stale ones", async () => {
-  using _app = setupTransactionsPage(openList());
+it("renders today, future days, the earlier count, and the top bar count", async () => {
+  const todayItem = item({
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c1",
+    drops: [player("Riley Chen", "D", "TOR")],
+  });
+  const futureItem = item({
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c2",
+    kind: "free_agent_add",
+    adds: [player("Jordan Lee", "WR", "SEA")],
+    drops: [],
+    window: "2026-11-15",
+    effectiveDate: "2026-11-16",
+    lifecycle: "scheduled",
+    reason: "Add a receiver before the next run.",
+  });
+  const endedItem = item({
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c3",
+    drops: [player("Owen Park", "D", "TOR")],
+    state: "executed",
+    lifecycle: "executed",
+    settled: true,
+    execution: { outcome: "executed", decidedAt: now, steps: [] },
+  });
+  using _app = setupTransactionsPage({
+    open: listData(
+      [
+        plan({
+          id: openPlanId,
+          teams: [teamEntry(footballTeam, [todayItem], [day(todayItem.id, today, "same_day")])],
+        }),
+        plan({
+          id: futurePlanId,
+          teams: [
+            teamEntry(hockeyTeam, [futureItem], [day(futureItem.id, "2026-11-15", "next_day")]),
+          ],
+        }),
+      ],
+      { open: 2, ended: 1 },
+    ),
+    closed: listData([
+      plan({
+        id: endedPlanId,
+        closed: true,
+        teams: [teamEntry(footballTeam, [endedItem], undefined)],
+      }),
+    ]),
+  });
 
-  await expect.element(page.getByRole("heading", { name: "Alpha" })).toBeVisible();
-  await expect.element(page.getByRole("link", { name: "Back to Alpha" })).toBeVisible();
-  await expect.element(page.getByRole("heading", { name: "Open plans" })).toBeVisible();
+  await expect.element(page.getByRole("heading", { name: "Transactions" })).toBeVisible();
+  await expect.element(page.getByRole("heading", { name: "Today" })).toBeVisible();
+  await expect.element(page.getByRole("heading", { name: "Upcoming" })).toBeVisible();
   await expect.element(page.getByText("Drop Riley Chen", { exact: true })).toBeVisible();
   await expect.element(page.getByText("Add Jordan Lee", { exact: true })).toBeVisible();
   await expect
     .element(
-      page.getByText(
-        "Jordan Lee is already rostered in this league, so the add can no longer be made.",
-      ),
-    )
-    .toBeVisible();
-  await expect.element(page.getByText("Illegal roster position")).toBeVisible();
-  await expect
-    .element(
-      page.getByText(
-        "Morgan Reed sits in IR, but IR does not accept their positions (D). This roster is illegal, so all adds and drops are blocked until it is cured. Activate them, or drop them.",
-      ),
-    )
-    .toBeVisible();
-  await expect
-    .element(page.getByRole("link", { name: "Review and submit" }))
-    .toHaveAttribute("href", `/transactions/${openPlanId}`);
-  await expect.element(page.getByText(/Proposed by an agent from Draft Desk/u)).toBeVisible();
-});
-
-it("names the illegal roster player, the block, and the cure above the open plans", async () => {
-  using _app = setupTransactionsPage(
-    listData([
-      plan({ items: [item()], illegalRoster: [rosterOccupant()] }),
-      plan({ id: secondPlanId, items: [item()], illegalRoster: [rosterOccupant()] }),
-    ]),
-  );
-
-  await expect.element(page.getByText("Alpha roster is illegal")).toBeVisible();
-  await expect
-    .element(
-      page.getByText(
-        "Linus Ullmark is no longer injured but sits in IR+. This roster is illegal, so all adds and drops are blocked until it is cured. Activate them, and at 19 of 19 places a drop is required, or drop them.",
-      ),
-    )
-    .toBeVisible();
-  await expect.element(page.getByText("Drop Riley Chen", { exact: true }).first()).toBeVisible();
-});
-
-it("dismisses one item from the list, keeps the others, and moves focus to the next control", async () => {
-  const first = item({ id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c1" });
-  const second = item({
-    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c2",
-    drops: [player("Owen Park", "D", "TOR")],
-    reason: "Open another roster place.",
-  });
-  let current = listData([plan({ items: [first, second] })]);
-  const requests: Array<DismissTransactionProposalRequest> = [];
-  let resolveDismissal = (_data: DismissTransactionProposalData): void => {};
-  const pendingDismissal = new Promise<DismissTransactionProposalData>((resolve) => {
-    resolveDismissal = resolve;
-  });
-  using _app = setupTransactionsPage(current, undefined, {
-    list: () => Promise.resolve(current),
-    dismiss: (input) => {
-      requests.push(input);
-      return pendingDismissal;
-    },
-  });
-
-  const firstButton = page.getByRole("button", { name: /Dismiss: Drop Riley Chen/u });
-  await expect.element(firstButton).toBeVisible();
-  firstButton.element().focus();
-  await firstButton.click();
-
-  expect(requests).toStrictEqual([{ set: openPlanId, items: [first.id] }]);
-  await expect
-    .element(page.getByRole("button", { name: /Dismissing: Drop Riley Chen/u }))
-    .toHaveAttribute("aria-busy", "true");
-  await expect.element(page.getByText("Dismissing move", { exact: true })).toBeVisible();
-  await expect
-    .element(page.getByRole("button", { name: /Dismiss: Drop Owen Park/u }))
-    .not.toHaveAttribute("aria-busy");
-
-  current = listData([plan({ items: [second] })]);
-  resolveDismissal({ outcome: "dismissed", review: review(openPlanId) });
-
-  await expect.element(page.getByText("Drop Riley Chen", { exact: true })).not.toBeInTheDocument();
-  await expect.element(page.getByText("Drop Owen Park", { exact: true })).toBeVisible();
-  await expect.element(page.getByText("Dismissed Drop Riley Chen.")).toBeVisible();
-  expect(document.activeElement).toBe(
-    page.getByRole("button", { name: /Dismiss: Drop Owen Park/u }).element(),
-  );
-});
-
-it("shows a closed plan with the reason a dismissed move carries", async () => {
-  using _app = setupTransactionsPage(openList(), historyList());
-
-  await expect.element(page.getByText("Not this week.", { exact: true })).not.toBeInTheDocument();
-  await page.getByRole("button", { name: "Show history" }).click();
-
-  await expect.element(page.getByRole("heading", { name: "History" })).toBeVisible();
-  await expect.element(page.getByText("Dismissed", { exact: true })).toBeVisible();
-  await expect.element(page.getByText("Not this week.", { exact: true })).toBeVisible();
-  await expect.element(page.getByText("Dismissed from this plan")).toBeVisible();
-  await expect.element(page.getByText("Executed", { exact: true })).toBeVisible();
-  expect(page.getByRole("button", { name: /Dismiss/u }).elements()).toHaveLength(3);
-});
-
-it("groups a plan's moves by the day each one runs", async () => {
-  const todayItem = item();
-  const laterItem = item({
-    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d2",
-    window: "2026-11-20",
-    drops: [player("Owen Park", "D", "TOR")],
-  });
-  using _app = setupTransactionsPage(
-    listData([
-      plan({
-        today: "2026-11-12",
-        items: [todayItem, laterItem],
-        groups: [
-          {
-            date: "2026-11-12",
-            triggerAt: "2026-11-12T08:00:00.000Z",
-            effectiveRule: "same_day",
-            items: [todayItem.id],
-          },
-          {
-            date: "2026-11-20",
-            triggerAt: "2026-11-20T08:00:00.000Z",
-            effectiveRule: "same_day",
-            items: [laterItem.id],
-          },
-        ],
+      page.getByRole("heading", {
+        name: formatCalendarDate("2026-11-15"),
       }),
-    ]),
-  );
-
-  await expect.element(page.getByRole("heading", { name: "Runs today" })).toBeVisible();
-  await expect
-    .element(page.getByRole("heading", { name: `Runs on ${formatCalendarDate("2026-11-20")}` }))
+    )
     .toBeVisible();
-  await expect.element(page.getByText("Drop Riley Chen", { exact: true })).toBeVisible();
+  await expect
+    .element(page.getByText(new RegExp(`Runs ${formatCalendarDate("2026-11-15")} at 12:00 am`)))
+    .toBeVisible();
+  await expect
+    .element(page.getByText(`Takes effect ${formatCalendarDate("2026-11-16")}.`, { exact: true }))
+    .toBeVisible();
+  await expect
+    .element(
+      page.getByRole("link", {
+        name: /Transactions 2 open moves/,
+      }),
+    )
+    .toBeVisible();
+
+  await expect.element(page.getByText("1 ended move", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Show earlier moves" }).click();
+  await expect.element(page.getByText("Executed", { exact: true })).toBeVisible();
   await expect.element(page.getByText("Drop Owen Park", { exact: true })).toBeVisible();
 });
 
-it("shows when a plan move takes effect beside the day it runs", async () => {
-  const laterItem = item({
-    window: "2026-11-14",
-    effectiveDate: "2026-11-15",
+it("submits only today's moves and leaves the saved move alone", async () => {
+  const todayItem = item({
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c4",
+    drops: [player("Riley Chen", "D", "TOR")],
+  });
+  const futureItem = item({
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c5",
+    drops: [player("Owen Park", "D", "TOR")],
+    window: "2026-11-15",
     lifecycle: "scheduled",
   });
-  using _app = setupTransactionsPage(
-    listData([
-      plan({
-        today: "2026-11-12",
-        items: [laterItem],
-        groups: [
-          {
-            date: "2026-11-14",
-            triggerAt: "2026-11-14T08:00:00.000Z",
-            effectiveRule: "next_day",
-            items: [laterItem.id],
-          },
-        ],
-      }),
-    ]),
-  );
-
-  await expect
-    .element(page.getByRole("heading", { name: `Runs on ${formatCalendarDate("2026-11-14")}` }))
-    .toBeVisible();
-  await expect.element(page.getByText("Scheduled", { exact: true })).toBeVisible();
-  await expect
-    .element(
-      page.getByText(`Takes effect on ${formatCalendarDate("2026-11-15")}.`, { exact: true }),
-    )
-    .toBeVisible();
-});
-
-it("shows the fallback choices a plan carries", async () => {
-  using _app = setupTransactionsPage(
-    listData([
-      plan({
-        items: [
-          item({
-            kind: "free_agent_add",
-            adds: [player("Mika Olsen", "LW", "NYR", "Free agent")],
-            drops: [],
-            fallbacks: [player("Nils Berg", "RW", "BOS"), player("Owen Park", "C", "TOR")],
-          }),
-        ],
-      }),
-    ]),
-  );
-
-  await expect
-    .element(page.getByText("If the first choice is gone: Nils Berg, Owen Park.", { exact: true }))
-    .toBeVisible();
-});
-
-it("states that a claim's fallback is added without the bid", async () => {
-  using _app = setupTransactionsPage(
-    listData([
-      plan({
-        items: [
-          item({
-            kind: "waiver_claim",
-            adds: [player("Sam Rivers", "WR", "SEA")],
-            drops: [],
-            bid: 12,
-            fallbacks: [player("Nils Berg", "RW", "BOS")],
-          }),
-        ],
-      }),
-    ]),
-  );
-
-  await expect
-    .element(
-      page.getByText(
-        "If the claim does not win because the first choice is gone: Nils Berg is added as a straight free-agent add in the same period. Your bid applies only to the claim, never to the fallback.",
-        { exact: true },
-      ),
-    )
-    .toBeVisible();
-});
-
-it("shows the promotion outcome detail with the player that ran", async () => {
-  using _app = setupTransactionsPage(
-    listData([]),
-    listData([
-      plan({
-        id: historyPlanId,
-        closed: true,
-        items: [
-          item({
-            kind: "free_agent_add",
-            adds: [player("Sam Jones", "RW", "BOS")],
-            drops: [],
-            state: "executed",
-            settled: true,
-            execution: {
-              outcome: "executed",
-              detail: "First choice Mika Olsen was gone, so Sam Jones was used.",
-              decidedAt: now,
-              steps: [],
-            },
-          }),
-        ],
-      }),
-    ]),
-  );
-  await page.getByRole("button", { name: "Show history" }).click();
-
-  await expect
-    .element(
-      page.getByText("First choice Mika Olsen was gone, so Sam Jones was used.", { exact: true }),
-    )
-    .toBeVisible();
-});
-
-it("stops saying a move waits once it has run", async () => {
-  using _app = setupTransactionsPage(
-    listData([]),
-    listData([
-      plan({
-        id: historyPlanId,
-        closed: true,
-        items: [
-          item({
-            state: "executed",
-            settled: true,
-            window: "2026-11-14",
-            approvedAt: "2026-11-12T10:00:00.000Z",
-          }),
-        ],
-      }),
-    ]),
-  );
-  await page.getByRole("button", { name: "Show history" }).click();
-
-  await expect.element(page.getByText("Executed", { exact: true })).toBeVisible();
-  await expect
-    .element(page.getByText(new RegExp(`Takes effect on ${formatCalendarDate("2026-11-14")}`, "u")))
-    .not.toBeInTheDocument();
-});
-
-it("shows more plans without losing the first page", async () => {
-  const first = plan({ id: openPlanId, items: [item()] });
-  const second = plan({
-    id: secondPlanId,
-    items: [
-      item({
-        id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c3",
-        drops: [player("Casey Trail", "LW", "SEA")],
-        reason: "Open a wing place.",
-      }),
-    ],
-  });
-  const requests: Array<TransactionProposalListRequest> = [];
-  using _app = setupTransactionsPage(
-    listData([first], { returned: 1, complete: false, remaining: 1, next: "page-2", total: 2 }),
-    undefined,
-    {
-      list: (input) => {
-        requests.push(input);
-        return Promise.resolve(
-          input.cursor === "page-2"
-            ? listData([second], { returned: 1, complete: true, remaining: 0, total: 2 })
-            : listData([first], {
-                returned: 1,
-                complete: false,
-                remaining: 1,
-                next: "page-2",
-                total: 2,
-              }),
-        );
-      },
+  const data = listData([
+    plan({
+      id: openPlanId,
+      teams: [
+        teamEntry(
+          footballTeam,
+          [todayItem, futureItem],
+          [day(todayItem.id, today, "same_day"), day(futureItem.id, "2026-11-15", "same_day")],
+        ),
+      ],
+    }),
+  ]);
+  const requests: Array<SubmitTransactionReviewRequest> = [];
+  using _app = setupTransactionsPage({
+    open: data,
+    closed: listData([]),
+    submit: (input) => {
+      requests.push(input);
+      return Promise.resolve({
+        review: review(input.set),
+        scheduled: 0,
+        detail: "Submitted 1 move today.",
+      });
     },
-  );
-
-  await expect.element(page.getByText("Drop Riley Chen", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Show more" }).click();
-
-  await expect.element(page.getByText("Drop Casey Trail", { exact: true })).toBeVisible();
-  await expect.element(page.getByText("Drop Riley Chen", { exact: true })).toBeVisible();
-  expect(requests).toStrictEqual([{ team: teamId, state: "open", cursor: "page-2" }]);
-});
-
-it("keeps a move in place and names why it was not dismissed", async () => {
-  using _app = setupTransactionsPage(openList(), undefined, {
-    dismiss: () => Promise.reject(new TransactionReviewFailure("transactions.items_not_open")),
   });
 
-  await page.getByRole("button", { name: /Dismiss: Drop Riley Chen/u }).click();
+  await page.getByRole("button", { name: /Submit now: Drop Riley Chen/ }).click();
 
-  await expect.element(page.getByText("Drop Riley Chen", { exact: true })).toBeVisible();
-  await expect
-    .element(
-      page
-        .getByText(
-          "That move is no longer open, so nothing was dismissed. Reload the plan to see its state.",
-        )
-        .first(),
-    )
-    .toBeVisible();
-  await expect
-    .element(page.getByRole("button", { name: /Dismiss: Drop Riley Chen/u }))
-    .not.toHaveAttribute("aria-busy");
-  await expect.element(page.getByText("Dismissed", { exact: true })).not.toBeInTheDocument();
+  await expect.element(page.getByText("Submitted 1 move today.", { exact: true })).toBeVisible();
+  expect(requests).toStrictEqual([{ set: openPlanId, include: [todayItem.id], bids: [] }]);
+  await expect.element(page.getByText("Drop Owen Park", { exact: true })).toBeVisible();
 });
 
-it("keeps the plans and controls inside a phone viewport without sideways scroll", async () => {
+it("edits and discards a future move without losing its controls", async () => {
+  const futureItem = item({
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c6",
+    drops: [player("Riley Chen", "D", "TOR")],
+    window: "2026-11-15",
+    lifecycle: "scheduled",
+  });
+  const data = listData([
+    plan({
+      id: futurePlanId,
+      teams: [
+        teamEntry(footballTeam, [futureItem], [day(futureItem.id, "2026-11-15", "next_day")]),
+      ],
+    }),
+  ]);
+  const rescheduled: Array<RescheduleTransactionProposalRequest> = [];
+  const dismissed: Array<DismissTransactionProposalRequest> = [];
+  using _app = setupTransactionsPage({
+    open: data,
+    closed: listData([]),
+    reschedule: (input) => {
+      rescheduled.push(input);
+      return Promise.resolve({
+        status: "saved",
+        set: futurePlanId,
+        window: input.window,
+        saved: 1,
+        refused: [],
+      } satisfies RescheduleTransactionProposalData);
+    },
+    dismiss: (input) => {
+      dismissed.push(input);
+      return Promise.resolve({
+        outcome: "dismissed",
+        review: review(input.set),
+      } satisfies DismissTransactionProposalData);
+    },
+  });
+
+  const edit = page.getByRole("button", { name: /Edit: Drop Riley Chen/ });
+  const discard = page.getByRole("button", { name: /Discard: Drop Riley Chen/ });
+  await expect.element(edit).toBeVisible();
+  await expect.element(edit).not.toHaveAttribute("aria-disabled");
+  await expect.element(discard).toBeVisible();
+  await expect.element(discard).not.toHaveAttribute("aria-disabled");
+
+  await edit.click();
+  await expect
+    .element(page.getByText(/Saving withdraws this saved move and proposes a replacement/u))
+    .toBeVisible();
+  const date = page.getByLabelText("Run date");
+  await expect.element(date).toHaveValue("2026-11-15");
+  await date.fill("2026-11-17");
+  await page.getByRole("button", { name: "Save changes" }).click();
+
+  await expect
+    .element(
+      page.getByText(`Saved 1 move for ${formatCalendarDate("2026-11-17")}.`, { exact: true }),
+    )
+    .toBeVisible();
+  expect(rescheduled).toStrictEqual([
+    { set: futurePlanId, items: [futureItem.id], window: "2026-11-17" },
+  ]);
+  await expect.element(page.getByRole("button", { name: /Edit: Drop Riley Chen/ })).toBeVisible();
+
+  await page.getByRole("button", { name: /Discard: Drop Riley Chen/ }).click();
+  await expect.element(page.getByText("Discarded 1 move.", { exact: true })).toBeVisible();
+  expect(dismissed).toStrictEqual([{ set: futurePlanId, items: [futureItem.id] }]);
+  await expect.element(page.getByRole("button", { name: /Edit: Drop Riley Chen/ })).toBeVisible();
+  await expect
+    .element(page.getByRole("button", { name: /Discard: Drop Riley Chen/ }))
+    .toBeVisible();
+});
+
+it("keeps a multi move proposal under one team heading and one edit control", async () => {
+  const add = item({
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c7",
+    kind: "free_agent_add",
+    adds: [player("Jordan Lee", "WR", "SEA")],
+    drops: [],
+    window: "2026-11-15",
+    lifecycle: "scheduled",
+    reason: "Add a receiver.",
+  });
+  const drop = item({
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c8",
+    drops: [player("Riley Chen", "D", "TOR")],
+    window: "2026-11-15",
+    lifecycle: "scheduled",
+    reason: "Open the place.",
+  });
+  using _app = setupTransactionsPage({
+    open: listData([
+      plan({
+        id: futurePlanId,
+        teams: [
+          teamEntry(
+            footballTeam,
+            [add, drop],
+            [day(add.id, "2026-11-15", "next_day", [add.id, drop.id])],
+          ),
+        ],
+      }),
+    ]),
+    closed: listData([]),
+  });
+
+  await expect.element(page.getByRole("heading", { name: "Alpha" })).toBeVisible();
+  expect(page.getByRole("heading", { name: "Alpha" }).elements()).toHaveLength(1);
+  await expect.element(page.getByText("Add Jordan Lee", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Drop Riley Chen", { exact: true })).toBeVisible();
+  expect(
+    page.getByRole("button", { name: /Edit: Add Jordan Lee, Drop Riley Chen/ }).elements(),
+  ).toHaveLength(1);
+});
+
+it("keeps the timeline inside a phone viewport and shows the phone submit line", async () => {
+  const first = item({
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c9",
+    drops: [player("Riley Chen", "D", "TOR")],
+  });
+  const second = item({
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d0",
+    drops: [player("Owen Park", "D", "TOR")],
+  });
   await page.viewport(390, 844);
   try {
-    using _app = setupTransactionsPage(openList());
+    using _app = setupTransactionsPage({
+      open: listData([
+        plan({
+          id: openPlanId,
+          teams: [teamEntry(footballTeam, [first], [day(first.id, today, "same_day")])],
+        }),
+        plan({
+          id: futurePlanId,
+          teams: [teamEntry(hockeyTeam, [second], [day(second.id, today, "same_day")])],
+        }),
+      ]),
+      closed: listData([]),
+    });
 
-    await expect.element(page.getByRole("heading", { name: "Open plans" })).toBeVisible();
-    await expect.element(page.getByRole("link", { name: "Review and submit" })).toBeVisible();
-    await expect.element(page.getByRole("button", { name: "Show history" })).toBeVisible();
+    await expect.element(page.getByRole("heading", { name: "Today" })).toBeVisible();
+    await expect.element(page.getByText("2 moves today", { exact: true })).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Submit today" })).toBeVisible();
+    await expect
+      .element(page.getByRole("link", { name: /Transactions 2 open moves/ }))
+      .toBeVisible();
     const root = document.documentElement;
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
-    for (const element of [
-      page.getByRole("link", { name: "Review and submit" }).element(),
-      page.getByRole("button", { name: "Show history" }).element(),
-      page.getByRole("button", { name: /Dismiss: Drop Riley Chen/u }).element(),
-    ]) {
-      const bounds = element.getBoundingClientRect();
-      expect(bounds.left).toBeGreaterThanOrEqual(0);
-      expect(bounds.right).toBeLessThanOrEqual(root.clientWidth);
-    }
+
+    await page.viewport(1440, 900);
+    await expect
+      .element(page.getByRole("button", { name: "Submit all of today's moves" }))
+      .toBeVisible();
   } finally {
     await page.viewport(1280, 720);
   }
 });
 
 function setupTransactionsPage(
-  open: TransactionProposalListData,
-  history: TransactionProposalListData = listData([]),
-  options: {
-    readonly list?: TransactionRemote["list"];
+  options: { readonly open: TransactionProposalListData } & {
+    readonly closed: TransactionProposalListData;
+    readonly submit?: TransactionRemote["submit"];
     readonly dismiss?: TransactionRemote["dismiss"];
-  } = {},
+    readonly reschedule?: TransactionRemote["reschedule"];
+  },
 ): { [Symbol.dispose](): void } {
   const queryClient = createQueryClient();
   const remote: TransactionRemote = {
     read: () => Promise.reject(new Error("Unexpected review read")),
-    list: options.list ?? ((input) => Promise.resolve(input.state === "closed" ? history : open)),
-    submit: () => Promise.reject(new Error("Unexpected submission")),
+    list: (input) => Promise.resolve(input.state === "closed" ? options.closed : options.open),
+    submit: options.submit ?? (() => Promise.reject(new Error("Unexpected submission"))),
     dismiss:
       options.dismiss ??
       ((input) => Promise.resolve({ outcome: "dismissed", review: review(input.set) })),
-    withdraw: () => Promise.reject(new Error("Unexpected withdrawal")),
+    withdraw: () => Promise.reject(new Error("Unexpected trade withdrawal")),
+    reschedule: options.reschedule ?? (() => Promise.reject(new Error("Unexpected reschedule"))),
   };
-  const openQuery = transactionQueries.list(remote, { team: teamId, state: "open" });
-  queryClient.setQueryData(openQuery.queryKey, { pages: [open], pageParams: [undefined] });
+  const openQuery = transactionQueries.list(remote, { state: "open" });
+  queryClient.setQueryData(openQuery.queryKey, {
+    pages: [options.open],
+    pageParams: [undefined],
+  });
+  const closedQuery = transactionQueries.list(remote, { state: "closed" });
+  queryClient.setQueryData(closedQuery.queryKey, {
+    pages: [options.closed],
+    pageParams: [undefined],
+  });
   const sessionRemote: SessionRemote = {
-    load: () => Promise.resolve({ status: "anonymous" }),
+    load: () => Promise.resolve({ status: "authenticated", userId: "reader" }),
     signOut: () => Promise.resolve(),
   };
   const rootRoute = createRootRouteWithContext<RouterContext>()({
     component: () => (
       <QueryClientProvider client={queryClient}>
-        <Outlet />
+        <TransactionsNavContext value={{ render: () => <TransactionsNavLink remote={remote} /> }}>
+          <Outlet />
+        </TransactionsNavContext>
       </QueryClientProvider>
     ),
   });
   const transactionsRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/teams/$teamId/transactions",
-    component: () => <TransactionsPage teamId={teamId} remote={remote} />,
+    path: "/transactions",
+    component: () => <TransactionsPage remote={remote} />,
+  });
+  const reviewRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/transactions/$setId",
+    component: () => <p>Review</p>,
   });
   const teamRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -464,11 +402,6 @@ function setupTransactionsPage(
     path: "/teams",
     component: () => <p>Teams</p>,
   });
-  const reviewRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/transactions/$setId",
-    component: () => <p>Review</p>,
-  });
   const accountRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/account",
@@ -476,12 +409,12 @@ function setupTransactionsPage(
   });
   const router = createRouter({
     context: { queryClient, sessionRemote },
-    history: createMemoryHistory({ initialEntries: [`/teams/${teamId}/transactions`] }),
+    history: createMemoryHistory({ initialEntries: ["/transactions"] }),
     routeTree: rootRoute.addChildren([
       transactionsRoute,
+      reviewRoute,
       teamRoute,
       teamsRoute,
-      reviewRoute,
       accountRoute,
     ]),
   });
@@ -497,124 +430,48 @@ function setupTransactionsPage(
   };
 }
 
-function openList(): TransactionProposalListData {
-  return listData([
-    plan({
-      items: [
-        item(),
-        item({
-          id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c4",
-          kind: "free_agent_add",
-          adds: [player("Jordan Lee", "WR", "SEA", "Questionable")],
-          drops: [],
-          reason: "Add a receiver.",
-          staleness: {
-            status: "stale",
-            checkedAt: now,
-            reasons: [
-              {
-                code: "player_unavailable",
-                detail:
-                  "Jordan Lee is already rostered in this league, so the add can no longer be made.",
-              },
-            ],
-          },
-        }),
-        item({
-          id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c5",
-          drops: [player("Morgan Reed", "D", "TOR")],
-          reason: "Drop the illegal defenseman.",
-          staleness: {
-            status: "illegal",
-            checkedAt: now,
-            reasons: [
-              {
-                code: "slot_illegal",
-                detail:
-                  "Morgan Reed sits in IR, but IR does not accept their positions (D). This roster is illegal, so all adds and drops are blocked until it is cured. Activate them, or drop them.",
-              },
-            ],
-          },
-        }),
-      ],
-    }),
-  ]);
-}
-
-function historyList(): TransactionProposalListData {
-  return listData([
-    plan({
-      id: historyPlanId,
-      closed: true,
-      items: [
-        item({
-          id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c6",
-          state: "dismissed",
-          settled: true,
-          outcomeDetail: "Not this week.",
-        }),
-        item({
-          id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c7",
-          state: "executed",
-          settled: true,
-          drops: [player("Owen Park", "D", "TOR")],
-          reason: "Drop the open roster place.",
-        }),
-      ],
-    }),
-  ]);
-}
-
 function plan(
   overrides: Partial<TransactionProposalSetSummaryView> & {
-    readonly items?: ReadonlyArray<TransactionProposalItemView>;
-    readonly today?: string;
-    readonly groups?: ReadonlyArray<TransactionRunGroupView>;
-    readonly illegalRoster?: ReadonlyArray<{
-      readonly name: string;
-      readonly slot: string;
-      readonly detail: string;
-    }>;
-  } = {},
+    readonly teams: ReadonlyArray<TransactionProposalSetSummaryView["teams"][number]>;
+  },
 ): TransactionProposalSetSummaryView {
-  const { items = [], illegalRoster, today, groups, ...rest } = overrides;
   const id = overrides.id ?? openPlanId;
   return {
     id,
     proposedBy: { kind: "agent", surface: "mcp", client: "Draft Desk" },
-    createdAt: oneHourAgo,
+    createdAt: now,
     updatedAt: now,
     closed: false,
     reviewPath: `/transactions/${id}`,
-    teams: [
-      {
-        team: {
-          id: teamId,
-          name: "Alpha",
-          league: "nfl",
-          sport: "football",
-          season: 2026,
-        },
-        ...(today === undefined ? {} : { today }),
-        items,
-        ...(groups === undefined ? {} : { groups }),
-        ...(illegalRoster === undefined ? {} : { illegalRoster }),
-      },
-    ],
-    ...rest,
+    ...overrides,
   };
 }
 
-function rosterOccupant(): {
-  readonly name: string;
-  readonly slot: string;
-  readonly detail: string;
-} {
+function teamEntry(
+  team: TransactionProposalSetSummaryView["teams"][number]["team"],
+  items: ReadonlyArray<TransactionProposalItemView>,
+  groups: ReadonlyArray<TransactionRunGroupView> | undefined,
+): TransactionProposalSetSummaryView["teams"][number] {
   return {
-    name: "Linus Ullmark",
-    slot: "IR+",
-    detail:
-      "Linus Ullmark is no longer injured but sits in IR+. This roster is illegal, so all adds and drops are blocked until it is cured. Activate them, and at 19 of 19 places a drop is required, or drop them.",
+    team,
+    today,
+    items,
+    ...(groups === undefined ? {} : { groups }),
+  };
+}
+
+function day(
+  first: string,
+  date: string,
+  effectiveRule: TransactionRunGroupView["effectiveRule"],
+  items: ReadonlyArray<string> = [first],
+): TransactionRunGroupView {
+  return {
+    date,
+    triggerAt: `${date}T08:00:00.000Z`,
+    timeZone: "America/Los_Angeles",
+    effectiveRule,
+    items,
   };
 }
 
@@ -648,24 +505,19 @@ function item(overrides: Partial<TransactionProposalItemView> = {}): Transaction
 
 function listData(
   sets: ReadonlyArray<TransactionProposalSetSummaryView>,
-  overrides: Partial<TransactionProposalListData["page"]> = {},
+  counts?: TransactionProposalListData["counts"],
 ): TransactionProposalListData {
+  const items = sets.flatMap((set) => set.teams.flatMap((entry) => entry.items));
+  const open = items.filter((entry) => entry.state === "proposed" && !entry.settled).length;
   return {
     status: "ok",
-    team: {
-      id: teamId,
-      name: "Alpha",
-      league: "nfl",
-      sport: "football",
-      season: 2026,
-    },
     sets,
+    counts: counts ?? { open, ended: items.length - open },
     page: {
       returned: sets.length,
       complete: true,
       remaining: 0,
       total: sets.length,
-      ...overrides,
     },
   };
 }
@@ -675,7 +527,7 @@ function review(set: string): TransactionReviewView {
     set: {
       id: set,
       proposedBy: { kind: "agent", surface: "mcp" },
-      createdAt: oneHourAgo,
+      createdAt: now,
       updatedAt: now,
       submissions: [],
       closed: false,

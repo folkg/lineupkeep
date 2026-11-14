@@ -13,12 +13,12 @@ export const transactionQueries = {
       refetchOnMount: false,
     }),
   listAll: () => ["transactions", "list"] as const,
-  listKey: (team: string, state: "open" | "closed" | "scheduled" = "open") =>
-    ["transactions", "list", team, state] as const,
+  listKey: (team: string | undefined, state: "open" | "closed" | "scheduled" = "open") =>
+    ["transactions", "list", team ?? "*", state] as const,
   list: (
     remote: Pick<TransactionRemote, "list">,
     input: {
-      readonly team: string;
+      readonly team?: string;
       readonly state?: "open" | "closed" | "scheduled";
       readonly limit?: number;
     },
@@ -29,7 +29,7 @@ export const transactionQueries = {
       queryFn: ({ pageParam, signal }) =>
         remote.list(
           {
-            team: input.team,
+            ...(input.team === undefined ? {} : { team: input.team }),
             state,
             ...(pageParam === undefined ? {} : { cursor: pageParam }),
             ...(input.limit === undefined ? {} : { limit: input.limit }),
@@ -42,7 +42,13 @@ export const transactionQueries = {
       refetchOnMount: false,
     });
   },
+  openCountKey: ["transactions", "open-count"] as const,
+  openCount: (remote: Pick<TransactionRemote, "list">) =>
+    queryOptions({
+      queryKey: transactionQueries.openCountKey,
+      queryFn: ({ signal }) =>
+        remote.list({ state: "open", limit: 1 }, { signal }).then((data) => data.counts.open),
+    }),
 };
 
 export type TransactionReviewQueryOptions = ReturnType<typeof transactionQueries.review>;
-export type TransactionProposalListQueryOptions = ReturnType<typeof transactionQueries.list>;

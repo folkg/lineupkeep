@@ -10,6 +10,7 @@ import { PageShell } from "#browser/shared-ui/PageShell.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
 
 import { ThemeProvider } from "./ThemeProvider";
+import { useTransactionsNav } from "./transactionsNav";
 import { useSessionActions } from "./useSessionActions";
 
 export function AppShell(props: AppShellProps): JSX.Element {
@@ -36,11 +37,15 @@ export function AppShell(props: AppShellProps): JSX.Element {
 
 function PrimaryNavigation(): JSX.Element {
   const session = useSessionActions();
+  const transactions = useTransactionsNav();
 
   return (
     <Show when={session.isSignedIn()}>
       <Nav label="Primary navigation">
         <NavLink to="/teams">Teams</NavLink>
+        <Show fallback={<NavLink to="/transactions">Transactions</NavLink>} when={transactions}>
+          {(nav) => nav().render()}
+        </Show>
         <NavLink to="/account">Account</NavLink>
       </Nav>
     </Show>

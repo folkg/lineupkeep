@@ -52,8 +52,9 @@ export function toTransactionReviewView(review: ProposalSetReview): TransactionR
 export function toTransactionProposalListView(list: ProposalSetList): TransactionProposalListData {
   return {
     status: "ok",
-    team: toListTeam(list.team),
+    ...(list.team === undefined ? {} : { team: toListTeam(list.team) }),
     sets: list.sets.map(toProposalSetSummaryView),
+    counts: { open: list.counts.open, ended: list.counts.ended },
     page: {
       returned: list.page.returned,
       complete: list.page.complete,
@@ -96,7 +97,9 @@ function toProposalSetSummaryView(
   };
 }
 
-function toListTeam(team: ProposalSetList["team"]): TransactionReviewTeamView["team"] {
+function toListTeam(
+  team: Exclude<ProposalSetList["team"], undefined>,
+): TransactionReviewTeamView["team"] {
   return {
     id: team.id,
     name: team.name,
@@ -187,12 +190,14 @@ function toIllegalRosterView(occupant: {
 function toRunGroupView(group: {
   readonly date: string;
   readonly triggerAt: DateTime.Utc;
+  readonly timeZone: string;
   readonly effectiveRule: TransactionRunTiming;
   readonly items: ReadonlyArray<string>;
 }): TransactionRunGroupView {
   return {
     date: group.date,
     triggerAt: DateTime.formatIso(group.triggerAt),
+    timeZone: group.timeZone,
     effectiveRule: group.effectiveRule,
     items: [...group.items],
   };

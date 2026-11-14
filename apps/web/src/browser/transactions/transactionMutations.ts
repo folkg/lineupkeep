@@ -4,6 +4,8 @@ import type { MutationFunctionContext } from "@tanstack/solid-query";
 import type {
   DismissTransactionProposalData,
   DismissTransactionProposalRequest,
+  RescheduleTransactionProposalData,
+  RescheduleTransactionProposalRequest,
   SubmitTransactionReviewRequest,
   TransactionReviewData,
   WithdrawTradeData,
@@ -38,6 +40,26 @@ export const transactionMutations = {
             data.review,
           );
           void context.client.invalidateQueries({
+            queryKey: transactionQueries.all(),
+            refetchType: "none",
+          });
+        }
+      },
+    }),
+  reschedule: (remote: Pick<TransactionRemote, "reschedule">) =>
+    mutationOptions({
+      mutationKey: ["transactions", "reschedule"],
+      mutationFn: (
+        input: RescheduleTransactionProposalRequest,
+      ): Promise<RescheduleTransactionProposalData> => remote.reschedule(input),
+      onSuccess: (
+        data: RescheduleTransactionProposalData,
+        _variables: RescheduleTransactionProposalRequest,
+        _onMutateResult: unknown,
+        context: MutationFunctionContext,
+      ) => {
+        if (data.status === "saved") {
+          void context.client.invalidateQueries({
             queryKey: transactionQueries.listAll(),
             refetchType: "none",
           });
@@ -68,7 +90,7 @@ function storeSubmittedReview(
 ): void {
   void context.client.setQueryData(transactionQueries.reviewKey(data.review.set.id), data.review);
   void context.client.invalidateQueries({
-    queryKey: transactionQueries.listAll(),
+    queryKey: transactionQueries.all(),
     refetchType: "none",
   });
 }

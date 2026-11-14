@@ -213,3 +213,64 @@ export function describeTransactionSubmissionFailure(
       "The submission could not be sent. Refresh the review before deciding what to do next.",
   };
 }
+
+export function describeTransactionRescheduleFailure(
+  error: unknown,
+): TransactionFailureDescription {
+  if (error instanceof TransactionReviewAuthenticationFailure) {
+    return {
+      kind: "authentication",
+      message:
+        "Your session ended before the saved move could be changed. Sign in again to continue.",
+    };
+  }
+  if (error instanceof TransactionReviewFailure) {
+    switch (error.reason) {
+      case "transactions.submission_in_progress":
+      case "transactions.set_closed":
+        return {
+          kind: "conflict",
+          message:
+            "This plan is changing, so the saved move was not changed. Reload the timeline to see where it stands.",
+        };
+      case "transactions.items_not_open":
+        return {
+          kind: "conflict",
+          message:
+            "That move is no longer open, so it was not changed. Reload the timeline to see its state.",
+        };
+      case "transactions.set_not_found":
+      case "transactions.input_invalid":
+        return {
+          kind: "failure",
+          message:
+            "The date could not be saved. Choose a date after today in the league's own day and try again.",
+        };
+      case "transactions.unavailable":
+        return {
+          kind: "failure",
+          message:
+            "The saved move could not be checked against current state, so it was not changed. Reload the timeline and try a current move.",
+        };
+      case "transactions.persistence_failed":
+        return {
+          kind: "failure",
+          message:
+            "The change could not be recorded. Reload the timeline to see whether it applied.",
+        };
+      case "transactions.nothing_included":
+      case "transactions.trade_not_found":
+      case "transactions.trade_not_pending":
+        return {
+          kind: "failure",
+          message:
+            "The saved move could not be changed. Reload the timeline before deciding what to do next.",
+        };
+    }
+  }
+  return {
+    kind: "failure",
+    message:
+      "The saved move could not be changed. Reload the timeline before deciding what to do next.",
+  };
+}
