@@ -15,7 +15,7 @@ export function TransactionsNavLink(props: TransactionsNavLinkProps): JSX.Elemen
       Transactions
       <Show when={open.count() > 0}>
         <Text as="span" size="caption" tone="faint" numeric>
-          {" "}
+          {"\u00a0"}
           {String(open.count())}
         </Text>
         <Text as="span" size="caption" srOnly>

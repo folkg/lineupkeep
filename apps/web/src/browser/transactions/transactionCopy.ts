@@ -93,6 +93,10 @@ export function moveCount(count: number): string {
   return `${String(count)} ${count === 1 ? "move" : "moves"}`;
 }
 
+export function openMoveCount(count: number): string {
+  return `${String(count)} open ${count === 1 ? "move" : "moves"}`;
+}
+
 export function endedMoveCount(count: number): string {
   return `${String(count)} ended ${count === 1 ? "move" : "moves"}`;
 }

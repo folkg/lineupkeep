@@ -57,7 +57,7 @@ const endedPlanId = "018f79ea-7d86-7c18-9b4a-8b4d0c9165b3";
 const today = "2026-11-13";
 const now = new Date().toISOString();
 
-it("renders today, future days, the earlier count, and the top bar count", async () => {
+it("renders day and team groups, counts, scheduled timing, and earlier moves", async () => {
   const todayItem = item({
     id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c1",
     drops: [player("Riley Chen", "D", "TOR")],
@@ -106,8 +106,10 @@ it("renders today, future days, the earlier count, and the top bar count", async
   });
 
   await expect.element(page.getByRole("heading", { name: "Transactions" })).toBeVisible();
+  await expect.element(page.getByText("2 open moves", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("1 today · 1 scheduled", { exact: true })).toBeVisible();
   await expect.element(page.getByRole("heading", { name: "Today" })).toBeVisible();
-  await expect.element(page.getByRole("heading", { name: "Upcoming" })).toBeVisible();
+  await expect.element(page.getByRole("heading", { name: "Scheduled" })).toBeVisible();
   await expect.element(page.getByText("Drop Riley Chen", { exact: true })).toBeVisible();
   await expect.element(page.getByText("Add Jordan Lee", { exact: true })).toBeVisible();
   await expect
@@ -130,6 +132,8 @@ it("renders today, future days, the earlier count, and the top bar count", async
       }),
     )
     .toBeVisible();
+  await expect.element(page.getByRole("region", { name: "Alpha" })).toBeVisible();
+  await expect.element(page.getByRole("region", { name: "Beta" })).toBeVisible();
 
   await expect.element(page.getByText("1 ended move", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Show earlier moves" }).click();
@@ -137,69 +141,118 @@ it("renders today, future days, the earlier count, and the top bar count", async
   await expect.element(page.getByText("Drop Owen Park", { exact: true })).toBeVisible();
 });
 
-it("submits only today's moves and leaves the saved move alone", async () => {
-  const todayItem = item({
+it("requires a choice for every today move and submits only the chosen moves", async () => {
+  await page.viewport(1280, 720);
+  const chosen = item({
     id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c4",
     drops: [player("Riley Chen", "D", "TOR")],
   });
-  const futureItem = item({
+  const discarded = item({
     id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c5",
-    drops: [player("Owen Park", "D", "TOR")],
-    window: "2026-11-15",
-    lifecycle: "scheduled",
+    kind: "free_agent_add",
+    adds: [player("Jordan Lee", "WR", "SEA")],
+    drops: [],
+    reason: "Add a receiver now.",
   });
-  const data = listData([
-    plan({
-      id: openPlanId,
-      teams: [
-        teamEntry(
-          footballTeam,
-          [todayItem, futureItem],
-          [day(todayItem.id, today, "same_day"), day(futureItem.id, "2026-11-15", "same_day")],
-        ),
-      ],
-    }),
-  ]);
-  const requests: Array<SubmitTransactionReviewRequest> = [];
+  const submitted: Array<SubmitTransactionReviewRequest> = [];
+  const dismissed: Array<DismissTransactionProposalRequest> = [];
   using _app = setupTransactionsPage({
-    open: data,
+    open: listData([
+      plan({
+        id: openPlanId,
+        teams: [
+          teamEntry(
+            footballTeam,
+            [chosen, discarded],
+            [day(chosen.id, today, "same_day", [chosen.id, discarded.id])],
+          ),
+        ],
+      }),
+    ]),
     closed: listData([]),
     submit: (input) => {
-      requests.push(input);
+      submitted.push(input);
       return Promise.resolve({
         review: review(input.set),
         scheduled: 0,
         detail: "Submitted 1 move today.",
       });
     },
+    dismiss: (input) => {
+      dismissed.push(input);
+      return Promise.resolve({
+        outcome: "dismissed",
+        review: review(input.set),
+      } satisfies DismissTransactionProposalData);
+    },
   });
 
-  await page.getByRole("button", { name: /Submit now: Drop Riley Chen/ }).click();
+  const submitButton = page.getByRole("button", { name: "Submit today's chosen moves" });
+  await expect.element(submitButton).toBeDisabled();
+  await expect.element(page.getByText("Not chosen yet.", { exact: true }).first()).toBeVisible();
+  await expect
+    .element(page.getByText(/2 moves still need a choice\. Choose Do it now or Discard/u))
+    .toBeVisible();
+  await expect
+    .element(page.getByRole("button", { name: /Do it now: Drop Riley Chen/u }))
+    .toBeVisible();
+  await expect
+    .element(page.getByRole("button", { name: /Discard: Add Jordan Lee/u }))
+    .toBeVisible();
 
-  await expect.element(page.getByText("Submitted 1 move today.", { exact: true })).toBeVisible();
-  expect(requests).toStrictEqual([{ set: openPlanId, include: [todayItem.id], bids: [] }]);
-  await expect.element(page.getByText("Drop Owen Park", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /Do it now: Drop Riley Chen/u }).click();
+  await expect.element(submitButton).toBeDisabled();
+  await expect
+    .element(page.getByText(/1 move still needs a choice\. Choose Do it now or Discard/u))
+    .toBeVisible();
+  await expect.element(page.getByText("Runs when you submit.", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: /Discard: Add Jordan Lee/u }).click();
+  await expect.element(submitButton).toBeEnabled();
+  await expect
+    .element(page.getByText("Every move today has a choice.", { exact: true }))
+    .toBeVisible();
+  await expect.element(page.getByText("Discarded when you submit.", { exact: true })).toBeVisible();
+
+  await submitButton.click();
+
+  await expect
+    .element(page.getByText("Submitted 1 move today. Discarded 1 move.", { exact: true }))
+    .toBeVisible();
+  expect(submitted).toStrictEqual([{ set: openPlanId, include: [chosen.id], bids: [] }]);
+  expect(dismissed).toStrictEqual([{ set: openPlanId, items: [discarded.id] }]);
 });
 
-it("edits and discards a future move without losing its controls", async () => {
-  const futureItem = item({
+it("edits and discards one future move at a time", async () => {
+  const first = item({
     id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c6",
     drops: [player("Riley Chen", "D", "TOR")],
     window: "2026-11-15",
     lifecycle: "scheduled",
   });
-  const data = listData([
-    plan({
-      id: futurePlanId,
-      teams: [
-        teamEntry(footballTeam, [futureItem], [day(futureItem.id, "2026-11-15", "next_day")]),
-      ],
-    }),
-  ]);
+  const second = item({
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c7",
+    kind: "free_agent_add",
+    adds: [player("Jordan Lee", "WR", "SEA")],
+    drops: [],
+    window: "2026-11-15",
+    lifecycle: "scheduled",
+  });
   const rescheduled: Array<RescheduleTransactionProposalRequest> = [];
   const dismissed: Array<DismissTransactionProposalRequest> = [];
   using _app = setupTransactionsPage({
-    open: data,
+    open: listData([
+      plan({
+        id: futurePlanId,
+        teams: [
+          teamEntry(
+            footballTeam,
+            [first, second],
+            [day(first.id, "2026-11-15", "next_day", [first.id, second.id])],
+          ),
+        ],
+      }),
+    ]),
     closed: listData([]),
     reschedule: (input) => {
       rescheduled.push(input);
@@ -220,13 +273,16 @@ it("edits and discards a future move without losing its controls", async () => {
     },
   });
 
-  const edit = page.getByRole("button", { name: /Edit: Drop Riley Chen/ });
-  const discard = page.getByRole("button", { name: /Discard: Drop Riley Chen/ });
-  await expect.element(edit).toBeVisible();
-  await expect.element(edit).not.toHaveAttribute("aria-disabled");
-  await expect.element(discard).toBeVisible();
-  await expect.element(discard).not.toHaveAttribute("aria-disabled");
+  await expect.element(page.getByRole("region", { name: "Alpha" })).toBeVisible();
+  expect(page.getByRole("button", { name: /Change date:/u }).elements()).toHaveLength(2);
+  expect(page.getByRole("button", { name: /Discard:/u }).elements()).toHaveLength(2);
+  await expect
+    .element(
+      page.getByText(`Saved for ${formatCalendarDate("2026-11-15")}. Editable until then.`).first(),
+    )
+    .toBeVisible();
 
+  const edit = page.getByRole("button", { name: /Change date: Drop Riley Chen/u });
   await edit.click();
   await expect
     .element(page.getByText(/Saving withdraws this saved move and proposes a replacement/u))
@@ -242,69 +298,110 @@ it("edits and discards a future move without losing its controls", async () => {
     )
     .toBeVisible();
   expect(rescheduled).toStrictEqual([
-    { set: futurePlanId, items: [futureItem.id], window: "2026-11-17" },
+    { set: futurePlanId, items: [first.id], window: "2026-11-17" },
   ]);
-  await expect.element(page.getByRole("button", { name: /Edit: Drop Riley Chen/ })).toBeVisible();
-
-  await page.getByRole("button", { name: /Discard: Drop Riley Chen/ }).click();
-  await expect.element(page.getByText("Discarded 1 move.", { exact: true })).toBeVisible();
-  expect(dismissed).toStrictEqual([{ set: futurePlanId, items: [futureItem.id] }]);
-  await expect.element(page.getByRole("button", { name: /Edit: Drop Riley Chen/ })).toBeVisible();
   await expect
-    .element(page.getByRole("button", { name: /Discard: Drop Riley Chen/ }))
+    .element(page.getByRole("button", { name: /Change date: Drop Riley Chen/u }))
+    .toBeVisible();
+  expect(page.getByLabelText("Run date").elements()).toHaveLength(0);
+
+  await page.getByRole("button", { name: /Discard: Add Jordan Lee/u }).click();
+  await expect.element(page.getByText("Discarded 1 move.", { exact: true })).toBeVisible();
+  expect(dismissed).toStrictEqual([{ set: futurePlanId, items: [second.id] }]);
+  await expect
+    .element(page.getByRole("button", { name: /Change date: Drop Riley Chen/u }))
     .toBeVisible();
 });
 
-it("keeps a multi move proposal under one team heading and one edit control", async () => {
-  const add = item({
-    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c7",
+it("groups the page by day first, then by one card per team, across plans", async () => {
+  await page.viewport(1280, 900);
+  const firstAlpha = item({
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c8",
+    drops: [player("Riley Chen", "D", "TOR")],
+  });
+  const secondAlpha = item({
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c9",
     kind: "free_agent_add",
     adds: [player("Jordan Lee", "WR", "SEA")],
     drops: [],
-    window: "2026-11-15",
-    lifecycle: "scheduled",
-    reason: "Add a receiver.",
+    reason: "Add a receiver now.",
   });
-  const drop = item({
-    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c8",
-    drops: [player("Riley Chen", "D", "TOR")],
+  const firstBeta = item({
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d0",
+    drops: [player("Owen Park", "D", "TOR")],
     window: "2026-11-15",
     lifecycle: "scheduled",
-    reason: "Open the place.",
+  });
+  const secondBeta = item({
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d1",
+    kind: "free_agent_add",
+    adds: [player("Sam Rivers", "C", "SEA")],
+    drops: [],
+    window: "2026-11-15",
+    lifecycle: "scheduled",
   });
   using _app = setupTransactionsPage({
     open: listData([
       plan({
+        id: openPlanId,
+        teams: [teamEntry(footballTeam, [firstAlpha], [day(firstAlpha.id, today, "same_day")])],
+      }),
+      plan({
         id: futurePlanId,
+        teams: [teamEntry(hockeyTeam, [firstBeta], [day(firstBeta.id, "2026-11-15", "next_day")])],
+      }),
+      plan({
+        id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165b4",
+        teams: [teamEntry(footballTeam, [secondAlpha], [day(secondAlpha.id, today, "same_day")])],
+      }),
+      plan({
+        id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165b5",
         teams: [
-          teamEntry(
-            footballTeam,
-            [add, drop],
-            [day(add.id, "2026-11-15", "next_day", [add.id, drop.id])],
-          ),
+          teamEntry(hockeyTeam, [secondBeta], [day(secondBeta.id, "2026-11-15", "next_day")]),
         ],
       }),
     ]),
     closed: listData([]),
   });
 
-  await expect.element(page.getByRole("heading", { name: "Alpha" })).toBeVisible();
+  await expect.element(page.getByRole("heading", { name: "Transactions" })).toBeVisible();
+  const headings = page
+    .getByRole("heading")
+    .elements()
+    .map((element) => element.textContent);
+  expect(headings).toStrictEqual([
+    "Transactions",
+    "Today",
+    "Alpha",
+    "Scheduled",
+    formatCalendarDate("2026-11-15"),
+    "Beta",
+    "Earlier",
+  ]);
+  await expect.element(page.getByText("4 open moves", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("2 today · 2 scheduled", { exact: true })).toBeVisible();
+  const alpha = page.getByRole("region", { name: "Alpha" });
+  await expect.element(alpha.getByText("Drop Riley Chen", { exact: true })).toBeVisible();
+  await expect.element(alpha.getByText("Add Jordan Lee", { exact: true })).toBeVisible();
+  expect(alpha.getByRole("button", { name: /Do it now:/u }).elements()).toHaveLength(2);
+  const beta = page.getByRole("region", { name: "Beta" });
+  await expect.element(beta.getByText("Drop Owen Park", { exact: true })).toBeVisible();
+  await expect.element(beta.getByText("Add Sam Rivers", { exact: true })).toBeVisible();
+  expect(beta.getByRole("button", { name: /Change date:/u }).elements()).toHaveLength(2);
   expect(page.getByRole("heading", { name: "Alpha" }).elements()).toHaveLength(1);
-  await expect.element(page.getByText("Add Jordan Lee", { exact: true })).toBeVisible();
-  await expect.element(page.getByText("Drop Riley Chen", { exact: true })).toBeVisible();
-  expect(
-    page.getByRole("button", { name: /Edit: Add Jordan Lee, Drop Riley Chen/ }).elements(),
-  ).toHaveLength(1);
+  expect(page.getByRole("heading", { name: "Beta" }).elements()).toHaveLength(1);
 });
 
-it("keeps the timeline inside a phone viewport and shows the phone submit line", async () => {
-  const first = item({
-    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c9",
+it("keeps the compact submit line on a phone and focuses today when filtered", async () => {
+  const todayItem = item({
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d2",
     drops: [player("Riley Chen", "D", "TOR")],
   });
-  const second = item({
-    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d0",
+  const futureItem = item({
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d3",
     drops: [player("Owen Park", "D", "TOR")],
+    window: "2026-11-15",
+    lifecycle: "scheduled",
   });
   await page.viewport(390, 844);
   try {
@@ -312,29 +409,49 @@ it("keeps the timeline inside a phone viewport and shows the phone submit line",
       open: listData([
         plan({
           id: openPlanId,
-          teams: [teamEntry(footballTeam, [first], [day(first.id, today, "same_day")])],
+          teams: [teamEntry(footballTeam, [todayItem], [day(todayItem.id, today, "same_day")])],
         }),
         plan({
           id: futurePlanId,
-          teams: [teamEntry(hockeyTeam, [second], [day(second.id, today, "same_day")])],
+          teams: [
+            teamEntry(hockeyTeam, [futureItem], [day(futureItem.id, "2026-11-15", "next_day")]),
+          ],
         }),
       ]),
       closed: listData([]),
     });
 
     await expect.element(page.getByRole("heading", { name: "Today" })).toBeVisible();
-    await expect.element(page.getByText("2 moves today", { exact: true })).toBeVisible();
-    await expect.element(page.getByRole("button", { name: "Submit today" })).toBeVisible();
+    await expect.element(page.getByText("2 open moves", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("1 today · 1 scheduled", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("1 move today", { exact: true })).toBeVisible();
+    const phoneSubmit = page.getByRole("button", { name: "Submit today's moves" });
+    await expect.element(phoneSubmit).toBeDisabled();
     await expect
       .element(page.getByRole("link", { name: /Transactions 2 open moves/ }))
       .toBeVisible();
     const root = document.documentElement;
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
 
+    await page.getByRole("button", { name: /Do it now: Drop Riley Chen/u }).click();
+    await expect.element(phoneSubmit).toBeEnabled();
+
+    const onlyToday = page.getByRole("button", { name: "Only today" });
+    await expect.element(onlyToday).toHaveAttribute("aria-pressed", "false");
+    await onlyToday.click();
+    await expect.element(onlyToday).toHaveAttribute("aria-pressed", "true");
+    await expect
+      .element(page.getByText("Showing today only. Press again to see every open move."))
+      .toBeVisible();
+    expect(page.getByRole("heading", { name: "Scheduled" }).elements()).toHaveLength(0);
+    expect(page.getByRole("heading", { name: "Earlier" }).elements()).toHaveLength(0);
+    await expect.element(page.getByText("Drop Riley Chen", { exact: true })).toBeVisible();
+    expect(page.getByText("Drop Owen Park", { exact: true }).elements()).toHaveLength(0);
+
     await page.viewport(1440, 900);
     await expect
-      .element(page.getByRole("button", { name: "Submit all of today's moves" }))
-      .toBeVisible();
+      .element(page.getByRole("button", { name: "Submit today's chosen moves" }))
+      .toBeEnabled();
   } finally {
     await page.viewport(1280, 720);
   }

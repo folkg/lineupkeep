@@ -7,22 +7,28 @@ import type {
 
 type TimelineTeam = TransactionProposalSetSummaryView["teams"][number]["team"];
 
-export type TimelineGroup = {
+export type TimelineMove = {
   readonly key: string;
   readonly set: string;
+  readonly item: TransactionProposalItemView;
+  readonly effectiveRule?: TransactionRunTiming;
+};
+
+export type TimelineTeamDay = {
+  readonly key: string;
   readonly team: TimelineTeam;
   readonly today?: string;
   readonly runDate?: string;
   readonly triggerAt?: string;
   readonly timeZone?: string;
-  readonly effectiveRule?: TransactionRunTiming;
   readonly startsToday?: true;
-  readonly items: ReadonlyArray<TransactionProposalItemView>;
+  readonly moves: ReadonlyArray<TimelineMove>;
 };
 
-export type TimelineFutureDay = {
-  readonly date: string;
-  readonly groups: ReadonlyArray<TimelineGroup>;
+export type TimelineDay = {
+  readonly key: string;
+  readonly date?: string;
+  readonly teams: ReadonlyArray<TimelineTeamDay>;
 };
 
 export type TimelineEarlierEntry = {
@@ -34,8 +40,8 @@ export type TimelineEarlierEntry = {
 };
 
 export type TransactionTimeline = {
-  readonly today: ReadonlyArray<TimelineGroup>;
-  readonly future: ReadonlyArray<TimelineFutureDay>;
+  readonly today: TimelineDay;
+  readonly future: ReadonlyArray<TimelineDay>;
   readonly earlier: ReadonlyArray<TimelineEarlierEntry>;
 };
 
@@ -43,7 +49,7 @@ export function buildTimeline(
   openSets: ReadonlyArray<TransactionProposalSetSummaryView>,
   endedSets: ReadonlyArray<TransactionProposalSetSummaryView>,
 ): TransactionTimeline {
-  const groups: Array<TimelineGroup> = [];
+  const cards = new Map<string, MutableTeamDay>();
   const earlier: Array<TimelineEarlierEntry> = [];
   const earlierIds = new Set<string>();
 
@@ -52,33 +58,31 @@ export function buildTimeline(
       const byId = new Map(entry.items.map((item) => [item.id, item] as const));
       const openIds = new Set<string>();
       for (const group of entry.groups ?? groupsFromItems(entry.items, entry.today)) {
-        const items = group.items.flatMap((id) => {
+        const startsToday =
+          group.date === undefined || (entry.today !== undefined && group.date === entry.today);
+        const runDate = startsToday ? undefined : group.date;
+        const key = `${entry.team.id}:${runDate ?? "today"}`;
+        for (const id of group.items) {
           const item = byId.get(id);
           if (item === undefined) {
             throw new Error(`A run day names a move outside its team: ${id}`);
           }
-          return isOpen(item) ? [item] : [];
-        });
-        if (items.length === 0) {
-          continue;
-        }
-        for (const item of items) {
+          if (!isOpen(item)) {
+            continue;
+          }
           openIds.add(item.id);
+          let card = cards.get(key);
+          if (card === undefined) {
+            card = createCard(key, entry, group, startsToday);
+            cards.set(key, card);
+          }
+          card.moves.push({
+            key: item.id,
+            set: set.id,
+            item,
+            ...(group.effectiveRule === undefined ? {} : { effectiveRule: group.effectiveRule }),
+          });
         }
-        const startsToday =
-          group.date === undefined || (entry.today !== undefined && group.date === entry.today);
-        groups.push({
-          key: `${set.id}:${entry.team.id}:${group.date ?? "today"}`,
-          set: set.id,
-          team: entry.team,
-          ...(entry.today === undefined ? {} : { today: entry.today }),
-          ...(group.date === undefined ? {} : { runDate: group.date }),
-          ...(group.triggerAt === undefined ? {} : { triggerAt: group.triggerAt }),
-          ...(group.timeZone === undefined ? {} : { timeZone: group.timeZone }),
-          ...(group.effectiveRule === undefined ? {} : { effectiveRule: group.effectiveRule }),
-          ...(startsToday ? { startsToday: true } : {}),
-          items,
-        });
       }
       for (const item of entry.items) {
         if (isOpen(item) && !openIds.has(item.id)) {
@@ -97,29 +101,36 @@ export function buildTimeline(
     }
   }
 
+  const todayTeams = [...cards.values()]
+    .filter((card) => card.startsToday === true)
+    .sort(compareTeamNames);
   return {
-    today: groups.filter((group) => group.startsToday === true),
-    future: futureDays(groups.filter((group) => group.startsToday !== true)),
+    today: { key: "today", teams: todayTeams },
+    future: futureDays([...cards.values()].filter((card) => card.startsToday !== true)),
     earlier,
   };
 }
 
-export function moveTotal(groups: ReadonlyArray<TimelineGroup>): number {
-  return groups.reduce((total, group) => total + group.items.length, 0);
+export function dayMoveTotal(day: TimelineDay): number {
+  return day.teams.reduce((total, card) => total + card.moves.length, 0);
 }
 
-export function runTimeLine(group: TimelineGroup): string | undefined {
-  if (group.runDate === undefined) {
+export function dayMoves(day: TimelineDay): ReadonlyArray<TimelineMove> {
+  return day.teams.flatMap((card) => card.moves);
+}
+
+export function runTimeLine(card: TimelineTeamDay): string | undefined {
+  if (card.runDate === undefined) {
     return undefined;
   }
-  const day = formatCalendarDate(group.runDate);
-  if (group.triggerAt === undefined) {
+  const day = formatCalendarDate(card.runDate);
+  if (card.triggerAt === undefined) {
     return `Runs ${day}.`;
   }
   const clock =
-    group.timeZone === undefined
-      ? formatClockTime(group.triggerAt)
-      : `${formatClockTime(group.triggerAt, { timeZone: group.timeZone })} ${zoneName(group.triggerAt, group.timeZone)}`;
+    card.timeZone === undefined
+      ? formatClockTime(card.triggerAt)
+      : `${formatClockTime(card.triggerAt, { timeZone: card.timeZone })} ${zoneName(card.triggerAt, card.timeZone)}`;
   return `Runs ${day} at ${clock}.`;
 }
 
@@ -154,19 +165,41 @@ function isOpen(item: TransactionProposalItemView): boolean {
   return item.state === "proposed" && !item.settled;
 }
 
-function futureDays(groups: ReadonlyArray<TimelineGroup>): ReadonlyArray<TimelineFutureDay> {
-  const byDate = new Map<string, Array<TimelineGroup>>();
-  for (const group of groups) {
-    if (group.runDate === undefined) {
+function createCard(
+  key: string,
+  entry: TransactionProposalSetSummaryView["teams"][number],
+  group: TimelineDaySource,
+  startsToday: boolean,
+): MutableTeamDay {
+  return {
+    key,
+    team: entry.team,
+    ...(entry.today === undefined ? {} : { today: entry.today }),
+    ...(group.date === undefined || startsToday ? {} : { runDate: group.date }),
+    ...(group.triggerAt === undefined ? {} : { triggerAt: group.triggerAt }),
+    ...(group.timeZone === undefined ? {} : { timeZone: group.timeZone }),
+    ...(startsToday ? { startsToday: true } : {}),
+    moves: [],
+  };
+}
+
+function futureDays(cards: ReadonlyArray<TimelineTeamDay>): ReadonlyArray<TimelineDay> {
+  const byDate = new Map<string, Array<TimelineTeamDay>>();
+  for (const card of cards) {
+    if (card.runDate === undefined) {
       continue;
     }
-    const current = byDate.get(group.runDate) ?? [];
-    current.push(group);
-    byDate.set(group.runDate, current);
+    const current = byDate.get(card.runDate) ?? [];
+    current.push(card);
+    byDate.set(card.runDate, current);
   }
   return [...byDate.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
-    .map(([date, entries]) => ({ date, groups: entries }));
+    .map(([date, teams]) => ({
+      key: date,
+      date,
+      teams: teams.sort(compareTeamNames),
+    }));
 }
 
 function groupsFromItems(
@@ -191,14 +224,6 @@ function groupsFromItems(
     }));
 }
 
-type TimelineDaySource = {
-  readonly date?: string;
-  readonly triggerAt?: string;
-  readonly timeZone?: string;
-  readonly effectiveRule?: TransactionRunTiming;
-  readonly items: ReadonlyArray<string>;
-};
-
 function addEarlier(
   set: TransactionProposalSetSummaryView,
   entry: TransactionProposalSetSummaryView["teams"][number],
@@ -219,6 +244,10 @@ function addEarlier(
   });
 }
 
+function compareTeamNames(left: TimelineTeamDay, right: TimelineTeamDay): number {
+  return left.team.name.localeCompare(right.team.name);
+}
+
 function zoneName(value: string, timeZone: string): string {
   const parts = new Intl.DateTimeFormat(undefined, {
     timeZone,
@@ -226,3 +255,15 @@ function zoneName(value: string, timeZone: string): string {
   }).formatToParts(new Date(value));
   return parts.find((part) => part.type === "timeZoneName")?.value ?? "";
 }
+
+type MutableTeamDay = TimelineTeamDay & {
+  moves: Array<TimelineMove>;
+};
+
+type TimelineDaySource = {
+  readonly date?: string;
+  readonly triggerAt?: string;
+  readonly timeZone?: string;
+  readonly effectiveRule?: TransactionRunTiming;
+  readonly items: ReadonlyArray<string>;
+};

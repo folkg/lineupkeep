@@ -267,10 +267,17 @@ test("shows one timeline across teams and moves a discarded move into earlier", 
   await page.goto("/transactions");
   await expect(page.getByRole("heading", { name: "Transactions" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
+  await expect(page.getByText("1 open move", { exact: true })).toBeVisible();
   const move = page.getByText("Drop Riverside Receiver", { exact: true });
   await expect(move).toBeVisible();
 
+  const submit = page.getByRole("button", { name: "Submit today's chosen moves" });
+  await expect(submit).toBeDisabled();
   await page.getByRole("button", { name: /Discard: Drop Riverside Receiver/ }).click();
+  await expect(page.getByText("Discarded when you submit.", { exact: true })).toBeVisible();
+  await expect(submit).toBeEnabled();
+  await submit.click();
+  await expect(page.getByText("Discarded 1 move.", { exact: true })).toBeVisible();
   await expect(move).toHaveCount(0);
 
   const earlier = page.getByRole("button", { name: /earlier moves/u });

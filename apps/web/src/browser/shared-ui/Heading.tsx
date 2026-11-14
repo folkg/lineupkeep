@@ -27,7 +27,7 @@ const sizeClass = {
 };
 
 type HeadingProps = {
-  readonly level: 1 | 2 | 3;
+  readonly level: 1 | 2 | 3 | 4;
   readonly size: keyof typeof sizeClass;
   readonly id?: string;
   readonly ref?: (element: HTMLHeadingElement) => void;
