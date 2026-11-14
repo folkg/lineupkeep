@@ -17,6 +17,16 @@ export const retentionPolicy = {
     countedFrom: "the plan's last change",
     millis: 90 * millisecondsPerDay,
   },
+  endedMove: {
+    appliesTo: "transaction moves whose result ended them, and their claims and steps",
+    countedFrom: "the move's end",
+    millis: 90 * millisecondsPerDay,
+  },
+  emptyPlan: {
+    appliesTo: "transaction plans with no moves",
+    countedFrom: "the plan's last change",
+    millis: 90 * millisecondsPerDay,
+  },
   scheduleObservation: {
     appliesTo: "stored schedule observations",
     countedFrom: "the end of the covered window",

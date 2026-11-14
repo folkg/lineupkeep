@@ -690,6 +690,64 @@ describe("proposal effective date migration", () => {
   );
 });
 
+describe("transaction plan storage migration", () => {
+  const planMigration = "20261114173618_transaction_plans";
+  const team = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+
+  it.effect("adds the plan tables and refuses a second plan for one owner and team", () =>
+    Effect.gen(function* () {
+      const sql = yield* PgliteClient.PgliteClient;
+
+      for (const statement of migrationStatements((name) => name < planMigration)) {
+        yield* sql.unsafe(statement);
+      }
+
+      yield* sql.unsafe(`
+        insert into provider_teams (
+          id, connection_id, user_id, provider, provider_team_key, provider_league_key,
+          league, sport, season, name, automation_state, automation_status,
+          last_seen_at, created_at, updated_at
+        )
+        values (
+          '${team}', 'connection', 'owner', 'yahoo', 'nhl.l.1.t.1', 'nhl.l.1',
+          'nhl', 'hockey', 2026, 'Red Line', '{}'::jsonb, 'disabled', now(), now(), now()
+        )
+      `);
+
+      for (const statement of migrationStatements((name) => name === planMigration)) {
+        yield* sql.unsafe(statement);
+      }
+
+      for (const table of [
+        "transaction_plans",
+        "transaction_moves",
+        "transaction_move_claims",
+        "transaction_move_steps",
+      ]) {
+        const found = yield* sql.unsafe<{ readonly table: string | null }>(
+          `select to_regclass('public.${table}')::text as "table"`,
+        );
+        expect(found).toEqual([{ table }]);
+      }
+
+      yield* sql.unsafe(`
+        insert into transaction_plans (user_id, team_id) values ('owner', '${team}')
+      `);
+      const duplicate = yield* Effect.exit(
+        sql.unsafe(`
+          insert into transaction_plans (user_id, team_id) values ('owner', '${team}')
+        `),
+      );
+      expect(Exit.isFailure(duplicate)).toBe(true);
+
+      const plans = yield* sql.unsafe<{ readonly user_id: string; readonly team_id: string }>(
+        "select user_id, team_id from transaction_plans",
+      );
+      expect(plans).toEqual([{ user_id: "owner", team_id: team }]);
+    }).pipe(Effect.provide(PgliteClient.layer())),
+  );
+});
+
 function migrationStatements(select: (name: string) => boolean): ReadonlyArray<string> {
   const statements: string[] = [];
   for (const name of readdirSync(migrationsFolder).filter(select).sort()) {

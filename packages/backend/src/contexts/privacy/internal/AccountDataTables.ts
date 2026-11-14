@@ -85,6 +85,35 @@ export const ownedDataInventory: ReadonlyArray<OwnedDataClass> = [
     withheld: [],
   },
   {
+    table: "transaction_move_steps",
+    label: "Transaction move steps",
+    needsAccountIdentity: false,
+    where: (account) =>
+      sql`move_id in (select id from transaction_moves where user_id = ${account.userId})`,
+    withheld: [],
+  },
+  {
+    table: "transaction_move_claims",
+    label: "Transaction move claims",
+    needsAccountIdentity: false,
+    where: ownerRows("user_id"),
+    withheld: [],
+  },
+  {
+    table: "transaction_moves",
+    label: "Transaction moves",
+    needsAccountIdentity: false,
+    where: ownerRows("user_id"),
+    withheld: [],
+  },
+  {
+    table: "transaction_plans",
+    label: "Transaction plans",
+    needsAccountIdentity: false,
+    where: ownerRows("user_id"),
+    withheld: [],
+  },
+  {
     table: "transaction_proposal_steps",
     label: "Transaction proposal steps",
     needsAccountIdentity: false,
