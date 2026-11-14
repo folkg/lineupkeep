@@ -280,3 +280,39 @@ test("lists a team's open plans and moves a dismissed one into history", async (
   await expect(page.getByText("Drop Riverside Receiver", { exact: true })).toBeVisible();
   await expect(page.getByText("1 closed plan", { exact: true })).toBeVisible();
 });
+
+test("opens a team's plans on the first visit from the team page", async ({ page, services }) => {
+  await signUp(page);
+  await services.exercise(
+    page,
+    "link the provider fake and discover teams",
+    "connectYahooAndDiscoverTeams",
+    {},
+  );
+
+  await page.goto("/teams");
+  await page.getByRole("link", { name: "Embedded Browser Team", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Back to teams" })).toBeVisible();
+  const teamId = new URL(page.url()).pathname.split("/").at(-1);
+  expect(teamId, "the team page URL").toBeDefined();
+  if (teamId === undefined) {
+    return;
+  }
+
+  const release = Promise.withResolvers<void>();
+  await page.route("**/_serverFn/**", async (route) => {
+    await release.promise;
+    await route.continue();
+  });
+
+  await page.getByRole("link", { name: "Transactions" }).click();
+  await page.waitForURL(`**/teams/${teamId}/transactions`);
+  await page.waitForTimeout(250);
+  await expect(page.getByRole("link", { name: "Back to teams" })).toBeVisible();
+  await expect(page.getByText(/Something went wrong/u)).toHaveCount(0);
+
+  release.resolve();
+  await page.unrouteAll({ behavior: "wait" });
+
+  await expect(page.getByRole("heading", { name: "Open plans" })).toBeVisible();
+});

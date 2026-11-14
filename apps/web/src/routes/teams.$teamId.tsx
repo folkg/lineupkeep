@@ -23,7 +23,10 @@ export const Route = createFileRoute("/teams/$teamId")({
 function TeamDetailRoute(): JSX.Element {
   const context = Route.useRouteContext();
   const params = Route.useParams();
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const showsTransactionPlans = useRouterState({
+    select: (state) =>
+      state.matches.some((match) => match.routeId === "/teams/$teamId/transactions"),
+  });
   return (
     <Show
       fallback={
@@ -34,7 +37,7 @@ function TeamDetailRoute(): JSX.Element {
           onRefresh={() => refreshTeamLists(context().queryClient)}
         />
       }
-      when={pathname().endsWith("/transactions")}
+      when={showsTransactionPlans()}
     >
       <Outlet />
     </Show>
