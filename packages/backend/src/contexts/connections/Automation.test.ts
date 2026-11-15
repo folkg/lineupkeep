@@ -171,7 +171,7 @@ it.effect("collapses several missed hourly ticks into one current run", () =>
   }).pipe(Effect.provide(AutomationTestLayer)),
 );
 
-it.effect("runs a saved move when its date arrives on the hourly tick", () =>
+it.effect("leaves a saved move for the owner when its date arrives on the hourly tick", () =>
   Effect.gen(function* () {
     yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-31T18:00:00Z")));
     const automation = yield* Automation;
@@ -193,20 +193,13 @@ it.effect("runs a saved move when its date arrives on the hourly tick", () =>
     });
 
     yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-01T18:00:00Z")));
-    const summary = yield* automation.run(10);
+    yield* automation.run(10);
     const plan = yield* plans.plan(owner, { team });
     const move = plan.moves[0];
 
-    assert.strictEqual(summary.dueMoves, 1);
-    assert.strictEqual(summary.dueIncluded, 1);
-    assert.strictEqual(summary.dueRefused, 0);
-    assert.strictEqual(summary.dueInProgress, 0);
-    assert.strictEqual(move?.result, "executed");
+    assert.strictEqual(move?.result, undefined);
     assert.strictEqual(move?.runDay, "2026-11-01");
-    assert.deepStrictEqual(
-      (yield* fake.transactionRequests).map((request) => request.drops),
-      [["461.p.10002"]],
-    );
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
   }).pipe(Effect.provide(AutomationTestLayer)),
 );
 
