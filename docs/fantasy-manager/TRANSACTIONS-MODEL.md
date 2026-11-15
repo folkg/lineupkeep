@@ -36,15 +36,16 @@ run holds the queue. A team cannot have two plans.
 
 `id` primary key, `user_id`, `team_id`, `group_id`, `position`, `run_position`, `kind`, `adds`,
 `fallbacks`, `drops`, `picks`, `slot_move`, `intent`, `placement`, `counterparty_key`, `external_ref`,
-`bid`, `reason`, `run_day`, `effective_date`, `decision`, `decided_at`, `validation`, `checked_at`,
-`validation_reasons`, `result`, `result_detail`, `result_at`, `proposed_by`, `created_at`,
-`updated_at`.
+`bid`, `reason`, `run_day`, `effective_date`, `decision`, `decided_at`, `confirmed_at`,
+`confirmed_by`, `run_id`, `run_at`, `validation`, `checked_at`, `validation_reasons`, `result`,
+`result_detail`, `result_at`, `proposed_by`, `created_at`, `updated_at`.
 
 `(user_id, team_id)` references the plan. `position` is the server's append order. `run_position` is
 the order for the next run. `run_day` is the day the move runs in the league's day. `effective_date` is
-when the league applies it. `external_ref` is the league's reference for a pending trade or waiver.
-`proposed_by` records who proposed it and from which surface. The move stores its own proposed change;
-no related item table.
+when the league applies it. `confirmed_by` and `confirmed_at` record the owner's confirmation, and
+`run_id` and `run_at` name the check that carried the move out. `external_ref` is the league's
+reference for a pending trade or waiver. `proposed_by` records who proposed it and from which
+surface. The move stores its own proposed change; no related item table.
 
 ### `transaction_move_claims`
 
@@ -86,8 +87,9 @@ existing open move impossible and names that move.
 
 A move has three kinds of state:
 
-- **Decision:** `undecided`, `saved`, `now`, or `discarded`. Today starts undecided. A later day starts
-  saved. `now` means chosen for the next run. `discarded` means removed by the person.
+- **Decision:** `undecided` (due today, not confirmed), `saved` (a later day, not confirmed), `now`
+  (confirmed for today), `confirmed` (confirmed for a later day), or `discarded` (removed by the
+  person).
 - **Validation:** `unchecked`, `current`, `stale`, or `illegal`, with a time and reasons.
 - **Result:** none, `executed`, `pending`, `failed`, `skipped`, `unknown`, `withdrawn`, or `expired`.
 
@@ -95,37 +97,48 @@ A move is open unless discarded or its result is executed, withdrawn, or expired
 trade stays open. A failed or skipped move stays open for a retry or discard. An unknown move stays
 open but is never retried automatically.
 
+Confirmation is the owner's recorded decision, stored with `confirmed_by` and `confirmed_at`. A saved
+move whose day arrives waits in Today and never runs until it is confirmed; a confirmed later move
+runs on the check when its day arrives. No MCP tool confirms a move.
+
 ### Groups
 
 The propose input takes an optional group label for each move; the label is only input, and the server
 assigns the group id. One propose call may put moves in one group by giving them the same label. A move
 without a label is a group of one. A group is one or more moves attempted together in the server's
-order. No group spans teams or run days. A group lands whole or not at all: if a move in it is refused,
-none of that group is stored, while a move outside it can still land. A group is a marker on moves,
-not a review unit. A person chooses a group whole, so a partial group cannot be submitted;
+order. No group spans teams or run days. A propose accepts a group whole or not at all: if a move in it
+is refused, none of that group is stored, while a move outside it can still land. A group is a marker
+on moves, not a review unit. A person chooses a group whole, so a part of a group cannot be sent;
 independent moves are chosen one by one. All moves in a group share one run day; editing the day
 moves the group. Discarding or editing one move leaves the rest of its group together. If a move in a
 group is stale before it starts, the group does not run and each move records why. If a move fails
-during the run, the rest of the group is skipped and records why.
+during the run, the rest of the group is skipped and records why. When the league accepts one write
+and rejects a later one, the group ran in part: each member and action records executed, failed,
+skipped, or unknown, the failed action and the actions that did not run stay open with a plain cure,
+and the page says so. A group reads ready, blocked, ran in part, or done. An add that needs a place gets
+a server-generated group labelled `Roster fixes`, made of the slot moves that legalize the roster and
+free the places the add needs, ordered before the move it funds.
 
 ### Transitions
 
-| Action         | What happens                                                                                        | Move after                  |
-| -------------- | --------------------------------------------------------------------------------------------------- | --------------------------- |
-| Propose        | Create or lock the plan, check claims and roster, append; today starts undecided, a later day saved | Undecided or saved, current |
-| Save or edit   | Change in place, set a day today or later, replace claims                                           | Saved, checked again        |
-| Discard        | Release claims, end the move, no write                                                              | Discarded                   |
-| Submit         | Mark selected groups `now`, lock, recheck every open move, set run order, write each group          | Now, then result            |
-| Run on its day | Hourly check locks, rechecks, writes each due group                                                 | Now, then result            |
-| Revalidate     | Replace validation, placement, dates, claims, run order                                             | Unchanged                   |
-| Settle         | Record result and steps, release claims if ended                                                    | Result set                  |
+| Action         | What happens                                                                                                         | Move after                    |
+| -------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| Propose        | Create or lock the plan, check claims and roster, append; today starts undecided, a later day saved                  | Undecided or saved, current   |
+| Save or edit   | Change in place, set a day today or later, replace claims, clear the confirmation                                    | Saved or undecided, checked   |
+| Confirm        | Record the owner and time; a due move becomes `now`, a later move `confirmed`; a due move submits now                | Now or confirmed, checked     |
+| Discard        | Release claims, end the move, no write                                                                               | Discarded                     |
+| Submit         | Lock, recheck every open move, set run order, write each confirmed group due today                                   | Now, then result              |
+| Run on its day | The check locks a plan whose confirmed move is due, rechecks, and writes each due group; a saved move waits in Today | Now or confirmed, then result |
+| Revalidate     | Replace validation, placement, dates, claims, run order                                                              | Unchanged                     |
+| Settle         | Record result and steps, release claims if ended                                                                     | Result set                    |
 
-A saved move stays editable until its day is claimed. A pending move stays until the league answers; it
-cannot be edited, discarded, or retried. A move with an unknown result cannot be edited or retried; the
-person checks the league's site, then discards or replaces it. A trade has no future day; it starts
-undecided and is sent only by a submission. A pending waiver settles on the next revalidation that
-sees the league's decision. A pending trade settles when the league reports it accepted, withdrawn, or
-expired, or when the owner withdraws it.
+A saved move stays editable until its day is claimed. A confirmed move stays open, and changing its day
+clears the confirmation. A pending move stays until the league answers; it cannot be edited,
+discarded, or retried. A move with an unknown result cannot be edited or retried; the person checks the
+league's site, then discards or replaces it. A trade has no future day; it starts undecided and is sent
+only by a submission. A pending waiver settles on the next revalidation that sees the league's
+decision. A pending trade settles when the league reports it accepted, withdrawn, or expired, or when
+the owner withdraws it.
 
 The plan's `run_claim` makes a second submission wait. A propose, edit, or discard waits for it to
 clear. It clears when the run ends; the hourly sweep recovers an interrupted claim. A submission
@@ -139,14 +152,18 @@ application groups rows by run day and team. Every read revalidates each open mo
 current state with one team check per team that has open moves, never one read per move, and returns
 the fresh validation with the time it was checked. When a team's state cannot be read, its moves carry
 the stored validation and the time it was checked, labelled as the last check and never as current.
-The ended section reads the same query with the ended state.
+The ended section reads the same query with the ended state. Every open move carries its decision and
+any confirmation; a move that ran names the check that carried it out, and each group says ready,
+blocked, ran in part, or done.
 
 **MCP list.** The same query with an optional team and state: today, saved, or ended. No input or
 result carries a set id.
 
 **Per-plan review.** One query for one team, ordered by `position`, grouped by run day, including
 recent ended moves. Open moves are revalidated with one team check against roster, budget, trade
-rules, and order; a failed check returns the stored validation as the last check.
+rules, and order; a failed check returns the stored validation as the last check. The read reports the
+team's places as used, maximum, and free, and each reserve list by the league's own name with its
+capacity, occupancy, and free count.
 
 **Counts.** One grouped count gives open, today, saved, and ended totals, optionally per team.
 

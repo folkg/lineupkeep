@@ -191,7 +191,7 @@ it("confirms today's move, runs it, and returns the recorded outcome", async () 
 
   await expect.element(page.getByText(/2 moves still need your confirmation/u)).toBeVisible();
   await expect
-    .element(page.getByText("Waiting for your confirmation.", { exact: true }).first())
+    .element(page.getByText("Nothing runs until you confirm it.", { exact: true }).first())
     .toBeVisible();
 
   await page.getByRole("button", { name: /Confirm and run: Drop Riley Chen/u }).click();
@@ -232,12 +232,12 @@ it("confirms a saved move for its day without running it", async () => {
   await page.getByRole("button", { name: /Confirm: Claim Amon-Ra St. Brown/u }).click();
 
   await expect
-    .element(page.getByText("Confirmed 1 move. It will run on its day.", { exact: true }))
+    .element(page.getByText("Confirmed 1 move. It runs on its day's check.", { exact: true }))
     .toBeVisible();
   expect(confirmed[0]?.moves).toStrictEqual([saved.move]);
 });
 
-it("shows pending, confirmed, and discarded moves with their times", async () => {
+it("shows undecided, confirmed, ran, and discarded moves in plain words", async () => {
   await page.viewport(1280, 900);
   const pending = move({
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c4",
@@ -255,6 +255,16 @@ it("shows pending, confirmed, and discarded moves with their times", async () =>
     adds: [player("Amon-Ra St. Brown")],
     confirmation: { by: "owner", at: "2026-11-11T17:35:00.000Z" },
   });
+  const ran = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c7",
+    team: alpha,
+    kind: "drop",
+    decision: "now",
+    drops: [player("Riley Chen")],
+    confirmation: { by: "owner", at: "2026-11-11T17:35:00.000Z" },
+    runAt: "2026-11-11T18:05:00.000Z",
+    result: "executed",
+  });
   const discarded = move({
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c6",
     team: beta,
@@ -264,16 +274,41 @@ it("shows pending, confirmed, and discarded moves with their times", async () =>
     drops: [player("Tyler Boyd")],
   });
   using _app = setupTransactionsPage({
-    open: listData([pending, confirmed], { open: 2, today: 1, saved: 1, ended: 1 }),
-    ended: listData([discarded], { open: 0, today: 0, saved: 0, ended: 1 }),
+    open: listData([pending, confirmed], { open: 2, today: 1, saved: 1, ended: 2 }),
+    ended: listData([discarded, ran], { open: 0, today: 0, saved: 0, ended: 2 }),
   });
 
-  await expect.element(page.getByText("You confirmed this on", { exact: false })).toBeVisible();
-  await expect.element(page.getByText("It has not run yet.", { exact: false })).toBeVisible();
+  await expect.element(page.getByText("Undecided", { exact: true }).first()).toBeVisible();
+  await expect
+    .element(page.getByText(`Confirmed for ${formatCalendarDate("2026-11-13")}`, { exact: true }))
+    .toBeVisible();
+  await expect
+    .element(
+      page.getByText(
+        `You confirmed this on ${formatCalendarDate("2026-11-11T17:35:00.000Z")}. It has not run yet.`,
+        { exact: true },
+      ),
+    )
+    .toBeVisible();
 
   await page.getByRole("button", { name: "Show earlier moves" }).click();
+  await expect.element(page.getByText("Ran on the check", { exact: true })).toBeVisible();
+  await expect
+    .element(
+      page.getByText(
+        `You confirmed this on ${formatCalendarDate("2026-11-11T17:35:00.000Z")}. It ran on the ${formatCalendarDate("2026-11-11T18:05:00.000Z")} check.`,
+        { exact: true },
+      ),
+    )
+    .toBeVisible();
   await expect.element(page.getByText("Discarded", { exact: true })).toBeVisible();
-  await expect.element(page.getByText("Discarded on", { exact: false })).toBeVisible();
+  await expect
+    .element(
+      page.getByText(`Discarded on ${formatCalendarDate("2026-11-10T15:10:00.000Z")}.`, {
+        exact: true,
+      }),
+    )
+    .toBeVisible();
 });
 
 it("edits and discards one saved move at a time", async () => {
@@ -329,7 +364,7 @@ it("edits and discards one saved move at a time", async () => {
   await expect
     .element(
       page.getByText(
-        `Saved for ${formatCalendarDate("2026-11-17")}. Confirm it when you are ready.`,
+        `Saved for ${formatCalendarDate("2026-11-17")}. It waits in Today that day until you confirm it.`,
         { exact: true },
       ),
     )
@@ -424,7 +459,7 @@ it("shows clear teams when nothing is open", async () => {
   await expect
     .element(
       page.getByText(
-        "Every team is clear. When you propose a change, it appears here with the day it runs.",
+        "Every team is clear. When you propose a change, it appears here with the day it waits for.",
         { exact: true },
       ),
     )
@@ -494,7 +529,14 @@ it("shows each group's status and the sentence that explains what ran", async ()
 
   await expect.element(page.getByRole("heading", { name: "Groups" })).toBeVisible();
   await expect.element(page.getByText("Roster fixes", { exact: true })).toBeVisible();
-  await expect.element(page.getByText("Partly done", { exact: true })).toBeVisible();
+  await expect
+    .element(
+      page.getByText("These moves make the roster legal and free the places your move needs.", {
+        exact: true,
+      }),
+    )
+    .toBeVisible();
+  await expect.element(page.getByText("Ran in part", { exact: true })).toBeVisible();
   await expect.element(page.getByText(sentence, { exact: true })).toBeVisible();
 });
 

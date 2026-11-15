@@ -98,8 +98,17 @@ An active lineup position whose assigned player can contribute to the fantasy te
 **Bench**:
 The portion of a roster whose players are retained but are not assigned to contributing starting positions or a reserve list.
 
+**Place**:
+A starting or bench position counted against the roster maximum. A team at its maximum has no free
+place even with an empty reserve list; a reserve player is on the roster but does not count as a
+place. The roster read reports places as used, maximum, and free.
+_Avoid_: Roster spot when the counted place is meant, slot when only the count is meant
+
 **Reserve list**:
-A restricted roster area whose players must meet the league's reserve eligibility rules, such as an injured reserve list.
+A separate roster area the league names, such as IR or IR+, with its own eligibility, capacity,
+occupancy, and free count. A reserve player is on the roster but does not count against the roster
+maximum. Capacity is per list, never pooled; IR and IR+ differ in eligibility and capacity.
+_Avoid_: Bench when a reserve list is meant, reserve slot when the list's own name is meant
 
 **Final score**:
 The single signed number a provider publishes for one player for a target period, in that provider's own unit, which is the only value the lineup objective compares. A player without one is unscored rather than zero, and a provider that cannot score a league says so instead of publishing numbers. How the provider arrives at it — which measurement, which arithmetic, which period window — never crosses the provider seam.
@@ -368,12 +377,39 @@ The exclusive hold an open move takes on a named player, one roster place, or on
 _Avoid_: Lock, reservation
 
 **Move group**:
-One or more moves a propose call marks to run together, whole or not at all. The label is input only and the server assigns the group id; a move without a label is a group of one. No group spans teams or run days, so all its moves share one run day. A group lands whole or not at all: if a move in it is refused, none of that group is stored, while a move outside it can still land. A person chooses a group whole, so a partial group cannot be submitted.
+One or more moves a propose call marks to run together, in one stored order. The label is input only
+and the server assigns the group id; a move without a label is a group of one. No group spans teams
+or run days, so all its moves share one run day. A propose accepts a group whole: if a move in it is
+refused, none of that group is stored, while a move outside it can still land. A person chooses a
+group whole, so a part of a group cannot be sent. A group runs whole when every member is current
+and legal; when the league accepts one write and rejects a later one, the group records that it ran
+in part, with each action's outcome, the failed action, the actions that did not run, and a plain
+cure.
 _Avoid_: Batch, review unit, dependency graph
 
+**Roster fixes**:
+The server-generated group of slot moves that legalizes a roster and frees the places a confirmed add
+needs, labelled "Roster fixes" and ordered before the move it funds. The server chooses the smallest
+set of eligibility moves; the owner asks only for the add, drop, or reserve move, and may edit or
+discard the group like any other move.
+_Avoid_: Repair plan, auto-shuffle
+
 **Move decision**:
-What a person chose for one move: `undecided` for a move due today with no choice yet, `saved` for a later day, `now` for a move chosen for the next run, or `discarded` for a move the person removed. A later day starts saved; today starts undecided. The decision is stored on the move and a read never infers it.
-_Avoid_: State when the decision is meant, selection
+What a person chose for one move: `undecided` for a move due today with no choice yet, `saved` for a
+later day with no choice yet, `now` for a move confirmed for today, `confirmed` for a move confirmed
+for a later day, or `discarded` for a move the person removed. A later day starts saved; today starts
+undecided. A saved move whose day arrives waits in Today and never runs until it is confirmed, and a
+confirmed later move runs on the check when its day arrives. The page says undecided, confirmed for a
+day, ran on a check, or discarded. The decision is stored on the move and a read never infers it.
+_Avoid_: Approval when confirmation is meant, pending when no confirmation has been made
+
+**Move confirmation**:
+The signed-in owner's recorded decision to let one move run, stored with who confirmed it and when.
+Today's confirmation runs the move now; a later day's confirmation lets the check run it on that day.
+An agent never confirms a move and no MCP tool offers one. The move read publishes the confirmation
+and the check that carried it out, and the page says undecided, confirmed for a day, ran on a check,
+or discarded.
+_Avoid_: Approval, submission when one move is confirmed
 
 **Move validation**:
 Whether a stored move still matches the team's current state: `unchecked`, `current`, `stale`, or `illegal`, with the time it was checked and the named reasons. Every read revalidates open moves with one team check; a team whose state cannot be read keeps its stored validation and its check time, labelled as the last check rather than current. Validation never executes or refuses a move by itself.
@@ -416,7 +452,10 @@ A person's decision to remove one move from the plan without running it. The mov
 _Avoid_: Rejection, cancellation when no provider answer is meant
 
 **Run day**:
-The calendar date, in the league's own fantasy day, when a move runs: its run day, or the day it is submitted when it has none. A future run day stays open because the move stays saved; the day it arrives is the day the hourly run revalidates it and runs it, or marks it stale and leaves it.
+The calendar date, in the league's own fantasy day, when a move runs: its run day, or the day it is
+submitted when it has none. A future run day stays open because the move stays saved; when that day
+arrives, the move waits in Today for the owner's confirmation, and the check never runs it
+unconfirmed. A confirmed move runs on the check that day, or is marked stale and left.
 _Avoid_: Effective date, trigger time when the run day is meant
 
 **Plan day**:
@@ -424,7 +463,12 @@ One run day's moves in one team's plan, with whether that day is today, ordered 
 _Avoid_: Approval, batch window when one day is meant
 
 **Move submission**:
-One person's decision to run chosen moves that are due today, in the league's own fantasy day. A submission locks each team's plan, rechecks every open move, sets the run order, writes each due group, and records every move's and step's outcome. Only chosen moves are sent; a saved move that is not due today is left alone. A team whose plan is already running is skipped and the other teams continue. A submission whose groups all stopped before writing runs nothing and says why.
+The owner's confirmation of chosen moves that are due today, in the league's own fantasy day. A
+submission locks each team's plan, rechecks every open move, sets the run order, writes each due
+group, and records every move's and step's outcome. Only confirmed moves are sent; a saved move that
+is not due today is left alone, and a saved move whose day arrives waits in Today until the owner
+confirms it. A team whose plan is already running is skipped and the other teams continue. A
+submission whose groups all stopped before writing runs nothing and says why.
 _Avoid_: Approval, retry, batch, execution queue
 
 **Move outcome**:
@@ -436,7 +480,12 @@ One recorded action inside a move: a reserve move added by the server to free a 
 _Avoid_: Sub-transaction, retry, hidden precondition
 
 **Transaction page**:
-The signed-in page that reads the account's queues, today first. Its Today zone gathers every move due today across teams, each with its own `Do it now` or `Discard` choice, and submit stays disabled until every today move has a choice. Below it, one planning sheet per team holds saved moves, their run and effective dates, save and discard actions, and the reason an invalid move cannot be chosen. It carries open, today, saved, and team counts and a phone submit line; it has no dependency graph and no progress line.
+The signed-in page that reads the account's queues, today first. Its Today zone gathers every move
+due today across teams, each with its own `Confirm and run` or `Discard` choice, and shows each
+team's places and reserve lists by name. Below it, one planning sheet per team holds saved moves,
+their run and effective dates, save and discard actions, and the reason an invalid move cannot be
+chosen. It says where a move stands: undecided, confirmed for a day, ran on a check, or discarded.
+It carries open, today, saved, and ended counts; it has no dependency graph and no progress line.
 _Avoid_: Review screen, approval page, cart
 
 **Pending trade offer**:

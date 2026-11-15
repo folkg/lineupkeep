@@ -1577,7 +1577,7 @@ function groupEvaluations(
         group,
         moves: movesInGroup.map((move) => move.move),
         valid: false,
-        detail: `A group lands whole or not at all. ${moveLabel(source)} cannot run: ${reason?.detail ?? "its check did not pass"}`,
+        detail: `A group is checked whole. ${moveLabel(source)} cannot run: ${reason?.detail ?? "its check did not pass"}`,
       };
     }
     const days = [...new Set(movesInGroup.map((move) => move.runDay))];

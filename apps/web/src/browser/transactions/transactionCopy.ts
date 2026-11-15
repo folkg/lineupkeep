@@ -71,7 +71,7 @@ export function groupStatusLabel(status: TransactionPlanGroupView["status"]): st
     case "blocked":
       return "Blocked";
     case "partly_done":
-      return "Partly done";
+      return "Ran in part";
     case "done":
       return "Done";
   }

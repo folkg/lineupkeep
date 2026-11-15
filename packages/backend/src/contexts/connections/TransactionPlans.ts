@@ -336,7 +336,7 @@ export const TransactionPlanRead = Schema.Struct({
   groups: Schema.Array(TransactionPlanGroupRead).pipe(
     Schema.annotate({
       description:
-        "Each group of moves that run together in run order, with its status, recorded actions, failed action, members that did not run, and a plain sentence. A group that lands in part is never done.",
+        "Each group of moves that run together in run order, with its status, recorded actions, failed action, members that did not run, and a plain sentence. A group that ran in part is never done.",
     }),
   ),
 });
@@ -728,10 +728,10 @@ export type TransactionPlanServiceShape = {
 
 const ProposeTransactionMoveInput = Schema.Struct({
   move: Schema.optional(TransactionMoveId).annotate({
-    description: "A saved move in this team's queue to change in place; omit it to add a new move.",
+    description: "A move in this team's queue to change in place; omit it to add a new move.",
   }),
   group: Schema.optional(Schema.NonEmptyString).annotate({
-    description: "A label shared by moves that must run together, whole or not at all.",
+    description: "A label shared by moves that go in one group; omit it for a group of one.",
   }),
   kind: TransactionMoveKind.annotate({
     description: "A drop adds nobody and carries no bid; a free-agent add cannot bid either.",

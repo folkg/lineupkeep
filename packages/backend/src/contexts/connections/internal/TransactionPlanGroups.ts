@@ -120,7 +120,7 @@ function detailOf(input: {
       return blockedDetail(input);
     case "ready":
       return sentence(
-        "This group runs whole or not at all, in this order:",
+        "This group is ready to run whole, in this order:",
         `${input.members.map((member) => memberLabel(member.move)).join(", ")}.`,
       );
   }

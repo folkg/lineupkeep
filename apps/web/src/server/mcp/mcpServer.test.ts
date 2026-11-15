@@ -1861,6 +1861,21 @@ it("publishes one queue per team", async () => {
   expect(JSON.stringify(plan.outputSchema)).toContain('"actions"');
 });
 
+it("leaves confirmation to the owner and says a saved move waits", async () => {
+  const response = await handle(request("tools/list", {}, "read"));
+  const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
+  const propose = listed.result.tools.find((tool) => tool.name === "propose_transactions");
+  if (propose === undefined) {
+    throw new Error("Expected the tool list to include propose_transactions");
+  }
+
+  expect(listed.result.tools.map((tool) => tool.name)).not.toContain("confirm_transaction_move");
+  expect(propose.description).toContain(
+    "A saved move whose day arrives waits in Today until the owner confirms it",
+  );
+  expect(propose.description).toContain("no tool confirms a move");
+});
+
 it("publishes fallback choices, a group label, and a stored check on the plan", async () => {
   const response = await handle(request("tools/list", {}, "read"));
   const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));

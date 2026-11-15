@@ -152,7 +152,7 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
         setEditingError(undefined);
         setFeedback({
           type: "success",
-          message: `Saved for ${formatCalendarDate(input.runDay)}. Confirm it when you are ready.`,
+          message: `Saved for ${formatCalendarDate(input.runDay)}. It waits in Today that day until you confirm it.`,
         });
       }
       void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
@@ -332,7 +332,7 @@ function confirmationMessage(outcome: TransactionMoveConfirmationData): string {
   }
   const parts: Array<string> = [];
   if (outcome.counts.moves === 0) {
-    parts.push(`Confirmed ${moveCount(outcome.confirmed.length)}. It will run on its day.`);
+    parts.push(`Confirmed ${moveCount(outcome.confirmed.length)}. It runs on its day's check.`);
   } else {
     parts.push(`Confirmed and ran ${moveCount(outcome.counts.moves)}.`);
   }

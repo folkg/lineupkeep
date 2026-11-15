@@ -70,7 +70,7 @@ const DiscardedTransactionPlan = Schema.Struct({
 export const proposalTools = Toolkit.make(
   Tool.make("propose_transactions", {
     description:
-      "Add moves to one team's transaction queue, or change a saved move in place by naming its move id. A saved move is discarded with `discard_transaction_move`. Proposals are stored only: nothing reaches the league's site or is submitted, executed, or spent. A move that cannot run is returned in `refused` with its position and reason and is not stored.",
+      "Add moves to one team's transaction queue, or amend a move in place by naming its move id. Nothing is submitted, executed, or spent. A saved move whose day arrives waits in Today until the owner confirms it; no tool confirms a move. `discard_transaction_move` removes one move. A move that cannot run is returned in `refused` with its position and reason and is not stored.",
     parameters: ProposeTransactionMovesInput,
     success: Schema.toCodecJson(ProposedTransactions),
     failure: ToolFailure,
@@ -96,7 +96,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("list_transaction_proposals", {
     description:
-      "List open moves across the account's teams, today first, grouped by run day and team. Filter by one team and by state: `today`, `saved`, or `ended`. The read carries each move's stored check and the time it was checked, and the open, today, saved, and ended totals.",
+      "List open moves across the account's teams, today first, grouped by run day and team. Filter by one team and by state: `today`, `saved`, or `ended`. Each move carries its stored check, time, decision, confirmation, and run, with the open, today, saved, and ended totals.",
     parameters: ListTransactionMovesInput,
     success: Schema.toCodecJson(TransactionMoveList),
     failure: ToolFailure,
@@ -109,7 +109,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_transaction_plan", {
     description:
-      "Read one team's transaction queue in run order by day, with each move's check and time. It checks stored moves against the team's current roster and reports its places, each reserve list by the league's name, and each group's status, actions, and sentence.",
+      "Read one team's transaction queue in run order by day, with each move's check, time, and confirmation. It reports the team's places, each reserve list by the league's own name, and each group as ready, blocked, ran in part, or done, with its actions and plain sentence.",
     parameters: TransactionPlanInput,
     success: Schema.toCodecJson(TransactionPlanRead),
     failure: ToolFailure,
@@ -122,7 +122,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("discard_transaction_move", {
     description:
-      "Discard one saved move from a team's queue and return the plan, which stays open with its other moves. A move that already ran is refused, and the refusal says why.",
+      "Discard one move from a team's queue and return the plan, which stays open with its other moves. Discarding is the owner's removal and confirms nothing. A move that already ran is refused with its reason.",
     parameters: DiscardTransactionMoveToolInput,
     success: Schema.toCodecJson(DiscardedTransactionPlan),
     failure: ToolFailure,

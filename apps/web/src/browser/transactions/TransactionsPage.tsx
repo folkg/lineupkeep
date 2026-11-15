@@ -48,7 +48,7 @@ export function TransactionsPage(props: TransactionsPageProps): JSX.Element {
   return (
     <AppShell>
       <Page
-        lede="Today is for acting. The rest is for planning. Every open move on your teams, split into what runs today and what waits for a later day."
+        lede="Today is for acting. The rest is for planning. Every open move on your teams, split into what is due today and what waits for a later day."
         title="Transactions"
       >
         <Show
@@ -234,7 +234,8 @@ function GroupsZone(props: SectionProps): JSX.Element {
             Groups
           </SectionTitle>
           <Text size="body" tone="muted">
-            A group runs whole or not at all, in the order its moves need.
+            A group runs whole, in the order its moves need. If your league accepts one write and
+            rejects a later one, the group says what ran in part.
           </Text>
           <Stack gap="lg">
             <For each={props.page.groups()}>{(group) => <GroupCard group={group} />}</For>
@@ -263,6 +264,11 @@ function GroupCard(props: { readonly group: TransactionPlanGroupView }): JSX.Ele
         <Text size="caption" tone={props.group.status === "ready" ? "muted" : "default"}>
           {props.group.detail}
         </Text>
+        <Show when={props.group.label === "Roster fixes"}>
+          <Text size="caption" tone="muted">
+            These moves make the roster legal and free the places your move needs.
+          </Text>
+        </Show>
       </Stack>
     </Box>
   );
@@ -284,13 +290,14 @@ function PlanningSheet(props: SectionProps): JSX.Element {
         </Text>
       </Inline>
       <Text size="body" tone="muted">
-        Each waits for its day until you confirm it. You can change or discard any saved move until
-        then.
+        Each saved move waits for its day. On that day it waits in Today for your confirmation; once
+        confirmed, the check runs it. You can change or discard it until then.
       </Text>
       <Show
         fallback={
           <EmptyState title="Nothing saved">
-            Every team is clear. When you propose a change, it appears here with the day it runs.
+            Every team is clear. When you propose a change, it appears here with the day it waits
+            for.
           </EmptyState>
         }
         when={teams().length > 0}
@@ -470,13 +477,18 @@ function MoveState(props: { readonly move: TransactionMoveView }): JSX.Element {
     const confirmed = props.move.confirmation;
     if (confirmed !== undefined) {
       return props.move.runAt === undefined
-        ? `You confirmed this on ${formatDateTime(confirmed.at)}. It has not run yet.`
-        : `You confirmed this on ${formatDateTime(confirmed.at)}. It ran on ${formatDateTime(props.move.runAt)}.`;
+        ? `You confirmed this on ${formatCalendarDate(confirmed.at)}. It has not run yet.`
+        : `You confirmed this on ${formatCalendarDate(confirmed.at)}. It ran on the ${formatCalendarDate(props.move.runAt)} check.`;
     }
     if (props.move.decision === "discarded") {
       return props.move.decidedAt === undefined
         ? "Discarded."
-        : `Discarded on ${formatDateTime(props.move.decidedAt)}.`;
+        : `Discarded on ${formatCalendarDate(props.move.decidedAt)}.`;
+    }
+    if (props.move.result === "executed") {
+      return props.move.runAt === undefined
+        ? "It ran on the check."
+        : `It ran on the ${formatCalendarDate(props.move.runAt)} check.`;
     }
     if (props.move.result !== undefined) {
       return undefined;
@@ -486,10 +498,10 @@ function MoveState(props: { readonly move: TransactionMoveView }): JSX.Element {
     }
     if (props.move.decision === "saved") {
       return props.move.runDay === undefined
-        ? "Saved. Waiting for your confirmation."
-        : `Saved for ${formatCalendarDate(props.move.runDay)}. Waiting for your confirmation.`;
+        ? "It waits for your confirmation."
+        : `It waits for ${formatCalendarDate(props.move.runDay)}. It runs only after you confirm it on that day.`;
     }
-    return "Waiting for your confirmation.";
+    return "Nothing runs until you confirm it.";
   };
   return (
     <Show when={confirmation()}>
@@ -633,7 +645,7 @@ function todayCopy(total: number, pending: number): string {
     return "No move is waiting to run today.";
   }
   if (pending === 0) {
-    return `All ${String(total)} ${total === 1 ? "is" : "are"} confirmed. A confirmed move runs now or on the next check.`;
+    return `All ${String(total)} ${total === 1 ? "is" : "are"} confirmed. A confirmed move runs now, or on the check when its day arrives.`;
   }
   return `${String(pending)} of ${String(total)} waiting for your confirmation. Nothing runs until you confirm it.`;
 }
@@ -642,10 +654,20 @@ function decisionLabel(move: TransactionMoveView): string {
   if (move.decision === "discarded") {
     return "Discarded";
   }
-  if (isConfirmed(move)) {
-    return "Confirmed";
+  if (move.decision === "now") {
+    return "Confirmed for today";
   }
-  return isPending(move) ? "Pending" : "Open";
+  if (move.decision === "confirmed") {
+    return move.runDay === undefined
+      ? "Confirmed"
+      : `Confirmed for ${formatCalendarDate(move.runDay)}`;
+  }
+  if (move.decision === "saved") {
+    return move.runDay === undefined
+      ? "Undecided"
+      : `Undecided for ${formatCalendarDate(move.runDay)}`;
+  }
+  return "Undecided";
 }
 
 function isPending(move: TransactionMoveView): boolean {
@@ -658,7 +680,7 @@ function isConfirmed(move: TransactionMoveView): boolean {
 
 function resultLabel(move: TransactionMoveView): string {
   if (move.result === "executed") {
-    return "Ran";
+    return "Ran on the check";
   }
   if (move.result === "failed") {
     return "Failed";
@@ -681,7 +703,7 @@ function resultLabel(move: TransactionMoveView): string {
   if (move.decision === "discarded") {
     return "Discarded";
   }
-  return "Open";
+  return "Undecided";
 }
 
 function moveLabel(move: TransactionMoveView): string {

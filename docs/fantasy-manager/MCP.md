@@ -800,20 +800,20 @@ A coverage entry has one of three states. `available` means the resource was rea
 
 ## Transaction queue
 
-Each team has one transaction queue. `propose_transactions` adds moves to that queue, or changes a
-saved move in place when its item names the move's id, and returns the team's stored plan plus any
+Each team has one transaction queue. `propose_transactions` adds moves to that queue, or amends a
+move in place when its item names the move's id, and returns the team's stored plan plus any
 moves it refused. There is no separate plan identifier. Omitting the id appends a new move; naming
-the id of a saved move changes that move instead of adding another. A move id that is not in the
+the id of a move changes that move instead of adding another. A move id that is not in the
 owner's team queue is refused as `move_not_found`.
 
 The input is one `team` and one or more `moves`. Each move names a `kind` (`free_agent_add`,
 `waiver_claim`, `drop`, `slot_move`, `activate`, `stash`, or `trade`), the players to `adds` and
-`drops`, an optional `reason`, and an optional `window`. `window` is one calendar date written `YYYY-MM-DD`, read in the league's own fantasy day; it becomes
-the move's run day and places it in the saved queue. A move with no
-window is due today. A trade also names `counterparty` and the `picks` it moves. A one-player add or
-waiver claim may name `fallbacks`, an ordered list of alternatives stored beside the move. The queue
-accepts the same sealed player and counterparty references as the rest of the surface; a reference
-from another account or league is refused.
+`drops`, an optional `reason`, and an optional `window`. `window` is one calendar date written
+`YYYY-MM-DD`, read in the league's own fantasy day; it becomes the move's run day and the move starts
+saved. A move with no window is due today and starts undecided. A trade also names `counterparty` and
+the `picks` it moves. A one-player add or waiver claim may name `fallbacks`, an ordered list of
+alternatives stored beside the move. The queue accepts the same sealed player and counterparty
+references as the rest of the surface; a reference from another account or league is refused.
 
 The call reads current league, roster, player, and budget state once for the team, then validates the
 new and changed moves together with the moves already stored and still open. An accepted move is
@@ -825,11 +825,15 @@ would make it valid. A refused move does not make the other accepted moves fail.
 contacts no write endpoint and spends nothing.
 
 `get_transaction_plan` reads one owned team's queue in order, grouped by run day, today first. Each
-move carries its stored validation and the time it was checked, its effective date, and its outcome
-once it has one. The read uses stored state and does not change the queue. A team the account does
-not own is reported as not found.
+move carries its stored validation and the time it was checked, its effective date, its decision,
+its confirmation, and the check that carried it out once it has run. A decision reads `undecided`,
+`saved`, `now`, `confirmed`, or `discarded`. The read reports the team's places as used, maximum, and
+free, and each reserve list by the league's own name with its eligibility, capacity, occupancy, and
+free count. Each group says ready, blocked, ran in part, or done, with the action that landed, the
+action that failed, the actions that did not run, and a plain cure. The read uses stored state and
+does not change the queue. A team the account does not own is reported as not found.
 
-`discard_transaction_move` takes one `team`, one saved `move` id, and an optional `reason`. It marks
+`discard_transaction_move` takes one `team`, one `move` id, and an optional `reason`. It marks
 that move discarded, releases its claims, and leaves the plan and its other moves open. The optional
 reason is returned with the result. A move that already ran cannot be discarded; it is returned in
 `refused` with `move_not_open` and a sentence saying the move has ended. A move id from another
@@ -839,9 +843,10 @@ owner or team is refused as `move_not_found`.
 `team`, an optional `state` (`today`, `saved`, or `ended`), a `cursor`, and a `limit` from 1 to 50
 (default 20). `today` includes moves due today or earlier, `saved` includes moves with a future run
 day, and `ended` includes moves that ran, failed, were skipped, or were discarded. The result is
-grouped by day and team, with `counts` for open, today, saved, and ended moves and `teamCount` for
-the teams represented. A page with more moves carries a bound cursor; reuse with different arguments
-is refused as a mismatch. The read writes nothing and contacts no provider.
+grouped by day and team, with each move's decision, confirmation, and run provenance, `counts` for
+open, today, saved, and ended moves, and `teamCount` for the teams represented. A page with more
+moves carries a bound cursor; reuse with different arguments is refused as a mismatch. The read
+writes nothing and contacts no provider.
 
 Validation is a stored fact, not a new write. A queue move is `current`, `stale`, or `illegal`. A
 stale move names why, such as the player leaving the pool, the player leaving the roster, a full
@@ -849,21 +854,23 @@ roster with no operation to open a place, a closed period, or a bid over the pub
 illegal roster names the player, the slot, and the move that would resolve it. A team whose state
 cannot be read marks only its own moves. A saved move can be changed on the team page or by an MCP
 amend until its run day. The page edit changes the run day; an MCP amend replaces the move's shape
-and rechecks the whole queue. Neither edit runs the move.
+and rechecks the whole queue. Neither edit runs the move, and changing a move's day clears its
+confirmation. An add that needs a place gets a server-generated group labelled `Roster fixes`,
+ordered before the move it funds; it is editable and discardable like any other move.
 
-No MCP tool submits, executes, or spends. A signed-in owner submits today's chosen moves from the
-transactions page, and each submission rechecks the queue immediately before writing. The page asks
-for a choice on every move due today before it enables submit: `Do it now` runs the move, and
-`Discard` marks it discarded. Only the chosen moves are sent. A saved move that is not due today is
-not part of that submission. The hourly runner runs a saved move whose day has arrived through the
-same write path, skips a team another run already claims, and records a failed, pending, or unknown
-outcome rather than retrying a write that may have applied.
+No MCP tool submits, executes, spends, or confirms. Confirmation is the signed-in owner's, on the
+transactions page, and a saved move whose day arrives waits in Today until they confirm it. The page
+asks for `Confirm and run` or `Discard` on every move due today; only confirmed moves are sent, and a
+saved move that is not due today is left alone. A confirmed later move runs on the check when its day
+arrives, through the same write path; the check skips a team another run already claims and records
+a failed, pending, or unknown outcome rather than retrying a write that may have applied.
 
 Moves run in the server's stored order. A drop or slot move that another move depends on runs first;
-a group of dependent moves runs whole or not at all. A provider refusal keeps its exact wording on
-the move and on the transactions page. A move that executed, was discarded, or can no longer change
-is `ended` and appears in the earlier list. The queue keeps no expiry: a move stays until it ends, and
-a team's queue is the stored record of what was proposed and what happened.
+a group runs whole, and a league that accepts one write and rejects a later one leaves the group that
+ran in part, with each action's outcome recorded. A provider refusal keeps its exact wording on the
+move and on the transactions page. A move that executed, was discarded, or can no longer change is
+`ended` and appears in the earlier list. The queue keeps no expiry: a move stays until it ends, and a
+team's queue is the stored record of what was proposed and what happened.
 
 A failed call returns one coded failure rather than a bare internal error:
 

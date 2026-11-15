@@ -40,18 +40,19 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 
 ### 13 November 2026
 
-- **A plan move can name the date it waits for, and the hourly clock runs it.** An item may carry one
-  calendar date read in the league's own fantasy day. Submitting the plan is the approval: a selected
-  move whose date is still ahead stays in the plan with an approval time, and a move with no window or
-  whose date has arrived runs on that submission. The hourly tick selects approved moves whose date has
-  arrived, in the league's own day, and runs them through the ordinary submission, so ordering,
-  revalidation, settling, and the single-slot claim stay one path. A failure that settles the move stops
-  it; a transient failure leaves it proposed for the next tick, so a missed tick is late rather than lost.
+- **A plan move can name the date it waits for, and the check runs it only after the owner confirms it.**
+  An item may carry one calendar date read in the league's own fantasy day. A selected move whose date
+  is still ahead stays in the plan as a saved move; on its day it waits in Today for the owner's
+  confirmation, and a confirmed later move runs on the check that day through the ordinary submission.
+  A move with no window is undecided today and runs only when confirmed. The check never chooses or
+  runs an unconfirmed move, so ordering, revalidation, settling, and the single-slot claim stay one
+  path. A failure that settles the move stops it; a transient failure leaves it proposed for the next
+  tick, so a missed tick is late rather than lost.
 - **A scheduled add can name ordered fallbacks, and the server promotes one when the first choice is
   gone.** The draft carries fallbacks only for a one-player add or waiver claim. At submission, when the
   first choice can no longer be added, the server uses the facts it already read to take the first
   fallback the pool lists as available, re-evaluates the team once, and records the chosen player and
-  why. Nothing promotes on a read; the review and the plan list show the fallbacks a person is approving.
+  why. Nothing promotes on a read; the review and the plan list show the fallbacks a person is confirming.
 - **A move says which budget it spends and how far along it is, and a plan list can ask for scheduled
   plans.** Every proposal item carries `budgetPeriod`, the league season for a waiver claim's bid and
   no budget for every other kind, and `lifecycle`, which reads as scheduled while the run date is
