@@ -212,6 +212,33 @@ it.effect("refuses a group whole when one of its moves cannot run", () =>
   ),
 );
 
+it.effect("refuses a proposed move for a player who has already played today", () =>
+  Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const result = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [drop("a1", "Locked One")],
+    });
+
+    assert.deepStrictEqual(
+      result.refused.map(({ code, team: refusedTeam, moves }) => [code, refusedTeam, moves]),
+      [["player_locked", team, [0]]],
+    );
+    assert.include(result.refused[0]?.detail ?? "", "Locked One");
+    assert.include(
+      result.refused[0]?.detail ?? "",
+      "Wait until the league unlocks Locked One, or choose another player.",
+    );
+    assert.deepStrictEqual(result.plan.moves, []);
+    assert.deepStrictEqual(yield* database.select().from(transactionMoves), []);
+  }).pipe(Effect.provide(serviceLayer([league([locked("a1", "Locked One", "BN", ["RB"])], [])]))),
+);
+
 it.effect("refuses a second drop of the same player in one plan", () =>
   Effect.gen(function* () {
     const service = yield* TransactionPlanService;
@@ -489,6 +516,68 @@ it.effect("discards one move and leaves the plan's other moves", () =>
   ),
 );
 
+it.effect("discards a failed move and a stale move out of the open list", () => {
+  const facts = new Map<TeamId, TransactionPlanTeamFacts>();
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const repository = yield* TransactionPlanRepository;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+    facts.set(
+      team,
+      league(
+        [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
+        [],
+        { slots: [bench("BN", 2)], constraints: constraints(2) },
+      ).facts,
+    );
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [drop("a1", "Roster One"), { ...drop("a2", "Roster Two"), runDay: "2026-11-16" }],
+    });
+    const failed = droppedMoveId(proposed.plan, "a1");
+    const stale = droppedMoveId(proposed.plan, "a2");
+    yield* repository.recordResult({
+      userId: owner,
+      team,
+      move: failed,
+      result: "failed",
+      detail: "Your league rejected the drop.",
+      externalRef: undefined,
+      at,
+    });
+
+    facts.set(
+      team,
+      league([rostered("a1", "Roster One", "BN", ["RB"])], [], {
+        slots: [bench("BN", 2)],
+        constraints: constraints(2),
+      }).facts,
+    );
+    const before = yield* service.plan(owner, { team });
+    assert.strictEqual(before.moves.find(({ move }) => move === stale)?.validation.status, "stale");
+
+    yield* service.discard(owner, { team, move: failed });
+    yield* service.discard(owner, { team, move: stale });
+
+    const after = yield* service.plan(owner, { team });
+    assert.deepStrictEqual(
+      after.moves
+        .filter(({ move }) => move === failed || move === stale)
+        .map(({ decision }) => decision),
+      ["discarded", "discarded"],
+    );
+    const open = yield* service.list(owner, { team });
+    assert.deepStrictEqual(open.moves, []);
+    const counts = yield* service.counts(owner, { team });
+    assert.strictEqual(counts.totals.open, 0);
+    assert.strictEqual(counts.totals.ended, 2);
+  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+});
+
 it.effect("resolves concurrent proposals to one plan without losing a move", () =>
   Effect.gen(function* () {
     const service = yield* TransactionPlanService;
@@ -571,6 +660,79 @@ it.effect("rechecks a saved drop when the league no longer rosters the player", 
     );
     assert.deepStrictEqual(move?.check, { status: "checked" });
     assert.strictEqual(move === undefined ? 0 : checkedAtOf(move), DateTime.toEpochMillis(readAt));
+  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+});
+
+it.effect("flags a saved free-agent add when the league moves the player to waivers", () => {
+  const facts = new Map<TeamId, TransactionPlanTeamFacts>();
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+    facts.set(team, league([], [freeAgent("fa1", "Free Agent One", ["RB"])]).facts);
+
+    yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [{ ...add("fa1", "Free Agent One"), runDay: "2026-11-16" }],
+    });
+
+    const readAt = DateTime.addDuration(at, 6 * 60 * 60 * 1000);
+    yield* TestClock.setTime(DateTime.toEpochMillis(readAt));
+    facts.set(team, league([], [waived("fa1", "Free Agent One", ["RB"])]).facts);
+    const waivedRead = yield* service.plan(owner, { team });
+    assert.strictEqual(waivedRead.moves[0]?.validation.status, "stale");
+    assert.deepStrictEqual(
+      waivedRead.moves[0]?.validation.reasons.map(({ code, detail }) => [code, detail]),
+      [
+        [
+          "player_unavailable",
+          "Free Agent One is on waivers, so a free-agent add cannot bring them in.",
+        ],
+      ],
+    );
+
+    facts.set(team, league([], []).facts);
+    const taken = yield* service.plan(owner, { team });
+    assert.strictEqual(taken.moves[0]?.validation.status, "stale");
+    assert.deepStrictEqual(
+      taken.moves[0]?.validation.reasons.map(({ code, detail }) => [code, detail]),
+      [["player_unavailable", "Free Agent One is not in the league's available player pool."]],
+    );
+  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+});
+
+it.effect("flags an open move when its player becomes locked before the read", () => {
+  const facts = new Map<TeamId, TransactionPlanTeamFacts>();
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+    facts.set(team, league([rostered("a1", "Roster One", "BN", ["RB"])], []).facts);
+
+    yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [drop("a1", "Roster One")],
+    });
+
+    const readAt = DateTime.addDuration(at, 6 * 60 * 60 * 1000);
+    yield* TestClock.setTime(DateTime.toEpochMillis(readAt));
+    facts.set(team, league([locked("a1", "Roster One", "BN", ["RB"])], []).facts);
+
+    const read = yield* service.plan(owner, { team });
+    assert.strictEqual(read.moves[0]?.validation.status, "stale");
+    assert.deepStrictEqual(
+      read.moves[0]?.validation.reasons.map(({ code, detail }) => [code, detail]),
+      [
+        [
+          "player_locked",
+          "Roster One has already played or is locked in their place today, so this move cannot drop them. Wait until the league unlocks Roster One, or choose another player.",
+        ],
+      ],
+    );
   }).pipe(Effect.provide(mutableFactsLayer(facts)));
 });
 
@@ -1593,9 +1755,24 @@ it.effect("records a pending waiver claim and does not retry it", () => {
 });
 
 for (const timing of [
-  { rule: "same_day" as const, currentDate: "2026-11-14", effectiveDate: "2026-11-15" },
-  { rule: "next_day" as const, currentDate: "2026-11-14", effectiveDate: "2026-11-16" },
-  { rule: "weekly_lock" as const, currentDate: "2026-11-19", effectiveDate: "2026-11-19" },
+  {
+    rule: "same_day" as const,
+    currentDate: "2026-11-14",
+    periodStart: undefined,
+    effectiveDate: "2026-11-15",
+  },
+  {
+    rule: "next_day" as const,
+    currentDate: "2026-11-14",
+    periodStart: undefined,
+    effectiveDate: "2026-11-16",
+  },
+  {
+    rule: "weekly_lock" as const,
+    currentDate: "2026-11-15",
+    periodStart: "2026-11-09",
+    effectiveDate: "2026-11-09",
+  },
 ]) {
   it.effect(`runs a saved move on the league's own day under ${timing.rule}`, () => {
     const facts = new Map<TeamId, TransactionPlanTeamFacts>();
@@ -1615,7 +1792,11 @@ for (const timing of [
           {
             slots: [bench("BN", 2)],
             constraints: constraints(2),
-            timing: { rule: timing.rule, currentDate: timing.currentDate },
+            timing: {
+              rule: timing.rule,
+              currentDate: timing.currentDate,
+              periodStart: timing.periodStart,
+            },
           },
         ).facts,
       );
@@ -1651,6 +1832,47 @@ for (const timing of [
     }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
   });
 }
+
+it.effect("stores the locked week's start as a weekly-lock move's effective date", () =>
+  Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [drop("a1", "Roster One"), { ...drop("a2", "Roster Two"), runDay: "2026-11-21" }],
+    });
+
+    assert.deepStrictEqual(
+      proposed.plan.moves.map(({ runDay, effectiveDate }) => [runDay, effectiveDate]),
+      [
+        ["2026-11-14", "2026-11-09"],
+        ["2026-11-21", "2026-11-16"],
+      ],
+    );
+  }).pipe(
+    Effect.provide(
+      serviceLayer([
+        league(
+          [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
+          [],
+          {
+            slots: [bench("BN", 2)],
+            constraints: constraints(2),
+            timing: {
+              rule: "weekly_lock",
+              currentDate: today,
+              periodStart: "2026-11-09",
+            },
+          },
+        ),
+      ]),
+    ),
+  ),
+);
 
 function serviceLayer(
   leagues: ReadonlyArray<League>,
@@ -1832,7 +2054,11 @@ function leagueFor(
       slots: overrides.slots ?? [bench("BN", 4)],
       constraints: overrides.constraints ?? constraints(4),
       today,
-      timing: overrides.timing ?? { rule: "next_day", currentDate: today },
+      timing: overrides.timing ?? {
+        rule: "next_day",
+        currentDate: today,
+        periodStart: undefined,
+      },
       budget: overrides.budget,
     },
   };
@@ -1870,6 +2096,15 @@ function rostered(
   positions: ReadonlyArray<string> = [],
 ): TransactionPlanRosterPlayer {
   return { key, name, positions, slot, injured: false, editable: true };
+}
+
+function locked(
+  key: string,
+  name: string,
+  slot: string,
+  positions: ReadonlyArray<string> = [],
+): TransactionPlanRosterPlayer {
+  return { key, name, positions, slot, injured: false, editable: false };
 }
 
 function freeAgent(

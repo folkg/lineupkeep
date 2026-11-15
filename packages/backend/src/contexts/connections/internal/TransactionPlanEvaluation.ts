@@ -290,16 +290,24 @@ function identityReasons(
   byId: ReadonlyMap<TransactionMoveId, TransactionPlanMove>,
 ): Reasons {
   const reasons = emptyReasons();
+  const dueToday = runDayOf(move, facts.today) === facts.today;
   for (const drop of move.drops) {
-    if (projection.roster.has(drop.key)) {
-      continue;
+    const player = projection.roster.get(drop.key);
+    if (player === undefined) {
+      stale(
+        reasons,
+        "drop_not_rostered",
+        drop.key,
+        leftRosterDetail(nameOf(drop), "drop them", drop.key, projection, byId),
+      );
+    } else if (dueToday && !player.editable) {
+      stale(
+        reasons,
+        "player_locked",
+        drop.key,
+        lockedPlayerDetail(player.name, lockedActionOf(move, drop.key)),
+      );
     }
-    stale(
-      reasons,
-      "drop_not_rostered",
-      drop.key,
-      leftRosterDetail(nameOf(drop), "drop them", drop.key, projection, byId),
-    );
   }
   if (isAddKind(move.kind)) {
     const wanted = move.kind === "free_agent_add" ? "free_agent" : "waiver";
@@ -343,13 +351,23 @@ function identityReasons(
         undefined,
         `This move names no player. An ${move.kind} names the rostered player to move.`,
       );
-    } else if (!projection.roster.has(player.key)) {
-      stale(
-        reasons,
-        "move_not_rostered",
-        player.key,
-        leftRosterDetail(nameOf(player), "place them", player.key, projection, byId),
-      );
+    } else {
+      const rostered = projection.roster.get(player.key);
+      if (rostered === undefined) {
+        stale(
+          reasons,
+          "move_not_rostered",
+          player.key,
+          leftRosterDetail(nameOf(player), "place them", player.key, projection, byId),
+        );
+      } else if (dueToday && !rostered.editable) {
+        stale(
+          reasons,
+          "player_locked",
+          player.key,
+          lockedPlayerDetail(rostered.name, lockedActionOf(move, player.key)),
+        );
+      }
     }
   }
   if (move.kind === "slot_move") {
@@ -375,6 +393,13 @@ function identityReasons(
             projection,
             byId,
           ),
+        );
+      } else if (dueToday && !player.editable) {
+        stale(
+          reasons,
+          "player_locked",
+          declared.playerKey,
+          lockedPlayerDetail(player.name, lockedActionOf(move, declared.playerKey)),
         );
       } else {
         const destination = rule.byPosition.get(declared.toSlot);
@@ -442,6 +467,29 @@ function identityReasons(
     );
   }
   return reasons;
+}
+
+function lockedActionOf(move: TransactionPlanMove, playerKey: string): string {
+  if (move.kind === "trade") {
+    return "trade them away";
+  }
+  if (move.drops.some((drop) => drop.key === playerKey)) {
+    return "drop them";
+  }
+  if (move.kind === "slot_move" && move.slotMove !== undefined) {
+    return `move them to ${move.slotMove.toSlot}`;
+  }
+  if (move.kind === "activate") {
+    return "activate them";
+  }
+  if (move.kind === "stash") {
+    return "stash them";
+  }
+  return "move them";
+}
+
+function lockedPlayerDetail(name: string, action: string): string {
+  return `${name} has already played or is locked in their place today, so this move cannot ${action}. Wait until the league unlocks ${name}, or choose another player.`;
 }
 
 function leftRosterDetail(
@@ -1290,10 +1338,27 @@ function effectiveDateOf(
     case "next_day":
       return nextDate(runDay);
     case "weekly_lock":
-      return timing.currentDate;
+      return lockedPeriodDate(runDay, timing.periodStart);
     case undefined:
       return undefined;
   }
+}
+
+function lockedPeriodDate(
+  runDay: StoredMoveDate,
+  periodStart: StoredMoveDate | undefined,
+): StoredMoveDate | undefined {
+  if (periodStart === undefined) {
+    return undefined;
+  }
+  const start = DateTime.makeUnsafe(`${periodStart}T00:00:00.000Z`);
+  const day = DateTime.makeUnsafe(`${runDay}T00:00:00.000Z`);
+  const days = Math.floor(
+    (DateTime.toEpochMillis(day) - DateTime.toEpochMillis(start)) / 86_400_000,
+  );
+  return DateTime.formatIsoDate(
+    DateTime.add(start, { days: Math.max(0, Math.floor(days / 7) * 7) }),
+  );
 }
 
 function nextDate(date: StoredMoveDate): StoredMoveDate {
@@ -1641,6 +1706,7 @@ export type TransactionPlanConstraints = {
 export type TransactionPlanTiming = {
   readonly rule: "same_day" | "next_day" | "weekly_lock" | undefined;
   readonly currentDate: StoredMoveDate | undefined;
+  readonly periodStart: StoredMoveDate | undefined;
 };
 
 export type TransactionPlanSlot = {

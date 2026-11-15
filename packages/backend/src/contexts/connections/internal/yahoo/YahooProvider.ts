@@ -1085,7 +1085,7 @@ function rosterChange(settings: YahooLeagueSettings): ProviderRosterChange | und
     return {
       rule: "weekly_lock",
       source: ["weekly_deadline"],
-      detail: `Your league's weekly_deadline is "${deadline}", which names the weekly deadline day, so the league locks roster changes once a week.`,
+      detail: `Your league's weekly_deadline is "${deadline}", which names the weekly deadline day, so the league locks roster changes once a week. A move takes effect at the start of the league's scoring week.`,
     };
   }
   if (deadline !== "") {
@@ -1099,7 +1099,7 @@ function rosterChange(settings: YahooLeagueSettings): ProviderRosterChange | und
     return {
       rule: "weekly_lock",
       source: ["weekly_deadline", "edit_key"],
-      detail: `Your league's weekly_deadline is empty and its edit_key is ${JSON.stringify(editKey)}, a scoring week, so roster changes are locked to that week.`,
+      detail: `Your league's weekly_deadline is empty and its edit_key is "${editKey}", a scoring week, so roster changes are locked to that week. A move takes effect at the start of that scoring week.`,
     };
   }
   const currentDate = settings.currentDate;

@@ -180,7 +180,31 @@ function rosterPayload(teamKey: string): unknown {
                     { is_editable: "0" },
                   ],
                 },
-                count: 2,
+                "2": {
+                  player: [
+                    [
+                      { player_key: `${game}.p.90003` },
+                      { player_id: "90003" },
+                      { name: { full: "Bench Runner", first: "Bench", last: "Runner" } },
+                      { editorial_team_abbr: "NYG" },
+                      { display_position: "RB" },
+                      { position_type: "O" },
+                      { primary_position: "RB" },
+                      { eligible_positions: { "0": { position: "RB" }, count: 1 } },
+                      { opponent: null },
+                      { is_undroppable: "0" },
+                    ],
+                    {
+                      selected_position: [
+                        { coverage_type: "week", week: "6" },
+                        { position: "BN" },
+                        { is_flex: 0 },
+                      ],
+                    },
+                    { is_editable: "1" },
+                  ],
+                },
+                count: 3,
               },
             },
             coverage_type: "week",

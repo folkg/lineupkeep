@@ -92,6 +92,7 @@ export const TransactionPlanFactsLive = Layer.effect(
         queries,
         enabled: input.needsBudget,
       });
+      const periodStart = yield* publishedPeriodStart({ context, league });
       return {
         roster: rosterPlayers(roster),
         pool: poolPlayers(details),
@@ -106,6 +107,7 @@ export const TransactionPlanFactsLive = Layer.effect(
         timing: {
           rule: league.rosterChange?.rule,
           currentDate: league.currentDate,
+          periodStart,
         },
         budget,
       };
@@ -255,6 +257,38 @@ function poolPlayers(details: ReadonlyArray<ProviderPlayerDetail>): ReadonlyMap<
     });
   }
   return pool;
+}
+
+function publishedPeriodStart(input: {
+  readonly context: TeamContext;
+  readonly league: ProviderLeagueSettings;
+}): Effect.Effect<string | undefined> {
+  if (input.league.rosterChange?.rule !== "weekly_lock") {
+    return Effect.void.pipe(Effect.as(undefined));
+  }
+  const week = input.league.periodWindow?.current;
+  if (week === undefined) {
+    return Effect.void.pipe(Effect.as(undefined));
+  }
+  return Effect.result(
+    input.context.provider.readMatchups({
+      ...providerIdentity(input.context),
+      providerLeagueKey: input.context.owned.team.providerLeagueKey,
+      period: { week },
+    }),
+  ).pipe(
+    Effect.map((result) => {
+      if (result._tag !== "Success") {
+        return undefined;
+      }
+      const weekStart = result.success.find(
+        (matchup) => matchup.weekStart !== undefined,
+      )?.weekStart;
+      return weekStart !== undefined && /^\d{4}-\d{2}-\d{2}$/u.test(weekStart)
+        ? weekStart
+        : undefined;
+    }),
+  );
 }
 
 function coverageOf(league: ProviderLeagueSettings): ProviderRosterCoverage | undefined {

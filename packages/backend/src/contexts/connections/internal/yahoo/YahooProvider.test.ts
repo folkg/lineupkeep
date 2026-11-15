@@ -1331,7 +1331,7 @@ it.effect("reads an NFL league whose settings publish extra and renamed fields",
       rule: "weekly_lock",
       source: ["weekly_deadline", "edit_key"],
       detail:
-        'Your league\'s weekly_deadline is empty and its edit_key is "42", a scoring week, so roster changes are locked to that week.',
+        'Your league\'s weekly_deadline is empty and its edit_key is "42", a scoring week, so roster changes are locked to that week. A move takes effect at the start of that scoring week.',
     });
     assert.strictEqual(league.waiverDays, 1);
     assert.strictEqual(league.maxWeeklyAcquisitions, undefined);
@@ -1654,7 +1654,7 @@ it.effect("derives a weekly cadence from the league's own declared deadline", ()
       rule: "weekly_lock",
       source: ["weekly_deadline"],
       detail:
-        'Your league\'s weekly_deadline is "3", which names the weekly deadline day, so the league locks roster changes once a week.',
+        "Your league's weekly_deadline is \"3\", which names the weekly deadline day, so the league locks roster changes once a week. A move takes effect at the start of the league's scoring week.",
     });
   }).pipe(Effect.provide(yahooLayer(internet)));
 });

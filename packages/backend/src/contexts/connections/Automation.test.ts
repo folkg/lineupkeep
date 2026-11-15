@@ -47,7 +47,13 @@ import { TransactionPlanWritesLive } from "./internal/TransactionPlanWritesLive.
 import { LineupRequestId, LineupRequestInput } from "./LineupRun.ts";
 import { LineupRuns } from "./LineupRuns.ts";
 import { LineupDispatcher } from "./LineupWork.ts";
-import type { ProviderLeagueSettings, ProviderRoster, ProviderTeam } from "./Provider.ts";
+import type {
+  ProviderLeagueSettings,
+  ProviderMatchup,
+  ProviderRoster,
+  ProviderTeam,
+  ProviderTeamScore,
+} from "./Provider.ts";
 import { Teams } from "./Teams.ts";
 import { TransactionPlanService } from "./TransactionPlans.ts";
 
@@ -201,6 +207,35 @@ it.effect("runs a saved move when its date arrives on the hourly tick", () =>
       (yield* fake.transactionRequests).map((request) => request.drops),
       [["461.p.10002"]],
     );
+  }).pipe(Effect.provide(AutomationTestLayer)),
+);
+
+it.effect("uses the league's published week start for a weekly-lock move", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-10T18:00:00Z")));
+    const plans = yield* TransactionPlanService;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha", {
+      team: teamFixture,
+      league: weeklyLeague,
+      roster,
+      nativeAfter,
+    });
+    yield* fake.setMatchups([weekStartMatchup(3, "2026-11-09")]);
+
+    const proposed = yield* plans.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [
+        {
+          kind: "drop",
+          drops: ["461.p.10002"],
+          reason: "Drop the bench quarterback.",
+        },
+      ],
+    });
+
+    assert.strictEqual(proposed.plan.moves[0]?.effectiveDate, "2026-11-09");
   }).pipe(Effect.provide(AutomationTestLayer)),
 );
 
@@ -631,6 +666,17 @@ const league: ProviderLeagueSettings = {
   statModifiers: [],
 };
 
+const weeklyLeague: ProviderLeagueSettings = {
+  ...league,
+  currentDate: "2026-11-10",
+  weeklyDeadline: "",
+  rosterChange: {
+    rule: "weekly_lock",
+    source: ["weekly_deadline", "edit_key"],
+    detail: "The league locks roster changes to a scoring week.",
+  },
+};
+
 const roster: ProviderRoster = {
   providerTeamKey: "461.l.1000.t.1",
   providerLeagueKey: "461.l.1000",
@@ -680,6 +726,30 @@ const roster: ProviderRoster = {
     },
   ],
 };
+
+function weekStartMatchup(week: number, weekStart: string): ProviderMatchup {
+  const side = (providerTeamKey: string, name: string): ProviderTeamScore => ({
+    providerTeamKey,
+    name,
+    points: 0,
+    projectedPoints: null,
+    winProbability: null,
+    remainingGames: undefined,
+    categoryTotals: [],
+  });
+  return {
+    period: { week },
+    home: side("461.l.1000.t.1", "Alpha"),
+    away: side("461.l.1000.t.2", "Beta"),
+    status: undefined,
+    isPlayoffs: undefined,
+    isConsolation: undefined,
+    isTied: undefined,
+    weekStart,
+    weekEnd: undefined,
+    categoryWinners: [],
+  };
+}
 
 const nativeAfter: ProviderRoster = {
   ...roster,

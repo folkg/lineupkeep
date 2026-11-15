@@ -279,7 +279,7 @@ it("rechecks a saved move whose day arrived as due today and stale", () => {
       constraints: constraints(1),
       roster: [rostered("p1", "Roster One", "BN")],
       today: "2026-11-10",
-      timing: { rule: "same_day", currentDate: "2026-11-10" },
+      timing: { rule: "same_day", currentDate: "2026-11-10", periodStart: undefined },
     }),
     moves: [
       move("saved-drop", {
@@ -973,7 +973,7 @@ it("applies a same-day move on its run day", () => {
       constraints: constraints(2),
       roster: [rostered("p1", "Roster One", "BN"), rostered("p2", "Roster Two", "BN")],
       today: "2026-11-10",
-      timing: { rule: "same_day", currentDate: "2026-11-10" },
+      timing: { rule: "same_day", currentDate: "2026-11-10", periodStart: undefined },
     }),
     moves: [
       move("today", { kind: "drop", drops: [player("p1", "Roster One")], decision: "saved" }),
@@ -1002,7 +1002,7 @@ it("applies a next-day move on the day after its run day", () => {
       constraints: constraints(2),
       roster: [rostered("p1", "Roster One", "BN"), rostered("p2", "Roster Two", "BN")],
       today: "2026-11-10",
-      timing: { rule: "next_day", currentDate: "2026-11-10" },
+      timing: { rule: "next_day", currentDate: "2026-11-10", periodStart: undefined },
     }),
     moves: [
       move("today", { kind: "drop", drops: [player("p1", "Roster One")], decision: "saved" }),
@@ -1024,14 +1024,18 @@ it("applies a next-day move on the day after its run day", () => {
   );
 });
 
-it("applies a weekly-lock move on the league's published locked date", () => {
+it("applies a weekly-lock move at the start of the locked week, not at its proposal date", () => {
   const evaluation = evaluate({
     facts: facts({
       slots: [bench("BN", 2)],
       constraints: constraints(2),
       roster: [rostered("p1", "Roster One", "BN"), rostered("p2", "Roster Two", "BN")],
       today: "2026-11-10",
-      timing: { rule: "weekly_lock", currentDate: "2026-11-11" },
+      timing: {
+        rule: "weekly_lock",
+        currentDate: "2026-11-10",
+        periodStart: "2026-11-09",
+      },
     }),
     moves: [
       move("today", { kind: "drop", drops: [player("p1", "Roster One")], decision: "saved" }),
@@ -1047,10 +1051,152 @@ it("applies a weekly-lock move on the league's published locked date", () => {
   assert.deepStrictEqual(
     evaluation.moves.map((entry) => [entry.runDay, entry.effectiveDate, entry.dueToday]),
     [
-      ["2026-11-10", "2026-11-11", true],
-      ["2026-11-12", "2026-11-11", false],
+      ["2026-11-10", "2026-11-09", true],
+      ["2026-11-12", "2026-11-09", false],
     ],
   );
+});
+
+it("resolves a weekly-lock move in the next week to that week's period", () => {
+  const evaluation = evaluate({
+    facts: facts({
+      slots: [bench("BN", 1)],
+      constraints: constraints(1),
+      roster: [rostered("p1", "Roster One", "BN")],
+      today: "2026-11-10",
+      timing: {
+        rule: "weekly_lock",
+        currentDate: "2026-11-10",
+        periodStart: "2026-11-09",
+      },
+    }),
+    moves: [
+      move("next-week", {
+        kind: "drop",
+        drops: [player("p1", "Roster One")],
+        decision: "saved",
+        runDay: "2026-11-17",
+      }),
+    ],
+  });
+
+  assert.deepStrictEqual(
+    evaluation.moves.map((entry) => [entry.runDay, entry.effectiveDate, entry.dueToday]),
+    [["2026-11-17", "2026-11-16", false]],
+  );
+});
+
+it("publishes no weekly-lock date when the league publishes no week start", () => {
+  const evaluation = evaluate({
+    facts: facts({
+      slots: [bench("BN", 1)],
+      constraints: constraints(1),
+      roster: [rostered("p1", "Roster One", "BN")],
+      today: "2026-11-10",
+      timing: {
+        rule: "weekly_lock",
+        currentDate: "2026-11-10",
+        periodStart: undefined,
+      },
+    }),
+    moves: [
+      move("today", { kind: "drop", drops: [player("p1", "Roster One")], decision: "saved" }),
+    ],
+  });
+
+  assert.deepStrictEqual(
+    evaluation.moves.map((entry) => [entry.runDay, entry.effectiveDate, entry.dueToday]),
+    [["2026-11-10", undefined, true]],
+  );
+});
+
+it("refuses a drop of a player who has already played today", () => {
+  const evaluation = evaluate({
+    facts: facts({
+      slots: [bench("BN", 1)],
+      constraints: constraints(1),
+      roster: [locked("p1", "Locked One", "BN")],
+      today: "2026-11-10",
+    }),
+    moves: [
+      move("drop-locked", {
+        kind: "drop",
+        drops: [player("p1", "Locked One")],
+        decision: "now",
+      }),
+    ],
+  });
+
+  assert.strictEqual(evaluation.moves[0]?.validation.status, "stale");
+  assert.deepStrictEqual(
+    evaluation.moves[0]?.validation.reasons.map(({ code, playerKey, detail }) => [
+      code,
+      playerKey,
+      detail,
+    ]),
+    [
+      [
+        "player_locked",
+        "p1",
+        "Locked One has already played or is locked in their place today, so this move cannot drop them. Wait until the league unlocks Locked One, or choose another player.",
+      ],
+    ],
+  );
+});
+
+it("refuses moving a player whose place is locked today", () => {
+  const evaluation = evaluate({
+    facts: facts({
+      slots: [bench("BN", 1), reserve("IR", ["IR"])],
+      constraints: constraints(2),
+      roster: [locked("p1", "Locked One", "BN")],
+      today: "2026-11-10",
+    }),
+    moves: [
+      move("move-locked", {
+        kind: "slot_move",
+        slotMove: slotMove("p1", "Locked One", "IR"),
+        decision: "now",
+      }),
+    ],
+  });
+
+  assert.strictEqual(evaluation.moves[0]?.validation.status, "stale");
+  assert.deepStrictEqual(
+    evaluation.moves[0]?.validation.reasons.map(({ code, playerKey, detail }) => [
+      code,
+      playerKey,
+      detail,
+    ]),
+    [
+      [
+        "player_locked",
+        "p1",
+        "Locked One has already played or is locked in their place today, so this move cannot move them to IR. Wait until the league unlocks Locked One, or choose another player.",
+      ],
+    ],
+  );
+});
+
+it("keeps a drop of a player who can still be moved today current", () => {
+  const evaluation = evaluate({
+    facts: facts({
+      slots: [bench("BN", 1)],
+      constraints: constraints(1),
+      roster: [rostered("p1", "Roster One", "BN")],
+      today: "2026-11-10",
+    }),
+    moves: [
+      move("drop-legal", {
+        kind: "drop",
+        drops: [player("p1", "Roster One")],
+        decision: "now",
+      }),
+    ],
+  });
+
+  assert.strictEqual(evaluation.moves[0]?.validation.status, "current");
+  assert.deepStrictEqual(evaluation.moves[0]?.validation.reasons, []);
 });
 
 function evaluate(plan: {
@@ -1101,7 +1247,11 @@ function facts(input: {
     slots: input.slots,
     constraints: input.constraints,
     today: input.today ?? "2026-11-10",
-    timing: input.timing ?? { rule: "same_day", currentDate: input.today ?? "2026-11-10" },
+    timing: input.timing ?? {
+      rule: "same_day",
+      currentDate: input.today ?? "2026-11-10",
+      periodStart: undefined,
+    },
     budget: input.budget,
   };
 }
@@ -1139,6 +1289,15 @@ function rostered(
   injured = false,
 ): TransactionPlanRosterPlayer {
   return { key, name, positions, slot, injured, editable: true };
+}
+
+function locked(
+  key: string,
+  name: string,
+  slot: string,
+  positions: ReadonlyArray<string> = [],
+): TransactionPlanRosterPlayer {
+  return { key, name, positions, slot, injured: false, editable: false };
 }
 
 function freeAgent(

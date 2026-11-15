@@ -448,12 +448,14 @@ test("appends moves to one team queue without writing to the provider and reads 
   const players = Schema.decodeUnknownSync(
     Schema.Struct({ players: Schema.Array(Schema.Struct({ player: Schema.String })) }),
   )(roster.structuredContent).players;
-  expect(players.length).toBeGreaterThan(1);
+  expect(players.length).toBeGreaterThan(2);
   const firstDrop = players[0]?.player;
-  const secondDrop = players[1]?.player;
+  const lockedDrop = players[1]?.player;
+  const secondDrop = players[2]?.player;
   expect(firstDrop, "a rostered player reference").toBeDefined();
+  expect(lockedDrop, "a locked rostered player reference").toBeDefined();
   expect(secondDrop, "a second rostered player reference").toBeDefined();
-  if (firstDrop === undefined || secondDrop === undefined) {
+  if (firstDrop === undefined || lockedDrop === undefined || secondDrop === undefined) {
     return;
   }
 
@@ -493,6 +495,25 @@ test("appends moves to one team queue without writing to the provider and reads 
   expect(plan.team.id).toBe(football.id);
   expect(plan.moves).toHaveLength(2);
   expect(plan.days.some((day) => day.today)).toBe(true);
+
+  const locked = await client.callTool("propose_transactions", {
+    team: football.id,
+    moves: [{ kind: "drop", drops: [lockedDrop], reason: "Try the locked player." }],
+  });
+  expect(locked.isError).toBe(false);
+  const lockedPlan = Schema.decodeUnknownSync(
+    Schema.Struct({
+      moves: Schema.Array(Schema.Unknown),
+      refused: Schema.Array(Schema.Struct({ code: Schema.String, detail: Schema.String })),
+    }),
+  )(locked.structuredContent);
+  expect(lockedPlan.moves).toHaveLength(2);
+  expect(lockedPlan.refused).toHaveLength(1);
+  expect(lockedPlan.refused[0]?.code).toBe("player_locked");
+  expect(lockedPlan.refused[0]?.detail).toContain("Harbor Back");
+  expect(lockedPlan.refused[0]?.detail).toContain(
+    "Wait until the league unlocks Harbor Back, or choose another player.",
+  );
 
   const read = await client.callTool("get_transaction_plan", { team: football.id });
   expect(read.isError).toBe(false);
