@@ -1324,6 +1324,84 @@ it.effect(
     }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+it.effect("publishes place accounting and each reserve list on the roster and team summary", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const positions = [
+      ...leagueFixture.rosterPositions,
+      { position: "IR", positionType: "R", count: 1, kind: "reserve", eligibility: ["IR"] },
+      { position: "IR+", positionType: "R", count: 2, kind: "reserve", eligibility: ["IR+"] },
+    ] satisfies ReadonlyArray<ProviderRosterPosition>;
+    const league: ProviderLeagueSettings = {
+      ...leagueFixture,
+      rosterPositions: positions,
+      rosterConstraints: {
+        ...declaredRosterConstraints(positions),
+        reserveEligibility: { kind: "injury_status" },
+      },
+    };
+    const base = rosterFixture({ count: 9 });
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      league,
+      roster: {
+        ...base,
+        players: base.players.map((player, index) =>
+          index === 7
+            ? {
+                ...player,
+                slot: { status: "verified" as const, slot: "IR" },
+                eligiblePositions: ["QB", "IR"],
+                injuryCode: "O",
+                injuryDetail: "Out",
+              }
+            : index === 8
+              ? {
+                  ...player,
+                  slot: { status: "verified" as const, slot: "IR+" },
+                  eligiblePositions: ["QB", "IR+"],
+                  injuryCode: "O",
+                  injuryDetail: "Out",
+                }
+              : player,
+        ),
+      },
+    });
+    const teamId = Array.getUnsafe(seeded, 0).id;
+
+    const read = yield* queries.getRosters(owner, { team: teamId });
+    const summary = yield* queries.getTeamSummary(owner, { team: teamId, groups: ["roster"] });
+    assert.strictEqual(read.status, "ok");
+    assert.strictEqual(summary.status, "ok");
+    if (read.status !== "ok" || read.scope !== "team" || summary.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(read.places, { used: 7, maximum: 7, free: 0 });
+    assert.deepStrictEqual(read.reserve, [
+      { name: "IR", eligibility: { kind: "injury_status" }, capacity: 1, occupied: 1, free: 0 },
+      { name: "IR+", eligibility: { kind: "injury_status" }, capacity: 2, occupied: 1, free: 1 },
+    ]);
+    assert.deepStrictEqual(summary.places, read.places);
+    assert.deepStrictEqual(summary.reserve, read.reserve);
+
+    const plainLeague = yield* seed(fake, [team("461.l.1000.t.3", "Gamma")], {
+      roster: rosterFixture({
+        count: 3,
+        providerTeamKey: "461.l.1000.t.3",
+        providerLeagueKey: "461.l.1000",
+      }),
+    });
+    const plain = yield* queries.getRosters(owner, {
+      team: Array.getUnsafe(plainLeague, 0).id,
+    });
+    assert.strictEqual(plain.status, "ok");
+    if (plain.status === "ok" && plain.scope === "team") {
+      assert.deepStrictEqual(plain.places, { used: 3, maximum: 7, free: 4 });
+      assert.deepStrictEqual(plain.reserve, []);
+    }
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
 it.effect("rejects a blank player search query with the remedy instead of a generic failure", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;

@@ -1,4 +1,5 @@
 import type { ProviderReserveEligibility, ProviderRosterConstraints } from "./Provider.ts";
+import type { ReserveEligibility, ReserveList, RosterPlaces } from "./QueryValues.ts";
 
 export type RosterSlot = {
   readonly position: string;
@@ -160,9 +161,37 @@ export function rosterOccupancy(input: {
     maximum: input.rule.rosterMaximum,
     occupied,
     reserved,
+    places: {
+      used: occupied,
+      maximum: input.rule.rosterMaximum,
+      free: Math.max(0, input.rule.rosterMaximum - occupied),
+    },
+    reserve: input.rule.slots
+      .filter((slot) => slot.kind === "reserve")
+      .map((slot): ReserveList => {
+        const occupants = occupancy.get(slot.position) ?? 0;
+        return {
+          name: slot.position,
+          eligibility: reserveEligibilityFacts(input.rule, slot),
+          capacity: slot.count,
+          occupied: occupants,
+          free: Math.max(0, slot.count - occupants),
+        };
+      }),
     illegal,
     overflow,
   };
+}
+
+function reserveEligibilityFacts(rule: RosterRule, slot: RosterSlot): ReserveEligibility {
+  switch (rule.reserveEligibility.kind) {
+    case "published_positions":
+      return { kind: "published_positions", positions: slot.eligibility };
+    case "injury_status":
+      return { kind: "injury_status" };
+    case "not_published":
+      return { kind: "not_published", detail: rule.reserveEligibility.detail };
+  }
 }
 
 export function slotMismatchDetail(input: {
@@ -235,6 +264,8 @@ export type RosterOccupancy = {
   readonly maximum: number;
   readonly occupied: number;
   readonly reserved: number;
+  readonly places: RosterPlaces;
+  readonly reserve: ReadonlyArray<ReserveList>;
   readonly illegal: ReadonlyArray<IneligibleSlotOccupant>;
   readonly overflow: ReadonlyArray<RosterSlotShortfall>;
 };

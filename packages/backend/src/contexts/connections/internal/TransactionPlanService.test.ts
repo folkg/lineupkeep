@@ -962,6 +962,51 @@ it.effect("rechecks a saved drop when the league no longer rosters the player", 
   }).pipe(Effect.provide(mutableFactsLayer(facts)));
 });
 
+it.effect("publishes places and each reserve list on the plan read", () => {
+  const facts = new Map<TeamId, TransactionPlanTeamFacts>();
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+    facts.set(
+      team,
+      league(
+        [
+          rostered("a1", "Roster One", "BN", ["RB"]),
+          rostered("a2", "Roster Two", "BN", ["RB"]),
+          { ...rostered("a3", "Roster Three", "IR", ["RB"]), injured: true },
+        ],
+        [],
+        {
+          slots: [bench("BN", 2), reserve("IR", ["RB"]), reserve("IR+", ["RB"])],
+          constraints: constraints(2),
+        },
+      ).facts,
+    );
+
+    const read = yield* service.plan(owner, { team });
+
+    assert.deepStrictEqual(read.places, { used: 2, maximum: 2, free: 0 });
+    assert.deepStrictEqual(read.reserve, [
+      {
+        name: "IR",
+        eligibility: { kind: "published_positions", positions: ["RB"] },
+        capacity: 1,
+        occupied: 1,
+        free: 0,
+      },
+      {
+        name: "IR+",
+        eligibility: { kind: "published_positions", positions: ["RB"] },
+        capacity: 1,
+        occupied: 0,
+        free: 1,
+      },
+    ]);
+  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+});
+
 it.effect("flags a saved free-agent add when the league moves the player to waivers", () => {
   const facts = new Map<TeamId, TransactionPlanTeamFacts>();
   return Effect.gen(function* () {

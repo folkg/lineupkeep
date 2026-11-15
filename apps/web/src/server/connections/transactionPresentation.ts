@@ -26,6 +26,7 @@ export function toTransactionMoveListView(list: TransactionMoveList): Transactio
     ...(list.team === undefined ? {} : { team: list.team }),
     moves: list.moves.map(toMoveView),
     days: list.days.map(toMoveDayView),
+    teamFacts: list.teamFacts,
     counts: list.counts,
     teamCount: list.teamCount,
     page: {
@@ -49,6 +50,8 @@ export function toTransactionPlanData(plan: TransactionPlanRead): TransactionPla
   return {
     team: plan.team,
     ...(plan.today === undefined ? {} : { today: plan.today }),
+    ...(plan.places === undefined ? {} : { places: plan.places }),
+    ...(plan.reserve === undefined ? {} : { reserve: plan.reserve }),
     moves: plan.moves.map(toMoveView),
     days: plan.days.map(toPlanDayView),
   };

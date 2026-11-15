@@ -73,7 +73,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_rosters", {
     description:
-      "One linked team's roster for an exact league week, or every roster in its league with `scope: league`.",
+      "One linked team's roster for an exact league week, or every roster in its league with `scope: league`. Places and each reserve list carry the league's own names.",
     parameters: GetRostersInput,
     success: Schema.toCodecJson(RosterResult),
     failure: ToolFailure,

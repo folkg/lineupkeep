@@ -12,6 +12,7 @@ import {
 import type { UserId } from "#contexts/auth/User.ts";
 import { TeamId } from "#contexts/connections/FantasyTeam.ts";
 import { PlayerRef } from "#contexts/connections/QueryValues.ts";
+import { rosterOccupancy, rosterRuleOf } from "#contexts/connections/RosterSlots.ts";
 import {
   TransactionPlanFactsUnavailable,
   TransactionPlanMoveNotFound,
@@ -1202,11 +1203,17 @@ export const TransactionPlanServiceLive = Layer.effect(
                 moves: movesByTeam.get(team) ?? [],
                 checkedAt: input.at,
               });
+              const occupancy = rosterOccupancy({
+                rule: rosterRuleOf(read.success.constraints, read.success.slots),
+                players: read.success.roster,
+              });
               return [
                 team,
                 {
                   status: "checked",
                   today: read.success.today,
+                  places: occupancy.places,
+                  reserve: occupancy.reserve,
                   moves: new Map(evaluation.moves.map((entry) => [entry.move, entry] as const)),
                 },
               ];
@@ -1254,6 +1261,11 @@ export const TransactionPlanServiceLive = Layer.effect(
           : yield* repository.readOpenMovesForTeams({ userId, teams: openTeams });
       const checks = yield* checkTeams({ userId, at, teams: openTeams, moves: planMoves });
       const moves = moveReadViews({ moves: page, checks });
+      const teamFacts = [...checks].flatMap(([teamId, check]) =>
+        check.status === "checked"
+          ? [{ team: teamId, places: check.places, reserve: check.reserve }]
+          : [],
+      );
       const todayOf = new Map(
         [...checks].flatMap(([teamId, check]) =>
           check.status === "checked" ? [[teamId, check.today] as const] : [],
@@ -1267,6 +1279,7 @@ export const TransactionPlanServiceLive = Layer.effect(
         team,
         moves,
         days: moveDays({ moves, todayOf }),
+        teamFacts,
         counts: counts.totals,
         teamCount: counts.teamCount,
         page: {
@@ -1312,7 +1325,7 @@ export const TransactionPlanServiceLive = Layer.effect(
       const checks = yield* checkTeams({
         userId,
         at,
-        teams: open.length === 0 ? [] : [input.team],
+        teams: [input.team],
         moves: open,
       });
       const check = checks.get(input.team);
@@ -1321,6 +1334,7 @@ export const TransactionPlanServiceLive = Layer.effect(
       return {
         team,
         today,
+        ...(check?.status === "checked" ? { places: check.places, reserve: check.reserve } : {}),
         moves,
         days: planDays({ moves, today }),
       } satisfies TransactionPlanRead;

@@ -1,6 +1,7 @@
 import { DateTime } from "effect";
 
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
+import type { ReserveList, RosterPlaces } from "#contexts/connections/QueryValues.ts";
 import type {
   StoredMoveDate,
   StoredMovePlacement,
@@ -275,6 +276,8 @@ export type TransactionTeamCheck =
   | {
       readonly status: "checked";
       readonly today: StoredMoveDate;
+      readonly places: RosterPlaces;
+      readonly reserve: ReadonlyArray<ReserveList>;
       readonly moves: ReadonlyMap<TransactionMoveRecord["id"], TransactionPlanMoveEvaluation>;
     }
   | { readonly status: "unavailable" };

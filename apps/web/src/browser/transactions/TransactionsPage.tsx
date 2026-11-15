@@ -27,6 +27,7 @@ import type {
   TransactionMoveView,
 } from "#contracts/connections/transactionContract.ts";
 
+import { TeamPlaces } from "./TeamPlaces";
 import {
   endedMoveCount,
   kindLabel,
@@ -202,6 +203,7 @@ function TodayCard(props: TodayCardProps): JSX.Element {
           <Text size="caption" tone="muted">
             {leagueDisplayName(props.move.team.league)} · {sportDisplayName(props.move.team.sport)}
           </Text>
+          <TeamPlaces facts={props.page.teamFacts().get(props.move.team.id)} />
         </Stack>
         <Stack gap="2xs">
           <Inline gap="sm" align="baseline">
@@ -310,6 +312,7 @@ function SavedTeamCard(props: SavedTeamCardProps): JSX.Element {
           <Text size="caption" tone="muted">
             {leagueDisplayName(props.card.team.league)} · {sportDisplayName(props.card.team.sport)}
           </Text>
+          <TeamPlaces facts={props.page.teamFacts().get(props.card.team.id)} />
         </Stack>
         <Box rule="top" space="none">
           <RuleList>

@@ -19,6 +19,8 @@ import {
   QueryStatus,
   QueryTeam,
   RecentFormWindow,
+  ReserveList,
+  RosterPlaces,
   RosterSlot,
   StartingStatus,
   StatRef,
@@ -843,6 +845,17 @@ export const RosterData = Schema.Struct({
   team: QueryTeam,
   period: Schema.optional(QueryPeriod),
   coverage: Schema.Array(QueryCoverage),
+  places: Schema.optional(RosterPlaces).pipe(
+    Schema.annotate({
+      description: "Present when the league rules and the roster were read.",
+    }),
+  ),
+  reserve: Schema.optional(Schema.Array(ReserveList)).pipe(
+    Schema.annotate({
+      description:
+        "Each reserve list the league publishes, by its own name, with free places. Present when the league rules and the roster were read; a league with no reserve lists publishes none.",
+    }),
+  ),
   players: Schema.Array(RosterPlayer),
   ownerNote: Schema.optional(TeamOwnerNote).pipe(
     Schema.annotate({
@@ -1972,14 +1985,6 @@ const SummaryIllegalSlot = Schema.Struct({
 });
 export type SummaryIllegalSlot = typeof SummaryIllegalSlot.Type;
 
-const SummaryRosterPlaces = Schema.Struct({
-  maximum: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  occupied: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  reserved: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  remaining: Schema.Int,
-});
-type SummaryRosterPlaces = typeof SummaryRosterPlaces.Type;
-
 export const TeamSummaryData = Schema.Struct({
   status: QueryStatus,
   team: QueryTeam,
@@ -2012,10 +2017,16 @@ export const TeamSummaryData = Schema.Struct({
         "Rostered players whose eligible positions exclude their league slot; absent when the roster was not read, not none.",
     }),
   ),
-  rosterPlaces: Schema.optional(SummaryRosterPlaces).pipe(
+  places: Schema.optional(RosterPlaces).pipe(
     Schema.annotate({
       description:
-        "The league's roster places: `maximum`, `occupied`, `reserved`, and `remaining`. Present only when the roster was read.",
+        "Starting and bench place accounting. Present when the league rules and the roster were read. Reserve places do not count against the maximum.",
+    }),
+  ),
+  reserve: Schema.optional(Schema.Array(ReserveList)).pipe(
+    Schema.annotate({
+      description:
+        "Each reserve list the league publishes, by its own name. Present when the league rules and the roster were read; a league with no reserve lists publishes none.",
     }),
   ),
   roster: Schema.optional(Schema.Array(SummaryRosterPlayer)).pipe(

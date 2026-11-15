@@ -121,6 +121,7 @@ import {
   rosterPlayerInjured,
   rosterRuleOf,
 } from "#contexts/connections/RosterSlots.ts";
+import type { RosterPlayerPlace } from "#contexts/connections/RosterSlots.ts";
 import {
   describeStatWindow,
   nearestStatWindow,
@@ -1545,12 +1546,25 @@ export const FantasyQueriesLive = Layer.effect(
       );
       const now = yield* DateTime.now;
       const offset = yield* openOffset(userId, fingerprintValue, input.cursor, now);
+      const occupancy =
+        leagueOutcome._tag === "ok"
+          ? rosterOccupancy({
+              rule: rosterRuleOf(
+                leagueOutcome.value.rosterConstraints,
+                leagueOutcome.value.rosterPositions,
+              ),
+              players: rosterPlacePlayers(roster.players),
+            })
+          : undefined;
       const base: Omit<RosterData, "players" | "page"> = {
         status: "ok",
         scope: "team",
         team,
         ...(roster.coverage.type === "week" ? { period: { week: roster.coverage.week } } : {}),
         coverage: [leagueCoverage(leagueOutcome, fetchedAt), rosterCoverage],
+        ...(occupancy === undefined
+          ? {}
+          : { places: occupancy.places, reserve: occupancy.reserve }),
         ...(detail === "full" ? { ownerNote: ownerNoteOf(context.owned.team) } : {}),
         failures: [...leagueFailure(leagueOutcome), ...weekFailures],
         budget: queryBudget,
@@ -3690,13 +3704,7 @@ export const FantasyQueriesLive = Layer.effect(
           ? undefined
           : rosterOccupancy({
               rule: rosterRuleOf(league.rosterConstraints, league.rosterPositions),
-              players: rosterPlayers.map((player) => ({
-                key: player.providerPlayerKey,
-                name: player.name,
-                slot: player.slot.status === "verified" ? player.slot.slot : undefined,
-                positions: player.eligiblePositions,
-                injured: rosterPlayerInjured(player),
-              })),
+              players: rosterPlacePlayers(rosterPlayers),
             });
       const illegalSlots: ReadonlyArray<SummaryIllegalSlot> = (
         rosterSummary?.illegal ?? []
@@ -3737,12 +3745,8 @@ export const FantasyQueriesLive = Layer.effect(
               ...(rosterSummary === undefined
                 ? {}
                 : {
-                    rosterPlaces: {
-                      maximum: rosterSummary.maximum,
-                      occupied: rosterSummary.occupied,
-                      reserved: rosterSummary.reserved,
-                      remaining: rosterSummary.maximum - rosterSummary.occupied,
-                    },
+                    places: rosterSummary.places,
+                    reserve: rosterSummary.reserve,
                   }),
             }
           : {}),
@@ -5558,6 +5562,18 @@ function injuryOfDetail(detail: ProviderPlayerDetail): {
     reported: detail.availabilityDetail !== undefined,
     ...(detail.availabilityDetail === undefined ? {} : { detail: detail.availabilityDetail }),
   };
+}
+
+function rosterPlacePlayers(
+  players: ReadonlyArray<ProviderRosterPlayer>,
+): ReadonlyArray<RosterPlayerPlace> {
+  return players.map((player) => ({
+    key: player.providerPlayerKey,
+    name: player.name,
+    slot: player.slot.status === "verified" ? player.slot.slot : undefined,
+    positions: player.eligiblePositions,
+    injured: rosterPlayerInjured(player),
+  }));
 }
 
 function rosterPlayer(

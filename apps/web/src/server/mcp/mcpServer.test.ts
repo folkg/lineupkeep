@@ -941,6 +941,7 @@ it("appends moves to one team queue and lists them across teams", async () => {
             teams: [{ team: teamView, moves: [move] }],
           },
         ],
+        teamFacts: [],
         counts: { open: 1, today: 1, saved: 0, ended: 0 },
         teamCount: 2,
         page: { returned: 1, complete: true },
@@ -1834,6 +1835,8 @@ it("publishes one queue per team", async () => {
   expect(published).toContain('"team"');
   expect(JSON.stringify(plan.outputSchema)).toContain('"moves"');
   expect(JSON.stringify(plan.outputSchema)).toContain('"validation"');
+  expect(JSON.stringify(plan.outputSchema)).toContain('"places"');
+  expect(JSON.stringify(plan.outputSchema)).toContain('"reserve"');
 });
 
 it("publishes fallback choices, a group label, and a stored check on the plan", async () => {
@@ -1868,6 +1871,7 @@ it("publishes the rolling move list with today, saved, and ended filters", async
   expect(JSON.stringify(list.outputSchema)).toContain('"teamCount"');
   expect(JSON.stringify(list.outputSchema)).toContain('"days"');
   expect(JSON.stringify(list.outputSchema)).toContain('"checkedAt"');
+  expect(JSON.stringify(list.outputSchema)).toContain('"teamFacts"');
   expect(JSON.stringify(list.outputSchema)).not.toContain('"sets"');
 });
 
@@ -1955,6 +1959,8 @@ it("publishes the accepted player-statistics periods and the compact standings f
   expect(rosterOutput).toContain('"total"');
   expect(rosterOutput).toContain("playsThisWeek");
   expect(rosterOutput).toContain("projectedRank");
+  expect(rosterOutput).toContain("Reserve places do not count");
+  expect(rosterOutput).toContain('"reserve"');
   expect(rosterOutput).not.toContain("playerSchedule");
 
   const calendarOutput = JSON.stringify(tool("get_calendar").outputSchema);

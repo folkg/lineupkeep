@@ -91,6 +91,31 @@ export type TransactionMoveDayView = {
   readonly teams: ReadonlyArray<TransactionMoveTeamDayView>;
 };
 
+export type ReserveEligibilityView =
+  | { readonly kind: "published_positions"; readonly positions: ReadonlyArray<string> }
+  | { readonly kind: "injury_status" }
+  | { readonly kind: "not_published"; readonly detail: string };
+
+export type ReserveListView = {
+  readonly name: string;
+  readonly eligibility: ReserveEligibilityView;
+  readonly capacity: number;
+  readonly occupied: number;
+  readonly free: number;
+};
+
+export type RosterPlacesView = {
+  readonly used: number;
+  readonly maximum: number;
+  readonly free: number;
+};
+
+export type TransactionTeamFactsView = {
+  readonly team: string;
+  readonly places: RosterPlacesView;
+  readonly reserve: ReadonlyArray<ReserveListView>;
+};
+
 export type TransactionPlanDayView = {
   readonly day?: string;
   readonly today: boolean;
@@ -102,6 +127,7 @@ export type TransactionMoveListData = {
   readonly team?: TransactionMoveTeamView;
   readonly moves: ReadonlyArray<TransactionMoveView>;
   readonly days: ReadonlyArray<TransactionMoveDayView>;
+  readonly teamFacts: ReadonlyArray<TransactionTeamFactsView>;
   readonly counts: {
     readonly open: number;
     readonly today: number;
@@ -124,6 +150,8 @@ export type TransactionMoveListData = {
 export type TransactionPlanData = {
   readonly team: TransactionMoveTeamView;
   readonly today?: string;
+  readonly places?: RosterPlacesView;
+  readonly reserve?: ReadonlyArray<ReserveListView>;
   readonly moves: ReadonlyArray<TransactionMoveView>;
   readonly days: ReadonlyArray<TransactionPlanDayView>;
 };

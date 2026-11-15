@@ -211,6 +211,69 @@ export const RosterSlot = Schema.Union([
 );
 export type RosterSlot = typeof RosterSlot.Type;
 
+export const RosterPlaces = Schema.Struct({
+  used: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
+    Schema.annotate({ description: "Starting and bench places in use." }),
+  ),
+  maximum: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
+    Schema.annotate({
+      description: "The league's whole-roster maximum. Reserve places are outside it.",
+    }),
+  ),
+  free: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
+    Schema.annotate({
+      description: "The places left under the maximum. Zero means no place is free.",
+    }),
+  ),
+}).pipe(
+  Schema.annotate({
+    description:
+      "Starting and bench place accounting. Reserve places do not count against the maximum, so a full active roster can still leave a reserve place free.",
+  }),
+);
+export type RosterPlaces = typeof RosterPlaces.Type;
+
+export const ReserveEligibility = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("published_positions"),
+    positions: Schema.Array(Schema.NonEmptyString).pipe(
+      Schema.annotate({
+        description: "The positions the league lets this list hold; empty means any position.",
+      }),
+    ),
+  }),
+  Schema.Struct({ kind: Schema.Literal("injury_status") }).pipe(
+    Schema.annotate({ description: "Only a player the league reports as injured." }),
+  ),
+  Schema.Struct({
+    kind: Schema.Literal("not_published"),
+    detail: Schema.NonEmptyString,
+  }).pipe(Schema.annotate({ description: "The league does not say who this list accepts." })),
+]).pipe(Schema.annotate({ description: "Who a reserve list accepts." }));
+export type ReserveEligibility = typeof ReserveEligibility.Type;
+
+export const ReserveList = Schema.Struct({
+  name: Schema.NonEmptyString.pipe(
+    Schema.annotate({ description: "The league's own name for this list." }),
+  ),
+  eligibility: ReserveEligibility,
+  capacity: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
+    Schema.annotate({ description: "How many players this list holds." }),
+  ),
+  occupied: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
+    Schema.annotate({ description: "How many players are on this list now." }),
+  ),
+  free: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
+    Schema.annotate({ description: "How many places this list has left." }),
+  ),
+}).pipe(
+  Schema.annotate({
+    description:
+      "One reserve list the league publishes, with its own capacity, occupancy, and free places. A league or sport with no reserve lists publishes none.",
+  }),
+);
+export type ReserveList = typeof ReserveList.Type;
+
 export const StartingStatus = Schema.Literals([
   "confirmed_starting",
   "confirmed_not_starting",

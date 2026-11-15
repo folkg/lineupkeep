@@ -106,7 +106,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_transaction_plan", {
     description:
-      "Read one team's transaction queue in order, grouped by run day, with every move's stored validation and the time it was checked. It reads stored state and checks the moves against the team's current roster.",
+      "Read one team's transaction queue in order, grouped by run day, with every move's stored validation and the time it was checked. It reads stored state and checks the moves against the team's current roster, reporting its places and each reserve list by the league's own name.",
     parameters: TransactionPlanInput,
     success: Schema.toCodecJson(TransactionPlanRead),
     failure: ToolFailure,

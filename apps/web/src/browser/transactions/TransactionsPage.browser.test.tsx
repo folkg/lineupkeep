@@ -124,6 +124,40 @@ it("shows every team's moves today and keeps saved moves on per team planning sh
     .toBeVisible();
 });
 
+it("shows the active places and each reserve list the league publishes", async () => {
+  await page.viewport(1280, 900);
+  const drop = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c0",
+    team: alpha,
+    kind: "drop",
+    drops: [player("Riley Chen")],
+  });
+  using _app = setupTransactionsPage({
+    open: listData([drop], { open: 1, today: 1, saved: 0, ended: 0 }, [
+      {
+        team: alpha.id,
+        places: { used: 5, maximum: 5, free: 0 },
+        reserve: [
+          {
+            name: "IR",
+            eligibility: { kind: "injury_status" },
+            capacity: 2,
+            occupied: 1,
+            free: 1,
+          },
+        ],
+      },
+    ]),
+  });
+
+  await expect
+    .element(page.getByText("Places: 5 of 5 used, 0 free.", { exact: true }))
+    .toBeVisible();
+  await expect
+    .element(page.getByText("IR: 1 of 2 used, 1 free, accepts an injured player.", { exact: true }))
+    .toBeVisible();
+});
+
 it("disables submit until every move today has a choice and sends only those choices", async () => {
   await page.viewport(1280, 900);
   const first = move({
@@ -461,6 +495,7 @@ function setupTransactionsPage(options: {
 function listData(
   moves: ReadonlyArray<TransactionMoveView>,
   counts: TransactionMoveListData["counts"],
+  teamFacts: TransactionMoveListData["teamFacts"] = [],
 ): TransactionMoveListData {
   const todayMoves = moves.filter(
     (move) => move.decision === "now" || move.decision === "undecided",
@@ -481,6 +516,7 @@ function listData(
     status: "ok",
     moves,
     days,
+    teamFacts,
     counts,
     teamCount: uniqueTeams(moves),
     page: { returned: moves.length, complete: true },

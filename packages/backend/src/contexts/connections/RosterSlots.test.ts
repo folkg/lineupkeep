@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest";
 
-import { rosterOccupancy, rosterRuleOf } from "./RosterSlots.ts";
+import { rosterOccupancy, rosterRuleOf, slotPlacement } from "./RosterSlots.ts";
 import type { RosterPlayerPlace, RosterSlot } from "./RosterSlots.ts";
 
 const slots: ReadonlyArray<RosterSlot> = [
@@ -90,6 +90,91 @@ it("keeps the position wording for a reserve list that publishes positions", () 
       "Linus Ullmark sits in IR+, but IR+ does not accept their positions (G). This roster is illegal, so all adds and drops are blocked until it is cured. Activate them, or drop them.",
     ],
   );
+});
+
+it("reports each reserve list by its own name and capacity while the active places stay full", () => {
+  const rule = rosterRuleOf(
+    {
+      rosterMaximum: 2,
+      benchCapacity: "generic",
+      startingSlotsMayStandEmpty: true,
+      reserveEligibility: { kind: "injury_status" },
+    },
+    [
+      { position: "C", kind: "starting", count: 1, eligibility: ["C"] },
+      { position: "BN", kind: "bench", count: 1, eligibility: [] },
+      { position: "IR", kind: "reserve", count: 1, eligibility: ["IR"] },
+      { position: "IR+", kind: "reserve", count: 2, eligibility: ["IR+"] },
+    ],
+  );
+  const occupancy = rosterOccupancy({
+    rule,
+    players: [
+      place("center", "Roster Center", "C", ["C"], true),
+      place("bench", "Roster Bench", "BN", ["C"], true),
+      place("tall", "Injured Tall", "IR+", ["C"], true),
+    ],
+  });
+
+  assert.deepStrictEqual(occupancy.places, { used: 2, maximum: 2, free: 0 });
+  assert.deepStrictEqual(occupancy.reserve, [
+    { name: "IR", eligibility: { kind: "injury_status" }, capacity: 1, occupied: 0, free: 1 },
+    { name: "IR+", eligibility: { kind: "injury_status" }, capacity: 2, occupied: 1, free: 1 },
+  ]);
+});
+
+it("publishes no reserve lists when the league declares none", () => {
+  const rule = rosterRuleOf(
+    {
+      rosterMaximum: 1,
+      benchCapacity: "generic",
+      startingSlotsMayStandEmpty: true,
+      reserveEligibility: {
+        kind: "not_published",
+        detail: "This league declares no reserve list.",
+      },
+    },
+    [{ position: "BN", kind: "bench", count: 1, eligibility: [] }],
+  );
+  const occupancy = rosterOccupancy({
+    rule,
+    players: [place("bench", "Roster Bench", "BN", [], true)],
+  });
+
+  assert.deepStrictEqual(occupancy.places, { used: 1, maximum: 1, free: 0 });
+  assert.deepStrictEqual(occupancy.reserve, []);
+});
+
+it("publishes the positions a reserve list declares", () => {
+  const rule = rosterRuleOf(
+    {
+      rosterMaximum: 0,
+      benchCapacity: "generic",
+      startingSlotsMayStandEmpty: true,
+      reserveEligibility: { kind: "published_positions" },
+    },
+    [{ position: "NA", kind: "reserve", count: 1, eligibility: ["C", "LW"] }],
+  );
+  const occupancy = rosterOccupancy({ rule, players: [] });
+
+  assert.deepStrictEqual(occupancy.reserve, [
+    {
+      name: "NA",
+      eligibility: { kind: "published_positions", positions: ["C", "LW"] },
+      capacity: 1,
+      occupied: 0,
+      free: 1,
+    },
+  ]);
+});
+
+it("does not treat a healthy player as eligible for an injury-only list", () => {
+  const placement = slotPlacement(injuryRule, "IR+", {
+    positions: ["C"],
+    injured: false,
+  });
+
+  assert.strictEqual(placement.legal, false);
 });
 
 function place(

@@ -4,7 +4,7 @@ import type { DateTime } from "effect";
 import type { UserId } from "#contexts/auth/User.ts";
 
 import { FantasyLeague, FantasySport, TeamId } from "./FantasyTeam.ts";
-import { CounterpartyRef, PlayerRef } from "./QueryValues.ts";
+import { CounterpartyRef, PlayerRef, ReserveList, RosterPlaces } from "./QueryValues.ts";
 
 const LineupgradeId = Schema.Union([
   Schema.String.pipe(Schema.check(Schema.isUUID())),
@@ -257,9 +257,27 @@ export const TransactionPlanDay = Schema.Struct({
 });
 export type TransactionPlanDay = typeof TransactionPlanDay.Type;
 
+const TransactionTeamFacts = Schema.Struct({
+  team: TeamId,
+  places: RosterPlaces,
+  reserve: Schema.Array(ReserveList),
+});
+
 export const TransactionPlanRead = Schema.Struct({
   team: TransactionMoveTeam,
   today: Schema.optional(StoredMoveDate),
+  places: Schema.optional(RosterPlaces).pipe(
+    Schema.annotate({
+      description:
+        "Starting and bench places used, the league's maximum, and the free places. Absent when the team's roster and league rules could not be read.",
+    }),
+  ),
+  reserve: Schema.optional(Schema.Array(ReserveList)).pipe(
+    Schema.annotate({
+      description:
+        "Each reserve list by the league's own name with its own capacity, occupancy, and free places. Absent when the roster could not be read; a league with no reserve lists publishes none.",
+    }),
+  ),
   moves: Schema.Array(TransactionMoveRead),
   days: Schema.Array(TransactionPlanDay),
 });
@@ -294,6 +312,12 @@ export const TransactionMoveList = Schema.Struct({
   team: Schema.optional(TransactionMoveTeam),
   moves: Schema.Array(TransactionMoveRead),
   days: Schema.Array(TransactionMoveDay),
+  teamFacts: Schema.Array(TransactionTeamFacts).pipe(
+    Schema.annotate({
+      description:
+        "Places and reserve lists for each team whose current state was read with the moves on this page. A team whose state could not be read is absent.",
+    }),
+  ),
   counts: TransactionMoveCounts,
   teamCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   page: Schema.Struct({
