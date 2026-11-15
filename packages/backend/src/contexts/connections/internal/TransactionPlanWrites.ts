@@ -9,9 +9,23 @@ import type {
   StoredMovePick,
   StoredMovePlacement,
   StoredMoveSlot,
+  StoredMoveStep,
   TransactionMoveId,
   TransactionMoveKind,
 } from "./TransactionPlanRecord.ts";
+
+export type TransactionPlanAction = Omit<StoredMoveStep, "decidedAt">;
+
+type TransactionPlanWrote = {
+  readonly actions: ReadonlyArray<TransactionPlanAction>;
+};
+
+export type TransactionPlanWriteResult =
+  | (TransactionPlanWrote & { readonly status: "executed" })
+  | (TransactionPlanWrote & { readonly status: "pending"; readonly detail: string })
+  | (TransactionPlanWrote & { readonly status: "failed"; readonly detail: string })
+  | (TransactionPlanWrote & { readonly status: "unknown"; readonly detail: string })
+  | { readonly status: "retry"; readonly detail: string };
 
 export type TransactionPlanWriteRequest = {
   readonly userId: UserId;
@@ -27,13 +41,6 @@ export type TransactionPlanWriteRequest = {
   readonly bid: number | undefined;
   readonly counterpartyKey: string | undefined;
 };
-
-export type TransactionPlanWriteResult =
-  | { readonly status: "executed" }
-  | { readonly status: "pending"; readonly detail: string }
-  | { readonly status: "failed"; readonly detail: string }
-  | { readonly status: "retry"; readonly detail: string }
-  | { readonly status: "unknown"; readonly detail: string };
 
 export type TransactionPlanWritesShape = {
   readonly apply: (

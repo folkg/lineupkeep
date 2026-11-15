@@ -855,6 +855,7 @@ it("claims a trade's outgoing players and picks but not its incoming player", ()
     ],
     placements: new Map(),
     roster: new Map([["outgoing", rostered("outgoing", "Outgoing Player", "BN")]]),
+    placeClaims: () => true,
   };
 
   const claims: TransactionPlanClaims = claimTransactionPlanMoves(input);
@@ -864,6 +865,30 @@ it("claims a trade's outgoing players and picks but not its incoming player", ()
     { kind: "draft_pick", key: "2:team-one" },
     { kind: "player", key: "outgoing" },
   ]);
+});
+
+it("lets two moves share a bench place that has room for them", () => {
+  const evaluation = evaluate({
+    facts: facts({
+      slots: [bench("BN", 4)],
+      constraints: constraints(4),
+      roster: [
+        rostered("p1", "Roster One", "BN"),
+        rostered("p2", "Roster Two", "BN"),
+        rostered("p3", "Roster Three", "BN"),
+      ],
+      pool: [freeAgent("fa1", "Free Agent", ["WR"])],
+    }),
+    moves: [
+      move("move-one", { kind: "slot_move", slotMove: slotMove("p1", "Roster One", "BN") }),
+      move("add-free-agent", { kind: "free_agent_add", adds: [player("fa1", "Free Agent")] }),
+    ],
+  });
+
+  assert.strictEqual(evaluation.moves[0]?.validation.status, "current");
+  assert.deepStrictEqual(evaluation.moves[0]?.claims, []);
+  assert.strictEqual(evaluation.moves[1]?.validation.status, "current");
+  assert.strictEqual(evaluation.moves[1]?.placement?.toSlot, "BN");
 });
 
 it("refuses a second claim and names the move that holds it", () => {
@@ -880,6 +905,7 @@ it("refuses a second claim and names the move that holds it", () => {
     ],
     placements: new Map(),
     roster: new Map([["p1", rostered("p1", "Roster One", "BN")]]),
+    placeClaims: () => true,
   });
   const refusal: TransactionPlanClaimRefusal | undefined = claims.refused[0];
 
@@ -1291,10 +1317,7 @@ it("refuses two stashes that claim the same reserve place", () => {
   });
 
   assert.strictEqual(evaluation.moves[0]?.validation.status, "current");
-  assert.deepStrictEqual(evaluation.moves[0]?.claims, [
-    { kind: "place", key: "BN" },
-    { kind: "place", key: "IR" },
-  ]);
+  assert.deepStrictEqual(evaluation.moves[0]?.claims, [{ kind: "place", key: "IR" }]);
   assert.strictEqual(evaluation.moves[1]?.validation.status, "stale");
   assert.deepStrictEqual(
     evaluation.moves[1]?.validation.reasons.map((reason) => reason.code),

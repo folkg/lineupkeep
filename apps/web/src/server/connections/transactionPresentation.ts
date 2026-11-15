@@ -4,6 +4,7 @@ import type {
   TransactionMoveRead,
   TransactionMoveValidationView,
   TransactionPlanDay,
+  TransactionPlanGroupRead,
   TransactionPlanRead,
   TransactionPlanServiceError,
 } from "@lineupkeep/backend/connections/TransactionPlans";
@@ -17,6 +18,7 @@ import type {
   TransactionMoveView,
   TransactionPlanData,
   TransactionPlanDayView,
+  TransactionPlanGroupView,
 } from "#contracts/connections/transactionContract.ts";
 import type { ExpectedFailure } from "#server/backendEntry.ts";
 
@@ -26,6 +28,7 @@ export function toTransactionMoveListView(list: TransactionMoveList): Transactio
     ...(list.team === undefined ? {} : { team: list.team }),
     moves: list.moves.map(toMoveView),
     days: list.days.map(toMoveDayView),
+    groups: list.groups.map(toGroupView),
     teamFacts: list.teamFacts,
     counts: list.counts,
     teamCount: list.teamCount,
@@ -54,6 +57,22 @@ export function toTransactionPlanData(plan: TransactionPlanRead): TransactionPla
     ...(plan.reserve === undefined ? {} : { reserve: plan.reserve }),
     moves: plan.moves.map(toMoveView),
     days: plan.days.map(toPlanDayView),
+    groups: plan.groups.map(toGroupView),
+  };
+}
+
+function toGroupView(group: TransactionPlanGroupRead): TransactionPlanGroupView {
+  return {
+    group: group.group,
+    team: group.team,
+    ...(group.label === undefined ? {} : { label: group.label }),
+    status: group.status,
+    moves: group.moves,
+    actions: group.actions,
+    ...(group.failed === undefined ? {} : { failed: group.failed }),
+    notRun: group.notRun,
+    detail: group.detail,
+    ...(group.cure === undefined ? {} : { cure: group.cure }),
   };
 }
 

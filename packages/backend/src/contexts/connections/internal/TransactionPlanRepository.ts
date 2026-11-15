@@ -50,6 +50,7 @@ import {
 } from "./TransactionPlanRecord.ts";
 import type { StoredMoveStep, TransactionMoveRowRecord } from "./TransactionPlanRecord.ts";
 import {
+  StoredMoveStepRow,
   TransactionMoveRow,
   TransactionPlanRow,
   openMovePredicate,
@@ -80,6 +81,7 @@ export type TransactionMoveContent = {
 };
 
 export type TransactionMoveAppend = {
+  readonly id: TransactionMoveId;
   readonly proposedBy: TransactionMoveProvenance;
   readonly content: TransactionMoveContent;
   readonly claims: ReadonlyArray<StoredMoveClaim>;
@@ -128,10 +130,6 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
       const database = yield* ConnectionsDatabase;
       const crypto = yield* Crypto.Crypto;
 
-      const newMoveId = crypto.randomULID.pipe(
-        Effect.map((id) => Schema.decodeSync(TransactionMoveId)(id)),
-        Effect.mapError(persistenceFailure),
-      );
       const newStepId = crypto.randomULID.pipe(Effect.mapError(persistenceFailure));
 
       const loadPlan = Effect.fn("TransactionPlanRepository.loadPlan")(function* (input: {
@@ -150,9 +148,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
         readonly moves: Array.NonEmptyReadonlyArray<TransactionMoveAppend>;
         readonly at: DateTime.Utc;
       }) {
-        const ids = yield* Effect.forEach(input.moves, (move) =>
-          newMoveId.pipe(Effect.map((id) => ({ move, id }))),
-        );
+        const ids = input.moves.map((move) => ({ move, id: move.id }));
         const at = DateTime.toDateUtc(input.at);
         return yield* database
           .transaction((tx) =>
@@ -302,10 +298,10 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
           .pipe(Effect.mapError(persistenceFailure));
       });
 
-      const discardMove = Effect.fn("TransactionPlanRepository.discardMove")(function* (input: {
+      const discardMoves = Effect.fn("TransactionPlanRepository.discardMoves")(function* (input: {
         readonly userId: UserId;
         readonly team: TeamId;
-        readonly move: TransactionMoveId;
+        readonly moves: Array.NonEmptyReadonlyArray<TransactionMoveId>;
         readonly at: DateTime.Utc;
       }) {
         const at = DateTime.toDateUtc(input.at);
@@ -313,7 +309,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
           .transaction((tx) =>
             Effect.gen(function* () {
               if (!(yield* lockPlan(tx, input))) {
-                return Option.none<TransactionMoveRecord>();
+                return [];
               }
               const updated = yield* tx
                 .update(transactionMoves)
@@ -322,17 +318,13 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                   and(
                     eq(transactionMoves.userId, input.userId),
                     eq(transactionMoves.teamId, input.team),
-                    eq(transactionMoves.id, input.move),
+                    anyOf(transactionMoves.id, input.moves),
                   ),
                 )
                 .returning();
-              const row = updated[0];
-              if (row === undefined) {
-                return Option.none<TransactionMoveRecord>();
-              }
               yield* tx
                 .delete(transactionMoveClaims)
-                .where(eq(transactionMoveClaims.moveId, input.move));
+                .where(anyOf(transactionMoveClaims.moveId, input.moves));
               yield* tx
                 .update(transactionPlans)
                 .set({ updatedAt: at })
@@ -342,7 +334,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                     eq(transactionPlans.teamId, input.team),
                   ),
                 );
-              return Option.some({ ...(yield* decodeMove(row)), claims: [] });
+              return yield* Effect.forEach(updated, decodeMove);
             }),
           )
           .pipe(Effect.mapError(persistenceFailure));
@@ -668,6 +660,47 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
         },
       );
 
+      const readSteps = Effect.fn("TransactionPlanRepository.readSteps")(function* (input: {
+        readonly moves: Array.NonEmptyReadonlyArray<TransactionMoveId>;
+      }) {
+        return yield* Effect.gen(function* () {
+          const rows = yield* database
+            .select()
+            .from(transactionMoveSteps)
+            .where(anyOf(transactionMoveSteps.moveId, input.moves))
+            .orderBy(asc(transactionMoveSteps.moveId), asc(transactionMoveSteps.position));
+          const steps = new Map<TransactionMoveId, Array<StoredMoveStep>>();
+          for (const row of rows) {
+            const id = yield* Schema.decodeEffect(TransactionMoveId)(row.moveId);
+            const held = steps.get(id) ?? [];
+            held.push(yield* Schema.decodeEffect(StoredMoveStepRow)(row));
+            steps.set(id, held);
+          }
+          return steps;
+        }).pipe(Effect.mapError(persistenceFailure));
+      });
+
+      const readGroupMoves = Effect.fn("TransactionPlanRepository.readGroupMoves")(
+        function* (input: {
+          readonly userId: UserId;
+          readonly groups: Array.NonEmptyReadonlyArray<string>;
+        }) {
+          return yield* Effect.gen(function* () {
+            const rows = yield* database
+              .select()
+              .from(transactionMoves)
+              .where(
+                and(
+                  eq(transactionMoves.userId, input.userId),
+                  anyOf(transactionMoves.groupId, input.groups),
+                ),
+              )
+              .orderBy(asc(transactionMoves.position), asc(transactionMoves.id));
+            return yield* withClaims(database, rows, input);
+          }).pipe(Effect.mapError(persistenceFailure));
+        },
+      );
+
       const readPlanMoves = Effect.fn("TransactionPlanRepository.readPlanMoves")(function* (input: {
         readonly userId: UserId;
         readonly team: TeamId;
@@ -863,13 +896,15 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
         loadPlan,
         appendMoves,
         editMove,
-        discardMove,
+        discardMoves,
         claimRun,
         releaseRun,
         recordResult,
         settleMoves,
         releaseStaleRuns,
         readPlanMoves,
+        readSteps,
+        readGroupMoves,
         readDuePlans,
         readDueMovesForPlans,
         readOpenMovesForPlans,

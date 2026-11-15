@@ -15,6 +15,7 @@ import { loadTeamContext, providerIdentity } from "./QueryContext.ts";
 import type { TeamContext } from "./QueryContext.ts";
 import { QueryRepository } from "./QueryRepository.ts";
 import type {
+  TransactionPlanAction,
   TransactionPlanWriteRequest,
   TransactionPlanWriteResult,
 } from "./TransactionPlanWrites.ts";
@@ -79,6 +80,7 @@ function transactionOf(input: {
   readonly league: ProviderLeagueSettings;
 }): Effect.Effect<TransactionPlanWriteResult> {
   return Effect.gen(function* () {
+    const actions = plannedActions(input.request);
     const transaction = yield* writeResult(
       input.queries,
       input.context,
@@ -96,11 +98,15 @@ function transactionOf(input: {
         return {
           status: "pending",
           detail: "The league will process this claim.",
+          actions: withOutcome(actions, "pending"),
         } satisfies TransactionPlanWriteResult;
       }
-      return yield* reserveAfterAdd(input);
+      return yield* reserveAfterAdd({ ...input, actions });
     }
-    return outcomeOf(transaction, "transaction");
+    const outcome = outcomeOf(transaction, "transaction");
+    return outcome.status === "retry"
+      ? outcome
+      : { ...outcome, actions: withOutcome(actions, outcome.status, outcome.detail) };
   });
 }
 
@@ -109,28 +115,59 @@ function reserveAfterAdd(input: {
   readonly context: TeamContext;
   readonly request: TransactionPlanWriteRequest;
   readonly league: ProviderLeagueSettings;
+  readonly actions: ReadonlyArray<TransactionPlanAction>;
 }): Effect.Effect<TransactionPlanWriteResult> {
   if (input.request.intent?.to !== "reserve") {
-    return Effect.succeed({ status: "executed" });
+    return Effect.succeed({ status: "executed", actions: withOutcome(input.actions, "executed") });
   }
   const placement = input.request.placement;
   const player = placement?.playerKey ?? input.request.adds[0];
   const slot = placement?.toSlot;
   if (player === undefined || slot === undefined) {
+    const detail = "The add reached your league, but no reserve place was named for it.";
     return Effect.succeed({
       status: "unknown",
-      detail: "The add reached your league, but no reserve place was named for it.",
+      detail,
+      actions: reserveActions({ actions: input.actions, outcome: "unknown", detail }),
     });
   }
   const coverage = coverageOf(input.league);
   if (coverage === undefined) {
+    const detail =
+      "The add reached your league, but the league publishes no current period to place the player in reserve.";
     return Effect.succeed({
       status: "unknown",
-      detail:
-        "The add reached your league, but the league publishes no current period to place the player in reserve.",
+      detail,
+      actions: reserveActions({ actions: input.actions, outcome: "unknown", detail }),
     });
   }
-  return reserveMoveOf({ ...input, player, slot, coverage });
+  return Effect.gen(function* () {
+    const result = yield* writeResult(
+      input.queries,
+      input.context,
+      input.context.provider.applyReserveMove({
+        ...providerIdentity(input.context),
+        providerTeamKey: input.context.owned.team.providerTeamKey,
+        coverage,
+        providerPlayerKey: player,
+        slot,
+      }),
+    );
+    if (result.status === "accepted") {
+      return { status: "executed", actions: withOutcome(input.actions, "executed") } as const;
+    }
+    const outcome = outcomeOf(result, "slot move");
+    return outcome.status === "retry"
+      ? outcome
+      : {
+          ...outcome,
+          actions: reserveActions({
+            actions: input.actions,
+            outcome: outcome.status,
+            detail: outcome.detail,
+          }),
+        };
+  });
 }
 
 function slotMoveOf(input: {
@@ -146,6 +183,7 @@ function slotMoveOf(input: {
         status: "failed",
         detail:
           "The league publishes no current date or scoring week, so the slot move could not be sent.",
+        actions: [],
       } satisfies TransactionPlanWriteResult;
     }
     const player =
@@ -157,36 +195,28 @@ function slotMoveOf(input: {
       return {
         status: "failed",
         detail: "This move names no player and destination place, so nothing was sent.",
+        actions: [],
       } satisfies TransactionPlanWriteResult;
     }
-    return yield* reserveMoveOf({ ...input, player, slot, coverage });
-  });
-}
-
-function reserveMoveOf(input: {
-  readonly queries: QueryRepository["Service"];
-  readonly context: TeamContext;
-  readonly request: TransactionPlanWriteRequest;
-  readonly player: string;
-  readonly slot: string;
-  readonly coverage: ProviderRosterCoverage;
-}): Effect.Effect<TransactionPlanWriteResult> {
-  return Effect.gen(function* () {
+    const actions = plannedActions(input.request);
     const result = yield* writeResult(
       input.queries,
       input.context,
       input.context.provider.applyReserveMove({
         ...providerIdentity(input.context),
         providerTeamKey: input.context.owned.team.providerTeamKey,
-        coverage: input.coverage,
-        providerPlayerKey: input.player,
-        slot: input.slot,
+        coverage,
+        providerPlayerKey: player,
+        slot,
       }),
     );
-    if (result.status !== "accepted") {
-      return outcomeOf(result, "slot move");
+    if (result.status === "accepted") {
+      return { status: "executed", actions: withOutcome(actions, "executed") } as const;
     }
-    return { status: "executed" } satisfies TransactionPlanWriteResult;
+    const outcome = outcomeOf(result, "slot move");
+    return outcome.status === "retry"
+      ? outcome
+      : { ...outcome, actions: withOutcome(actions, outcome.status, outcome.detail) };
   });
 }
 
@@ -201,6 +231,7 @@ function tradeOf(input: {
       return {
         status: "failed",
         detail: "This trade names no other team, so no offer was sent.",
+        actions: [],
       } satisfies TransactionPlanWriteResult;
     }
     const sent = yield* Effect.result(
@@ -236,9 +267,14 @@ function tradeOutcome(result: ProviderTradeProposalResult): TransactionPlanWrite
       return {
         status: "pending",
         detail: "Offer sent. The other manager decides.",
+        actions: [],
       };
     case "rejected":
-      return { status: "failed", detail: result.detail ?? "Your league refused the offer." };
+      return {
+        status: "failed",
+        detail: result.detail ?? "Your league refused the offer.",
+        actions: [],
+      };
     case "not_sent":
       return {
         status: "retry",
@@ -249,8 +285,80 @@ function tradeOutcome(result: ProviderTradeProposalResult): TransactionPlanWrite
         status: "unknown",
         detail:
           "Your league did not confirm the offer, so it was not retried. Check the trade page before proposing again.",
+        actions: [],
       };
   }
+}
+
+function plannedActions(
+  request: TransactionPlanWriteRequest,
+): ReadonlyArray<TransactionPlanAction> {
+  if (request.kind === "trade") {
+    return [];
+  }
+  if (request.kind === "activate" || request.kind === "stash" || request.kind === "slot_move") {
+    const playerKey = request.slotMove?.playerKey ?? request.placement?.playerKey;
+    const toSlot = request.slotMove?.toSlot ?? request.placement?.toSlot;
+    return playerKey === undefined
+      ? []
+      : [
+          {
+            kind: "reserve_move",
+            playerKey,
+            ...(request.placement?.fromSlot === undefined
+              ? {}
+              : { fromSlot: request.placement.fromSlot }),
+            ...(toSlot === undefined ? {} : { toSlot }),
+            outcome: "skipped",
+          },
+        ];
+  }
+  const actions: Array<TransactionPlanAction> = [
+    ...request.adds.map((playerKey): TransactionPlanAction => ({
+      kind: "add",
+      playerKey,
+      outcome: "skipped",
+    })),
+    ...request.drops.map((playerKey): TransactionPlanAction => ({
+      kind: "drop",
+      playerKey,
+      outcome: "skipped",
+    })),
+  ];
+  if (request.intent?.to === "reserve" && request.placement !== undefined) {
+    actions.push({
+      kind: "reserve_move",
+      playerKey: request.placement.playerKey,
+      ...(request.placement.fromSlot === undefined ? {} : { fromSlot: request.placement.fromSlot }),
+      toSlot: request.placement.toSlot,
+      outcome: "skipped",
+    });
+  }
+  return actions;
+}
+
+function withOutcome(
+  actions: ReadonlyArray<TransactionPlanAction>,
+  outcome: TransactionPlanAction["outcome"],
+  detail?: string,
+): ReadonlyArray<TransactionPlanAction> {
+  return actions.map((action) => ({
+    ...action,
+    outcome,
+    ...(detail === undefined ? {} : { detail }),
+  }));
+}
+
+function reserveActions(input: {
+  readonly actions: ReadonlyArray<TransactionPlanAction>;
+  readonly outcome: "failed" | "unknown";
+  readonly detail: string;
+}): ReadonlyArray<TransactionPlanAction> {
+  return input.actions.map((action) =>
+    action.kind === "reserve_move"
+      ? { ...action, outcome: input.outcome, detail: input.detail }
+      : { ...action, outcome: "executed" },
+  );
 }
 
 function writeResult(
@@ -275,7 +383,10 @@ function writeResult(
 function outcomeOf(
   result: Extract<ProviderWriteResult, { readonly status: "rejected" | "not_sent" | "unknown" }>,
   operation: string,
-): TransactionPlanWriteResult {
+):
+  | { readonly status: "failed"; readonly detail: string }
+  | { readonly status: "unknown"; readonly detail: string }
+  | { readonly status: "retry"; readonly detail: string } {
   switch (result.status) {
     case "rejected":
       return {

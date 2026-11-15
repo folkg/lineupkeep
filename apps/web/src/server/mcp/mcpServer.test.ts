@@ -893,11 +893,13 @@ it("appends moves to one team queue and lists them across teams", async () => {
       readonly today: boolean;
       readonly moves: ReadonlyArray<typeof move>;
     }>;
+    readonly groups: ReadonlyArray<never>;
   } => ({
     team: target,
     today: "2026-11-11",
     moves,
     days: moves.length === 0 ? [] : [{ day: "2026-11-11", today: true, moves }],
+    groups: [],
   });
   const listed: Array<{ readonly team?: string; readonly state?: string }> = [];
   const proposed: Array<{
@@ -944,6 +946,7 @@ it("appends moves to one team queue and lists them across teams", async () => {
         teamFacts: [],
         counts: { open: 1, today: 1, saved: 0, ended: 0 },
         teamCount: 2,
+        groups: [],
         page: { returned: 1, complete: true },
       };
       return Effect.succeed(data);
@@ -1120,6 +1123,7 @@ it("discards one saved move and reports why a run move stays", async () => {
     today: "2026-11-11",
     moves: [move],
     days: [{ day: "2026-11-11", today: true, moves: [move] }],
+    groups: [],
   };
   const discarded: Array<{
     userId: string;
@@ -1837,6 +1841,9 @@ it("publishes one queue per team", async () => {
   expect(JSON.stringify(plan.outputSchema)).toContain('"validation"');
   expect(JSON.stringify(plan.outputSchema)).toContain('"places"');
   expect(JSON.stringify(plan.outputSchema)).toContain('"reserve"');
+  expect(JSON.stringify(plan.outputSchema)).toContain('"groups"');
+  expect(JSON.stringify(plan.outputSchema)).toContain('"partly_done"');
+  expect(JSON.stringify(plan.outputSchema)).toContain('"actions"');
 });
 
 it("publishes fallback choices, a group label, and a stored check on the plan", async () => {

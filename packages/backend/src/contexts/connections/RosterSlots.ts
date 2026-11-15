@@ -87,6 +87,11 @@ export function slotCapacity(rule: RosterRule, slot: RosterSlot): number | undef
   return slot.kind === "bench" && rule.benchCapacity === "generic" ? undefined : slot.count;
 }
 
+export function exclusivePlace(rule: RosterRule, place: string): boolean {
+  const declared = rule.byPosition.get(place);
+  return declared === undefined ? true : slotCapacity(rule, declared) === 1;
+}
+
 export function rosterOccupancy(input: {
   readonly rule: RosterRule;
   readonly players: ReadonlyArray<RosterPlayerPlace>;

@@ -257,6 +257,39 @@ export const TransactionPlanDay = Schema.Struct({
 });
 export type TransactionPlanDay = typeof TransactionPlanDay.Type;
 
+export const TransactionPlanGroupAction = Schema.Struct({
+  move: TransactionMoveId,
+  action: Schema.Literals(["add", "drop", "reserve_move", "slot_move"]),
+  player: Schema.optional(Schema.NonEmptyString),
+  fromSlot: Schema.optional(Schema.NonEmptyString),
+  toSlot: Schema.optional(Schema.NonEmptyString),
+  outcome: Schema.Literals(["executed", "pending", "failed", "skipped", "unknown"]),
+  detail: Schema.optional(Schema.NonEmptyString),
+});
+export type TransactionPlanGroupAction = typeof TransactionPlanGroupAction.Type;
+
+export const TransactionPlanGroupStatus = Schema.Literals([
+  "ready",
+  "blocked",
+  "partly_done",
+  "done",
+]);
+export type TransactionPlanGroupStatus = typeof TransactionPlanGroupStatus.Type;
+
+export const TransactionPlanGroupRead = Schema.Struct({
+  group: Schema.NonEmptyString,
+  team: TeamId,
+  label: Schema.optional(Schema.NonEmptyString),
+  status: TransactionPlanGroupStatus,
+  moves: Schema.Array(TransactionMoveId),
+  actions: Schema.Array(TransactionPlanGroupAction),
+  failed: Schema.optional(TransactionPlanGroupAction),
+  notRun: Schema.Array(TransactionMoveId),
+  detail: Schema.NonEmptyString,
+  cure: Schema.optional(Schema.NonEmptyString),
+});
+export type TransactionPlanGroupRead = typeof TransactionPlanGroupRead.Type;
+
 const TransactionTeamFacts = Schema.Struct({
   team: TeamId,
   places: RosterPlaces,
@@ -280,6 +313,12 @@ export const TransactionPlanRead = Schema.Struct({
   ),
   moves: Schema.Array(TransactionMoveRead),
   days: Schema.Array(TransactionPlanDay),
+  groups: Schema.Array(TransactionPlanGroupRead).pipe(
+    Schema.annotate({
+      description:
+        "Each group of moves that run together in run order, with its status, recorded actions, failed action, members that did not run, and a plain sentence. A group that lands in part is never done.",
+    }),
+  ),
 });
 export type TransactionPlanRead = typeof TransactionPlanRead.Type;
 
@@ -320,6 +359,12 @@ export const TransactionMoveList = Schema.Struct({
   ),
   counts: TransactionMoveCounts,
   teamCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  groups: Schema.Array(TransactionPlanGroupRead).pipe(
+    Schema.annotate({
+      description:
+        "Each group among this page's moves, with its members in run order, its status, its recorded actions, and a plain sentence.",
+    }),
+  ),
   page: Schema.Struct({
     returned: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     complete: Schema.Boolean,

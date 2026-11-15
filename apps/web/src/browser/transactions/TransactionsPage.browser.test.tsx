@@ -22,6 +22,7 @@ import type {
   TransactionMoveListData,
   TransactionMoveTeamDayView,
   TransactionMoveView,
+  TransactionPlanGroupView,
   TransactionSaveMoveRequest,
   TransactionSubmitTodayRequest,
 } from "#contracts/connections/transactionContract.ts";
@@ -377,6 +378,62 @@ it("offers a retry when the read fails", async () => {
   await expect.element(page.getByRole("button", { name: "Try again" })).toBeVisible();
 });
 
+it("shows each group's status and the sentence that explains what ran", async () => {
+  await page.viewport(1280, 900);
+  const drop = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d1",
+    team: alpha,
+    kind: "drop",
+    drops: [player("Riley Chen")],
+  });
+  const stash = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d2",
+    team: alpha,
+    kind: "stash",
+    drops: [],
+    intent: { kind: "stash", player: player("Amon-Ra St. Brown") },
+  });
+  const failed: TransactionPlanGroupView["failed"] = {
+    move: stash.move,
+    action: "reserve_move",
+    player: "Amon-Ra St. Brown",
+    toSlot: "IR",
+    outcome: "failed",
+    detail: "The player was already there.",
+  };
+  const sentence =
+    "This group ran in part. The drop of Riley Chen reached your league. The move of Amon-Ra St. Brown to IR failed: The player was already there. Check your roster, then choose the move again or discard it.";
+  using _app = setupTransactionsPage({
+    open: listData(
+      [drop, stash],
+      { open: 2, today: 2, saved: 0, ended: 0 },
+      [],
+      [
+        {
+          group: "018f79ea-7d86-7c18-9b4a-8b4d0c9165e1",
+          team: alpha.id,
+          label: "Roster fixes",
+          status: "partly_done",
+          moves: [drop.move, stash.move],
+          actions: [
+            { move: drop.move, action: "drop", player: "Riley Chen", outcome: "executed" },
+            failed,
+          ],
+          failed,
+          notRun: [],
+          detail: sentence,
+          cure: "Check your roster, then choose the move again or discard it.",
+        },
+      ],
+    ),
+  });
+
+  await expect.element(page.getByRole("heading", { name: "Groups" })).toBeVisible();
+  await expect.element(page.getByText("Roster fixes", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Partly done", { exact: true })).toBeVisible();
+  await expect.element(page.getByText(sentence, { exact: true })).toBeVisible();
+});
+
 it("keeps today's count and submit on a phone line", async () => {
   const only = move({
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165f1",
@@ -426,7 +483,7 @@ function setupTransactionsPage(options: {
     timeline: () =>
       options.failure === undefined ? Promise.resolve(open) : Promise.reject(options.failure),
     list: () => Promise.resolve(open),
-    plan: () => Promise.resolve({ team: alpha, moves: [], days: [] }),
+    plan: () => Promise.resolve({ team: alpha, moves: [], days: [], groups: [] }),
     save: options.save ?? (() => Promise.reject(new Error("Unexpected save"))),
     discard: options.discard ?? (() => Promise.reject(new Error("Unexpected discard"))),
     submitToday: options.submitToday ?? (() => Promise.reject(new Error("Unexpected submission"))),
@@ -496,6 +553,7 @@ function listData(
   moves: ReadonlyArray<TransactionMoveView>,
   counts: TransactionMoveListData["counts"],
   teamFacts: TransactionMoveListData["teamFacts"] = [],
+  groups: ReadonlyArray<TransactionPlanGroupView> = [],
 ): TransactionMoveListData {
   const todayMoves = moves.filter(
     (move) => move.decision === "now" || move.decision === "undecided",
@@ -519,6 +577,7 @@ function listData(
     teamFacts,
     counts,
     teamCount: uniqueTeams(moves),
+    groups,
     page: { returned: moves.length, complete: true },
   };
 }

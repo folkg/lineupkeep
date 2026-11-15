@@ -122,6 +122,29 @@ export type TransactionPlanDayView = {
   readonly moves: ReadonlyArray<TransactionMoveView>;
 };
 
+type TransactionPlanGroupActionView = {
+  readonly move: string;
+  readonly action: "add" | "drop" | "reserve_move" | "slot_move";
+  readonly player?: string;
+  readonly fromSlot?: string;
+  readonly toSlot?: string;
+  readonly outcome: "executed" | "pending" | "failed" | "skipped" | "unknown";
+  readonly detail?: string;
+};
+
+export type TransactionPlanGroupView = {
+  readonly group: string;
+  readonly team: string;
+  readonly label?: string;
+  readonly status: "ready" | "blocked" | "partly_done" | "done";
+  readonly moves: ReadonlyArray<string>;
+  readonly actions: ReadonlyArray<TransactionPlanGroupActionView>;
+  readonly failed?: TransactionPlanGroupActionView;
+  readonly notRun: ReadonlyArray<string>;
+  readonly detail: string;
+  readonly cure?: string;
+};
+
 export type TransactionMoveListData = {
   readonly status: "ok";
   readonly team?: TransactionMoveTeamView;
@@ -135,6 +158,7 @@ export type TransactionMoveListData = {
     readonly ended: number;
   };
   readonly teamCount: number;
+  readonly groups: ReadonlyArray<TransactionPlanGroupView>;
   readonly page: {
     readonly returned: number;
     readonly complete: boolean;
@@ -154,6 +178,7 @@ export type TransactionPlanData = {
   readonly reserve?: ReadonlyArray<ReserveListView>;
   readonly moves: ReadonlyArray<TransactionMoveView>;
   readonly days: ReadonlyArray<TransactionPlanDayView>;
+  readonly groups: ReadonlyArray<TransactionPlanGroupView>;
 };
 
 type TransactionRefusalView = {

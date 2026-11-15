@@ -3,6 +3,7 @@ import { DateTime } from "effect";
 import { placeIntentItems } from "#contexts/connections/ProposalOrder.ts";
 import type { ProposalPlacementInput } from "#contexts/connections/ProposalOrder.ts";
 import {
+  exclusivePlace,
   rosterOccupancy,
   rosterRuleOf,
   slotCapacity,
@@ -86,7 +87,12 @@ export function claimTransactionPlanMoves(input: TransactionPlanClaimInput): Tra
   const refused: Array<TransactionPlanClaimRefusal> = [];
 
   for (const move of moves) {
-    const candidates = claimCandidates(move, input.placements.get(move.id), input.roster);
+    const candidates = claimCandidates(
+      move,
+      input.placements.get(move.id),
+      input.roster,
+      input.placeClaims,
+    );
     for (const candidate of candidates) {
       const key = claimKey(candidate.claim);
       const holder = held.get(key);
@@ -159,11 +165,12 @@ function replayPlan(input: {
 
 function evaluateReplayMove(input: ReplayMoveInput): ReplayStep {
   const { move, projection, facts, rule, byId } = input;
+  const placeClaims = (place: string): boolean => exclusivePlace(rule, place);
   const dependsOn = orderedDependencies(move.id, input.dependencies, input.entries);
   const step: ReplayStep = {
     move,
     dependsOn,
-    claims: claimCandidates(move, undefined, projection.roster)
+    claims: claimCandidates(move, undefined, projection.roster, placeClaims)
       .map((candidate) => candidate.claim)
       .sort(compareClaims),
     stale: [],
@@ -187,7 +194,7 @@ function evaluateReplayMove(input: ReplayMoveInput): ReplayStep {
       undefined,
       `${moveLabel(move)} waits on the league's answer before it can run.`,
     );
-    holdClaims(step, projection, true, undefined);
+    holdClaims(step, projection, true, undefined, placeClaims);
     step.projectedRoster = projectionRoster(projection);
     return step;
   }
@@ -212,7 +219,7 @@ function evaluateReplayMove(input: ReplayMoveInput): ReplayStep {
     return step;
   }
 
-  const claims = checkClaims(move, projection);
+  const claims = checkClaims(move, projection, placeClaims);
   if (claims.waiting !== undefined) {
     const holder = requireValue(
       byId.get(claims.waiting.move),
@@ -264,7 +271,7 @@ function evaluateReplayMove(input: ReplayMoveInput): ReplayStep {
   if (reasonCount(step) === 0 && effect !== undefined) {
     const destination = destinationRefusal({
       move,
-      places: usedDestinations(move, step.placement),
+      places: usedDestinations(move, step.placement, placeClaims),
       projection,
       byId,
     });
@@ -292,13 +299,18 @@ function evaluateReplayMove(input: ReplayMoveInput): ReplayStep {
     );
   }
   if (reasonCount(step) === 0 && !input.blocked) {
-    step.claims = claimCandidates(move, step.placement, projection.roster)
+    step.claims = claimCandidates(move, step.placement, projection.roster, placeClaims)
       .map((candidate) => candidate.claim)
       .sort(compareClaims);
     if (holdsClaimsWithoutEffect(move.result)) {
-      holdClaims(step, projection, false, step.placement);
+      holdClaims(step, projection, false, step.placement, placeClaims);
     } else {
-      applyMove(step, requireValue(effect, "An applied move has no projected effect"), projection);
+      applyMove(
+        step,
+        requireValue(effect, "An applied move has no projected effect"),
+        projection,
+        placeClaims,
+      );
       step.applied = true;
     }
   }
@@ -529,10 +541,14 @@ function leftRosterDetail(
     : `${name} left the roster when ${moveLabel(requireValue(byId.get(remover), "A removing move was not declared in the plan"))} ran, so this move cannot ${action}.`;
 }
 
-function checkClaims(move: TransactionPlanMove, projection: TeamProjection): ClaimCheck {
+function checkClaims(
+  move: TransactionPlanMove,
+  projection: TeamProjection,
+  placeClaims: (place: string) => boolean,
+): ClaimCheck {
   const leaving = leavingPlaces(move, projection);
   const refused: Array<StoredMoveValidationReason> = [];
-  for (const candidate of claimCandidates(move, undefined, projection.roster)) {
+  for (const candidate of claimCandidates(move, undefined, projection.roster, placeClaims)) {
     const held = projection.claims.get(claimKey(candidate.claim));
     if (held === undefined || held.move === move.id) {
       continue;
@@ -597,6 +613,7 @@ function destinationRefusal(input: {
 function usedDestinations(
   move: TransactionPlanMove,
   placement: StoredMovePlacement | undefined,
+  placeClaims: (place: string) => boolean,
 ): ReadonlyArray<string> {
   const places: Array<string> = [];
   if (move.kind === "slot_move" && move.slotMove !== undefined) {
@@ -605,7 +622,7 @@ function usedDestinations(
   if (placement !== undefined) {
     places.push(placement.toSlot);
   }
-  return uniquePlaces(places);
+  return uniquePlaces(places).filter(placeClaims);
 }
 
 function uniquePlaces(places: ReadonlyArray<string>): ReadonlyArray<string> {
@@ -752,7 +769,12 @@ function accountingReason(
   return undefined;
 }
 
-function applyMove(step: ReplayStep, effect: PlanEffect, projection: TeamProjection): void {
+function applyMove(
+  step: ReplayStep,
+  effect: PlanEffect,
+  projection: TeamProjection,
+  exclusivePlaceOf: (place: string) => boolean,
+): void {
   const move = step.move;
   for (const place of leavingPlaces(move, projection)) {
     projection.claims.delete(claimKey({ kind: "place", key: place }));
@@ -792,7 +814,7 @@ function applyMove(step: ReplayStep, effect: PlanEffect, projection: TeamProject
       pending: false,
     });
   }
-  for (const place of usedPlaces(move, step.placement)) {
+  for (const place of usedPlaces(move, step.placement, exclusivePlaceOf)) {
     projection.claims.set(claimKey({ kind: "place", key: place }), {
       move: move.id,
       adds: false,
@@ -816,8 +838,9 @@ function holdClaims(
   projection: TeamProjection,
   pending: boolean,
   placement: StoredMovePlacement | undefined,
+  placeClaims: (place: string) => boolean,
 ): void {
-  for (const candidate of claimCandidates(step.move, placement, projection.roster)) {
+  for (const candidate of claimCandidates(step.move, placement, projection.roster, placeClaims)) {
     projection.claims.set(claimKey(candidate.claim), {
       move: step.move.id,
       adds:
@@ -846,6 +869,15 @@ function leavingPlaces(move: TransactionPlanMove, projection: TeamProjection): S
 }
 
 function usedPlaces(
+  move: TransactionPlanMove,
+  placement: StoredMovePlacement | undefined,
+  placeClaims: (place: string) => boolean,
+): ReadonlyArray<string> {
+  const places = claimedPlacesOf(move, placement);
+  return places.filter(placeClaims);
+}
+
+function claimedPlacesOf(
   move: TransactionPlanMove,
   placement: StoredMovePlacement | undefined,
 ): ReadonlyArray<string> {
@@ -1626,6 +1658,7 @@ function claimCandidates(
   move: TransactionPlanMove,
   placement: StoredMovePlacement | undefined,
   roster: ReadonlyMap<string, TransactionPlanRosterPlayer>,
+  placeClaims: (place: string) => boolean,
 ): ReadonlyArray<ClaimCandidate> {
   const candidates: Array<ClaimCandidate> = [];
   for (const drop of move.drops) {
@@ -1680,6 +1713,9 @@ function claimCandidates(
   }
   const seen = new Set<string>();
   return candidates.filter((candidate) => {
+    if (candidate.claim.kind === "place" && !placeClaims(candidate.claim.key)) {
+      return false;
+    }
     const key = claimKey(candidate.claim);
     if (seen.has(key)) {
       return false;
@@ -2098,6 +2134,7 @@ export type TransactionPlanClaimInput = {
   readonly moves: ReadonlyArray<TransactionPlanMove>;
   readonly placements: ReadonlyMap<TransactionMoveId, StoredMovePlacement>;
   readonly roster: ReadonlyMap<string, TransactionPlanRosterPlayer>;
+  readonly placeClaims: (place: string) => boolean;
 };
 
 export type TransactionPlanMoveClaims = {

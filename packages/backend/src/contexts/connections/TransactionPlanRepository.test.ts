@@ -3,13 +3,15 @@ import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import type { UserId } from "@lineupkeep/backend/auth/User";
 import { eq } from "drizzle-orm";
-import { Array, DateTime, Effect, Layer, Option } from "effect";
+import { Array, DateTime, Effect, Layer, Option, Schema } from "effect";
 
 import { decodeTeamId } from "./FantasyTeam.ts";
 import type { TeamId } from "./FantasyTeam.ts";
 import { ConnectionsDatabase } from "./internal/ConnectionsDatabase.ts";
 import { ConnectionsDatabaseTest } from "./internal/ConnectionsDatabaseTest.ts";
 import { providerTeams } from "./internal/ConnectionTables.ts";
+import { TransactionMoveId } from "./internal/TransactionPlanRecord.ts";
+import type { TransactionMoveId as TransactionMoveIdType } from "./internal/TransactionPlanRecord.ts";
 import type {
   TransactionMoveAppend,
   TransactionMoveContent,
@@ -226,14 +228,14 @@ it.effect("discards a move and releases the claims it held", () =>
       0,
     );
 
-    const discarded = yield* repository.discardMove({
+    const discarded = yield* repository.discardMoves({
       userId: owner,
       team: firstTeam,
-      move: stored.id,
+      moves: [stored.id],
       at,
     });
 
-    assert.isTrue(Option.isSome(discarded));
+    assert.strictEqual(discarded.length, 1);
     const moves = yield* repository.readPlanMoves({ userId: owner, team: firstTeam });
     assert.strictEqual(moves[0]?.decision, "discarded");
     assert.strictEqual(
@@ -335,10 +337,10 @@ it.effect("pages one owner's moves by state and orders them by run day, team, an
       externalRef: undefined,
       at,
     });
-    yield* repository.discardMove({
+    yield* repository.discardMoves({
       userId: owner,
       team: firstTeam,
-      move: discarded.id,
+      moves: [discarded.id],
       at,
     });
     yield* repository.appendMoves({
@@ -502,11 +504,19 @@ function teamRow(id: TeamId, userId: UserId): typeof providerTeams.$inferInsert 
   };
 }
 
+let moveSequence = 0;
+
+function nextMoveId(): TransactionMoveIdType {
+  moveSequence += 1;
+  return Schema.decodeSync(TransactionMoveId)(`01J${String(moveSequence).padStart(23, "0")}`);
+}
+
 function appendMove(
   playerKey: string,
   content: Partial<TransactionMoveContent> = {},
 ): TransactionMoveAppend {
   return {
+    id: nextMoveId(),
     proposedBy: { kind: "agent", reference: "mcp", surface: "mcp" },
     content: moveContent({
       drops: [{ key: playerKey, name: `Player ${playerKey}` }],

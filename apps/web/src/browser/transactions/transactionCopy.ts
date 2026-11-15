@@ -1,6 +1,7 @@
 import type {
   TransactionMovePlayerView,
   TransactionMoveView,
+  TransactionPlanGroupView,
 } from "#contracts/connections/transactionContract.ts";
 
 export function moveSummary(move: TransactionMoveView): string {
@@ -61,6 +62,23 @@ export function kindLabel(kind: TransactionMoveView["kind"]): string {
     case "stash":
       return "Stash";
   }
+}
+
+export function groupStatusLabel(status: TransactionPlanGroupView["status"]): string {
+  switch (status) {
+    case "ready":
+      return "Ready";
+    case "blocked":
+      return "Blocked";
+    case "partly_done":
+      return "Partly done";
+    case "done":
+      return "Done";
+  }
+}
+
+export function groupTitle(group: TransactionPlanGroupView): string {
+  return group.label ?? `Group of ${moveCount(group.moves.length)}`;
 }
 
 export function moveCount(count: number): string {

@@ -27,6 +27,7 @@ import type {
   TransactionPlanTeamFacts,
   TransactionPlanTiming,
 } from "./TransactionPlanEvaluation.ts";
+import { TransactionMoveId as TransactionMoveIdSchema } from "./TransactionPlanRecord.ts";
 import type { TransactionMoveCursor, TransactionMoveId } from "./TransactionPlanRecord.ts";
 import { TransactionPlanRepository } from "./TransactionPlanRepository.ts";
 import type { TransactionMoveAppend } from "./TransactionPlanRepository.ts";
@@ -46,8 +47,8 @@ import {
 } from "./TransactionPlanTables.ts";
 import { TransactionPlanWrites } from "./TransactionPlanWrites.ts";
 import type {
+  TransactionPlanAction,
   TransactionPlanWriteRequest,
-  TransactionPlanWriteResult,
   TransactionPlanWritesShape,
 } from "./TransactionPlanWrites.ts";
 
@@ -268,15 +269,7 @@ it.effect("refuses a second stash that claims the same reserve place", () =>
     );
     assert.deepStrictEqual(
       result.plan.moves.map((move) => [move.intent?.player?.key, move.claims]),
-      [
-        [
-          "a1",
-          [
-            { kind: "place", key: "BN" },
-            { kind: "place", key: "IR" },
-          ],
-        ],
-      ],
+      [["a1", [{ kind: "place", key: "IR" }]]],
     );
   }).pipe(
     Effect.provide(
@@ -2343,6 +2336,502 @@ it.effect("stores the locked week's start as a weekly-lock move's effective date
   ),
 );
 
+it.effect("runs a drop, a stash, and an add group in the order its effects need", () => {
+  const facts = new Map<TeamId, TransactionPlanTeamFacts>();
+  const writes = writeLayer((request) => {
+    appliedWrite(facts, request);
+    return { status: "executed" };
+  });
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+    const seeded = league(
+      [
+        rostered("a1", "Roster One", "BN", ["RB"]),
+        { ...rostered("a2", "Roster Two", "BN", ["RB"]), injured: true },
+      ],
+      [freeAgent("fa1", "Free Agent One", ["WR"])],
+      { slots: [bench("BN", 2), reserve("IR", ["RB"])], constraints: constraints(2) },
+    );
+    facts.set(team, seeded.facts);
+
+    yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [
+        { ...add("fa1", "Free Agent One"), group: "three" },
+        { ...stash("a2", "Roster Two"), group: "three" },
+        { ...drop("a1", "Roster One"), group: "three" },
+      ],
+    });
+
+    const result = yield* service.submit(owner, { team });
+
+    assert.strictEqual(result.counts.executed, 3);
+    assert.deepStrictEqual(
+      writes.requests.map((request) => [request.kind, request.drops[0] ?? request.adds[0]]),
+      [
+        ["stash", undefined],
+        ["drop", "a1"],
+        ["free_agent_add", "fa1"],
+      ],
+    );
+
+    const read = yield* service.plan(owner, { team });
+    assert.deepStrictEqual(
+      read.groups.map((group) => [group.status, group.actions.length]),
+      [["done", 3]],
+    );
+    assert.include(read.groups[0]?.detail ?? "", "This group ran whole.");
+  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+});
+
+it.effect("stops a whole group when one member is stale and sends nothing", () => {
+  const facts = new Map<TeamId, TransactionPlanTeamFacts>();
+  const writes = writeLayer(() => ({ status: "executed" }));
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+    facts.set(
+      team,
+      league(
+        [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
+        [freeAgent("fa1", "Free Agent One", ["RB"])],
+        { slots: [bench("BN", 2)], constraints: constraints(2) },
+      ).facts,
+    );
+
+    yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [
+        { ...drop("a1", "Roster One"), group: "pair" },
+        { ...drop("a2", "Roster Two"), group: "pair" },
+      ],
+    });
+
+    facts.set(
+      team,
+      league(
+        [rostered("a2", "Roster Two", "BN", ["RB"])],
+        [freeAgent("fa1", "Free Agent One", ["RB"])],
+        { slots: [bench("BN", 2)], constraints: constraints(2) },
+      ).facts,
+    );
+
+    const result = yield* service.submit(owner, { team });
+
+    assert.strictEqual(writes.requests.length, 0);
+    assert.strictEqual(result.counts.failed, 1);
+    assert.strictEqual(result.counts.skipped, 1);
+    const read = yield* service.plan(owner, { team });
+    assert.deepStrictEqual(
+      read.moves.map((move) => [move.kind, move.result]),
+      [
+        ["drop", "failed"],
+        ["drop", "skipped"],
+      ],
+    );
+    assert.strictEqual(read.groups[0]?.status, "blocked");
+    assert.deepStrictEqual(read.groups[0]?.actions, []);
+    assert.match(
+      read.groups[0]?.detail ?? "",
+      /^This group does not run\. The drop of Roster One cannot run: /u,
+    );
+  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+});
+
+it.effect("leaves a group unwhole when one of its members is discarded", () => {
+  const facts = new Map<TeamId, TransactionPlanTeamFacts>();
+  const writes = writeLayer(() => ({ status: "executed" }));
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+    facts.set(
+      team,
+      league(
+        [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
+        [],
+        { slots: [bench("BN", 2)], constraints: constraints(2) },
+      ).facts,
+    );
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [
+        { ...drop("a1", "Roster One"), group: "pair" },
+        { ...drop("a2", "Roster Two"), group: "pair" },
+      ],
+    });
+    const discarded = proposed.plan.moves[0]?.move;
+    if (discarded === undefined) {
+      throw new Error("The proposed group had no first move");
+    }
+
+    yield* service.discard(owner, { team, move: discarded });
+
+    const read = yield* service.plan(owner, { team });
+    assert.strictEqual(writes.requests.length, 0);
+    assert.strictEqual(read.groups.length, 1);
+    assert.strictEqual(read.groups[0]?.status, "blocked");
+    assert.strictEqual(
+      read.groups[0]?.detail,
+      "This group is not whole. The drop of Roster One was discarded, so the rest cannot run until you discard the group or form it again.",
+    );
+  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+});
+
+it.effect(
+  "records the drop that landed, the stash the league refused, and the add that did not run",
+  () => {
+    const facts = new Map<TeamId, TransactionPlanTeamFacts>();
+    let reads = 0;
+    const writes = writeLayer((request) => {
+      if (request.kind === "stash") {
+        return { status: "failed", detail: "The player was already there." };
+      }
+      appliedWrite(facts, request);
+      return { status: "executed" };
+    });
+    const layer = layerWith((input) => {
+      reads += 1;
+      const found = facts.get(input.team);
+      return found === undefined
+        ? Effect.fail(
+            TransactionPlanFactsUnavailable.make({
+              team: input.team,
+              detail: "The league could not be read.",
+            }),
+          )
+        : Effect.succeed(found);
+    }, writes.layer);
+    return Effect.gen(function* () {
+      const service = yield* TransactionPlanService;
+      const database = yield* ConnectionsDatabase;
+      yield* TestClock.setTime(DateTime.toEpochMillis(at));
+      yield* seedTeam(database, owner, team);
+      facts.set(
+        team,
+        league(
+          [
+            rostered("a1", "Roster One", "BN", ["RB"]),
+            { ...rostered("a2", "Roster Two", "BN", ["RB"]), injured: true },
+          ],
+          [freeAgent("fa1", "Free Agent One", ["WR"])],
+          { slots: [bench("BN", 2), reserve("IR", ["RB"])], constraints: constraints(2) },
+        ).facts,
+      );
+
+      yield* service.propose(owner, {
+        team,
+        proposedBy: proposer,
+        moves: [
+          { ...drop("a1", "Roster One"), group: "three" },
+          { ...stash("a2", "Roster Two"), group: "three" },
+          { ...add("fa1", "Free Agent One"), group: "three" },
+        ],
+      });
+      const before = reads;
+
+      const result = yield* service.submit(owner, { team });
+
+      assert.strictEqual(writes.requests.length, 2);
+      assert.isAbove(reads, before + 1);
+      assert.strictEqual(result.counts.executed, 1);
+      assert.strictEqual(result.counts.failed, 1);
+      assert.strictEqual(result.counts.skipped, 1);
+
+      const read = yield* service.plan(owner, { team });
+      const group = read.groups[0];
+      assert.strictEqual(group?.status, "partly_done");
+      assert.deepStrictEqual(
+        group?.actions.map((action) => [action.action, action.player, action.outcome]),
+        [
+          ["drop", "Roster One", "executed"],
+          ["reserve_move", "Roster Two", "failed"],
+        ],
+      );
+      assert.strictEqual(group?.failed?.detail, "The player was already there.");
+      assert.deepStrictEqual(
+        group?.notRun.map((move) => read.moves.find((entry) => entry.move === move)?.kind),
+        ["free_agent_add"],
+      );
+      assert.strictEqual(
+        group?.cure,
+        "Check your roster, then choose the move again or discard it.",
+      );
+      assert.strictEqual(
+        group?.detail,
+        "This group ran in part. The drop of Roster One reached your league. The move of Roster Two to IR failed: The player was already there. The add did not run. Check your roster, then choose the move again or discard it.",
+      );
+    }).pipe(Effect.provide(layer));
+  },
+);
+
+it.effect("adds a visible Roster fixes group before the add it funds", () => {
+  const writes = writeLayer(() => ({ status: "executed" }));
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const result = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [add("fa1", "Free Agent One")],
+    });
+
+    assert.deepStrictEqual(result.refused, []);
+    assert.deepStrictEqual(
+      result.plan.moves.map((move) => [move.kind, move.runPosition]),
+      [
+        ["stash", 0],
+        ["free_agent_add", 1],
+      ],
+    );
+
+    const read = yield* service.plan(owner, { team });
+    const group = read.groups[0];
+    assert.strictEqual(group?.label, "Roster fixes");
+    assert.strictEqual(group?.status, "ready");
+    assert.strictEqual(group?.moves.length, 1);
+    assert.strictEqual(read.moves.find((move) => move.move === group?.moves[0])?.kind, "stash");
+    assert.include(read.moves[0]?.reason ?? "", "to free a place");
+
+    yield* service.submit(owner, { team });
+    assert.deepStrictEqual(
+      writes.requests.map((request) => request.kind),
+      ["stash", "free_agent_add"],
+    );
+  }).pipe(
+    Effect.provide(
+      serviceLayer(
+        [
+          league(
+            [{ ...rostered("a1", "Roster One", "BN", ["RB"]), injured: true }],
+            [freeAgent("fa1", "Free Agent One", ["WR"])],
+            { slots: [bench("BN", 1), reserve("IR", ["RB"])], constraints: constraints(1) },
+          ),
+        ],
+        writes.layer,
+      ),
+    ),
+  );
+});
+
+it.effect("adds no Roster fixes group when the add already fits", () =>
+  Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const result = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [add("fa1", "Free Agent One")],
+    });
+
+    assert.deepStrictEqual(result.refused, []);
+    const read = yield* service.plan(owner, { team });
+    assert.deepStrictEqual(read.groups, []);
+    assert.deepStrictEqual(
+      read.moves.map((move) => move.kind),
+      ["free_agent_add"],
+    );
+  }).pipe(
+    Effect.provide(
+      serviceLayer([
+        league(
+          [{ ...rostered("a1", "Roster One", "BN", ["RB"]), injured: true }],
+          [freeAgent("fa1", "Free Agent One", ["WR"])],
+          { slots: [bench("BN", 2), reserve("IR", ["RB"])], constraints: constraints(2) },
+        ),
+      ]),
+    ),
+  ),
+);
+
+it.effect("activates a healthy player off a reserve list so an add can run", () =>
+  Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const result = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [add("fa1", "Free Agent One")],
+    });
+
+    assert.deepStrictEqual(result.refused, []);
+    const read = yield* service.plan(owner, { team });
+    assert.deepStrictEqual(
+      read.moves.map((move) => [move.kind, move.validation.status]),
+      [
+        ["activate", "current"],
+        ["free_agent_add", "current"],
+      ],
+    );
+    assert.strictEqual(read.groups[0]?.label, "Roster fixes");
+    assert.deepStrictEqual(
+      read.groups[0]?.moves.map((move) => read.moves.find((entry) => entry.move === move)?.kind),
+      ["activate"],
+    );
+  }).pipe(
+    Effect.provide(
+      serviceLayer([
+        league(
+          [
+            rostered("a1", "Roster One", "BN", ["RB"]),
+            rostered("a2", "Roster Two", "IR", ["RB"]),
+            { ...rostered("a3", "Roster Three", "IR+", ["RB"]), injured: true },
+          ],
+          [freeAgent("fa1", "Free Agent One", ["WR"])],
+          {
+            slots: [bench("BN", 2), reserve("IR", ["RB"]), reserve("IR+", ["RB"])],
+            constraints: constraints(3, { reserveEligibility: { kind: "injury_status" } }),
+          },
+        ),
+      ]),
+    ),
+  ),
+);
+
+it.effect("names the cure when no roster fix can make an add fit", () =>
+  Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const result = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [add("fa1", "Free Agent One")],
+    });
+
+    assert.strictEqual(result.refused.length, 1);
+    assert.include(
+      result.refused[0]?.detail ?? "",
+      "no injured player on the roster can move to a reserve list to free one",
+    );
+    assert.deepStrictEqual(result.plan.moves, []);
+  }).pipe(
+    Effect.provide(
+      serviceLayer([
+        league(
+          [rostered("a1", "Roster One", "BN", ["WR"])],
+          [freeAgent("fa1", "Free Agent One", ["WR"])],
+          { slots: [bench("BN", 1)], constraints: constraints(1) },
+        ),
+      ]),
+    ),
+  ),
+);
+
+it.effect("regenerates a move's Roster fixes when it is edited", () =>
+  Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [add("fa1", "Free Agent One")],
+    });
+    const funded = proposed.plan.moves.find((move) => move.kind === "free_agent_add");
+    assert.isDefined(funded);
+
+    const edited = yield* service.edit(owner, {
+      team,
+      move: requireMoveId(funded),
+      change: add("fa1", "Free Agent One", { reason: "Add a receiver for Sunday." }),
+    });
+    assert.deepStrictEqual(edited.refused, []);
+
+    const stored = yield* database.select().from(transactionMoves);
+    const fixes = stored.filter((move) => move.groupId?.startsWith("roster-fixes:") === true);
+    assert.strictEqual(fixes.filter((move) => move.decision !== "discarded").length, 1);
+    assert.strictEqual(fixes.filter((move) => move.decision === "discarded").length, 1);
+
+    const read = yield* service.plan(owner, { team });
+    assert.deepStrictEqual(
+      read.moves.filter((move) => move.decision !== "discarded").map((move) => move.kind),
+      ["free_agent_add", "stash"],
+    );
+    assert.deepStrictEqual(
+      read.groups[0]?.moves.map((move) => read.moves.find((entry) => entry.move === move)?.kind),
+      ["stash"],
+    );
+    assert.strictEqual(read.groups[0]?.status, "ready");
+  }).pipe(
+    Effect.provide(
+      serviceLayer([
+        league(
+          [{ ...rostered("a1", "Roster One", "BN", ["RB"]), injured: true }],
+          [freeAgent("fa1", "Free Agent One", ["WR"])],
+          { slots: [bench("BN", 1), reserve("IR", ["RB"])], constraints: constraints(1) },
+        ),
+      ]),
+    ),
+  ),
+);
+
+it.effect("discards a move's Roster fixes with it", () =>
+  Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [add("fa1", "Free Agent One")],
+    });
+    const funded = proposed.plan.moves.find((move) => move.kind === "free_agent_add");
+    assert.isDefined(funded);
+
+    const discarded = yield* service.discard(owner, {
+      team,
+      move: requireMoveId(funded),
+    });
+    assert.deepStrictEqual(discarded.refused, []);
+
+    const read = yield* service.plan(owner, { team });
+    assert.deepStrictEqual(
+      read.moves.map((move) => [move.kind, move.decision]),
+      [
+        ["stash", "discarded"],
+        ["free_agent_add", "discarded"],
+      ],
+    );
+    assert.deepStrictEqual(read.groups, []);
+  }).pipe(
+    Effect.provide(
+      serviceLayer([
+        league(
+          [{ ...rostered("a1", "Roster One", "BN", ["RB"]), injured: true }],
+          [freeAgent("fa1", "Free Agent One", ["WR"])],
+          { slots: [bench("BN", 1), reserve("IR", ["RB"])], constraints: constraints(1) },
+        ),
+      ]),
+    ),
+  ),
+);
+
 function serviceLayer(
   leagues: ReadonlyArray<League>,
   writes: Layer.Layer<TransactionPlanWrites> = executedWrites(),
@@ -2386,8 +2875,33 @@ function executedWrites(): Layer.Layer<TransactionPlanWrites> {
   return writeLayer(() => ({ status: "executed" })).layer;
 }
 
+function appliedWrite(
+  facts: Map<TeamId, TransactionPlanTeamFacts>,
+  request: TransactionPlanWriteRequest,
+): void {
+  const current = facts.get(team);
+  if (current === undefined) {
+    return;
+  }
+  const roster = current.roster.filter((player) => !request.drops.includes(player.key));
+  const moving = request.intent?.player?.key ?? request.slotMove?.playerKey;
+  const destination = request.slotMove?.toSlot ?? request.placement?.toSlot;
+  const moved = roster.map((player) =>
+    player.key === moving && destination !== undefined ? { ...player, slot: destination } : player,
+  );
+  const added = request.adds.map((key) => ({
+    key,
+    name: key,
+    positions: [],
+    slot: request.placement?.toSlot,
+    injured: false,
+    editable: true,
+  }));
+  facts.set(team, { ...current, roster: [...moved, ...added] });
+}
+
 function writeLayer(
-  outcome: (request: TransactionPlanWriteRequest, attempt: number) => TransactionPlanWriteResult,
+  outcome: (request: TransactionPlanWriteRequest, attempt: number) => WriteDecision,
 ): {
   readonly layer: Layer.Layer<TransactionPlanWrites>;
   readonly requests: Array<TransactionPlanWriteRequest>;
@@ -2399,9 +2913,66 @@ function writeLayer(
       requests.push(request);
       const attempt = (attempts.get(request.move) ?? 0) + 1;
       attempts.set(request.move, attempt);
-      return outcome(request, attempt);
+      const decided = outcome(request, attempt);
+      return decided.status === "retry"
+        ? decided
+        : {
+            ...decided,
+            actions: plannedActions(request, decided.status).map((action) => ({
+              ...action,
+              ...(decided.status === "executed" ? {} : { detail: decided.detail }),
+            })),
+          };
     });
   return { layer: Layer.succeed(TransactionPlanWrites)({ apply }), requests };
+}
+
+function plannedActions(
+  request: TransactionPlanWriteRequest,
+  outcome: TransactionPlanAction["outcome"],
+): ReadonlyArray<TransactionPlanAction> {
+  return planActions(request).map((action) => ({ ...action, outcome }));
+}
+
+function planActions(request: TransactionPlanWriteRequest): ReadonlyArray<TransactionPlanAction> {
+  if (request.kind === "trade") {
+    return [];
+  }
+  if (request.kind === "activate" || request.kind === "stash" || request.kind === "slot_move") {
+    const playerKey = request.slotMove?.playerKey ?? request.placement?.playerKey;
+    const toSlot = request.slotMove?.toSlot ?? request.placement?.toSlot;
+    return playerKey === undefined
+      ? []
+      : [
+          {
+            kind: "reserve_move",
+            playerKey,
+            ...(toSlot === undefined ? {} : { toSlot }),
+            outcome: "skipped",
+          },
+        ];
+  }
+  const actions: Array<TransactionPlanAction> = [
+    ...request.adds.map((playerKey): TransactionPlanAction => ({
+      kind: "add",
+      playerKey,
+      outcome: "skipped",
+    })),
+    ...request.drops.map((playerKey): TransactionPlanAction => ({
+      kind: "drop",
+      playerKey,
+      outcome: "skipped",
+    })),
+  ];
+  if (request.intent?.to === "reserve" && request.placement !== undefined) {
+    actions.push({
+      kind: "reserve_move",
+      playerKey: request.placement.playerKey,
+      toSlot: request.placement.toSlot,
+      outcome: "skipped",
+    });
+  }
+  return actions;
 }
 
 function layerWith(
@@ -2469,8 +3040,18 @@ function droppedMoveId(plan: TransactionPlanView, key: string): TransactionMoveI
   return move.move;
 }
 
+let storedMoveSequence = 0;
+
+function nextStoredMoveId(): TransactionMoveId {
+  storedMoveSequence += 1;
+  return Schema.decodeSync(TransactionMoveIdSchema)(
+    `01K${String(storedMoveSequence).padStart(23, "0")}`,
+  );
+}
+
 function storedDrop(key: string, name: string): TransactionMoveAppend {
   return {
+    id: nextStoredMoveId(),
     proposedBy: proposer,
     content: {
       group: undefined,
@@ -2656,6 +3237,13 @@ function slotMove(playerKey: string, playerName: string, toSlot: string): Transa
     reason: `Move ${playerName} to ${toSlot}.`,
   };
 }
+
+type WriteDecision =
+  | { readonly status: "executed" }
+  | { readonly status: "pending"; readonly detail: string }
+  | { readonly status: "failed"; readonly detail: string }
+  | { readonly status: "unknown"; readonly detail: string }
+  | { readonly status: "retry"; readonly detail: string };
 
 type League = {
   readonly team: TeamId;

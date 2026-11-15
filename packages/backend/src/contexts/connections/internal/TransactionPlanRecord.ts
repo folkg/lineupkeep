@@ -50,12 +50,24 @@ export {
   isOpenMove,
 };
 
+export const StoredMoveStepKind = Schema.Literals(["reserve_move", "slot_move", "add", "drop"]);
+export type StoredMoveStepKind = typeof StoredMoveStepKind.Type;
+
+export const StoredMoveStepOutcome = Schema.Literals([
+  "executed",
+  "pending",
+  "failed",
+  "skipped",
+  "unknown",
+]);
+export type StoredMoveStepOutcome = typeof StoredMoveStepOutcome.Type;
+
 export const StoredMoveStep = Schema.Struct({
-  kind: Schema.Literals(["reserve_move", "slot_move", "add", "drop"]),
+  kind: StoredMoveStepKind,
   playerKey: Schema.NonEmptyString,
   fromSlot: Schema.optional(Schema.NonEmptyString),
   toSlot: Schema.optional(Schema.NonEmptyString),
-  outcome: Schema.Literals(["executed", "pending", "failed", "skipped", "unknown"]),
+  outcome: StoredMoveStepOutcome,
   detail: Schema.optional(Schema.NonEmptyString),
   decidedAt: Schema.DateTimeUtc,
 });

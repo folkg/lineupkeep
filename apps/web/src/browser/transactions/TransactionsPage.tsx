@@ -25,11 +25,14 @@ import { leagueDisplayName, sportDisplayName } from "#contracts/connections/team
 import type {
   TransactionMoveTeamDayView,
   TransactionMoveView,
+  TransactionPlanGroupView,
 } from "#contracts/connections/transactionContract.ts";
 
 import { TeamPlaces } from "./TeamPlaces";
 import {
   endedMoveCount,
+  groupStatusLabel,
+  groupTitle,
   kindLabel,
   moveCount,
   moveSummary,
@@ -77,6 +80,7 @@ export function TransactionsPage(props: TransactionsPageProps): JSX.Element {
                 <ActionFeedback feedback={page.feedback()} />
                 <SummaryLine page={page} />
                 <TodayZone page={page} />
+                <GroupsZone page={page} />
                 <PlanningSheet page={page} />
                 <EarlierSection page={page} />
               </Stack>
@@ -245,6 +249,49 @@ function TodayCard(props: TodayCardProps): JSX.Element {
             </Button>
           </Inline>
         </Stack>
+      </Stack>
+    </Box>
+  );
+}
+
+function GroupsZone(props: SectionProps): JSX.Element {
+  return (
+    <Show when={props.page.groups().length > 0}>
+      <Band labelledBy="groups-title">
+        <Stack gap="md">
+          <SectionTitle id="groups-title" focusable>
+            Groups
+          </SectionTitle>
+          <Text size="body" tone="muted">
+            A group runs whole or not at all, in the order its moves need.
+          </Text>
+          <Stack gap="lg">
+            <For each={props.page.groups()}>{(group) => <GroupCard group={group} />}</For>
+          </Stack>
+        </Stack>
+      </Band>
+    </Show>
+  );
+}
+
+function GroupCard(props: { readonly group: TransactionPlanGroupView }): JSX.Element {
+  return (
+    <Box rule="top" ruleTone="ink" space="lg">
+      <Stack gap="2xs">
+        <Inline gap="sm" align="baseline">
+          <Badge tone={props.group.status === "blocked" ? "neutral" : "accent"}>
+            {groupStatusLabel(props.group.status)}
+          </Badge>
+          <Text size="item" weight="semibold">
+            {groupTitle(props.group)}
+          </Text>
+          <Text numeric size="caption" tone="faint">
+            {moveCount(props.group.moves.length)}
+          </Text>
+        </Inline>
+        <Text size="caption" tone={props.group.status === "ready" ? "muted" : "default"}>
+          {props.group.detail}
+        </Text>
       </Stack>
     </Box>
   );

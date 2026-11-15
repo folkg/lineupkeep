@@ -10,6 +10,7 @@ import type {
   TransactionMoveActionData,
   TransactionMoveTeamDayView,
   TransactionMoveView,
+  TransactionPlanGroupView,
   TransactionSubmitTodayData,
   TransactionTeamFactsView,
 } from "#contracts/connections/transactionContract.ts";
@@ -52,6 +53,15 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
       }
     }
     return held;
+  });
+  const groups = createMemo(() => {
+    const held = new Map<string, TransactionPlanGroupView>();
+    for (const data of open.isSuccess ? open.data.pages : []) {
+      for (const group of data.groups) {
+        held.set(group.group, group);
+      }
+    }
+    return [...held.values()];
   });
   const todayMoves = createMemo(() => {
     const days = open.isSuccess ? open.data.pages.flatMap((page) => page.days) : [];
@@ -234,6 +244,7 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     counts,
     teamCount,
     teamFacts,
+    groups,
     choiceFor: (move) => choices()[choiceKey(move)],
     chooseToday,
     undecidedTodayCount,
@@ -336,6 +347,7 @@ export type TransactionsPageController = {
   }>;
   readonly teamCount: Accessor<number>;
   readonly teamFacts: Accessor<ReadonlyMap<string, TransactionTeamFactsView>>;
+  readonly groups: Accessor<ReadonlyArray<TransactionPlanGroupView>>;
   readonly choiceFor: (move: TransactionMoveView) => TodayChoice | undefined;
   readonly chooseToday: (move: TransactionMoveView, choice: TodayChoice) => void;
   readonly undecidedTodayCount: () => number;

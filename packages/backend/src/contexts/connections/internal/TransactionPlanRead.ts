@@ -279,6 +279,7 @@ export type TransactionTeamCheck =
       readonly places: RosterPlaces;
       readonly reserve: ReadonlyArray<ReserveList>;
       readonly moves: ReadonlyMap<TransactionMoveRecord["id"], TransactionPlanMoveEvaluation>;
+      readonly blocked: ReadonlyMap<TransactionMoveRecord["id"], string>;
     }
   | { readonly status: "unavailable" };
 

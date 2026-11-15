@@ -12,7 +12,12 @@ import {
 import type { UserId } from "#contexts/auth/User.ts";
 import { TeamId } from "#contexts/connections/FantasyTeam.ts";
 import { PlayerRef } from "#contexts/connections/QueryValues.ts";
-import { rosterOccupancy, rosterRuleOf } from "#contexts/connections/RosterSlots.ts";
+import {
+  exclusivePlace,
+  rosterOccupancy,
+  rosterRuleOf,
+} from "#contexts/connections/RosterSlots.ts";
+import type { RosterRule } from "#contexts/connections/RosterSlots.ts";
 import {
   TransactionPlanFactsUnavailable,
   TransactionPlanMoveNotFound,
@@ -72,6 +77,10 @@ import type {
   TransactionPlanRosterPlayer,
   TransactionPlanTeamFacts,
 } from "./TransactionPlanEvaluation.ts";
+import { rosterFixGroupOf, searchRosterFixes } from "./TransactionPlanFixes.ts";
+import type { RosterFixDraft } from "./TransactionPlanFixes.ts";
+import { planGroupReads } from "./TransactionPlanGroups.ts";
+import type { TransactionPlanGroupMember } from "./TransactionPlanGroups.ts";
 import {
   countTotals,
   moveCursor,
@@ -85,11 +94,7 @@ import {
   StoredMoveDate,
   TransactionMoveId as TransactionMoveIdSchema,
 } from "./TransactionPlanRecord.ts";
-import type {
-  StoredMoveStep,
-  TransactionMoveRecord,
-  TransactionMoveRowRecord,
-} from "./TransactionPlanRecord.ts";
+import type { TransactionMoveRecord, TransactionMoveRowRecord } from "./TransactionPlanRecord.ts";
 import type {
   TransactionMoveAppend,
   TransactionMoveContent,
@@ -99,6 +104,7 @@ import type {
 import { TransactionPlanRepository } from "./TransactionPlanRepository.ts";
 import { TransactionPlanWrites } from "./TransactionPlanWrites.ts";
 import type {
+  TransactionPlanAction,
   TransactionPlanWriteRequest,
   TransactionPlanWriteResult,
 } from "./TransactionPlanWrites.ts";
@@ -157,6 +163,101 @@ export const TransactionPlanServiceLive = Layer.effect(
       return planViewOf({ stored, facts: input.facts, checkedAt: input.at, team: input.team });
     });
 
+    const rosterFixedEntries = Effect.fn("TransactionPlanService.rosterFixedEntries")(
+      function* (input: {
+        readonly facts: TransactionPlanTeamFacts;
+        readonly rule: RosterRule;
+        readonly open: ReadonlyArray<TransactionPlanMove>;
+        readonly entries: ReadonlyArray<ProposedEntry>;
+        readonly at: DateTime.Utc;
+      }) {
+        const baseline = evaluateTransactionPlan({
+          facts: input.facts,
+          moves: [...input.open, ...input.entries.map((entry) => entry.candidate)],
+          checkedAt: input.at,
+        });
+        const evaluated = evaluatedMoves(baseline);
+        const plans: Array<{
+          readonly funded: ProposedEntry;
+          readonly fixes: ReadonlyArray<RosterFixDraft>;
+        }> = [];
+        const cures = new Map<TransactionMoveId, string>();
+        for (const entry of input.entries) {
+          const evaluation = evaluated.get(entry.candidate.id);
+          if (evaluation === undefined || evaluation.validation.status === "current") {
+            continue;
+          }
+          const search = searchRosterFixes({
+            facts: input.facts,
+            rule: input.rule,
+            funded: entry.candidate,
+            reasons: evaluation.validation.reasons,
+          });
+          if (search.detail !== undefined) {
+            cures.set(entry.candidate.id, search.detail);
+          }
+          if (search.fixes.length === 0) {
+            continue;
+          }
+          plans.push({ funded: entry, fixes: search.fixes });
+        }
+        if (plans.length === 0) {
+          return { entries: input.entries, cures };
+        }
+        const ids = yield* Effect.forEach(
+          plans.flatMap((plan) => plan.fixes),
+          () => newId.pipe(Effect.map((id) => Schema.decodeSync(TransactionMoveIdSchema)(id))),
+        );
+        let cursor = 0;
+        const generated = plans.map((plan) => ({
+          funded: plan.funded,
+          entries: plan.fixes.map((fix): ProposedEntry => {
+            const id = requireId(ids, cursor);
+            cursor += 1;
+            return {
+              candidate: fixCandidateOf({
+                fix,
+                id,
+                group: rosterFixGroupOf(plan.funded.candidate.id),
+                funded: plan.funded.candidate,
+              }),
+              index: plan.funded.index,
+              label: plan.funded.label,
+              settleKey: plan.funded.settleKey,
+              funded: plan.funded.candidate.id,
+            };
+          }),
+        }));
+        const base = input.entries.reduce(
+          (position, entry) => Math.min(position, entry.candidate.position),
+          Number.MAX_SAFE_INTEGER,
+        );
+        const ordered = input.entries
+          .flatMap((entry) => {
+            const fixes = generated.find((plan) => plan.funded === entry)?.entries ?? [];
+            return [...fixes, entry];
+          })
+          .map((entry, index) => ({
+            ...entry,
+            candidate: { ...entry.candidate, position: base + index },
+          }));
+        const verified = evaluateTransactionPlan({
+          facts: input.facts,
+          moves: [...input.open, ...ordered.map((entry) => entry.candidate)],
+          checkedAt: input.at,
+        });
+        const current = new Set(
+          verified.moves.flatMap((entry) =>
+            entry.validation.status === "current" ? [entry.move] : [],
+          ),
+        );
+        const kept = ordered.filter(
+          (entry) => entry.funded === undefined || current.has(entry.funded),
+        );
+        return { entries: kept, cures };
+      },
+    );
+
     const propose = Effect.fn("TransactionPlanService.propose")(function* (
       userId: UserId,
       input: TransactionPlanProposeInput,
@@ -173,6 +274,7 @@ export const TransactionPlanServiceLive = Layer.effect(
         needsBudget: needsBudget(open) || input.moves.some((move) => move.bid !== undefined),
       });
       const roster = new Map(facts.roster.map((player) => [player.key, player] as const));
+      const rule = rosterRuleOf(facts.constraints, facts.slots);
       const groupIds = new Map(
         yield* Effect.forEach(
           [
@@ -188,41 +290,66 @@ export const TransactionPlanServiceLive = Layer.effect(
       const ids = yield* Effect.forEach(input.moves, () =>
         newId.pipe(Effect.map((id) => Schema.decodeSync(TransactionMoveIdSchema)(id))),
       );
-      const candidates = input.moves.map((draft, index) =>
-        draftCandidate({
-          draft,
-          id: requireId(ids, index),
-          position: firstPosition + index,
-          group: draft.group === undefined ? undefined : groupIds.get(draft.group),
-          roster,
-          facts,
-        }),
-      );
-      const proposals = draftGroups(input.moves, candidates);
+      const entries = input.moves.map((draft, index): ProposedEntry => {
+        const id = requireId(ids, index);
+        return {
+          candidate: draftCandidate({
+            draft,
+            id,
+            position: firstPosition + index,
+            group: draft.group === undefined ? undefined : groupIds.get(draft.group),
+            roster,
+            facts,
+          }),
+          index,
+          label: draft.group,
+          settleKey: draft.group ?? id,
+          funded: undefined,
+        };
+      });
+      const fixed = yield* rosterFixedEntries({
+        facts,
+        rule,
+        open,
+        entries,
+        at,
+      });
       const settled = settleProposals({
         team: input.team,
         accepted: open,
-        proposals,
+        proposals: proposedGroups(fixed.entries),
         facts,
         roster,
+        placeClaims: (place) => exclusivePlace(rule, place),
+        cures: fixed.cures,
         checkedAt: at,
       });
 
       if (settled.accepted.length > open.length) {
+        const acceptedIds = new Set(settled.accepted.map((move) => move.id));
         const evaluation = evaluateTransactionPlan({
           facts,
           moves: settled.accepted,
           checkedAt: at,
         });
-        const evaluated = new Map(evaluation.moves.map((entry) => [entry.move, entry] as const));
-        const planClaims = claimPlan({ moves: settled.accepted, after: evaluation, roster });
-        const appends = candidates
-          .filter((candidate) => settled.accepted.includes(candidate))
-          .map((candidate) =>
+        const evaluated = evaluatedMoves(evaluation);
+        const planClaims = claimPlan({
+          moves: settled.accepted,
+          after: evaluation,
+          roster,
+          placeClaims: (place) => exclusivePlace(rule, place),
+        });
+        const appends = fixed.entries
+          .filter(
+            (entry) =>
+              acceptedIds.has(entry.candidate.id) &&
+              (entry.funded === undefined || acceptedIds.has(entry.funded)),
+          )
+          .map((entry) =>
             appendOf(
-              candidate,
-              entryOf(evaluated, candidate.id),
-              planClaims.claims.get(candidate.id) ?? [],
+              entry.candidate,
+              entryOf(evaluated, entry.candidate.id),
+              planClaims.claims.get(entry.candidate.id) ?? [],
               input.proposedBy,
               at,
             ),
@@ -517,7 +644,7 @@ export const TransactionPlanServiceLive = Layer.effect(
       }
 
       const before = evaluateTransactionPlan({ facts, moves: open, checkedAt: at });
-      const peers = groupPeers(open, move);
+      const peers = [...groupPeers(open, move), ...fixPeers(open, move)];
       const changed = open.map((entry) =>
         entry.id === move.id || peers.some((peer) => peer.id === entry.id)
           ? movedToDay(entry, input.runDay)
@@ -539,7 +666,12 @@ export const TransactionPlanServiceLive = Layer.effect(
           refused: [revalidation],
         };
       }
-      const planClaims = claimPlan({ moves: changed, after, roster });
+      const planClaims = claimPlan({
+        moves: changed,
+        after,
+        roster,
+        placeClaims: (place) => exclusivePlace(rosterRuleOf(facts.constraints, facts.slots), place),
+      });
       const collision = planClaims.refused[0];
       if (collision !== undefined) {
         return {
@@ -634,19 +766,38 @@ export const TransactionPlanServiceLive = Layer.effect(
         roster,
         facts,
       });
+      const rule = rosterRuleOf(facts.constraints, facts.slots);
       const before = evaluateTransactionPlan({ facts, moves: open, checkedAt: at });
       const peers = runDay === move.runDay ? [] : groupPeers(open, move);
-      const changed = open.flatMap((entry) => {
-        if (entry.id === move.id) {
-          return [candidate];
-        }
-        return peers.some((peer) => peer.id === entry.id) ? [movedToDay(entry, runDay)] : [entry];
+      const replacedFixes = fixPeers(open, move);
+      const surviving = open.filter(
+        (entry) =>
+          entry.id !== move.id &&
+          !peers.some((peer) => peer.id === entry.id) &&
+          !replacedFixes.some((fix) => fix.id === entry.id),
+      );
+      const withPeers = [...surviving, ...peers.map((peer) => movedToDay(peer, runDay))];
+      const fixed = yield* rosterFixedEntries({
+        facts,
+        rule,
+        open: withPeers,
+        entries: [
+          {
+            candidate,
+            index: 0,
+            label: undefined,
+            settleKey: candidate.id,
+            funded: undefined,
+          },
+        ],
+        at,
       });
+      const changed = [...fixed.entries.map((entry) => entry.candidate), ...withPeers];
       const after = evaluateTransactionPlan({ facts, moves: changed, checkedAt: at });
       const revalidation = revalidationRefusal({
         team: input.team,
         target: candidate,
-        moves: open,
+        moves: withPeers,
         before,
         after,
         requireTarget: true,
@@ -655,10 +806,15 @@ export const TransactionPlanServiceLive = Layer.effect(
       if (revalidation !== undefined) {
         return {
           plan: planViewOf({ stored, facts, checkedAt: at, team: input.team }),
-          refused: [revalidation],
+          refused: [withCure(revalidation, fixed.cures.get(candidate.id))],
         };
       }
-      const planClaims = claimPlan({ moves: changed, after, roster });
+      const planClaims = claimPlan({
+        moves: changed,
+        after,
+        roster,
+        placeClaims: (place) => exclusivePlace(rosterRuleOf(facts.constraints, facts.slots), place),
+      });
       const collision = planClaims.refused[0];
       if (collision !== undefined) {
         return {
@@ -667,7 +823,8 @@ export const TransactionPlanServiceLive = Layer.effect(
         };
       }
 
-      const entry = entryOf(evaluatedMoves(after), move.id);
+      const evaluatedAfter = evaluatedMoves(after);
+      const entry = entryOf(evaluatedAfter, move.id);
       yield* repository.editMove({
         userId,
         team: input.team,
@@ -680,9 +837,42 @@ export const TransactionPlanServiceLive = Layer.effect(
         groupDays: peers.map((peer) => ({
           move: peer.id,
           runDay,
-          effectiveDate: entryOf(evaluatedMoves(after), peer.id).effectiveDate,
+          effectiveDate: entryOf(evaluatedAfter, peer.id).effectiveDate,
         })),
       });
+      if (replacedFixes.length > 0) {
+        yield* repository.discardMoves({
+          userId,
+          team: input.team,
+          moves: nonEmpty(
+            replacedFixes.map((fix) => fix.id),
+            "A replaced roster fix was lost",
+          ),
+          at,
+        });
+      }
+      const generated = fixed.entries.filter((generated) => generated.funded !== undefined);
+      if (generated.length > 0) {
+        const appends = generated.map((generated) =>
+          appendOf(
+            generated.candidate,
+            entryOf(evaluatedAfter, generated.candidate.id),
+            planClaims.claims.get(generated.candidate.id) ?? [],
+            move.proposedBy,
+            at,
+          ),
+        );
+        const [first, ...rest] = appends;
+        if (first === undefined) {
+          return yield* Effect.die(new Error("Generated roster fixes produced no moves to append"));
+        }
+        yield* repository.appendMoves({
+          userId,
+          team: input.team,
+          at,
+          moves: [first, ...rest],
+        });
+      }
 
       return { plan: yield* readView({ userId, team: input.team, facts, at }), refused: [] };
     });
@@ -712,10 +902,14 @@ export const TransactionPlanServiceLive = Layer.effect(
         };
       }
 
-      yield* repository.discardMove({
+      const fixes = fixPeers(stored.filter(isOpenMove), move);
+      yield* repository.discardMoves({
         userId,
         team: input.team,
-        move: move.id,
+        moves: nonEmpty(
+          [move.id, ...fixes.map((fix) => fix.id)],
+          "A discarded move named no move to discard",
+        ),
         at,
       });
 
@@ -749,6 +943,7 @@ export const TransactionPlanServiceLive = Layer.effect(
       const deferred = new Set<TransactionMoveId>();
       const openById = new Map(input.open.map((move) => [move.id, move] as const));
       const selectedIds = new Set(selection.selected.map((move) => move.id));
+      const settled = new Set<TransactionMoveId>();
 
       const settle = Effect.fn("TransactionPlanService.settle")(function* (
         settlements: ReadonlyArray<TransactionMoveSettlement>,
@@ -764,27 +959,47 @@ export const TransactionPlanServiceLive = Layer.effect(
         });
         for (const settlement of settlements) {
           outcomes.set(settlement.move, settlement.result);
+          settled.add(settlement.move);
           countRunResult(counts, settlement.result);
         }
       });
 
+      const skip = (
+        moves: ReadonlyArray<TransactionMoveRowRecord>,
+        entries: ReadonlyMap<TransactionMoveId, TransactionPlanMoveEvaluation>,
+        detail: string,
+      ): Effect.Effect<void, TransactionPlanPersistenceFailed> =>
+        settle(
+          moves.map((move) =>
+            settlementOf({
+              move,
+              entry: entryOf(entries, move.id),
+              result: "skipped",
+              detail,
+              facts: input.facts,
+              at: input.at,
+              attempted: false,
+              actions: [],
+            }),
+          ),
+        );
+
       const runMember = (
-        members: ReadonlyArray<TransactionMoveRowRecord>,
-        index: number,
-      ): Effect.Effect<{ readonly retry: boolean }, TransactionPlanPersistenceFailed> =>
+        state: RunState,
+      ): Effect.Effect<RunStop, TransactionPlanPersistenceFailed> =>
         Effect.gen(function* () {
-          const move = members[index];
+          const move = state.members[state.index];
           if (move === undefined) {
-            return { retry: false };
+            return "settled";
           }
-          const entry = entryOf(entries, move.id);
+          const entry = entryOf(state.entries, move.id);
           const write = yield* writes.apply(
             writeRequestOf({ userId: input.userId, team: input.team, move, entry }),
           );
           const decided = writeResultOf(write);
           if (decided.status === "retry") {
             counts.retry += 1;
-            return { retry: true };
+            return "retry";
           }
           yield* settle([
             settlementOf({
@@ -792,29 +1007,83 @@ export const TransactionPlanServiceLive = Layer.effect(
               entry,
               result: decided.result,
               detail: decided.detail,
-              facts: input.facts,
+              facts: state.facts,
               at: input.at,
               attempted: true,
+              actions: decided.actions,
             }),
           ]);
+          const rest = state.members.slice(state.index + 1);
           if (decided.result === "failed" || decided.result === "unknown") {
-            const stopped = `${describeTransactionPlanMove(move)} did not run, so the rest of its group was skipped.`;
-            yield* settle(
-              members.slice(index + 1).map((rest) =>
-                settlementOf({
-                  move: rest,
-                  entry: entryOf(entries, rest.id),
-                  result: "skipped",
-                  detail: stopped,
-                  facts: input.facts,
-                  at: input.at,
-                  attempted: false,
-                }),
-              ),
+            yield* skip(
+              rest,
+              state.entries,
+              decided.result === "unknown"
+                ? `${describeTransactionPlanMove(move)} has an unknown outcome, so the rest of its group was skipped.`
+                : `${describeTransactionPlanMove(move)} failed, so the rest of its group was skipped.`,
             );
-            return { retry: false };
+            return "settled";
           }
-          return yield* runMember(members, index + 1);
+          if (rest.length === 0) {
+            return "settled";
+          }
+
+          const remaining = input.open.filter((open) => !settled.has(open.id));
+          const reread = yield* Effect.result(
+            factsPort.read({
+              userId: input.userId,
+              team: input.team,
+              at: input.at,
+              players: namedPlayers(remaining),
+              needsBudget: needsBudget(remaining),
+            }),
+          );
+          if (reread._tag === "Failure") {
+            yield* skip(
+              rest,
+              state.entries,
+              `${describeTransactionPlanMove(move)} reached your league, and the roster could not be read again, so the rest of its group did not run.`,
+            );
+            return "settled";
+          }
+          const reevaluated = evaluateTransactionPlan({
+            facts: reread.success,
+            moves: remaining,
+            checkedAt: input.at,
+          });
+          const entries = evaluatedMoves(reevaluated);
+          const next = rest[0];
+          if (next === undefined) {
+            return "settled";
+          }
+          const nextEntry = entries.get(next.id);
+          if (nextEntry === undefined || nextEntry.validation.status !== "current") {
+            const reason = nextEntry?.validation.reasons[0];
+            yield* settle([
+              settlementOf({
+                move: next,
+                entry: nextEntry ?? entryOf(state.entries, next.id),
+                result: "failed",
+                detail: `${describeTransactionPlanMove(next)} did not run after ${describeTransactionPlanMove(move)} reached your league: ${reason?.detail ?? "its check no longer passes."} Your roster was read again; check it, then choose the move again or discard it.`,
+                facts: reread.success,
+                at: input.at,
+                attempted: false,
+                actions: [],
+              }),
+            ]);
+            yield* skip(
+              rest.slice(1),
+              entries,
+              `The group stopped after ${describeTransactionPlanMove(next)} could not run.`,
+            );
+            return "settled";
+          }
+          return yield* runMember({
+            members: rest,
+            index: 0,
+            facts: reread.success,
+            entries,
+          });
         });
 
       for (const group of selection.groups) {
@@ -844,6 +1113,7 @@ export const TransactionPlanServiceLive = Layer.effect(
                 facts: input.facts,
                 at: input.at,
                 attempted: false,
+                actions: [],
               }),
             ),
           );
@@ -868,6 +1138,7 @@ export const TransactionPlanServiceLive = Layer.effect(
                     facts: input.facts,
                     at: input.at,
                     attempted: false,
+                    actions: [],
                   })
                 : settlementOf({
                     move,
@@ -877,14 +1148,20 @@ export const TransactionPlanServiceLive = Layer.effect(
                     facts: input.facts,
                     at: input.at,
                     attempted: false,
+                    actions: [],
                   });
             }),
           );
           continue;
         }
 
-        const memberRun = yield* runMember(group.moves, 0);
-        if (memberRun.retry) {
+        const stop = yield* runMember({
+          members: group.moves,
+          index: 0,
+          facts: input.facts,
+          entries,
+        });
+        if (stop === "retry") {
           for (const move of group.moves) {
             if (!outcomes.has(move.id)) {
               deferred.add(move.id);
@@ -1215,6 +1492,9 @@ export const TransactionPlanServiceLive = Layer.effect(
                   places: occupancy.places,
                   reserve: occupancy.reserve,
                   moves: new Map(evaluation.moves.map((entry) => [entry.move, entry] as const)),
+                  blocked: new Map(
+                    evaluation.order.blocked.map((entry) => [entry.move, entry.detail] as const),
+                  ),
                 },
               ];
             }),
@@ -1222,6 +1502,26 @@ export const TransactionPlanServiceLive = Layer.effect(
         { concurrency: 3 },
       );
       return new Map(checks);
+    });
+
+    const groupReadsFor = Effect.fn("TransactionPlanService.groupReadsFor")(function* (input: {
+      readonly moves: ReadonlyArray<TransactionMoveRecord>;
+      readonly check: TransactionTeamCheck | undefined;
+    }) {
+      const grouped = input.moves.filter((move) => move.group !== undefined);
+      if (grouped.length === 0) {
+        return [];
+      }
+      const steps = yield* repository.readSteps({
+        moves: nonEmpty(
+          grouped.map((move) => move.id),
+          "A grouped move was read without an identifier",
+        ),
+      });
+      return planGroupReads({
+        members: grouped.map((move) => groupMemberOf(move, input.check)),
+        steps,
+      });
     });
 
     const countMoves = Effect.fn("TransactionPlanService.countMoves")(function* (
@@ -1274,6 +1574,26 @@ export const TransactionPlanServiceLive = Layer.effect(
       const counts = yield* countMoves(userId, input.team);
       const last = page[page.length - 1];
       const complete = rows.length <= input.limit;
+      const pageGroups = [
+        ...new Set(page.flatMap((row) => (row.move.group === undefined ? [] : [row.move.group]))),
+      ];
+      const groupMoves =
+        pageGroups.length === 0
+          ? []
+          : yield* repository.readGroupMoves({
+              userId,
+              groups: nonEmpty(pageGroups, "A grouped move was read without its group"),
+            });
+      const groups = (yield* Effect.forEach(
+        [...new Set(groupMoves.map((move) => move.team))],
+        (teamId) =>
+          groupReadsFor({
+            moves: groupMoves.filter((move) => move.team === teamId),
+            check: checks.get(teamId),
+          }),
+      ))
+        .flat()
+        .sort((left, right) => left.team.localeCompare(right.team));
       return {
         status: "ok",
         team,
@@ -1282,6 +1602,7 @@ export const TransactionPlanServiceLive = Layer.effect(
         teamFacts,
         counts: counts.totals,
         teamCount: counts.teamCount,
+        groups,
         page: {
           returned: moves.length,
           complete,
@@ -1337,6 +1658,7 @@ export const TransactionPlanServiceLive = Layer.effect(
         ...(check?.status === "checked" ? { places: check.places, reserve: check.reserve } : {}),
         moves,
         days: planDays({ moves, today }),
+        groups: yield* groupReadsFor({ moves: stored, check }),
       } satisfies TransactionPlanRead;
     });
 
@@ -1373,6 +1695,8 @@ function settleProposals(input: {
   readonly proposals: ReadonlyArray<DraftGroup>;
   readonly facts: TransactionPlanTeamFacts;
   readonly roster: ReadonlyMap<string, TransactionPlanRosterPlayer>;
+  readonly placeClaims: (place: string) => boolean;
+  readonly cures: ReadonlyMap<TransactionMoveId, string>;
   readonly checkedAt: DateTime.Utc;
 }): {
   readonly accepted: ReadonlyArray<TransactionPlanMove>;
@@ -1430,6 +1754,8 @@ function settleProposals(input: {
         accepted,
         full,
         roster: input.roster,
+        placeClaims: input.placeClaims,
+        cures: input.cures,
       });
       return refusal === undefined ? [] : [{ proposal, refusal }];
     });
@@ -1508,6 +1834,8 @@ function groupRefusal(input: {
   readonly accepted: ReadonlyArray<TransactionPlanMove>;
   readonly full: TransactionPlanEvaluation;
   readonly roster: ReadonlyMap<string, TransactionPlanRosterPlayer>;
+  readonly placeClaims: (place: string) => boolean;
+  readonly cures: ReadonlyMap<TransactionMoveId, string>;
 }): TransactionPlanRefusal | undefined {
   const fullMoves = evaluatedMoves(input.full);
   const invalid = input.proposal.moves.find(
@@ -1518,8 +1846,10 @@ function groupRefusal(input: {
     return {
       code: reason?.code ?? "invalid_move",
       team: input.team,
-      detail:
+      detail: cured(
         reason?.detail ?? `${describeTransactionPlanMove(invalid)} cannot run against this plan.`,
+        input.cures.get(invalid.id),
+      ),
       ...(input.proposal.label === undefined ? {} : { group: input.proposal.label }),
       moves: input.proposal.indexes,
     };
@@ -1541,6 +1871,7 @@ function groupRefusal(input: {
     moves: [...input.accepted, ...input.proposal.moves],
     after: input.full,
     roster: input.roster,
+    placeClaims: input.placeClaims,
     indexes: input.proposal.indexes,
   });
 }
@@ -1590,6 +1921,7 @@ function claimCollision(input: {
   readonly moves: ReadonlyArray<TransactionPlanMove>;
   readonly after: TransactionPlanEvaluation;
   readonly roster: ReadonlyMap<string, TransactionPlanRosterPlayer>;
+  readonly placeClaims: (place: string) => boolean;
   readonly indexes: ReadonlyArray<number>;
 }): TransactionPlanRefusal | undefined {
   const refused = claimPlan(input).refused[0];
@@ -1600,6 +1932,7 @@ function claimPlan(input: {
   readonly moves: ReadonlyArray<TransactionPlanMove>;
   readonly after: TransactionPlanEvaluation;
   readonly roster: ReadonlyMap<string, TransactionPlanRosterPlayer>;
+  readonly placeClaims: (place: string) => boolean;
 }): {
   readonly claims: ReadonlyMap<TransactionMoveId, ReadonlyArray<StoredMoveClaim>>;
   readonly refused: ReadonlyArray<TransactionPlanClaimRefusal>;
@@ -1608,6 +1941,7 @@ function claimPlan(input: {
     moves: input.moves,
     placements: placementsOf(input.after),
     roster: input.roster,
+    placeClaims: input.placeClaims,
   });
   return {
     claims: new Map(claims.moves.map((entry) => [entry.move, entry.claims] as const)),
@@ -1829,13 +2163,13 @@ function writeRequestOf(input: {
 function writeResultOf(write: TransactionPlanWriteResult): DecidedWrite {
   switch (write.status) {
     case "executed":
-      return { status: "settled", result: "executed", detail: undefined };
+      return { status: "settled", result: "executed", detail: undefined, actions: write.actions };
     case "pending":
-      return { status: "settled", result: "pending", detail: write.detail };
+      return { status: "settled", result: "pending", detail: write.detail, actions: write.actions };
     case "failed":
-      return { status: "settled", result: "failed", detail: write.detail };
+      return { status: "settled", result: "failed", detail: write.detail, actions: write.actions };
     case "unknown":
-      return { status: "settled", result: "unknown", detail: write.detail };
+      return { status: "settled", result: "unknown", detail: write.detail, actions: write.actions };
     case "retry":
       return { status: "retry" };
   }
@@ -1849,6 +2183,7 @@ function settlementOf(input: {
   readonly facts: TransactionPlanTeamFacts;
   readonly at: DateTime.Utc;
   readonly attempted: boolean;
+  readonly actions: ReadonlyArray<TransactionPlanAction>;
 }): TransactionMoveSettlement {
   return {
     move: input.move.id,
@@ -1858,97 +2193,10 @@ function settlementOf(input: {
     runDay: input.entry.runDay,
     effectiveDate: input.entry.effectiveDate,
     runPosition: input.entry.runPosition,
-    steps: input.attempted ? attemptStepsOf(input) : [],
+    steps: input.attempted
+      ? input.actions.map((action) => ({ ...action, decidedAt: input.at }))
+      : [],
   };
-}
-
-function attemptStepsOf(input: {
-  readonly move: TransactionMoveRowRecord;
-  readonly entry: TransactionPlanMoveEvaluation;
-  readonly result: TransactionMoveResult;
-  readonly detail: string | undefined;
-  readonly facts: TransactionPlanTeamFacts;
-  readonly at: DateTime.Utc;
-}): ReadonlyArray<StoredMoveStep> {
-  const step = (
-    kind: StoredMoveStep["kind"],
-    playerKey: string,
-    fromSlot: string | undefined,
-    toSlot: string | undefined,
-  ): StoredMoveStep => ({
-    kind,
-    playerKey,
-    ...(fromSlot === undefined ? {} : { fromSlot }),
-    ...(toSlot === undefined ? {} : { toSlot }),
-    outcome: stepOutcome(input.result),
-    ...(input.detail === undefined ? {} : { detail: input.detail }),
-    decidedAt: input.at,
-  });
-
-  if (input.move.kind === "activate" || input.move.kind === "stash") {
-    const placement = input.entry.placement;
-    const playerKey = placement?.playerKey ?? input.move.intent?.player?.key;
-    const toSlot = placement?.toSlot;
-    if (playerKey === undefined || toSlot === undefined) {
-      return [];
-    }
-    return [
-      step(
-        "reserve_move",
-        playerKey,
-        placement?.fromSlot ?? rosterSlot(input.facts, playerKey),
-        toSlot,
-      ),
-    ];
-  }
-  if (input.move.kind === "slot_move") {
-    const slot = input.move.slotMove;
-    return slot === undefined
-      ? []
-      : [step("slot_move", slot.playerKey, rosterSlot(input.facts, slot.playerKey), slot.toSlot)];
-  }
-  if (input.move.kind === "trade") {
-    return [];
-  }
-
-  const steps = [
-    ...input.move.adds.map((add) => step("add", add.key, undefined, undefined)),
-    ...input.move.drops.map((drop) => step("drop", drop.key, undefined, undefined)),
-  ];
-  const placement = input.entry.placement;
-  if (
-    input.move.intent?.to === "reserve" &&
-    placement !== undefined &&
-    input.result === "executed"
-  ) {
-    steps.push(
-      step(
-        "reserve_move",
-        placement.playerKey,
-        placement.fromSlot ?? rosterSlot(input.facts, placement.playerKey),
-        placement.toSlot,
-      ),
-    );
-  }
-  return steps;
-}
-
-function stepOutcome(result: TransactionMoveResult): StoredMoveStep["outcome"] {
-  switch (result) {
-    case "executed":
-    case "pending":
-    case "failed":
-    case "skipped":
-    case "unknown":
-      return result;
-    case "withdrawn":
-    case "expired":
-      return "skipped";
-  }
-}
-
-function rosterSlot(facts: TransactionPlanTeamFacts, playerKey: string): string | undefined {
-  return facts.roster.find((player) => player.key === playerKey)?.slot;
 }
 
 function mergeRunCounts(target: MutableRunCounts, source: TransactionPlanRunCounts): void {
@@ -2144,36 +2392,57 @@ function draftIntent(
   return undefined;
 }
 
-function draftGroups(
-  drafts: ReadonlyArray<TransactionPlanMoveDraft>,
-  candidates: ReadonlyArray<TransactionPlanMove>,
-): ReadonlyArray<DraftGroup> {
-  const grouped = new Map<string, DraftGroup>();
-  const proposals: Array<DraftGroup> = [];
-  drafts.forEach((draft, index) => {
-    const candidate = candidates[index];
-    if (candidate === undefined) {
-      throw new Error("A drafted move was not converted");
+function proposedGroups(entries: ReadonlyArray<ProposedEntry>): ReadonlyArray<DraftGroup> {
+  const groups = new Map<string, DraftGroup>();
+  for (const entry of entries) {
+    const held = groups.get(entry.settleKey);
+    if (held === undefined) {
+      groups.set(entry.settleKey, {
+        label: entry.label,
+        indexes: [entry.index],
+        moves: [entry.candidate],
+      });
+      continue;
     }
-    if (draft.group === undefined) {
-      proposals.push({ label: undefined, indexes: [index], moves: [candidate] });
-      return;
+    if (!held.indexes.includes(entry.index)) {
+      held.indexes.push(entry.index);
     }
-    const existing = grouped.get(draft.group);
-    if (existing === undefined) {
-      const proposal: DraftGroup = {
-        label: draft.group,
-        indexes: [index],
-        moves: [candidate],
-      };
-      grouped.set(draft.group, proposal);
-      proposals.push(proposal);
-      return;
-    }
-    existing.indexes.push(index);
-    existing.moves.push(candidate);
-  });
-  return proposals;
+    held.moves.push(entry.candidate);
+  }
+  return [...groups.values()];
+}
+
+function fixCandidateOf(input: {
+  readonly fix: RosterFixDraft;
+  readonly id: TransactionMoveId;
+  readonly group: string;
+  readonly funded: TransactionPlanMove;
+}): CandidateMove {
+  const fix = input.fix;
+  return {
+    id: input.id,
+    group: input.group,
+    position: input.funded.position,
+    kind: fix.kind,
+    adds: [],
+    fallbacks: [],
+    drops: [],
+    picks: [],
+    slotMove:
+      fix.kind === "slot_move" && fix.toSlot !== undefined
+        ? { playerKey: fix.playerKey, playerName: fix.playerName, toSlot: fix.toSlot }
+        : undefined,
+    intent:
+      fix.kind === "slot_move"
+        ? undefined
+        : { kind: fix.kind, player: { key: fix.playerKey, name: fix.playerName } },
+    counterpartyKey: undefined,
+    bid: undefined,
+    reason: fix.detail,
+    runDay: input.funded.runDay,
+    decision: input.funded.decision,
+    result: undefined,
+  };
 }
 
 function appendOf(
@@ -2184,6 +2453,7 @@ function appendOf(
   at: DateTime.Utc,
 ): TransactionMoveAppend {
   return {
+    id: candidate.id,
     proposedBy,
     content: {
       group: candidate.group,
@@ -2266,6 +2536,54 @@ function movedToDay(
   runDay: StoredMoveDate | undefined,
 ): TransactionPlanMove {
   return { ...move, runDay, decision: runDay === undefined ? "now" : "saved" };
+}
+
+function groupMemberOf(
+  move: TransactionMoveRecord,
+  check: TransactionTeamCheck | undefined,
+): TransactionPlanGroupMember {
+  const evaluated = check?.status === "checked" ? check.moves.get(move.id) : undefined;
+  if (check?.status !== "checked" || evaluated === undefined) {
+    return {
+      move,
+      validation: move.validation,
+      blockedBy: undefined,
+      runPosition: move.runPosition,
+    };
+  }
+  return {
+    move,
+    validation: evaluated.validation,
+    blockedBy: check.blocked.get(move.id),
+    runPosition: evaluated.runPosition ?? move.runPosition,
+  };
+}
+
+function withCure(
+  refusal: TransactionPlanRefusal,
+  cure: string | undefined,
+): TransactionPlanRefusal {
+  return { ...refusal, detail: cured(refusal.detail, cure) };
+}
+
+function cured(detail: string, cure: string | undefined): string {
+  return cure === undefined || detail.endsWith(cure) ? detail : `${detail} ${cure}`;
+}
+
+function fixPeers(
+  open: ReadonlyArray<TransactionMoveRecord>,
+  move: TransactionMoveRecord,
+): ReadonlyArray<TransactionMoveRecord> {
+  const group = rosterFixGroupOf(move.id);
+  return open.filter((entry) => entry.group === group);
+}
+
+function nonEmpty<A>(values: ReadonlyArray<A>, detail: string): readonly [A, ...Array<A>] {
+  const [first, ...rest] = values;
+  if (first === undefined) {
+    throw new Error(detail);
+  }
+  return [first, ...rest];
 }
 
 function groupPeers(
@@ -2385,6 +2703,23 @@ function requireId(ids: ReadonlyArray<TransactionMoveId>, index: number): Transa
   return id;
 }
 
+type ProposedEntry = {
+  readonly candidate: CandidateMove;
+  readonly index: number;
+  readonly label: string | undefined;
+  readonly settleKey: string;
+  readonly funded: TransactionMoveId | undefined;
+};
+
+type RunState = {
+  readonly members: ReadonlyArray<TransactionMoveRowRecord>;
+  readonly index: number;
+  readonly facts: TransactionPlanTeamFacts;
+  readonly entries: ReadonlyMap<TransactionMoveId, TransactionPlanMoveEvaluation>;
+};
+
+type RunStop = "settled" | "retry";
+
 type CandidateMove = TransactionPlanMove & {
   readonly reason: string;
   readonly counterpartyKey: string | undefined;
@@ -2422,6 +2757,7 @@ type DecidedWrite =
       readonly status: "settled";
       readonly result: TransactionMoveResult;
       readonly detail: string | undefined;
+      readonly actions: ReadonlyArray<TransactionPlanAction>;
     }
   | { readonly status: "retry" };
 

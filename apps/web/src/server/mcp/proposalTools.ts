@@ -17,6 +17,7 @@ import {
   TransactionMoveRead,
   TransactionMoveTeam,
   TransactionPlanDay,
+  TransactionPlanGroupRead,
   TransactionPlanInput,
   TransactionPlanRead,
   TransactionPlanService,
@@ -44,6 +45,7 @@ const ProposedTransactions = Schema.Struct({
   today: Schema.optional(StoredMoveDate),
   moves: Schema.Array(TransactionMoveRead),
   days: Schema.Array(TransactionPlanDay),
+  groups: Schema.Array(TransactionPlanGroupRead),
   refused: Schema.Array(PlanRefusal),
 });
 
@@ -60,6 +62,7 @@ const DiscardedTransactionPlan = Schema.Struct({
   today: Schema.optional(StoredMoveDate),
   moves: Schema.Array(TransactionMoveRead),
   days: Schema.Array(TransactionPlanDay),
+  groups: Schema.Array(TransactionPlanGroupRead),
   refused: Schema.Array(PlanRefusal),
   reason: Schema.optional(Schema.NonEmptyString),
 });
@@ -106,7 +109,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_transaction_plan", {
     description:
-      "Read one team's transaction queue in order, grouped by run day, with every move's stored validation and the time it was checked. It reads stored state and checks the moves against the team's current roster, reporting its places and each reserve list by the league's own name.",
+      "Read one team's transaction queue in run order by day, with each move's check and time. It checks stored moves against the team's current roster and reports its places, each reserve list by the league's name, and each group's status, actions, and sentence.",
     parameters: TransactionPlanInput,
     success: Schema.toCodecJson(TransactionPlanRead),
     failure: ToolFailure,

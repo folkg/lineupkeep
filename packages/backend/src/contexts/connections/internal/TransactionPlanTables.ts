@@ -26,6 +26,9 @@ import {
   StoredMovePlacement,
   StoredMovePlayer,
   StoredMoveSlot,
+  StoredMoveStep,
+  StoredMoveStepKind,
+  StoredMoveStepOutcome,
   StoredMoveValidationReason,
   TransactionMoveDecision,
   TransactionMoveId,
@@ -156,6 +159,42 @@ export const transactionMoveSteps = pgTable(
   (table) => [
     uniqueIndex("transaction_move_steps_move_id_position_idx").on(table.moveId, table.position),
   ],
+);
+
+const StoredMoveStepFacts = Schema.Struct({
+  kind: StoredMoveStepKind,
+  playerKey: Schema.NonEmptyString,
+  fromSlot: Schema.NullOr(Schema.NonEmptyString),
+  toSlot: Schema.NullOr(Schema.NonEmptyString),
+  outcome: StoredMoveStepOutcome,
+  detail: Schema.NullOr(Schema.NonEmptyString),
+  decidedAt: Schema.DateTimeUtcFromDate,
+});
+
+export const StoredMoveStepRow = StoredMoveStepFacts.pipe(
+  Schema.decodeTo(
+    StoredMoveStep,
+    SchemaTransformation.transform({
+      decode: (row) => ({
+        kind: row.kind,
+        playerKey: row.playerKey,
+        ...(row.fromSlot === null ? {} : { fromSlot: row.fromSlot }),
+        ...(row.toSlot === null ? {} : { toSlot: row.toSlot }),
+        outcome: row.outcome,
+        ...(row.detail === null ? {} : { detail: row.detail }),
+        decidedAt: row.decidedAt,
+      }),
+      encode: (step) => ({
+        kind: step.kind,
+        playerKey: step.playerKey,
+        fromSlot: step.fromSlot ?? null,
+        toSlot: step.toSlot ?? null,
+        outcome: step.outcome,
+        detail: step.detail ?? null,
+        decidedAt: step.decidedAt,
+      }),
+    }),
+  ),
 );
 
 export function openMovePredicate(table: {
