@@ -4,26 +4,36 @@ import type { TransactionRemote } from "./transactionRemote";
 
 export const transactionQueries = {
   all: () => ["transactions"] as const,
-  reviewKey: (setId: string) => ["transactions", "review", setId] as const,
-  review: (remote: Pick<TransactionRemote, "read">, setId: string) =>
-    queryOptions({
-      queryKey: transactionQueries.reviewKey(setId),
-      queryFn: ({ signal }) => remote.read({ set: setId }, { signal }),
+  timelineAll: () => ["transactions", "timeline"] as const,
+  timeline: (remote: Pick<TransactionRemote, "timeline">) =>
+    infiniteQueryOptions({
+      queryKey: transactionQueries.timelineAll(),
+      queryFn: ({ pageParam, signal }) =>
+        remote.timeline(pageParam === undefined ? {} : { after: pageParam }, { signal }),
+      initialPageParam: undefined as
+        | {
+            readonly runDay: string | null;
+            readonly team: string;
+            readonly position: number;
+            readonly move: string;
+          }
+        | undefined,
+      getNextPageParam: (last) => last.page.next,
       staleTime: 0,
       refetchOnMount: false,
     }),
   listAll: () => ["transactions", "list"] as const,
-  listKey: (team: string | undefined, state: "open" | "closed" | "scheduled" = "open") =>
+  listKey: (team: string | undefined, state: "today" | "saved" | "ended") =>
     ["transactions", "list", team ?? "*", state] as const,
   list: (
     remote: Pick<TransactionRemote, "list">,
     input: {
       readonly team?: string;
-      readonly state?: "open" | "closed" | "scheduled";
+      readonly state?: "today" | "saved" | "ended";
       readonly limit?: number;
     },
   ) => {
-    const state = input.state ?? "open";
+    const state = input.state ?? "today";
     return infiniteQueryOptions({
       queryKey: transactionQueries.listKey(input.team, state),
       queryFn: ({ pageParam, signal }) =>
@@ -31,12 +41,19 @@ export const transactionQueries = {
           {
             ...(input.team === undefined ? {} : { team: input.team }),
             state,
-            ...(pageParam === undefined ? {} : { cursor: pageParam }),
+            ...(pageParam === undefined ? {} : { after: pageParam }),
             ...(input.limit === undefined ? {} : { limit: input.limit }),
           },
           { signal },
         ),
-      initialPageParam: undefined as string | undefined,
+      initialPageParam: undefined as
+        | {
+            readonly runDay: string | null;
+            readonly team: string;
+            readonly position: number;
+            readonly move: string;
+          }
+        | undefined,
       getNextPageParam: (last) => last.page.next,
       staleTime: 0,
       refetchOnMount: false,
@@ -47,8 +64,6 @@ export const transactionQueries = {
     queryOptions({
       queryKey: transactionQueries.openCountKey,
       queryFn: ({ signal }) =>
-        remote.list({ state: "open", limit: 1 }, { signal }).then((data) => data.counts.open),
+        remote.list({ state: "today", limit: 1 }, { signal }).then((data) => data.counts.open),
     }),
 };
-
-export type TransactionReviewQueryOptions = ReturnType<typeof transactionQueries.review>;

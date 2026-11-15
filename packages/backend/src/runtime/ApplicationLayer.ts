@@ -46,6 +46,10 @@ import { ScheduleGateLive } from "#contexts/connections/internal/ScheduleGateLiv
 import { ScheduleObservationRepository } from "#contexts/connections/internal/ScheduleObservationRepository.ts";
 import { TeamRepository } from "#contexts/connections/internal/TeamRepository.ts";
 import { TeamsLive } from "#contexts/connections/internal/TeamsLive.ts";
+import { TransactionPlanFactsLive } from "#contexts/connections/internal/TransactionPlanFactsLive.ts";
+import { TransactionPlanRepository } from "#contexts/connections/internal/TransactionPlanRepository.ts";
+import { TransactionPlanServiceLive } from "#contexts/connections/internal/TransactionPlanService.ts";
+import { TransactionPlanWritesLive } from "#contexts/connections/internal/TransactionPlanWritesLive.ts";
 import { TransactionProposalRepository } from "#contexts/connections/internal/TransactionProposalRepository.ts";
 import { TransactionProposalsLive } from "#contexts/connections/internal/TransactionProposalsLive.ts";
 import { yahooProvider } from "#contexts/connections/internal/yahoo/YahooProvider.ts";
@@ -56,6 +60,7 @@ import type { ProfessionalCalendar } from "#contexts/connections/ProfessionalCal
 import { ProviderRegistry, providerRegistryOf } from "#contexts/connections/ProviderRegistry.ts";
 import type { RetentionSweep } from "#contexts/connections/Retention.ts";
 import type { Teams } from "#contexts/connections/Teams.ts";
+import { TransactionPlanService } from "#contexts/connections/TransactionPlans.ts";
 import type { TransactionProposals } from "#contexts/connections/TransactionProposals.ts";
 import type { Feedback } from "#contexts/feedback/Feedback.ts";
 import type { FeedbackRetention } from "#contexts/feedback/FeedbackRetention.ts";
@@ -119,6 +124,26 @@ const HostedLinkingLayer = HostedLinkingLive.pipe(
 const QueryRepositoryLayer = QueryRepository.layer.pipe(
   Layer.provide(RepositoryLayer),
   Layer.provide(ConnectionsDatabase.layer),
+);
+const TransactionPlanRepositoryLayer = TransactionPlanRepository.layer.pipe(
+  Layer.provide(ConnectionsDatabase.layer),
+);
+const TransactionPlanFactsLayer = TransactionPlanFactsLive.pipe(
+  Layer.provide(QueryRepositoryLayer),
+  Layer.provide(CredentialEncryptionLayer),
+  Layer.provide(ProviderLayer),
+);
+const TransactionPlanWritesLayer = TransactionPlanWritesLive.pipe(
+  Layer.provide(QueryRepositoryLayer),
+  Layer.provide(CredentialEncryptionLayer),
+  Layer.provide(ProviderLayer),
+);
+const TransactionPlansLayer = TransactionPlanServiceLive.pipe(
+  Layer.provide(TransactionPlanRepositoryLayer),
+  Layer.provide(TransactionPlanFactsLayer),
+  Layer.provide(TransactionPlanWritesLayer),
+  Layer.provide(QueryTokens.layer),
+  Layer.provide(NodeCrypto.layer),
 );
 const ScheduleObservationRepositoryLayer = ScheduleObservationRepository.layer.pipe(
   Layer.provide(ConnectionsDatabase.layer),
@@ -208,7 +233,7 @@ const AutomationLayer = AutomationLive.pipe(
   Layer.provide(TeamRepositoryLayer),
   Layer.provide(LineupRepositoryLayer),
   Layer.provide(LineupDispatcherLayer),
-  Layer.provide(ProposalsLayer),
+  Layer.provide(TransactionPlansLayer),
   Layer.provide(RetentionSweepLayer),
   Layer.provide(CredentialCensusLayer),
 );
@@ -239,6 +264,7 @@ export const ApplicationLayer = Layer.mergeAll(
   ProfessionalCalendarLayer,
   ScheduleGateLayer,
   ProposalsLayer,
+  TransactionPlansLayer,
   LineupRunsLayer,
   TeamsLayer,
   AutomationLayer,
@@ -269,6 +295,7 @@ export type BackendServices =
   | HostedLinking
   | FantasyQueries
   | ProfessionalCalendar
+  | TransactionPlanService
   | TransactionProposals
   | LineupRuns
   | Teams

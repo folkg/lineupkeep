@@ -1,18 +1,25 @@
 import { AuthService } from "@lineupkeep/backend/auth/Auth";
 import type { AuthenticatedAgent } from "@lineupkeep/backend/auth/Auth";
 import { providerSessionRefusal } from "@lineupkeep/backend/connections/Connection";
+import { TeamId } from "@lineupkeep/backend/connections/FantasyTeam";
 import { fantasyQueryScopes } from "@lineupkeep/backend/connections/QueryScopes";
 import {
-  ListProposalSetsInput,
+  ListTransactionMovesInput,
+  ProposeTransactionMovesInput,
+  TransactionMoveList,
+  TransactionMoveRead,
+  TransactionMoveTeam,
+  TransactionPlanDay,
+  TransactionPlanInput,
+  TransactionPlanRead,
+  TransactionPlanService,
+  StoredMoveDate,
+} from "@lineupkeep/backend/connections/TransactionPlans";
+import type { TransactionPlanServiceError } from "@lineupkeep/backend/connections/TransactionPlans";
+import {
   PendingTradeOffersInput,
   PendingTradeOffersResult,
-  ProposalSetInput,
-  ProposalSetList,
-  ProposalSetReview,
-  ProposeTransactionsInput,
-  ProposeTransactionsResult,
   TransactionProposals,
-  WithdrawProposalItemsInput,
 } from "@lineupkeep/backend/connections/TransactionProposals";
 import type { ProposalError } from "@lineupkeep/backend/connections/TransactionProposals";
 import { Effect, Schema } from "effect";
@@ -23,76 +30,32 @@ import { RequiredScope } from "./toolAuthorization";
 
 const ToolFailure = Schema.Struct({ code: Schema.String, message: Schema.String });
 
-const listUnavailableDetail =
-  "One or more plans on this page could not be read, so the page was not returned. Narrow the filter by reading open and closed plans separately, or start again from the first page, and try once more.";
+const PlanRefusal = Schema.Struct({
+  code: Schema.String,
+  team: TeamId,
+  detail: Schema.String,
+  group: Schema.optional(Schema.String),
+  moves: Schema.Array(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+});
 
 const ProposedTransactions = Schema.Struct({
-  set: ProposeTransactionsResult.fields.set,
-  created: ProposeTransactionsResult.fields.created,
-  extended: ProposeTransactionsResult.fields.extended,
-  items: ProposeTransactionsResult.fields.items,
-  refused: ProposeTransactionsResult.fields.refused,
-  reviewUrl: Schema.NonEmptyString,
-  detail: Schema.NonEmptyString,
+  team: TransactionMoveTeam,
+  today: Schema.optional(StoredMoveDate),
+  moves: Schema.Array(TransactionMoveRead),
+  days: Schema.Array(TransactionPlanDay),
+  refused: Schema.Array(PlanRefusal),
 });
-type ProposedTransactions = typeof ProposedTransactions.Type;
-
-const ProposalReview = Schema.Struct({
-  set: ProposalSetReview.fields.set,
-  teams: ProposalSetReview.fields.teams,
-  reviewUrl: Schema.NonEmptyString,
-});
-type ProposalReview = typeof ProposalReview.Type;
 
 export const proposalTools = Toolkit.make(
   Tool.make("propose_transactions", {
     description:
-      "Propose player moves across this account's teams for a person to review, returning the set and a review link. Proposals are stored only: nothing reaches the league's site, nothing is submitted, executed, or spent. A refused item returns in `refused` with its position, reason, and fix, and is not stored. Editing a stored move means withdrawing it and proposing its replacement.",
-    parameters: ProposeTransactionsInput,
+      "Add moves to one team's single transaction queue, returning that team's plan and any refused moves. Proposals are stored only: nothing reaches the league's site, nothing is submitted, executed, or spent. A move that cannot run is returned in `refused` with its position and reason and is not stored. A saved move is changed by saving it again or discarding it.",
+    parameters: ProposeTransactionMovesInput,
     success: Schema.toCodecJson(ProposedTransactions),
     failure: ToolFailure,
   })
     .annotate(RequiredScope, fantasyQueryScopes.reviewTransactions)
-    .annotate(Tool.Title, "Propose transactions for review")
-    .annotate(Tool.Readonly, false)
-    .annotate(Tool.Destructive, false)
-    .annotate(Tool.Idempotent, true)
-    .annotate(Tool.OpenWorld, false),
-  Tool.make("get_transaction_proposal_set", {
-    description:
-      "Read one stored proposal set: its moves grouped by the day each runs, with state, last check, planned order, and submissions. It reads stored state only, so a set can be stale.",
-    parameters: ProposalSetInput,
-    success: Schema.toCodecJson(ProposalReview),
-    failure: ToolFailure,
-  })
-    .annotate(RequiredScope, fantasyQueryScopes.reviewTransactions)
-    .annotate(Tool.Title, "Read a transaction proposal set")
-    .annotate(Tool.Readonly, true)
-    .annotate(Tool.Destructive, false)
-    .annotate(Tool.Idempotent, true)
-    .annotate(Tool.OpenWorld, false),
-  Tool.make("revalidate_transaction_proposal_set", {
-    description:
-      "Re-check one proposal set against current league state, marking each open item current, stale, or illegal with reasons. Staleness is not failure: items stay proposed and the plan is recomputed.",
-    parameters: ProposalSetInput,
-    success: Schema.toCodecJson(ProposalReview),
-    failure: ToolFailure,
-  })
-    .annotate(RequiredScope, fantasyQueryScopes.reviewTransactions)
-    .annotate(Tool.Title, "Revalidate a transaction proposal set")
-    .annotate(Tool.Readonly, false)
-    .annotate(Tool.Destructive, false)
-    .annotate(Tool.Idempotent, true)
-    .annotate(Tool.OpenWorld, false),
-  Tool.make("withdraw_transaction_proposal_items", {
-    description:
-      "Withdraw still-proposed moves from one set and return it with its order recomputed. A move that already ran, is pending, failed, or was skipped cannot be withdrawn; a scheduled move stays withdrawable until its day.",
-    parameters: WithdrawProposalItemsInput,
-    success: Schema.toCodecJson(ProposalReview),
-    failure: ToolFailure,
-  })
-    .annotate(RequiredScope, fantasyQueryScopes.reviewTransactions)
-    .annotate(Tool.Title, "Withdraw transaction proposal moves")
+    .annotate(Tool.Title, "Propose transactions")
     .annotate(Tool.Readonly, false)
     .annotate(Tool.Destructive, false)
     .annotate(Tool.Idempotent, false)
@@ -112,13 +75,26 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("list_transaction_proposals", {
     description:
-      "List one team's plans, newest first, as open, scheduled, or closed, with moves by run day, review links, and last checks. An open list reads the current roster to name a player the league places in an illegal slot.",
-    parameters: ListProposalSetsInput,
-    success: Schema.toCodecJson(ProposalSetList),
+      "List open moves across the account's teams, today first, grouped by run day and team. Filter by one team and by state: `today`, `saved`, or `ended`. The read carries each move's stored check and the time it was checked, and the open, today, saved, and ended totals.",
+    parameters: ListTransactionMovesInput,
+    success: Schema.toCodecJson(TransactionMoveList),
     failure: ToolFailure,
   })
     .annotate(RequiredScope, fantasyQueryScopes.read)
-    .annotate(Tool.Title, "List transaction plans for a team")
+    .annotate(Tool.Title, "List transaction moves")
+    .annotate(Tool.Readonly, true)
+    .annotate(Tool.Destructive, false)
+    .annotate(Tool.Idempotent, true)
+    .annotate(Tool.OpenWorld, false),
+  Tool.make("get_transaction_plan", {
+    description:
+      "Read one team's transaction queue in order, grouped by run day, with every move's stored validation and the time it was checked. It reads stored state and checks the moves against the team's current roster.",
+    parameters: TransactionPlanInput,
+    success: Schema.toCodecJson(TransactionPlanRead),
+    failure: ToolFailure,
+  })
+    .annotate(RequiredScope, fantasyQueryScopes.read)
+    .annotate(Tool.Title, "Read a team's transaction plan")
     .annotate(Tool.Readonly, true)
     .annotate(Tool.Destructive, false)
     .annotate(Tool.Idempotent, true)
@@ -130,106 +106,107 @@ export function proposalToolHandlers(
 ): Layer.Layer<
   Tool.HandlersFor<Toolkit.Tools<typeof proposalTools>>,
   never,
-  TransactionProposals | AuthService
+  TransactionPlanService | TransactionProposals | AuthService
 > {
   return proposalTools.toLayer(
     Effect.gen(function* () {
+      const plans = yield* TransactionPlanService;
       const proposals = yield* TransactionProposals;
-      const auth = yield* AuthService;
       const proposer = { kind: "agent", reference: "mcp", surface: "mcp" } as const;
-      const reviewUrl = (path: string): string => new URL(path, auth.oauthResource).href;
-      const toReview = (review: ProposalSetReview): ProposalReview => ({
-        set: review.set,
-        teams: review.teams,
-        reviewUrl: reviewUrl(review.set.reviewPath),
-      });
 
       return proposalTools.of({
         propose_transactions: (input) =>
-          proposals.propose(agent.userId, proposer, input).pipe(
-            Effect.map((result): ProposedTransactions => ({
-              set: result.set,
-              created: result.created,
-              extended: result.extended,
-              items: result.items,
-              refused: result.refused,
-              reviewUrl: reviewUrl(result.set.reviewPath),
-              detail: result.detail,
-            })),
-            mapFailure,
-          ),
-        get_transaction_proposal_set: (input) =>
-          proposals.read(agent.userId, input).pipe(Effect.map(toReview), mapFailure),
-        revalidate_transaction_proposal_set: (input) =>
-          proposals.revalidate(agent.userId, input).pipe(Effect.map(toReview), mapFailure),
-        withdraw_transaction_proposal_items: (input) =>
-          proposals.withdrawItems(agent.userId, input).pipe(Effect.map(toReview), mapFailure),
+          plans
+            .proposeRefs(agent.userId, {
+              team: input.team,
+              proposedBy: {
+                ...proposer,
+                ...(input.client === undefined || input.client === null
+                  ? {}
+                  : { client: input.client }),
+              },
+              moves: input.moves.map((move) => ({
+                ...(move.group === undefined ? {} : { group: move.group }),
+                kind: move.kind,
+                adds: move.adds,
+                ...(move.fallbacks === undefined || move.fallbacks === null
+                  ? {}
+                  : { fallbacks: move.fallbacks }),
+                drops: move.drops,
+                ...(move.to === undefined || move.to === null ? {} : { to: move.to }),
+                ...(move.player === undefined || move.player === null
+                  ? {}
+                  : { player: move.player }),
+                ...(move.slotMove === undefined || move.slotMove === null
+                  ? {}
+                  : { slotMove: move.slotMove }),
+                ...(move.picks === undefined || move.picks === null ? {} : { picks: move.picks }),
+                ...(move.counterparty === undefined || move.counterparty === null
+                  ? {}
+                  : { counterparty: move.counterparty }),
+                ...(move.bid === undefined || move.bid === null ? {} : { bid: move.bid }),
+                reason: move.reason,
+                ...(move.window === undefined || move.window === null
+                  ? {}
+                  : { runDay: move.window }),
+              })),
+            })
+            .pipe(
+              Effect.flatMap((result) =>
+                plans
+                  .plan(agent.userId, { team: input.team })
+                  .pipe(Effect.map((plan) => ({ ...plan, refused: result.refused }))),
+              ),
+              mapPlanFailure,
+            ),
         get_pending_trade_offers: (input) =>
-          proposals.readPendingOffers(agent.userId, input).pipe(mapFailure),
-        list_transaction_proposals: (input) =>
-          mapFailure(proposals.list(agent.userId, input), {
-            code: "list_unavailable",
-            message: listUnavailableDetail,
-          }),
+          proposals.readPendingOffers(agent.userId, input).pipe(mapProposalFailure),
+        list_transaction_proposals: (input) => plans.list(agent.userId, input).pipe(mapPlanFailure),
+        get_transaction_plan: (input) => plans.plan(agent.userId, input).pipe(mapPlanFailure),
       });
     }),
   );
 }
 
-function mapFailure<A>(
-  program: Effect.Effect<A, ProposalError>,
-  persistence?: { readonly code: string; readonly message: string },
+function mapPlanFailure<A>(
+  program: Effect.Effect<A, TransactionPlanServiceError>,
 ): Effect.Effect<A, { code: string; message: string }, never> {
   return program.pipe(
     Effect.catch((error) => {
       switch (error._tag) {
-        case "proposal.content_invalid":
-          return reject("content_invalid", error.detail);
-        case "proposal.nothing_included":
-          return reject("nothing_included", error.detail);
-        case "proposal.set_closed":
-          return reject("set_closed", error.detail);
-        case "proposal.submission_in_progress":
+        case "transaction_plan.facts_unavailable":
+          return reject("state_unavailable", error.detail);
+        case "transaction_plan.team_not_found":
           return reject(
-            "submission_in_progress",
-            "This proposal set is already being submitted, so nothing else was sent. Read it again in a moment to see the outcome.",
+            "team_not_found",
+            "The selected team is not available to this account. List your teams and try again.",
           );
-        case "proposal.nothing_accepted":
+        case "transaction_plan.move_not_found":
           return reject(
-            "nothing_accepted",
-            [
-              error.detail,
-              ...error.refusals.map(
-                (refusal) => `Item ${String(refusal.position)}: ${refusal.reason} ${refusal.fix}`,
-              ),
-              ...error.withdraw.map(
-                (entry) => `Withdraw move ${entry.item} (${entry.label}): ${entry.detail}`,
-              ),
-            ].join(" "),
+            "move_not_found",
+            "The selected move is not available to this account. Read the plan again and try another move.",
           );
-        case "proposal.items_not_open":
+        case "transaction_plan.run_in_progress":
           return reject(
-            "items_not_open",
-            [
-              error.detail,
-              ...error.items.map(
-                (entry) =>
-                  `Move ${entry.item}${entry.state === undefined ? "" : ` (${entry.state})`}: ${entry.detail}`,
-              ),
-            ].join(" "),
+            "run_in_progress",
+            "This team's plan is running, so nothing else was sent. Read it again in a moment to see the outcome.",
           );
-        case "proposal.set_not_found":
+        case "transaction_plan.persistence_failed":
           return reject(
-            "set_not_found",
-            "The selected proposal set is not available to this account. Propose the set again or read your own set id.",
+            "plan_unavailable",
+            "The plan could not be read or stored. Try again, or start again from the first page.",
           );
-        case "proposal.trade_not_found":
-          return reject(
-            "trade_not_found",
-            "That trade proposal is not available to this account. Reload the review and try again.",
-          );
-        case "proposal.trade_not_pending":
-          return reject("trade_not_pending", error.detail);
+      }
+    }),
+  );
+}
+
+function mapProposalFailure<A>(
+  program: Effect.Effect<A, ProposalError>,
+): Effect.Effect<A, { code: string; message: string }, never> {
+  return program.pipe(
+    Effect.catch((error) => {
+      switch (error._tag) {
         case "proposal.team_not_found":
           return reject(
             "team_not_found",
@@ -240,16 +217,28 @@ function mapFailure<A>(
         case "proposal.provider_unavailable":
           return reject("provider_unavailable", error.detail);
         case "proposal.persistence_failed":
-          return persistence === undefined
-            ? Effect.annotateCurrentSpan({
-                "app.outcome": "failure",
-                "error.type": error._tag,
-              }).pipe(
-                Effect.andThen(
-                  Effect.die(new Error("The proposal could not be stored or read. Try again.")),
-                ),
-              )
-            : reject(persistence.code, persistence.message);
+          return reject(
+            "offers_unavailable",
+            "The pending offers could not be read. Try again in a moment.",
+          );
+        case "proposal.content_invalid":
+          return reject("content_invalid", error.detail);
+        case "proposal.nothing_included":
+          return reject("nothing_included", error.detail);
+        case "proposal.set_closed":
+          return reject("set_closed", error.detail);
+        case "proposal.submission_in_progress":
+          return reject("submission_in_progress", "This plan is already running.");
+        case "proposal.nothing_accepted":
+          return reject("nothing_accepted", error.detail);
+        case "proposal.items_not_open":
+          return reject("items_not_open", error.detail);
+        case "proposal.set_not_found":
+          return reject("set_not_found", "The selected plan is not available to this account.");
+        case "proposal.trade_not_found":
+          return reject("trade_not_found", "That trade proposal is not available.");
+        case "proposal.trade_not_pending":
+          return reject("trade_not_pending", error.detail);
       }
     }),
   );

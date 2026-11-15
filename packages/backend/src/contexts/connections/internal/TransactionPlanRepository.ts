@@ -819,6 +819,46 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
         },
       );
 
+      const readTeamProviderKeys = Effect.fn("TransactionPlanRepository.readTeamProviderKeys")(
+        function* (input: { readonly userId: UserId; readonly team: TeamId }) {
+          return yield* Effect.gen(function* () {
+            const rows = yield* database
+              .select({
+                providerTeamKey: providerTeams.providerTeamKey,
+                providerLeagueKey: providerTeams.providerLeagueKey,
+                name: providerTeams.name,
+              })
+              .from(providerTeams)
+              .where(and(eq(providerTeams.userId, input.userId), eq(providerTeams.id, input.team)))
+              .limit(1);
+            const row = rows[0];
+            return row === undefined
+              ? Option.none<{
+                  readonly providerTeamKey: string;
+                  readonly providerLeagueKey: string;
+                  readonly name: string;
+                }>()
+              : Option.some(row);
+          }).pipe(Effect.mapError(persistenceFailure));
+        },
+      );
+      const countOwnerTeams = Effect.fn("TransactionPlanRepository.countOwnerTeams")(
+        function* (input: { readonly userId: UserId; readonly team: TeamId | undefined }) {
+          return yield* Effect.gen(function* () {
+            const rows = yield* database
+              .select({ total: count() })
+              .from(providerTeams)
+              .where(
+                and(
+                  eq(providerTeams.userId, input.userId),
+                  input.team === undefined ? undefined : eq(providerTeams.id, input.team),
+                ),
+              );
+            return rows[0]?.total ?? 0;
+          }).pipe(Effect.mapError(persistenceFailure));
+        },
+      );
+
       return {
         loadPlan,
         appendMoves,
@@ -836,7 +876,9 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
         readOwnerMoves,
         readOpenMovesForTeams,
         readTeam,
+        readTeamProviderKeys,
         countOwnerMoves,
+        countOwnerTeams,
       };
     }),
   },

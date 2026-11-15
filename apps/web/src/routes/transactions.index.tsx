@@ -15,9 +15,7 @@ export const Route = createFileRoute("/transactions/")({
       location.href,
     ).then(() => undefined),
   loader: ({ context }) =>
-    context.queryClient.ensureInfiniteQueryData(
-      transactionQueries.list(transactionRemote, { state: "open" }),
-    ),
+    context.queryClient.ensureInfiniteQueryData(transactionQueries.timeline(transactionRemote)),
   component: TransactionsRoute,
 });
 

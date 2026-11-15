@@ -7,7 +7,7 @@ import { CredentialKeyCensus } from "#contexts/connections/CredentialKeyCensus.t
 import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
 import { LineupDispatcher } from "#contexts/connections/LineupWork.ts";
 import { RetentionSweep } from "#contexts/connections/Retention.ts";
-import { TransactionProposals } from "#contexts/connections/TransactionProposals.ts";
+import { TransactionPlanService } from "#contexts/connections/TransactionPlans.ts";
 
 import { LineupRunRepository } from "./LineupRunRepository.ts";
 import type { NewScheduledLineupRun } from "./LineupRunRepository.ts";
@@ -19,7 +19,7 @@ export const AutomationLive = Layer.effect(
     const teams = yield* TeamRepository;
     const runs = yield* LineupRunRepository;
     const dispatcher = yield* LineupDispatcher;
-    const proposals = yield* TransactionProposals;
+    const plans = yield* TransactionPlanService;
     const retention = yield* RetentionSweep;
     const credentialKeys = yield* CredentialKeyCensus;
 
@@ -42,7 +42,7 @@ export const AutomationLive = Layer.effect(
       );
       const scheduledRuns = scheduled.reduce((total, result) => total + result.runs.length, 0);
       const repaired = yield* dispatcher.repair(limit);
-      const due = yield* proposals.runDue(limit, now);
+      const due = yield* plans.runDue(limit, now);
       const retained = yield* retention.run(limit, now);
       const credentialKeyReport = yield* credentialKeys.report;
       const summary: AutomationSummary = {
@@ -51,10 +51,10 @@ export const AutomationLive = Layer.effect(
         scheduledRuns,
         delivered: repaired.delivered,
         pending: repaired.pending,
-        dueMoves: due.due,
-        dueIncluded: due.included,
-        dueRefused: due.refused,
-        dueInProgress: due.inProgress,
+        dueMoves: due.counts.moves,
+        dueIncluded: due.counts.executed + due.counts.pending,
+        dueRefused: due.counts.failed + due.counts.skipped,
+        dueInProgress: due.counts.busy,
         retention: retained,
         credentialKeys: credentialKeyReport,
       };

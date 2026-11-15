@@ -23,7 +23,6 @@ import { Route as RunsRunIdRouteImport } from './routes/runs.$runId'
 import { Route as TeamsIndexRouteImport } from './routes/teams.index'
 import { Route as TeamsTeamIdRouteImport } from './routes/teams.$teamId'
 import { Route as TransactionsIndexRouteImport } from './routes/transactions.index'
-import { Route as TransactionsSetIdRouteImport } from './routes/transactions.$setId'
 import { Route as ApiAccountExportRouteImport } from './routes/api/account/export'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiDevProviderLoginRouteImport } from './routes/api/dev/provider-login'
@@ -99,11 +98,6 @@ const TransactionsIndexRoute = TransactionsIndexRouteImport.update({
   path: '/transactions/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const TransactionsSetIdRoute = TransactionsSetIdRouteImport.update({
-  id: '/transactions/$setId',
-  path: '/transactions/$setId',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiAccountExportRoute = ApiAccountExportRouteImport.update({
   id: '/api/account/export',
   path: '/api/account/export',
@@ -138,7 +132,6 @@ export interface FileRoutesByFullPath {
   '/api/telemetry': typeof ApiTelemetryRoute
   '/runs/$runId': typeof RunsRunIdRoute
   '/teams/$teamId': typeof TeamsTeamIdRoute
-  '/transactions/$setId': typeof TransactionsSetIdRoute
   '/teams/': typeof TeamsIndexRoute
   '/transactions/': typeof TransactionsIndexRoute
   '/api/account/export': typeof ApiAccountExportRoute
@@ -159,7 +152,6 @@ export interface FileRoutesByTo {
   '/api/telemetry': typeof ApiTelemetryRoute
   '/runs/$runId': typeof RunsRunIdRoute
   '/teams/$teamId': typeof TeamsTeamIdRoute
-  '/transactions/$setId': typeof TransactionsSetIdRoute
   '/teams': typeof TeamsIndexRoute
   '/transactions': typeof TransactionsIndexRoute
   '/api/account/export': typeof ApiAccountExportRoute
@@ -181,7 +173,6 @@ export interface FileRoutesById {
   '/api/telemetry': typeof ApiTelemetryRoute
   '/runs/$runId': typeof RunsRunIdRoute
   '/teams/$teamId': typeof TeamsTeamIdRoute
-  '/transactions/$setId': typeof TransactionsSetIdRoute
   '/teams/': typeof TeamsIndexRoute
   '/transactions/': typeof TransactionsIndexRoute
   '/api/account/export': typeof ApiAccountExportRoute
@@ -204,7 +195,6 @@ export interface FileRouteTypes {
     | '/api/telemetry'
     | '/runs/$runId'
     | '/teams/$teamId'
-    | '/transactions/$setId'
     | '/teams/'
     | '/transactions/'
     | '/api/account/export'
@@ -225,7 +215,6 @@ export interface FileRouteTypes {
     | '/api/telemetry'
     | '/runs/$runId'
     | '/teams/$teamId'
-    | '/transactions/$setId'
     | '/teams'
     | '/transactions'
     | '/api/account/export'
@@ -246,7 +235,6 @@ export interface FileRouteTypes {
     | '/api/telemetry'
     | '/runs/$runId'
     | '/teams/$teamId'
-    | '/transactions/$setId'
     | '/teams/'
     | '/transactions/'
     | '/api/account/export'
@@ -268,7 +256,6 @@ export interface RootRouteChildren {
   ApiTelemetryRoute: typeof ApiTelemetryRoute
   RunsRunIdRoute: typeof RunsRunIdRoute
   TeamsTeamIdRoute: typeof TeamsTeamIdRoute
-  TransactionsSetIdRoute: typeof TransactionsSetIdRoute
   TeamsIndexRoute: typeof TeamsIndexRoute
   TransactionsIndexRoute: typeof TransactionsIndexRoute
   ApiAccountExportRoute: typeof ApiAccountExportRoute
@@ -377,13 +364,6 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof TransactionsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/transactions/$setId': {
-      id: '/transactions/$setId'
-      path: '/transactions/$setId'
-      fullPath: '/transactions/$setId'
-      preLoaderRoute: typeof TransactionsSetIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/account/export': {
       id: '/api/account/export'
       path: '/api/account/export'
@@ -428,7 +408,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiTelemetryRoute: ApiTelemetryRoute,
   RunsRunIdRoute: RunsRunIdRoute,
   TeamsTeamIdRoute: TeamsTeamIdRoute,
-  TransactionsSetIdRoute: TransactionsSetIdRoute,
   TeamsIndexRoute: TeamsIndexRoute,
   TransactionsIndexRoute: TransactionsIndexRoute,
   ApiAccountExportRoute: ApiAccountExportRoute,

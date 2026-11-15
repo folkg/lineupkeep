@@ -1,6 +1,5 @@
 import {
   Array as EffectArray,
-  Config,
   Context,
   Crypto,
   DateTime,
@@ -12,7 +11,53 @@ import {
 
 import type { UserId } from "#contexts/auth/User.ts";
 import { TeamId } from "#contexts/connections/FantasyTeam.ts";
+import { PlayerRef } from "#contexts/connections/QueryValues.ts";
+import {
+  TransactionPlanFactsUnavailable,
+  TransactionPlanMoveNotFound,
+  TransactionPlanPersistenceFailed,
+  TransactionPlanRunInProgress,
+  TransactionPlanService,
+  TransactionPlanTeamNotFound,
+  isOpenMove,
+} from "#contexts/connections/TransactionPlans.ts";
+import type {
+  StoredMoveClaim,
+  StoredMoveIntent,
+  StoredMovePlacement,
+  StoredMovePlayer,
+  StoredMoveSlot,
+  TransactionMoveCursor,
+  TransactionMoveId,
+  TransactionMoveList,
+  TransactionMoveListInput,
+  TransactionMovePageLimit,
+  TransactionMoveProvenance,
+  TransactionMoveReadState,
+  TransactionMoveResult,
+  TransactionPlanCountsInput,
+  TransactionPlanDiscardInput,
+  TransactionPlanEditInput,
+  TransactionPlanMoveDraft,
+  TransactionPlanMoveView,
+  TransactionPlanProposeInput,
+  TransactionPlanRead,
+  TransactionPlanReadInput,
+  TransactionPlanRefMoveDraft,
+  TransactionPlanRefProposeInput,
+  TransactionPlanRefusal,
+  TransactionPlanRunCounts,
+  TransactionPlanRunRefusal,
+  TransactionPlanSaveInput,
+  TransactionPlanServiceError,
+  TransactionPlanSubmitInput,
+  TransactionPlanTodayInput,
+  TransactionPlanTodaySubmission,
+  TransactionPlanView,
+  TransactionTimelineInput,
+} from "#contexts/connections/TransactionPlans.ts";
 
+import { QueryTokens } from "./QueryTokens.ts";
 import {
   claimTransactionPlanMoves,
   describeTransactionPlanMove,
@@ -21,7 +66,6 @@ import {
 import type {
   TransactionPlanClaimRefusal,
   TransactionPlanEvaluation,
-  TransactionPlanGroupEvaluation,
   TransactionPlanMove,
   TransactionPlanMoveEvaluation,
   TransactionPlanRosterPlayer,
@@ -35,39 +79,14 @@ import {
   moveReadViews,
   planDays,
 } from "./TransactionPlanRead.ts";
-import type {
-  TransactionMoveList,
-  TransactionMoveListInput,
-  TransactionPlanCounts,
-  TransactionPlanCountsInput,
-  TransactionPlanRead,
-  TransactionPlanReadInput,
-  TransactionTeamCheck,
-  TransactionTimelineInput,
-} from "./TransactionPlanRead.ts";
+import type { TransactionTeamCheck } from "./TransactionPlanRead.ts";
 import {
   StoredMoveDate,
   TransactionMoveId as TransactionMoveIdSchema,
-  TransactionPlanPersistenceFailed,
-  isOpenMove,
 } from "./TransactionPlanRecord.ts";
 import type {
-  StoredMoveClaim,
-  StoredMoveIntent,
-  StoredMovePick,
-  StoredMovePlacement,
-  StoredMovePlayer,
-  StoredMoveSlot,
   StoredMoveStep,
-  StoredMoveValidation,
-  TransactionMoveCursor,
-  TransactionMoveId,
-  TransactionMoveKind,
-  TransactionMovePageLimit,
-  TransactionMoveProvenance,
-  TransactionMoveReadState,
   TransactionMoveRecord,
-  TransactionMoveResult,
   TransactionMoveRowRecord,
 } from "./TransactionPlanRecord.ts";
 import type {
@@ -83,55 +102,22 @@ import type {
   TransactionPlanWriteResult,
 } from "./TransactionPlanWrites.ts";
 
-const transactionPlanServiceSwitch = Config.Boolean("TRANSACTION_PLAN_SERVICE").pipe(
-  Config.withDefault(false),
-);
+export {
+  TransactionPlanFactsUnavailable,
+  TransactionPlanPersistenceFailed,
+  TransactionPlanRunInProgress,
+  TransactionPlanService,
+} from "#contexts/connections/TransactionPlans.ts";
 
 const transactionPlanRunStaleMillis = 10 * 60 * 1000;
-
-export class TransactionPlansDisabled extends Schema.TaggedError<
-  TransactionPlansDisabled,
-  { readonly brand: unique symbol }
->()("transaction_plan.service_disabled", {
-  detail: Schema.NonEmptyString,
-}) {}
-
-export class TransactionPlanFactsUnavailable extends Schema.TaggedError<
-  TransactionPlanFactsUnavailable,
-  { readonly brand: unique symbol }
->()("transaction_plan.facts_unavailable", {
-  team: TeamId,
-  detail: Schema.NonEmptyString,
-}) {}
-
-export class TransactionPlanRunInProgress extends Schema.TaggedError<
-  TransactionPlanRunInProgress,
-  { readonly brand: unique symbol }
->()("transaction_plan.run_in_progress", {
-  team: TeamId,
-  detail: Schema.NonEmptyString,
-}) {}
-
-class TransactionPlanMoveNotFound extends Schema.TaggedError<
-  TransactionPlanMoveNotFound,
-  { readonly brand: unique symbol }
->()("transaction_plan.move_not_found", {
-  team: TeamId,
-  move: TransactionMoveIdSchema,
-}) {}
-
-class TransactionPlanTeamNotFound extends Schema.TaggedError<
-  TransactionPlanTeamNotFound,
-  { readonly brand: unique symbol }
->()("transaction_plan.team_not_found", {
-  team: TeamId,
-}) {}
 
 export type TransactionPlanFactsShape = {
   readonly read: (input: {
     readonly userId: UserId;
     readonly team: TeamId;
     readonly at: DateTime.Utc;
+    readonly players: ReadonlyArray<string>;
+    readonly needsBudget: boolean;
   }) => Effect.Effect<TransactionPlanTeamFacts, TransactionPlanFactsUnavailable>;
 };
 
@@ -142,20 +128,12 @@ export class TransactionPlanFacts extends Context.Service<
   "@lineupkeep/backend/contexts/connections/internal/TransactionPlanService/TransactionPlanFacts",
 ) {}
 
-export class TransactionPlanService extends Context.Service<
-  TransactionPlanService,
-  TransactionPlanServiceShape
->()("@lineupkeep/backend/contexts/connections/internal/TransactionPlanService") {}
-
 export const TransactionPlanServiceLive = Layer.effect(
   TransactionPlanService,
   Effect.gen(function* () {
-    const enabled = yield* transactionPlanServiceSwitch;
-    if (!enabled) {
-      return disabledService;
-    }
     const repository = yield* TransactionPlanRepository;
     const factsPort = yield* TransactionPlanFacts;
+    const tokens = yield* QueryTokens;
     const writes = yield* TransactionPlanWrites;
     const crypto = yield* Crypto.Crypto;
     const newId = crypto.randomULID.pipe(
@@ -183,10 +161,16 @@ export const TransactionPlanServiceLive = Layer.effect(
       input: TransactionPlanProposeInput,
     ) {
       const at = yield* DateTime.now;
-      const facts = yield* factsPort.read({ userId, team: input.team, at });
       yield* repository.loadPlan({ userId, team: input.team, at });
       const stored = yield* repository.readPlanMoves({ userId, team: input.team });
       const open = stored.filter(isOpenMove);
+      const facts = yield* factsPort.read({
+        userId,
+        team: input.team,
+        at,
+        players: [...new Set([...namedPlayers(open), ...draftPlayers(input.moves)])],
+        needsBudget: needsBudget(open) || input.moves.some((move) => move.bid !== undefined),
+      });
       const roster = new Map(facts.roster.map((player) => [player.key, player] as const));
       const groupIds = new Map(
         yield* Effect.forEach(
@@ -260,19 +244,184 @@ export const TransactionPlanServiceLive = Layer.effect(
       };
     });
 
+    const resolveDraft = Effect.fn("TransactionPlanService.resolveDraft")(function* (input: {
+      readonly userId: UserId;
+      readonly team: TeamId;
+      readonly providerTeamKey: string;
+      readonly teamName: string;
+      readonly leagueKey: string;
+      readonly draft: TransactionPlanRefMoveDraft;
+    }) {
+      const open = (
+        refs: ReadonlyArray<string>,
+      ): Effect.Effect<ReadonlyArray<string | undefined>> =>
+        tokens.openPlayerRefs({
+          userId: input.userId,
+          leagueKey: input.leagueKey,
+          refs: refs.map((ref) => Schema.decodeSync(PlayerRef)(ref)),
+        });
+      const addRefs = yield* open(input.draft.adds ?? []);
+      const fallbackRefs = yield* open(input.draft.fallbacks ?? []);
+      const dropRefs = yield* open(input.draft.drops ?? []);
+      const slotPlayer =
+        input.draft.slotMove === undefined ? [] : yield* open([input.draft.slotMove.player]);
+      const intentPlayer =
+        input.draft.player === undefined ? [] : yield* open([input.draft.player]);
+      const invalid =
+        addRefs.includes(undefined) ||
+        fallbackRefs.includes(undefined) ||
+        dropRefs.includes(undefined) ||
+        slotPlayer.includes(undefined) ||
+        intentPlayer.includes(undefined);
+      if (invalid) {
+        return {
+          status: "refused",
+          code: "reference_invalid",
+          detail: "A player reference is not valid for this account and league.",
+        } as const;
+      }
+      const counterparty = input.draft.counterparty;
+      const counterpartyKey =
+        counterparty === undefined
+          ? undefined
+          : yield* Effect.result(
+              tokens.openCounterpartyRef({
+                userId: input.userId,
+                leagueKey: input.leagueKey,
+                ref: counterparty,
+              }),
+            ).pipe(
+              Effect.map((result) => (result._tag === "Success" ? result.success : undefined)),
+            );
+      if (counterparty !== undefined && counterpartyKey === undefined) {
+        return {
+          status: "refused",
+          code: "reference_invalid",
+          detail: "The other team's reference is not valid for this account and league.",
+        } as const;
+      }
+      const party = (ref: string): { readonly key: string; readonly name: string } | undefined => {
+        if (ref === input.team) {
+          return { key: input.providerTeamKey, name: input.teamName };
+        }
+        return counterparty !== undefined && ref === counterparty && counterpartyKey !== undefined
+          ? { key: counterpartyKey, name: "the other team" }
+          : undefined;
+      };
+      const picks = [];
+      for (const pick of input.draft.picks ?? []) {
+        const source = party(pick.from);
+        const destination = party(pick.to);
+        if (source === undefined || destination === undefined) {
+          return {
+            status: "refused",
+            code: "trade_pick_team_not_party",
+            detail: "A draft pick names a team that is not part of this trade.",
+          } as const;
+        }
+        picks.push({
+          round: pick.round,
+          sourceTeamKey: source.key,
+          destinationTeamKey: destination.key,
+          sourceName: source.name,
+          destinationName: destination.name,
+        });
+      }
+      return {
+        status: "resolved",
+        draft: {
+          ...(input.draft.group === undefined ? {} : { group: input.draft.group }),
+          kind: input.draft.kind,
+          adds: addRefs.filter((ref): ref is string => ref !== undefined),
+          fallbacks: fallbackRefs.filter((ref): ref is string => ref !== undefined),
+          drops: dropRefs.filter((ref): ref is string => ref !== undefined),
+          picks,
+          ...(input.draft.slotMove === undefined || slotPlayer[0] === undefined
+            ? {}
+            : { slotMove: { player: slotPlayer[0], toSlot: input.draft.slotMove.toSlot } }),
+          ...(input.draft.to === undefined ? {} : { to: input.draft.to }),
+          ...(intentPlayer[0] === undefined ? {} : { player: intentPlayer[0] }),
+          ...(counterpartyKey === undefined ? {} : { counterparty: counterpartyKey }),
+          ...(input.draft.bid === undefined ? {} : { bid: input.draft.bid }),
+          reason: input.draft.reason,
+          ...(input.draft.runDay === undefined ? {} : { runDay: input.draft.runDay }),
+        },
+      } as const;
+    });
+
+    const proposeRefs = Effect.fn("TransactionPlanService.proposeRefs")(function* (
+      userId: UserId,
+      input: TransactionPlanRefProposeInput,
+    ) {
+      const team = yield* repository.readTeamProviderKeys({ userId, team: input.team });
+      if (Option.isNone(team)) {
+        return yield* TransactionPlanTeamNotFound.make({ team: input.team });
+      }
+      const resolved = yield* Effect.forEach(input.moves, (draft, index) =>
+        resolveDraft({
+          userId,
+          team: input.team,
+          providerTeamKey: team.value.providerTeamKey,
+          teamName: team.value.name,
+          leagueKey: team.value.providerLeagueKey,
+          draft,
+        }).pipe(Effect.map((result) => ({ index, result }))),
+      );
+      const refused = resolved.flatMap((entry) =>
+        entry.result.status === "refused"
+          ? [
+              {
+                code: entry.result.code,
+                team: input.team,
+                detail: entry.result.detail,
+                moves: [entry.index],
+              },
+            ]
+          : [],
+      );
+      if (refused.length > 0) {
+        const at = yield* DateTime.now;
+        const stored = yield* repository.readPlanMoves({ userId, team: input.team });
+        const facts = yield* factsPort.read({
+          userId,
+          team: input.team,
+          at,
+          players: [],
+          needsBudget: false,
+        });
+        return {
+          plan: planViewOf({ stored, facts, checkedAt: at, team: input.team }),
+          refused,
+        };
+      }
+      return yield* propose(userId, {
+        team: input.team,
+        proposedBy: input.proposedBy,
+        moves: resolved.flatMap((entry) =>
+          entry.result.status === "resolved" ? [entry.result.draft] : [],
+        ),
+      });
+    });
+
     const save = Effect.fn("TransactionPlanService.save")(function* (
       userId: UserId,
       input: TransactionPlanSaveInput,
     ) {
       const at = yield* DateTime.now;
-      const facts = yield* factsPort.read({ userId, team: input.team, at });
-      const roster = new Map(facts.roster.map((player) => [player.key, player] as const));
       const stored = yield* repository.readPlanMoves({ userId, team: input.team });
       const move = stored.find((entry) => entry.id === input.move);
       if (move === undefined) {
         return yield* TransactionPlanMoveNotFound.make({ team: input.team, move: input.move });
       }
       const open = stored.filter(isOpenMove);
+      const facts = yield* factsPort.read({
+        userId,
+        team: input.team,
+        at,
+        players: namedPlayers(open),
+        needsBudget: needsBudget(open),
+      });
+      const roster = new Map(facts.roster.map((player) => [player.key, player] as const));
       const refused = moveChangeRefusal({ team: input.team, move });
       if (refused !== undefined) {
         return {
@@ -364,14 +513,20 @@ export const TransactionPlanServiceLive = Layer.effect(
       input: TransactionPlanEditInput,
     ) {
       const at = yield* DateTime.now;
-      const facts = yield* factsPort.read({ userId, team: input.team, at });
-      const roster = new Map(facts.roster.map((player) => [player.key, player] as const));
       const stored = yield* repository.readPlanMoves({ userId, team: input.team });
       const move = stored.find((entry) => entry.id === input.move);
       if (move === undefined) {
         return yield* TransactionPlanMoveNotFound.make({ team: input.team, move: input.move });
       }
       const open = stored.filter(isOpenMove);
+      const facts = yield* factsPort.read({
+        userId,
+        team: input.team,
+        at,
+        players: namedPlayers(open),
+        needsBudget: needsBudget(open),
+      });
+      const roster = new Map(facts.roster.map((player) => [player.key, player] as const));
       const refused = moveChangeRefusal({ team: input.team, move });
       if (refused !== undefined) {
         return {
@@ -474,7 +629,13 @@ export const TransactionPlanServiceLive = Layer.effect(
       input: TransactionPlanDiscardInput,
     ) {
       const at = yield* DateTime.now;
-      const facts = yield* factsPort.read({ userId, team: input.team, at });
+      const facts = yield* factsPort.read({
+        userId,
+        team: input.team,
+        at,
+        players: [],
+        needsBudget: false,
+      });
       const stored = yield* repository.readPlanMoves({ userId, team: input.team });
       const move = stored.find((entry) => entry.id === input.move);
       if (move === undefined) {
@@ -691,8 +852,14 @@ export const TransactionPlanServiceLive = Layer.effect(
         });
       }
       return yield* Effect.gen(function* () {
-        const facts = yield* factsPort.read({ userId, team: input.team, at });
         const stored = yield* repository.readPlanMoves({ userId, team: input.team });
+        const facts = yield* factsPort.read({
+          userId,
+          team: input.team,
+          at,
+          players: namedPlayers(stored.filter(isOpenMove)),
+          needsBudget: needsBudget(stored.filter(isOpenMove)),
+        });
         const run = yield* runMoves({
           userId,
           team: input.team,
@@ -721,6 +888,58 @@ export const TransactionPlanServiceLive = Layer.effect(
       );
     });
 
+    const submitToday = Effect.fn("TransactionPlanService.submitToday")(function* (
+      userId: UserId,
+      input: TransactionPlanTodayInput,
+    ) {
+      const held = new Map<TeamId, { readonly discard: Array<TransactionMoveId>; now: boolean }>();
+      for (const choice of input.choices) {
+        const team = held.get(choice.team) ?? { discard: [], now: false };
+        if (choice.choice === "discard") {
+          team.discard.push(choice.move);
+        } else {
+          team.now = true;
+        }
+        held.set(choice.team, team);
+      }
+      const counts = emptyRunCounts();
+      const refusals: Array<TransactionPlanRunRefusal> = [];
+      let discarded = 0;
+      for (const [team, choices] of held) {
+        let blocked = false;
+        for (const move of choices.discard) {
+          const result = yield* discard(userId, { team, move });
+          if (result.refused.length > 0) {
+            blocked = true;
+            for (const refusal of result.refused) {
+              refusals.push({
+                code: refusal.code,
+                team,
+                detail: refusal.detail,
+                moves: [move],
+              });
+            }
+            continue;
+          }
+          discarded += 1;
+        }
+        if (blocked || !choices.now) {
+          continue;
+        }
+        const submission = yield* submit(userId, { team });
+        mergeRunCounts(counts, submission.counts);
+        for (const refusal of submission.refusals) {
+          refusals.push(refusal);
+        }
+      }
+      return {
+        status: "submitted",
+        counts,
+        discarded,
+        refusals,
+      } satisfies TransactionPlanTodaySubmission;
+    });
+
     const runDue = Effect.fn("TransactionPlanService.runDue")(function* (
       limit: number,
       at: DateTime.Utc,
@@ -733,11 +952,23 @@ export const TransactionPlanServiceLive = Layer.effect(
         return { at, counts };
       }
 
+      const candidateMoves = yield* repository.readOpenMovesForPlans({ plans: candidates });
       const factsByPlan = new Map<string, TransactionPlanTeamFacts>();
       yield* Effect.forEach(
         candidates,
-        (plan) =>
-          Effect.result(factsPort.read({ userId: plan.userId, team: plan.team, at })).pipe(
+        (plan) => {
+          const planMoves = candidateMoves.filter(
+            (move) => move.userId === plan.userId && move.team === plan.team,
+          );
+          return Effect.result(
+            factsPort.read({
+              userId: plan.userId,
+              team: plan.team,
+              at,
+              players: namedPlayers(planMoves),
+              needsBudget: needsBudget(planMoves),
+            }),
+          ).pipe(
             Effect.map((read) => {
               if (read._tag === "Failure") {
                 counts.unavailable += 1;
@@ -745,7 +976,8 @@ export const TransactionPlanServiceLive = Layer.effect(
               }
               factsByPlan.set(planKey(plan), read.success);
             }),
-          ),
+          );
+        },
         { concurrency: 3 },
       );
 
@@ -890,7 +1122,15 @@ export const TransactionPlanServiceLive = Layer.effect(
       const checks = yield* Effect.forEach(
         input.teams,
         (team) =>
-          Effect.result(factsPort.read({ userId: input.userId, team, at: input.at })).pipe(
+          Effect.result(
+            factsPort.read({
+              userId: input.userId,
+              team,
+              at: input.at,
+              players: namedPlayers(movesByTeam.get(team) ?? []),
+              needsBudget: needsBudget(movesByTeam.get(team) ?? []),
+            }),
+          ).pipe(
             Effect.map((read): readonly [TeamId, TransactionTeamCheck] => {
               if (read._tag === "Failure") {
                 return [team, { status: "unavailable" }];
@@ -920,7 +1160,8 @@ export const TransactionPlanServiceLive = Layer.effect(
       team: TeamId | undefined,
     ) {
       const teams = yield* repository.countOwnerMoves({ userId, team });
-      return { totals: countTotals(teams), teams };
+      const teamCount = yield* repository.countOwnerTeams({ userId, team });
+      return { totals: countTotals(teams), teams, teamCount };
     });
 
     const readMovePage = Effect.fn("TransactionPlanService.readMovePage")(function* (
@@ -965,6 +1206,7 @@ export const TransactionPlanServiceLive = Layer.effect(
         moves,
         days: moveDays({ moves, todayOf }),
         counts: counts.totals,
+        teamCount: counts.teamCount,
         page: {
           returned: moves.length,
           complete,
@@ -1032,7 +1274,20 @@ export const TransactionPlanServiceLive = Layer.effect(
       return yield* countMoves(userId, input.team);
     });
 
-    return { propose, save, edit, discard, submit, runDue, timeline, list, plan, counts };
+    return {
+      propose,
+      proposeRefs,
+      save,
+      edit,
+      discard,
+      submit,
+      submitToday,
+      runDue,
+      timeline,
+      list,
+      plan,
+      counts,
+    };
   }),
 );
 
@@ -1620,6 +1875,21 @@ function rosterSlot(facts: TransactionPlanTeamFacts, playerKey: string): string 
   return facts.roster.find((player) => player.key === playerKey)?.slot;
 }
 
+function mergeRunCounts(target: MutableRunCounts, source: TransactionPlanRunCounts): void {
+  target.plans += source.plans;
+  target.claimed += source.claimed;
+  target.busy += source.busy;
+  target.recovered += source.recovered;
+  target.unavailable += source.unavailable;
+  target.moves += source.moves;
+  target.executed += source.executed;
+  target.pending += source.pending;
+  target.failed += source.failed;
+  target.skipped += source.skipped;
+  target.unknown += source.unknown;
+  target.retry += source.retry;
+}
+
 function emptyRunCounts(): MutableRunCounts {
   return {
     plans: 0,
@@ -2008,6 +2278,29 @@ function planDecision(move: TransactionMoveRecord): TransactionPlanDecision {
   return move.runDay === undefined ? "now" : "saved";
 }
 
+type TransactionPlanDecision = "now" | "saved" | "discarded";
+
+function namedPlayers(
+  moves: ReadonlyArray<{
+    readonly adds: ReadonlyArray<StoredMovePlayer>;
+    readonly fallbacks: ReadonlyArray<StoredMovePlayer>;
+  }>,
+): ReadonlyArray<string> {
+  return [
+    ...new Set(moves.flatMap((move) => [...move.adds, ...move.fallbacks].map((add) => add.key))),
+  ];
+}
+
+function draftPlayers(drafts: ReadonlyArray<TransactionPlanMoveDraft>): ReadonlyArray<string> {
+  return [
+    ...new Set(drafts.flatMap((draft) => [...(draft.adds ?? []), ...(draft.fallbacks ?? [])])),
+  ];
+}
+
+function needsBudget(moves: ReadonlyArray<{ readonly bid?: number }>): boolean {
+  return moves.some((move) => move.bid !== undefined);
+}
+
 function requireId(ids: ReadonlyArray<TransactionMoveId>, index: number): TransactionMoveId {
   const id = ids[index];
   if (id === undefined) {
@@ -2015,213 +2308,6 @@ function requireId(ids: ReadonlyArray<TransactionMoveId>, index: number): Transa
   }
   return id;
 }
-
-const disabledService: TransactionPlanServiceShape = {
-  propose: () => plansDisabled("propose"),
-  save: () => plansDisabled("save"),
-  edit: () => plansDisabled("edit"),
-  discard: () => plansDisabled("discard"),
-  submit: () => plansDisabled("submit today's moves"),
-  runDue: () => plansDisabled("run the due moves"),
-  timeline: () => plansDisabled("read the timeline"),
-  list: () => plansDisabled("list the plan's moves"),
-  plan: () => plansDisabled("read a plan"),
-  counts: () => plansDisabled("count moves"),
-};
-
-function plansDisabled(operation: string): Effect.Effect<never, TransactionPlansDisabled> {
-  return Effect.fail(
-    TransactionPlansDisabled.make({
-      detail: `The transaction plan service is off, so it cannot ${operation}.`,
-    }),
-  );
-}
-
-export type TransactionPlanMoveDraft = {
-  readonly group?: string;
-  readonly kind: TransactionMoveKind;
-  readonly adds?: ReadonlyArray<string>;
-  readonly fallbacks?: ReadonlyArray<string>;
-  readonly drops?: ReadonlyArray<string>;
-  readonly picks?: ReadonlyArray<StoredMovePick>;
-  readonly slotMove?: { readonly player: string; readonly toSlot: string };
-  readonly to?: "active" | "reserve";
-  readonly player?: string;
-  readonly counterparty?: string;
-  readonly bid?: number;
-  readonly reason: string;
-  readonly runDay?: StoredMoveDate;
-};
-
-export type TransactionPlanProposeInput = {
-  readonly team: TeamId;
-  readonly proposedBy: TransactionMoveProvenance;
-  readonly moves: ReadonlyArray<TransactionPlanMoveDraft>;
-};
-
-export type TransactionPlanSaveInput = {
-  readonly team: TeamId;
-  readonly move: TransactionMoveId;
-  readonly runDay: StoredMoveDate;
-};
-
-export type TransactionPlanEditInput = {
-  readonly team: TeamId;
-  readonly move: TransactionMoveId;
-  readonly change: TransactionPlanMoveDraft;
-};
-
-export type TransactionPlanDiscardInput = {
-  readonly team: TeamId;
-  readonly move: TransactionMoveId;
-};
-
-export type TransactionPlanSubmitInput = {
-  readonly team: TeamId;
-};
-
-type TransactionPlanRunCounts = {
-  readonly plans: number;
-  readonly claimed: number;
-  readonly busy: number;
-  readonly recovered: number;
-  readonly unavailable: number;
-  readonly moves: number;
-  readonly executed: number;
-  readonly pending: number;
-  readonly failed: number;
-  readonly skipped: number;
-  readonly unknown: number;
-  readonly retry: number;
-};
-
-type TransactionPlanRunRefusal = {
-  readonly code: string;
-  readonly team: TeamId;
-  readonly detail: string;
-  readonly moves: ReadonlyArray<TransactionMoveId>;
-};
-
-type TransactionPlanSubmission = {
-  readonly team: TeamId;
-  readonly today: StoredMoveDate;
-  readonly counts: TransactionPlanRunCounts;
-  readonly refusals: ReadonlyArray<TransactionPlanRunRefusal>;
-  readonly plan: TransactionPlanView;
-};
-
-type TransactionPlanDueResult = {
-  readonly at: DateTime.Utc;
-  readonly counts: TransactionPlanRunCounts;
-};
-
-type TransactionPlanDecision = "now" | "saved" | "discarded";
-
-type TransactionPlanMoveView = {
-  readonly move: TransactionMoveId;
-  readonly group: string | undefined;
-  readonly kind: TransactionMoveKind;
-  readonly adds: ReadonlyArray<StoredMovePlayer>;
-  readonly fallbacks: ReadonlyArray<StoredMovePlayer>;
-  readonly drops: ReadonlyArray<StoredMovePlayer>;
-  readonly picks: ReadonlyArray<StoredMovePick>;
-  readonly slotMove: StoredMoveSlot | undefined;
-  readonly intent: StoredMoveIntent | undefined;
-  readonly counterpartyKey: string | undefined;
-  readonly bid: number | undefined;
-  readonly reason: string;
-  readonly decision: TransactionPlanDecision;
-  readonly runDay: StoredMoveDate | undefined;
-  readonly effectiveDate: StoredMoveDate | undefined;
-  readonly dueToday: boolean;
-  readonly validation: StoredMoveValidation;
-  readonly placement: StoredMovePlacement | undefined;
-  readonly claims: ReadonlyArray<StoredMoveClaim>;
-  readonly runPosition: number | undefined;
-  readonly dependsOn: ReadonlyArray<TransactionMoveId>;
-  readonly blockage: string | undefined;
-  readonly projection: ReadonlyArray<TransactionPlanRosterPlayer>;
-};
-
-export type TransactionPlanView = {
-  readonly team: TeamId;
-  readonly today: StoredMoveDate;
-  readonly moves: ReadonlyArray<TransactionPlanMoveView>;
-  readonly groups: ReadonlyArray<TransactionPlanGroupEvaluation>;
-};
-
-export type TransactionPlanRefusal = {
-  readonly code: string;
-  readonly team: TeamId;
-  readonly detail: string;
-  readonly group?: string;
-  readonly moves: ReadonlyArray<number>;
-};
-
-type TransactionPlanResult = {
-  readonly plan: TransactionPlanView;
-  readonly refused: ReadonlyArray<TransactionPlanRefusal>;
-};
-
-type TransactionPlanServiceError =
-  | TransactionPlansDisabled
-  | TransactionPlanFactsUnavailable
-  | TransactionPlanMoveNotFound
-  | TransactionPlanTeamNotFound
-  | TransactionPlanRunInProgress
-  | TransactionPlanPersistenceFailed;
-
-export type TransactionPlanServiceShape = {
-  readonly propose: (
-    userId: UserId,
-    input: TransactionPlanProposeInput,
-  ) => Effect.Effect<TransactionPlanResult, TransactionPlanServiceError>;
-
-  readonly save: (
-    userId: UserId,
-    input: TransactionPlanSaveInput,
-  ) => Effect.Effect<TransactionPlanResult, TransactionPlanServiceError>;
-
-  readonly edit: (
-    userId: UserId,
-    input: TransactionPlanEditInput,
-  ) => Effect.Effect<TransactionPlanResult, TransactionPlanServiceError>;
-
-  readonly discard: (
-    userId: UserId,
-    input: TransactionPlanDiscardInput,
-  ) => Effect.Effect<TransactionPlanResult, TransactionPlanServiceError>;
-
-  readonly submit: (
-    userId: UserId,
-    input: TransactionPlanSubmitInput,
-  ) => Effect.Effect<TransactionPlanSubmission, TransactionPlanServiceError>;
-
-  readonly runDue: (
-    limit: number,
-    at: DateTime.Utc,
-  ) => Effect.Effect<TransactionPlanDueResult, TransactionPlanServiceError>;
-
-  readonly timeline: (
-    userId: UserId,
-    input: TransactionTimelineInput,
-  ) => Effect.Effect<TransactionMoveList, TransactionPlanServiceError>;
-
-  readonly list: (
-    userId: UserId,
-    input: TransactionMoveListInput,
-  ) => Effect.Effect<TransactionMoveList, TransactionPlanServiceError>;
-
-  readonly plan: (
-    userId: UserId,
-    input: TransactionPlanReadInput,
-  ) => Effect.Effect<TransactionPlanRead, TransactionPlanServiceError>;
-
-  readonly counts: (
-    userId: UserId,
-    input: TransactionPlanCountsInput,
-  ) => Effect.Effect<TransactionPlanCounts, TransactionPlanServiceError>;
-};
 
 type CandidateMove = TransactionPlanMove & {
   readonly reason: string;

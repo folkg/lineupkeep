@@ -239,7 +239,7 @@ const legacyClientName = "Lineupgrade legacy scope acceptance";
 
 const scopePhrases: Readonly<Record<string, RegExp>> = {
   "fantasy:read": /Read your own fantasy data/u,
-  "transactions:review": /Propose player transactions/u,
+  "transactions:review": /Add moves to one team/u,
   "lineups:write": /Ask Lineupgrade to set an owned team's lineup/u,
   "teams:manage": /Change what Lineupgrade records about your own teams/u,
   offline_access: /Stay connected with renewable access/u,

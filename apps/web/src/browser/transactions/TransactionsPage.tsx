@@ -4,34 +4,38 @@ import { For, Show } from "solid-js";
 import { AppShell } from "#browser/app-shell/AppShell.tsx";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Badge } from "#browser/shared-ui/Badge.tsx";
+import { Band } from "#browser/shared-ui/Band.tsx";
 import { Box } from "#browser/shared-ui/Box.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
+import { Definition, DefinitionList } from "#browser/shared-ui/DefinitionList.tsx";
 import { Dock, DockSpacer } from "#browser/shared-ui/Dock.tsx";
 import { Form } from "#browser/shared-ui/Form.tsx";
-import { formatCalendarDate } from "#browser/shared-ui/formatTime.ts";
+import { formatCalendarDate, formatDateTime } from "#browser/shared-ui/formatTime.ts";
 import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
+import { ResponsiveContent } from "#browser/shared-ui/ResponsiveContent.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextField } from "#browser/shared-ui/TextField.tsx";
 import { leagueDisplayName, sportDisplayName } from "#contracts/connections/teamVocabulary.ts";
-import type { TransactionProposalItemView } from "#contracts/connections/transactionContract.ts";
+import type {
+  TransactionMoveTeamDayView,
+  TransactionMoveView,
+} from "#contracts/connections/transactionContract.ts";
 
-import { effectiveDateLine, nextRunDate, runTimeLine } from "./timeline";
-import type { TimelineDay, TimelineEarlierEntry, TimelineMove, TimelineTeamDay } from "./timeline";
 import {
   endedMoveCount,
   kindLabel,
-  lifecycleLabel,
   moveCount,
   moveSummary,
   openMoveCount,
+  teamCount,
 } from "./transactionCopy";
-import { TransactionReviewAuthenticationFailure } from "./transactionFailure";
+import { TransactionAuthenticationFailure } from "./transactionFailure";
 import type { TransactionRemote } from "./transactionRemote";
 import { useTransactionsPage } from "./useTransactionsPage";
 import type { TransactionsPageController } from "./useTransactionsPage";
@@ -42,7 +46,7 @@ export function TransactionsPage(props: TransactionsPageProps): JSX.Element {
   return (
     <AppShell>
       <Page
-        lede="Every open move across your teams. Choose each move that runs today, then submit once. Saved moves stay editable until their day."
+        lede="Today is for acting. The rest is for planning. Every open move on your teams, split into what runs today and what waits for a later day."
         title="Transactions"
       >
         <Show
@@ -55,11 +59,11 @@ export function TransactionsPage(props: TransactionsPageProps): JSX.Element {
                 feedback={{
                   type: "attention",
                   message:
-                    page.failure() instanceof TransactionReviewAuthenticationFailure
+                    page.failure() instanceof TransactionAuthenticationFailure
                       ? "Your session ended before your moves could be read. Sign in again to continue."
                       : "We could not load your open moves. Try again.",
                   recovery:
-                    page.failure() instanceof TransactionReviewAuthenticationFailure
+                    page.failure() instanceof TransactionAuthenticationFailure
                       ? page.signIn
                       : { label: "Try again", onAction: page.retry },
                 }}
@@ -67,18 +71,16 @@ export function TransactionsPage(props: TransactionsPageProps): JSX.Element {
             }
             when={page.failure() === null}
           >
-            <DockSpacer active={showsPhoneDock(page)}>
+            <DockSpacer active={page.todayMoves().length > 0}>
               <Stack gap="xl">
                 <ActionFeedback feedback={page.feedback()} />
-                <OpenMoveSummary page={page} />
-                <TodaySection page={page} />
-                <Show when={!page.onlyToday()}>
-                  <ScheduledSection page={page} />
-                  <EarlierSection page={page} />
-                </Show>
+                <SummaryLine page={page} />
+                <TodayZone page={page} />
+                <PlanningSheet page={page} />
+                <EarlierSection page={page} />
               </Stack>
             </DockSpacer>
-            <Show when={showsPhoneDock(page)}>
+            <Show when={page.todayMoves().length > 0}>
               <PhoneDock page={page} />
             </Show>
           </Show>
@@ -88,82 +90,74 @@ export function TransactionsPage(props: TransactionsPageProps): JSX.Element {
   );
 }
 
-function OpenMoveSummary(props: SectionProps): JSX.Element {
+function SummaryLine(props: SectionProps): JSX.Element {
   return (
-    <Stack gap="sm">
-      <Box rule="top" ruleTone="ink" space="md">
-        <Stack gap="xs">
-          <Text numeric size="item" weight="semibold">
-            {openMoveCount(props.page.openCount())}
-          </Text>
-          <Text numeric size="caption" tone="muted">
-            {`${String(props.page.todayCount())} today · ${String(props.page.scheduledCount())} scheduled`}
-          </Text>
-        </Stack>
-      </Box>
-      <Inline gap="sm" align="baseline">
-        <Button
-          variant={props.page.onlyToday() ? "secondary" : "quiet"}
-          aria-pressed={props.page.onlyToday() ? "true" : "false"}
-          onClick={props.page.toggleOnlyToday}
-        >
-          Only today
-        </Button>
-        <Show when={props.page.onlyToday()}>
-          <Text size="caption" tone="muted">
-            Showing today only. Press again to see every open move.
-          </Text>
-        </Show>
-      </Inline>
-    </Stack>
+    <Inline gap="sm" align="baseline">
+      <Text numeric size="item" weight="semibold">
+        {openMoveCount(props.page.counts().open)}
+      </Text>
+      <Text numeric size="caption" tone="muted">
+        {`· ${String(props.page.counts().today)} today · ${String(props.page.counts().saved)} saved · ${teamCount(props.page.teamCount())}`}
+      </Text>
+    </Inline>
   );
 }
 
-function TodaySection(props: SectionProps): JSX.Element {
-  const hasToday = (): boolean => props.page.todayCount() > 0;
+function TodayZone(props: SectionProps): JSX.Element {
+  const total = (): number => props.page.todayMoves().length;
+  const chosen = (): number => total() - props.page.undecidedTodayCount();
   return (
-    <Stack as="section" gap="md" labelledBy="today-title">
-      <SectionTitle
-        id="today-title"
-        focusable
-        action={
-          <Show when={hasToday()}>
-            <Stack gap="none" hide="phone">
-              <Button
-                state={props.page.submitting() ? "working" : "idle"}
-                disabled={!props.page.canSubmitToday()}
-                aria-describedby="today-choice-hint"
-                aria-label="Submit today's chosen moves"
-                onClick={props.page.submitToday}
-              >
-                {props.page.submitting() ? "Submitting" : "Submit today"}
-              </Button>
-            </Stack>
-          </Show>
-        }
-      >
-        Today
-      </SectionTitle>
-      <Text size="caption" tone="muted">
-        Choose Do it now or Discard for every move. Submitting applies every choice: it runs the
-        moves you chose and discards the others.
-      </Text>
-      <Show
-        fallback={
-          <EmptyState title="Nothing today">
-            Moves that run now will appear here. Saved moves wait for their day.
-          </EmptyState>
-        }
-        when={hasToday()}
-      >
-        <ChoiceHint page={props.page} />
-        <Stack gap="xl">
-          <For each={props.page.today().teams}>
-            {(card) => <TodayTeamCard card={card} page={props.page} />}
-          </For>
+    <Band labelledBy="today-title">
+      <Stack gap="md">
+        <SectionTitle
+          id="today-title"
+          focusable
+          action={
+            <Show when={total() > 0}>
+              <ResponsiveContent
+                phone={<></>}
+                wide={
+                  <Button
+                    state={props.page.submitting() ? "working" : "idle"}
+                    disabled={!props.page.canSubmitToday()}
+                    aria-describedby="today-choice-hint"
+                    aria-label="Submit today's chosen moves"
+                    onClick={props.page.submitToday}
+                  >
+                    {props.page.submitting() ? "Submitting" : "Submit today"}
+                  </Button>
+                }
+              />
+            </Show>
+          }
+        >
+          Today
+        </SectionTitle>
+        <Stack gap="2xs">
+          <Text numeric size="item" weight="semibold">
+            {total() > 0 ? `${moveCount(total())} for today` : "Nothing for today"}
+          </Text>
+          <Text size="body" tone="muted">
+            {todayCopy(total(), chosen())}
+          </Text>
         </Stack>
-      </Show>
-    </Stack>
+        <Show
+          fallback={
+            <EmptyState title="No moves due">
+              When a move is due today, it appears here for a choice.
+            </EmptyState>
+          }
+          when={total() > 0}
+        >
+          <ChoiceHint page={props.page} />
+          <Stack gap="lg">
+            <For each={props.page.todayMoves()}>
+              {(move) => <TodayCard move={move} page={props.page} />}
+            </For>
+          </Stack>
+        </Show>
+      </Stack>
+    </Band>
   );
 }
 
@@ -185,30 +179,12 @@ function ChoiceHint(props: SectionProps): JSX.Element {
   );
 }
 
-function TodayTeamCard(props: TeamCardProps): JSX.Element {
-  const titleId = (): string => `today-team-${props.card.key}`;
-  return (
-    <Box rule="top" ruleTone="ink" space="lg">
-      <Stack as="section" gap="md" labelledBy={titleId()}>
-        <TeamHeading card={props.card} id={titleId()} level={3} />
-        <MoveList>
-          <For each={props.card.moves}>
-            {(move) => (
-              <TodayMoveRow move={move} page={props.page} teamName={props.card.team.name} />
-            )}
-          </For>
-        </MoveList>
-      </Stack>
-    </Box>
-  );
-}
-
-function TodayMoveRow(props: TodayMoveRowProps): JSX.Element {
-  const choice = (): TodayChoice | undefined => props.page.choiceFor(props.move.item.id);
-  const stale = (): boolean => props.move.item.staleness.status !== "current";
+function TodayCard(props: TodayCardProps): JSX.Element {
+  const choice = (): TodayChoice | undefined => props.page.choiceFor(props.move);
+  const invalid = (): boolean => props.move.validation.status !== "current";
   const status = (): string => {
     switch (choice()) {
-      case "do_it_now":
+      case "now":
         return "Runs when you submit.";
       case "discard":
         return "Discarded when you submit.";
@@ -217,20 +193,41 @@ function TodayMoveRow(props: TodayMoveRowProps): JSX.Element {
     }
   };
   return (
-    <RuleListItem layout="stack">
-      <Inline gap="lg" align="start" justify="between" growFirst collapse>
-        <MoveContent move={props.move} />
+    <Box rule="top" ruleTone="ink" space="lg">
+      <Stack gap="md">
+        <Stack gap="2xs">
+          <Text size="caption" weight="semibold">
+            {props.move.team.name}
+          </Text>
+          <Text size="caption" tone="muted">
+            {leagueDisplayName(props.move.team.league)} · {sportDisplayName(props.move.team.sport)}
+          </Text>
+        </Stack>
+        <Stack gap="2xs">
+          <Inline gap="sm" align="baseline">
+            <Badge tone="accent">{kindLabel(props.move.kind)}</Badge>
+            <Text size="item" weight="semibold">
+              {moveSummary(props.move)}
+            </Text>
+          </Inline>
+          <Show when={props.move.reason.length > 0}>
+            <Text size="caption" tone="muted">
+              {props.move.reason}
+            </Text>
+          </Show>
+          <MoveCheck move={props.move} />
+        </Stack>
         <Stack gap="sm">
           <Text size="caption" tone={choice() === undefined ? "danger" : "muted"}>
             {status()}
           </Text>
           <Inline gap="sm" align="baseline" justify="end">
             <Button
-              variant={choice() === "do_it_now" ? "secondary" : "quiet"}
-              aria-pressed={choice() === "do_it_now" ? "true" : "false"}
-              disabled={stale() || props.page.submitting()}
-              aria-label={`Do it now: ${moveLabel(props.move, props.teamName)}`}
-              onClick={() => props.page.chooseToday(props.move.item.id, "do_it_now")}
+              variant={choice() === "now" ? "secondary" : "quiet"}
+              aria-pressed={choice() === "now" ? "true" : "false"}
+              disabled={invalid() || props.page.submitting()}
+              aria-label={`Do it now: ${moveLabel(props.move)}`}
+              onClick={() => props.page.chooseToday(props.move, "now")}
             >
               Do it now
             </Button>
@@ -239,44 +236,46 @@ function TodayMoveRow(props: TodayMoveRowProps): JSX.Element {
               tone="danger"
               aria-pressed={choice() === "discard" ? "true" : "false"}
               disabled={props.page.submitting()}
-              aria-label={`Discard: ${moveLabel(props.move, props.teamName)}`}
-              onClick={() => props.page.chooseToday(props.move.item.id, "discard")}
+              aria-label={`Discard: ${moveLabel(props.move)}`}
+              onClick={() => props.page.chooseToday(props.move, "discard")}
             >
               Discard
             </Button>
           </Inline>
         </Stack>
-      </Inline>
-      <Show when={stale()}>
-        <Text size="caption" tone="danger">
-          This move needs another look before it can run. You can discard it here.
-        </Text>
-      </Show>
-    </RuleListItem>
+      </Stack>
+    </Box>
   );
 }
 
-function ScheduledSection(props: SectionProps): JSX.Element {
+function PlanningSheet(props: SectionProps): JSX.Element {
+  const teams = (): ReadonlyArray<TransactionMoveTeamDayView> => props.page.savedTeams();
   return (
-    <Stack as="section" gap="md" labelledBy="scheduled-title">
-      <SectionTitle id="scheduled-title" focusable>
-        Scheduled
+    <Stack as="section" gap="md" labelledBy="saved-title">
+      <SectionTitle id="saved-title" focusable>
+        Saved for later
       </SectionTitle>
-      <Text size="caption" tone="muted">
-        Saved moves wait for their day. You can change or discard any saved move until then.
+      <Inline gap="sm" align="baseline">
+        <Text numeric size="item" weight="semibold">
+          {moveCount(props.page.counts().saved)}
+        </Text>
+        <Text numeric size="caption" tone="muted">
+          {`· ${teamCount(teams().length)}`}
+        </Text>
+      </Inline>
+      <Text size="body" tone="muted">
+        Each waits for its day. You can change or discard any saved move until then.
       </Text>
       <Show
         fallback={
-          <EmptyState title="Nothing scheduled">
-            Moves you save for a later day will appear here, one day at a time.
+          <EmptyState title="Nothing saved">
+            Every team is clear. When you propose a change, it appears here with the day it runs.
           </EmptyState>
         }
-        when={props.page.future().length > 0}
+        when={teams().length > 0}
       >
-        <Stack gap="2xl">
-          <For each={props.page.future()}>
-            {(day) => <ScheduledDay day={day} page={props.page} />}
-          </For>
+        <Stack gap="xl">
+          <For each={teams()}>{(card) => <SavedTeamCard card={card} page={props.page} />}</For>
         </Stack>
       </Show>
       <Show when={props.page.hasMoreOpen()}>
@@ -294,88 +293,93 @@ function ScheduledSection(props: SectionProps): JSX.Element {
   );
 }
 
-function ScheduledDay(props: ScheduledDayProps): JSX.Element {
-  const titleId = (): string => `day-${props.day.key}`;
-  return (
-    <Stack as="section" gap="lg" labelledBy={titleId()}>
-      <SectionTitle id={titleId()} level={3}>
-        {props.day.date === undefined ? "Date not set" : formatCalendarDate(props.day.date)}
-      </SectionTitle>
-      <Stack gap="xl">
-        <For each={props.day.teams}>
-          {(card) => <FutureTeamCard card={card} page={props.page} />}
-        </For>
-      </Stack>
-    </Stack>
-  );
-}
-
-function FutureTeamCard(props: TeamCardProps): JSX.Element {
-  const titleId = (): string => `future-team-${props.card.key}`;
+function SavedTeamCard(props: SavedTeamCardProps): JSX.Element {
+  const titleId = (): string => `saved-team-${props.card.team.id}`;
   return (
     <Box rule="top" ruleTone="ink" space="lg">
       <Stack as="section" gap="md" labelledBy={titleId()}>
-        <TeamHeading card={props.card} id={titleId()} level={4} />
-        <MoveList>
-          <For each={props.card.moves}>
-            {(move) => <FutureMoveRow card={props.card} move={move} page={props.page} />}
-          </For>
-        </MoveList>
+        <Stack gap="2xs">
+          <Inline gap="sm" align="baseline" justify="between">
+            <Heading id={titleId()} level={3} size="item">
+              {props.card.team.name}
+            </Heading>
+            <Text numeric size="caption" tone="faint">
+              {moveCount(props.card.moves.length)}
+            </Text>
+          </Inline>
+          <Text size="caption" tone="muted">
+            {leagueDisplayName(props.card.team.league)} · {sportDisplayName(props.card.team.sport)}
+          </Text>
+        </Stack>
+        <Box rule="top" space="none">
+          <RuleList>
+            <For each={props.card.moves}>
+              {(move) => <SavedMoveRow move={move} page={props.page} />}
+            </For>
+          </RuleList>
+        </Box>
       </Stack>
     </Box>
   );
 }
 
-function FutureMoveRow(props: FutureMoveRowProps): JSX.Element {
-  const minimum = (): string | undefined =>
-    props.card.today === undefined ? undefined : nextRunDate(props.card.today);
-  const savedFor = (): string =>
-    props.card.runDate === undefined
-      ? "Saved for a later day."
-      : `Saved for ${formatCalendarDate(props.card.runDate)}.`;
+function SavedMoveRow(props: SavedMoveRowProps): JSX.Element {
+  const invalid = (): boolean => props.move.validation.status !== "current";
+  const editing = (): boolean => props.page.editing() === props.move.move;
   return (
     <RuleListItem layout="stack">
       <Inline gap="lg" align="start" justify="between" growFirst collapse>
-        <MoveContent move={props.move} />
+        <Stack gap="2xs">
+          <Inline gap="sm" align="baseline">
+            <Badge tone="accent">{kindLabel(props.move.kind)}</Badge>
+            <Text size="item" weight="semibold">
+              {moveSummary(props.move)}
+            </Text>
+          </Inline>
+          <Show when={props.move.reason.length > 0}>
+            <Text size="caption" tone="muted">
+              {props.move.reason}
+            </Text>
+          </Show>
+          <DateFacts move={props.move} />
+          <MoveCheck move={props.move} />
+        </Stack>
         <Stack gap="sm">
-          <Text size="caption" tone="muted">
-            {savedFor()} Editable until then.
-          </Text>
           <Inline gap="sm" align="baseline" justify="end">
-            <Button
-              variant="link"
-              disabled={props.page.saving() || props.page.submitting()}
-              aria-label={`Change date: ${moveLabel(props.move, props.card.team.name)}`}
-              onClick={() => props.page.startEdit(props.move, props.card.runDate)}
-            >
-              Change date
-            </Button>
+            <Show when={!invalid()}>
+              <Button
+                variant="link"
+                disabled={props.page.saving() || props.page.discarding() !== undefined}
+                aria-label={`Change date: ${moveLabel(props.move)}`}
+                onClick={() => props.page.startEdit(props.move)}
+              >
+                {props.move.runDay === undefined ? "Set date" : "Change date"}
+              </Button>
+            </Show>
             <Button
               variant="quiet"
               tone="danger"
-              disabled={props.page.saving() || props.page.submitting()}
-              state={props.page.discarding() === props.move.item.id ? "working" : "idle"}
-              aria-label={`Discard: ${moveLabel(props.move, props.card.team.name)}`}
+              disabled={props.page.saving() || props.page.discarding() !== undefined}
+              state={props.page.discarding() === props.move.move ? "working" : "idle"}
+              aria-label={`Discard: ${moveLabel(props.move)}`}
               onClick={() => props.page.discardMove(props.move)}
             >
-              {props.page.discarding() === props.move.item.id ? "Discarding" : "Discard"}
+              {props.page.discarding() === props.move.move ? "Discarding" : "Discard"}
             </Button>
           </Inline>
         </Stack>
       </Inline>
-      <Show when={props.page.editing() === props.move.item.id}>
-        <Form gap="sm" onSubmit={props.page.saveEdit}>
+      <Show when={editing()}>
+        <Form gap="sm" onSubmit={() => props.page.saveEdit(props.move)}>
           <Stack gap="sm">
             <TextField
               label="Run date"
               type="date"
-              min={minimum()}
               value={props.page.editingDate()}
               onInput={(event) => props.page.setEditingDate(event.currentTarget.value)}
             />
             <Text size="caption" tone="muted">
-              Saving withdraws this saved move and proposes a replacement for the date you choose.
-              It does not run it.
+              Saving changes the day this move runs. It does not run it.
             </Text>
             <Show when={props.page.editingError()}>
               {(error) => (
@@ -388,7 +392,7 @@ function FutureMoveRow(props: FutureMoveRowProps): JSX.Element {
               <Button
                 type="submit"
                 state={props.page.saving() ? "working" : "idle"}
-                disabled={props.page.discarding() !== undefined}
+                disabled={invalid() || props.page.discarding() !== undefined}
               >
                 {props.page.saving() ? "Saving" : "Save changes"}
               </Button>
@@ -400,6 +404,59 @@ function FutureMoveRow(props: FutureMoveRowProps): JSX.Element {
         </Form>
       </Show>
     </RuleListItem>
+  );
+}
+
+function DateFacts(props: { readonly move: TransactionMoveView }): JSX.Element {
+  return (
+    <DefinitionList>
+      <Definition
+        term="Runs"
+        value={
+          props.move.runDay === undefined ? "No date set" : formatCalendarDate(props.move.runDay)
+        }
+      />
+      <Definition
+        term="Takes effect"
+        value={
+          props.move.effectiveDate === undefined
+            ? "When the league applies it"
+            : formatCalendarDate(props.move.effectiveDate)
+        }
+      />
+    </DefinitionList>
+  );
+}
+
+function MoveCheck(props: { readonly move: TransactionMoveView }): JSX.Element {
+  const invalid = (): boolean => props.move.validation.status !== "current";
+  const reasons = (): string =>
+    props.move.validation.reasons.map((reason) => reason.detail).join(" ");
+  const checked = (): string | undefined => {
+    if (props.move.check.status === "last_checked") {
+      return props.move.check.note;
+    }
+    return props.move.validation.checkedAt === undefined
+      ? undefined
+      : `Checked ${formatDateTime(props.move.validation.checkedAt)}.`;
+  };
+  return (
+    <Show when={invalid() || checked() !== undefined}>
+      <Stack gap="2xs">
+        <Show when={invalid()}>
+          <Text size="caption" tone="danger">
+            {reasons()}
+          </Text>
+        </Show>
+        <Show when={checked()}>
+          {(line) => (
+            <Text size="caption" tone="faint">
+              {line()}
+            </Text>
+          )}
+        </Show>
+      </Stack>
+    </Show>
   );
 }
 
@@ -422,7 +479,7 @@ function EarlierSection(props: SectionProps): JSX.Element {
         Earlier
       </SectionTitle>
       <Text size="caption" tone="muted">
-        {endedMoveCount(props.page.endedCount())}
+        {endedMoveCount(props.page.earlierCount())}
       </Text>
       <Show when={props.page.earlierEnabled()}>
         <Show
@@ -453,7 +510,7 @@ function EarlierSection(props: SectionProps): JSX.Element {
             when={props.page.earlier().length > 0}
           >
             <RuleList>
-              <For each={props.page.earlier()}>{(entry) => <EarlierRow entry={entry} />}</For>
+              <For each={props.page.earlier()}>{(move) => <EarlierRow move={move} />}</For>
             </RuleList>
             <Show when={props.page.hasMoreEarlier()}>
               <Inline gap="sm">
@@ -475,107 +532,35 @@ function EarlierSection(props: SectionProps): JSX.Element {
   );
 }
 
-function EarlierRow(props: EarlierRowProps): JSX.Element {
-  const detail = (): string | undefined =>
-    props.entry.item.execution?.detail ?? props.entry.item.outcomeDetail;
+function EarlierRow(props: { readonly move: TransactionMoveView }): JSX.Element {
   return (
     <RuleListItem layout="stack" dense>
       <Stack gap="2xs">
         <Inline gap="sm" align="baseline">
-          <Badge tone={props.entry.item.lifecycle === "failed" ? "neutral" : "accent"}>
-            {lifecycleLabel(props.entry.item.lifecycle)}
+          <Badge tone={props.move.result === "failed" ? "neutral" : "accent"}>
+            {resultLabel(props.move)}
           </Badge>
           <Text size="item" weight="semibold">
-            {moveSummary(props.entry.item)}
+            {moveSummary(props.move)}
           </Text>
         </Inline>
         <Text size="caption" tone="muted">
-          {teamLine(props.entry)}
+          {props.move.team.name} · {leagueDisplayName(props.move.team.league)} ·{" "}
+          {sportDisplayName(props.move.team.sport)}
         </Text>
-        <Show when={detail()}>
-          {(line) => (
-            <Text size="caption" tone="muted">
-              {line()}
-            </Text>
-          )}
-        </Show>
       </Stack>
     </RuleListItem>
   );
 }
 
-function MoveContent(props: MoveContentProps): JSX.Element {
-  return (
-    <Stack gap="2xs">
-      <Inline gap="sm" align="baseline">
-        <Badge tone="accent">{kindLabel(props.move.item.kind)}</Badge>
-        <Text size="item" weight="semibold">
-          {moveSummary(props.move.item)}
-        </Text>
-      </Inline>
-      <Show when={effectiveDateLine(props.move.item, props.move.effectiveRule)}>
-        {(line) => (
-          <Text size="caption" tone="muted">
-            {line()}
-          </Text>
-        )}
-      </Show>
-      <StaleReasons item={props.move.item} />
-    </Stack>
-  );
-}
-
-function StaleReasons(props: { readonly item: TransactionProposalItemView }): JSX.Element {
-  return (
-    <Show when={props.item.staleness.status !== "current"}>
-      <Text size="caption" tone="danger">
-        {props.item.staleness.reasons.map((reason) => reason.detail).join(" ")}
-      </Text>
-    </Show>
-  );
-}
-
-function MoveList(props: { readonly children: JSX.Element }): JSX.Element {
-  return (
-    <Box rule="top" space="none">
-      <RuleList>{props.children}</RuleList>
-    </Box>
-  );
-}
-
-function TeamHeading(props: TeamHeadingProps): JSX.Element {
-  return (
-    <Stack gap="2xs">
-      <Inline gap="sm" align="baseline" justify="between">
-        <Heading id={props.id} level={props.level} size="item">
-          {props.card.team.name}
-        </Heading>
-        <Text numeric size="caption" tone="faint">
-          {moveCount(props.card.moves.length)}
-        </Text>
-      </Inline>
-      <Text size="caption" tone="muted">
-        {leagueDisplayName(props.card.team.league)} · {sportDisplayName(props.card.team.sport)}
-      </Text>
-      <Show when={runTimeLine(props.card)}>
-        {(line) => (
-          <Text size="caption" tone="muted">
-            {line()}
-          </Text>
-        )}
-      </Show>
-    </Stack>
-  );
-}
-
 function PhoneDock(props: SectionProps): JSX.Element {
   return (
-    <Stack gap="none" hide="wide">
+    <Stack hide="wide" gap="2xs">
       <Dock id="today-dock">
         <Inline gap="sm" justify="between">
           <Stack gap="2xs">
             <Text numeric size="body" weight="semibold">
-              {`${moveCount(props.page.todayCount())} today`}
+              {`${moveCount(props.page.todayMoves().length)} today`}
             </Text>
             <Show
               fallback={
@@ -604,16 +589,46 @@ function PhoneDock(props: SectionProps): JSX.Element {
   );
 }
 
-function showsPhoneDock(page: TransactionsPageController): boolean {
-  return page.todayCount() > 0;
+function todayCopy(total: number, chosen: number): string {
+  if (total === 0) {
+    return "No move is waiting to run today.";
+  }
+  if (chosen === total) {
+    return `All ${String(total)} ${total === 1 ? "is" : "are"} chosen. Submitting runs ${total === 1 ? "it" : "them"} now.`;
+  }
+  return `${String(chosen)} of ${String(total)} chosen. Submitting runs only the moves you chose.`;
 }
 
-function teamLine(entry: TimelineEarlierEntry): string {
-  return `${entry.team.name} · ${leagueDisplayName(entry.team.league)} · ${sportDisplayName(entry.team.sport)}`;
+function resultLabel(move: TransactionMoveView): string {
+  if (move.result === "executed") {
+    return "Ran";
+  }
+  if (move.result === "failed") {
+    return "Failed";
+  }
+  if (move.result === "skipped") {
+    return "Skipped";
+  }
+  if (move.result === "unknown") {
+    return "Not confirmed";
+  }
+  if (move.result === "pending") {
+    return "Waiting on the league";
+  }
+  if (move.result === "withdrawn") {
+    return "Withdrawn";
+  }
+  if (move.result === "expired") {
+    return "Expired";
+  }
+  if (move.decision === "discarded") {
+    return "Discarded";
+  }
+  return "Open";
 }
 
-function moveLabel(move: TimelineMove, teamName: string): string {
-  return `${moveSummary(move.item)} for ${teamName}`;
+function moveLabel(move: TransactionMoveView): string {
+  return `${moveSummary(move)} for ${move.team.name}`;
 }
 
 type TransactionsPageProps = {
@@ -624,41 +639,19 @@ type SectionProps = {
   readonly page: TransactionsPageController;
 };
 
-type TodayChoice = "do_it_now" | "discard";
+type TodayChoice = "now" | "discard";
 
-type TeamCardProps = {
-  readonly card: TimelineTeamDay;
+type TodayCardProps = {
+  readonly move: TransactionMoveView;
   readonly page: TransactionsPageController;
 };
 
-type MoveRowProps = {
-  readonly move: TimelineMove;
+type SavedTeamCardProps = {
+  readonly card: TransactionMoveTeamDayView;
   readonly page: TransactionsPageController;
 };
 
-type TodayMoveRowProps = MoveRowProps & {
-  readonly teamName: string;
-};
-
-type FutureMoveRowProps = MoveRowProps & {
-  readonly card: TimelineTeamDay;
-};
-
-type ScheduledDayProps = {
-  readonly day: TimelineDay;
+type SavedMoveRowProps = {
+  readonly move: TransactionMoveView;
   readonly page: TransactionsPageController;
-};
-
-type MoveContentProps = {
-  readonly move: TimelineMove;
-};
-
-type EarlierRowProps = {
-  readonly entry: TimelineEarlierEntry;
-};
-
-type TeamHeadingProps = {
-  readonly card: TimelineTeamDay;
-  readonly id: string;
-  readonly level: 3 | 4;
 };

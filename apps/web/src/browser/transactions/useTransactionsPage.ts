@@ -7,60 +7,66 @@ import { useSignInRecovery } from "#browser/session/signInRecovery.ts";
 import type { ActionFeedbackState, RecoveryAction } from "#browser/shared-ui/ActionFeedback.tsx";
 import { formatCalendarDate } from "#browser/shared-ui/formatTime.ts";
 import type {
-  DismissTransactionProposalData,
-  TransactionReviewData,
+  TransactionMoveActionData,
+  TransactionMoveTeamDayView,
+  TransactionMoveView,
+  TransactionSubmitTodayData,
 } from "#contracts/connections/transactionContract.ts";
 
-import { buildTimeline, dayMoveTotal, dayMoves } from "./timeline";
-import type { TimelineDay, TimelineEarlierEntry, TimelineMove, TimelineTeamDay } from "./timeline";
 import { moveCount } from "./transactionCopy";
-import {
-  describeTransactionDismissalFailure,
-  describeTransactionRescheduleFailure,
-  describeTransactionSubmissionFailure,
-} from "./transactionFailure";
+import { describeTransactionActionFailure } from "./transactionFailure";
 import { transactionQueries } from "./transactionQueries";
 import type { TransactionRemote } from "./transactionRemote";
 
 export function useTransactionsPage(props: TransactionsPageOptions): TransactionsPageController {
-  const open = useInfiniteQuery(() => transactionQueries.list(props.remote(), { state: "open" }));
   const signIn = useSignInRecovery();
+  const open = useInfiniteQuery(() => transactionQueries.timeline(props.remote()));
   const [earlierEnabled, setEarlierEnabled] = createSignal(false);
   const earlier = useInfiniteQuery(() => ({
-    ...transactionQueries.list(props.remote(), { state: "closed" }),
+    ...transactionQueries.list(props.remote(), { state: "ended" }),
     enabled: earlierEnabled(),
   }));
   const [feedback, setFeedback] = createSignal<ActionFeedbackState>();
   const [choices, setChoices] = createSignal<Readonly<Record<string, TodayChoice>>>({});
-  const [onlyToday, setOnlyToday] = createSignal(false);
   const [editing, setEditing] = createSignal<string>();
   const [editingDate, setEditingDate] = createSignal("");
   const [editingError, setEditingError] = createSignal<string>();
 
-  const openSets = createMemo(() =>
-    open.isSuccess ? open.data.pages.flatMap((page) => page.sets) : [],
+  const openMoves = createMemo(() =>
+    open.isSuccess ? open.data.pages.flatMap((page) => page.moves) : [],
   );
-  const earlierSets = createMemo(() =>
-    earlier.isSuccess ? earlier.data.pages.flatMap((page) => page.sets) : [],
-  );
-  const timeline = createMemo(() => buildTimeline(openSets(), earlierSets()));
   const counts = createMemo(() => {
     const first = open.isSuccess ? open.data.pages[0] : undefined;
-    return first?.counts ?? { open: 0, ended: 0 };
+    return first?.counts ?? { open: 0, today: 0, saved: 0, ended: 0 };
   });
-  const todayMoves = createMemo(() => dayMoves(timeline().today));
+  const teamCount = createMemo(() => {
+    const first = open.isSuccess ? open.data.pages[0] : undefined;
+    return first?.teamCount ?? 0;
+  });
+  const todayMoves = createMemo(() => {
+    const days = open.isSuccess ? open.data.pages.flatMap((page) => page.days) : [];
+    return days
+      .filter((day) => day.today)
+      .flatMap((day) => day.teams.flatMap((team) => team.moves))
+      .sort(compareMoveCards);
+  });
+  const todayTeams = createMemo(() => groupByTeam(todayMoves()));
+
+  const savedTeams = createMemo(() => {
+    const todayIds = new Set(todayMoves().map((move) => move.move));
+    return groupByTeam(
+      openMoves().filter((move) => !todayIds.has(move.move) && move.decision === "saved"),
+    );
+  });
   const undecidedTodayCount = createMemo(
-    () => todayMoves().filter((move) => choices()[move.item.id] === undefined).length,
+    () => todayMoves().filter((move) => choices()[choiceKey(move)] === undefined).length,
   );
   const canSubmitToday = createMemo(
     () =>
       todayMoves().length > 0 &&
       todayMoves().every((move) => {
-        const choice = choices()[move.item.id];
-        return (
-          choice === "discard" ||
-          (choice === "do_it_now" && move.item.staleness.status === "current")
-        );
+        const choice = choices()[choiceKey(move)];
+        return choice === "discard" || (choice === "now" && move.validation.status === "current");
       }),
   );
 
@@ -73,63 +79,23 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
 
   const submit = useMutation(() => ({
     mutationKey: ["transactions", "submit-today"],
-    mutationFn: async (input: TodaySubmission): Promise<TodaySubmissionResult> => {
-      const results: Array<TransactionReviewData> = [];
-      for (const [set, include] of itemsBySet(input.include)) {
-        results.push(await props.remote().submit({ set, include, bids: [] }));
-      }
-      const dismissed: Array<DismissTransactionProposalData> = [];
-      const dismissalFailures: Array<unknown> = [];
-      for (const [set, items] of itemsBySet(input.discard)) {
-        try {
-          dismissed.push(await props.remote().dismiss({ set, items }));
-        } catch (error) {
-          dismissalFailures.push(error);
-        }
-      }
-      return { results, dismissed, dismissalFailures };
-    },
-    onSuccess: (
-      outcome: TodaySubmissionResult,
-      input: TodaySubmission,
-      _onMutateResult: unknown,
-      context: MutationFunctionContext,
-    ) => {
-      for (const result of outcome.results) {
-        void context.client.setQueryData(
-          transactionQueries.reviewKey(result.review.set.id),
-          result.review,
-        );
-      }
-      for (const result of outcome.dismissed) {
-        if (result.outcome === "dismissed") {
-          void context.client.setQueryData(
-            transactionQueries.reviewKey(result.review.set.id),
-            result.review,
-          );
-        }
-      }
-      void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
-      const discarded = outcome.dismissed.filter((result) => result.outcome === "dismissed").length;
-      const refused = outcome.dismissed.flatMap((result) =>
-        result.outcome === "refused" ? [`That move was not discarded. ${result.detail}`] : [],
-      );
-      const failures = outcome.dismissalFailures.map(
-        (error) => describeTransactionDismissalFailure(error).message,
-      );
-      const message = submissionMessage(outcome.results, input.include.length, discarded);
-      const problems = [...refused, ...failures];
+    mutationFn: (moves: ReadonlyArray<TransactionMoveView>) =>
+      props.remote().submitToday({
+        choices: moves.flatMap((move) => {
+          const choice = choices()[choiceKey(move)];
+          return choice === undefined ? [] : [{ team: move.team.id, move: move.move, choice }];
+        }),
+      }),
+    onSuccess: (outcome: TransactionSubmitTodayData) => {
       setFeedback({
-        type: problems.length > 0 ? "attention" : "success",
-        message: [message, ...problems].filter((part) => part.length > 0).join(" "),
+        type: outcome.refusals.length > 0 ? "attention" : "success",
+        message: submissionMessage(outcome),
       });
       setChoices({});
-      setEditing(undefined);
       refresh();
     },
-    onError: (error: Error, _input, _onMutateResult, context: MutationFunctionContext) => {
-      void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
-      const failure = describeTransactionSubmissionFailure(error);
+    onError: (error: Error) => {
+      const failure = describeTransactionActionFailure(error);
       setFeedback({
         type: "attention",
         message: failure.message,
@@ -139,83 +105,34 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     },
   }));
 
-  const dismiss = useMutation(() => ({
-    mutationKey: ["transactions", "discard"],
-    mutationFn: (move: TimelineMove) =>
-      props.remote().dismiss({ set: move.set, items: [move.item.id] }),
-    onSuccess: (
-      data: DismissTransactionProposalData,
-      _move: TimelineMove,
-      _onMutateResult: unknown,
-      context: MutationFunctionContext,
-    ) => {
-      void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
-      if (data.outcome === "refused") {
-        setFeedback({
-          type: "attention",
-          message: `That move was not discarded. ${data.detail}`,
-        });
-      } else {
-        void context.client.setQueryData(
-          transactionQueries.reviewKey(data.review.set.id),
-          data.review,
-        );
-        setFeedback({ type: "success", message: `Discarded ${moveCount(1)}.` });
-      }
-      refresh();
-    },
-    onError: (error: Error, _move, _onMutateResult, context: MutationFunctionContext) => {
-      void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
-      const failure = describeTransactionDismissalFailure(error);
-      setFeedback({
-        type: "attention",
-        message: failure.message,
-        ...(failure.kind === "authentication" ? { recovery: signIn } : {}),
-      });
-      refresh();
-    },
-  }));
-
-  const reschedule = useMutation(() => ({
-    mutationKey: ["transactions", "reschedule"],
-    mutationFn: (input: { readonly move: TimelineMove; readonly window: string }) =>
-      props.remote().reschedule({
-        set: input.move.set,
-        items: [input.move.item.id],
-        window: input.window,
+  const save = useMutation(() => ({
+    mutationKey: ["transactions", "save"],
+    mutationFn: (input: { readonly move: TransactionMoveView; readonly runDay: string }) =>
+      props.remote().save({
+        team: input.move.team.id,
+        move: input.move.move,
+        runDay: input.runDay,
       }),
-    onSuccess: (
-      data: Awaited<ReturnType<TransactionRemote["reschedule"]>>,
-      _input: { readonly move: TimelineMove; readonly window: string },
-      _onMutateResult: unknown,
-      context: MutationFunctionContext,
-    ) => {
-      void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
+    onSuccess: (data: TransactionMoveActionData, input, _onMutateResult, context) => {
       if (data.status === "refused") {
         setFeedback({
           type: "attention",
-          message: `The saved move was withdrawn, but no replacement could be saved. ${data.detail}`,
+          message: data.refusals.map((entry) => entry.detail).join(" "),
         });
       } else {
         setEditing(undefined);
         setEditingError(undefined);
-        const refused =
-          data.refused.length === 0
-            ? ""
-            : ` This move could not be saved, so it is no longer open. ${data.refused.map((entry) => entry.reason).join(" ")}`;
         setFeedback({
           type: "success",
-          message:
-            data.saved === 0
-              ? `No replacement was saved for ${formatCalendarDate(data.window)}.${refused}`
-              : `Saved ${moveCount(data.saved)} for ${formatCalendarDate(data.window)}.${refused}`,
+          message: `Saved for ${formatCalendarDate(input.runDay)}.`,
         });
       }
+      void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
       refresh();
     },
     onError: (error: Error, _input, _onMutateResult, context: MutationFunctionContext) => {
       void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
-      const failure = describeTransactionRescheduleFailure(error);
+      const failure = describeTransactionActionFailure(error);
       setFeedback({
         type: "attention",
         message: failure.message,
@@ -225,50 +142,55 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     },
   }));
 
-  const futureCardOf = (
-    moveId: string,
-  ): { readonly card: TimelineTeamDay; readonly move: TimelineMove } | undefined => {
-    for (const day of timeline().future) {
-      for (const card of day.teams) {
-        const move = card.moves.find((entry) => entry.item.id === moveId);
-        if (move !== undefined) {
-          return { card, move };
-        }
+  const discard = useMutation(() => ({
+    mutationKey: ["transactions", "discard"],
+    mutationFn: (move: TransactionMoveView) =>
+      props.remote().discard({ team: move.team.id, move: move.move }),
+    onSuccess: (data: TransactionMoveActionData, _move, _onMutateResult, context) => {
+      if (data.status === "refused") {
+        setFeedback({
+          type: "attention",
+          message: data.refusals.map((entry) => entry.detail).join(" "),
+        });
+      } else {
+        setFeedback({ type: "success", message: `Discarded ${moveCount(1)}.` });
       }
-    }
-    return undefined;
-  };
+      void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
+      refresh();
+    },
+    onError: (error: Error, _move, _onMutateResult, context: MutationFunctionContext) => {
+      void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
+      const failure = describeTransactionActionFailure(error);
+      setFeedback({
+        type: "attention",
+        message: failure.message,
+        ...(failure.kind === "authentication" ? { recovery: signIn } : {}),
+      });
+      refresh();
+    },
+  }));
 
-  const chooseToday = (moveId: string, choice: TodayChoice): void => {
+  const chooseToday = (move: TransactionMoveView, choice: TodayChoice): void => {
     if (submit.isPending) {
       return;
     }
     setFeedback(undefined);
-    setChoices((current) => ({ ...current, [moveId]: choice }));
+    setChoices((current) => ({ ...current, [choiceKey(move)]: choice }));
   };
 
   const submitToday = (): void => {
     if (!canSubmitToday() || submit.isPending) {
       return;
     }
-    const include = todayMoves().filter((move) => choices()[move.item.id] === "do_it_now");
-    const discard = todayMoves().filter((move) => choices()[move.item.id] === "discard");
     setFeedback(undefined);
-    void submit.mutate({ include, discard });
+    void submit.mutate(todayMoves());
   };
 
-  const discardMove = (move: TimelineMove): void => {
-    if (!dismiss.isPending && !submit.isPending) {
-      setFeedback(undefined);
-      void dismiss.mutate(move);
-    }
-  };
-
-  const startEdit = (move: TimelineMove, runDate: string | undefined): void => {
+  const startEdit = (move: TransactionMoveView): void => {
     setFeedback(undefined);
     setEditingError(undefined);
-    setEditing(move.item.id);
-    setEditingDate(move.item.window ?? runDate ?? "");
+    setEditing(move.move);
+    setEditingDate(move.runDay ?? "");
   };
 
   const cancelEdit = (): void => {
@@ -276,43 +198,39 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     setEditingError(undefined);
   };
 
-  const saveEdit = (): void => {
-    const target = futureCardOf(editing() ?? "");
-    if (target === undefined) {
-      return;
-    }
+  const saveEdit = (move: TransactionMoveView): void => {
     const date = editingDate();
     if (date.length === 0) {
       setEditingError("Choose a date.");
       return;
     }
-    if (target.card.today !== undefined && date <= target.card.today) {
-      setEditingError("Choose a date after today.");
-      return;
-    }
     setEditingError(undefined);
-    if (!reschedule.isPending) {
-      void reschedule.mutate({ move: target.move, window: date });
+    if (!save.isPending && !discard.isPending) {
+      void save.mutate({ move, runDay: date });
+    }
+  };
+
+  const discardMove = (move: TransactionMoveView): void => {
+    if (!discard.isPending && !submit.isPending) {
+      setFeedback(undefined);
+      void discard.mutate(move);
     }
   };
 
   return {
-    today: () => timeline().today,
-    future: () => timeline().future,
-    earlier: () => timeline().earlier,
-    openCount: () => counts().open,
-    todayCount: () => dayMoveTotal(timeline().today),
-    scheduledCount: () => Math.max(0, counts().open - dayMoveTotal(timeline().today)),
-    onlyToday,
-    toggleOnlyToday: () => setOnlyToday((current) => !current),
-    choiceFor: (moveId) => choices()[moveId],
+    todayMoves,
+    todayTeams,
+    savedTeams,
+    counts,
+    teamCount,
+    choiceFor: (move) => choices()[choiceKey(move)],
     chooseToday,
     undecidedTodayCount,
     canSubmitToday,
     submitToday,
     submitting: () => submit.isPending,
     discardMove,
-    discarding: () => (dismiss.isPending ? dismiss.variables?.item.id : undefined),
+    discarding: () => (discard.isPending ? discard.variables?.move : undefined),
     startEdit,
     cancelEdit,
     saveEdit,
@@ -320,8 +238,7 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     editingDate,
     setEditingDate,
     editingError,
-    saving: () => reschedule.isPending,
-    endedCount: () => counts().ended,
+    saving: () => save.isPending,
     isLoading: () => open.isPending,
     failure: () => open.error,
     retry: () => open.refetch().then(() => undefined),
@@ -334,6 +251,8 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
         void open.fetchNextPage();
       }
     },
+    earlier: () => (earlier.isSuccess ? earlier.data.pages.flatMap((page) => page.moves) : []),
+    earlierCount: () => counts().ended,
     earlierEnabled,
     toggleEarlier: () => setEarlierEnabled((current) => !current),
     earlierLoading: () => earlier.isPending,
@@ -349,72 +268,78 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
   };
 }
 
-function itemsBySet(
-  moves: ReadonlyArray<TimelineMove>,
-): ReadonlyArray<readonly [string, ReadonlyArray<string>]> {
-  const bySet = new Map<string, Array<string>>();
+function groupByTeam(
+  moves: ReadonlyArray<TransactionMoveView>,
+): ReadonlyArray<TransactionMoveTeamDayView> {
+  const byTeam = new Map<
+    string,
+    { readonly team: TransactionMoveView["team"]; moves: Array<TransactionMoveView> }
+  >();
   for (const move of moves) {
-    const current = bySet.get(move.set) ?? [];
-    current.push(move.item.id);
-    bySet.set(move.set, current);
-  }
-  return [...bySet.entries()];
-}
-
-function submissionMessage(
-  results: ReadonlyArray<TransactionReviewData>,
-  submitted: number,
-  discarded: number,
-): string {
-  const parts: Array<string> = [];
-  const scheduled = results.reduce((total, result) => total + (result.scheduled ?? 0), 0);
-  const nextRun = results.find((result) => result.nextRun !== undefined)?.nextRun;
-  if (submitted > 0) {
-    if (scheduled === 0) {
-      parts.push(`Submitted ${moveCount(submitted)} today.`);
+    const held = byTeam.get(move.team.id);
+    if (held === undefined) {
+      byTeam.set(move.team.id, { team: move.team, moves: [move] });
     } else {
-      const due = submitted - scheduled;
-      const stays = scheduled === 1 ? "stays" : "stay";
-      const when = nextRun === undefined ? "a later day" : formatCalendarDate(nextRun);
-      parts.push(
-        due === 0
-          ? `Nothing runs today. ${moveCount(scheduled)} ${stays} scheduled for ${when}.`
-          : `Submitted ${moveCount(due)} today. ${moveCount(scheduled)} ${stays} scheduled for ${when}.`,
-      );
+      held.moves.push(move);
     }
   }
-  if (discarded > 0) {
-    parts.push(`Discarded ${moveCount(discarded)}.`);
+  return [...byTeam.values()]
+    .sort((left, right) => left.team.name.localeCompare(right.team.name))
+    .map((entry) => ({ team: entry.team, moves: entry.moves }));
+}
+
+function choiceKey(move: TransactionMoveView): string {
+  return `${move.team.id}:${move.move}`;
+}
+
+function compareMoveCards(left: TransactionMoveView, right: TransactionMoveView): number {
+  return left.team.name.localeCompare(right.team.name) || left.position - right.position;
+}
+
+function submissionMessage(outcome: TransactionSubmitTodayData): string {
+  const parts: Array<string> = [];
+  if (outcome.counts.moves > 0) {
+    parts.push(`Submitted ${moveCount(outcome.counts.moves)}.`);
   }
-  return parts.join(" ");
+  if (outcome.counts.pending > 0) {
+    parts.push(`${moveCount(outcome.counts.pending)} waiting on the league.`);
+  }
+  if (outcome.discarded > 0) {
+    parts.push(`Discarded ${moveCount(outcome.discarded)}.`);
+  }
+  for (const refusal of outcome.refusals) {
+    parts.push(refusal.detail);
+  }
+  return parts.length === 0 ? "Nothing was submitted." : parts.join(" ");
 }
 
 export type TransactionsPageController = {
-  readonly today: Accessor<TimelineDay>;
-  readonly future: Accessor<ReadonlyArray<TimelineDay>>;
-  readonly earlier: Accessor<ReadonlyArray<TimelineEarlierEntry>>;
-  readonly openCount: () => number;
-  readonly todayCount: () => number;
-  readonly scheduledCount: () => number;
-  readonly onlyToday: Accessor<boolean>;
-  readonly toggleOnlyToday: () => void;
-  readonly choiceFor: (moveId: string) => TodayChoice | undefined;
-  readonly chooseToday: (moveId: string, choice: TodayChoice) => void;
+  readonly todayMoves: Accessor<ReadonlyArray<TransactionMoveView>>;
+  readonly todayTeams: Accessor<ReadonlyArray<TransactionMoveTeamDayView>>;
+  readonly savedTeams: Accessor<ReadonlyArray<TransactionMoveTeamDayView>>;
+  readonly counts: Accessor<{
+    readonly open: number;
+    readonly today: number;
+    readonly saved: number;
+    readonly ended: number;
+  }>;
+  readonly teamCount: Accessor<number>;
+  readonly choiceFor: (move: TransactionMoveView) => TodayChoice | undefined;
+  readonly chooseToday: (move: TransactionMoveView, choice: TodayChoice) => void;
   readonly undecidedTodayCount: () => number;
   readonly canSubmitToday: () => boolean;
   readonly submitToday: () => void;
   readonly submitting: () => boolean;
-  readonly discardMove: (move: TimelineMove) => void;
+  readonly discardMove: (move: TransactionMoveView) => void;
   readonly discarding: () => string | undefined;
-  readonly startEdit: (move: TimelineMove, runDate: string | undefined) => void;
+  readonly startEdit: (move: TransactionMoveView) => void;
   readonly cancelEdit: () => void;
-  readonly saveEdit: () => void;
+  readonly saveEdit: (move: TransactionMoveView) => void;
   readonly editing: Accessor<string | undefined>;
   readonly editingDate: Accessor<string>;
   readonly setEditingDate: (value: string) => void;
   readonly editingError: Accessor<string | undefined>;
   readonly saving: () => boolean;
-  readonly endedCount: () => number;
   readonly isLoading: () => boolean;
   readonly failure: () => Error | null;
   readonly retry: () => Promise<void>;
@@ -423,6 +348,8 @@ export type TransactionsPageController = {
   readonly hasMoreOpen: () => boolean;
   readonly fetchingMoreOpen: () => boolean;
   readonly showMoreOpen: () => void;
+  readonly earlier: Accessor<ReadonlyArray<TransactionMoveView>>;
+  readonly earlierCount: () => number;
   readonly earlierEnabled: Accessor<boolean>;
   readonly toggleEarlier: () => void;
   readonly earlierLoading: () => boolean;
@@ -437,15 +364,4 @@ type TransactionsPageOptions = {
   readonly remote: Accessor<TransactionRemote>;
 };
 
-type TodayChoice = "do_it_now" | "discard";
-
-type TodaySubmission = {
-  readonly include: ReadonlyArray<TimelineMove>;
-  readonly discard: ReadonlyArray<TimelineMove>;
-};
-
-type TodaySubmissionResult = {
-  readonly results: ReadonlyArray<TransactionReviewData>;
-  readonly dismissed: ReadonlyArray<DismissTransactionProposalData>;
-  readonly dismissalFailures: ReadonlyArray<unknown>;
-};
+type TodayChoice = "now" | "discard";

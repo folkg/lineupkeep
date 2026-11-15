@@ -93,11 +93,11 @@ spends the smallest allowance, a `readOnlyHint: true` tool spends the generous o
 spends the write allowance. An unannotated tool defaults to destructive, so forgetting to describe a
 new tool bounds it more tightly rather than leaving it unlimited.
 
-| Class         | Tools                                                                                                                                          | Window | Per client | Per owner |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | --------- |
-| `read`        | every `readOnlyHint: true` tool, including the summaries, searches, and proposal read-back                                                     | 1 min  | 60         | 180       |
-| `write`       | `submit_feedback`, `propose_transactions`, `revalidate_transaction_proposal_set`, `withdraw_transaction_proposal_items`, `set_team_automation` | 1 hour | 20         | 60        |
-| `destructive` | `set_lineup`                                                                                                                                   | 1 hour | 6          | 18        |
+| Class         | Tools                                                                                         | Window | Per client | Per owner |
+| ------------- | --------------------------------------------------------------------------------------------- | ------ | ---------- | --------- |
+| `read`        | every `readOnlyHint: true` tool, including the summaries, searches, and the rolling move list | 1 min  | 60         | 180       |
+| `write`       | `submit_feedback`, `propose_transactions`, `set_team_automation`                              | 1 hour | 20         | 60        |
+| `destructive` | `set_lineup`                                                                                  | 1 hour | 6          | 18        |
 
 The numbers are a product judgement, not a measurement. A polling agent reading a team summary a few
 times a minute uses well under a tenth of the read allowance; 60 reads a minute still lets one client
@@ -798,200 +798,72 @@ becoming zero.
 
 A coverage entry has one of three states. `available` means the resource was read and verified. `unsupported` means the provider or league does not establish it, and the entry, or a typed group result beside it, carries the reason. `degraded` means a dependency could not be verified while the read still returned what does not depend on it: the entry names the failed field, the affected resource lists a bounded failure, and roster and matchup reads are not erased because league settings failed. A calendar that needs the scoring-week window reports the degraded dependency instead of inventing periods. A group that declares itself unsupported never also reports a period failure; the two statements would contradict each other.
 
-## Transaction proposals
+## Transaction queue
 
-`propose_transactions` stores what an agent proposes; it writes nothing to the provider. Before it
-stores anything, it reads current state once per team the request touches and validates every declared
-item against the set's end state, the roster projected through the order the set would run. An item
-that cannot run is never stored: it is returned in `refused` with its 1-based position in the request,
-a plain reason, and what would make it valid, while the valid items in the same call are stored as
-usual. When no item can run, the call refuses and stores nothing. One call covers every team the
-account has, and the set is grouped by team, so teams with nothing proposed still appear as an empty
-section on the review. Each item names
-one team, a kind (`free_agent_add`, `waiver_claim`, `drop`, `slot_move`, or `trade`), the players to
-add and drop or the player and destination slot of a slot move, an optional FAAB bid, and a required
-reason. A slot move names one rostered player and one slot the league declares, into a reserve list
-or back out of one; it adds and drops nobody and carries no bid. The client declares intent per team;
-the server owns the order of that team's moves, the effective date, and the timing, and validates the
-items against the roster projected through that order. A trade names
-`counterparty` from the league's teams read, the players going out in `drops`, the players coming
-back in `adds`, and the draft picks it moves in `picks`; it carries no bid. Each pick names its
-`round` and the two teams it moves between, written as the item's own `team` id or its
-`counterparty` reference; any other team is refused. A league's own switch decides whether picks are
-allowed: `false` refuses with that reason, an unpublished switch refuses because the pick cannot be
-checked, and a round the sending team's available picks do not list is refused with that reason.
-A trade may carry picks on both sides, including a trade of picks only. The linked provider declares
-the assets its own trade request can name, and the review publishes that declaration as
-`tradeProposal` (`assets` and a plain `detail`) on each team. A pick the request cannot carry is
-accepted, validated, and shown on the review with both sides named, then skipped with that true
-reason when the set is submitted; nothing is sent for it, and it is never silently dropped. For
-Yahoo, the adapter sends a player-only trade to its website write host and a pick-bearing trade to
-its app write host, in the captured `<picks><pick>` shape. The website host refused that shape with
-"Invalid XML POSTed. Error code 25"; the app host is the one the SDK capture proved. A refusal from
-either host returns in league terms with the provider's own sentence, and the item stays replaceable.
-Staging a trade reads the league settings, both rosters, the league's teams, and the available
-draft picks for both teams, and refuses the item when the counterparty is not another team in the
-same league, a player is not on the roster they would leave, or the trade window has closed. A free-agent add carries no bid, a waiver claim carries one of 0 or more, and a
-drop item only drops. The result carries the set id, the review link
-(`https://{origin}/transactions/{setId}`), the surface (`mcp`) and acting client, and each item's
-outcome by position: accepted with its stored state, or refused with a code and a sentence that
-names the item. A reference from another account or league, a team the account does not have, a
-player named in both adds and drops, a kind and bid that disagree, or the same move repeated are
-refused and named. Repeating the identical set returns the existing set with `created: false`
-rather than stacking a duplicate. Once a set is extended or a stored move is withdrawn, its contents
-no longer match the original request, so proposing the original items again creates a new set.
+Each team has one transaction queue. `propose_transactions` appends moves to that queue and returns
+the team's stored plan plus any moves it refused. There is no set, no review link, and no separate
+withdraw tool. A second call appends to the same queue; a stored move is changed or removed from the
+team page, not by starting another set.
 
-An item may name `window`, one calendar date written `YYYY-MM-DD` and read in the league's own fantasy
-day. It is how a move is scheduled for a later date instead of running when the plan is submitted. A
-trade carries no window, because the other manager decides when a trade runs; a window in the past, or
-one this league's day cannot interpret, is refused with a plain reason. Submitting commits only the
-moves due today: an item with no window, or whose date has arrived, runs on that submission, while an
-item whose date is still ahead stays proposed with no approval time and no record against it. The read
-groups the plan by run day, today first, and each group names the day, the league's rollover for that
-day, and when the league applies the moves. The hourly tick runs a proposed move whose day has arrived
-through the same submission without a separate approval, so a plan already submitting is skipped and a
-transient failure is tried again on the next tick. The result reports how many included moves stay
-scheduled and the day the next one runs; a submission whose included moves are all scheduled runs
-nothing and says so. A scheduled move stays withdrawable until its day, and editing it means
-withdrawing it and proposing its replacement. `list_transaction_proposals` and
-`get_transaction_proposal_set` publish each item's `window` and the team's run-day `groups`. Every item
-also carries `lifecycle`: `scheduled` when its run date is still ahead, `stale` when its last check no
-longer matches, and otherwise its stored state, so a client never compares dates to know a move waits.
-`budgetPeriod` names the budget the move spends, which is the league season for a waiver claim's bid and
-none for every other kind.
+The input is one `team` and one or more `moves`. Each move names a `kind` (`free_agent_add`,
+`waiver_claim`, `drop`, `slot_move`, `activate`, `stash`, or `trade`), the players to `adds` and
+`drops`, an optional `reason`, and an optional `window`. `window` is one calendar date written `YYYY-MM-DD`, read in the league's own fantasy day; it becomes
+the move's run day and places it in the saved queue. A move with no
+window is due today. A trade also names `counterparty` and the `picks` it moves. A one-player add or
+waiver claim may name `fallbacks`, an ordered list of alternatives stored beside the move. The queue
+accepts the same sealed player and counterparty references as the rest of the surface; a reference
+from another account or league is refused.
 
-A one-player add or waiver claim may also name `fallbacks`: an ordered list of player references to try
-when the first choice cannot be added at submission. A plan never promotes on propose or on a read.
-When a submission, or the hourly tick that runs a scheduled move on its day, finds the first choice gone, it
-uses the first fallback that the league's player pool lists as available, records the chosen player as the
-move's add, and names both players in the move's outcome. If no fallback can be added, the move keeps its
-normal refusal. A fallback for a waiver claim runs as a straight free-agent add in the same budget
-period and never carries the claim's bid; a fallback still on waivers is not used, because adding it
-would be a second claim. A trade, another kind, several adds, or a fallback that repeats a choice is
-refused with a plain reason. The published item carries `fallbacks` with names beside its `adds`, and
-the propose result states the bid rule once a claim carries fallbacks.
+The call reads current league, roster, player, and budget state once for the team, then validates the
+new moves together with the moves already stored and still open. An accepted move is stored with its
+server position, effective date, validation, and claims. A move that cannot run is not stored; it is
+returned in `refused` with its position in the request, a code, and a plain sentence that names what
+would make it valid. A refused move does not make the other accepted moves fail. A queue write
+contacts no write endpoint and spends nothing.
 
-Passing `set` appends the items after an existing plan that is still open. A plan is open while any
-move in it can still run: a move ends when it executed, was dismissed by the owner, was withdrawn, its
-trade offer is no longer available, or it was skipped for a reason that cannot change. A plan whose
-submission left a move failed, or that was never submitted, is open. Every team that receives an item is
-validated again against the current roster together with the moves in the set that are still proposed,
-and that team's stored order is recomputed. A move whose attempt failed or that was skipped is replaced
-by a new item, so proposing that move again in the same set is accepted; the earlier item stays as a
-record. If an added item makes an existing unrun item impossible, nothing is stored; the refusal
-names the existing item to withdraw. `withdraw_transaction_proposal_items` takes a set and one to
-twenty item ids, removes the moves that are still proposed, revalidates the remaining moves as a set, and
-returns the set with its new order and review link. Removing the last move for a team is allowed. A
-move that already ran, is pending, failed, or was skipped cannot be withdrawn: it keeps its outcome
-and is replaced by a new item. A set that stayed open after a submission still accepts a withdrawal
-of a move that is still proposed; a plan whose moves have all ended is an audit record and refuses both
-new moves and withdrawals. A plan never expires; it stops when every move has ended. A closed plan stays readable for 90 days as the audit record of what was proposed, then the retention sweep removes it with its moves, submissions, and steps.
+`get_transaction_plan` reads one owned team's queue in order, grouped by run day, today first. Each
+move carries its stored validation and the time it was checked, its effective date, and its outcome
+once it has one. The read uses stored state and does not change the queue. A team the account does
+not own is reported as not found.
 
-`list_transaction_proposals` returns one team's plans, newest change first, filtered by `state`:
-`open` (the default, a plan with at least one move that can still run), `scheduled` (a plan with at
-least one proposed move whose run date is still ahead), or `closed` (every move has ended). Each plan
-carries who proposed it, when it was created and last changed, its review path, and that team's moves
-with their stored state, computed `lifecycle`, staleness, and outcome. The read is owner-scoped and paged: a
-`cursor` from the previous page fetches the next, and `limit` (1 to 50, default 20) sizes the page. A
-plan appears once for the team whose moves are asked for, and a team the account does not own is
-refused rather than answered as empty. The read writes nothing and never changes a plan. The team
-transactions page uses the same read, so a person and an agent see the same plans.
+`list_transaction_proposals` is the rolling move list across all owned teams. It accepts an optional
+`team`, an optional `state` (`today`, `saved`, or `ended`), a `cursor`, and a `limit` from 1 to 50
+(default 20). `today` includes moves due today or earlier, `saved` includes moves with a future run
+day, and `ended` includes moves that ran, failed, were skipped, or were discarded. The result is
+grouped by day and team, with `counts` for open, today, saved, and ended moves and `teamCount` for
+the teams represented. A page with more moves carries a bound cursor; reuse with different arguments
+is refused as a mismatch. The read writes nothing and contacts no provider.
 
-A plan page that cannot be read from stored state answers one coded failure rather than a bare
-internal error:
+Validation is a stored fact, not a new write. A queue move is `current`, `stale`, or `illegal`. A
+stale move names why, such as the player leaving the pool, the player leaving the roster, a full
+roster with no operation to open a place, a closed period, or a bid over the published balance. An
+illegal roster names the player, the slot, and the move that would resolve it. A team whose state
+cannot be read marks only its own moves. A saved move can be edited on the team page until its run
+day. The edit changes the run day and does not run the move.
 
-| Code               | Remedy                                                                                                 | Message budget |
-| ------------------ | ------------------------------------------------------------------------------------------------------ | -------------- |
-| `list_unavailable` | Narrow the filter by reading `open` and `closed` plans separately, or start again from the first page. | 320 bytes      |
+No MCP tool submits, executes, or spends. A signed-in owner submits today's chosen moves from the
+transactions page, and each submission rechecks the queue immediately before writing. The page asks
+for a choice on every move due today before it enables submit: `Do it now` runs the move, and
+`Discard` marks it discarded. Only the chosen moves are sent. A saved move that is not due today is
+not part of that submission. The hourly runner runs a saved move whose day has arrived through the
+same write path, skips a team another run already claims, and records a failed, pending, or unknown
+outcome rather than retrying a write that may have applied.
 
-A signed-in owner dismisses one move from the review page. The move becomes `dismissed`, keeps the
-owner's reason in `outcomeDetail`, and never runs; dismissing the last open move closes the plan. No
-MCP tool dismisses: an agent withdraws the moves it still controls.
+Moves run in the server's stored order. A drop or slot move that another move depends on runs first;
+a group of dependent moves runs whole or not at all. A provider refusal keeps its exact wording on
+the move and on the team page. A move that executed, was discarded, or can no longer change is
+`ended` and appears in the earlier list. The queue keeps no set lifetime and no expiry: a move stays
+until it ends, and a team's queue is the stored record of what was proposed and what happened.
 
-`revalidate_transaction_proposal_set` re-reads current state
-once per team (its roster, its league rules, the pool state of the players it adds, and its FAAB
-balance when a bid is present) and marks each open item `current`, `stale`, or `illegal` with
-reasons: the added player is no longer in the pool, a dropped player is no longer on the roster, the
-set has no way to give the add a roster place, a rostered player sits in a slot that does not accept
-him and the set cannot resolve it, the league's period has closed, the bid exceeds the team's
-remaining budget, the league has no FAAB budget, or the team's state could not be read. When the
-league publishes a remaining balance, that team's `budget` also carries `periods`: for each budget
-period, `spent` for bids its stored plans already sent, `scheduled` for bids on moves whose run date is
-ahead, and `open` for bids on moves that run now. The rollup is computed from stored plans and the
-published balance, never a new provider read, and it is not a cap. It validates
-one team's set as a set: it first chooses the team's order, then walks that team's items against a
-roster projected through the earlier ones. A drop already in the set is gone, an add is already
-rostered, and a declared slot move into or out of reserve has already changed what counts against
-the team's non-reserve places. A later add therefore relies on the drop or slot move that funds it
-instead of being judged against the roster as it stood before the set. Stale and illegal are
-different states: stale means the facts behind the item changed or the set itself cannot make it
-legal, while illegal means the roster cannot be submitted as it stands. An add that no operation in
-the set frees a place for stays stale with `roster_full`, and its reason names the missing operation:
-a drop for a player outside a reserve slot, or a slot move into a reserve slot. An illegal item names
-the offending player, his slot, and what resolves it, and the check covers every rostered player
-because one illegal player blocks any transaction for that team. When a slot the set opens accepts
-the offending player, the item carries a roster move, before the transaction when the slot is
-already open or after it when the transaction frees it, and the review reports that move as its own
-step. The slot can be opened by a drop in the same item or an earlier item.
-When no slot in the set is open, the item refuses and names the choice only the person can make,
-which is who to drop, and the drop or slot move that would resolve it in this set. Every team with
-roster moves also carries its `order`: the sequence the server chose so each move leaves the roster
-legal under the league's slots and published roster-change timing, with a `position` for every move
-that is still proposed. The set read returns that sequence before submission, with the position every move
-holds, and the review says when the league applies the moves. When no order exists, that team's whole set is refused at the check: every move in it is
-illegal, the reason names the operations that conflict in plain words, and nothing in that team's
-set can be submitted. An item that no operation in the set can make legal is named on its own and
-does not make the rest of the team's plan illegal. A trade follows the roster moves in the
-published sequence, because it changes no roster until the other manager accepts. A trade is
-re-checked against both
-rosters, the counterparty's continuing place in the league, and the trade window, and carries its
-current state back to the review. Staleness and illegality are recorded beside the item's state and
-are never failures; a move that is still proposed stays `proposed`. A set stores only moves that passed the check when they
-were proposed, so a fresh set is current; a later check can still make a stored move stale. A team
-whose state cannot be read marks only its own items, and the review reports the failure beside that
-team. A plan that sat overnight is re-checked before anything runs: revalidation reads current state,
-and a submission runs the same check immediately before writing. `get_transaction_proposal_set` reads
-the plan back with every team, including the teams
-that had nothing proposed, whether the plan is `closed`, each item's state and `settled` flag, last check, each team's planned
-`order` with its positions, an item's server roster move as `reserveMove`, every submission in
-order, and each move's position and step outcomes, and the same review link. It contacts no
-provider: the order is the one the last check planned and saved. A rejected write carries the provider's exact wording, and that wording reaches
-both the review page and this tool result. Another account's set is reported as not
-found.
+A failed call returns one coded failure rather than a bare internal error:
 
-The item state vocabulary is `proposed`, `executed`, `pending`, `failed`, `skipped`, `unknown`, and
-`dismissed`, plus a trade's `accepted`, `withdrawn`, and `expired`.
-No MCP tool submits, accepts, or spends anything. Execution happens only when a signed-in owner
-submits the moves due today from the review page, or when the hourly tick reaches a scheduled move's
-day. Each submission claims the set in the
-database, re-runs the same revalidation immediately before writing, and skips an item that went stale
-with its reason rather than attempting it. It sends only the included moves that are still
-`proposed`; a move that already ran, failed, or was skipped keeps its outcome. The included moves for
-each team then run in the order the server computed for that submission, never in the order the
-client sent, and in the same positions the review published. Each executed item records its position
-in that order and its steps, so the review shows afterwards that the drop ran before the reserve
-move. Each item is
-one provider transaction carrying its add and drop together, sent once with no retry; an optional
-reserve move is its own recorded step before the add, and a declared slot move is one recorded step on
-its own. A waiver claim is `pending` until the provider processes it, and `unknown` means a request
-may or may not have applied and is never retried automatically. The set records each submission in
-order, with who submitted it and when, the position and outcome of every move it sent, and the
-outcome of every step. A move carries `settled`: true when it will not run again because it
-executed, its trade offer ended, or it was skipped for a reason that cannot change. A set whose
-submission left a move failed stays open for a replacement, and a later submission sends only the
-moves that are still proposed; the failed move keeps its own state, outcome, and the provider's
-wording beside the retry. A set whose moves have all settled is an audit record and refuses new moves and
-another submission. A failed, unknown, or pending item, or one refused before anything was sent,
-stops the later steps for that team only, because their checks no longer describe the roster; other
-teams continue. A
-skipped step keeps the failed step's own wording and says it followed it. A submitted trade stays
-`pending` as an offer and is never sent as though the roster had already changed. A trade is sent
-once with no retry: an `unknown` propose is recorded as unknown and the person is told to check the
-provider's trade page before trying again, because a repeated propose has no proven idempotency. The
-review page reads the provider's pending feed and completed trades to show
-the trade as pending, accepted, withdrawn, or expired, and can withdraw an offer before acceptance
-from our own record or from the provider's pending feed. It never accepts, rejects, votes, counters,
-or selects a pick for another manager or the league.
+| Code                 | Meaning                                                                            |
+| -------------------- | ---------------------------------------------------------------------------------- |
+| `facts_unavailable`  | The league, roster, player pool, or budget could not be read; nothing was stored.  |
+| `move_not_found`     | The move is no longer open, or does not belong to that team.                       |
+| `team_not_found`     | The team is not available to this account.                                         |
+| `run_in_progress`    | Another run holds the team's queue; nothing was changed.                           |
+| `persistence_failed` | Stored state could not be read or written; nothing partial is presented as a plan. |
 
 ## Client onboarding and scopes
 
@@ -1000,30 +872,27 @@ or selects a pick for another manager or the league.
 Every tool enforces one scope, and only that scope. Holding a scope no tool needs, or
 lacking a scope a different tool needs, does not change whether a call succeeds.
 
-| Tool                                  | Required scope        |
-| ------------------------------------- | --------------------- |
-| `list_connections`                    | `fantasy:read`        |
-| `list_teams`                          | `fantasy:read`        |
-| `get_calendar`                        | `fantasy:read`        |
-| `get_league`                          | `fantasy:read`        |
-| `get_rosters`                         | `fantasy:read`        |
-| `search_players`                      | `fantasy:read`        |
-| `get_players`                         | `fantasy:read`        |
-| `get_matchups`                        | `fantasy:read`        |
-| `get_team_summary`                    | `fantasy:read`        |
-| `get_transactions`                    | `fantasy:read`        |
-| `list_transaction_proposals`          | `fantasy:read`        |
-| `get_pending_trade_offers`            | `fantasy:read`        |
-| `get_lineup_runs`                     | `fantasy:read`        |
-| `submit_feedback`                     | `fantasy:read`        |
-| `list_feedback`                       | `fantasy:read`        |
-| `propose_transactions`                | `transactions:review` |
-| `get_transaction_proposal_set`        | `transactions:review` |
-| `revalidate_transaction_proposal_set` | `transactions:review` |
-| `withdraw_transaction_proposal_items` | `transactions:review` |
-| `set_lineup`                          | `lineups:write`       |
-| `set_team_automation`                 | `teams:manage`        |
-| `add_team_agent_note`                 | `notes:write`         |
+| Tool                         | Required scope        |
+| ---------------------------- | --------------------- |
+| `list_connections`           | `fantasy:read`        |
+| `list_teams`                 | `fantasy:read`        |
+| `get_calendar`               | `fantasy:read`        |
+| `get_league`                 | `fantasy:read`        |
+| `get_rosters`                | `fantasy:read`        |
+| `search_players`             | `fantasy:read`        |
+| `get_players`                | `fantasy:read`        |
+| `get_matchups`               | `fantasy:read`        |
+| `get_team_summary`           | `fantasy:read`        |
+| `get_transactions`           | `fantasy:read`        |
+| `list_transaction_proposals` | `fantasy:read`        |
+| `get_pending_trade_offers`   | `fantasy:read`        |
+| `get_lineup_runs`            | `fantasy:read`        |
+| `submit_feedback`            | `fantasy:read`        |
+| `list_feedback`              | `fantasy:read`        |
+| `propose_transactions`       | `transactions:review` |
+| `set_lineup`                 | `lineups:write`       |
+| `set_team_automation`        | `teams:manage`        |
+| `add_team_agent_note`        | `notes:write`         |
 
 A scope-coverage test derives this table from the tool declarations, so a tool that omits a
 scope fails the test suite instead of becoming an open endpoint.
@@ -1035,8 +904,8 @@ Five resource scopes cover the surface, and each exists because a tool needs exa
   scopes. It also covers a lineup run's status, because a run read is a read, and feedback
   submission and read-back, because reporting a problem must stay possible under the scope every
   client holds and it writes only the acting account's own report.
-- `transactions:review` stages proposals, reads them back, revalidates them, and withdraws stored
-  moves before submission. It writes nothing to the provider and submits nothing.
+- `transactions:review` stages moves into a team queue. It writes nothing to the provider and
+  submits nothing.
 - `lineups:write` is the roster mutation: `set_lineup` and only `set_lineup`. A lineup change and
   a transaction submission are not the same risk, so they are not the same scope.
 - `teams:manage` changes team-level state the owner keeps in Lineupgrade: automation enrollment,

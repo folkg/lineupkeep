@@ -220,7 +220,7 @@ const ProposalStaleReason = Schema.Struct({
   player: Schema.optional(PlayerRef),
   detail: Schema.NonEmptyString,
 });
-export type ProposalStaleReason = typeof ProposalStaleReason.Type;
+type ProposalStaleReason = typeof ProposalStaleReason.Type;
 
 const ProposalStaleness = Schema.Struct({
   status: ProposalStalenessStatus,
@@ -855,9 +855,6 @@ export const ProposeTransactionsResult = Schema.Struct({
 });
 export type ProposeTransactionsResult = typeof ProposeTransactionsResult.Type;
 
-export const ProposalSetInput = Schema.Struct({ set: ProposalSetId });
-export type ProposalSetInput = typeof ProposalSetInput.Type;
-
 export const WithdrawProposalItemsInput = Schema.Struct({
   set: ProposalSetId,
   items: Schema.Array(ProposalItemId).pipe(
@@ -951,6 +948,9 @@ export const WithdrawTradeResult = Schema.Struct({
   detail: Schema.NonEmptyString,
 });
 export type WithdrawTradeResult = typeof WithdrawTradeResult.Type;
+
+const ProposalSetInput = Schema.Struct({ set: ProposalSetId });
+type ProposalSetInput = typeof ProposalSetInput.Type;
 
 export class TransactionProposals extends Context.Service<
   TransactionProposals,

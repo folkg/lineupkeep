@@ -42,10 +42,8 @@ it("spends a declared allowance on every shipped tool, smallest for the destruct
   ).toEqual([
     "add_team_agent_note",
     "propose_transactions",
-    "revalidate_transaction_proposal_set",
     "set_team_automation",
     "submit_feedback",
-    "withdraw_transaction_proposal_items",
   ]);
   expect(
     toolClasses
@@ -61,7 +59,7 @@ it("spends a declared allowance on every shipped tool, smallest for the destruct
     "get_players",
     "get_rosters",
     "get_team_summary",
-    "get_transaction_proposal_set",
+    "get_transaction_plan",
     "get_transactions",
     "list_connections",
     "list_feedback",

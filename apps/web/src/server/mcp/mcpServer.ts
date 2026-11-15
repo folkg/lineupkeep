@@ -3,6 +3,7 @@ import type { Connections } from "@lineupkeep/backend/connections/Connections";
 import type { FantasyQueries } from "@lineupkeep/backend/connections/FantasyQueries";
 import type { LineupRuns } from "@lineupkeep/backend/connections/LineupRuns";
 import type { Teams } from "@lineupkeep/backend/connections/Teams";
+import type { TransactionPlanService } from "@lineupkeep/backend/connections/TransactionPlans";
 import type { TransactionProposals } from "@lineupkeep/backend/connections/TransactionProposals";
 import type { Feedback } from "@lineupkeep/backend/feedback/Feedback";
 import type { ToolCallQuota } from "@lineupkeep/backend/toolCalls/ToolCallQuota";
@@ -34,7 +35,14 @@ const applicationHandlers = (
 ): Layer.Layer<
   Tool.HandlersFor<Toolkit.Tools<typeof applicationTools>>,
   never,
-  Connections | FantasyQueries | TransactionProposals | LineupRuns | Teams | Feedback | AuthService
+  | Connections
+  | FantasyQueries
+  | TransactionPlanService
+  | TransactionProposals
+  | LineupRuns
+  | Teams
+  | Feedback
+  | AuthService
 > =>
   Layer.mergeAll(
     connectionToolHandlers(agent),

@@ -20,20 +20,17 @@ import {
 import type { TeamsShape } from "@lineupkeep/backend/connections/Teams";
 import { Teams } from "@lineupkeep/backend/connections/Teams";
 import type {
-  ProposalSet,
-  ProposalSetList,
-  ProposalSetReview,
-  ProposeTransactionsResult,
-  TransactionProposalsShape,
-} from "@lineupkeep/backend/connections/TransactionProposals";
+  TransactionMoveList,
+  TransactionMoveTeam,
+  TransactionPlanServiceShape,
+} from "@lineupkeep/backend/connections/TransactionPlans";
 import {
-  ProposalItem,
-  ProposalItemsNotOpen,
-  ProposalPersistenceFailed,
-  ProposalSetClosed,
-  ProposalSetId,
-  TransactionProposals,
-} from "@lineupkeep/backend/connections/TransactionProposals";
+  TransactionMoveId,
+  TransactionPlanPersistenceFailed,
+  TransactionPlanService,
+} from "@lineupkeep/backend/connections/TransactionPlans";
+import type { TransactionProposalsShape } from "@lineupkeep/backend/connections/TransactionProposals";
+import { TransactionProposals } from "@lineupkeep/backend/connections/TransactionProposals";
 import {
   Feedback,
   FeedbackContentInvalid,
@@ -418,11 +415,9 @@ it("lists only the read-only connection tool without exposing account identity",
     "get_team_summary",
     "get_transactions",
     "propose_transactions",
-    "get_transaction_proposal_set",
-    "revalidate_transaction_proposal_set",
-    "withdraw_transaction_proposal_items",
     "get_pending_trade_offers",
     "list_transaction_proposals",
+    "get_transaction_plan",
     "set_lineup",
     "get_lineup_runs",
     "set_team_automation",
@@ -499,6 +494,7 @@ it("enforces fantasy read scope and serves bounded query results over MCP", asyn
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(queries),
     Layer.succeed(TransactionProposals)(unavailableProposals),
+    Layer.succeed(TransactionPlanService)(unavailablePlans),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
     Layer.succeed(Feedback)(unavailableFeedback),
@@ -567,6 +563,7 @@ it("accepts ISO 8601 instants for transaction and feedback filters", async () =>
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(queries),
     Layer.succeed(TransactionProposals)(unavailableProposals),
+    Layer.succeed(TransactionPlanService)(unavailablePlans),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
     Layer.succeed(Feedback)(feedback),
@@ -631,6 +628,7 @@ it("refuses a malformed or tagged instant with a readable field message", async 
               Layer.succeed(Connections)(unavailableConnections),
               Layer.succeed(FantasyQueries)(unavailableQueries),
               Layer.succeed(TransactionProposals)(unavailableProposals),
+              Layer.succeed(TransactionPlanService)(unavailablePlans),
               Layer.succeed(LineupRuns)(unavailableLineups),
               Layer.succeed(Teams)(unavailableTeams),
               Layer.succeed(Feedback)(unavailableFeedback),
@@ -671,6 +669,7 @@ it("reaches search_players with an empty query and returns the remedy instead of
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(queries),
     Layer.succeed(TransactionProposals)(unavailableProposals),
+    Layer.succeed(TransactionPlanService)(unavailablePlans),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
     Layer.succeed(Feedback)(unavailableFeedback),
@@ -759,6 +758,7 @@ it("publishes and serves the scoring-period schedule group over MCP", async () =
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(queries),
     Layer.succeed(TransactionProposals)(unavailableProposals),
+    Layer.succeed(TransactionPlanService)(unavailablePlans),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
     Layer.succeed(Feedback)(unavailableFeedback),
@@ -822,6 +822,7 @@ it("names the cause when a continuation cursor is reused with different argument
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(queries),
     Layer.succeed(TransactionProposals)(unavailableProposals),
+    Layer.succeed(TransactionPlanService)(unavailablePlans),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
     Layer.succeed(Feedback)(unavailableFeedback),
@@ -847,294 +848,226 @@ it("names the cause when a continuation cursor is reused with different argument
   expect(text).not.toContain("invalid or expired");
 });
 
-it("proposes a transaction set under the review scope and returns the review link", async () => {
-  const at = DateTime.makeUnsafe("2026-10-25T12:00:00Z");
+it("appends moves to one team queue and lists them across teams without a set id", async () => {
   const team = decodeTeamId("018f79ea-7d86-7c18-9b4a-8b4d0c9164b0");
-  const set: ProposalSet = {
-    id: Schema.decodeSync(ProposalSetId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164d0"),
-    proposedBy: { kind: "agent", reference: "mcp", surface: "mcp" },
-    createdAt: at,
-    updatedAt: at,
-    submissions: [],
-    closed: false,
-    reviewPath: "/transactions/018f79ea-7d86-7c18-9b4a-8b4d0c9164d0",
+  const otherTeam = decodeTeamId("018f79ea-7d86-7c18-9b4a-8b4d0c9164b1");
+  const teamView = {
+    id: team,
+    name: "Alpha",
+    league: "nfl" as const,
+    sport: "football" as const,
+    season: 2026,
   };
-  const providerRefusal =
-    "The provider rejected the transaction with HTTP 400. It said: Player Travis Konecny is in a IR position on your roster, but is no longer on the real-life IR. Please edit your lineup to activate this player from your IR and then attempt your transaction again.";
-  const illegalDetail =
-    "Travis Konecny is in the IR slot, but it does not accept his positions (LW, RW). No open slot accepts him, and choosing which player to drop is yours. Drop a player to make room, then propose this transaction again.";
-  const failedItem = Schema.decodeSync(ProposalItem)({
-    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9164d1",
-    team,
-    kind: "drop",
+  const otherTeamView = {
+    ...teamView,
+    id: otherTeam,
+    name: "Beta",
+    league: "nhl" as const,
+    sport: "hockey" as const,
+  };
+  const move = {
+    move: Schema.decodeSync(TransactionMoveId)("018f79ea-7d86-7c18-9b4a-8b4d0c9165b1"),
+    team: teamView,
+    kind: "drop" as const,
+    position: 0,
+    decision: "now" as const,
+    reason: "Open a bench place.",
     adds: [],
     fallbacks: [],
-    drops: [],
-    budgetPeriod: {
-      status: "none",
-      detail: "Only a waiver claim with a FAAB bid spends a budget.",
-    },
-    reason: "A stated reason.",
-    state: "failed",
-    lifecycle: "failed",
-    settled: false,
-    staleness: { status: "current", checkedAt: at, reasons: [] },
-    execution: {
-      outcome: "failed",
-      detail: providerRefusal,
-      decidedAt: at,
-      steps: [],
-    },
-    createdAt: at,
-    updatedAt: at,
-  });
-  const illegalItem = Schema.decodeSync(ProposalItem)({
-    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9164d2",
-    team,
-    kind: "drop",
-    adds: [],
-    fallbacks: [],
-    drops: [],
-    budgetPeriod: {
-      status: "none",
-      detail: "Only a waiver claim with a FAAB bid spends a budget.",
-    },
-    reason: "A stated reason.",
-    state: "proposed",
-    lifecycle: "stale",
-    settled: false,
-    staleness: {
-      status: "illegal",
-      checkedAt: at,
-      reasons: [{ code: "slot_illegal", detail: illegalDetail }],
-    },
-    createdAt: at,
-    updatedAt: at,
-  });
-  const review = {
-    set,
-    teams: [
-      {
-        team: {
-          id: team,
-          name: "Alpha",
-          provider: decodeProviderKey("yahoo"),
-          league: "nfl",
-          sport: "football",
-          season: 2026,
-        },
-        items: [failedItem, illegalItem],
-        pendingOffers: [],
-      },
-    ],
-  } satisfies ProposalSetReview;
-  const listedTeam = review.teams[0]?.team;
-  if (listedTeam === undefined) {
-    throw new Error("Expected the review fixture to carry its team");
-  }
-  const listedSets: ProposalSetList = {
-    status: "ok",
-    team: listedTeam,
-    sets: [
-      {
-        id: set.id,
-        proposedBy: set.proposedBy,
-        createdAt: at,
-        updatedAt: at,
-        closed: false,
-        reviewPath: set.reviewPath,
-        teams: [{ team: listedTeam, items: [failedItem] }],
-      },
-    ],
-    counts: { open: 1, ended: 0 },
-    page: { returned: 1, complete: true, remaining: 0, total: 1 },
+    drops: [{ name: "Riverside Receiver" }],
+    picks: [],
+    validation: { status: "current" as const, reasons: [] },
+    check: { status: "checked" as const },
   };
-  const listedInputs: Array<{ readonly team?: string; readonly state?: string }> = [];
-  const proposed: Array<{ userId: string; proposer: unknown }> = [];
-  let revalidations = 0;
-  const proposals: TransactionProposalsShape = {
-    ...unavailableProposals,
-    list: (userId, input) => {
-      expect(userId).toBe("reader");
-      listedInputs.push(input);
-      return Effect.succeed(listedSets);
-    },
-    propose: (userId, proposer, input) => {
-      proposed.push({ userId, proposer });
-      if (input.set !== undefined && input.set !== null) {
-        return Effect.fail(
-          ProposalSetClosed.make({
-            set: set.id,
-            detail:
-              "Every move in this plan has been executed, dismissed, or withdrawn, so the plan is closed and takes no new moves or submissions. Propose a fresh set to start a new plan.",
-          }),
-        );
-      }
+  const emptyRead = (
+    target: TransactionMoveTeam,
+    moves: ReadonlyArray<typeof move>,
+  ): {
+    readonly team: TransactionMoveTeam;
+    readonly today: string;
+    readonly moves: ReadonlyArray<typeof move>;
+    readonly days: ReadonlyArray<{
+      readonly day: string;
+      readonly today: boolean;
+      readonly moves: ReadonlyArray<typeof move>;
+    }>;
+  } => ({
+    team: target,
+    today: "2026-11-11",
+    moves,
+    days: moves.length === 0 ? [] : [{ day: "2026-11-11", today: true, moves }],
+  });
+  const listed: Array<{ readonly team?: string; readonly state?: string }> = [];
+  const proposed: Array<{ userId: string; input: { readonly team: string } }> = [];
+  const plans: TransactionPlanServiceShape = {
+    ...unavailablePlans,
+    proposeRefs: (userId, input) => {
+      proposed.push({ userId, input });
       return Effect.succeed({
-        set,
-        created: true,
-        extended: false,
-        items: [],
+        plan: {
+          team: input.team,
+          today: "2026-11-11",
+          moves: [],
+          groups: [],
+        },
         refused: [],
-        detail: "Created the set.",
-      } satisfies ProposeTransactionsResult);
+      });
     },
-    read: () => Effect.succeed(review),
-    revalidate: () => {
-      revalidations += 1;
-      return Effect.succeed(review);
+    plan: (_userId, input) =>
+      Effect.succeed(emptyRead(input.team === team ? teamView : otherTeamView, [move])),
+    list: (_userId, input): Effect.Effect<TransactionMoveList> => {
+      listed.push({
+        ...(input.team === undefined ? {} : { team: input.team }),
+        ...(input.state === undefined ? {} : { state: input.state }),
+      });
+      const data = {
+        status: "ok" as const,
+        ...(input.team === undefined
+          ? {}
+          : { team: input.team === team ? teamView : otherTeamView }),
+        moves: [move],
+        days: [
+          {
+            day: "2026-11-11",
+            today: true,
+            teams: [{ team: teamView, moves: [move] }],
+          },
+        ],
+        counts: { open: 1, today: 1, saved: 0, ended: 0 },
+        teamCount: 2,
+        page: { returned: 1, complete: true },
+      };
+      return Effect.succeed(data);
     },
-    withdrawItems: () =>
-      Effect.fail(
-        ProposalItemsNotOpen.make({
-          items: [
-            {
-              item: failedItem.id,
-              state: "failed",
-              detail:
-                "This move is failed and can no longer be withdrawn. It was attempted and failed; its outcome is part of the record.",
-            },
-          ],
-          detail: "Nothing was withdrawn. Fix the refused moves and withdraw again.",
-        }),
-      ),
-    rescheduleItems: () => Effect.die(new Error("reschedule is not used here")),
-    readPendingOffers: () => Effect.die(new Error("pending offers are not read here")),
   };
-  const services = Layer.mergeAll(
-    authentication,
-    permissiveQuota,
-    Layer.succeed(Connections)(unavailableConnections),
-    Layer.succeed(FantasyQueries)(unavailableQueries),
-    Layer.succeed(TransactionProposals)(proposals),
-    Layer.succeed(LineupRuns)(unavailableLineups),
-    Layer.succeed(Teams)(unavailableTeams),
-    Layer.succeed(Feedback)(unavailableFeedback),
-  );
-  const call = (invocation: Request): Promise<Response> =>
+  const run = (invocation: Request): Promise<Response> =>
     handleMcpRequest(invocation, (_request, _operation, program) =>
-      Effect.runPromise(Effect.provide(program, services)),
+      Effect.runPromise(
+        Effect.provide(
+          program,
+          Layer.mergeAll(
+            authentication,
+            permissiveQuota,
+            Layer.succeed(Connections)(unavailableConnections),
+            Layer.succeed(FantasyQueries)(unavailableQueries),
+            Layer.succeed(TransactionProposals)(unavailableProposals),
+            Layer.succeed(TransactionPlanService)(plans),
+            Layer.succeed(LineupRuns)(unavailableLineups),
+            Layer.succeed(Teams)(unavailableTeams),
+            Layer.succeed(Feedback)(unavailableFeedback),
+          ),
+        ),
+      ),
     );
-  const arguments_ = {
-    items: [{ team, kind: "drop", adds: [], drops: ["r1.test"], reason: "A stated reason." }],
-  };
 
-  const denied = await call(
-    request("tools/call", { name: "propose_transactions", arguments: arguments_ }, "fantasy"),
+  const denied = await run(
+    request(
+      "tools/call",
+      {
+        name: "propose_transactions",
+        arguments: {
+          team,
+          moves: [{ kind: "drop", drops: ["r1.test"], reason: "A stated reason." }],
+        },
+      },
+      "fantasy",
+    ),
   );
-
   expect(denied.status).toBe(403);
   expect(denied.headers.get("www-authenticate")).toContain('scope="transactions:review"');
   expect(proposed).toEqual([]);
 
-  const allowed = await call(
-    request("tools/call", { name: "propose_transactions", arguments: arguments_ }, "review"),
-  );
-  const body = await json(allowed);
-
-  expect(allowed.status).toBe(200);
-  expect(body).toMatchObject({
-    result: {
-      isError: false,
-      structuredContent: {
-        created: true,
-        reviewUrl: "https://connections.example/transactions/018f79ea-7d86-7c18-9b4a-8b4d0c9164d0",
-        set: { id: "018f79ea-7d86-7c18-9b4a-8b4d0c9164d0", closed: false },
-      },
-    },
-  });
-  expect(proposed).toEqual([
-    {
-      userId: "reader",
-      proposer: { kind: "agent", reference: "mcp", surface: "mcp" },
-    },
-  ]);
-  expect(revalidations).toBe(0);
-
-  const read = await call(
+  const proposedOnce = await run(
     request(
       "tools/call",
-      { name: "get_transaction_proposal_set", arguments: { set: set.id } },
+      {
+        name: "propose_transactions",
+        arguments: {
+          team,
+          moves: [{ kind: "drop", drops: ["r1.test"], reason: "A stated reason." }],
+        },
+      },
       "review",
     ),
   );
-  expect(read.status).toBe(200);
-  const readBody = await json(read);
-  expect(readBody).toMatchObject({
-    result: {
-      isError: false,
-      structuredContent: {
-        reviewUrl: "https://connections.example/transactions/018f79ea-7d86-7c18-9b4a-8b4d0c9164d0",
-      },
-    },
+  const proposedBody = await json(proposedOnce);
+  expect(proposedOnce.status).toBe(200);
+  expect(proposedBody).toMatchObject({
+    result: { isError: false, structuredContent: { team: { id: team }, refused: [] } },
   });
-  expect(JSON.stringify(readBody)).toContain(providerRefusal);
-  expect(JSON.stringify(readBody)).toContain(illegalDetail);
+  expect(JSON.stringify(proposedBody)).not.toContain('"set":');
+  expect(JSON.stringify(proposedBody)).not.toContain("reviewUrl");
 
-  const listed = await call(
+  const proposedAgain = await run(
     request(
       "tools/call",
-      { name: "list_transaction_proposals", arguments: { team, state: "open" } },
+      {
+        name: "propose_transactions",
+        arguments: {
+          team,
+          moves: [{ kind: "drop", drops: ["r1.other"], reason: "A later reason." }],
+        },
+      },
+      "review",
+    ),
+  );
+  expect(proposedAgain.status).toBe(200);
+  expect(proposed).toHaveLength(2);
+  expect(proposed.map((entry) => entry.userId)).toEqual(["reader", "reader"]);
+  expect(proposed[0]?.input.team).toBe(team);
+  expect(proposed[1]?.input.team).toBe(team);
+
+  const listedResponse = await run(
+    request(
+      "tools/call",
+      { name: "list_transaction_proposals", arguments: { team, state: "saved" } },
       "fantasy",
     ),
   );
-  const listedBody = await json(listed);
-  expect(listed.status).toBe(200);
+  const listedBody = await json(listedResponse);
+  expect(listedResponse.status).toBe(200);
   expect(listedBody).toMatchObject({
     result: {
       isError: false,
       structuredContent: {
         status: "ok",
-        sets: [
-          {
-            id: set.id,
-            closed: false,
-            teams: [{ team: { id: team }, items: [{ id: failedItem.id }] }],
-          },
-        ],
-        page: { returned: 1, complete: true, total: 1 },
+        team: { id: team },
+        days: [{ today: true, teams: [{ team: { id: team } }] }],
+        counts: { open: 1, today: 1, saved: 0, ended: 0 },
+        teamCount: 2,
+        page: { returned: 1, complete: true },
       },
     },
   });
-  expect(listedInputs).toEqual([{ team, state: "open" }]);
+  expect(listed).toEqual([{ team, state: "saved" }]);
+  expect(JSON.stringify(listedBody)).not.toContain('"set":');
 
-  const closed = await call(
-    request(
-      "tools/call",
-      { name: "propose_transactions", arguments: { ...arguments_, set: set.id } },
-      "review",
-    ),
+  const planResponse = await run(
+    request("tools/call", { name: "get_transaction_plan", arguments: { team } }, "fantasy"),
   );
-  const closedBody = await json(closed);
-  expect(closedBody).toMatchObject({ result: { isError: true } });
-  expect(JSON.stringify(closedBody)).toContain("set_closed");
-  expect(JSON.stringify(closedBody)).toContain("Propose a fresh");
-  expect(JSON.stringify(closedBody)).not.toContain("set_expired");
-
-  const refused = await call(
-    request(
-      "tools/call",
-      {
-        name: "withdraw_transaction_proposal_items",
-        arguments: { set: set.id, items: [failedItem.id] },
+  const planBody = await json(planResponse);
+  expect(planResponse.status).toBe(200);
+  expect(planBody).toMatchObject({
+    result: {
+      isError: false,
+      structuredContent: {
+        team: { id: team },
+        today: "2026-11-11",
+        days: [{ day: "2026-11-11", today: true }],
       },
-      "review",
-    ),
-  );
-  const refusedBody = await json(refused);
-  expect(refusedBody).toMatchObject({ result: { isError: true } });
-  expect(JSON.stringify(refusedBody)).toContain("items_not_open");
-  expect(JSON.stringify(refusedBody)).toContain("attempted and failed");
-  expect(JSON.stringify(refusedBody)).not.toContain("items_not_withdrawable");
+    },
+  });
+  expect(JSON.stringify(planBody)).not.toContain("461.p.");
+  expect(JSON.stringify(planBody)).not.toContain('"set":');
 });
 
-it("returns a coded remedy instead of a 500 when a plan list cannot be read", async () => {
+it("returns a coded remedy instead of a 500 when a move list cannot be read", async () => {
   const team = decodeTeamId("018f79ea-7d86-7c18-9b4a-8b4d0c9164b0");
-  const proposals: TransactionProposalsShape = {
-    ...unavailableProposals,
+  const plans: TransactionPlanServiceShape = {
+    ...unavailablePlans,
     list: () =>
       Effect.fail(
-        ProposalPersistenceFailed.make({ cause: new Error("private database password") }),
+        TransactionPlanPersistenceFailed.make({ cause: new Error("private database password") }),
       ),
   };
   const response = await handleMcpRequest(
@@ -1148,7 +1081,8 @@ it("returns a coded remedy instead of a 500 when a plan list cannot be read", as
             permissiveQuota,
             Layer.succeed(Connections)(unavailableConnections),
             Layer.succeed(FantasyQueries)(unavailableQueries),
-            Layer.succeed(TransactionProposals)(proposals),
+            Layer.succeed(TransactionProposals)(unavailableProposals),
+            Layer.succeed(TransactionPlanService)(plans),
             Layer.succeed(LineupRuns)(unavailableLineups),
             Layer.succeed(Teams)(unavailableTeams),
             Layer.succeed(Feedback)(unavailableFeedback),
@@ -1161,10 +1095,8 @@ it("returns a coded remedy instead of a 500 when a plan list cannot be read", as
   const text = decoded.result.content.map((entry) => entry.text).join(" ");
   const failure = Schema.decodeSync(Schema.fromJsonString(ToolFailure))(text);
   expect(decoded.result.isError).toBe(true);
-  expect(failure.code).toBe("list_unavailable");
-  expect(failure.message).toContain("Narrow the filter");
+  expect(failure.code).toBe("plan_unavailable");
   expect(failure.message).toContain("start again from the first page");
-  expect(new TextEncoder().encode(failure.message).length).toBeLessThanOrEqual(320);
   expect(failure.message).not.toContain("private database");
   expect(failure.message).not.toContain("internal server error");
 });
@@ -1202,6 +1134,7 @@ it("returns a durable queued lineup reference without claiming success", async (
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
     Layer.succeed(TransactionProposals)(unavailableProposals),
+    Layer.succeed(TransactionPlanService)(unavailablePlans),
     Layer.succeed(LineupRuns)(lineups),
     Layer.succeed(Teams)(unavailableTeams),
     Layer.succeed(Feedback)(unavailableFeedback),
@@ -1271,6 +1204,7 @@ it("requires teams:manage and changes automation through the shared team service
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
     Layer.succeed(TransactionProposals)(unavailableProposals),
+    Layer.succeed(TransactionPlanService)(unavailablePlans),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(teams),
     Layer.succeed(Feedback)(unavailableFeedback),
@@ -1346,6 +1280,7 @@ it("requires notes:write and attributes an agent note to the authenticated clien
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
     Layer.succeed(TransactionProposals)(unavailableProposals),
+    Layer.succeed(TransactionPlanService)(unavailablePlans),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(teams),
     Layer.succeed(Feedback)(unavailableFeedback),
@@ -1432,6 +1367,7 @@ it("records agent feedback for the authenticated account on a read grant", async
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
     Layer.succeed(TransactionProposals)(unavailableProposals),
+    Layer.succeed(TransactionPlanService)(unavailablePlans),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
     Layer.succeed(Feedback)(feedback),
@@ -1535,6 +1471,7 @@ it("returns an actionable failure for refused feedback instead of leaking persis
               Layer.succeed(Connections)(unavailableConnections),
               Layer.succeed(FantasyQueries)(unavailableQueries),
               Layer.succeed(TransactionProposals)(unavailableProposals),
+              Layer.succeed(TransactionPlanService)(unavailablePlans),
               Layer.succeed(LineupRuns)(unavailableLineups),
               Layer.succeed(Teams)(unavailableTeams),
               Layer.succeed(Feedback)(service),
@@ -1629,6 +1566,7 @@ function handle(
     Layer.succeed(Connections)(connections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
     Layer.succeed(TransactionProposals)(unavailableProposals),
+    Layer.succeed(TransactionPlanService)(unavailablePlans),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
     Layer.succeed(Feedback)(unavailableFeedback),
@@ -1661,6 +1599,20 @@ const unavailableProposals: TransactionProposalsShape = {
   runDue: () => Effect.die(new Error("proposals unavailable")),
   readPendingOffers: () => Effect.die(new Error("proposals unavailable")),
   withdrawTrade: () => Effect.die(new Error("proposals unavailable")),
+};
+const unavailablePlans: TransactionPlanServiceShape = {
+  propose: () => Effect.die(new Error("plans unavailable")),
+  proposeRefs: () => Effect.die(new Error("plans unavailable")),
+  save: () => Effect.die(new Error("plans unavailable")),
+  edit: () => Effect.die(new Error("plans unavailable")),
+  discard: () => Effect.die(new Error("plans unavailable")),
+  submit: () => Effect.die(new Error("plans unavailable")),
+  submitToday: () => Effect.die(new Error("plans unavailable")),
+  runDue: () => Effect.die(new Error("plans unavailable")),
+  timeline: () => Effect.die(new Error("plans unavailable")),
+  list: () => Effect.die(new Error("plans unavailable")),
+  plan: () => Effect.die(new Error("plans unavailable")),
+  counts: () => Effect.die(new Error("plans unavailable")),
 };
 const unavailableLineups: LineupRunsShape = {
   submit: () => Effect.die(new Error("lineups unavailable")),
@@ -1710,46 +1662,42 @@ function request(
   });
 }
 
-it("publishes a closed plan and a dismissed move without a set lifetime", async () => {
-  const response = await handle(request("tools/list", {}, "read"));
-  const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
-  const proposalSet = listed.result.tools.find(
-    (tool) => tool.name === "get_transaction_proposal_set",
-  );
-  if (proposalSet === undefined) {
-    throw new Error("Expected the tool list to include get_transaction_proposal_set");
-  }
-  const published = JSON.stringify(proposalSet);
-
-  expect(published).toContain('"closed"');
-  expect(published).toContain("dismissed");
-  expect(published).not.toContain("expiresAt");
-  expect(published).not.toContain("24 hours");
-});
-
-it("publishes fallback choices on a proposed move and accepts them on a proposal", async () => {
+it("publishes one queue per team without a set lifetime", async () => {
   const response = await handle(request("tools/list", {}, "read"));
   const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
   const propose = listed.result.tools.find((tool) => tool.name === "propose_transactions");
-  const review = listed.result.tools.find((tool) => tool.name === "get_transaction_proposal_set");
-  if (propose === undefined || review === undefined) {
-    throw new Error("Expected the tool list to include both proposal tools");
+  const plan = listed.result.tools.find((tool) => tool.name === "get_transaction_plan");
+  if (propose === undefined || plan === undefined) {
+    throw new Error("Expected the tool list to include both plan tools");
+  }
+  const published = JSON.stringify(propose.inputSchema);
+  expect(published).not.toContain('"set"');
+  expect(published).toContain('"team"');
+  expect(JSON.stringify(plan.outputSchema)).toContain('"moves"');
+  expect(JSON.stringify(plan.outputSchema)).toContain('"validation"');
+  expect(JSON.stringify(plan.outputSchema)).not.toContain("reviewPath");
+  expect(JSON.stringify(plan.outputSchema)).not.toContain("expiresAt");
+});
+
+it("publishes fallback choices, a group label, and a stored check on the plan", async () => {
+  const response = await handle(request("tools/list", {}, "read"));
+  const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
+  const propose = listed.result.tools.find((tool) => tool.name === "propose_transactions");
+  const plan = listed.result.tools.find((tool) => tool.name === "get_transaction_plan");
+  if (propose === undefined || plan === undefined) {
+    throw new Error("Expected the tool list to include both plan tools");
   }
 
   expect(JSON.stringify(propose.inputSchema)).toContain('"fallbacks"');
-  expect(JSON.stringify(review.outputSchema)).toContain('"fallbacks"');
-  expect(JSON.stringify(review.outputSchema)).toContain("Other players to try");
-  expect(JSON.stringify(review.outputSchema)).toContain('"effectiveDate"');
-  expect(JSON.stringify(review.outputSchema)).toContain("not when it takes effect");
-  expect(JSON.stringify(review.outputSchema)).toContain('"groups"');
-  expect(JSON.stringify(review.outputSchema)).toContain('"triggerAt"');
-  expect(JSON.stringify(review.outputSchema)).toContain('"effectiveRule"');
-  expect(JSON.stringify(review.outputSchema)).toContain('"budgetPeriod"');
-  expect(JSON.stringify(review.outputSchema)).toContain('"lifecycle"');
-  expect(JSON.stringify(review.outputSchema)).toContain('"periods"');
+  expect(JSON.stringify(propose.inputSchema)).toContain('"group"');
+  expect(JSON.stringify(propose.inputSchema)).toContain('"window"');
+  expect(JSON.stringify(plan.outputSchema)).toContain('"checkedAt"');
+  expect(JSON.stringify(plan.outputSchema)).toContain('"effectiveDate"');
+  expect(JSON.stringify(plan.outputSchema)).toContain('"reason"');
+  expect(JSON.stringify(plan.outputSchema)).toContain('"check"');
 });
 
-it("publishes the scheduled plan filter and each move's budget period and lifecycle", async () => {
+it("publishes the rolling move list with today, saved, and ended filters", async () => {
   const response = await handle(request("tools/list", {}, "read"));
   const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
   const list = listed.result.tools.find((tool) => tool.name === "list_transaction_proposals");
@@ -1757,9 +1705,13 @@ it("publishes the scheduled plan filter and each move's budget period and lifecy
     throw new Error("Expected the tool list to include list_transaction_proposals");
   }
 
-  expect(JSON.stringify(list.inputSchema)).toContain('"scheduled"');
-  expect(JSON.stringify(list.outputSchema)).toContain('"budgetPeriod"');
-  expect(JSON.stringify(list.outputSchema)).toContain('"lifecycle"');
+  expect(JSON.stringify(list.inputSchema)).toContain('"saved"');
+  expect(JSON.stringify(list.inputSchema)).toContain('"ended"');
+  expect(JSON.stringify(list.outputSchema)).toContain('"counts"');
+  expect(JSON.stringify(list.outputSchema)).toContain('"teamCount"');
+  expect(JSON.stringify(list.outputSchema)).toContain('"days"');
+  expect(JSON.stringify(list.outputSchema)).toContain('"checkedAt"');
+  expect(JSON.stringify(list.outputSchema)).not.toContain('"sets"');
 });
 
 it("keeps every published description inside its budget", async () => {
@@ -1775,19 +1727,17 @@ it("keeps every published description inside its budget", async () => {
     get_players: 220,
     get_rosters: 220,
     get_team_summary: 220,
-    get_transaction_proposal_set: 220,
+    get_transaction_plan: 300,
     get_transactions: 220,
     list_connections: 220,
     list_feedback: 220,
     list_teams: 220,
-    list_transaction_proposals: 220,
+    list_transaction_proposals: 360,
     propose_transactions: 400,
-    revalidate_transaction_proposal_set: 260,
     search_players: 220,
     set_lineup: 220,
     set_team_automation: 220,
     submit_feedback: 280,
-    withdraw_transaction_proposal_items: 220,
   };
 
   expect(listed.result.tools.map((tool) => tool.name).sort()).toEqual(Object.keys(budgets).sort());

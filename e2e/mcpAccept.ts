@@ -807,23 +807,18 @@ function callArguments(tool: string, team: string): Record<string, unknown> {
       return { team, period: { week: 1 } };
     case "propose_transactions":
       return {
-        items: [
+        team: randomUUID(),
+        moves: [
           {
-            team: randomUUID(),
             kind: "drop",
-            adds: [],
             drops: ["r1.acceptance"],
             reason: "The acceptance command checks the proposal scope boundary.",
           },
         ],
       };
-    case "get_transaction_proposal_set":
-    case "revalidate_transaction_proposal_set":
-      return { set: randomUUID() };
-    case "withdraw_transaction_proposal_items":
-      return { set: randomUUID(), items: [randomUUID()] };
     case "get_pending_trade_offers":
     case "list_transaction_proposals":
+    case "get_transaction_plan":
       return { team: randomUUID() };
     case "set_lineup":
       return {

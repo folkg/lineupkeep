@@ -2,7 +2,7 @@ import { Schema } from "effect";
 
 import { expect, signUp, test } from "./support";
 
-test("reviews and submits a proposed transaction set across the owner's teams", async ({
+test("proposes a move into one team queue and submits the chosen move from the transactions page", async ({
   page,
   services,
   mcp,
@@ -43,181 +43,65 @@ test("reviews and submits a proposed transaction set across the owner's teams", 
     return;
   }
 
+  const reason = "Open a bench spot for the incoming wing.";
   const proposed = await client.callTool("propose_transactions", {
-    items: [
-      {
-        team: football.id,
-        kind: "drop",
-        adds: [],
-        drops: [drop],
-        reason: "Open a bench spot for the incoming wing.",
-      },
-    ],
+    team: football.id,
+    moves: [{ kind: "drop", drops: [drop], reason }],
   });
   expect(proposed.isError).toBe(false);
-  const review = Schema.decodeUnknownSync(
+  const queued = Schema.decodeUnknownSync(
     Schema.Struct({
-      reviewUrl: Schema.String,
-      set: Schema.Struct({ id: Schema.String, closed: Schema.Boolean }),
+      team: Schema.Struct({ id: Schema.String, name: Schema.String }),
+      moves: Schema.Array(
+        Schema.Struct({
+          move: Schema.String,
+          kind: Schema.String,
+          drops: Schema.Array(Schema.Struct({ name: Schema.optional(Schema.String) })),
+        }),
+      ),
+      refused: Schema.Array(Schema.Struct({ code: Schema.String })),
     }),
   )(proposed.structuredContent);
+  expect(queued.team.id).toBe(football.id);
+  expect(queued.moves).toHaveLength(1);
+  expect(queued.refused).toStrictEqual([]);
+  expect(JSON.stringify(proposed)).not.toContain('"set":');
+  expect(JSON.stringify(proposed)).not.toContain("reviewUrl");
 
-  await page.goto(review.reviewUrl);
+  await page.goto("/transactions");
+  await expect(page.getByRole("heading", { name: "Transactions" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
+  await expect(page.getByText("1 open move", { exact: true })).toBeVisible();
+  await expect(page.getByText("1 move for today", { exact: true })).toBeVisible();
+  await expect(page.getByText(reason, { exact: true })).toBeVisible();
+  await expect(page.getByText("Embedded Browser Team", { exact: true }).first()).toBeVisible();
 
-  await expect(page.getByRole("heading", { name: "Proposed moves" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Embedded Browser Team" })).toBeVisible();
-  await expect(page.getByText("Open a bench spot for the incoming wing.")).toBeVisible();
-  await expect(page.getByText("Riverside Receiver", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Checked against current state/u)).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Teams with nothing proposed" })).toBeVisible();
-  await expect(
-    page.getByLabel("Teams with nothing proposed").getByText("Hosted Hockey Team", { exact: true }),
-  ).toBeVisible();
+  const submit = page.getByRole("button", { name: "Submit today's chosen moves" });
+  await expect(submit).toBeDisabled();
+  await page.getByRole("button", { name: /Do it now: Drop Riverside Receiver/u }).click();
+  await expect(page.getByText("Runs when you submit.", { exact: true })).toBeVisible();
+  await expect(submit).toBeEnabled();
+  await submit.click();
 
-  const checkbox = page.getByRole("checkbox", { name: /Drop Riverside Receiver/u });
-  await expect(checkbox).toBeChecked();
-  await expect(page.getByRole("button", { name: "Submit 1 move today" })).not.toHaveAttribute(
-    "aria-disabled",
-  );
-  await expect(page.getByText(/Each move is sent once, with no retries./u)).toBeVisible();
+  await expect(page.getByText("Submitted 1 move.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Nothing for today", { exact: true }).first()).toBeVisible();
 
-  await page.getByRole("button", { name: "Submit 1 move today" }).click();
-
-  await expect(page.getByRole("heading", { name: "Submitted" })).toBeVisible();
-  await expect(page.getByText("1 executed.")).toBeVisible();
-  await expect(page.getByText("Submitted by you", { exact: false })).toBeVisible();
-  await expect(page.getByText("Executed", { exact: true }).first()).toBeVisible();
+  const earlier = page.getByRole("button", { name: "Show earlier moves" });
+  await expect(earlier).toHaveAttribute("aria-expanded", "false");
+  await earlier.click();
+  await expect(page.getByText("Ran", { exact: true })).toBeVisible();
   await expect(page.getByText("Drop Riverside Receiver", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Submit/u })).toHaveCount(0);
-  await expect(page.getByRole("checkbox")).toHaveCount(0);
-  await expect(
-    page.getByText(/Every move in this plan has settled or been dismissed/u),
-  ).toBeVisible();
+  await expect(page.getByText("1 ended move", { exact: true })).toBeVisible();
 
   const content = await page.content();
   expect(content).not.toContain("461.p.90001");
   expect(content).not.toContain("461.l.9000.t.1");
 
-  await page.reload();
-  await expect(page.getByRole("heading", { name: "Submitted" })).toBeVisible();
-  await expect(page.getByText("1 executed.")).toBeVisible();
-  await expect(page.getByText("Drop Riverside Receiver", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Submit/u })).toHaveCount(0);
-
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({
-    path: ".artifacts/transactions-review/e2e-result-390-light.png",
-  });
-  await page.emulateMedia({ colorScheme: "dark" });
-  await page.reload();
-  await expect(page.getByRole("heading", { name: "Submitted" })).toBeVisible();
-  await page.screenshot({
-    path: ".artifacts/transactions-review/e2e-result-390-dark.png",
-  });
+  await expect(page.getByRole("button", { name: "Submit today's moves" })).toHaveCount(0);
 });
 
-test("shows one league refusal in the review page and in the MCP result", async ({
-  page,
-  services,
-  mcp,
-}) => {
-  await signUp(page);
-  const discovered = Schema.decodeUnknownSync(
-    Schema.Array(
-      Schema.Struct({
-        id: Schema.String,
-        name: Schema.String,
-      }),
-    ),
-  )(
-    await services.exercise(
-      page,
-      "link the provider fake and discover teams",
-      "connectYahooAndDiscoverTeams",
-      {},
-    ),
-  );
-  const hockey = discovered.find((team) => team.name === "Hosted Hockey Team");
-  expect(hockey, "a hockey team").toBeDefined();
-  if (hockey === undefined) {
-    return;
-  }
-
-  const client = await mcp(["fantasy:read", "transactions:review"], page);
-  const roster = await client.callTool("get_rosters", { team: hockey.id });
-  expect(roster.isError).toBe(false);
-  const players = Schema.decodeUnknownSync(
-    Schema.Struct({ players: Schema.Array(Schema.Struct({ player: Schema.String })) }),
-  )(roster.structuredContent).players;
-  const drop = players[0]?.player;
-  expect(drop, "a rostered player reference").toBeDefined();
-  if (drop === undefined) {
-    return;
-  }
-
-  const proposed = await client.callTool("propose_transactions", {
-    items: [
-      {
-        team: hockey.id,
-        kind: "drop",
-        adds: [],
-        drops: [drop],
-        reason: "Make room for the call-up.",
-      },
-    ],
-  });
-  expect(proposed.isError).toBe(false);
-  const created = Schema.decodeUnknownSync(
-    Schema.Struct({
-      reviewUrl: Schema.String,
-      set: Schema.Struct({ id: Schema.String }),
-    }),
-  )(proposed.structuredContent);
-
-  await page.goto(created.reviewUrl);
-  await expect(page.getByRole("button", { name: "Submit 1 move today" })).toBeVisible();
-  await page.getByRole("button", { name: "Submit 1 move today" }).click();
-  await expect(page.getByRole("heading", { name: "Submitted" })).toBeVisible();
-
-  const read = await client.callTool("get_transaction_proposal_set", { set: created.set.id });
-  expect(read.isError).toBe(false);
-  const review = Schema.decodeUnknownSync(
-    Schema.Struct({
-      teams: Schema.Array(
-        Schema.Struct({
-          items: Schema.Array(
-            Schema.Struct({
-              execution: Schema.optional(
-                Schema.Struct({
-                  outcome: Schema.String,
-                  detail: Schema.optional(Schema.String),
-                }),
-              ),
-            }),
-          ),
-        }),
-      ),
-    }),
-  )(read.structuredContent);
-  const detail = review.teams
-    .flatMap((team) => team.items)
-    .find((item) => item.execution?.outcome === "failed")?.execution?.detail;
-
-  if (detail === undefined) {
-    throw new Error("the MCP result carries no league refusal");
-  }
-  expect(detail).toBe(
-    "Your league rejected the transaction with HTTP 400. It said: Player Travis Konecny is in a IR position on your roster, but is no longer on the real-life IR. Please edit your lineup to activate this player from your IR and then attempt your transaction again.",
-  );
-  await expect(page.getByText(detail, { exact: true }).first()).toBeVisible();
-  expect(await page.content()).not.toContain("without giving a reason");
-});
-
-test("shows one timeline across teams and moves a discarded move into earlier", async ({
-  page,
-  services,
-  mcp,
-}) => {
+test("discards a move today and shows it under earlier moves", async ({ page, services, mcp }) => {
   await signUp(page);
   const discovered = Schema.decodeUnknownSync(
     Schema.Array(
@@ -252,44 +136,72 @@ test("shows one timeline across teams and moves a discarded move into earlier", 
 
   const reason = "Free the bench spot before the waiver run.";
   const proposed = await client.callTool("propose_transactions", {
-    items: [
-      {
-        team: football.id,
-        kind: "drop",
-        adds: [],
-        drops: [drop],
-        reason,
-      },
-    ],
+    team: football.id,
+    moves: [{ kind: "drop", drops: [drop], reason }],
   });
   expect(proposed.isError).toBe(false);
 
   await page.goto("/transactions");
-  await expect(page.getByRole("heading", { name: "Transactions" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
-  await expect(page.getByText("1 open move", { exact: true })).toBeVisible();
   const move = page.getByText("Drop Riverside Receiver", { exact: true });
   await expect(move).toBeVisible();
 
   const submit = page.getByRole("button", { name: "Submit today's chosen moves" });
   await expect(submit).toBeDisabled();
-  await page.getByRole("button", { name: /Discard: Drop Riverside Receiver/ }).click();
+  await page.getByRole("button", { name: /Discard: Drop Riverside Receiver/u }).click();
   await expect(page.getByText("Discarded when you submit.", { exact: true })).toBeVisible();
   await expect(submit).toBeEnabled();
   await submit.click();
   await expect(page.getByText("Discarded 1 move.", { exact: true })).toBeVisible();
   await expect(move).toHaveCount(0);
 
-  const earlier = page.getByRole("button", { name: /earlier moves/u });
-  await expect(earlier).toHaveAttribute("aria-expanded", "false");
+  const earlier = page.getByRole("button", { name: "Show earlier moves" });
   await earlier.click();
-  await expect(page.getByRole("button", { name: "Hide earlier moves" })).toHaveAttribute(
-    "aria-expanded",
-    "true",
-  );
   await expect(page.getByText("Discarded", { exact: true })).toBeVisible();
   await expect(page.getByText("Drop Riverside Receiver", { exact: true })).toBeVisible();
-  await expect(page.getByText("1 ended move", { exact: true })).toBeVisible();
+});
+
+test("names a refused move without storing it or returning a set id", async ({
+  page,
+  services,
+  mcp,
+}) => {
+  await signUp(page);
+  const discovered = Schema.decodeUnknownSync(
+    Schema.Array(Schema.Struct({ id: Schema.String, name: Schema.String })),
+  )(
+    await services.exercise(
+      page,
+      "link the provider fake and discover teams",
+      "connectYahooAndDiscoverTeams",
+      {},
+    ),
+  );
+  const football = discovered.find((team) => team.name === "Embedded Browser Team");
+  expect(football, "a football team").toBeDefined();
+  if (football === undefined) {
+    return;
+  }
+
+  const client = await mcp(["fantasy:read", "transactions:review"], page);
+  const proposed = await client.callTool("propose_transactions", {
+    team: football.id,
+    moves: [{ kind: "drop", drops: ["r1.not-a-player"], reason: "Try a move that cannot run." }],
+  });
+  expect(proposed.isError).toBe(false);
+  const body = Schema.decodeUnknownSync(
+    Schema.Struct({
+      moves: Schema.Array(Schema.Unknown),
+      refused: Schema.Array(Schema.Struct({ code: Schema.String, detail: Schema.String })),
+    }),
+  )(proposed.structuredContent);
+  expect(body.moves).toHaveLength(0);
+  expect(body.refused).toHaveLength(1);
+  expect(body.refused[0]?.code).toBe("reference_invalid");
+  expect(JSON.stringify(proposed)).not.toContain('"set":');
+
+  await page.goto("/transactions");
+  await expect(page.getByText("0 open moves", { exact: true })).toBeVisible();
 });
 
 test("opens the timeline on the first visit from the team page", async ({ page, services }) => {

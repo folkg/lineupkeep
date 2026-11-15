@@ -1,408 +1,208 @@
 import type { FantasyLeague, FantasySport } from "@lineupkeep/backend/connections/FantasyTeam";
-import type {
-  ProposalItemKind,
-  ProposalItemLifecycle,
-  ProposalItemState,
-  ProposalOutcome,
-  ProposalStalenessStatus,
-} from "@lineupkeep/backend/connections/TransactionProposals";
+import type { TransactionMoveKind } from "@lineupkeep/backend/connections/TransactionPlans";
 
 import type { AuthenticationFailure } from "#contracts/auth/authContract.ts";
 import type { UseCaseResult } from "#contracts/useCaseContract.ts";
 
-export type TransactionReviewPlayerView = {
+type TransactionMoveTeamView = {
+  readonly id: string;
+  readonly name: string;
+  readonly league: FantasyLeague;
+  readonly sport: FantasySport;
+  readonly season: number;
+};
+
+export type TransactionMovePlayerView = {
   readonly name?: string;
   readonly position?: string;
   readonly proTeam?: string;
   readonly availability?: string;
 };
 
-export type TransactionReviewStaleReasonView = {
+type TransactionMovePickView = {
+  readonly round: number;
+  readonly sourceName: string;
+  readonly destinationName: string;
+};
+
+type TransactionMoveValidationReasonView = {
   readonly code: string;
   readonly detail: string;
 };
 
-export type TransactionReviewIllegalRosterView = {
-  readonly name: string;
-  readonly slot: string;
-  readonly detail: string;
+type TransactionMoveValidationView = {
+  readonly status: "unchecked" | "current" | "stale" | "illegal";
+  readonly checkedAt?: string;
+  readonly reasons: ReadonlyArray<TransactionMoveValidationReasonView>;
 };
 
-export type TransactionReviewStepView = {
-  readonly kind: "reserve_move" | "slot_move" | "add" | "drop";
-  readonly playerName?: string;
-  readonly fromSlot?: string;
-  readonly toSlot?: string;
-  readonly outcome: ProposalOutcome;
-  readonly detail?: string;
-  readonly decidedAt: string;
-};
-
-export type TransactionReviewExecutionView = {
-  readonly position?: number;
-  readonly outcome: ProposalOutcome;
-  readonly detail?: string;
-  readonly decidedAt: string;
-  readonly steps: ReadonlyArray<TransactionReviewStepView>;
-};
-
-type TransactionReviewReserveMoveView = {
-  readonly playerName?: string;
-  readonly fromSlot?: string;
-  readonly toSlot: string;
-  readonly order: "before" | "after";
-};
-
-type TransactionReviewSlotMoveView = {
-  readonly playerName?: string;
-  readonly fromSlot?: string;
-  readonly toSlot: string;
-};
-
-type TransactionReviewPlacementView = {
-  readonly playerName?: string;
-  readonly fromSlot?: string;
-  readonly toSlot: string;
-  readonly detail: string;
-};
-
-type TransactionReviewLineupView = {
-  readonly status:
-    | "settled"
-    | "pending"
-    | "blocked"
-    | "failed"
-    | "uncertain"
-    | "not_started"
-    | "not_needed"
-    | "superseded";
-  readonly detail: string;
-  readonly run?: string;
-  readonly at?: string;
-};
-
-type TransactionReviewCounterpartyView = {
-  readonly ref: string;
-  readonly name?: string;
-  readonly managerName?: string;
-};
-
-type TransactionReviewTradePartyView = {
-  readonly ref: string;
-  readonly name: string;
-};
-
-export type TransactionReviewTradePickView = {
-  readonly round: number;
-  readonly from: TransactionReviewTradePartyView;
-  readonly to: TransactionReviewTradePartyView;
-};
-
-type TransactionReviewTradeSupportView = {
-  readonly assets: ReadonlyArray<"player" | "draft_pick">;
-  readonly detail: string;
-};
-
-export type TransactionReviewTradeView = {
-  readonly state: "pending" | "accepted" | "withdrawn" | "expired";
-  readonly requestedAt: string;
-  readonly proposedAt?: string;
-  readonly settledAt?: string;
-  readonly detail?: string;
-};
-
-type TransactionReviewOfferPartyView = {
-  readonly ref: string;
-  readonly name?: string;
-};
-
-type TransactionReviewOfferPlayerView = {
-  readonly player: string;
-  readonly name?: string;
-  readonly displayPosition?: string;
-  readonly proTeam?: string;
-  readonly from?: TransactionReviewOfferPartyView;
-  readonly to?: TransactionReviewOfferPartyView;
-};
-
-type TransactionReviewOfferPickView = {
-  readonly round: number;
-  readonly from?: TransactionReviewOfferPartyView;
-  readonly to?: TransactionReviewOfferPartyView;
-  readonly original?: TransactionReviewOfferPartyView;
-};
-
-export type TransactionReviewPendingOfferView = {
-  readonly offerRef: string;
-  readonly proposedAt: string;
+type TransactionMoveCheckView = {
+  readonly status: "checked" | "stored" | "last_checked";
   readonly note?: string;
-  readonly canRespond: boolean;
-  readonly proposingTeam?: TransactionReviewOfferPartyView;
-  readonly receivingTeam?: TransactionReviewOfferPartyView;
-  readonly players: ReadonlyArray<TransactionReviewOfferPlayerView>;
-  readonly picks: ReadonlyArray<TransactionReviewOfferPickView>;
-  readonly incomplete?: string;
 };
 
-type TransactionReviewBudgetPeriodView =
-  | { readonly status: "season"; readonly season: number; readonly detail: string }
-  | { readonly status: "none"; readonly detail: string };
-
-type TransactionReviewBudgetRollupView = {
-  readonly season: number;
-  readonly spent: number;
-  readonly scheduled: number;
-  readonly open: number;
-};
-
-export type TransactionReviewItemView = {
-  readonly id: string;
-  readonly kind: ProposalItemKind;
-  readonly adds: ReadonlyArray<TransactionReviewPlayerView>;
-  readonly fallbacks?: ReadonlyArray<TransactionReviewPlayerView>;
-  readonly drops: ReadonlyArray<TransactionReviewPlayerView>;
-  readonly picks: ReadonlyArray<TransactionReviewTradePickView>;
-  readonly bid?: number;
-  readonly budgetPeriod: TransactionReviewBudgetPeriodView;
+export type TransactionMoveView = {
+  readonly move: string;
+  readonly team: TransactionMoveTeamView;
+  readonly group?: string;
+  readonly kind: TransactionMoveKind;
+  readonly position: number;
+  readonly decision: "undecided" | "saved" | "now" | "discarded";
   readonly reason: string;
-  readonly state: ProposalItemState;
-  readonly lifecycle: ProposalItemLifecycle;
-  readonly outcomeDetail?: string;
-  readonly staleness: {
-    readonly status: ProposalStalenessStatus;
-    readonly checkedAt?: string;
-    readonly reasons: ReadonlyArray<TransactionReviewStaleReasonView>;
+  readonly adds: ReadonlyArray<TransactionMovePlayerView>;
+  readonly fallbacks: ReadonlyArray<TransactionMovePlayerView>;
+  readonly drops: ReadonlyArray<TransactionMovePlayerView>;
+  readonly picks: ReadonlyArray<TransactionMovePickView>;
+  readonly slotMove?: { readonly playerName?: string; readonly toSlot: string };
+  readonly intent?: {
+    readonly kind: "add" | "activate" | "stash";
+    readonly player?: TransactionMovePlayerView;
+    readonly to?: "active" | "reserve";
   };
-  readonly execution?: TransactionReviewExecutionView;
-  readonly reserveMove?: TransactionReviewReserveMoveView;
-  readonly slotMove?: TransactionReviewSlotMoveView;
-  readonly placement?: TransactionReviewPlacementView;
-  readonly counterparty?: TransactionReviewCounterpartyView;
-  readonly trade?: TransactionReviewTradeView;
-  readonly window?: string;
+  readonly placement?: {
+    readonly playerName?: string;
+    readonly fromSlot?: string;
+    readonly toSlot: string;
+    readonly detail: string;
+  };
+  readonly bid?: number;
+  readonly runDay?: string;
   readonly effectiveDate?: string;
-  readonly effectiveWarning?: string;
-  readonly approvedAt?: string;
+  readonly validation: TransactionMoveValidationView;
+  readonly check: TransactionMoveCheckView;
+  readonly result?:
+    | "executed"
+    | "pending"
+    | "failed"
+    | "skipped"
+    | "unknown"
+    | "withdrawn"
+    | "expired";
 };
 
-export type TransactionReviewTradeRulesView = {
-  readonly endDate?: string;
-  readonly ratification?: "vote" | "commissioner" | "none" | "unknown";
-  readonly objectionDays?: number;
+export type TransactionMoveTeamDayView = {
+  readonly team: TransactionMoveTeamView;
+  readonly moves: ReadonlyArray<TransactionMoveView>;
 };
 
-export type TransactionRunTiming = "same_day" | "next_day" | "weekly_lock" | "not_published";
-
-export type TransactionRunGroupView = {
-  readonly date: string;
-  readonly triggerAt: string;
-  readonly timeZone: string;
-  readonly effectiveRule: TransactionRunTiming;
-  readonly items: ReadonlyArray<string>;
+export type TransactionMoveDayView = {
+  readonly day?: string;
+  readonly today: boolean;
+  readonly teams: ReadonlyArray<TransactionMoveTeamDayView>;
 };
 
-type TransactionReviewRosterPlacesView = {
-  readonly maximum: number;
-  readonly occupied: number;
-  readonly net: number;
+export type TransactionPlanDayView = {
+  readonly day?: string;
+  readonly today: boolean;
+  readonly moves: ReadonlyArray<TransactionMoveView>;
 };
 
-export type TransactionReviewOrderView =
-  | {
-      readonly status: "ordered";
-      readonly timing: "same_day" | "next_day" | "weekly_lock" | "not_published";
-      readonly effectiveDate?: string;
-      readonly rosterPlaces?: TransactionReviewRosterPlacesView;
-      readonly steps: ReadonlyArray<{
-        readonly item: string;
-        readonly position: number;
-        readonly rosterPlace?: "frees" | "consumes";
-      }>;
-    }
-  | {
-      readonly status: "conflict";
-      readonly timing: "same_day" | "next_day" | "weekly_lock" | "not_published";
-      readonly effectiveDate?: string;
-      readonly conflicts: ReadonlyArray<{
-        readonly items: ReadonlyArray<string>;
-        readonly detail: string;
-      }>;
-    }
-  | {
-      readonly status: "unresolved";
-      readonly timing: "same_day" | "next_day" | "weekly_lock" | "not_published";
-      readonly effectiveDate?: string;
-      readonly detail: string;
-    };
-
-export type TransactionReviewTeamView = {
-  readonly team: {
-    readonly id: string;
-    readonly name: string;
-    readonly league: FantasyLeague;
-    readonly sport: FantasySport;
-    readonly season: number;
-  };
-  readonly budget?:
-    | {
-        readonly status: "published";
-        readonly remaining: number;
-        readonly periods: ReadonlyArray<TransactionReviewBudgetRollupView>;
-      }
-    | { readonly status: "not_published"; readonly detail: string };
-  readonly tradeProposal?: TransactionReviewTradeSupportView;
-  readonly tradeRules?: TransactionReviewTradeRulesView;
-  readonly order?: TransactionReviewOrderView;
-  readonly lineup?: TransactionReviewLineupView;
-  readonly illegalRoster?: ReadonlyArray<TransactionReviewIllegalRosterView>;
-  readonly today?: string;
-  readonly failure?: string;
-  readonly items: ReadonlyArray<TransactionReviewItemView>;
-  readonly groups?: ReadonlyArray<TransactionRunGroupView>;
-  readonly pendingOffers: ReadonlyArray<TransactionReviewPendingOfferView>;
-};
-
-export type TransactionReviewView = {
-  readonly set: {
-    readonly id: string;
-    readonly proposedBy: {
-      readonly kind: "user" | "agent";
-      readonly surface: "app" | "mcp";
-    };
-    readonly createdAt: string;
-    readonly updatedAt: string;
-    readonly submissions: ReadonlyArray<{
-      readonly submittedAt: string;
-      readonly completedAt?: string;
-    }>;
-    readonly closed: boolean;
-  };
-  readonly teams: ReadonlyArray<TransactionReviewTeamView>;
-};
-
-export type TransactionReviewData = {
-  readonly review: TransactionReviewView;
-  readonly submittedBids?: ReadonlyArray<{ readonly item: string; readonly bid: number }>;
-  readonly scheduled?: number;
-  readonly nextRun?: string;
-  readonly detail?: string;
-};
-
-export type TransactionProposalItemView = TransactionReviewItemView & {
-  readonly settled: boolean;
-};
-
-export type TransactionProposalSetSummaryView = {
-  readonly id: string;
-  readonly proposedBy: {
-    readonly kind: "user" | "agent";
-    readonly surface: "app" | "mcp";
-    readonly client?: string;
-  };
-  readonly createdAt: string;
-  readonly updatedAt: string;
-  readonly closed: boolean;
-  readonly reviewPath: string;
-  readonly teams: ReadonlyArray<{
-    readonly team: TransactionReviewTeamView["team"];
-    readonly today?: string;
-    readonly items: ReadonlyArray<TransactionProposalItemView>;
-    readonly groups?: ReadonlyArray<TransactionRunGroupView>;
-    readonly illegalRoster?: ReadonlyArray<TransactionReviewIllegalRosterView>;
-  }>;
-};
-
-export type TransactionProposalListData = {
+export type TransactionMoveListData = {
   readonly status: "ok";
-  readonly team?: TransactionReviewTeamView["team"];
-  readonly sets: ReadonlyArray<TransactionProposalSetSummaryView>;
+  readonly team?: TransactionMoveTeamView;
+  readonly moves: ReadonlyArray<TransactionMoveView>;
+  readonly days: ReadonlyArray<TransactionMoveDayView>;
   readonly counts: {
     readonly open: number;
+    readonly today: number;
+    readonly saved: number;
     readonly ended: number;
   };
+  readonly teamCount: number;
   readonly page: {
     readonly returned: number;
     readonly complete: boolean;
-    readonly remaining: number;
-    readonly next?: string;
-    readonly total?: number;
+    readonly next?: {
+      readonly runDay: string | null;
+      readonly team: string;
+      readonly position: number;
+      readonly move: string;
+    };
   };
 };
 
-export type TransactionProposalListRequest = {
+export type TransactionPlanData = {
+  readonly team: TransactionMoveTeamView;
+  readonly today?: string;
+  readonly moves: ReadonlyArray<TransactionMoveView>;
+  readonly days: ReadonlyArray<TransactionPlanDayView>;
+};
+
+type TransactionRefusalView = {
+  readonly code: string;
+  readonly detail: string;
+};
+
+export type TransactionMoveActionData =
+  | { readonly status: "saved" | "discarded"; readonly move: string }
+  | { readonly status: "refused"; readonly refusals: ReadonlyArray<TransactionRefusalView> };
+
+type TransactionTodayChoice = {
+  readonly team: string;
+  readonly move: string;
+  readonly choice: "now" | "discard";
+};
+
+export type TransactionSubmitTodayData = {
+  readonly status: "submitted";
+  readonly counts: {
+    readonly moves: number;
+    readonly executed: number;
+    readonly pending: number;
+    readonly failed: number;
+    readonly skipped: number;
+    readonly unknown: number;
+  };
+  readonly discarded: number;
+  readonly refusals: ReadonlyArray<TransactionRefusalView>;
+};
+
+export type TransactionListRequest = {
   readonly team?: string;
-  readonly state?: "open" | "closed" | "scheduled";
-  readonly cursor?: string;
+  readonly state?: "today" | "saved" | "ended";
+  readonly after?: {
+    readonly runDay: string | null;
+    readonly team: string;
+    readonly position: number;
+    readonly move: string;
+  };
   readonly limit?: number;
 };
 
-export type SubmitTransactionReviewRequest = {
-  readonly set: string;
-  readonly include: ReadonlyArray<string>;
-  readonly bids: ReadonlyArray<{ readonly item: string; readonly bid: number }>;
+export type TransactionTimelineRequest = {
+  readonly after?: TransactionListRequest["after"];
+  readonly limit?: number;
 };
 
-export type DismissTransactionProposalRequest = {
-  readonly set: string;
-  readonly items: ReadonlyArray<string>;
-  readonly reason?: string;
-};
-
-export type RescheduleTransactionProposalRequest = {
-  readonly set: string;
-  readonly items: ReadonlyArray<string>;
-  readonly window: string;
-};
-
-export type RescheduleTransactionProposalData =
-  | {
-      readonly status: "saved";
-      readonly set: string;
-      readonly window: string;
-      readonly saved: number;
-      readonly refused: ReadonlyArray<{ readonly reason: string; readonly fix: string }>;
-    }
-  | {
-      readonly status: "refused";
-      readonly detail: string;
-      readonly refusals: ReadonlyArray<{ readonly reason: string; readonly fix: string }>;
-    };
-
-export type DismissTransactionProposalData =
-  | {
-      readonly outcome: "dismissed";
-      readonly review: TransactionReviewView;
-    }
-  | {
-      readonly outcome: "refused";
-      readonly detail: string;
-      readonly refusals: ReadonlyArray<{ readonly item: string; readonly detail: string }>;
-    };
-
-export type WithdrawTradeData = {
-  readonly status: "withdrawn" | "not_pending";
-  readonly detail: string;
-};
-export type WithdrawTradeRequest = {
+export type TransactionPlanRequest = {
   readonly team: string;
-  readonly item?: string;
-  readonly offer?: string;
 };
 
-export type TransactionReviewError = {
+export type TransactionSaveMoveRequest = {
+  readonly team: string;
+  readonly move: string;
+  readonly runDay: string;
+};
+
+export type TransactionDiscardMoveRequest = {
+  readonly team: string;
+  readonly move: string;
+};
+
+export type TransactionSubmitTodayRequest = {
+  readonly choices: ReadonlyArray<TransactionTodayChoice>;
+};
+
+export type TransactionError = {
   readonly type:
-    | "transactions.set_not_found"
+    | "transactions.team_not_found"
+    | "transactions.move_not_found"
+    | "transactions.run_in_progress"
     | "transactions.persistence_failed"
     | "transactions.unavailable"
-    | "transactions.input_invalid"
-    | "transactions.set_closed"
-    | "transactions.items_not_open"
-    | "transactions.submission_in_progress"
-    | "transactions.nothing_included"
-    | "transactions.trade_not_found"
-    | "transactions.trade_not_pending";
+    | "transactions.input_invalid";
 };
 
-export type TransactionReviewRequestResult<A> =
-  | UseCaseResult<A, TransactionReviewError["type"]>
+export type TransactionRequestResult<A> =
+  | UseCaseResult<A, TransactionError["type"]>
   | { readonly type: "error"; readonly error: AuthenticationFailure };

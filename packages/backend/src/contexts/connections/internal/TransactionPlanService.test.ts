@@ -3,15 +3,21 @@ import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import type { UserId } from "@lineupkeep/backend/auth/User";
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
-import { ConfigProvider, DateTime, Effect, Layer, Schema } from "effect";
+import { DateTime, Effect, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 
 import { decodeTeamId } from "#contexts/connections/FantasyTeam.ts";
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
+import type { TransactionMoveList } from "#contexts/connections/TransactionPlans.ts";
+import type {
+  TransactionPlanMoveDraft,
+  TransactionPlanView,
+} from "#contexts/connections/TransactionPlans.ts";
 
 import { ConnectionsDatabase } from "./ConnectionsDatabase.ts";
 import { ConnectionsDatabaseTest } from "./ConnectionsDatabaseTest.ts";
 import { providerTeams } from "./ConnectionTables.ts";
+import { QueryTokens } from "./QueryTokens.ts";
 import type {
   TransactionPlanConstraints,
   TransactionPlanPoolPlayer,
@@ -20,7 +26,6 @@ import type {
   TransactionPlanTeamFacts,
   TransactionPlanTiming,
 } from "./TransactionPlanEvaluation.ts";
-import type { TransactionMoveList } from "./TransactionPlanRead.ts";
 import type { TransactionMoveCursor, TransactionMoveId } from "./TransactionPlanRecord.ts";
 import { TransactionPlanRepository } from "./TransactionPlanRepository.ts";
 import type { TransactionMoveAppend } from "./TransactionPlanRepository.ts";
@@ -30,13 +35,8 @@ import {
   TransactionPlanRunInProgress,
   TransactionPlanService,
   TransactionPlanServiceLive,
-  TransactionPlansDisabled,
 } from "./TransactionPlanService.ts";
-import type {
-  TransactionPlanFactsShape,
-  TransactionPlanMoveDraft,
-  TransactionPlanView,
-} from "./TransactionPlanService.ts";
+import type { TransactionPlanFactsShape } from "./TransactionPlanService.ts";
 import {
   transactionMoveClaims,
   transactionMoveSteps,
@@ -533,35 +533,6 @@ it.effect("resolves concurrent proposals to one plan without losing a move", () 
   ),
 );
 
-it.effect("refuses every operation while the switch is off", () =>
-  Effect.gen(function* () {
-    const service = yield* TransactionPlanService;
-    const database = yield* ConnectionsDatabase;
-    yield* TestClock.setTime(DateTime.toEpochMillis(at));
-    yield* seedTeam(database, owner, team);
-
-    const error = yield* service
-      .propose(owner, { team, proposedBy: proposer, moves: [add("fa1", "Free Agent One")] })
-      .pipe(Effect.flip);
-
-    assert.isTrue(Schema.is(TransactionPlansDisabled)(error));
-    assert.include(
-      Schema.is(TransactionPlansDisabled)(error) ? error.detail : "",
-      "The transaction plan service is off",
-    );
-    const readError = yield* service.timeline(owner, {}).pipe(Effect.flip);
-    assert.isTrue(Schema.is(TransactionPlansDisabled)(readError));
-    const submitError = yield* service.submit(owner, { team }).pipe(Effect.flip);
-    assert.isTrue(Schema.is(TransactionPlansDisabled)(submitError));
-    const dueError = yield* service.runDue(10, at).pipe(Effect.flip);
-    assert.isTrue(Schema.is(TransactionPlansDisabled)(dueError));
-    assert.deepStrictEqual(yield* database.select().from(transactionPlans), []);
-    assert.deepStrictEqual(yield* database.select().from(transactionMoves), []);
-  }).pipe(
-    Effect.provide(serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])], false)),
-  ),
-);
-
 it.effect("rechecks a saved drop when the league no longer rosters the player", () => {
   const facts = new Map<TeamId, TransactionPlanTeamFacts>();
   return Effect.gen(function* () {
@@ -638,8 +609,8 @@ it.effect("reads a healthy player in an injury reserve place as illegal", () => 
 
     assert.strictEqual(move?.validation.status, "illegal");
     assert.deepStrictEqual(
-      move?.validation.reasons.map((reason) => [reason.code, reason.playerKey]),
-      [["slot_illegal", "h1"]],
+      move?.validation.reasons.map((reason) => reason.code),
+      ["slot_illegal"],
     );
     assert.include(
       move?.validation.reasons[0]?.detail ?? "",
@@ -847,6 +818,7 @@ it.effect("counts open, today, saved, and ended moves, overall and per team", ()
 
     const all = yield* service.counts(owner, {});
 
+    assert.strictEqual(all.teamCount, 2);
     assert.deepStrictEqual(all.totals, { open: 3, today: 2, saved: 1, ended: 2 });
     assert.deepStrictEqual(all.teams, [
       { team, open: 2, today: 1, saved: 1, ended: 2 },
@@ -858,6 +830,7 @@ it.effect("counts open, today, saved, and ended moves, overall and per team", ()
     assert.deepStrictEqual(one, {
       totals: { open: 2, today: 1, saved: 1, ended: 2 },
       teams: [{ team, open: 2, today: 1, saved: 1, ended: 2 }],
+      teamCount: 1,
     });
   }).pipe(Effect.provide(mutableFactsLayer(facts)));
 });
@@ -1177,7 +1150,61 @@ it.effect("submits today's chosen move and records its result, steps, and check 
             ],
           ),
         ],
-        true,
+        writes.layer,
+      ),
+    ),
+  );
+});
+
+it.effect("submits today's chosen moves together and discards the rest", () => {
+  const writes = writeLayer(() => ({ status: "executed" }));
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const repository = yield* TransactionPlanRepository;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [add("fa1", "Free Agent One"), add("fa2", "Free Agent Two")],
+    });
+    const first = proposed.plan.moves[0];
+    const second = proposed.plan.moves[1];
+    if (first === undefined || second === undefined) {
+      throw new Error("Expected two proposed moves");
+    }
+
+    const result = yield* service.submitToday(owner, {
+      choices: [
+        { team, move: first.move, choice: "now" },
+        { team, move: second.move, choice: "discard" },
+      ],
+    });
+
+    assert.strictEqual(result.discarded, 1);
+    assert.strictEqual(result.counts.moves, 1);
+    assert.strictEqual(result.counts.executed, 1);
+    assert.deepStrictEqual(result.refusals, []);
+    assert.strictEqual(writes.requests.length, 1);
+    assert.deepStrictEqual(writes.requests[0]?.adds, ["fa1"]);
+
+    const stored = yield* repository.readPlanMoves({ userId: owner, team });
+    assert.strictEqual(stored.find((move) => move.id === first.move)?.result, "executed");
+    assert.strictEqual(stored.find((move) => move.id === second.move)?.decision, "discarded");
+  }).pipe(
+    Effect.provide(
+      serviceLayer(
+        [
+          league(
+            [],
+            [
+              freeAgent("fa1", "Free Agent One", ["RB"]),
+              freeAgent("fa2", "Free Agent Two", ["RB"]),
+            ],
+          ),
+        ],
         writes.layer,
       ),
     ),
@@ -1231,7 +1258,6 @@ it.effect("submits a two move group in the evaluated order", () => {
             ],
           ),
         ],
-        true,
         writes.layer,
       ),
     ),
@@ -1291,7 +1317,7 @@ it.effect("refuses a group whole when one of its moves fails, and runs an indepe
     assert.strictEqual(peer?.result, "skipped");
     assert.include(peer?.resultDetail ?? "", "The group did not run");
     assert.strictEqual(stored.find((move) => move.drops[0]?.key === "a1")?.result, "executed");
-  }).pipe(Effect.provide(mutableFactsLayer(facts, true, writes.layer)));
+  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("settles a refusal that cannot change with its reason", () => {
@@ -1323,7 +1349,7 @@ it.effect("settles a refusal that cannot change with its reason", () => {
     const next = yield* service.runDue(10, at);
     assert.strictEqual(next.counts.moves, 0);
     assert.strictEqual(writes.requests.length, 0);
-  }).pipe(Effect.provide(mutableFactsLayer(facts, true, writes.layer)));
+  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("leaves a transient provider failure for the next hourly tick", () => {
@@ -1359,7 +1385,7 @@ it.effect("leaves a transient provider failure for the next hourly tick", () => 
     assert.strictEqual(stored[0]?.result, "executed");
   }).pipe(
     Effect.provide(
-      serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])], true, writes.layer),
+      serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])], writes.layer),
     ),
   );
 });
@@ -1397,7 +1423,7 @@ it.effect("runs an overdue saved move on the next tick", () => {
     assert.strictEqual(stored[0]?.result, "executed");
     assert.strictEqual(stored[0]?.runDay, "2026-11-16");
     assert.strictEqual(stored[0]?.effectiveDate, "2026-11-17");
-  }).pipe(Effect.provide(mutableFactsLayer(facts, true, writes.layer)));
+  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("skips a plan that another run holds", () => {
@@ -1428,7 +1454,7 @@ it.effect("skips a plan that another run holds", () => {
     assert.strictEqual(plans[0]?.runClaim, "held-run");
   }).pipe(
     Effect.provide(
-      serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])], true, writes.layer),
+      serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])], writes.layer),
     ),
   );
 });
@@ -1464,7 +1490,7 @@ it.effect("recovers a stale claim before running the due moves", () => {
     assert.strictEqual(plans[0]?.runClaim, null);
   }).pipe(
     Effect.provide(
-      serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])], true, writes.layer),
+      serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])], writes.layer),
     ),
   );
 });
@@ -1524,7 +1550,6 @@ it.effect("blocks a dependent when its move fails and runs an independent move",
             { slots: [bench("BN", 4)], constraints: constraints(4) },
           ),
         ],
-        true,
         writes.layer,
       ),
     ),
@@ -1559,7 +1584,7 @@ it.effect("records an unknown provider outcome and never retries it", () => {
     assert.strictEqual(writes.requests.length, 1);
   }).pipe(
     Effect.provide(
-      serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])], true, writes.layer),
+      serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])], writes.layer),
     ),
   );
 });
@@ -1603,7 +1628,6 @@ it.effect("records a pending waiver claim and does not retry it", () => {
     Effect.provide(
       serviceLayer(
         [league([], [waived("w1", "Waiver One", ["RB"])], { budget: 100 })],
-        true,
         writes.layer,
       ),
     ),
@@ -1666,53 +1690,43 @@ for (const timing of [
       assert.strictEqual(run?.runDay, "2026-11-15");
       assert.strictEqual(run?.effectiveDate, timing.effectiveDate);
       assert.strictEqual(stored.find((move) => move.drops[0]?.key === "a2")?.result, undefined);
-    }).pipe(Effect.provide(mutableFactsLayer(facts, true, writes.layer)));
+    }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
   });
 }
 
 function serviceLayer(
   leagues: ReadonlyArray<League>,
-  enabled = true,
   writes: Layer.Layer<TransactionPlanWrites> = executedWrites(),
 ): Layer.Layer<TransactionPlanService | TransactionPlanRepository | ConnectionsDatabase> {
   const byTeam = new Map(leagues.map((entry) => [entry.team, entry.facts] as const));
-  return layerWith(
-    (input) => {
-      const facts = byTeam.get(input.team);
-      return facts === undefined
-        ? Effect.fail(
-            TransactionPlanFactsUnavailable.make({
-              team: input.team,
-              detail: `No league facts for ${input.team}.`,
-            }),
-          )
-        : Effect.succeed(facts);
-    },
-    enabled,
-    writes,
-  );
+  return layerWith((input) => {
+    const facts = byTeam.get(input.team);
+    return facts === undefined
+      ? Effect.fail(
+          TransactionPlanFactsUnavailable.make({
+            team: input.team,
+            detail: `No league facts for ${input.team}.`,
+          }),
+        )
+      : Effect.succeed(facts);
+  }, writes);
 }
 
 function mutableFactsLayer(
   facts: Map<TeamId, TransactionPlanTeamFacts>,
-  enabled = true,
   writes: Layer.Layer<TransactionPlanWrites> = executedWrites(),
 ): Layer.Layer<TransactionPlanService | TransactionPlanRepository | ConnectionsDatabase> {
-  return layerWith(
-    (input) => {
-      const found = facts.get(input.team);
-      return found === undefined
-        ? Effect.fail(
-            TransactionPlanFactsUnavailable.make({
-              team: input.team,
-              detail: "The league could not be read.",
-            }),
-          )
-        : Effect.succeed(found);
-    },
-    enabled,
-    writes,
-  );
+  return layerWith((input) => {
+    const found = facts.get(input.team);
+    return found === undefined
+      ? Effect.fail(
+          TransactionPlanFactsUnavailable.make({
+            team: input.team,
+            detail: "The league could not be read.",
+          }),
+        )
+      : Effect.succeed(found);
+  }, writes);
 }
 
 function executedWrites(): Layer.Layer<TransactionPlanWrites> {
@@ -1739,7 +1753,6 @@ function writeLayer(
 
 function layerWith(
   read: TransactionPlanFactsShape["read"],
-  enabled = true,
   writes: Layer.Layer<TransactionPlanWrites> = executedWrites(),
 ): Layer.Layer<TransactionPlanService | TransactionPlanRepository | ConnectionsDatabase> {
   const Facts = Layer.succeed(TransactionPlanFacts)({ read });
@@ -1748,11 +1761,7 @@ function layerWith(
     Layer.provide(Facts),
     Layer.provide(writes),
     Layer.provide(NodeCrypto.layer),
-    Layer.provide(
-      ConfigProvider.layer(
-        ConfigProvider.fromUnknown(enabled ? { TRANSACTION_PLAN_SERVICE: "true" } : {}),
-      ),
-    ),
+    Layer.provide(QueryTokens.fromSecret("test-query-token-secret-at-least-32-chars")),
     Layer.provideMerge(ConnectionsDatabaseTest),
     Layer.orDie,
   );

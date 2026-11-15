@@ -63,11 +63,9 @@ test("discovers and authorizes a stateless client through email sign-in, consent
     "get_team_summary",
     "get_transactions",
     "propose_transactions",
-    "get_transaction_proposal_set",
-    "revalidate_transaction_proposal_set",
-    "withdraw_transaction_proposal_items",
     "get_pending_trade_offers",
     "list_transaction_proposals",
+    "get_transaction_plan",
     "set_lineup",
     "get_lineup_runs",
     "set_team_automation",
@@ -129,22 +127,13 @@ test("serves every tool scope after one consent for the documented scope set", a
     [
       "propose_transactions",
       {
-        items: [
-          {
-            team,
-            kind: "drop",
-            adds: [],
-            drops: ["r1.test"],
-            reason: "Checking the proposal scope.",
-          },
-        ],
+        team,
+        moves: [{ kind: "drop", drops: ["r1.test"], reason: "Checking the proposal scope." }],
       },
     ],
-    ["get_transaction_proposal_set", { set: randomUUID() }],
-    ["revalidate_transaction_proposal_set", { set: randomUUID() }],
-    ["withdraw_transaction_proposal_items", { set: randomUUID(), items: [randomUUID()] }],
     ["get_pending_trade_offers", { team }],
     ["list_transaction_proposals", { team }],
+    ["get_transaction_plan", { team }],
     [
       "set_lineup",
       { requestId: randomUUID(), teams: [{ team, period: { coverage: "week", week: 3 } }] },
@@ -272,11 +261,10 @@ test("enforces fantasy read and transaction review scopes over MCP", async ({ pa
   const reviewDenied = await client.request("tools/call", {
     name: "propose_transactions",
     arguments: {
-      items: [
+      team: randomUUID(),
+      moves: [
         {
-          team: randomUUID(),
           kind: "drop",
-          adds: [],
           drops: ["r1.invalid"],
           reason: "Checking the review scope boundary.",
         },
@@ -310,9 +298,9 @@ test("enforces fantasy read and transaction review scopes over MCP", async ({ pa
   expect(missing.isError).toBe(true);
   expect(JSON.stringify(missing)).not.toContain("cause");
 
-  const reviewAuthorization = await authorize(page, origin, "transactions:review");
+  const reviewAuthorization = await authorize(page, origin, "fantasy:read transactions:review");
   const reviewer = mcpClient(mcpEndpoint(origin), reviewAuthorization.credentials.access_token);
-  const review = await reviewer.callTool("get_transaction_proposal_set", { set: randomUUID() });
+  const review = await reviewer.callTool("get_transaction_plan", { team: randomUUID() });
   expect(review.isError).toBe(true);
   expect(JSON.stringify(review)).not.toContain("submit");
 
@@ -421,7 +409,7 @@ test("serves read tools to a grant minted with the retired connections:read name
   expect(automation.headers.get("www-authenticate")).toContain('scope="teams:manage"');
 });
 
-test("proposes transactions without writing to the provider and reads pending offers", async ({
+test("appends moves to one team queue without writing to the provider and reads pending offers", async ({
   page,
   baseURL,
   newUser,
@@ -460,78 +448,88 @@ test("proposes transactions without writing to the provider and reads pending of
   const players = Schema.decodeUnknownSync(
     Schema.Struct({ players: Schema.Array(Schema.Struct({ player: Schema.String })) }),
   )(roster.structuredContent).players;
-  expect(players.length).toBeGreaterThan(0);
-  const drop = players[0]?.player;
-  expect(drop, "a rostered player reference").toBeDefined();
-  if (drop === undefined) {
+  expect(players.length).toBeGreaterThan(1);
+  const firstDrop = players[0]?.player;
+  const secondDrop = players[1]?.player;
+  expect(firstDrop, "a rostered player reference").toBeDefined();
+  expect(secondDrop, "a second rostered player reference").toBeDefined();
+  if (firstDrop === undefined || secondDrop === undefined) {
     return;
   }
 
   const proposed = await client.callTool("propose_transactions", {
-    items: [
-      {
-        team: football.id,
-        kind: "drop",
-        adds: [],
-        drops: [drop],
-        reason: "Open a bench spot for the incoming wing.",
-      },
+    team: football.id,
+    moves: [
+      { kind: "drop", drops: [firstDrop], reason: "Open a bench spot for the incoming wing." },
     ],
   });
   expect(proposed.isError).toBe(false);
-  const set = Schema.decodeUnknownSync(
+  const queued = Schema.decodeUnknownSync(
     Schema.Struct({
-      created: Schema.Boolean,
-      reviewUrl: Schema.String,
-      set: Schema.Struct({ id: Schema.String, closed: Schema.Boolean }),
-      items: Schema.Array(Schema.Struct({ outcome: Schema.String })),
+      team: Schema.Struct({ id: Schema.String }),
+      moves: Schema.Array(Schema.Struct({ move: Schema.String })),
+      refused: Schema.Array(Schema.Unknown),
     }),
   )(proposed.structuredContent);
-  expect(set.created).toBe(true);
-  expect(set.set.closed).toBe(false);
-  expect(set.reviewUrl).toBe(`${origin}/transactions/${set.set.id}`);
-  expect(set.items).toMatchObject([{ outcome: "accepted" }]);
+  expect(queued.team.id).toBe(football.id);
+  expect(queued.moves).toHaveLength(1);
+  expect(queued.refused).toStrictEqual([]);
+  expect(JSON.stringify(proposed)).not.toContain('"set":');
+  expect(JSON.stringify(proposed)).not.toContain("reviewUrl");
 
-  const repeated = await client.callTool("propose_transactions", {
-    items: [
-      {
-        team: football.id,
-        kind: "drop",
-        adds: [],
-        drops: [drop],
-        reason: "Open a bench spot for the incoming wing.",
-      },
-    ],
+  const appended = await client.callTool("propose_transactions", {
+    team: football.id,
+    moves: [{ kind: "drop", drops: [secondDrop], reason: "Open a second bench spot." }],
   });
-  expect(repeated.structuredContent).toMatchObject({
-    created: false,
-    set: { id: set.set.id },
-  });
-
-  const read = await client.callTool("get_transaction_proposal_set", { set: set.set.id });
-  expect(read.isError).toBe(false);
-  const review = Schema.decodeUnknownSync(
+  expect(appended.isError).toBe(false);
+  const plan = Schema.decodeUnknownSync(
     Schema.Struct({
-      teams: Schema.Array(
-        Schema.Struct({
-          team: Schema.Struct({ id: Schema.String }),
-          items: Schema.Array(Schema.Unknown),
-        }),
+      team: Schema.Struct({ id: Schema.String }),
+      today: Schema.optional(Schema.String),
+      moves: Schema.Array(
+        Schema.Struct({ move: Schema.String, group: Schema.optional(Schema.String) }),
       ),
+      days: Schema.Array(Schema.Struct({ today: Schema.Boolean })),
+    }),
+  )(appended.structuredContent);
+  expect(plan.team.id).toBe(football.id);
+  expect(plan.moves).toHaveLength(2);
+  expect(plan.days.some((day) => day.today)).toBe(true);
+
+  const read = await client.callTool("get_transaction_plan", { team: football.id });
+  expect(read.isError).toBe(false);
+  const readPlan = Schema.decodeUnknownSync(
+    Schema.Struct({
+      team: Schema.Struct({ id: Schema.String }),
+      moves: Schema.Array(Schema.Unknown),
     }),
   )(read.structuredContent);
-  expect(review.teams.map((entry) => entry.team.id).sort()).toEqual(
-    [football.id, hockey.id].sort(),
-  );
-  expect(review.teams.find((entry) => entry.team.id === football.id)?.items).toHaveLength(1);
-  expect(review.teams.find((entry) => entry.team.id === hockey.id)?.items).toHaveLength(0);
+  expect(readPlan.team.id).toBe(football.id);
+  expect(readPlan.moves).toHaveLength(2);
   expect(JSON.stringify(read)).not.toContain("461.p.90001");
+
+  const listed = await client.callTool("list_transaction_proposals", {
+    team: football.id,
+    state: "today",
+  });
+  expect(listed.isError).toBe(false);
+  const rolling = Schema.decodeUnknownSync(
+    Schema.Struct({
+      counts: Schema.Struct({ open: Schema.Number, today: Schema.Number, saved: Schema.Number }),
+      teamCount: Schema.Number,
+      days: Schema.Array(Schema.Struct({ today: Schema.Boolean })),
+    }),
+  )(listed.structuredContent);
+  expect(rolling.counts.open).toBeGreaterThanOrEqual(2);
+  expect(rolling.teamCount).toBe(1);
+  expect(rolling.days.some((day) => day.today)).toBe(true);
+  expect(JSON.stringify(listed)).not.toContain('"set":');
 
   const other = await newUser();
   await signUp(other);
   const otherAuthorization = await authorize(other, origin, "fantasy:read transactions:review");
   const otherClient = mcpClient(mcpEndpoint(origin), otherAuthorization.credentials.access_token);
-  const hidden = await otherClient.callTool("get_transaction_proposal_set", { set: set.set.id });
+  const hidden = await otherClient.callTool("get_transaction_plan", { team: football.id });
   expect(hidden.isError).toBe(true);
   expect(JSON.stringify(hidden)).not.toContain("Open a bench spot");
 

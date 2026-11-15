@@ -1,21 +1,28 @@
 import { DateTime } from "effect";
 
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
+import type {
+  StoredMoveDate,
+  StoredMovePlacement,
+  StoredMovePlayer,
+  StoredMoveSlot,
+  StoredMoveValidation,
+  TransactionMoveCheckView,
+  TransactionMoveCursor,
+  TransactionMoveDay,
+  TransactionMovePickView,
+  TransactionMovePlayerView,
+  TransactionMoveRead,
+  TransactionMoveTeam,
+  TransactionMoveTeamCounts,
+  TransactionMoveCounts,
+  TransactionMoveValidationView,
+  TransactionPlanDay,
+} from "#contexts/connections/TransactionPlans.ts";
+import { isOpenMove } from "#contexts/connections/TransactionPlans.ts";
 
 import type { TransactionPlanMoveEvaluation } from "./TransactionPlanEvaluation.ts";
-import {
-  isOpenMove,
-  type StoredMoveDate,
-  type StoredMoveValidation,
-  type TransactionMoveCursor,
-  type TransactionMoveDecision,
-  type TransactionMoveId,
-  type TransactionMoveKind,
-  type TransactionMovePageLimit,
-  type TransactionMoveRecord,
-  type TransactionMoveResult,
-  type TransactionMoveTeam,
-} from "./TransactionPlanRecord.ts";
+import type { TransactionMoveRecord } from "./TransactionPlanRecord.ts";
 
 export function moveReadViews(input: {
   readonly moves: ReadonlyArray<{
@@ -36,32 +43,72 @@ export function moveReadView(input: {
 }): TransactionMoveRead {
   const move = input.move;
   const team = input.team;
+  const content = {
+    move: move.id,
+    team,
+    ...(move.group === undefined ? {} : { group: move.group }),
+    kind: move.kind,
+    position: move.position,
+    decision: move.decision,
+    reason: move.reason,
+    adds: move.adds.map(playerView),
+    fallbacks: move.fallbacks.map(playerView),
+    drops: move.drops.map(playerView),
+    picks: move.picks.map((pick): TransactionMovePickView => ({
+      round: pick.round,
+      sourceName: pick.sourceName,
+      destinationName: pick.destinationName,
+    })),
+    ...(move.slotMove === undefined ? {} : { slotMove: slotView(move.slotMove) }),
+    ...(move.intent === undefined
+      ? {}
+      : {
+          intent: {
+            kind: move.intent.kind,
+            ...(move.intent.player === undefined ? {} : { player: playerView(move.intent.player) }),
+            ...(move.intent.to === undefined ? {} : { to: move.intent.to }),
+          },
+        }),
+    ...(move.bid === undefined ? {} : { bid: move.bid }),
+  };
   if (!isOpenMove(move)) {
-    return storedMoveView({ move, team, check: { status: "stored" } });
+    return {
+      ...content,
+      ...(move.runDay === undefined ? {} : { runDay: move.runDay }),
+      ...(move.effectiveDate === undefined ? {} : { effectiveDate: move.effectiveDate }),
+      ...(move.placement === undefined ? {} : { placement: placementView(move.placement) }),
+      validation: validationView(move.validation),
+      check: { status: "stored" },
+      ...(move.result === undefined ? {} : { result: move.result }),
+    };
   }
   const check = input.check;
   if (check === undefined) {
     throw new Error("An open move was read without a check of its team");
   }
   if (check.status === "unavailable") {
-    return storedMoveView({ move, team, check: lastCheck(move) });
+    return {
+      ...content,
+      ...(move.runDay === undefined ? {} : { runDay: move.runDay }),
+      ...(move.effectiveDate === undefined ? {} : { effectiveDate: move.effectiveDate }),
+      ...(move.placement === undefined ? {} : { placement: placementView(move.placement) }),
+      validation: validationView(move.validation),
+      check: lastCheck(move),
+      ...(move.result === undefined ? {} : { result: move.result }),
+    };
   }
   const evaluated = check.moves.get(move.id);
   if (evaluated === undefined) {
     throw new Error("An open move was not checked with its team");
   }
   return {
-    move: move.id,
-    team,
-    group: move.group,
-    kind: move.kind,
-    position: move.position,
-    decision: move.decision,
+    ...content,
     runDay: evaluated.runDay,
-    effectiveDate: evaluated.effectiveDate,
-    validation: evaluated.validation,
+    ...(evaluated.effectiveDate === undefined ? {} : { effectiveDate: evaluated.effectiveDate }),
+    ...(evaluated.placement === undefined ? {} : { placement: placementView(evaluated.placement) }),
+    validation: validationView(evaluated.validation),
     check: { status: "checked" },
-    result: move.result,
+    ...(move.result === undefined ? {} : { result: move.result }),
   };
 }
 
@@ -94,7 +141,7 @@ export function moveDays(input: {
     team.moves.push(move);
   }
   return [...days.values()].sort(compareMoveDays).map((grouped) => ({
-    day: grouped.day,
+    ...(grouped.day === undefined ? {} : { day: grouped.day }),
     today: grouped.today,
     teams: [...grouped.teams.values()].sort(compareMoveTeams),
   }));
@@ -120,7 +167,11 @@ export function planDays(input: {
     }
     day.moves.push(move);
   }
-  return ordered;
+  return ordered.map((day) => ({
+    ...(day.day === undefined ? {} : { day: day.day }),
+    today: day.today,
+    moves: day.moves,
+  }));
 }
 
 export function countTotals(
@@ -146,27 +197,48 @@ export function moveCursor(move: TransactionMoveRecord): TransactionMoveCursor {
   };
 }
 
-function storedMoveView(input: {
-  readonly move: TransactionMoveRecord;
-  readonly team: TransactionMoveTeam;
-  readonly check: TransactionMoveCheck;
-}): TransactionMoveRead {
+function playerView(player: StoredMovePlayer): TransactionMovePlayerView {
   return {
-    move: input.move.id,
-    team: input.team,
-    group: input.move.group,
-    kind: input.move.kind,
-    position: input.move.position,
-    decision: input.move.decision,
-    runDay: input.move.runDay,
-    effectiveDate: input.move.effectiveDate,
-    validation: input.move.validation,
-    check: input.check,
-    result: input.move.result,
+    ...(player.name === undefined ? {} : { name: player.name }),
+    ...(player.position === undefined ? {} : { position: player.position }),
+    ...(player.proTeam === undefined ? {} : { proTeam: player.proTeam }),
+    ...(player.availability === undefined ? {} : { availability: player.availability }),
   };
 }
 
-function lastCheck(move: TransactionMoveRecord): TransactionMoveCheck {
+function slotView(slot: StoredMoveSlot): {
+  readonly playerName?: string;
+  readonly toSlot: string;
+} {
+  return {
+    ...(slot.playerName === undefined ? {} : { playerName: slot.playerName }),
+    toSlot: slot.toSlot,
+  };
+}
+
+function placementView(placement: StoredMovePlacement): {
+  readonly playerName?: string;
+  readonly fromSlot?: string;
+  readonly toSlot: string;
+  readonly detail: string;
+} {
+  return {
+    ...(placement.playerName === undefined ? {} : { playerName: placement.playerName }),
+    ...(placement.fromSlot === undefined ? {} : { fromSlot: placement.fromSlot }),
+    toSlot: placement.toSlot,
+    detail: placement.detail,
+  };
+}
+
+function validationView(validation: StoredMoveValidation): TransactionMoveValidationView {
+  return {
+    status: validation.status,
+    ...(validation.checkedAt === undefined ? {} : { checkedAt: validation.checkedAt }),
+    reasons: validation.reasons.map((reason) => ({ code: reason.code, detail: reason.detail })),
+  };
+}
+
+function lastCheck(move: TransactionMoveRecord): TransactionMoveCheckView {
   return {
     status: "last_checked",
     note: lastCheckedNote(move.validation),
@@ -192,7 +264,10 @@ function compareMoveDays(
   return left.day.localeCompare(right.day);
 }
 
-function compareMoveTeams(left: TransactionMoveTeamDay, right: TransactionMoveTeamDay): number {
+function compareMoveTeams(
+  left: TransactionMoveDay["teams"][number],
+  right: TransactionMoveDay["teams"][number],
+): number {
   return left.team.name.localeCompare(right.team.name) || left.team.id.localeCompare(right.team.id);
 }
 
@@ -200,113 +275,14 @@ export type TransactionTeamCheck =
   | {
       readonly status: "checked";
       readonly today: StoredMoveDate;
-      readonly moves: ReadonlyMap<TransactionMoveId, TransactionPlanMoveEvaluation>;
+      readonly moves: ReadonlyMap<TransactionMoveRecord["id"], TransactionPlanMoveEvaluation>;
     }
   | { readonly status: "unavailable" };
-
-type TransactionMoveCheck =
-  | { readonly status: "checked" }
-  | { readonly status: "stored" }
-  | { readonly status: "last_checked"; readonly note: string };
-
-export type TransactionMoveRead = {
-  readonly move: TransactionMoveId;
-  readonly team: TransactionMoveTeam;
-  readonly group: string | undefined;
-  readonly kind: TransactionMoveKind;
-  readonly position: number;
-  readonly decision: TransactionMoveDecision;
-  readonly runDay: StoredMoveDate | undefined;
-  readonly effectiveDate: StoredMoveDate | undefined;
-  readonly validation: StoredMoveValidation;
-  readonly check: TransactionMoveCheck;
-  readonly result: TransactionMoveResult | undefined;
-};
-
-type TransactionMoveTeamDay = {
-  readonly team: TransactionMoveTeam;
-  readonly moves: ReadonlyArray<TransactionMoveRead>;
-};
-
-export type TransactionMoveDay = {
-  readonly day: StoredMoveDate | undefined;
-  readonly today: boolean;
-  readonly teams: ReadonlyArray<TransactionMoveTeamDay>;
-};
-
-export type TransactionPlanDay = {
-  readonly day: StoredMoveDate | undefined;
-  readonly today: boolean;
-  readonly moves: ReadonlyArray<TransactionMoveRead>;
-};
-
-export type TransactionPlanRead = {
-  readonly team: TransactionMoveTeam;
-  readonly today: StoredMoveDate | undefined;
-  readonly moves: ReadonlyArray<TransactionMoveRead>;
-  readonly days: ReadonlyArray<TransactionPlanDay>;
-};
-
-export type TransactionMoveCounts = {
-  readonly open: number;
-  readonly today: number;
-  readonly saved: number;
-  readonly ended: number;
-};
-
-export type TransactionMoveTeamCounts = TransactionMoveCounts & {
-  readonly team: TeamId;
-};
-
-export type TransactionPlanCounts = {
-  readonly totals: TransactionMoveCounts;
-  readonly teams: ReadonlyArray<TransactionMoveTeamCounts>;
-};
-
-type TransactionMovePage = {
-  readonly returned: number;
-  readonly complete: boolean;
-  readonly next: TransactionMoveCursor | undefined;
-};
-
-export type TransactionMoveList = {
-  readonly status: "ok";
-  readonly team: TransactionMoveTeam | undefined;
-  readonly moves: ReadonlyArray<TransactionMoveRead>;
-  readonly days: ReadonlyArray<TransactionMoveDay>;
-  readonly counts: TransactionMoveCounts;
-  readonly page: TransactionMovePage;
-};
-
-export type TransactionMoveListInput = {
-  readonly team?: TeamId;
-  readonly state?: "today" | "saved" | "ended";
-  readonly after?: TransactionMoveCursor;
-  readonly limit?: TransactionMovePageLimit;
-};
-
-export type TransactionTimelineInput = {
-  readonly after?: TransactionMoveCursor;
-  readonly limit?: TransactionMovePageLimit;
-};
-
-export type TransactionPlanCountsInput = {
-  readonly team?: TeamId;
-};
-
-export type TransactionPlanReadInput = {
-  readonly team: TeamId;
-};
 
 type MutableMoveDay = {
   readonly day: StoredMoveDate | undefined;
   readonly today: boolean;
-  readonly teams: Map<TeamId, MutableMoveTeamDay>;
-};
-
-type MutableMoveTeamDay = {
-  readonly team: TransactionMoveTeam;
-  readonly moves: Array<TransactionMoveRead>;
+  readonly teams: Map<TeamId, { team: TransactionMoveTeam; moves: Array<TransactionMoveRead> }>;
 };
 
 type MutablePlanDay = {

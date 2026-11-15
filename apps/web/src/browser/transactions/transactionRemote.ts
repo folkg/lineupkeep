@@ -1,77 +1,76 @@
 import type {
-  DismissTransactionProposalData,
-  DismissTransactionProposalRequest,
-  RescheduleTransactionProposalData,
-  RescheduleTransactionProposalRequest,
-  SubmitTransactionReviewRequest,
-  TransactionProposalListData,
-  TransactionProposalListRequest,
-  TransactionReviewData,
-  TransactionReviewView,
-  WithdrawTradeData,
-  WithdrawTradeRequest,
+  TransactionDiscardMoveRequest,
+  TransactionListRequest,
+  TransactionMoveActionData,
+  TransactionMoveListData,
+  TransactionPlanData,
+  TransactionPlanRequest,
+  TransactionSaveMoveRequest,
+  TransactionSubmitTodayData,
+  TransactionSubmitTodayRequest,
+  TransactionTimelineRequest,
 } from "#contracts/connections/transactionContract.ts";
 import {
-  dismissTransactionProposalItemsServerFn,
-  listTransactionProposalSetsServerFn,
-  readTransactionReviewServerFn,
-  rescheduleTransactionProposalItemsServerFn,
-  submitTransactionReviewServerFn,
-  withdrawTradeServerFn,
+  discardTransactionMoveServerFn,
+  listTransactionMovesServerFn,
+  readTransactionPlanServerFn,
+  readTransactionTimelineServerFn,
+  saveTransactionMoveServerFn,
+  submitTransactionTodayServerFn,
 } from "#server-functions/connections/transactionServerFunctions.ts";
 
 import { requireTransactionSuccess } from "./transactionFailure";
 
 export const transactionRemote: TransactionRemote = {
-  read: (input, options) =>
-    readTransactionReviewServerFn({ data: input, signal: options?.signal }).then(
-      (result) => requireTransactionSuccess(result).review,
+  timeline: (input, options) =>
+    readTransactionTimelineServerFn({ data: input, signal: options?.signal }).then((result) =>
+      requireTransactionSuccess(result),
     ),
   list: (input, options) =>
-    listTransactionProposalSetsServerFn({ data: input, signal: options?.signal }).then((result) =>
+    listTransactionMovesServerFn({ data: input, signal: options?.signal }).then((result) =>
       requireTransactionSuccess(result),
     ),
-  submit: (input, options) =>
-    submitTransactionReviewServerFn({ data: input, signal: options?.signal }).then((result) =>
+  plan: (input, options) =>
+    readTransactionPlanServerFn({ data: input, signal: options?.signal }).then((result) =>
       requireTransactionSuccess(result),
     ),
-  dismiss: (input, options) =>
-    dismissTransactionProposalItemsServerFn({ data: input, signal: options?.signal }).then(
-      (result) => requireTransactionSuccess(result),
-    ),
-  withdraw: (input, options) =>
-    withdrawTradeServerFn({ data: input, signal: options?.signal }).then((result) =>
+  save: (input, options) =>
+    saveTransactionMoveServerFn({ data: input, signal: options?.signal }).then((result) =>
       requireTransactionSuccess(result),
     ),
-  reschedule: (input, options) =>
-    rescheduleTransactionProposalItemsServerFn({ data: input, signal: options?.signal }).then(
-      (result) => requireTransactionSuccess(result),
+  discard: (input, options) =>
+    discardTransactionMoveServerFn({ data: input, signal: options?.signal }).then((result) =>
+      requireTransactionSuccess(result),
+    ),
+  submitToday: (input, options) =>
+    submitTransactionTodayServerFn({ data: input, signal: options?.signal }).then((result) =>
+      requireTransactionSuccess(result),
     ),
 };
 
 export type TransactionRemote = {
-  readonly read: (
-    input: { readonly set: string },
+  readonly timeline: (
+    input: TransactionTimelineRequest,
     options?: { readonly signal?: AbortSignal },
-  ) => Promise<TransactionReviewView>;
+  ) => Promise<TransactionMoveListData>;
   readonly list: (
-    input: TransactionProposalListRequest,
+    input: TransactionListRequest,
     options?: { readonly signal?: AbortSignal },
-  ) => Promise<TransactionProposalListData>;
-  readonly submit: (
-    input: SubmitTransactionReviewRequest,
+  ) => Promise<TransactionMoveListData>;
+  readonly plan: (
+    input: TransactionPlanRequest,
     options?: { readonly signal?: AbortSignal },
-  ) => Promise<TransactionReviewData>;
-  readonly dismiss: (
-    input: DismissTransactionProposalRequest,
+  ) => Promise<TransactionPlanData>;
+  readonly save: (
+    input: TransactionSaveMoveRequest,
     options?: { readonly signal?: AbortSignal },
-  ) => Promise<DismissTransactionProposalData>;
-  readonly withdraw: (
-    input: WithdrawTradeRequest,
+  ) => Promise<TransactionMoveActionData>;
+  readonly discard: (
+    input: TransactionDiscardMoveRequest,
     options?: { readonly signal?: AbortSignal },
-  ) => Promise<WithdrawTradeData>;
-  readonly reschedule: (
-    input: RescheduleTransactionProposalRequest,
+  ) => Promise<TransactionMoveActionData>;
+  readonly submitToday: (
+    input: TransactionSubmitTodayRequest,
     options?: { readonly signal?: AbortSignal },
-  ) => Promise<RescheduleTransactionProposalData>;
+  ) => Promise<TransactionSubmitTodayData>;
 };

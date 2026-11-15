@@ -162,8 +162,8 @@ pages can change day, so the client restarts after an action.
 - `ProposalSetId`, `ProposalItemId`, the set-shaped proposal types, `ListProposalSetsInput`, the `set`
   input on propose, `ProposalSubmissionInProgress` in its set form, `isClosedSet`, and the repository
   methods that create, append to, list, and close sets.
-- The old review route `/transactions/{setId}`. The new route is `/transactions/{teamId}`. Old links
-  stop working.
+- The old review route `/transactions/{setId}`. The transactions page is `/transactions`; a team's
+  queue is read there and through the MCP plan read. Old links stop working.
 - The set-based retention sweep, replaced by one that removes ended moves after 90 days and empty
   plans.
 
@@ -173,8 +173,8 @@ tables join account export and erasure from the slice that creates them.
 
 ## 6. Implementation slices
 
-Each slice is shippable and ends with the project checks. The new path stays behind one switch until
-slice 6, so no slice leaves two write paths.
+Each slice is shippable and ends with the project checks. The new path stayed behind one switch through
+slice 5, so no earlier slice left two write paths. Slice 6 removed the switch.
 
 | Slice                           | Work                                                                                                                                                         | Evidence                                                                                          |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
