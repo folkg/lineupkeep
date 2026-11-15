@@ -136,6 +136,17 @@ export const StoredMoveClaim = Schema.Struct({
 });
 export type StoredMoveClaim = typeof StoredMoveClaim.Type;
 
+const StoredMoveStep = Schema.Struct({
+  kind: Schema.Literals(["reserve_move", "slot_move", "add", "drop"]),
+  playerKey: Schema.NonEmptyString,
+  fromSlot: Schema.optional(Schema.NonEmptyString),
+  toSlot: Schema.optional(Schema.NonEmptyString),
+  outcome: Schema.Literals(["executed", "pending", "failed", "skipped", "unknown"]),
+  detail: Schema.optional(Schema.NonEmptyString),
+  decidedAt: Schema.DateTimeUtc,
+});
+export type StoredMoveStep = typeof StoredMoveStep.Type;
+
 export const TransactionMoveProvenance = Schema.Struct({
   kind: Schema.Literals(["user", "agent"]),
   reference: Schema.NonEmptyString,

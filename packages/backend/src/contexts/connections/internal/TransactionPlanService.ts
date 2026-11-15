@@ -1,4 +1,14 @@
-import { Config, Context, Crypto, DateTime, Effect, Layer, Option, Schema } from "effect";
+import {
+  Array as EffectArray,
+  Config,
+  Context,
+  Crypto,
+  DateTime,
+  Effect,
+  Layer,
+  Option,
+  Schema,
+} from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import { TeamId } from "#contexts/connections/FantasyTeam.ts";
@@ -48,6 +58,7 @@ import type {
   StoredMovePlacement,
   StoredMovePlayer,
   StoredMoveSlot,
+  StoredMoveStep,
   StoredMoveValidation,
   TransactionMoveCursor,
   TransactionMoveId,
@@ -56,14 +67,27 @@ import type {
   TransactionMoveProvenance,
   TransactionMoveReadState,
   TransactionMoveRecord,
+  TransactionMoveResult,
   TransactionMoveRowRecord,
 } from "./TransactionPlanRecord.ts";
-import type { TransactionMoveAppend, TransactionMoveContent } from "./TransactionPlanRepository.ts";
+import type {
+  TransactionMoveAppend,
+  TransactionMoveContent,
+  TransactionMoveSettlement,
+  TransactionPlanRef,
+} from "./TransactionPlanRepository.ts";
 import { TransactionPlanRepository } from "./TransactionPlanRepository.ts";
+import { TransactionPlanWrites } from "./TransactionPlanWrites.ts";
+import type {
+  TransactionPlanWriteRequest,
+  TransactionPlanWriteResult,
+} from "./TransactionPlanWrites.ts";
 
 const transactionPlanServiceSwitch = Config.Boolean("TRANSACTION_PLAN_SERVICE").pipe(
   Config.withDefault(false),
 );
+
+const transactionPlanRunStaleMillis = 10 * 60 * 1000;
 
 export class TransactionPlansDisabled extends Schema.TaggedError<
   TransactionPlansDisabled,
@@ -76,6 +100,14 @@ export class TransactionPlanFactsUnavailable extends Schema.TaggedError<
   TransactionPlanFactsUnavailable,
   { readonly brand: unique symbol }
 >()("transaction_plan.facts_unavailable", {
+  team: TeamId,
+  detail: Schema.NonEmptyString,
+}) {}
+
+export class TransactionPlanRunInProgress extends Schema.TaggedError<
+  TransactionPlanRunInProgress,
+  { readonly brand: unique symbol }
+>()("transaction_plan.run_in_progress", {
   team: TeamId,
   detail: Schema.NonEmptyString,
 }) {}
@@ -124,8 +156,12 @@ export const TransactionPlanServiceLive = Layer.effect(
     }
     const repository = yield* TransactionPlanRepository;
     const factsPort = yield* TransactionPlanFacts;
+    const writes = yield* TransactionPlanWrites;
     const crypto = yield* Crypto.Crypto;
     const newId = crypto.randomULID.pipe(
+      Effect.mapError((cause) => TransactionPlanPersistenceFailed.make({ cause })),
+    );
+    const newClaim = crypto.randomULID.pipe(
       Effect.mapError((cause) => TransactionPlanPersistenceFailed.make({ cause })),
     );
 
@@ -462,6 +498,372 @@ export const TransactionPlanServiceLive = Layer.effect(
       return { plan: yield* readView({ userId, team: input.team, facts, at }), refused: [] };
     });
 
+    const runMoves = Effect.fn("TransactionPlanService.runMoves")(function* (input: {
+      readonly userId: UserId;
+      readonly team: TeamId;
+      readonly at: DateTime.Utc;
+      readonly facts: TransactionPlanTeamFacts;
+      readonly open: ReadonlyArray<TransactionMoveRowRecord>;
+      readonly mode: "submit" | "due";
+    }) {
+      const evaluation = evaluateTransactionPlan({
+        facts: input.facts,
+        moves: input.open,
+        checkedAt: input.at,
+      });
+      const entries = evaluatedMoves(evaluation);
+      const selection = selectRunGroups({
+        team: input.team,
+        mode: input.mode,
+        facts: input.facts,
+        open: input.open,
+        entries,
+      });
+      const counts = emptyRunCounts();
+      counts.moves = selection.selected.length;
+      const outcomes = new Map<TransactionMoveId, TransactionMoveResult>();
+      const deferred = new Set<TransactionMoveId>();
+      const openById = new Map(input.open.map((move) => [move.id, move] as const));
+      const selectedIds = new Set(selection.selected.map((move) => move.id));
+
+      const settle = Effect.fn("TransactionPlanService.settle")(function* (
+        settlements: ReadonlyArray<TransactionMoveSettlement>,
+      ) {
+        if (!EffectArray.isReadonlyArrayNonEmpty(settlements)) {
+          return;
+        }
+        yield* repository.settleMoves({
+          userId: input.userId,
+          team: input.team,
+          at: input.at,
+          settlements,
+        });
+        for (const settlement of settlements) {
+          outcomes.set(settlement.move, settlement.result);
+          countRunResult(counts, settlement.result);
+        }
+      });
+
+      const runMember = (
+        members: ReadonlyArray<TransactionMoveRowRecord>,
+        index: number,
+      ): Effect.Effect<{ readonly retry: boolean }, TransactionPlanPersistenceFailed> =>
+        Effect.gen(function* () {
+          const move = members[index];
+          if (move === undefined) {
+            return { retry: false };
+          }
+          const entry = entryOf(entries, move.id);
+          const write = yield* writes.apply(
+            writeRequestOf({ userId: input.userId, team: input.team, move, entry }),
+          );
+          const decided = writeResultOf(write);
+          if (decided.status === "retry") {
+            counts.retry += 1;
+            return { retry: true };
+          }
+          yield* settle([
+            settlementOf({
+              move,
+              entry,
+              result: decided.result,
+              detail: decided.detail,
+              facts: input.facts,
+              at: input.at,
+              attempted: true,
+            }),
+          ]);
+          if (decided.result === "failed" || decided.result === "unknown") {
+            const stopped = `${describeTransactionPlanMove(move)} did not run, so the rest of its group was skipped.`;
+            yield* settle(
+              members.slice(index + 1).map((rest) =>
+                settlementOf({
+                  move: rest,
+                  entry: entryOf(entries, rest.id),
+                  result: "skipped",
+                  detail: stopped,
+                  facts: input.facts,
+                  at: input.at,
+                  attempted: false,
+                }),
+              ),
+            );
+            return { retry: false };
+          }
+          return yield* runMember(members, index + 1);
+        });
+
+      for (const group of selection.groups) {
+        const blocked = blockingRunDependency({
+          group,
+          entries,
+          openById,
+          outcomes,
+          selected: selectedIds,
+          deferred,
+        });
+        if (blocked !== undefined) {
+          if (blocked.kind === "deferred") {
+            counts.retry += group.moves.length;
+            for (const move of group.moves) {
+              deferred.add(move.id);
+            }
+            continue;
+          }
+          yield* settle(
+            group.moves.map((move) =>
+              settlementOf({
+                move,
+                entry: entryOf(entries, move.id),
+                result: "skipped",
+                detail: blocked.detail,
+                facts: input.facts,
+                at: input.at,
+                attempted: false,
+              }),
+            ),
+          );
+          continue;
+        }
+
+        const invalid = group.moves.find(
+          (move) => entryOf(entries, move.id).validation.status !== "current",
+        );
+        if (invalid !== undefined) {
+          const label = describeTransactionPlanMove(invalid);
+          const reason = entryOf(entries, invalid.id).validation.reasons[0];
+          yield* settle(
+            group.moves.map((move) => {
+              const entry = entryOf(entries, move.id);
+              return move.id === invalid.id
+                ? settlementOf({
+                    move,
+                    entry,
+                    result: "failed",
+                    detail: reason?.detail ?? `${label} could not run.`,
+                    facts: input.facts,
+                    at: input.at,
+                    attempted: false,
+                  })
+                : settlementOf({
+                    move,
+                    entry,
+                    result: "skipped",
+                    detail: `The group did not run because ${label} could not run.`,
+                    facts: input.facts,
+                    at: input.at,
+                    attempted: false,
+                  });
+            }),
+          );
+          continue;
+        }
+
+        const memberRun = yield* runMember(group.moves, 0);
+        if (memberRun.retry) {
+          for (const move of group.moves) {
+            if (!outcomes.has(move.id)) {
+              deferred.add(move.id);
+            }
+          }
+        }
+      }
+
+      return { counts, refusals: selection.refused };
+    });
+
+    const submit = Effect.fn("TransactionPlanService.submit")(function* (
+      userId: UserId,
+      input: TransactionPlanSubmitInput,
+    ) {
+      const at = yield* DateTime.now;
+      const runClaim = yield* newClaim;
+      const claimed = yield* repository.claimRun({
+        userId,
+        team: input.team,
+        runClaim,
+        at,
+      });
+      if (claimed.status === "held") {
+        return yield* TransactionPlanRunInProgress.make({
+          team: input.team,
+          detail: `Another run holds this team's plan, so today's moves wait for it to finish.`,
+        });
+      }
+      return yield* Effect.gen(function* () {
+        const facts = yield* factsPort.read({ userId, team: input.team, at });
+        const stored = yield* repository.readPlanMoves({ userId, team: input.team });
+        const run = yield* runMoves({
+          userId,
+          team: input.team,
+          at,
+          facts,
+          open: stored.filter(isOpenMove),
+          mode: "submit",
+        });
+        const plan = planViewOf({
+          stored: yield* repository.readPlanMoves({ userId, team: input.team }),
+          facts,
+          checkedAt: at,
+          team: input.team,
+        });
+        return {
+          team: input.team,
+          today: facts.today,
+          counts: { ...run.counts, plans: 1, claimed: 1 },
+          refusals: run.refusals,
+          plan,
+        };
+      }).pipe(
+        Effect.ensuring(
+          repository.releaseRun({ userId, team: input.team, runClaim, at }).pipe(Effect.ignore),
+        ),
+      );
+    });
+
+    const runDue = Effect.fn("TransactionPlanService.runDue")(function* (
+      limit: number,
+      at: DateTime.Utc,
+    ) {
+      const before = DateTime.formatIsoDateUtc(DateTime.add(at, { days: 1 }));
+      const recovered = yield* repository.releaseStaleRuns({ before: staleClaimBefore(at) });
+      const candidates = yield* repository.readDuePlans({ before, limit });
+      const counts = { ...emptyRunCounts(), plans: candidates.length, recovered };
+      if (candidates.length === 0) {
+        return { at, counts };
+      }
+
+      const factsByPlan = new Map<string, TransactionPlanTeamFacts>();
+      yield* Effect.forEach(
+        candidates,
+        (plan) =>
+          Effect.result(factsPort.read({ userId: plan.userId, team: plan.team, at })).pipe(
+            Effect.map((read) => {
+              if (read._tag === "Failure") {
+                counts.unavailable += 1;
+                return;
+              }
+              factsByPlan.set(planKey(plan), read.success);
+            }),
+          ),
+        { concurrency: 3 },
+      );
+
+      const known = candidates.filter((plan) => factsByPlan.has(planKey(plan)));
+      if (known.length === 0) {
+        return { at, counts };
+      }
+      const dueMoves = yield* repository.readDueMovesForPlans({ plans: known, before });
+      const duePlans = known.filter((plan) => {
+        const facts = factsByPlan.get(planKey(plan));
+        return (
+          facts !== undefined &&
+          dueMoves.some(
+            (move) =>
+              move.userId === plan.userId &&
+              move.team === plan.team &&
+              (move.runDay === undefined || move.runDay <= facts.today),
+          )
+        );
+      });
+
+      const claimDue = (
+        index: number,
+        claimed: ReadonlyArray<DueClaim>,
+      ): Effect.Effect<ReadonlyArray<DueClaim>, TransactionPlanPersistenceFailed> =>
+        Effect.gen(function* () {
+          const plan = duePlans[index];
+          if (plan === undefined) {
+            return claimed;
+          }
+          const runClaim = yield* newClaim;
+          const claim = yield* repository.claimRun({
+            userId: plan.userId,
+            team: plan.team,
+            runClaim,
+            at,
+          });
+          if (claim.status === "held") {
+            counts.busy += 1;
+            return yield* claimDue(index + 1, claimed);
+          }
+          const facts = factsByPlan.get(planKey(plan));
+          if (facts === undefined) {
+            yield* repository.releaseRun({
+              userId: plan.userId,
+              team: plan.team,
+              runClaim,
+              at,
+            });
+            return yield* claimDue(index + 1, claimed);
+          }
+          counts.claimed += 1;
+          return yield* claimDue(index + 1, [...claimed, { plan, facts, runClaim }]);
+        });
+      const claimed = yield* claimDue(0, []);
+      if (claimed.length === 0) {
+        return { at, counts };
+      }
+
+      const open = yield* repository.readOpenMovesForPlans({
+        plans: claimed.map((entry) => entry.plan),
+      });
+      const runClaimed = (index: number): Effect.Effect<void, TransactionPlanServiceError> =>
+        Effect.gen(function* () {
+          const entry = claimed[index];
+          if (entry === undefined) {
+            return;
+          }
+          const planMoves = open.filter(
+            (move) => move.userId === entry.plan.userId && move.team === entry.plan.team,
+          );
+          const run = yield* runMoves({
+            userId: entry.plan.userId,
+            team: entry.plan.team,
+            at,
+            facts: entry.facts,
+            open: planMoves,
+            mode: "due",
+          }).pipe(
+            Effect.ensuring(
+              repository
+                .releaseRun({
+                  userId: entry.plan.userId,
+                  team: entry.plan.team,
+                  runClaim: entry.runClaim,
+                  at,
+                })
+                .pipe(Effect.ignore),
+            ),
+          );
+          counts.moves += run.counts.moves;
+          counts.executed += run.counts.executed;
+          counts.pending += run.counts.pending;
+          counts.failed += run.counts.failed;
+          counts.skipped += run.counts.skipped;
+          counts.unknown += run.counts.unknown;
+          counts.retry += run.counts.retry;
+          return yield* runClaimed(index + 1);
+        });
+      yield* runClaimed(0);
+
+      yield* Effect.annotateCurrentSpan({
+        "transaction_plan.plans": counts.plans,
+        "transaction_plan.claimed": counts.claimed,
+        "transaction_plan.busy": counts.busy,
+        "transaction_plan.recovered": counts.recovered,
+        "transaction_plan.moves": counts.moves,
+        "transaction_plan.executed": counts.executed,
+        "transaction_plan.pending": counts.pending,
+        "transaction_plan.failed": counts.failed,
+        "transaction_plan.skipped": counts.skipped,
+        "transaction_plan.unknown": counts.unknown,
+        "transaction_plan.retry": counts.retry,
+      });
+
+      return { at, counts };
+    });
+
     const teamSummary = Effect.fn("TransactionPlanService.teamSummary")(function* (
       userId: UserId,
       team: TeamId,
@@ -630,7 +1032,7 @@ export const TransactionPlanServiceLive = Layer.effect(
       return yield* countMoves(userId, input.team);
     });
 
-    return { propose, save, edit, discard, timeline, list, plan, counts };
+    return { propose, save, edit, discard, submit, runDue, timeline, list, plan, counts };
   }),
 );
 
@@ -926,6 +1328,361 @@ function moveChangeRefusal(input: {
     detail: `${describeTransactionPlanMove(input.move)} has ended, so the plan no longer changes it.`,
     moves: [0],
   };
+}
+
+function selectRunGroups(input: {
+  readonly team: TeamId;
+  readonly mode: "submit" | "due";
+  readonly facts: TransactionPlanTeamFacts;
+  readonly open: ReadonlyArray<TransactionMoveRowRecord>;
+  readonly entries: ReadonlyMap<TransactionMoveId, TransactionPlanMoveEvaluation>;
+}): RunSelection {
+  const due = input.open.filter((move) =>
+    runCandidate({
+      move,
+      entry: entryOf(input.entries, move.id),
+      mode: input.mode,
+      today: input.facts.today,
+    }),
+  );
+  const dueIds = new Set(due.map((move) => move.id));
+  const peers = new Map<string, Array<TransactionMoveRowRecord>>();
+  for (const move of due) {
+    const key = move.group ?? move.id;
+    if (peers.has(key)) {
+      continue;
+    }
+    peers.set(
+      key,
+      input.open.filter((open) => (open.group ?? open.id) === key),
+    );
+  }
+  const groups: Array<RunGroup> = [];
+  const refused: Array<TransactionPlanRunRefusal> = [];
+  for (const [key, members] of peers) {
+    const missing = members.filter((move) => !dueIds.has(move.id));
+    if (missing.length > 0) {
+      refused.push({
+        code: "group_not_selected",
+        team: input.team,
+        detail:
+          input.mode === "submit"
+            ? "A group runs whole, so every move in it must be chosen for today."
+            : "A group runs whole, so every move in it must be due on the same league day.",
+        moves: members.map((move) => move.id),
+      });
+      continue;
+    }
+    groups.push({
+      key,
+      moves: [...members].sort(
+        (left, right) =>
+          runPositionOf(entryOf(input.entries, left.id), left) -
+            runPositionOf(entryOf(input.entries, right.id), right) ||
+          left.id.localeCompare(right.id),
+      ),
+    });
+  }
+  groups.sort(
+    (left, right) =>
+      groupPosition(left, input.entries) - groupPosition(right, input.entries) ||
+      left.key.localeCompare(right.key),
+  );
+  return { selected: groups.flatMap((group) => group.moves), groups, refused };
+}
+
+function runCandidate(input: {
+  readonly move: TransactionMoveRowRecord;
+  readonly entry: TransactionPlanMoveEvaluation;
+  readonly mode: "submit" | "due";
+  readonly today: StoredMoveDate;
+}): boolean {
+  if (!isOpenMove(input.move) || input.move.result !== undefined) {
+    return false;
+  }
+  if (input.mode === "submit") {
+    return input.move.decision === "now" && input.entry.runDay === input.today;
+  }
+  return input.entry.dueToday && input.move.kind !== "trade";
+}
+
+function blockingRunDependency(input: {
+  readonly group: RunGroup;
+  readonly entries: ReadonlyMap<TransactionMoveId, TransactionPlanMoveEvaluation>;
+  readonly openById: ReadonlyMap<TransactionMoveId, TransactionMoveRowRecord>;
+  readonly outcomes: ReadonlyMap<TransactionMoveId, TransactionMoveResult>;
+  readonly selected: ReadonlySet<TransactionMoveId>;
+  readonly deferred: ReadonlySet<TransactionMoveId>;
+}): RunBlockage | undefined {
+  for (const move of input.group.moves) {
+    const entry = entryOf(input.entries, move.id);
+    for (const dependency of entry.dependsOn) {
+      if (input.group.moves.some((member) => member.id === dependency)) {
+        continue;
+      }
+      if (input.deferred.has(dependency)) {
+        return { kind: "deferred" };
+      }
+      const dependencyMove = input.openById.get(dependency);
+      const outcome = input.outcomes.get(dependency);
+      if (outcome !== undefined) {
+        if (outcome === "executed" || (outcome === "pending" && dependencyMove?.kind !== "trade")) {
+          continue;
+        }
+        return {
+          kind: "hard",
+          detail: `${describeTransactionPlanMove(move)} did not run because ${describeDependency(dependencyMove, dependency, outcome)}.`,
+        };
+      }
+      if (input.selected.has(dependency)) {
+        continue;
+      }
+      const stored = dependencyMove?.result;
+      if (stored === "executed" || (stored === "pending" && dependencyMove?.kind !== "trade")) {
+        continue;
+      }
+      return {
+        kind: "hard",
+        detail: `${describeTransactionPlanMove(move)} did not run because ${describeDependency(dependencyMove, dependency, stored)}.`,
+      };
+    }
+  }
+  return undefined;
+}
+
+function describeDependency(
+  move: TransactionMoveRowRecord | undefined,
+  dependency: TransactionMoveId,
+  result: TransactionMoveResult | undefined,
+): string {
+  const label = move === undefined ? dependency : describeTransactionPlanMove(move);
+  switch (result) {
+    case "pending":
+      return `${label} waits on the league's answer`;
+    case "unknown":
+      return `${label} has an unknown outcome`;
+    case "failed":
+    case "skipped":
+      return `${label} did not pass its check`;
+    case "executed":
+    case "withdrawn":
+    case "expired":
+      return `${label} has ended`;
+    case undefined:
+      return `${label} is not part of this run`;
+  }
+}
+
+function writeRequestOf(input: {
+  readonly userId: UserId;
+  readonly team: TeamId;
+  readonly move: TransactionMoveRowRecord;
+  readonly entry: TransactionPlanMoveEvaluation;
+}): TransactionPlanWriteRequest {
+  return {
+    userId: input.userId,
+    team: input.team,
+    move: input.move.id,
+    kind: input.move.kind,
+    adds: input.move.adds.map((add) => add.key),
+    drops: input.move.drops.map((drop) => drop.key),
+    picks: input.move.picks,
+    slotMove: input.move.slotMove,
+    intent: input.move.intent,
+    placement: input.entry.placement ?? input.move.placement,
+    bid: input.move.bid,
+    counterpartyKey: input.move.counterpartyKey,
+  };
+}
+
+function writeResultOf(write: TransactionPlanWriteResult): DecidedWrite {
+  switch (write.status) {
+    case "executed":
+      return { status: "settled", result: "executed", detail: undefined };
+    case "pending":
+      return { status: "settled", result: "pending", detail: write.detail };
+    case "failed":
+      return { status: "settled", result: "failed", detail: write.detail };
+    case "unknown":
+      return { status: "settled", result: "unknown", detail: write.detail };
+    case "retry":
+      return { status: "retry" };
+  }
+}
+
+function settlementOf(input: {
+  readonly move: TransactionMoveRowRecord;
+  readonly entry: TransactionPlanMoveEvaluation;
+  readonly result: TransactionMoveResult;
+  readonly detail: string | undefined;
+  readonly facts: TransactionPlanTeamFacts;
+  readonly at: DateTime.Utc;
+  readonly attempted: boolean;
+}): TransactionMoveSettlement {
+  return {
+    move: input.move.id,
+    result: input.result,
+    detail: input.detail,
+    validation: input.entry.validation,
+    runDay: input.entry.runDay,
+    effectiveDate: input.entry.effectiveDate,
+    runPosition: input.entry.runPosition,
+    steps: input.attempted ? attemptStepsOf(input) : [],
+  };
+}
+
+function attemptStepsOf(input: {
+  readonly move: TransactionMoveRowRecord;
+  readonly entry: TransactionPlanMoveEvaluation;
+  readonly result: TransactionMoveResult;
+  readonly detail: string | undefined;
+  readonly facts: TransactionPlanTeamFacts;
+  readonly at: DateTime.Utc;
+}): ReadonlyArray<StoredMoveStep> {
+  const step = (
+    kind: StoredMoveStep["kind"],
+    playerKey: string,
+    fromSlot: string | undefined,
+    toSlot: string | undefined,
+  ): StoredMoveStep => ({
+    kind,
+    playerKey,
+    ...(fromSlot === undefined ? {} : { fromSlot }),
+    ...(toSlot === undefined ? {} : { toSlot }),
+    outcome: stepOutcome(input.result),
+    ...(input.detail === undefined ? {} : { detail: input.detail }),
+    decidedAt: input.at,
+  });
+
+  if (input.move.kind === "activate" || input.move.kind === "stash") {
+    const placement = input.entry.placement;
+    const playerKey = placement?.playerKey ?? input.move.intent?.player?.key;
+    const toSlot = placement?.toSlot;
+    if (playerKey === undefined || toSlot === undefined) {
+      return [];
+    }
+    return [
+      step(
+        "reserve_move",
+        playerKey,
+        placement?.fromSlot ?? rosterSlot(input.facts, playerKey),
+        toSlot,
+      ),
+    ];
+  }
+  if (input.move.kind === "slot_move") {
+    const slot = input.move.slotMove;
+    return slot === undefined
+      ? []
+      : [step("slot_move", slot.playerKey, rosterSlot(input.facts, slot.playerKey), slot.toSlot)];
+  }
+  if (input.move.kind === "trade") {
+    return [];
+  }
+
+  const steps = [
+    ...input.move.adds.map((add) => step("add", add.key, undefined, undefined)),
+    ...input.move.drops.map((drop) => step("drop", drop.key, undefined, undefined)),
+  ];
+  const placement = input.entry.placement;
+  if (
+    input.move.intent?.to === "reserve" &&
+    placement !== undefined &&
+    input.result === "executed"
+  ) {
+    steps.push(
+      step(
+        "reserve_move",
+        placement.playerKey,
+        placement.fromSlot ?? rosterSlot(input.facts, placement.playerKey),
+        placement.toSlot,
+      ),
+    );
+  }
+  return steps;
+}
+
+function stepOutcome(result: TransactionMoveResult): StoredMoveStep["outcome"] {
+  switch (result) {
+    case "executed":
+    case "pending":
+    case "failed":
+    case "skipped":
+    case "unknown":
+      return result;
+    case "withdrawn":
+    case "expired":
+      return "skipped";
+  }
+}
+
+function rosterSlot(facts: TransactionPlanTeamFacts, playerKey: string): string | undefined {
+  return facts.roster.find((player) => player.key === playerKey)?.slot;
+}
+
+function emptyRunCounts(): MutableRunCounts {
+  return {
+    plans: 0,
+    claimed: 0,
+    busy: 0,
+    recovered: 0,
+    unavailable: 0,
+    moves: 0,
+    executed: 0,
+    pending: 0,
+    failed: 0,
+    skipped: 0,
+    unknown: 0,
+    retry: 0,
+  };
+}
+
+function countRunResult(counts: MutableRunCounts, result: TransactionMoveResult): void {
+  switch (result) {
+    case "executed":
+      counts.executed += 1;
+      return;
+    case "pending":
+      counts.pending += 1;
+      return;
+    case "failed":
+      counts.failed += 1;
+      return;
+    case "skipped":
+      counts.skipped += 1;
+      return;
+    case "unknown":
+      counts.unknown += 1;
+      return;
+    case "withdrawn":
+    case "expired":
+      return;
+  }
+}
+
+function runPositionOf(
+  entry: TransactionPlanMoveEvaluation,
+  move: TransactionMoveRowRecord,
+): number {
+  return entry.runPosition ?? move.position;
+}
+
+function groupPosition(
+  group: RunGroup,
+  entries: ReadonlyMap<TransactionMoveId, TransactionPlanMoveEvaluation>,
+): number {
+  return group.moves.reduce(
+    (position, move) => Math.min(position, runPositionOf(entryOf(entries, move.id), move)),
+    Number.MAX_SAFE_INTEGER,
+  );
+}
+
+function staleClaimBefore(at: DateTime.Utc): DateTime.Utc {
+  return DateTime.subtractDuration(at, transactionPlanRunStaleMillis);
+}
+
+function planKey(plan: TransactionPlanRef): string {
+  return `${plan.userId}:${plan.team}`;
 }
 
 function planViewOf(input: {
@@ -1264,6 +2021,8 @@ const disabledService: TransactionPlanServiceShape = {
   save: () => plansDisabled("save"),
   edit: () => plansDisabled("edit"),
   discard: () => plansDisabled("discard"),
+  submit: () => plansDisabled("submit today's moves"),
+  runDue: () => plansDisabled("run the due moves"),
   timeline: () => plansDisabled("read the timeline"),
   list: () => plansDisabled("list the plan's moves"),
   plan: () => plansDisabled("read a plan"),
@@ -1315,6 +2074,45 @@ export type TransactionPlanEditInput = {
 export type TransactionPlanDiscardInput = {
   readonly team: TeamId;
   readonly move: TransactionMoveId;
+};
+
+export type TransactionPlanSubmitInput = {
+  readonly team: TeamId;
+};
+
+type TransactionPlanRunCounts = {
+  readonly plans: number;
+  readonly claimed: number;
+  readonly busy: number;
+  readonly recovered: number;
+  readonly unavailable: number;
+  readonly moves: number;
+  readonly executed: number;
+  readonly pending: number;
+  readonly failed: number;
+  readonly skipped: number;
+  readonly unknown: number;
+  readonly retry: number;
+};
+
+type TransactionPlanRunRefusal = {
+  readonly code: string;
+  readonly team: TeamId;
+  readonly detail: string;
+  readonly moves: ReadonlyArray<TransactionMoveId>;
+};
+
+type TransactionPlanSubmission = {
+  readonly team: TeamId;
+  readonly today: StoredMoveDate;
+  readonly counts: TransactionPlanRunCounts;
+  readonly refusals: ReadonlyArray<TransactionPlanRunRefusal>;
+  readonly plan: TransactionPlanView;
+};
+
+type TransactionPlanDueResult = {
+  readonly at: DateTime.Utc;
+  readonly counts: TransactionPlanRunCounts;
 };
 
 type TransactionPlanDecision = "now" | "saved" | "discarded";
@@ -1370,6 +2168,7 @@ type TransactionPlanServiceError =
   | TransactionPlanFactsUnavailable
   | TransactionPlanMoveNotFound
   | TransactionPlanTeamNotFound
+  | TransactionPlanRunInProgress
   | TransactionPlanPersistenceFailed;
 
 export type TransactionPlanServiceShape = {
@@ -1392,6 +2191,16 @@ export type TransactionPlanServiceShape = {
     userId: UserId,
     input: TransactionPlanDiscardInput,
   ) => Effect.Effect<TransactionPlanResult, TransactionPlanServiceError>;
+
+  readonly submit: (
+    userId: UserId,
+    input: TransactionPlanSubmitInput,
+  ) => Effect.Effect<TransactionPlanSubmission, TransactionPlanServiceError>;
+
+  readonly runDue: (
+    limit: number,
+    at: DateTime.Utc,
+  ) => Effect.Effect<TransactionPlanDueResult, TransactionPlanServiceError>;
 
   readonly timeline: (
     userId: UserId,
@@ -1423,4 +2232,37 @@ type DraftGroup = {
   readonly label: string | undefined;
   readonly indexes: Array<number>;
   readonly moves: Array<TransactionPlanMove>;
+};
+
+type DueClaim = {
+  readonly plan: TransactionPlanRef;
+  readonly facts: TransactionPlanTeamFacts;
+  readonly runClaim: string;
+};
+
+type RunGroup = {
+  readonly key: string;
+  readonly moves: ReadonlyArray<TransactionMoveRowRecord>;
+};
+
+type RunSelection = {
+  readonly selected: ReadonlyArray<TransactionMoveRowRecord>;
+  readonly groups: ReadonlyArray<RunGroup>;
+  readonly refused: ReadonlyArray<TransactionPlanRunRefusal>;
+};
+
+type RunBlockage =
+  | { readonly kind: "hard"; readonly detail: string }
+  | { readonly kind: "deferred" };
+
+type DecidedWrite =
+  | {
+      readonly status: "settled";
+      readonly result: TransactionMoveResult;
+      readonly detail: string | undefined;
+    }
+  | { readonly status: "retry" };
+
+type MutableRunCounts = {
+  -readonly [Key in keyof TransactionPlanRunCounts]: TransactionPlanRunCounts[Key];
 };

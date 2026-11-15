@@ -8,7 +8,9 @@ import {
   gt,
   isNotNull,
   isNull,
+  lte,
   max,
+  min,
   not,
   or,
 } from "drizzle-orm";
@@ -46,13 +48,14 @@ import {
   TransactionPlanRecord,
   isOpenMove,
 } from "./TransactionPlanRecord.ts";
-import type { TransactionMoveRowRecord } from "./TransactionPlanRecord.ts";
+import type { StoredMoveStep, TransactionMoveRowRecord } from "./TransactionPlanRecord.ts";
 import {
   TransactionMoveRow,
   TransactionPlanRow,
   openMovePredicate,
   transactionMoveClaims,
   transactionMoves,
+  transactionMoveSteps,
   transactionPlans,
 } from "./TransactionPlanTables.ts";
 
@@ -80,6 +83,22 @@ export type TransactionMoveAppend = {
   readonly proposedBy: TransactionMoveProvenance;
   readonly content: TransactionMoveContent;
   readonly claims: ReadonlyArray<StoredMoveClaim>;
+};
+
+export type TransactionMoveSettlement = {
+  readonly move: TransactionMoveId;
+  readonly result: TransactionMoveResult;
+  readonly detail: string | undefined;
+  readonly validation: StoredMoveValidation;
+  readonly runDay: StoredMoveDate;
+  readonly effectiveDate: StoredMoveDate | undefined;
+  readonly runPosition: number | undefined;
+  readonly steps: ReadonlyArray<StoredMoveStep>;
+};
+
+export type TransactionPlanRef = {
+  readonly userId: UserId;
+  readonly team: TeamId;
 };
 
 type TransactionMoveWithTeam = {
@@ -113,6 +132,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
         Effect.map((id) => Schema.decodeSync(TransactionMoveId)(id)),
         Effect.mapError(persistenceFailure),
       );
+      const newStepId = crypto.randomULID.pipe(Effect.mapError(persistenceFailure));
 
       const loadPlan = Effect.fn("TransactionPlanRepository.loadPlan")(function* (input: {
         readonly userId: UserId;
@@ -454,6 +474,200 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
           .pipe(Effect.mapError(persistenceFailure));
       });
 
+      const settleMoves = Effect.fn("TransactionPlanRepository.settleMoves")(function* (input: {
+        readonly userId: UserId;
+        readonly team: TeamId;
+        readonly at: DateTime.Utc;
+        readonly settlements: Array.NonEmptyReadonlyArray<TransactionMoveSettlement>;
+      }) {
+        const at = DateTime.toDateUtc(input.at);
+        const steps = yield* Effect.forEach(input.settlements, (settlement) =>
+          Effect.forEach(settlement.steps, (step, position) =>
+            newStepId.pipe(
+              Effect.map((id) => ({
+                id,
+                moveId: settlement.move,
+                position,
+                kind: step.kind,
+                playerKey: step.playerKey,
+                fromSlot: step.fromSlot ?? null,
+                toSlot: step.toSlot ?? null,
+                outcome: step.outcome,
+                detail: step.detail ?? null,
+                decidedAt: DateTime.toDateUtc(step.decidedAt),
+              })),
+            ),
+          ),
+        );
+        return yield* database
+          .transaction((tx) =>
+            Effect.gen(function* () {
+              if (!(yield* lockPlan(tx, input))) {
+                return yield* Effect.die(
+                  new Error("A run settled moves on a plan that no longer exists"),
+                );
+              }
+              const ids = input.settlements.map((settlement) => String(settlement.move));
+              if (!Array.isArrayNonEmpty(ids)) {
+                return yield* Effect.die(new Error("A run settled no moves"));
+              }
+              yield* tx.delete(transactionMoveSteps).where(anyOf(transactionMoveSteps.moveId, ids));
+              const rows = steps.flat();
+              if (rows.length > 0) {
+                yield* tx.insert(transactionMoveSteps).values(rows);
+              }
+              for (const settlement of input.settlements) {
+                yield* tx
+                  .update(transactionMoves)
+                  .set({
+                    result: settlement.result,
+                    resultDetail: settlement.detail ?? null,
+                    resultAt: at,
+                    decision: "now",
+                    decidedAt: at,
+                    runDay: settlement.runDay,
+                    effectiveDate: settlement.effectiveDate ?? null,
+                    validation: settlement.validation.status,
+                    checkedAt:
+                      settlement.validation.checkedAt === undefined
+                        ? at
+                        : DateTime.toDateUtc(settlement.validation.checkedAt),
+                    validationReasons: settlement.validation.reasons,
+                    runPosition: settlement.runPosition ?? null,
+                    updatedAt: at,
+                  })
+                  .where(
+                    and(
+                      eq(transactionMoves.userId, input.userId),
+                      eq(transactionMoves.teamId, input.team),
+                      eq(transactionMoves.id, settlement.move),
+                    ),
+                  );
+              }
+              const ended = input.settlements.flatMap((settlement) =>
+                endsMove(settlement.result) ? [String(settlement.move)] : [],
+              );
+              if (Array.isArrayNonEmpty(ended)) {
+                yield* tx
+                  .delete(transactionMoveClaims)
+                  .where(anyOf(transactionMoveClaims.moveId, ended));
+              }
+              yield* tx
+                .update(transactionPlans)
+                .set({ updatedAt: at })
+                .where(
+                  and(
+                    eq(transactionPlans.userId, input.userId),
+                    eq(transactionPlans.teamId, input.team),
+                  ),
+                );
+            }),
+          )
+          .pipe(Effect.mapError(persistenceFailure));
+      });
+
+      const releaseStaleRuns = Effect.fn("TransactionPlanRepository.releaseStaleRuns")(
+        function* (input: { readonly before: DateTime.Utc }) {
+          const released = yield* database
+            .update(transactionPlans)
+            .set({ runClaim: null, runClaimedAt: null })
+            .where(
+              and(
+                isNotNull(transactionPlans.runClaim),
+                lte(transactionPlans.runClaimedAt, DateTime.toDateUtc(input.before)),
+              ),
+            )
+            .returning({ teamId: transactionPlans.teamId })
+            .pipe(Effect.mapError(persistenceFailure));
+          return released.length;
+        },
+      );
+
+      const readDuePlans = Effect.fn("TransactionPlanRepository.readDuePlans")(function* (input: {
+        readonly before: StoredMoveDate;
+        readonly limit: number;
+      }) {
+        return yield* Effect.gen(function* () {
+          const rows = yield* database
+            .select({ userId: transactionMoves.userId, teamId: transactionMoves.teamId })
+            .from(transactionMoves)
+            .where(
+              and(
+                openMovePredicate(transactionMoves),
+                isNull(transactionMoves.result),
+                anyOf(transactionMoves.decision, ["now", "saved"]),
+                not(eq(transactionMoves.kind, "trade")),
+                or(isNull(transactionMoves.runDay), lte(transactionMoves.runDay, input.before)),
+              ),
+            )
+            .groupBy(transactionMoves.userId, transactionMoves.teamId)
+            .orderBy(asc(min(transactionMoves.runDay)), asc(transactionMoves.teamId))
+            .limit(input.limit);
+          return yield* Effect.forEach(rows, (row) =>
+            Effect.all({
+              userId: Schema.decodeEffect(UserId)(row.userId),
+              team: Schema.decodeEffect(TeamId)(row.teamId),
+            }),
+          );
+        }).pipe(Effect.mapError(persistenceFailure));
+      });
+
+      const readDueMovesForPlans = Effect.fn("TransactionPlanRepository.readDueMovesForPlans")(
+        function* (input: {
+          readonly plans: ReadonlyArray<TransactionPlanRef>;
+          readonly before: StoredMoveDate;
+        }) {
+          return yield* Effect.gen(function* () {
+            const scope = planScope(input.plans);
+            if (scope === undefined) {
+              return [];
+            }
+            const rows = yield* database
+              .select()
+              .from(transactionMoves)
+              .where(
+                and(
+                  scope,
+                  openMovePredicate(transactionMoves),
+                  isNull(transactionMoves.result),
+                  anyOf(transactionMoves.decision, ["now", "saved"]),
+                  not(eq(transactionMoves.kind, "trade")),
+                  or(isNull(transactionMoves.runDay), lte(transactionMoves.runDay, input.before)),
+                ),
+              )
+              .orderBy(
+                asc(transactionMoves.userId),
+                asc(transactionMoves.teamId),
+                asc(transactionMoves.position),
+                asc(transactionMoves.id),
+              );
+            return yield* Effect.forEach(rows, decodeMove);
+          }).pipe(Effect.mapError(persistenceFailure));
+        },
+      );
+
+      const readOpenMovesForPlans = Effect.fn("TransactionPlanRepository.readOpenMovesForPlans")(
+        function* (input: { readonly plans: ReadonlyArray<TransactionPlanRef> }) {
+          return yield* Effect.gen(function* () {
+            const scope = planScope(input.plans);
+            if (scope === undefined) {
+              return [];
+            }
+            const rows = yield* database
+              .select()
+              .from(transactionMoves)
+              .where(and(scope, openMovePredicate(transactionMoves)))
+              .orderBy(
+                asc(transactionMoves.userId),
+                asc(transactionMoves.teamId),
+                asc(transactionMoves.position),
+                asc(transactionMoves.id),
+              );
+            return yield* Effect.forEach(rows, decodeMove);
+          }).pipe(Effect.mapError(persistenceFailure));
+        },
+      );
+
       const readPlanMoves = Effect.fn("TransactionPlanRepository.readPlanMoves")(function* (input: {
         readonly userId: UserId;
         readonly team: TeamId;
@@ -613,7 +827,12 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
         claimRun,
         releaseRun,
         recordResult,
+        settleMoves,
+        releaseStaleRuns,
         readPlanMoves,
+        readDuePlans,
+        readDueMovesForPlans,
+        readOpenMovesForPlans,
         readOwnerMoves,
         readOpenMovesForTeams,
         readTeam,
@@ -854,6 +1073,18 @@ function decodeTeam(row: unknown): Effect.Effect<TransactionMoveTeam, Schema.Sch
 
 function endsMove(result: TransactionMoveResult): boolean {
   return result === "executed" || result === "withdrawn" || result === "expired";
+}
+
+function planScope(plans: ReadonlyArray<TransactionPlanRef>): SQL | undefined {
+  const unique = new Map(plans.map((plan) => [`${plan.userId}:${plan.team}`, plan] as const));
+  return [...unique.values()]
+    .map((plan) =>
+      and(eq(transactionMoves.userId, plan.userId), eq(transactionMoves.teamId, plan.team)),
+    )
+    .reduce<SQL | undefined>(
+      (scope, next) => (scope === undefined ? next : or(scope, next)),
+      undefined,
+    );
 }
 
 function readStatePredicate(state: TransactionMoveReadState): SQL | undefined {
