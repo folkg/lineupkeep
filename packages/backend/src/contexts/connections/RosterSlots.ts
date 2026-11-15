@@ -87,22 +87,6 @@ export function slotCapacity(rule: RosterRule, slot: RosterSlot): number | undef
   return slot.kind === "bench" && rule.benchCapacity === "generic" ? undefined : slot.count;
 }
 
-export function rosterPlaceCount(rule: RosterRule, slot: string | undefined): number {
-  return slot !== undefined && rule.byPosition.get(slot)?.kind === "reserve" ? 0 : 1;
-}
-
-export function rosterPlaceChange(
-  rule: RosterRule,
-  fromSlot: string | undefined,
-  toSlot: string | undefined,
-): { readonly frees: number; readonly consumes: number } {
-  const before = rosterPlaceCount(rule, fromSlot);
-  const after = toSlot === undefined ? 0 : rosterPlaceCount(rule, toSlot);
-  return after < before
-    ? { frees: before - after, consumes: 0 }
-    : { frees: 0, consumes: after - before };
-}
-
 export function rosterOccupancy(input: {
   readonly rule: RosterRule;
   readonly players: ReadonlyArray<RosterPlayerPlace>;

@@ -214,6 +214,83 @@ it.effect("refuses a group whole when one of its moves cannot run", () =>
   ),
 );
 
+it.effect("orders a stash before the add that uses the place it frees", () =>
+  Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const result = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [add("fa1", "Free Agent One"), stash("a1", "Roster One")],
+    });
+
+    assert.deepStrictEqual(result.refused, []);
+    assert.deepStrictEqual(
+      result.plan.moves.map((move) => [move.kind, move.runPosition, move.validation.status]),
+      [
+        ["stash", 0, "current"],
+        ["free_agent_add", 1, "current"],
+      ],
+    );
+    assert.deepStrictEqual(result.plan.moves[1]?.dependsOn, [requireMoveId(result.plan.moves[0])]);
+  }).pipe(
+    Effect.provide(
+      serviceLayer([
+        league(
+          [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["WR"])],
+          [freeAgent("fa1", "Free Agent One", ["WR"])],
+          { slots: [bench("BN", 2), reserve("IR", ["RB"])], constraints: constraints(2) },
+        ),
+      ]),
+    ),
+  ),
+);
+
+it.effect("refuses a second stash that claims the same reserve place", () =>
+  Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const result = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [stash("a1", "Roster One"), stash("a2", "Roster Two")],
+    });
+
+    assert.deepStrictEqual(
+      result.refused.map((refusal) => [refusal.code, refusal.moves]),
+      [["place_claimed", [1]]],
+    );
+    assert.deepStrictEqual(
+      result.plan.moves.map((move) => [move.intent?.player?.key, move.claims]),
+      [
+        [
+          "a1",
+          [
+            { kind: "place", key: "BN" },
+            { kind: "place", key: "IR" },
+          ],
+        ],
+      ],
+    );
+  }).pipe(
+    Effect.provide(
+      serviceLayer([
+        league(
+          [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
+          [],
+          { slots: [bench("BN", 2), reserve("IR", ["RB"])], constraints: constraints(3) },
+        ),
+      ]),
+    ),
+  ),
+);
+
 it.effect("refuses a proposed move for a player who has already played today", () =>
   Effect.gen(function* () {
     const service = yield* TransactionPlanService;
@@ -730,6 +807,54 @@ it.effect("discards a saved move and leaves the plan open", () =>
         league(
           [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
           [],
+        ),
+      ]),
+    ),
+  ),
+);
+
+it.effect("rechecks the queue after discarding the move that funds an add", () =>
+  Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [add("fa1", "Free Agent One"), drop("a2", "Roster Two")],
+    });
+    assert.deepStrictEqual(proposed.refused, []);
+    assert.deepStrictEqual(
+      proposed.plan.moves.map((move) => [move.kind, move.runPosition]),
+      [
+        ["drop", 0],
+        ["free_agent_add", 1],
+      ],
+    );
+    const funder = proposed.plan.moves.find((move) => move.kind === "drop");
+    const funded = proposed.plan.moves.find((move) => move.kind === "free_agent_add");
+
+    const result = yield* service.discard(owner, {
+      team,
+      move: requireMoveId(funder),
+    });
+
+    const remaining = result.plan.moves.find((move) => move.move === requireMoveId(funded));
+    assert.strictEqual(remaining?.validation.status, "stale");
+    assert.deepStrictEqual(
+      remaining?.validation.reasons.map((reason) => reason.code),
+      ["roster_full"],
+    );
+    assert.strictEqual(remaining?.runPosition, undefined);
+  }).pipe(
+    Effect.provide(
+      serviceLayer([
+        league(
+          [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
+          [freeAgent("fa1", "Free Agent One", ["RB"])],
+          { constraints: constraints(2) },
         ),
       ]),
     ),
@@ -2513,6 +2638,14 @@ function drop(key: string, name: string): TransactionPlanMoveDraft {
     kind: "drop",
     drops: [key],
     reason: `Drop ${name}.`,
+  };
+}
+
+function stash(playerKey: string, playerName: string): TransactionPlanMoveDraft {
+  return {
+    kind: "stash",
+    player: playerKey,
+    reason: `Stash ${playerName}.`,
   };
 }
 

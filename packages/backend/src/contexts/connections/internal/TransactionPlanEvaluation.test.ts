@@ -272,6 +272,34 @@ it("refuses a healthy player in an injury-based reserve place", () => {
   assert.deepStrictEqual(evaluation.order.steps, []);
 });
 
+it("refuses a stash to a reserve list that does not accept the player's positions", () => {
+  const evaluation = evaluate({
+    facts: facts({
+      slots: [bench("BN", 1), reserve("IR", ["RB"])],
+      constraints: constraints(2),
+      roster: [rostered("w1", "Receiver One", "BN", ["WR"])],
+    }),
+    moves: [
+      move("stash-receiver", {
+        kind: "stash",
+        intent: { kind: "stash", player: player("w1", "Receiver One") },
+      }),
+    ],
+  });
+
+  assert.strictEqual(evaluation.moves[0]?.validation.status, "stale");
+  assert.deepStrictEqual(
+    evaluation.moves[0]?.validation.reasons.map((reason) => [reason.code, reason.detail]),
+    [
+      [
+        "reserve_unavailable",
+        "Receiver One cannot sit on a reserve list: the league lists none they are eligible for.",
+      ],
+    ],
+  );
+  assert.deepStrictEqual(evaluation.order.steps, []);
+});
+
 it("rechecks a saved move whose day arrived as due today and stale", () => {
   const evaluation = evaluate({
     facts: facts({
@@ -362,7 +390,7 @@ it("orders a reserve add after the activate that frees its place", () => {
     evaluation.order.steps.map((step) => [step.move, step.fundedBy, step.dependsOn]),
     [
       [moveId("activate-runner"), undefined, []],
-      [moveId("add-reserve"), undefined, [moveId("activate-runner")]],
+      [moveId("add-reserve"), moveId("activate-runner"), [moveId("activate-runner")]],
     ],
   );
 });
@@ -672,8 +700,8 @@ it("blocks only a failed waiver claim's dependents", () => {
     ],
   );
   assert.deepStrictEqual(
-    evaluation.moves[1]?.validation.reasons.map((reason) => reason.code),
-    ["drop_not_rostered"],
+    evaluation.moves[1]?.validation.reasons.map((reason) => [reason.code, reason.detail]),
+    [["blocked_by_move", "Drop Runner C cannot run because Add Runner C did not pass its check."]],
   );
   assert.deepStrictEqual(
     evaluation.moves[2]?.projectedRoster.map((member) => member.key),
@@ -1197,6 +1225,251 @@ it("keeps a drop of a player who can still be moved today current", () => {
 
   assert.strictEqual(evaluation.moves[0]?.validation.status, "current");
   assert.deepStrictEqual(evaluation.moves[0]?.validation.reasons, []);
+});
+
+it("frees an active place for a later add when a stash moves a player to a reserve list", () => {
+  const evaluation = evaluate({
+    facts: facts({
+      slots: [bench("BN", 2), reserve("IR", ["RB"])],
+      constraints: constraints(2),
+      roster: [
+        rostered("a1", "Runner A", "BN", ["RB"]),
+        rostered("w1", "Receiver One", "BN", ["WR"]),
+      ],
+      pool: [freeAgent("fa1", "Free Agent", ["WR"])],
+    }),
+    moves: [
+      move("add-free-agent", { kind: "free_agent_add", adds: [player("fa1", "Free Agent")] }),
+      move("stash-runner", {
+        kind: "stash",
+        intent: { kind: "stash", player: player("a1", "Runner A") },
+      }),
+    ],
+  });
+
+  assert.deepStrictEqual(
+    evaluation.moves.map((entry) => [entry.move, entry.validation.status, entry.runPosition]),
+    [
+      [moveId("add-free-agent"), "current", 1],
+      [moveId("stash-runner"), "current", 0],
+    ],
+  );
+  assert.deepStrictEqual(
+    evaluation.order.steps.map((step) => [step.move, step.fundedBy]),
+    [
+      [moveId("stash-runner"), undefined],
+      [moveId("add-free-agent"), moveId("stash-runner")],
+    ],
+  );
+  assert.deepStrictEqual(
+    evaluation.moves[0]?.projectedRoster.map((member) => [member.key, member.slot]),
+    [
+      ["a1", "IR"],
+      ["w1", "BN"],
+      ["fa1", "BN"],
+    ],
+  );
+});
+
+it("refuses two stashes that claim the same reserve place", () => {
+  const evaluation = evaluate({
+    facts: facts({
+      slots: [bench("BN", 2), reserve("IR", ["RB"])],
+      constraints: constraints(3),
+      roster: [rostered("a1", "Runner A", "BN", ["RB"]), rostered("b1", "Runner B", "BN", ["RB"])],
+    }),
+    moves: [
+      move("stash-runner-a", {
+        kind: "stash",
+        intent: { kind: "stash", player: player("a1", "Runner A") },
+      }),
+      move("stash-runner-b", {
+        kind: "stash",
+        intent: { kind: "stash", player: player("b1", "Runner B") },
+      }),
+    ],
+  });
+
+  assert.strictEqual(evaluation.moves[0]?.validation.status, "current");
+  assert.deepStrictEqual(evaluation.moves[0]?.claims, [
+    { kind: "place", key: "BN" },
+    { kind: "place", key: "IR" },
+  ]);
+  assert.strictEqual(evaluation.moves[1]?.validation.status, "stale");
+  assert.deepStrictEqual(
+    evaluation.moves[1]?.validation.reasons.map((reason) => reason.code),
+    ["place_claimed"],
+  );
+  assert.include(evaluation.moves[1]?.validation.reasons[0]?.detail ?? "", "IR place");
+  assert.deepStrictEqual(
+    evaluation.order.steps.map((step) => step.move),
+    [moveId("stash-runner-a")],
+  );
+});
+
+it("blocks the add a failed drop funds and still validates an independent move", () => {
+  const evaluation = evaluate({
+    facts: facts({
+      slots: [bench("BN", 2)],
+      constraints: constraints(2),
+      roster: [rostered("a1", "Runner A", "BN", ["RB"]), rostered("x1", "Bench X", "BN", ["WR"])],
+      pool: [freeAgent("fa1", "Free Agent", ["WR"])],
+    }),
+    moves: [
+      move("add-free-agent", { kind: "free_agent_add", adds: [player("fa1", "Free Agent")] }),
+      move("drop-x", {
+        kind: "drop",
+        drops: [player("x1", "Bench X")],
+        result: "failed",
+      }),
+      move("drop-runner", { kind: "drop", drops: [player("a1", "Runner A")] }),
+      move("drop-added", { kind: "drop", drops: [player("fa1", "Free Agent")] }),
+    ],
+  });
+
+  assert.deepStrictEqual(
+    evaluation.moves.map((entry) => [entry.move, entry.validation.status, entry.runPosition]),
+    [
+      [moveId("add-free-agent"), "stale", undefined],
+      [moveId("drop-x"), "current", undefined],
+      [moveId("drop-runner"), "current", 0],
+      [moveId("drop-added"), "stale", undefined],
+    ],
+  );
+  assert.deepStrictEqual(
+    evaluation.moves[0]?.validation.reasons.map((reason) => [reason.code, reason.detail]),
+    [["blocked_by_move", "Add Free Agent cannot run because Drop Bench X did not pass its check."]],
+  );
+  assert.deepStrictEqual(
+    evaluation.moves[3]?.validation.reasons.map((reason) => [reason.code, reason.detail]),
+    [
+      [
+        "blocked_by_move",
+        "Drop Free Agent cannot run because Add Free Agent did not pass its check.",
+      ],
+    ],
+  );
+  assert.deepStrictEqual(
+    evaluation.order.steps.map((step) => step.move),
+    [moveId("drop-runner")],
+  );
+});
+
+it("projects a saved chain through a swap, a stash, and an add", () => {
+  const evaluation = evaluate({
+    facts: facts({
+      slots: [bench("BN", 2), reserve("IR", ["RB"])],
+      constraints: constraints(2),
+      roster: [rostered("a1", "Runner A", "BN", ["RB"]), rostered("a2", "Runner B", "BN", ["RB"])],
+      pool: [
+        freeAgent("fa1", "Free Agent One", ["RB"]),
+        freeAgent("fa2", "Free Agent Two", ["RB"]),
+      ],
+      today: "2026-11-10",
+      timing: { rule: "same_day", currentDate: "2026-11-10", periodStart: undefined },
+    }),
+    moves: [
+      move("swap", {
+        kind: "free_agent_add",
+        adds: [player("fa1", "Free Agent One")],
+        drops: [player("a1", "Runner A")],
+        decision: "saved",
+        runDay: "2026-11-12",
+      }),
+      move("stash", {
+        kind: "stash",
+        intent: { kind: "stash", player: player("fa1", "Free Agent One") },
+        decision: "saved",
+        runDay: "2026-11-12",
+      }),
+      move("add", {
+        kind: "free_agent_add",
+        adds: [player("fa2", "Free Agent Two")],
+        decision: "saved",
+        runDay: "2026-11-12",
+      }),
+    ],
+  });
+
+  assert.deepStrictEqual(
+    evaluation.moves.map((entry) => [entry.move, entry.validation.status, entry.runPosition]),
+    [
+      [moveId("swap"), "current", 0],
+      [moveId("stash"), "current", 1],
+      [moveId("add"), "current", 2],
+    ],
+  );
+  assert.deepStrictEqual(
+    evaluation.moves[2]?.projectedRoster.map((member) => [member.key, member.slot]),
+    [
+      ["a2", "BN"],
+      ["fa1", "IR"],
+      ["fa2", "BN"],
+    ],
+  );
+  assert.deepStrictEqual(
+    evaluation.order.steps.map((step) => [step.move, step.fundedBy]),
+    [
+      [moveId("swap"), undefined],
+      [moveId("stash"), undefined],
+      [moveId("add"), moveId("stash")],
+    ],
+  );
+});
+
+it("projects a saved chain of a stash and an add", () => {
+  const evaluation = evaluate({
+    facts: facts({
+      slots: [bench("BN", 2), reserve("IR", ["RB"])],
+      constraints: constraints(2),
+      roster: [
+        rostered("a1", "Runner A", "BN", ["RB"]),
+        rostered("w1", "Receiver One", "BN", ["WR"]),
+      ],
+      pool: [freeAgent("fa1", "Free Agent", ["WR"])],
+      today: "2026-11-10",
+      timing: { rule: "same_day", currentDate: "2026-11-10", periodStart: undefined },
+    }),
+    moves: [
+      move("add-free-agent", {
+        kind: "free_agent_add",
+        adds: [player("fa1", "Free Agent")],
+        decision: "saved",
+        runDay: "2026-11-12",
+      }),
+      move("stash-runner", {
+        kind: "stash",
+        intent: { kind: "stash", player: player("a1", "Runner A") },
+        decision: "saved",
+        runDay: "2026-11-12",
+      }),
+    ],
+  });
+
+  assert.deepStrictEqual(
+    evaluation.moves.map((entry) => [
+      entry.move,
+      entry.runDay,
+      entry.dueToday,
+      entry.validation.status,
+    ]),
+    [
+      [moveId("add-free-agent"), "2026-11-12", false, "current"],
+      [moveId("stash-runner"), "2026-11-12", false, "current"],
+    ],
+  );
+  assert.deepStrictEqual(
+    evaluation.moves[0]?.projectedRoster.map((member) => [member.key, member.slot]),
+    [
+      ["a1", "IR"],
+      ["w1", "BN"],
+      ["fa1", "BN"],
+    ],
+  );
+  assert.deepStrictEqual(
+    evaluation.order.steps.map((step) => step.move),
+    [moveId("stash-runner"), moveId("add-free-agent")],
+  );
 });
 
 function evaluate(plan: {
