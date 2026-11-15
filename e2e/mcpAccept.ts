@@ -820,6 +820,8 @@ function callArguments(tool: string, team: string): Record<string, unknown> {
     case "list_transaction_proposals":
     case "get_transaction_plan":
       return { team: randomUUID() };
+    case "discard_transaction_move":
+      return { team: randomUUID(), move: randomUUID() };
     case "set_lineup":
       return {
         requestId: randomUUID(),

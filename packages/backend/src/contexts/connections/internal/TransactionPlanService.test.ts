@@ -8,6 +8,7 @@ import { TestClock } from "effect/testing";
 
 import { decodeTeamId } from "#contexts/connections/FantasyTeam.ts";
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
+import type { PlayerRef } from "#contexts/connections/QueryValues.ts";
 import type { TransactionMoveList } from "#contexts/connections/TransactionPlans.ts";
 import type {
   TransactionPlanMoveDraft,
@@ -51,6 +52,7 @@ import type {
 } from "./TransactionPlanWrites.ts";
 
 const owner = decodeUserId("owner");
+const otherOwner = decodeUserId("other-owner");
 const team = decodeTeamId("01ARZ3NDEKTSV4RRFFQ69G5FAV");
 const secondTeam = decodeTeamId("01ARZ3NDEKTSV4RRFFQ69G5FAW");
 const at = DateTime.makeUnsafe("2026-11-14T12:00:00.000Z");
@@ -471,6 +473,303 @@ it.effect("refuses an edit that would make a later move impossible", () =>
       ]),
     ),
   ),
+);
+
+it.effect("amends a saved move's reason and fallbacks in place and revalidates the queue", () =>
+  Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    const tokens = yield* QueryTokens;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [{ ...add("fa1", "Free Agent One", { fallbacks: ["fa2"] }), runDay: "2026-11-16" }],
+    });
+    assert.deepStrictEqual(proposed.refused, []);
+    const amended = proposed.plan.moves[0];
+    assert.isDefined(amended);
+    const storedBefore = yield* database.select().from(transactionMoves);
+    const positionBefore = storedBefore[0]?.position;
+
+    yield* TestClock.adjust(60_000);
+    const refs = yield* tokens.sealPlayerRefs({
+      userId: owner,
+      leagueKey: `league-${team}`,
+      playerKeys: ["fa1", "fa3"],
+    });
+    const result = yield* service.proposeRefs(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [
+        {
+          move: requireMoveId(amended),
+          kind: "free_agent_add",
+          adds: [requireRef(refs, 0)],
+          fallbacks: [requireRef(refs, 1)],
+          reason: "Prefer the third fallback.",
+        },
+      ],
+    });
+
+    assert.deepStrictEqual(result.refused, []);
+    assert.strictEqual(result.plan.moves.length, 1);
+    const changed = result.plan.moves[0];
+    assert.strictEqual(changed?.move, requireMoveId(amended));
+    assert.strictEqual(changed?.reason, "Prefer the third fallback.");
+    assert.deepStrictEqual(
+      changed?.fallbacks.map((player) => player.key),
+      ["fa3"],
+    );
+    assert.strictEqual(changed?.runDay, "2026-11-16");
+    assert.strictEqual(changed?.decision, "saved");
+    assert.strictEqual(changed?.runPosition, 0);
+    assert.strictEqual(changed?.validation.status, "current");
+    assert.strictEqual(checkedAtOf(changed), DateTime.toEpochMillis(at) + 60_000);
+    const storedAfter = yield* database.select().from(transactionMoves);
+    assert.strictEqual(storedAfter.length, 1);
+    assert.strictEqual(storedAfter[0]?.position, positionBefore);
+    assert.deepStrictEqual(
+      (yield* database.select().from(transactionMoveClaims)).map((claim) => claim.claimKey).sort(),
+      ["fa1", "fa3"],
+    );
+  }).pipe(
+    Effect.provide(
+      serviceLayer([
+        league(
+          [],
+          [
+            freeAgent("fa1", "Free Agent One", ["RB"]),
+            freeAgent("fa2", "Free Agent Two", ["RB"]),
+            freeAgent("fa3", "Free Agent Three", ["RB"]),
+          ],
+        ),
+      ]),
+    ),
+  ),
+);
+
+it.effect("changes a saved move's run day and reorders the plan", () =>
+  Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    const tokens = yield* QueryTokens;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [
+        { ...drop("a1", "Roster One"), runDay: "2026-11-16" },
+        { ...drop("a2", "Roster Two"), runDay: "2026-11-17" },
+      ],
+    });
+    assert.deepStrictEqual(proposed.refused, []);
+    const before = yield* service.list(owner, { team, state: "saved" });
+    assert.deepStrictEqual(
+      before.days.map((day) => day.day),
+      ["2026-11-16", "2026-11-17"],
+    );
+    const first = droppedMoveId(proposed.plan, "a1");
+    const downstream = droppedMoveId(proposed.plan, "a2");
+    const storedBefore = yield* database.select().from(transactionMoves);
+    const positionBefore = (move: TransactionMoveId): number | undefined =>
+      storedBefore.find((row) => row.id === move)?.position;
+
+    yield* TestClock.adjust(60_000);
+    const refs = yield* tokens.sealPlayerRefs({
+      userId: owner,
+      leagueKey: `league-${team}`,
+      playerKeys: ["a1"],
+    });
+    const result = yield* service.proposeRefs(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [
+        {
+          move: first,
+          kind: "drop",
+          drops: [requireRef(refs, 0)],
+          reason: "Drop Roster One later.",
+          runDay: "2026-11-18",
+        },
+      ],
+    });
+
+    assert.deepStrictEqual(result.refused, []);
+    assert.deepStrictEqual(
+      result.plan.moves.map((move) => [move.move, move.validation.status]),
+      [
+        [first, "current"],
+        [downstream, "current"],
+      ],
+    );
+    const after = yield* service.list(owner, { team, state: "saved" });
+    assert.deepStrictEqual(
+      after.days.map((day) => [day.day, day.teams[0]?.moves.map((move) => move.move)]),
+      [
+        ["2026-11-17", [downstream]],
+        ["2026-11-18", [first]],
+      ],
+    );
+    assert.strictEqual(
+      checkedAtOf(after.days[0]?.teams[0]?.moves[0]),
+      DateTime.toEpochMillis(at) + 60_000,
+    );
+    const storedAfter = yield* database.select().from(transactionMoves);
+    assert.strictEqual(
+      storedAfter.find((row) => row.id === first)?.position,
+      positionBefore(first),
+    );
+    assert.strictEqual(
+      storedAfter.find((row) => row.id === downstream)?.position,
+      positionBefore(downstream),
+    );
+  }).pipe(
+    Effect.provide(
+      serviceLayer([
+        league(
+          [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
+          [],
+        ),
+      ]),
+    ),
+  ),
+);
+
+it.effect("refuses an amendment for a move in another owner's queue", () =>
+  Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    const tokens = yield* QueryTokens;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+    yield* seedTeam(database, otherOwner, secondTeam);
+
+    const other = yield* service.propose(otherOwner, {
+      team: secondTeam,
+      proposedBy: proposer,
+      moves: [drop("a1", "Roster One")],
+    });
+    const otherMove = requireMoveId(other.plan.moves[0]);
+    const refs = yield* tokens.sealPlayerRefs({
+      userId: owner,
+      leagueKey: `league-${team}`,
+      playerKeys: ["a1"],
+    });
+
+    const failure = yield* service
+      .proposeRefs(owner, {
+        team,
+        proposedBy: proposer,
+        moves: [
+          {
+            move: otherMove,
+            kind: "drop",
+            drops: [requireRef(refs, 0)],
+            reason: "Amend a move from another account.",
+          },
+        ],
+      })
+      .pipe(Effect.flip);
+
+    if (failure._tag !== "transaction_plan.move_not_found") {
+      throw new Error(`Expected an amendment refusal, received ${failure._tag}`);
+    }
+    assert.strictEqual(failure.team, team);
+    assert.strictEqual(failure.move, otherMove);
+  }).pipe(
+    Effect.provide(
+      serviceLayer([
+        league([rostered("a1", "Roster One", "BN", ["RB"])], []),
+        leagueFor(secondTeam, [rostered("a1", "Roster One", "BN", ["RB"])], []),
+      ]),
+    ),
+  ),
+);
+
+it.effect("discards a saved move and leaves the plan open", () =>
+  Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [
+        { ...drop("a1", "Roster One"), runDay: "2026-11-16" },
+        { ...drop("a2", "Roster Two"), runDay: "2026-11-16" },
+      ],
+    });
+    const discarded = droppedMoveId(proposed.plan, "a1");
+
+    const result = yield* service.discard(owner, { team, move: discarded });
+
+    assert.deepStrictEqual(result.refused, []);
+    assert.deepStrictEqual(
+      result.plan.moves.map((move) => [move.drops[0]?.key, move.decision]),
+      [
+        ["a2", "saved"],
+        ["a1", "discarded"],
+      ],
+    );
+    const open = yield* service.list(owner, { team, state: "saved" });
+    assert.deepStrictEqual(
+      open.moves.map((move) => move.move),
+      [droppedMoveId(result.plan, "a2")],
+    );
+    assert.strictEqual((yield* database.select().from(transactionPlans)).length, 1);
+  }).pipe(
+    Effect.provide(
+      serviceLayer([
+        league(
+          [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
+          [],
+        ),
+      ]),
+    ),
+  ),
+);
+
+it.effect("refuses to discard a move that has already run", () =>
+  Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const repository = yield* TransactionPlanRepository;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [{ ...drop("a1", "Roster One"), runDay: "2026-11-16" }],
+    });
+    const move = requireMoveId(proposed.plan.moves[0]);
+    yield* repository.recordResult({
+      userId: owner,
+      team,
+      move,
+      result: "executed",
+      detail: undefined,
+      externalRef: undefined,
+      at,
+    });
+
+    const result = yield* service.discard(owner, { team, move });
+
+    assert.deepStrictEqual(
+      result.refused.map((refusal) => [refusal.code, refusal.team]),
+      [["move_not_open", team]],
+    );
+    assert.include(result.refused[0]?.detail ?? "", "has ended");
+    const stored = yield* database.select().from(transactionMoves);
+    assert.strictEqual(stored[0]?.decision, "saved");
+  }).pipe(Effect.provide(serviceLayer([league([rostered("a1", "Roster One", "BN", ["RB"])], [])]))),
 );
 
 it.effect("discards one move and leaves the plan's other moves", () =>
@@ -1877,7 +2176,9 @@ it.effect("stores the locked week's start as a weekly-lock move's effective date
 function serviceLayer(
   leagues: ReadonlyArray<League>,
   writes: Layer.Layer<TransactionPlanWrites> = executedWrites(),
-): Layer.Layer<TransactionPlanService | TransactionPlanRepository | ConnectionsDatabase> {
+): Layer.Layer<
+  TransactionPlanService | TransactionPlanRepository | ConnectionsDatabase | QueryTokens
+> {
   const byTeam = new Map(leagues.map((entry) => [entry.team, entry.facts] as const));
   return layerWith((input) => {
     const facts = byTeam.get(input.team);
@@ -1895,7 +2196,9 @@ function serviceLayer(
 function mutableFactsLayer(
   facts: Map<TeamId, TransactionPlanTeamFacts>,
   writes: Layer.Layer<TransactionPlanWrites> = executedWrites(),
-): Layer.Layer<TransactionPlanService | TransactionPlanRepository | ConnectionsDatabase> {
+): Layer.Layer<
+  TransactionPlanService | TransactionPlanRepository | ConnectionsDatabase | QueryTokens
+> {
   return layerWith((input) => {
     const found = facts.get(input.team);
     return found === undefined
@@ -1934,14 +2237,16 @@ function writeLayer(
 function layerWith(
   read: TransactionPlanFactsShape["read"],
   writes: Layer.Layer<TransactionPlanWrites> = executedWrites(),
-): Layer.Layer<TransactionPlanService | TransactionPlanRepository | ConnectionsDatabase> {
+): Layer.Layer<
+  TransactionPlanService | TransactionPlanRepository | ConnectionsDatabase | QueryTokens
+> {
   const Facts = Layer.succeed(TransactionPlanFacts)({ read });
   return TransactionPlanServiceLive.pipe(
     Layer.provideMerge(TransactionPlanRepository.layer),
     Layer.provide(Facts),
     Layer.provide(writes),
     Layer.provide(NodeCrypto.layer),
-    Layer.provide(QueryTokens.fromSecret("test-query-token-secret-at-least-32-chars")),
+    Layer.provideMerge(QueryTokens.fromSecret("test-query-token-secret-at-least-32-chars")),
     Layer.provideMerge(ConnectionsDatabaseTest),
     Layer.orDie,
   );
@@ -1976,6 +2281,14 @@ function requireMoveId(move: { readonly move: TransactionMoveId } | undefined): 
     throw new Error("A test read a move the plan did not carry");
   }
   return move.move;
+}
+
+function requireRef(refs: ReadonlyArray<PlayerRef>, index: number): PlayerRef {
+  const ref = refs[index];
+  if (ref === undefined) {
+    throw new Error("A test read a player reference it did not seal");
+  }
+  return ref;
 }
 
 function droppedMoveId(plan: TransactionPlanView, key: string): TransactionMoveId {

@@ -330,6 +330,7 @@ export const TransactionPlanServiceLive = Layer.effect(
       return {
         status: "resolved",
         draft: {
+          ...(input.draft.move === undefined ? {} : { move: input.draft.move }),
           ...(input.draft.group === undefined ? {} : { group: input.draft.group }),
           kind: input.draft.kind,
           adds: addRefs.filter((ref): ref is string => ref !== undefined),
@@ -367,7 +368,7 @@ export const TransactionPlanServiceLive = Layer.effect(
           draft,
         }).pipe(Effect.map((result) => ({ index, result }))),
       );
-      const refused = resolved.flatMap((entry) =>
+      const refused: Array<TransactionPlanRefusal> = resolved.flatMap((entry) =>
         entry.result.status === "refused"
           ? [
               {
@@ -394,13 +395,71 @@ export const TransactionPlanServiceLive = Layer.effect(
           refused,
         };
       }
-      return yield* propose(userId, {
+      const resolvedMoves = resolved.flatMap((entry) =>
+        entry.result.status === "resolved"
+          ? [{ index: entry.index, draft: entry.result.draft }]
+          : [],
+      );
+      const amendments: Array<{
+        readonly index: number;
+        readonly move: TransactionMoveId;
+        readonly draft: TransactionPlanMoveDraft;
+      }> = [];
+      const appends: Array<{ readonly index: number; readonly draft: TransactionPlanMoveDraft }> =
+        [];
+      for (const entry of resolvedMoves) {
+        const move = entry.draft.move;
+        if (move === undefined) {
+          appends.push(entry);
+        } else {
+          amendments.push({ index: entry.index, move, draft: entry.draft });
+        }
+      }
+      let plan: TransactionPlanView | undefined;
+      for (const amendment of amendments) {
+        const result = yield* edit(userId, {
+          team: input.team,
+          move: amendment.move,
+          change: amendment.draft,
+        });
+        for (const refusal of result.refused) {
+          refused.push({
+            ...refusal,
+            moves: refusal.moves.map(() => amendment.index),
+          });
+        }
+        plan = result.plan;
+      }
+      if (appends.length > 0) {
+        const result = yield* propose(userId, {
+          team: input.team,
+          proposedBy: input.proposedBy,
+          moves: appends.map((entry) => entry.draft),
+        });
+        for (const refusal of result.refused) {
+          refused.push({
+            ...refusal,
+            moves: refusal.moves.map((position) => appends[position]?.index ?? position),
+          });
+        }
+        plan = result.plan;
+      }
+      if (plan !== undefined) {
+        return { plan, refused };
+      }
+      const at = yield* DateTime.now;
+      const stored = yield* repository.readPlanMoves({ userId, team: input.team });
+      const facts = yield* factsPort.read({
+        userId,
         team: input.team,
-        proposedBy: input.proposedBy,
-        moves: resolved.flatMap((entry) =>
-          entry.result.status === "resolved" ? [entry.result.draft] : [],
-        ),
+        at,
+        players: [],
+        needsBudget: false,
       });
+      return {
+        plan: planViewOf({ stored, facts, checkedAt: at, team: input.team }),
+        refused,
+      };
     });
 
     const save = Effect.fn("TransactionPlanService.save")(function* (
@@ -534,7 +593,8 @@ export const TransactionPlanServiceLive = Layer.effect(
           refused: [refused],
         };
       }
-      if (input.change.runDay !== undefined && !Schema.is(StoredMoveDate)(input.change.runDay)) {
+      const runDay = input.change.runDay ?? move.runDay;
+      if (runDay !== undefined && !Schema.is(StoredMoveDate)(runDay)) {
         return {
           plan: planViewOf({ stored, facts, checkedAt: at, team: input.team }),
           refused: [
@@ -547,22 +607,26 @@ export const TransactionPlanServiceLive = Layer.effect(
           ],
         };
       }
-      if (input.change.runDay !== undefined && input.change.runDay < facts.today) {
+      if (runDay !== undefined && runDay < facts.today) {
         return {
           plan: planViewOf({ stored, facts, checkedAt: at, team: input.team }),
           refused: [
             {
               code: "run_day_past",
               team: input.team,
-              detail: `A saved move runs on ${facts.today} or a later day, so ${input.change.runDay} has already passed.`,
+              detail: `A saved move runs on ${facts.today} or a later day, so ${runDay} has already passed.`,
               moves: [0],
             },
           ],
         };
       }
+      const change = {
+        ...input.change,
+        ...(runDay === undefined ? {} : { runDay }),
+      };
 
       const candidate = draftCandidate({
-        draft: input.change,
+        draft: change,
         id: move.id,
         position: move.position,
         group: move.group,
@@ -570,14 +634,12 @@ export const TransactionPlanServiceLive = Layer.effect(
         facts,
       });
       const before = evaluateTransactionPlan({ facts, moves: open, checkedAt: at });
-      const peers = input.change.runDay === move.runDay ? [] : groupPeers(open, move);
+      const peers = runDay === move.runDay ? [] : groupPeers(open, move);
       const changed = open.flatMap((entry) => {
         if (entry.id === move.id) {
           return [candidate];
         }
-        return peers.some((peer) => peer.id === entry.id)
-          ? [movedToDay(entry, input.change.runDay)]
-          : [entry];
+        return peers.some((peer) => peer.id === entry.id) ? [movedToDay(entry, runDay)] : [entry];
       });
       const after = evaluateTransactionPlan({ facts, moves: changed, checkedAt: at });
       const revalidation = revalidationRefusal({
@@ -616,7 +678,7 @@ export const TransactionPlanServiceLive = Layer.effect(
         },
         groupDays: peers.map((peer) => ({
           move: peer.id,
-          runDay: input.change.runDay,
+          runDay,
           effectiveDate: entryOf(evaluatedMoves(after), peer.id).effectiveDate,
         })),
       });

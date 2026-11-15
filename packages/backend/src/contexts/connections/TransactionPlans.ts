@@ -325,6 +325,7 @@ export type TransactionPlanReadInput = {
 };
 
 export type TransactionPlanMoveDraft = {
+  readonly move?: TransactionMoveId;
   readonly group?: string;
   readonly kind: TransactionMoveKind;
   readonly adds?: ReadonlyArray<string>;
@@ -347,6 +348,7 @@ export type TransactionPlanProposeInput = {
 };
 
 export type TransactionPlanRefMoveDraft = {
+  readonly move?: TransactionMoveId;
   readonly group?: string;
   readonly kind: TransactionMoveKind;
   readonly adds?: ReadonlyArray<PlayerRef>;
@@ -622,6 +624,9 @@ export type TransactionPlanServiceShape = {
 };
 
 const ProposeTransactionMoveInput = Schema.Struct({
+  move: Schema.optional(TransactionMoveId).annotate({
+    description: "A saved move in this team's queue to change in place; omit it to add a new move.",
+  }),
   group: Schema.optional(Schema.NonEmptyString).annotate({
     description: "A label shared by moves that must run together, whole or not at all.",
   }),

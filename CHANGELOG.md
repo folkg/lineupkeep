@@ -3,6 +3,15 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
+## Unreleased — amend or discard a saved move
+
+- `propose_transactions` items accept an optional `move` id. Naming a saved move's id changes that
+  move in place with the new shape, keeps its queue position unless its run day changes, and rechecks
+  the whole queue. Omitting the id appends as before. A move id outside the owner's queue is refused.
+- `discard_transaction_move` discards one saved move under `transactions:review`, leaves the plan and
+  its other moves open, and returns the plan with any refusal. An ended move is refused with
+  `move_not_open`.
+
 ## Unreleased — neutral recent-form windows, including football
 
 - `search_players` availability `all` lists every player off a roster: free agents and

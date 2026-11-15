@@ -28,6 +28,7 @@ import type {
 } from "@lineupkeep/backend/connections/TransactionPlans";
 import {
   TransactionMoveId,
+  TransactionPlanMoveNotFound,
   TransactionPlanPersistenceFailed,
   TransactionPlanService,
 } from "@lineupkeep/backend/connections/TransactionPlans";
@@ -418,6 +419,7 @@ it("lists only the read-only connection tool without exposing account identity",
     "get_pending_trade_offers",
     "list_transaction_proposals",
     "get_transaction_plan",
+    "discard_transaction_move",
     "set_lineup",
     "get_lineup_runs",
     "set_team_automation",
@@ -898,7 +900,13 @@ it("appends moves to one team queue and lists them across teams", async () => {
     days: moves.length === 0 ? [] : [{ day: "2026-11-11", today: true, moves }],
   });
   const listed: Array<{ readonly team?: string; readonly state?: string }> = [];
-  const proposed: Array<{ userId: string; input: { readonly team: string } }> = [];
+  const proposed: Array<{
+    userId: string;
+    input: {
+      readonly team: string;
+      readonly moves: ReadonlyArray<{ readonly move?: TransactionMoveId }>;
+    };
+  }> = [];
   const plans: TransactionPlanServiceShape = {
     ...unavailablePlans,
     proposeRefs: (userId, input) => {
@@ -1015,6 +1023,31 @@ it("appends moves to one team queue and lists them across teams", async () => {
   expect(proposed[0]?.input.team).toBe(team);
   expect(proposed[1]?.input.team).toBe(team);
 
+  const moveId = Schema.decodeSync(TransactionMoveId)("018f79ea-7d86-7c18-9b4a-8b4d0c9165b2");
+  const amended = await run(
+    request(
+      "tools/call",
+      {
+        name: "propose_transactions",
+        arguments: {
+          team,
+          moves: [
+            {
+              move: moveId,
+              kind: "drop",
+              drops: ["r1.amended"],
+              reason: "An amended reason.",
+            },
+          ],
+        },
+      },
+      "review",
+    ),
+  );
+  expect(amended.status).toBe(200);
+  expect(proposed).toHaveLength(3);
+  expect(proposed[2]?.input.moves[0]?.move).toBe(moveId);
+
   const listedResponse = await run(
     request(
       "tools/call",
@@ -1055,6 +1088,147 @@ it("appends moves to one team queue and lists them across teams", async () => {
     },
   });
   expect(JSON.stringify(planBody)).not.toContain("461.p.");
+});
+
+it("discards one saved move and reports why a run move stays", async () => {
+  const team = decodeTeamId("018f79ea-7d86-7c18-9b4a-8b4d0c9164b3");
+  const teamView = {
+    id: team,
+    name: "Gamma",
+    league: "nfl" as const,
+    sport: "football" as const,
+    season: 2026,
+  };
+  const moveId = Schema.decodeSync(TransactionMoveId)("018f79ea-7d86-7c18-9b4a-8b4d0c9165b3");
+  const move = {
+    move: moveId,
+    team: teamView,
+    kind: "drop" as const,
+    position: 0,
+    decision: "saved" as const,
+    reason: "Open a bench place.",
+    adds: [],
+    fallbacks: [],
+    drops: [{ name: "Riverside Receiver" }],
+    picks: [],
+    validation: { status: "current" as const, reasons: [] },
+    check: { status: "checked" as const },
+  };
+  const planRead = {
+    team: teamView,
+    today: "2026-11-11",
+    moves: [move],
+    days: [{ day: "2026-11-11", today: true, moves: [move] }],
+  };
+  const discarded: Array<{
+    userId: string;
+    input: { readonly team: TeamId; readonly move: TransactionMoveId };
+  }> = [];
+  let outcome: "ok" | "ended" | "missing" = "ok";
+  const plans: TransactionPlanServiceShape = {
+    ...unavailablePlans,
+    discard: (userId, input) => {
+      discarded.push({ userId, input });
+      if (outcome === "missing") {
+        return Effect.fail(
+          TransactionPlanMoveNotFound.make({ team: input.team, move: input.move }),
+        );
+      }
+      return Effect.succeed({
+        plan: { team: input.team, today: "2026-11-11", moves: [], groups: [] },
+        refused:
+          outcome === "ended"
+            ? [
+                {
+                  code: "move_not_open",
+                  team: input.team,
+                  detail: "Drop Riverside Receiver has ended, so the plan no longer changes it.",
+                  moves: [0],
+                },
+              ]
+            : [],
+      });
+    },
+    plan: (_userId, input) =>
+      Effect.succeed({
+        ...planRead,
+        team: input.team === team ? teamView : move.team,
+      }),
+  };
+  const services = Layer.mergeAll(
+    authentication,
+    permissiveQuota,
+    Layer.succeed(Connections)(unavailableConnections),
+    Layer.succeed(FantasyQueries)(unavailableQueries),
+    Layer.succeed(TransactionOffers)(unavailableOffers),
+    Layer.succeed(TransactionPlanService)(plans),
+    Layer.succeed(LineupRuns)(unavailableLineups),
+    Layer.succeed(Teams)(unavailableTeams),
+    Layer.succeed(Feedback)(unavailableFeedback),
+  );
+  const run = (invocation: Request): Promise<Response> =>
+    handleMcpRequest(invocation, (_request, _operation, program) =>
+      Effect.runPromise(Effect.provide(program, services)),
+    );
+
+  const denied = await run(
+    request(
+      "tools/call",
+      { name: "discard_transaction_move", arguments: { team, move: moveId, reason: "Duplicate." } },
+      "fantasy",
+    ),
+  );
+  expect(denied.status).toBe(403);
+  expect(discarded).toEqual([]);
+
+  const discardedOnce = await run(
+    request(
+      "tools/call",
+      { name: "discard_transaction_move", arguments: { team, move: moveId, reason: "Duplicate." } },
+      "review",
+    ),
+  );
+  expect(discardedOnce.status).toBe(200);
+  expect(await json(discardedOnce)).toMatchObject({
+    result: {
+      isError: false,
+      structuredContent: { team: { id: team }, reason: "Duplicate.", refused: [] },
+    },
+  });
+  expect(discarded).toEqual([{ userId: "reader", input: { team, move: moveId } }]);
+
+  outcome = "ended";
+  const ended = await run(
+    request(
+      "tools/call",
+      { name: "discard_transaction_move", arguments: { team, move: moveId } },
+      "review",
+    ),
+  );
+  expect(ended.status).toBe(200);
+  expect(await json(ended)).toMatchObject({
+    result: {
+      isError: false,
+      structuredContent: {
+        team: { id: team },
+        refused: [{ code: "move_not_open", team }],
+      },
+    },
+  });
+
+  outcome = "missing";
+  const missing = await run(
+    request(
+      "tools/call",
+      { name: "discard_transaction_move", arguments: { team, move: moveId } },
+      "review",
+    ),
+  );
+  const decoded = Schema.decodeUnknownSync(ToolErrorResult)(await json(missing));
+  const text = decoded.result.content.map((entry) => entry.text).join(" ");
+  const failure = Schema.decodeSync(Schema.fromJsonString(ToolFailure))(text);
+  expect(decoded.result.isError).toBe(true);
+  expect(failure.code).toBe("move_not_found");
 });
 
 it("returns a coded remedy instead of a 500 when a move list cannot be read", async () => {
@@ -1702,6 +1876,7 @@ it("keeps every published description inside its budget", async () => {
   const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
   const budgets: Readonly<Record<string, number>> = {
     add_team_agent_note: 220,
+    discard_transaction_move: 220,
     get_calendar: 220,
     get_league: 220,
     get_lineup_runs: 220,

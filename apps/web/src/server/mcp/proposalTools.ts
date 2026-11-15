@@ -12,6 +12,7 @@ import type { TransactionOffersError } from "@lineupkeep/backend/connections/Tra
 import {
   ListTransactionMovesInput,
   ProposeTransactionMovesInput,
+  TransactionMoveId,
   TransactionMoveList,
   TransactionMoveRead,
   TransactionMoveTeam,
@@ -46,10 +47,27 @@ const ProposedTransactions = Schema.Struct({
   refused: Schema.Array(PlanRefusal),
 });
 
+const DiscardTransactionMoveToolInput = Schema.Struct({
+  team: TeamId,
+  move: TransactionMoveId.annotate({ description: "The saved move to discard." }),
+  reason: Schema.optional(Schema.NonEmptyString).annotate({
+    description: "Why you are discarding it; returned with the result.",
+  }),
+});
+
+const DiscardedTransactionPlan = Schema.Struct({
+  team: TransactionMoveTeam,
+  today: Schema.optional(StoredMoveDate),
+  moves: Schema.Array(TransactionMoveRead),
+  days: Schema.Array(TransactionPlanDay),
+  refused: Schema.Array(PlanRefusal),
+  reason: Schema.optional(Schema.NonEmptyString),
+});
+
 export const proposalTools = Toolkit.make(
   Tool.make("propose_transactions", {
     description:
-      "Add moves to one team's single transaction queue, returning that team's plan and any refused moves. Proposals are stored only: nothing reaches the league's site, nothing is submitted, executed, or spent. A move that cannot run is returned in `refused` with its position and reason and is not stored. A saved move is changed by saving it again or discarding it.",
+      "Add moves to one team's transaction queue, or change a saved move in place by naming its move id. A saved move is discarded with `discard_transaction_move`. Proposals are stored only: nothing reaches the league's site or is submitted, executed, or spent. A move that cannot run is returned in `refused` with its position and reason and is not stored.",
     parameters: ProposeTransactionMovesInput,
     success: Schema.toCodecJson(ProposedTransactions),
     failure: ToolFailure,
@@ -99,6 +117,19 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.Destructive, false)
     .annotate(Tool.Idempotent, true)
     .annotate(Tool.OpenWorld, false),
+  Tool.make("discard_transaction_move", {
+    description:
+      "Discard one saved move from a team's queue and return the plan, which stays open with its other moves. A move that already ran is refused, and the refusal says why.",
+    parameters: DiscardTransactionMoveToolInput,
+    success: Schema.toCodecJson(DiscardedTransactionPlan),
+    failure: ToolFailure,
+  })
+    .annotate(RequiredScope, fantasyQueryScopes.reviewTransactions)
+    .annotate(Tool.Title, "Discard a transaction move")
+    .annotate(Tool.Readonly, false)
+    .annotate(Tool.Destructive, false)
+    .annotate(Tool.Idempotent, false)
+    .annotate(Tool.OpenWorld, false),
 );
 
 export function proposalToolHandlers(
@@ -126,6 +157,7 @@ export function proposalToolHandlers(
                   : { client: input.client }),
               },
               moves: input.moves.map((move) => ({
+                ...(move.move === undefined ? {} : { move: move.move }),
                 ...(move.group === undefined ? {} : { group: move.group }),
                 kind: move.kind,
                 adds: move.adds,
@@ -163,6 +195,19 @@ export function proposalToolHandlers(
           offers.readPendingOffers(agent.userId, input).pipe(mapOfferFailure),
         list_transaction_proposals: (input) => plans.list(agent.userId, input).pipe(mapPlanFailure),
         get_transaction_plan: (input) => plans.plan(agent.userId, input).pipe(mapPlanFailure),
+        discard_transaction_move: (input) =>
+          plans.discard(agent.userId, { team: input.team, move: input.move }).pipe(
+            Effect.flatMap((result) =>
+              plans.plan(agent.userId, { team: input.team }).pipe(
+                Effect.map((plan) => ({
+                  ...plan,
+                  refused: result.refused,
+                  ...(input.reason === undefined ? {} : { reason: input.reason }),
+                })),
+              ),
+            ),
+            mapPlanFailure,
+          ),
       });
     }),
   );

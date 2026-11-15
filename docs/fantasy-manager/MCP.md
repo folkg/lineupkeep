@@ -96,7 +96,7 @@ new tool bounds it more tightly rather than leaving it unlimited.
 | Class         | Tools                                                                                         | Window | Per client | Per owner |
 | ------------- | --------------------------------------------------------------------------------------------- | ------ | ---------- | --------- |
 | `read`        | every `readOnlyHint: true` tool, including the summaries, searches, and the rolling move list | 1 min  | 60         | 180       |
-| `write`       | `submit_feedback`, `propose_transactions`, `set_team_automation`                              | 1 hour | 20         | 60        |
+| `write`       | `submit_feedback`, `propose_transactions`, `discard_transaction_move`, `set_team_automation`  | 1 hour | 20         | 60        |
 | `destructive` | `set_lineup`                                                                                  | 1 hour | 6          | 18        |
 
 The numbers are a product judgement, not a measurement. A polling agent reading a team summary a few
@@ -800,10 +800,11 @@ A coverage entry has one of three states. `available` means the resource was rea
 
 ## Transaction queue
 
-Each team has one transaction queue. `propose_transactions` appends moves to that queue and returns
-the team's stored plan plus any moves it refused. There is no separate plan identifier and no
-withdraw tool. A second call appends to the same queue; a stored move is changed or removed from the
-transactions page.
+Each team has one transaction queue. `propose_transactions` adds moves to that queue, or changes a
+saved move in place when its item names the move's id, and returns the team's stored plan plus any
+moves it refused. There is no separate plan identifier. Omitting the id appends a new move; naming
+the id of a saved move changes that move instead of adding another. A move id that is not in the
+owner's team queue is refused as `move_not_found`.
 
 The input is one `team` and one or more `moves`. Each move names a `kind` (`free_agent_add`,
 `waiver_claim`, `drop`, `slot_move`, `activate`, `stash`, or `trade`), the players to `adds` and
@@ -815,8 +816,10 @@ accepts the same sealed player and counterparty references as the rest of the su
 from another account or league is refused.
 
 The call reads current league, roster, player, and budget state once for the team, then validates the
-new moves together with the moves already stored and still open. An accepted move is stored with its
-server position, effective date, validation, and claims. A move that cannot run is not stored; it is
+new and changed moves together with the moves already stored and still open. An accepted move is
+stored with its server position, effective date, validation, and claims. An amendment keeps the
+move's queue position unless its run day changes; a new run day moves it in the plan and rechecks the
+moves after it. A move that cannot run is not stored; it is
 returned in `refused` with its position in the request, a code, and a plain sentence that names what
 would make it valid. A refused move does not make the other accepted moves fail. A queue write
 contacts no write endpoint and spends nothing.
@@ -825,6 +828,12 @@ contacts no write endpoint and spends nothing.
 move carries its stored validation and the time it was checked, its effective date, and its outcome
 once it has one. The read uses stored state and does not change the queue. A team the account does
 not own is reported as not found.
+
+`discard_transaction_move` takes one `team`, one saved `move` id, and an optional `reason`. It marks
+that move discarded, releases its claims, and leaves the plan and its other moves open. The optional
+reason is returned with the result. A move that already ran cannot be discarded; it is returned in
+`refused` with `move_not_open` and a sentence saying the move has ended. A move id from another
+owner or team is refused as `move_not_found`.
 
 `list_transaction_proposals` is the rolling move list across all owned teams. It accepts an optional
 `team`, an optional `state` (`today`, `saved`, or `ended`), a `cursor`, and a `limit` from 1 to 50
@@ -838,8 +847,9 @@ Validation is a stored fact, not a new write. A queue move is `current`, `stale`
 stale move names why, such as the player leaving the pool, the player leaving the roster, a full
 roster with no operation to open a place, a closed period, or a bid over the published balance. An
 illegal roster names the player, the slot, and the move that would resolve it. A team whose state
-cannot be read marks only its own moves. A saved move can be edited on the team page until its run
-day. The edit changes the run day and does not run the move.
+cannot be read marks only its own moves. A saved move can be changed on the team page or by an MCP
+amend until its run day. The page edit changes the run day; an MCP amend replaces the move's shape
+and rechecks the whole queue. Neither edit runs the move.
 
 No MCP tool submits, executes, or spends. A signed-in owner submits today's chosen moves from the
 transactions page, and each submission rechecks the queue immediately before writing. The page asks
@@ -890,6 +900,7 @@ lacking a scope a different tool needs, does not change whether a call succeeds.
 | `submit_feedback`            | `fantasy:read`        |
 | `list_feedback`              | `fantasy:read`        |
 | `propose_transactions`       | `transactions:review` |
+| `discard_transaction_move`   | `transactions:review` |
 | `set_lineup`                 | `lineups:write`       |
 | `set_team_automation`        | `teams:manage`        |
 | `add_team_agent_note`        | `notes:write`         |
