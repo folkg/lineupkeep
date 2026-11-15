@@ -38,7 +38,7 @@ A league/opponent read requires verified access through the user's connection; i
 
 Inputs: explicit owned team references and validated target periods, plus stable request identity. MCP's protocol request ID is not assumed to be a durable retry identity. Decide one stable client request field with clear same-key/different-intent rejection.
 
-Phase 1 uses the provider's native lineup action; Phase 2 uses the custom optimizer after direct cutover. No MCP-initiated transaction execution and no provider-premium optimization: a signed-in person may submit a reviewed transaction set from the web review page.
+Phase 1 uses the provider's native lineup action; Phase 2 uses the custom optimizer after direct cutover. No MCP-initiated transaction execution and no provider-premium optimization: a signed-in person may submit chosen moves from the transactions page.
 
 Response includes per-team run reference, status, implementation, target period, observation time, and safe change/no-op/blocked/pending explanations. A bounded wait may return pending work; `get_lineup_runs` retrieves the result later. Do not report success merely because work was queued or a provider returned HTTP 200 with invalid coverage.
 
@@ -102,7 +102,7 @@ new tool bounds it more tightly rather than leaving it unlimited.
 The numbers are a product judgement, not a measurement. A polling agent reading a team summary a few
 times a minute uses well under a tenth of the read allowance; 60 reads a minute still lets one client
 enumerate a league, search a pool, and poll several teams. A write is rare by nature, so 20 an hour is
-far above a person revising and revalidating a proposal set, and bounds a machine loop to one change
+far above a person revising and revalidating a team's transaction queue, and bounds a machine loop to one change
 every three minutes. `set_lineup` is the one upstream mutation, so it gets the smallest bucket: six
 requests an hour is a handful, and one request already covers up to ten teams. Each class has its own
 window and its own counters, so a read loop can never spend a write's allowance. The owner allowance is
@@ -403,9 +403,9 @@ request is refused, so there is no league-wide trade wire and no offer data is i
 `get_pending_trade_offers` reads that feed for one owned team, marks the result `readOnly: true`,
 and states that this product cannot accept, reject, or vote on a trade. It also carries `ownerNote`,
 the linked team's note from Lineupgrade, so an offer can be read against the owner's stated intent;
-the note is owner context, not a provider fact. It returns an opaque reference
-a signed-in person can use on the review page to withdraw an offer this account made. It never exposes
-a provider team key, player key, or pending-trade key; parties and players arrive as private references. A provider that
+the note is owner context, not a provider fact. It returns an opaque reference for each offer, and
+this product cannot accept, reject, vote on, or withdraw one. It never exposes a provider team key,
+player key, or pending-trade key; parties and players arrive as private references. A provider that
 publishes no such feed reports `status: "unsupported"` with the reason instead of an empty success.
 
 `get_league`'s `draft_history` group returns the provider's `draftresults` read: every published
@@ -801,9 +801,9 @@ A coverage entry has one of three states. `available` means the resource was rea
 ## Transaction queue
 
 Each team has one transaction queue. `propose_transactions` appends moves to that queue and returns
-the team's stored plan plus any moves it refused. There is no set, no review link, and no separate
+the team's stored plan plus any moves it refused. There is no separate plan identifier and no
 withdraw tool. A second call appends to the same queue; a stored move is changed or removed from the
-team page, not by starting another set.
+transactions page.
 
 The input is one `team` and one or more `moves`. Each move names a `kind` (`free_agent_add`,
 `waiver_claim`, `drop`, `slot_move`, `activate`, `stash`, or `trade`), the players to `adds` and
@@ -851,9 +851,9 @@ outcome rather than retrying a write that may have applied.
 
 Moves run in the server's stored order. A drop or slot move that another move depends on runs first;
 a group of dependent moves runs whole or not at all. A provider refusal keeps its exact wording on
-the move and on the team page. A move that executed, was discarded, or can no longer change is
-`ended` and appears in the earlier list. The queue keeps no set lifetime and no expiry: a move stays
-until it ends, and a team's queue is the stored record of what was proposed and what happened.
+the move and on the transactions page. A move that executed, was discarded, or can no longer change
+is `ended` and appears in the earlier list. The queue keeps no expiry: a move stays until it ends, and
+a team's queue is the stored record of what was proposed and what happened.
 
 A failed call returns one coded failure rather than a bare internal error:
 

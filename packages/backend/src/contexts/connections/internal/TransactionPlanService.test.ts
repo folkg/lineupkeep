@@ -1035,48 +1035,6 @@ it.effect("lists one team's moves by today, saved, and ended", () => {
   }).pipe(Effect.provide(mutableFactsLayer(facts)));
 });
 
-it.effect("never returns a set id from a read", () =>
-  Effect.gen(function* () {
-    const service = yield* TransactionPlanService;
-    const database = yield* ConnectionsDatabase;
-    yield* TestClock.setTime(DateTime.toEpochMillis(at));
-    yield* seedTeam(database, owner, team);
-
-    yield* service.propose(owner, {
-      team,
-      proposedBy: proposer,
-      moves: [drop("a1", "Roster One"), { ...drop("a2", "Roster Two"), runDay: "2026-11-16" }],
-    });
-
-    const keys = new Set<string>();
-    const reads = [
-      yield* service.timeline(owner, {}),
-      yield* service.plan(owner, { team }),
-      yield* service.list(owner, { team, state: "today" }),
-      yield* service.list(owner, { team, state: "saved" }),
-      yield* service.list(owner, { team, state: "ended" }),
-      yield* service.counts(owner, {}),
-    ];
-    for (const read of reads) {
-      collectKeys(read, keys);
-    }
-
-    assert.deepStrictEqual(
-      [...keys].filter((key) => /set/iu.test(key)),
-      [],
-    );
-  }).pipe(
-    Effect.provide(
-      serviceLayer([
-        league(
-          [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
-          [],
-        ),
-      ]),
-    ),
-  ),
-);
-
 it.effect("submits today's chosen move and records its result, steps, and check time", () => {
   const writes = writeLayer(() => ({ status: "executed" }));
   return Effect.gen(function* () {
@@ -1840,22 +1798,6 @@ function checkedAtOf(
     throw new Error("A test read a check time the plan did not carry");
   }
   return DateTime.toEpochMillis(checkedAt);
-}
-
-function collectKeys(value: unknown, keys: Set<string>): Set<string> {
-  if (Array.isArray(value)) {
-    for (const entry of value) {
-      collectKeys(entry, keys);
-    }
-    return keys;
-  }
-  if (value !== null && typeof value === "object" && !(value instanceof Date)) {
-    for (const [key, entry] of Object.entries(value)) {
-      keys.add(key);
-      collectKeys(entry, keys);
-    }
-  }
-  return keys;
 }
 
 function league(

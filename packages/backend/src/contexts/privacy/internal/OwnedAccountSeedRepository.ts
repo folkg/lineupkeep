@@ -25,10 +25,8 @@ export const owner = {
   deliveryId: "22222222-2222-4222-8222-333333333333",
   diagnosticId: "22222222-2222-4222-8222-444444444444",
   writeIntentId: "22222222-2222-4222-8222-555555555555",
-  proposalSetId: "33333333-3333-4333-8333-333333333333",
-  proposalSubmissionId: "33333333-3333-4333-8333-444444444444",
-  proposalItemId: "44444444-4444-4444-8444-444444444444",
-  proposalStepId: "44444444-4444-4444-8444-555555555555",
+  transactionMoveId: "33333333-3333-4333-8333-333333333333",
+  transactionStepId: "44444444-4444-4444-8444-555555555555",
   incidentId: "55555555-5555-4555-8555-555555555555",
   notificationId: "66666666-6666-4666-8666-666666666666",
   hostedSessionId: "77777777-7777-4777-8777-777777777777",
@@ -170,30 +168,31 @@ export const seedOwnedAccount = Effect.gen(function* () {
         ${"native_action"}, ${"{}"}::jsonb, ${"[]"}::jsonb, ${"accepted"})`,
   );
   yield* run(
-    sql`insert into ${sql.identifier("transaction_proposal_sets")}
-      (id, user_id, proposer_kind, proposer_reference, surface, fingerprint, teams)
-      values
-      (${owner.proposalSetId}, ${owner.id}, ${"user"}, ${"web"}, ${"app"}, ${"fingerprint-owner"},
-        ${`["${owner.teamId}"]`}::jsonb)`,
+    sql`insert into ${sql.identifier("transaction_plans")}
+      (user_id, team_id, created_at, updated_at) values
+      (${owner.id}, ${owner.teamId}, ${instant}, ${instant})`,
   );
   yield* run(
-    sql`insert into ${sql.identifier("transaction_proposal_submissions")}
-      (id, set_id, user_id, ordinal, submitted_at, completed_at) values
-      (${owner.proposalSubmissionId}, ${owner.proposalSetId}, ${owner.id}, 1, ${instant}, ${instant})`,
+    sql`insert into ${sql.identifier("transaction_moves")}
+      (id, user_id, team_id, position, kind, adds, fallbacks, drops, picks, reason, decision,
+        validation, validation_reasons, proposed_by, created_at, updated_at) values
+      (${owner.transactionMoveId}, ${owner.id}, ${owner.teamId}, 0, ${"drop"}, ${"[]"}::jsonb,
+        ${"[]"}::jsonb, ${`[{"key":"player-1"}]`}::jsonb, ${"[]"}::jsonb, ${"A reason"},
+        ${"undecided"}, ${"current"}, ${"[]"}::jsonb,
+        ${`{"kind":"user","reference":"web","surface":"app"}`}::jsonb,
+        ${instant}, ${instant})`,
   );
   yield* run(
-    sql`insert into ${sql.identifier("transaction_proposal_items")}
-      (id, set_id, position, user_id, team_id, connection_id, kind, add_players, drop_players,
-        reason, state, staleness, stale_reasons, checked_at) values
-      (${owner.proposalItemId}, ${owner.proposalSetId}, 0, ${owner.id}, ${owner.teamId},
-        ${owner.connectionId}, ${"drop"}, ${"[]"}::jsonb, ${"[]"}::jsonb, ${"A reason"},
-        ${"proposed"}, ${"current"}, ${"[]"}::jsonb, ${instant})`,
+    sql`insert into ${sql.identifier("transaction_move_claims")}
+      (user_id, team_id, claim_kind, claim_key, move_id, created_at) values
+      (${owner.id}, ${owner.teamId}, ${"player"}, ${"player-1"}, ${owner.transactionMoveId},
+        ${instant})`,
   );
   yield* run(
-    sql`insert into ${sql.identifier("transaction_proposal_steps")}
-      (id, set_id, item_id, user_id, position, kind, player_key, outcome, decided_at) values
-      (${owner.proposalStepId}, ${owner.proposalSetId}, ${owner.proposalItemId}, ${owner.id},
-        0, ${"drop"}, ${"player-1"}, ${"executed"}, ${instant})`,
+    sql`insert into ${sql.identifier("transaction_move_steps")}
+      (id, move_id, position, kind, player_key, outcome, decided_at) values
+      (${owner.transactionStepId}, ${owner.transactionMoveId}, 0, ${"drop"}, ${"player-1"},
+        ${"executed"}, ${instant})`,
   );
   yield* run(
     sql`insert into ${sql.identifier("connection_incidents")}

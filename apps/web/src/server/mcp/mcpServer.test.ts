@@ -19,6 +19,8 @@ import {
 } from "@lineupkeep/backend/connections/QueryValues";
 import type { TeamsShape } from "@lineupkeep/backend/connections/Teams";
 import { Teams } from "@lineupkeep/backend/connections/Teams";
+import type { TransactionOffersShape } from "@lineupkeep/backend/connections/TransactionOffers";
+import { TransactionOffers } from "@lineupkeep/backend/connections/TransactionOffers";
 import type {
   TransactionMoveList,
   TransactionMoveTeam,
@@ -29,8 +31,6 @@ import {
   TransactionPlanPersistenceFailed,
   TransactionPlanService,
 } from "@lineupkeep/backend/connections/TransactionPlans";
-import type { TransactionProposalsShape } from "@lineupkeep/backend/connections/TransactionProposals";
-import { TransactionProposals } from "@lineupkeep/backend/connections/TransactionProposals";
 import {
   Feedback,
   FeedbackContentInvalid,
@@ -493,7 +493,7 @@ it("enforces fantasy read scope and serves bounded query results over MCP", asyn
     permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(queries),
-    Layer.succeed(TransactionProposals)(unavailableProposals),
+    Layer.succeed(TransactionOffers)(unavailableOffers),
     Layer.succeed(TransactionPlanService)(unavailablePlans),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
@@ -562,7 +562,7 @@ it("accepts ISO 8601 instants for transaction and feedback filters", async () =>
     permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(queries),
-    Layer.succeed(TransactionProposals)(unavailableProposals),
+    Layer.succeed(TransactionOffers)(unavailableOffers),
     Layer.succeed(TransactionPlanService)(unavailablePlans),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
@@ -627,7 +627,7 @@ it("refuses a malformed or tagged instant with a readable field message", async 
               permissiveQuota,
               Layer.succeed(Connections)(unavailableConnections),
               Layer.succeed(FantasyQueries)(unavailableQueries),
-              Layer.succeed(TransactionProposals)(unavailableProposals),
+              Layer.succeed(TransactionOffers)(unavailableOffers),
               Layer.succeed(TransactionPlanService)(unavailablePlans),
               Layer.succeed(LineupRuns)(unavailableLineups),
               Layer.succeed(Teams)(unavailableTeams),
@@ -668,7 +668,7 @@ it("reaches search_players with an empty query and returns the remedy instead of
     permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(queries),
-    Layer.succeed(TransactionProposals)(unavailableProposals),
+    Layer.succeed(TransactionOffers)(unavailableOffers),
     Layer.succeed(TransactionPlanService)(unavailablePlans),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
@@ -757,7 +757,7 @@ it("publishes and serves the scoring-period schedule group over MCP", async () =
     permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(queries),
-    Layer.succeed(TransactionProposals)(unavailableProposals),
+    Layer.succeed(TransactionOffers)(unavailableOffers),
     Layer.succeed(TransactionPlanService)(unavailablePlans),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
@@ -821,7 +821,7 @@ it("names the cause when a continuation cursor is reused with different argument
     permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(queries),
-    Layer.succeed(TransactionProposals)(unavailableProposals),
+    Layer.succeed(TransactionOffers)(unavailableOffers),
     Layer.succeed(TransactionPlanService)(unavailablePlans),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
@@ -848,7 +848,7 @@ it("names the cause when a continuation cursor is reused with different argument
   expect(text).not.toContain("invalid or expired");
 });
 
-it("appends moves to one team queue and lists them across teams without a set id", async () => {
+it("appends moves to one team queue and lists them across teams", async () => {
   const team = decodeTeamId("018f79ea-7d86-7c18-9b4a-8b4d0c9164b0");
   const otherTeam = decodeTeamId("018f79ea-7d86-7c18-9b4a-8b4d0c9164b1");
   const teamView = {
@@ -950,7 +950,7 @@ it("appends moves to one team queue and lists them across teams without a set id
             permissiveQuota,
             Layer.succeed(Connections)(unavailableConnections),
             Layer.succeed(FantasyQueries)(unavailableQueries),
-            Layer.succeed(TransactionProposals)(unavailableProposals),
+            Layer.succeed(TransactionOffers)(unavailableOffers),
             Layer.succeed(TransactionPlanService)(plans),
             Layer.succeed(LineupRuns)(unavailableLineups),
             Layer.succeed(Teams)(unavailableTeams),
@@ -995,8 +995,6 @@ it("appends moves to one team queue and lists them across teams without a set id
   expect(proposedBody).toMatchObject({
     result: { isError: false, structuredContent: { team: { id: team }, refused: [] } },
   });
-  expect(JSON.stringify(proposedBody)).not.toContain('"set":');
-  expect(JSON.stringify(proposedBody)).not.toContain("reviewUrl");
 
   const proposedAgain = await run(
     request(
@@ -1040,7 +1038,6 @@ it("appends moves to one team queue and lists them across teams without a set id
     },
   });
   expect(listed).toEqual([{ team, state: "saved" }]);
-  expect(JSON.stringify(listedBody)).not.toContain('"set":');
 
   const planResponse = await run(
     request("tools/call", { name: "get_transaction_plan", arguments: { team } }, "fantasy"),
@@ -1058,7 +1055,6 @@ it("appends moves to one team queue and lists them across teams without a set id
     },
   });
   expect(JSON.stringify(planBody)).not.toContain("461.p.");
-  expect(JSON.stringify(planBody)).not.toContain('"set":');
 });
 
 it("returns a coded remedy instead of a 500 when a move list cannot be read", async () => {
@@ -1081,7 +1077,7 @@ it("returns a coded remedy instead of a 500 when a move list cannot be read", as
             permissiveQuota,
             Layer.succeed(Connections)(unavailableConnections),
             Layer.succeed(FantasyQueries)(unavailableQueries),
-            Layer.succeed(TransactionProposals)(unavailableProposals),
+            Layer.succeed(TransactionOffers)(unavailableOffers),
             Layer.succeed(TransactionPlanService)(plans),
             Layer.succeed(LineupRuns)(unavailableLineups),
             Layer.succeed(Teams)(unavailableTeams),
@@ -1133,7 +1129,7 @@ it("returns a durable queued lineup reference without claiming success", async (
     permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
-    Layer.succeed(TransactionProposals)(unavailableProposals),
+    Layer.succeed(TransactionOffers)(unavailableOffers),
     Layer.succeed(TransactionPlanService)(unavailablePlans),
     Layer.succeed(LineupRuns)(lineups),
     Layer.succeed(Teams)(unavailableTeams),
@@ -1203,7 +1199,7 @@ it("requires teams:manage and changes automation through the shared team service
     permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
-    Layer.succeed(TransactionProposals)(unavailableProposals),
+    Layer.succeed(TransactionOffers)(unavailableOffers),
     Layer.succeed(TransactionPlanService)(unavailablePlans),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(teams),
@@ -1279,7 +1275,7 @@ it("requires notes:write and attributes an agent note to the authenticated clien
     permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
-    Layer.succeed(TransactionProposals)(unavailableProposals),
+    Layer.succeed(TransactionOffers)(unavailableOffers),
     Layer.succeed(TransactionPlanService)(unavailablePlans),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(teams),
@@ -1366,7 +1362,7 @@ it("records agent feedback for the authenticated account on a read grant", async
     permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
-    Layer.succeed(TransactionProposals)(unavailableProposals),
+    Layer.succeed(TransactionOffers)(unavailableOffers),
     Layer.succeed(TransactionPlanService)(unavailablePlans),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
@@ -1470,7 +1466,7 @@ it("returns an actionable failure for refused feedback instead of leaking persis
               permissiveQuota,
               Layer.succeed(Connections)(unavailableConnections),
               Layer.succeed(FantasyQueries)(unavailableQueries),
-              Layer.succeed(TransactionProposals)(unavailableProposals),
+              Layer.succeed(TransactionOffers)(unavailableOffers),
               Layer.succeed(TransactionPlanService)(unavailablePlans),
               Layer.succeed(LineupRuns)(unavailableLineups),
               Layer.succeed(Teams)(unavailableTeams),
@@ -1565,7 +1561,7 @@ function handle(
     quota,
     Layer.succeed(Connections)(connections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
-    Layer.succeed(TransactionProposals)(unavailableProposals),
+    Layer.succeed(TransactionOffers)(unavailableOffers),
     Layer.succeed(TransactionPlanService)(unavailablePlans),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
@@ -1587,18 +1583,8 @@ const unavailableQueries: FantasyQueriesShape = {
   getTransactions: () => Effect.die(new Error("queries unavailable")),
   getTeamSummary: () => Effect.die(new Error("queries unavailable")),
 };
-const unavailableProposals: TransactionProposalsShape = {
-  propose: () => Effect.die(new Error("proposals unavailable")),
-  revalidate: () => Effect.die(new Error("proposals unavailable")),
-  withdrawItems: () => Effect.die(new Error("proposals unavailable")),
-  rescheduleItems: () => Effect.die(new Error("proposals unavailable")),
-  dismissItems: () => Effect.die(new Error("proposals unavailable")),
-  read: () => Effect.die(new Error("proposals unavailable")),
-  list: () => Effect.die(new Error("proposals unavailable")),
-  submit: () => Effect.die(new Error("proposals unavailable")),
-  runDue: () => Effect.die(new Error("proposals unavailable")),
-  readPendingOffers: () => Effect.die(new Error("proposals unavailable")),
-  withdrawTrade: () => Effect.die(new Error("proposals unavailable")),
+const unavailableOffers: TransactionOffersShape = {
+  readPendingOffers: () => Effect.die(new Error("offers unavailable")),
 };
 const unavailablePlans: TransactionPlanServiceShape = {
   propose: () => Effect.die(new Error("plans unavailable")),
@@ -1662,7 +1648,7 @@ function request(
   });
 }
 
-it("publishes one queue per team without a set lifetime", async () => {
+it("publishes one queue per team", async () => {
   const response = await handle(request("tools/list", {}, "read"));
   const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
   const propose = listed.result.tools.find((tool) => tool.name === "propose_transactions");
@@ -1671,12 +1657,9 @@ it("publishes one queue per team without a set lifetime", async () => {
     throw new Error("Expected the tool list to include both plan tools");
   }
   const published = JSON.stringify(propose.inputSchema);
-  expect(published).not.toContain('"set"');
   expect(published).toContain('"team"');
   expect(JSON.stringify(plan.outputSchema)).toContain('"moves"');
   expect(JSON.stringify(plan.outputSchema)).toContain('"validation"');
-  expect(JSON.stringify(plan.outputSchema)).not.toContain("reviewPath");
-  expect(JSON.stringify(plan.outputSchema)).not.toContain("expiresAt");
 });
 
 it("publishes fallback choices, a group label, and a stored check on the plan", async () => {

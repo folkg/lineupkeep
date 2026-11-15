@@ -603,6 +603,7 @@ const fixtureReadingTests = [
   "packages/backend/src/contexts/connections/internal/ProfessionalTeamMap.test.ts",
   "packages/backend/src/contexts/connections/internal/game-sources/nhl/NhlGameSource.test.ts",
 ];
+const repositoryScanTests = ["packages/backend/src/database/RemovedTransactionStorage.test.ts"];
 const isolateTransport = ["packages/backend/src/runtime/public-internet/transport/isolate/**/*.ts"];
 const transportTests = ["packages/backend/src/runtime/public-internet/transport/**/*.test.ts"];
 const timing = ["apps/web/src/browser/timing/**"];
@@ -827,7 +828,12 @@ export default defineConfig({
       rules: { "repository/no-per-item-service-calls": "error" },
     },
     {
-      files: [...migrationTests, ...fixtureReadingTests, ...databaseFixtures],
+      files: [
+        ...migrationTests,
+        ...fixtureReadingTests,
+        ...repositoryScanTests,
+        ...databaseFixtures,
+      ],
       rules: {
         "effecttsgo/node-builtin-import": "off",
       },

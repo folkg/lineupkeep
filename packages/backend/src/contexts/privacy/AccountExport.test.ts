@@ -67,10 +67,6 @@ it.effect(
         "Transaction move steps",
         "Transaction moves",
         "Transaction plans",
-        "Transaction proposal sets",
-        "Transaction proposal steps",
-        "Transaction proposal submissions",
-        "Transaction proposals",
       ]);
 
       const summary = yield* erasure.erase(owner.id);

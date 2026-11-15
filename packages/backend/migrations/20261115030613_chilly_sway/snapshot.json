@@ -1,0 +1,403 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "e72bf0dc-0f6d-44c4-afa7-b1fa1065cf98",
+  "prevIds": ["a7e7be59-873e-494d-8992-60391f11ca97"],
+  "footprints": [
+    {
+      "statementType": "drop_table",
+      "statementTarget": ["table", "public", "transaction_proposal_items"],
+      "writes": [
+        "s|tbl|public.transaction_proposal_items",
+        "n|tbl|public.transaction_proposal_items",
+        "e|tbl|public.transaction_proposal_items",
+        "n|rel|public.transaction_proposal_items",
+        "n|type|public.transaction_proposal_items"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "drop_table",
+      "statementTarget": ["table", "public", "transaction_proposal_sets"],
+      "writes": [
+        "s|tbl|public.transaction_proposal_sets",
+        "n|tbl|public.transaction_proposal_sets",
+        "e|tbl|public.transaction_proposal_sets",
+        "n|rel|public.transaction_proposal_sets",
+        "n|type|public.transaction_proposal_sets"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "drop_table",
+      "statementTarget": ["table", "public", "transaction_proposal_steps"],
+      "writes": [
+        "s|tbl|public.transaction_proposal_steps",
+        "n|tbl|public.transaction_proposal_steps",
+        "e|tbl|public.transaction_proposal_steps",
+        "n|rel|public.transaction_proposal_steps",
+        "n|type|public.transaction_proposal_steps"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "drop_table",
+      "statementTarget": ["table", "public", "transaction_proposal_submissions"],
+      "writes": [
+        "s|tbl|public.transaction_proposal_submissions",
+        "n|tbl|public.transaction_proposal_submissions",
+        "e|tbl|public.transaction_proposal_submissions",
+        "n|rel|public.transaction_proposal_submissions",
+        "n|type|public.transaction_proposal_submissions"
+      ],
+      "reads": ["n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "drop",
+      "key": "tables\u0000[\"public\",\"transaction_proposal_items\"]"
+    },
+    {
+      "op": "drop",
+      "key": "tables\u0000[\"public\",\"transaction_proposal_sets\"]"
+    },
+    {
+      "op": "drop",
+      "key": "tables\u0000[\"public\",\"transaction_proposal_steps\"]"
+    },
+    {
+      "op": "drop",
+      "key": "tables\u0000[\"public\",\"transaction_proposal_submissions\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"set_id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"position\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"user_id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"team_id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"kind\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"add_players\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"drop_players\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"bid\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"reason\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"state\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"staleness\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"stale_reasons\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"checked_at\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"created_at\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"updated_at\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_sets\",\"id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_sets\",\"user_id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_sets\",\"proposer_kind\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_sets\",\"proposer_reference\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_sets\",\"surface\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_sets\",\"client_label\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_sets\",\"fingerprint\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_sets\",\"teams\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_sets\",\"created_at\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_sets\",\"updated_at\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"outcome\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"outcome_detail\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"outcome_at\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_steps\",\"id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_steps\",\"set_id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_steps\",\"item_id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_steps\",\"user_id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_steps\",\"position\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_steps\",\"kind\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_steps\",\"player_key\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_steps\",\"player_name\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_steps\",\"from_slot\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_steps\",\"to_slot\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_steps\",\"outcome\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_steps\",\"detail\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_steps\",\"decided_at\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"connection_id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"counterparty_team_key\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"counterparty_name\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"trade_provider_key\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"trade_state\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"trade_requested_at\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"trade_proposed_at\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"trade_settled_at\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"trade_detail\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"slot_move\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"execution_position\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"reserve_move\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_sets\",\"orders\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"settled\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_submissions\",\"id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_submissions\",\"set_id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_submissions\",\"user_id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_submissions\",\"ordinal\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_submissions\",\"submitted_at\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_submissions\",\"completed_at\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"intent\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"placement\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_sets\",\"lineups\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"picks\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"window_date\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"approved_at\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"fallback_players\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"effective_date\"]"
+    },
+    {
+      "op": "drop",
+      "key": "indexes\u0000[\"public\",\"transaction_proposal_items_set_id_position_idx\"]"
+    },
+    {
+      "op": "drop",
+      "key": "indexes\u0000[\"public\",\"transaction_proposal_items_user_id_team_id_state_idx\"]"
+    },
+    {
+      "op": "drop",
+      "key": "indexes\u0000[\"public\",\"transaction_proposal_sets_user_id_fingerprint_idx\"]"
+    },
+    {
+      "op": "drop",
+      "key": "indexes\u0000[\"public\",\"transaction_proposal_sets_user_id_created_at_idx\"]"
+    },
+    {
+      "op": "drop",
+      "key": "indexes\u0000[\"public\",\"transaction_proposal_steps_item_id_position_idx\"]"
+    },
+    {
+      "op": "drop",
+      "key": "indexes\u0000[\"public\",\"transaction_proposal_steps_user_id_set_id_idx\"]"
+    },
+    {
+      "op": "drop",
+      "key": "indexes\u0000[\"public\",\"transaction_proposal_submissions_set_id_ordinal_idx\"]"
+    },
+    {
+      "op": "drop",
+      "key": "indexes\u0000[\"public\",\"transaction_proposal_submissions_user_id_set_id_idx\"]"
+    },
+    {
+      "op": "drop",
+      "key": "pks\u0000[\"public\",\"transaction_proposal_items\",\"transaction_proposal_items_pkey\"]"
+    },
+    {
+      "op": "drop",
+      "key": "pks\u0000[\"public\",\"transaction_proposal_sets\",\"transaction_proposal_sets_pkey\"]"
+    },
+    {
+      "op": "drop",
+      "key": "pks\u0000[\"public\",\"transaction_proposal_steps\",\"transaction_proposal_steps_pkey\"]"
+    },
+    {
+      "op": "drop",
+      "key": "pks\u0000[\"public\",\"transaction_proposal_submissions\",\"transaction_proposal_submissions_pkey\"]"
+    }
+  ]
+}

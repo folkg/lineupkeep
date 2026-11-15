@@ -19,12 +19,7 @@ import {
   lineupWriteIntents,
 } from "./LineupRunTables.ts";
 import { scheduleObservations } from "./ScheduleObservationTables.ts";
-import {
-  transactionProposalItems,
-  transactionProposalSets,
-  transactionProposalSteps,
-  transactionProposalSubmissions,
-} from "./TransactionProposalTables.ts";
+import { transactionMoves, transactionPlans } from "./TransactionPlanTables.ts";
 
 const terminalOutcomeStatuses = [
   "completed",
@@ -34,6 +29,7 @@ const terminalOutcomeStatuses = [
   "superseded",
 ] as const satisfies ReadonlyArray<LineupRunStatus>;
 const terminalHostedLinkingStatuses = ["completed", "cancelled", "expired", "failed"] as const;
+const endedMoveResults = ["executed", "withdrawn", "expired"] as const;
 
 export const RetentionSweepLive = Layer.effect(
   RetentionSweep,
@@ -51,8 +47,11 @@ export const RetentionSweepLive = Layer.effect(
       const hostedLinkingBefore = DateTime.toDateUtc(
         DateTime.subtractDuration(now, retentionPolicy.hostedLinkingSession.millis),
       );
-      const plansBefore = DateTime.toDateUtc(
-        DateTime.subtractDuration(now, retentionPolicy.closedPlan.millis),
+      const endedMovesBefore = DateTime.toDateUtc(
+        DateTime.subtractDuration(now, retentionPolicy.endedMove.millis),
+      );
+      const emptyPlansBefore = DateTime.toDateUtc(
+        DateTime.subtractDuration(now, retentionPolicy.emptyPlan.millis),
       );
       const connections = yield* database
         .transaction((tx) =>
@@ -136,34 +135,56 @@ export const RetentionSweepLive = Layer.effect(
               .limit(limit);
             const hosted = yield* deleteIds(tx, hostedLinkingSessions, oldHostedLinkingSessions);
 
-            const closedPlanIds = yield* tx
-              .select({ id: transactionProposalSets.id })
-              .from(transactionProposalSets)
+            const endedMoves = yield* tx
+              .select({ id: transactionMoves.id })
+              .from(transactionMoves)
               .where(
                 and(
-                  lte(transactionProposalSets.updatedAt, plansBefore),
+                  anyOf(transactionMoves.result, endedMoveResults),
+                  lte(transactionMoves.resultAt, endedMovesBefore),
+                ),
+              )
+              .orderBy(transactionMoves.resultAt)
+              .limit(limit);
+            const discardedMoves = yield* tx
+              .select({ id: transactionMoves.id })
+              .from(transactionMoves)
+              .where(
+                and(
+                  eq(transactionMoves.decision, "discarded"),
+                  lte(transactionMoves.decidedAt, endedMovesBefore),
+                ),
+              )
+              .orderBy(transactionMoves.decidedAt)
+              .limit(limit);
+            const moves =
+              (yield* deleteIds(tx, transactionMoves, endedMoves)) +
+              (yield* deleteIds(tx, transactionMoves, discardedMoves));
+
+            const emptyPlans = yield* tx
+              .select({ userId: transactionPlans.userId, teamId: transactionPlans.teamId })
+              .from(transactionPlans)
+              .where(
+                and(
+                  lte(transactionPlans.updatedAt, emptyPlansBefore),
                   not(
                     exists(
                       tx
-                        .select({ id: transactionProposalItems.id })
-                        .from(transactionProposalItems)
+                        .select({ id: transactionMoves.id })
+                        .from(transactionMoves)
                         .where(
                           and(
-                            eq(transactionProposalItems.setId, transactionProposalSets.id),
-                            eq(transactionProposalItems.settled, false),
+                            eq(transactionMoves.userId, transactionPlans.userId),
+                            eq(transactionMoves.teamId, transactionPlans.teamId),
                           ),
                         ),
                     ),
                   ),
                 ),
               )
-              .orderBy(transactionProposalSets.updatedAt)
+              .orderBy(transactionPlans.updatedAt)
               .limit(limit);
-            const planIds = closedPlanIds.map((row) => row.id);
-            yield* deleteSetChildren(tx, transactionProposalSteps, planIds);
-            yield* deleteSetChildren(tx, transactionProposalItems, planIds);
-            yield* deleteSetChildren(tx, transactionProposalSubmissions, planIds);
-            const plans = yield* deleteIds(tx, transactionProposalSets, closedPlanIds);
+            const plans = yield* deletePlans(tx, emptyPlans);
 
             const summary = {
               diagnostics: diagnostics + runDiagnostics,
@@ -174,6 +195,7 @@ export const RetentionSweepLive = Layer.effect(
               deliveries,
               scheduleObservations: observations,
               hostedLinkingSessions: hosted,
+              moves,
               plans,
             };
             return summary;
@@ -192,6 +214,7 @@ export const RetentionSweepLive = Layer.effect(
         "retention.requests": summary.requests,
         "retention.schedule_observations": summary.scheduleObservations,
         "retention.hosted_linking_sessions": summary.hostedLinkingSessions,
+        "retention.moves": summary.moves,
         "retention.plans": summary.plans,
         "retention.sessions": summary.sessions,
         "retention.verifications": summary.verifications,
@@ -214,7 +237,7 @@ function deleteIds(
     | typeof lineupRuns
     | typeof lineupDeliveries
     | typeof hostedLinkingSessions
-    | typeof transactionProposalSets,
+    | typeof transactionMoves,
   rows: ReadonlyArray<{ readonly id: string }>,
 ): Effect.Effect<number, never> {
   const ids = rows.map((row) => row.id);
@@ -250,22 +273,23 @@ function deleteRunChildren(
     );
 }
 
-function deleteSetChildren(
+function deletePlans(
   tx: Transaction,
-  table:
-    | typeof transactionProposalSteps
-    | typeof transactionProposalItems
-    | typeof transactionProposalSubmissions,
-  setIds: ReadonlyArray<string>,
+  plans: ReadonlyArray<{ readonly userId: string; readonly teamId: string }>,
 ): Effect.Effect<number, never> {
-  const ids = [...setIds];
-  if (!Array.isArrayNonEmpty(ids)) {
+  if (plans.length === 0) {
     return Effect.succeed(0);
   }
   return tx
-    .delete(table)
-    .where(anyOf(table.setId, ids))
-    .returning({ setId: table.setId })
+    .delete(transactionPlans)
+    .where(
+      or(
+        ...plans.map((plan) =>
+          and(eq(transactionPlans.userId, plan.userId), eq(transactionPlans.teamId, plan.teamId)),
+        ),
+      ),
+    )
+    .returning({ teamId: transactionPlans.teamId })
     .pipe(
       Effect.orDie,
       Effect.map((deleted) => deleted.length),

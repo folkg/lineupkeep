@@ -474,8 +474,6 @@ test("appends moves to one team queue without writing to the provider and reads 
   expect(queued.team.id).toBe(football.id);
   expect(queued.moves).toHaveLength(1);
   expect(queued.refused).toStrictEqual([]);
-  expect(JSON.stringify(proposed)).not.toContain('"set":');
-  expect(JSON.stringify(proposed)).not.toContain("reviewUrl");
 
   const appended = await client.callTool("propose_transactions", {
     team: football.id,
@@ -523,7 +521,6 @@ test("appends moves to one team queue without writing to the provider and reads 
   expect(rolling.counts.open).toBeGreaterThanOrEqual(2);
   expect(rolling.teamCount).toBe(1);
   expect(rolling.days.some((day) => day.today)).toBe(true);
-  expect(JSON.stringify(listed)).not.toContain('"set":');
 
   const other = await newUser();
   await signUp(other);

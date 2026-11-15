@@ -111,18 +111,6 @@ export type QueryTokensShape = {
     }>;
   }) => Effect.Effect<ReadonlyArray<ReadonlyArray<string | undefined>>>;
 
-  readonly sealTradeOfferRef: (input: {
-    readonly userId: UserId;
-    readonly leagueKey: string;
-    readonly transactionKey: string;
-  }) => Effect.Effect<TradeOfferRef>;
-
-  readonly sealTradeOfferRefs: (input: {
-    readonly userId: UserId;
-    readonly leagueKey: string;
-    readonly transactionKeys: ReadonlyArray<string>;
-  }) => Effect.Effect<ReadonlyArray<TradeOfferRef>>;
-
   readonly sealTradeOfferRefGroups: (input: {
     readonly userId: UserId;
     readonly groups: ReadonlyArray<{
@@ -130,12 +118,6 @@ export type QueryTokensShape = {
       readonly transactionKeys: ReadonlyArray<string>;
     }>;
   }) => Effect.Effect<ReadonlyArray<ReadonlyArray<TradeOfferRef>>>;
-
-  readonly openTradeOfferRef: (input: {
-    readonly userId: UserId;
-    readonly leagueKey: string;
-    readonly ref: TradeOfferRef;
-  }) => Effect.Effect<string, QueryReferenceInvalid>;
 
   readonly statRef: (input: {
     readonly leagueKey: string;
@@ -301,20 +283,6 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
             ),
           ),
         ),
-      sealTradeOfferRef: ({ userId, leagueKey, transactionKey }) =>
-        Effect.promise(() =>
-          sealReference(keys.aes, "trade_offer", userId, leagueKey, transactionKey),
-        ).pipe(Effect.map((value) => Schema.decodeSync(TradeOfferRef)(value))),
-      sealTradeOfferRefs: ({ userId, leagueKey, transactionKeys }) =>
-        Effect.promise(() =>
-          Promise.all(
-            transactionKeys.map((transactionKey) =>
-              sealReference(keys.aes, "trade_offer", userId, leagueKey, transactionKey),
-            ),
-          ),
-        ).pipe(
-          Effect.map((values) => values.map((value) => Schema.decodeSync(TradeOfferRef)(value))),
-        ),
       sealTradeOfferRefGroups: ({ userId, groups }) =>
         Effect.promise(() =>
           Promise.all(
@@ -333,11 +301,6 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
             ),
           ),
         ),
-      openTradeOfferRef: ({ userId, leagueKey, ref }) =>
-        Effect.tryPromise({
-          try: () => openReference(keys.aes, "trade_offer", userId, leagueKey, ref),
-          catch: () => QueryReferenceInvalid.make({ reason: "invalid" }),
-        }),
       statRef: ({ leagueKey, statId }) =>
         Effect.promise(() => statRef(keys.hmac, leagueKey, statId)),
     })),

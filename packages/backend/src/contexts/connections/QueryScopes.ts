@@ -7,6 +7,6 @@ export const fantasyQueryScopes = {
   reviewTransactions: {
     name: "transactions:review",
     description:
-      "Propose player transactions for your own review, read your proposal sets back, and revalidate them against current state at your league's site. This stores proposals and reads from your league's site; it never submits a transaction, never executes a proposal, and never guarantees eligibility.",
+      "Propose player transactions for your own review, read your moves back, and revalidate them against current state at your league's site. This stores moves and reads from your league's site; it never submits a transaction, never executes a move, and never guarantees eligibility.",
   },
 } as const;

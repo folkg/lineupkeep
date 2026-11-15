@@ -46,12 +46,11 @@ import { ScheduleGateLive } from "#contexts/connections/internal/ScheduleGateLiv
 import { ScheduleObservationRepository } from "#contexts/connections/internal/ScheduleObservationRepository.ts";
 import { TeamRepository } from "#contexts/connections/internal/TeamRepository.ts";
 import { TeamsLive } from "#contexts/connections/internal/TeamsLive.ts";
+import { TransactionOffersLive } from "#contexts/connections/internal/TransactionOffersLive.ts";
 import { TransactionPlanFactsLive } from "#contexts/connections/internal/TransactionPlanFactsLive.ts";
 import { TransactionPlanRepository } from "#contexts/connections/internal/TransactionPlanRepository.ts";
 import { TransactionPlanServiceLive } from "#contexts/connections/internal/TransactionPlanService.ts";
 import { TransactionPlanWritesLive } from "#contexts/connections/internal/TransactionPlanWritesLive.ts";
-import { TransactionProposalRepository } from "#contexts/connections/internal/TransactionProposalRepository.ts";
-import { TransactionProposalsLive } from "#contexts/connections/internal/TransactionProposalsLive.ts";
 import { yahooProvider } from "#contexts/connections/internal/yahoo/YahooProvider.ts";
 import type { LineupRuns } from "#contexts/connections/LineupRuns.ts";
 import type { LineupDispatcher, LineupWorker } from "#contexts/connections/LineupWork.ts";
@@ -60,8 +59,8 @@ import type { ProfessionalCalendar } from "#contexts/connections/ProfessionalCal
 import { ProviderRegistry, providerRegistryOf } from "#contexts/connections/ProviderRegistry.ts";
 import type { RetentionSweep } from "#contexts/connections/Retention.ts";
 import type { Teams } from "#contexts/connections/Teams.ts";
+import type { TransactionOffers } from "#contexts/connections/TransactionOffers.ts";
 import { TransactionPlanService } from "#contexts/connections/TransactionPlans.ts";
-import type { TransactionProposals } from "#contexts/connections/TransactionProposals.ts";
 import type { Feedback } from "#contexts/feedback/Feedback.ts";
 import type { FeedbackRetention } from "#contexts/feedback/FeedbackRetention.ts";
 import { FeedbackDatabase } from "#contexts/feedback/internal/FeedbackDatabase.ts";
@@ -145,6 +144,12 @@ const TransactionPlansLayer = TransactionPlanServiceLive.pipe(
   Layer.provide(QueryTokens.layer),
   Layer.provide(NodeCrypto.layer),
 );
+const TransactionOffersLayer = TransactionOffersLive.pipe(
+  Layer.provide(QueryRepositoryLayer),
+  Layer.provide(ProviderLayer),
+  Layer.provide(CredentialEncryptionLayer),
+  Layer.provide(QueryTokens.layer),
+);
 const ScheduleObservationRepositoryLayer = ScheduleObservationRepository.layer.pipe(
   Layer.provide(ConnectionsDatabase.layer),
 );
@@ -161,9 +166,6 @@ const QueriesLayer = FantasyQueriesLive.pipe(
   Layer.provide(ProviderLayer),
   Layer.provide(CredentialEncryptionLayer),
   Layer.provide(QueryTokens.layer),
-);
-const ProposalRepositoryLayer = TransactionProposalRepository.layer.pipe(
-  Layer.provide(ConnectionsDatabase.layer),
 );
 const LineupRepositoryLayer = LineupRunRepository.layer.pipe(
   Layer.provide(ConnectionsDatabase.layer),
@@ -199,14 +201,6 @@ const LineupRunsLayer = LineupRunsLive.pipe(
   Layer.provide(LineupRepositoryLayer),
   Layer.provide(QueryRepositoryLayer),
   Layer.provide(LineupDispatcherLayer),
-);
-const ProposalsLayer = TransactionProposalsLive.pipe(
-  Layer.provide(ProposalRepositoryLayer),
-  Layer.provide(QueryRepositoryLayer),
-  Layer.provide(ProviderLayer),
-  Layer.provide(CredentialEncryptionLayer),
-  Layer.provide(QueryTokens.layer),
-  Layer.provide(LineupRunsLayer),
 );
 const TeamRepositoryLayer = TeamRepository.layer.pipe(
   Layer.provide(ConnectionsDatabase.layer),
@@ -263,8 +257,8 @@ export const ApplicationLayer = Layer.mergeAll(
   QueriesLayer,
   ProfessionalCalendarLayer,
   ScheduleGateLayer,
-  ProposalsLayer,
   TransactionPlansLayer,
+  TransactionOffersLayer,
   LineupRunsLayer,
   TeamsLayer,
   AutomationLayer,
@@ -296,7 +290,7 @@ export type BackendServices =
   | FantasyQueries
   | ProfessionalCalendar
   | TransactionPlanService
-  | TransactionProposals
+  | TransactionOffers
   | LineupRuns
   | Teams
   | Automation

@@ -4,6 +4,12 @@ import { providerSessionRefusal } from "@lineupkeep/backend/connections/Connecti
 import { TeamId } from "@lineupkeep/backend/connections/FantasyTeam";
 import { fantasyQueryScopes } from "@lineupkeep/backend/connections/QueryScopes";
 import {
+  PendingTradeOffersInput,
+  PendingTradeOffersResult,
+  TransactionOffers,
+} from "@lineupkeep/backend/connections/TransactionOffers";
+import type { TransactionOffersError } from "@lineupkeep/backend/connections/TransactionOffers";
+import {
   ListTransactionMovesInput,
   ProposeTransactionMovesInput,
   TransactionMoveList,
@@ -16,12 +22,6 @@ import {
   StoredMoveDate,
 } from "@lineupkeep/backend/connections/TransactionPlans";
 import type { TransactionPlanServiceError } from "@lineupkeep/backend/connections/TransactionPlans";
-import {
-  PendingTradeOffersInput,
-  PendingTradeOffersResult,
-  TransactionProposals,
-} from "@lineupkeep/backend/connections/TransactionProposals";
-import type { ProposalError } from "@lineupkeep/backend/connections/TransactionProposals";
 import { Effect, Schema } from "effect";
 import type { Layer } from "effect";
 import { Tool, Toolkit } from "effect/ai";
@@ -106,12 +106,12 @@ export function proposalToolHandlers(
 ): Layer.Layer<
   Tool.HandlersFor<Toolkit.Tools<typeof proposalTools>>,
   never,
-  TransactionPlanService | TransactionProposals | AuthService
+  TransactionPlanService | TransactionOffers | AuthService
 > {
   return proposalTools.toLayer(
     Effect.gen(function* () {
       const plans = yield* TransactionPlanService;
-      const proposals = yield* TransactionProposals;
+      const offers = yield* TransactionOffers;
       const proposer = { kind: "agent", reference: "mcp", surface: "mcp" } as const;
 
       return proposalTools.of({
@@ -160,7 +160,7 @@ export function proposalToolHandlers(
               mapPlanFailure,
             ),
         get_pending_trade_offers: (input) =>
-          proposals.readPendingOffers(agent.userId, input).pipe(mapProposalFailure),
+          offers.readPendingOffers(agent.userId, input).pipe(mapOfferFailure),
         list_transaction_proposals: (input) => plans.list(agent.userId, input).pipe(mapPlanFailure),
         get_transaction_plan: (input) => plans.plan(agent.userId, input).pipe(mapPlanFailure),
       });
@@ -201,44 +201,26 @@ function mapPlanFailure<A>(
   );
 }
 
-function mapProposalFailure<A>(
-  program: Effect.Effect<A, ProposalError>,
+function mapOfferFailure<A>(
+  program: Effect.Effect<A, TransactionOffersError>,
 ): Effect.Effect<A, { code: string; message: string }, never> {
   return program.pipe(
     Effect.catch((error) => {
       switch (error._tag) {
-        case "proposal.team_not_found":
+        case "transaction_offers.team_not_found":
           return reject(
             "team_not_found",
             "The selected team is not available to this account. List your teams and try again.",
           );
-        case "proposal.connection_not_ready":
+        case "transaction_offers.connection_not_ready":
           return reject("connection_not_ready", providerSessionRefusal(error.status));
-        case "proposal.provider_unavailable":
+        case "transaction_offers.provider_unavailable":
           return reject("provider_unavailable", error.detail);
-        case "proposal.persistence_failed":
+        case "transaction_offers.persistence_failed":
           return reject(
             "offers_unavailable",
             "The pending offers could not be read. Try again in a moment.",
           );
-        case "proposal.content_invalid":
-          return reject("content_invalid", error.detail);
-        case "proposal.nothing_included":
-          return reject("nothing_included", error.detail);
-        case "proposal.set_closed":
-          return reject("set_closed", error.detail);
-        case "proposal.submission_in_progress":
-          return reject("submission_in_progress", "This plan is already running.");
-        case "proposal.nothing_accepted":
-          return reject("nothing_accepted", error.detail);
-        case "proposal.items_not_open":
-          return reject("items_not_open", error.detail);
-        case "proposal.set_not_found":
-          return reject("set_not_found", "The selected plan is not available to this account.");
-        case "proposal.trade_not_found":
-          return reject("trade_not_found", "That trade proposal is not available.");
-        case "proposal.trade_not_pending":
-          return reject("trade_not_pending", error.detail);
       }
     }),
   );

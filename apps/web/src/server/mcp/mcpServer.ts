@@ -3,8 +3,8 @@ import type { Connections } from "@lineupkeep/backend/connections/Connections";
 import type { FantasyQueries } from "@lineupkeep/backend/connections/FantasyQueries";
 import type { LineupRuns } from "@lineupkeep/backend/connections/LineupRuns";
 import type { Teams } from "@lineupkeep/backend/connections/Teams";
+import type { TransactionOffers } from "@lineupkeep/backend/connections/TransactionOffers";
 import type { TransactionPlanService } from "@lineupkeep/backend/connections/TransactionPlans";
-import type { TransactionProposals } from "@lineupkeep/backend/connections/TransactionProposals";
 import type { Feedback } from "@lineupkeep/backend/feedback/Feedback";
 import type { ToolCallQuota } from "@lineupkeep/backend/toolCalls/ToolCallQuota";
 import { productName } from "@lineupkeep/brand/product";
@@ -38,7 +38,7 @@ const applicationHandlers = (
   | Connections
   | FantasyQueries
   | TransactionPlanService
-  | TransactionProposals
+  | TransactionOffers
   | LineupRuns
   | Teams
   | Feedback
