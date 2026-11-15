@@ -23,6 +23,10 @@ import {
   TransactionMoveTeam,
   TransactionMoveValidationStatus,
   TransactionPlanPersistenceFailed,
+  TransactionPlanRunCounts,
+  TransactionPlanRunRefusal,
+  TransactionRunId,
+  TransactionRunTrigger,
   isOpenMove,
 } from "#contexts/connections/TransactionPlans.ts";
 
@@ -47,6 +51,10 @@ export {
   TransactionMoveTeam,
   TransactionMoveValidationStatus,
   TransactionPlanPersistenceFailed,
+  TransactionPlanRunCounts,
+  TransactionPlanRunRefusal,
+  TransactionRunId,
+  TransactionRunTrigger,
   isOpenMove,
 };
 
@@ -106,6 +114,10 @@ const TransactionMoveFields = {
   effectiveDate: Schema.optional(StoredMoveDate),
   decision: TransactionMoveDecision,
   decidedAt: Schema.optional(Schema.DateTimeUtc),
+  confirmedAt: Schema.optional(Schema.DateTimeUtc),
+  confirmedBy: Schema.optional(UserId),
+  runId: Schema.optional(TransactionRunId),
+  runAt: Schema.optional(Schema.DateTimeUtc),
   validation: StoredMoveValidation,
   result: Schema.optional(TransactionMoveResult),
   resultDetail: Schema.optional(Schema.NonEmptyString),
@@ -128,3 +140,16 @@ export const TransactionMoveRecord = Schema.Struct({
   ),
 }).pipe(Schema.toType);
 export type TransactionMoveRecord = typeof TransactionMoveRecord.Type;
+
+export const TransactionRunRecord = Schema.Struct({
+  run: TransactionRunId,
+  userId: UserId,
+  team: TeamId,
+  trigger: TransactionRunTrigger,
+  key: Schema.optional(Schema.NonEmptyString),
+  at: Schema.DateTimeUtc,
+  finishedAt: Schema.optional(Schema.DateTimeUtc),
+  counts: TransactionPlanRunCounts,
+  refusals: Schema.Array(TransactionPlanRunRefusal),
+}).pipe(Schema.toType);
+export type TransactionRunRecord = typeof TransactionRunRecord.Type;

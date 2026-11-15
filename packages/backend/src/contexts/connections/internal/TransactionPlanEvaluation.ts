@@ -1651,7 +1651,7 @@ function nextDate(date: StoredMoveDate): StoredMoveDate {
 }
 
 function isDueDecision(decision: TransactionPlanMove["decision"]): boolean {
-  return decision === "now" || decision === "saved";
+  return decision === "now" || decision === "confirmed";
 }
 
 function claimCandidates(

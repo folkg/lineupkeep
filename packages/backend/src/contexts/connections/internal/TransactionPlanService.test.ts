@@ -3,13 +3,18 @@ import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import type { UserId } from "@lineupkeep/backend/auth/User";
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
-import { DateTime, Effect, Layer, Schema } from "effect";
+import { DateTime, Effect, Fiber, Layer, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 
 import { decodeTeamId } from "#contexts/connections/FantasyTeam.ts";
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
 import type { PlayerRef } from "#contexts/connections/QueryValues.ts";
-import type { TransactionMoveList } from "#contexts/connections/TransactionPlans.ts";
+import {
+  TransactionPlanRunCounts,
+  TransactionRunId,
+  type TransactionMoveList,
+  type TransactionPlanServiceShape,
+} from "#contexts/connections/TransactionPlans.ts";
 import type {
   TransactionPlanMoveDraft,
   TransactionPlanView,
@@ -34,7 +39,6 @@ import type { TransactionMoveAppend } from "./TransactionPlanRepository.ts";
 import {
   TransactionPlanFacts,
   TransactionPlanFactsUnavailable,
-  TransactionPlanRunInProgress,
   TransactionPlanService,
   TransactionPlanServiceLive,
 } from "./TransactionPlanService.ts";
@@ -44,6 +48,7 @@ import {
   transactionMoveSteps,
   transactionMoves,
   transactionPlans,
+  transactionRuns,
 } from "./TransactionPlanTables.ts";
 import { TransactionPlanWrites } from "./TransactionPlanWrites.ts";
 import type {
@@ -60,7 +65,7 @@ const at = DateTime.makeUnsafe("2026-11-14T12:00:00.000Z");
 const today = "2026-11-14";
 const proposer = { kind: "agent", reference: "mcp", surface: "mcp" } as const;
 
-it.effect("proposes into an empty team and runs a move with no date now", () =>
+it.effect("proposes into an empty team and leaves a move for today undecided", () =>
   Effect.gen(function* () {
     const service = yield* TransactionPlanService;
     const database = yield* ConnectionsDatabase;
@@ -78,7 +83,7 @@ it.effect("proposes into an empty team and runs a move with no date now", () =>
     assert.strictEqual(result.plan.today, today);
     assert.strictEqual(result.plan.moves.length, 1);
     const move = result.plan.moves[0];
-    assert.strictEqual(move?.decision, "now");
+    assert.strictEqual(move?.decision, "undecided");
     assert.strictEqual(move?.runDay, today);
     assert.strictEqual(move?.effectiveDate, "2026-11-15");
     assert.strictEqual(move?.validation.status, "current");
@@ -96,7 +101,7 @@ it.effect("proposes into an empty team and runs a move with no date now", () =>
     assert.strictEqual(plans.length, 1);
     const stored = yield* database.select().from(transactionMoves);
     assert.strictEqual(stored.length, 1);
-    assert.strictEqual(stored[0]?.decision, "now");
+    assert.strictEqual(stored[0]?.decision, "undecided");
   }).pipe(Effect.provide(serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])]))),
 );
 
@@ -122,7 +127,7 @@ it.effect("proposes into an existing queue and keeps one plan", () =>
     assert.deepStrictEqual(
       second.plan.moves.map((move) => [move.adds[0]?.key, move.decision]),
       [
-        ["fa1", "now"],
+        ["fa1", "undecided"],
         ["fa2", "saved"],
       ],
     );
@@ -914,7 +919,7 @@ it.effect("discards one move and leaves the plan's other moves", () =>
     assert.deepStrictEqual(
       result.plan.moves.map((move) => [move.drops[0]?.key, move.decision]),
       [
-        ["a2", "now"],
+        ["a2", "undecided"],
         ["a1", "discarded"],
       ],
     );
@@ -1321,7 +1326,7 @@ it.effect("groups the timeline by run day and team with today first", () => {
     assert.deepStrictEqual(
       plan.moves.map(({ decision, runDay }) => [decision, runDay]),
       [
-        ["now", "2026-11-14"],
+        ["undecided", "2026-11-14"],
         ["saved", "2026-11-16"],
         ["saved", "2026-11-15"],
       ],
@@ -1356,7 +1361,7 @@ it.effect("keeps a team's ended moves in its plan read", () =>
     assert.deepStrictEqual(
       plan.moves.map(({ decision, check }) => [decision, check.status]),
       [
-        ["now", "checked"],
+        ["undecided", "checked"],
         ["discarded", "stored"],
       ],
     );
@@ -1627,7 +1632,7 @@ it.effect("lists one team's moves by today, saved, and ended", () => {
     );
     assert.deepStrictEqual(
       now.moves.map(({ decision }) => decision),
-      ["now"],
+      ["undecided"],
     );
 
     const defaulted = yield* service.list(owner, { team });
@@ -1674,7 +1679,7 @@ it.effect("submits today's chosen move and records its result, steps, and check 
       moves: [add("fa1", "Free Agent One"), add("fa2", "Free Agent Two", { runDay: "2026-11-15" })],
     });
 
-    const result = yield* service.submit(owner, { team });
+    const result = yield* confirmDue(service, team);
 
     assert.deepStrictEqual(result.counts, {
       plans: 1,
@@ -1738,7 +1743,7 @@ it.effect("submits today's chosen move and records its result, steps, and check 
   );
 });
 
-it.effect("submits today's chosen moves together and discards the rest", () => {
+it.effect("confirms today's move, runs only it, and discards another", () => {
   const writes = writeLayer(() => ({ status: "executed" }));
   return Effect.gen(function* () {
     const service = yield* TransactionPlanService;
@@ -1758,14 +1763,14 @@ it.effect("submits today's chosen moves together and discards the rest", () => {
       throw new Error("Expected two proposed moves");
     }
 
-    const result = yield* service.submitToday(owner, {
-      choices: [
-        { team, move: first.move, choice: "now" },
-        { team, move: second.move, choice: "discard" },
-      ],
+    const result = yield* service.confirm(owner, {
+      team,
+      moves: [first.move],
+      key: "confirm-one",
     });
+    const discarded = yield* service.discard(owner, { team, move: second.move });
 
-    assert.strictEqual(result.discarded, 1);
+    assert.deepStrictEqual(discarded.refused, []);
     assert.strictEqual(result.counts.moves, 1);
     assert.strictEqual(result.counts.executed, 1);
     assert.deepStrictEqual(result.refusals, []);
@@ -1775,6 +1780,238 @@ it.effect("submits today's chosen moves together and discards the rest", () => {
     const stored = yield* repository.readPlanMoves({ userId: owner, team });
     assert.strictEqual(stored.find((move) => move.id === first.move)?.result, "executed");
     assert.strictEqual(stored.find((move) => move.id === second.move)?.decision, "discarded");
+  }).pipe(
+    Effect.provide(
+      serviceLayer(
+        [
+          league(
+            [],
+            [
+              freeAgent("fa1", "Free Agent One", ["RB"]),
+              freeAgent("fa2", "Free Agent Two", ["RB"]),
+            ],
+          ),
+        ],
+        writes.layer,
+      ),
+    ),
+  );
+});
+
+it.effect("waits for a recorded run that is still in progress", () => {
+  const writes = writeLayer(() => ({ status: "executed" }));
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const repository = yield* TransactionPlanRepository;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+    const runId = yield* Schema.decodeEffect(TransactionRunId)("01K00000000000000000000001");
+    const started = {
+      plans: 1,
+      claimed: 1,
+      busy: 0,
+      recovered: 0,
+      unavailable: 0,
+      moves: 0,
+      executed: 0,
+      pending: 0,
+      failed: 0,
+      skipped: 0,
+      unknown: 0,
+      retry: 0,
+    } as const;
+    yield* repository.beginRun({
+      userId: owner,
+      team,
+      run: runId,
+      trigger: "submit",
+      key: "in-progress-key",
+      counts: started,
+      refusals: [],
+      at,
+    });
+
+    const fiber = yield* Effect.forkChild(service.submit(owner, { team, key: "in-progress-key" }));
+    yield* Effect.yieldNow;
+    yield* TestClock.adjust(300);
+    yield* repository.finishRun({
+      run: runId,
+      counts: { ...started, recovered: 1 },
+      refusals: [],
+      at,
+    });
+    yield* TestClock.adjust(300);
+    const result = yield* Fiber.join(fiber);
+
+    assert.strictEqual(result.counts.recovered, 1);
+    assert.strictEqual(writes.requests.length, 0);
+  }).pipe(
+    Effect.provide(
+      serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])], writes.layer),
+    ),
+  );
+});
+
+it.effect("runs a confirmed future move on the check after its day, recording both times", () => {
+  const facts = new Map<TeamId, TransactionPlanTeamFacts>();
+  const writes = writeLayer(() => ({ status: "executed" }));
+  const later = DateTime.makeUnsafe("2026-11-15T12:00:00.000Z");
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const repository = yield* TransactionPlanRepository;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+    facts.set(team, league([rostered("a1", "Roster One", "BN", ["RB"])], []).facts);
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [{ ...drop("a1", "Roster One"), runDay: "2026-11-15" }],
+    });
+    const confirmed = yield* service.confirm(owner, {
+      team,
+      moves: [requireMoveId(proposed.plan.moves[0])],
+      key: "confirm-future",
+    });
+
+    assert.strictEqual(confirmed.counts.moves, 0);
+    assert.strictEqual(writes.requests.length, 0);
+    const confirmedMove = confirmed.plan.moves[0];
+    assert.strictEqual(confirmedMove?.decision, "confirmed");
+    assert.strictEqual(
+      DateTime.formatIso(Option.getOrThrow(Option.fromNullishOr(confirmedMove?.confirmation?.at))),
+      DateTime.formatIso(at),
+    );
+    assert.strictEqual(confirmedMove?.confirmation?.by, owner);
+    assert.strictEqual(confirmedMove?.runAt, undefined);
+
+    const early = yield* service.runDue(10, at);
+    assert.strictEqual(early.counts.moves, 0);
+    assert.strictEqual(writes.requests.length, 0);
+
+    const current = facts.get(team);
+    if (current === undefined) {
+      throw new Error("The league facts were not seeded");
+    }
+    facts.set(team, { ...current, today: "2026-11-15" });
+    const run = yield* service.runDue(10, later);
+
+    assert.strictEqual(run.counts.executed, 1);
+    assert.strictEqual(writes.requests.length, 1);
+    const stored = yield* repository.readPlanMoves({ userId: owner, team });
+    assert.strictEqual(stored[0]?.result, "executed");
+    assert.strictEqual(stored[0]?.decision, "confirmed");
+    assert.strictEqual(stored[0]?.runDay, "2026-11-15");
+    assert.strictEqual(
+      DateTime.formatIso(Option.getOrThrow(Option.fromNullishOr(stored[0]?.confirmedAt))),
+      DateTime.formatIso(at),
+    );
+    assert.strictEqual(
+      DateTime.formatIso(Option.getOrThrow(Option.fromNullishOr(stored[0]?.runAt))),
+      DateTime.formatIso(later),
+    );
+
+    const read = yield* service.plan(owner, { team });
+    assert.strictEqual(
+      DateTime.formatIso(Option.getOrThrow(Option.fromNullishOr(read.moves[0]?.runAt))),
+      DateTime.formatIso(later),
+    );
+
+    const runs = yield* database.select().from(transactionRuns);
+    assert.strictEqual(runs.length, 1);
+    const tickRun = runs[0];
+    if (tickRun === undefined) {
+      throw new Error("The tick did not record a run");
+    }
+    assert.strictEqual(tickRun.trigger, "tick");
+    assert.strictEqual(tickRun.key, null);
+    const tickCounts = yield* Schema.decodeUnknownEffect(TransactionPlanRunCounts)(tickRun.counts);
+    assert.strictEqual(tickCounts.moves, 1);
+    assert.strictEqual(
+      Option.getOrThrow(Option.fromNullishOr(tickRun.finishedAt)).toISOString(),
+      DateTime.formatIso(later),
+    );
+  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+});
+
+it.effect("returns the recorded run when one submit key is used twice", () => {
+  const writes = writeLayer(() => ({ status: "executed" }));
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [add("fa1", "Free Agent One")],
+    });
+    const first = yield* service.confirm(owner, {
+      team,
+      moves: [requireMoveId(proposed.plan.moves[0])],
+      key: "same-submit-key",
+    });
+    assert.strictEqual(first.counts.executed, 1);
+    assert.strictEqual(writes.requests.length, 1);
+
+    const second = yield* service.submit(owner, { team, key: "same-submit-key" });
+    const third = yield* service.submit(owner, { team, key: "same-submit-key" });
+
+    assert.deepStrictEqual(second.counts, first.counts);
+    assert.deepStrictEqual(third.counts, first.counts);
+    assert.strictEqual(writes.requests.length, 1);
+    const runs = yield* database.select().from(transactionRuns);
+    assert.strictEqual(runs.length, 1);
+    const recordedRun = runs[0];
+    if (recordedRun === undefined) {
+      throw new Error("The submit did not record a run");
+    }
+    assert.strictEqual(recordedRun.key, "same-submit-key");
+    const recordedCounts = yield* Schema.decodeUnknownEffect(TransactionPlanRunCounts)(
+      recordedRun.counts,
+    );
+    assert.strictEqual(recordedCounts.executed, 1);
+  }).pipe(
+    Effect.provide(
+      serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])], writes.layer),
+    ),
+  );
+});
+
+it.effect("confirms a whole group from one member", () => {
+  const writes = writeLayer(() => ({ status: "executed" }));
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [
+        { ...add("fa1", "Free Agent One"), group: "pair" },
+        { ...add("fa2", "Free Agent Two"), group: "pair" },
+      ],
+    });
+    const first = proposed.plan.moves[0];
+    if (first === undefined) {
+      throw new Error("The plan carried no group member to confirm");
+    }
+    const result = yield* service.confirm(owner, {
+      team,
+      moves: [first.move],
+      key: "confirm-group",
+    });
+
+    assert.strictEqual(result.counts.moves, 2);
+    assert.strictEqual(result.counts.executed, 2);
+    assert.strictEqual(writes.requests.length, 2);
+    const decisions = result.plan.moves.map((move) => move.decision);
+    assert.deepStrictEqual(decisions.sort(), ["now", "now"]);
   }).pipe(
     Effect.provide(
       serviceLayer(
@@ -1810,7 +2047,7 @@ it.effect("submits a two move group in the evaluated order", () => {
       ],
     });
 
-    const result = yield* service.submit(owner, { team });
+    const result = yield* confirmDue(service, team);
 
     assert.strictEqual(result.counts.moves, 2);
     assert.strictEqual(result.counts.executed, 2);
@@ -1881,7 +2118,7 @@ it.effect("refuses a group whole when one of its moves fails, and runs an indepe
       ).facts,
     );
 
-    const result = yield* service.submit(owner, { team });
+    const result = yield* confirmDue(service, team);
 
     assert.strictEqual(result.counts.failed, 1);
     assert.strictEqual(result.counts.skipped, 1);
@@ -1920,7 +2157,7 @@ it.effect("settles a refusal that cannot change with its reason", () => {
     });
 
     facts.set(team, league([], []).facts);
-    const result = yield* service.submit(owner, { team });
+    const result = yield* confirmDue(service, team);
 
     assert.strictEqual(result.counts.failed, 1);
     assert.strictEqual(writes.requests.length, 0);
@@ -1947,13 +2184,17 @@ it.effect("leaves a transient provider failure for the next hourly tick", () => 
     yield* TestClock.setTime(DateTime.toEpochMillis(at));
     yield* seedTeam(database, owner, team);
 
-    yield* service.propose(owner, {
+    const proposed = yield* service.propose(owner, {
       team,
       proposedBy: proposer,
-      moves: [add("fa1", "Free Agent One", { runDay: today })],
+      moves: [add("fa1", "Free Agent One")],
     });
 
-    const first = yield* service.runDue(10, at);
+    const first = yield* service.confirm(owner, {
+      team,
+      moves: [requireMoveId(proposed.plan.moves[0])],
+      key: "confirm-retry",
+    });
     assert.strictEqual(first.counts.retry, 1);
     assert.strictEqual(first.counts.executed, 0);
     assert.strictEqual(writes.requests.length, 1);
@@ -1972,7 +2213,37 @@ it.effect("leaves a transient provider failure for the next hourly tick", () => 
   );
 });
 
-it.effect("runs an overdue saved move on the next tick", () => {
+it.effect("never runs an undecided move on the tick", () => {
+  const writes = writeLayer(() => ({ status: "executed" }));
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const repository = yield* TransactionPlanRepository;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [add("fa1", "Free Agent One")],
+    });
+    assert.strictEqual(proposed.plan.moves[0]?.decision, "undecided");
+
+    const run = yield* service.runDue(10, at);
+
+    assert.strictEqual(run.counts.moves, 0);
+    assert.strictEqual(writes.requests.length, 0);
+    const stored = yield* repository.readPlanMoves({ userId: owner, team });
+    assert.strictEqual(stored[0]?.result, undefined);
+    assert.strictEqual(stored[0]?.decision, "undecided");
+  }).pipe(
+    Effect.provide(
+      serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])], writes.layer),
+    ),
+  );
+});
+
+it.effect("waits undecided on its day and runs only after the owner confirms", () => {
   const facts = new Map<TeamId, TransactionPlanTeamFacts>();
   const writes = writeLayer(() => ({ status: "executed" }));
   return Effect.gen(function* () {
@@ -1997,18 +2268,37 @@ it.effect("runs an overdue saved move on the next tick", () => {
       ...league([rostered("a1", "Roster One", "BN", ["RB"])], []).facts,
       today: "2026-11-16",
     });
-    const run = yield* service.runDue(10, at);
+    const arrived = yield* service.runDue(10, at);
+    assert.strictEqual(arrived.counts.moves, 0);
+    assert.strictEqual(writes.requests.length, 0);
+    const waiting = yield* service.plan(owner, { team });
+    assert.strictEqual(waiting.moves[0]?.decision, "undecided");
+    assert.strictEqual(waiting.moves[0]?.runDay, "2026-11-16");
 
-    assert.strictEqual(run.counts.executed, 1);
+    const result = yield* service.confirm(owner, {
+      team,
+      moves: [requireMoveId(waiting.moves[0])],
+      key: "confirm-waiting",
+    });
+    assert.strictEqual(result.counts.executed, 1);
     assert.strictEqual(writes.requests.length, 1);
     const stored = yield* repository.readPlanMoves({ userId: owner, team });
     assert.strictEqual(stored[0]?.result, "executed");
     assert.strictEqual(stored[0]?.runDay, "2026-11-16");
     assert.strictEqual(stored[0]?.effectiveDate, "2026-11-17");
+    assert.strictEqual(
+      DateTime.formatIso(Option.getOrThrow(Option.fromNullishOr(stored[0]?.confirmedAt))),
+      DateTime.formatIso(at),
+    );
+    assert.strictEqual(
+      DateTime.formatIso(Option.getOrThrow(Option.fromNullishOr(stored[0]?.runAt))),
+      DateTime.formatIso(at),
+    );
   }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("skips a plan that another run holds", () => {
+  const facts = new Map<TeamId, TransactionPlanTeamFacts>();
   const writes = writeLayer(() => ({ status: "executed" }));
   return Effect.gen(function* () {
     const service = yield* TransactionPlanService;
@@ -2016,32 +2306,37 @@ it.effect("skips a plan that another run holds", () => {
     const database = yield* ConnectionsDatabase;
     yield* TestClock.setTime(DateTime.toEpochMillis(at));
     yield* seedTeam(database, owner, team);
+    facts.set(team, league([], [freeAgent("fa1", "Free Agent One", ["RB"])]).facts);
 
-    yield* service.propose(owner, {
+    const proposed = yield* service.propose(owner, {
       team,
       proposedBy: proposer,
-      moves: [add("fa1", "Free Agent One")],
+      moves: [add("fa1", "Free Agent One", { runDay: "2026-11-15" })],
+    });
+    yield* service.confirm(owner, {
+      team,
+      moves: [requireMoveId(proposed.plan.moves[0])],
+      key: "confirm-held",
     });
     yield* repository.claimRun({ userId: owner, team, runClaim: "held-run", at });
+    const current = facts.get(team);
+    if (current === undefined) {
+      throw new Error("The league facts were not seeded");
+    }
+    facts.set(team, { ...current, today: "2026-11-15" });
 
     const due = yield* service.runDue(10, at);
     assert.strictEqual(due.counts.busy, 1);
     assert.strictEqual(due.counts.executed, 0);
     assert.strictEqual(writes.requests.length, 0);
 
-    const failure = yield* service.submit(owner, { team }).pipe(Effect.flip);
-    assert.isTrue(Schema.is(TransactionPlanRunInProgress)(failure));
-
     const plans = yield* database.select().from(transactionPlans);
     assert.strictEqual(plans[0]?.runClaim, "held-run");
-  }).pipe(
-    Effect.provide(
-      serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])], writes.layer),
-    ),
-  );
+  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("recovers a stale claim before running the due moves", () => {
+  const facts = new Map<TeamId, TransactionPlanTeamFacts>();
   const writes = writeLayer(() => ({ status: "executed" }));
   return Effect.gen(function* () {
     const service = yield* TransactionPlanService;
@@ -2049,12 +2344,23 @@ it.effect("recovers a stale claim before running the due moves", () => {
     const database = yield* ConnectionsDatabase;
     yield* TestClock.setTime(DateTime.toEpochMillis(at));
     yield* seedTeam(database, owner, team);
+    facts.set(team, league([], [freeAgent("fa1", "Free Agent One", ["RB"])]).facts);
 
-    yield* service.propose(owner, {
+    const proposed = yield* service.propose(owner, {
       team,
       proposedBy: proposer,
-      moves: [add("fa1", "Free Agent One")],
+      moves: [add("fa1", "Free Agent One", { runDay: "2026-11-15" })],
     });
+    yield* service.confirm(owner, {
+      team,
+      moves: [requireMoveId(proposed.plan.moves[0])],
+      key: "confirm-stale",
+    });
+    const current = facts.get(team);
+    if (current === undefined) {
+      throw new Error("The league facts were not seeded");
+    }
+    facts.set(team, { ...current, today: "2026-11-15" });
     yield* repository.claimRun({
       userId: owner,
       team,
@@ -2070,11 +2376,7 @@ it.effect("recovers a stale claim before running the due moves", () => {
     assert.strictEqual(writes.requests.length, 1);
     const plans = yield* database.select().from(transactionPlans);
     assert.strictEqual(plans[0]?.runClaim, null);
-  }).pipe(
-    Effect.provide(
-      serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])], writes.layer),
-    ),
-  );
+  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("blocks a dependent when its move fails and runs an independent move", () => {
@@ -2096,7 +2398,7 @@ it.effect("blocks a dependent when its move fails and runs an independent move",
       moves: [drop("a1", "Roster One"), add("fa1", "Free Agent One"), drop("a2", "Roster Two")],
     });
 
-    const result = yield* service.submit(owner, { team });
+    const result = yield* confirmDue(service, team);
 
     assert.strictEqual(result.counts.failed, 1);
     assert.strictEqual(result.counts.skipped, 1);
@@ -2150,13 +2452,17 @@ it.effect("records an unknown provider outcome and never retries it", () => {
     yield* TestClock.setTime(DateTime.toEpochMillis(at));
     yield* seedTeam(database, owner, team);
 
-    yield* service.propose(owner, {
+    const proposed = yield* service.propose(owner, {
       team,
       proposedBy: proposer,
-      moves: [add("fa1", "Free Agent One", { runDay: today })],
+      moves: [add("fa1", "Free Agent One")],
     });
 
-    const first = yield* service.runDue(10, at);
+    const first = yield* service.confirm(owner, {
+      team,
+      moves: [requireMoveId(proposed.plan.moves[0])],
+      key: "confirm-unknown",
+    });
     assert.strictEqual(first.counts.unknown, 1);
     const stored = yield* repository.readPlanMoves({ userId: owner, team });
     assert.strictEqual(stored[0]?.result, "unknown");
@@ -2196,7 +2502,7 @@ it.effect("records a pending waiver claim and does not retry it", () => {
       ],
     });
 
-    const result = yield* service.submit(owner, { team });
+    const result = yield* confirmDue(service, team);
 
     assert.strictEqual(result.counts.pending, 1);
     const stored = yield* repository.readPlanMoves({ userId: owner, team });
@@ -2263,13 +2569,18 @@ for (const timing of [
         ).facts,
       );
 
-      yield* service.propose(owner, {
+      const proposed = yield* service.propose(owner, {
         team,
         proposedBy: proposer,
         moves: [
           { ...drop("a1", "Roster One"), runDay: "2026-11-15" },
           { ...drop("a2", "Roster Two"), runDay: "2026-11-16" },
         ],
+      });
+      yield* service.confirm(owner, {
+        team,
+        moves: proposed.plan.moves.map((move) => move.move),
+        key: `confirm-timing-${timing.rule}`,
       });
 
       const early = yield* service.runDue(10, leagueAt);
@@ -2367,7 +2678,7 @@ it.effect("runs a drop, a stash, and an add group in the order its effects need"
       ],
     });
 
-    const result = yield* service.submit(owner, { team });
+    const result = yield* confirmDue(service, team);
 
     assert.strictEqual(result.counts.executed, 3);
     assert.deepStrictEqual(
@@ -2423,7 +2734,7 @@ it.effect("stops a whole group when one member is stale and sends nothing", () =
       ).facts,
     );
 
-    const result = yield* service.submit(owner, { team });
+    const result = yield* confirmDue(service, team);
 
     assert.strictEqual(writes.requests.length, 0);
     assert.strictEqual(result.counts.failed, 1);
@@ -2540,7 +2851,7 @@ it.effect(
       });
       const before = reads;
 
-      const result = yield* service.submit(owner, { team });
+      const result = yield* confirmDue(service, team);
 
       assert.strictEqual(writes.requests.length, 2);
       assert.isAbove(reads, before + 1);
@@ -2606,7 +2917,7 @@ it.effect("adds a visible Roster fixes group before the add it funds", () => {
     assert.strictEqual(read.moves.find((move) => move.move === group?.moves[0])?.kind, "stash");
     assert.include(read.moves[0]?.reason ?? "", "to free a place");
 
-    yield* service.submit(owner, { team });
+    yield* confirmDue(service, team);
     assert.deepStrictEqual(
       writes.requests.map((request) => request.kind),
       ["stash", "free_agent_add"],
@@ -2831,6 +3142,29 @@ it.effect("discards a move's Roster fixes with it", () =>
     ),
   ),
 );
+
+function confirmDue(
+  service: Pick<TransactionPlanServiceShape, "plan" | "confirm">,
+  teamId: TeamId,
+): ReturnType<TransactionPlanServiceShape["confirm"]> {
+  return Effect.gen(function* () {
+    const plan = yield* service.plan(owner, { team: teamId });
+    const moves = plan.moves.flatMap((move) =>
+      move.result === undefined &&
+      move.runDay === plan.today &&
+      (move.decision === "undecided" || move.decision === "now" || move.decision === "confirmed")
+        ? [move.move]
+        : [],
+    );
+    return yield* service.confirm(owner, {
+      team: teamId,
+      moves,
+      key: `confirm-${String(++confirmSequence)}`,
+    });
+  });
+}
+
+let confirmSequence = 0;
 
 function serviceLayer(
   leagues: ReadonlyArray<League>,
@@ -3068,8 +3402,10 @@ function storedDrop(key: string, name: string): TransactionMoveAppend {
       reason: `Drop ${name}.`,
       runDay: today,
       effectiveDate: "2026-11-15",
-      decision: "now",
+      decision: "undecided",
       decidedAt: undefined,
+      confirmedAt: undefined,
+      confirmedBy: undefined,
       validation: { status: "current", checkedAt: at, reasons: [] },
     },
     claims: [{ kind: "player", key }],

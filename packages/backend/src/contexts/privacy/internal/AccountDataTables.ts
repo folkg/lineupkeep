@@ -107,6 +107,13 @@ export const ownedDataInventory: ReadonlyArray<OwnedDataClass> = [
     withheld: [],
   },
   {
+    table: "transaction_runs",
+    label: "Transaction runs",
+    needsAccountIdentity: false,
+    where: ownerRows("user_id"),
+    withheld: [],
+  },
+  {
     table: "transaction_plans",
     label: "Transaction plans",
     needsAccountIdentity: false,

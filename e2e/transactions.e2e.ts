@@ -2,7 +2,7 @@ import { Schema } from "effect";
 
 import { expect, signUp, test } from "./support";
 
-test("proposes a move into one team queue and submits the chosen move from the transactions page", async ({
+test("proposes a move into one team queue and confirms it from the transactions page", async ({
   page,
   services,
   mcp,
@@ -73,15 +73,14 @@ test("proposes a move into one team queue and submits the chosen move from the t
   await expect(page.getByText("1 move for today", { exact: true })).toBeVisible();
   await expect(page.getByText(reason, { exact: true })).toBeVisible();
   await expect(page.getByText("Embedded Browser Team", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Pending", { exact: true })).toBeVisible();
+  await expect(page.getByText("Waiting for your confirmation.", { exact: true })).toBeVisible();
 
-  const submit = page.getByRole("button", { name: "Submit today's chosen moves" });
-  await expect(submit).toBeDisabled();
-  await page.getByRole("button", { name: /Do it now: Drop Riverside Receiver/u }).click();
-  await expect(page.getByText("Runs when you submit.", { exact: true })).toBeVisible();
-  await expect(submit).toBeEnabled();
-  await submit.click();
+  const confirm = page.getByRole("button", { name: /Confirm and run: Drop Riverside Receiver/u });
+  await expect(confirm).toBeEnabled();
+  await confirm.click();
 
-  await expect(page.getByText("Submitted 1 move.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Confirmed and ran 1 move.", { exact: true })).toBeVisible();
   await expect(page.getByText("Nothing for today", { exact: true }).first()).toBeVisible();
 
   const earlier = page.getByRole("button", { name: "Show earlier moves" });
@@ -96,7 +95,7 @@ test("proposes a move into one team queue and submits the chosen move from the t
   expect(content).not.toContain("461.l.9000.t.1");
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByRole("button", { name: "Submit today's moves" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Submit today/u })).toHaveCount(0);
 });
 
 test("discards a move today and shows it under earlier moves", async ({ page, services, mcp }) => {
@@ -144,12 +143,7 @@ test("discards a move today and shows it under earlier moves", async ({ page, se
   const move = page.getByText("Drop Riverside Receiver", { exact: true });
   await expect(move).toBeVisible();
 
-  const submit = page.getByRole("button", { name: "Submit today's chosen moves" });
-  await expect(submit).toBeDisabled();
   await page.getByRole("button", { name: /Discard: Drop Riverside Receiver/u }).click();
-  await expect(page.getByText("Discarded when you submit.", { exact: true })).toBeVisible();
-  await expect(submit).toBeEnabled();
-  await submit.click();
   await expect(page.getByText("Discarded 1 move.", { exact: true })).toBeVisible();
   await expect(move).toHaveCount(0);
 

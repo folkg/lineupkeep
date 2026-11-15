@@ -47,7 +47,7 @@ export type TransactionMoveView = {
   readonly group?: string;
   readonly kind: TransactionMoveKind;
   readonly position: number;
-  readonly decision: "undecided" | "saved" | "now" | "discarded";
+  readonly decision: "undecided" | "saved" | "now" | "confirmed" | "discarded";
   readonly reason: string;
   readonly adds: ReadonlyArray<TransactionMovePlayerView>;
   readonly fallbacks: ReadonlyArray<TransactionMovePlayerView>;
@@ -68,6 +68,9 @@ export type TransactionMoveView = {
   readonly bid?: number;
   readonly runDay?: string;
   readonly effectiveDate?: string;
+  readonly decidedAt?: string;
+  readonly confirmation?: { readonly by: string; readonly at: string };
+  readonly runAt?: string;
   readonly validation: TransactionMoveValidationView;
   readonly check: TransactionMoveCheckView;
   readonly result?:
@@ -190,25 +193,21 @@ export type TransactionMoveActionData =
   | { readonly status: "saved" | "discarded"; readonly move: string }
   | { readonly status: "refused"; readonly refusals: ReadonlyArray<TransactionRefusalView> };
 
-type TransactionTodayChoice = {
-  readonly team: string;
-  readonly move: string;
-  readonly choice: "now" | "discard";
-};
-
-export type TransactionSubmitTodayData = {
-  readonly status: "submitted";
-  readonly counts: {
-    readonly moves: number;
-    readonly executed: number;
-    readonly pending: number;
-    readonly failed: number;
-    readonly skipped: number;
-    readonly unknown: number;
-  };
-  readonly discarded: number;
-  readonly refusals: ReadonlyArray<TransactionRefusalView>;
-};
+export type TransactionMoveConfirmationData =
+  | {
+      readonly status: "confirmed";
+      readonly confirmed: ReadonlyArray<string>;
+      readonly counts: {
+        readonly moves: number;
+        readonly executed: number;
+        readonly pending: number;
+        readonly failed: number;
+        readonly skipped: number;
+        readonly unknown: number;
+      };
+      readonly refusals: ReadonlyArray<TransactionRefusalView>;
+    }
+  | { readonly status: "refused"; readonly refusals: ReadonlyArray<TransactionRefusalView> };
 
 export type TransactionListRequest = {
   readonly team?: string;
@@ -242,8 +241,10 @@ export type TransactionDiscardMoveRequest = {
   readonly move: string;
 };
 
-export type TransactionSubmitTodayRequest = {
-  readonly choices: ReadonlyArray<TransactionTodayChoice>;
+export type TransactionConfirmRequest = {
+  readonly team: string;
+  readonly moves: ReadonlyArray<string>;
+  readonly key: string;
 };
 
 export type TransactionError = {

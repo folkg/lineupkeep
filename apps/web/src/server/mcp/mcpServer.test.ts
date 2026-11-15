@@ -878,6 +878,11 @@ it("appends moves to one team queue and lists them across teams", async () => {
     fallbacks: [],
     drops: [{ name: "Riverside Receiver" }],
     picks: [],
+    confirmation: {
+      by: decodeUserId("reader"),
+      at: DateTime.makeUnsafe("2026-11-11T16:00:00.000Z"),
+    },
+    runAt: DateTime.makeUnsafe("2026-11-11T17:00:00.000Z"),
     validation: { status: "current" as const, reasons: [] },
     check: { status: "checked" as const },
   };
@@ -1088,6 +1093,16 @@ it("appends moves to one team queue and lists them across teams", async () => {
         team: { id: team },
         today: "2026-11-11",
         days: [{ day: "2026-11-11", today: true }],
+        moves: [
+          {
+            decision: "now",
+            confirmation: {
+              by: "reader",
+              at: "2026-11-11T16:00:00.000Z",
+            },
+            runAt: "2026-11-11T17:00:00.000Z",
+          },
+        ],
       },
     },
   });
@@ -1771,8 +1786,8 @@ const unavailablePlans: TransactionPlanServiceShape = {
   save: () => Effect.die(new Error("plans unavailable")),
   edit: () => Effect.die(new Error("plans unavailable")),
   discard: () => Effect.die(new Error("plans unavailable")),
+  confirm: () => Effect.die(new Error("plans unavailable")),
   submit: () => Effect.die(new Error("plans unavailable")),
-  submitToday: () => Effect.die(new Error("plans unavailable")),
   runDue: () => Effect.die(new Error("plans unavailable")),
   timeline: () => Effect.die(new Error("plans unavailable")),
   list: () => Effect.die(new Error("plans unavailable")),

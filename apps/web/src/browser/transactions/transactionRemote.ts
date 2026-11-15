@@ -1,22 +1,22 @@
 import type {
+  TransactionConfirmRequest,
   TransactionDiscardMoveRequest,
   TransactionListRequest,
   TransactionMoveActionData,
+  TransactionMoveConfirmationData,
   TransactionMoveListData,
   TransactionPlanData,
   TransactionPlanRequest,
   TransactionSaveMoveRequest,
-  TransactionSubmitTodayData,
-  TransactionSubmitTodayRequest,
   TransactionTimelineRequest,
 } from "#contracts/connections/transactionContract.ts";
 import {
+  confirmTransactionMovesServerFn,
   discardTransactionMoveServerFn,
   listTransactionMovesServerFn,
   readTransactionPlanServerFn,
   readTransactionTimelineServerFn,
   saveTransactionMoveServerFn,
-  submitTransactionTodayServerFn,
 } from "#server-functions/connections/transactionServerFunctions.ts";
 
 import { requireTransactionSuccess } from "./transactionFailure";
@@ -42,8 +42,8 @@ export const transactionRemote: TransactionRemote = {
     discardTransactionMoveServerFn({ data: input, signal: options?.signal }).then((result) =>
       requireTransactionSuccess(result),
     ),
-  submitToday: (input, options) =>
-    submitTransactionTodayServerFn({ data: input, signal: options?.signal }).then((result) =>
+  confirm: (input, options) =>
+    confirmTransactionMovesServerFn({ data: input, signal: options?.signal }).then((result) =>
       requireTransactionSuccess(result),
     ),
 };
@@ -69,8 +69,8 @@ export type TransactionRemote = {
     input: TransactionDiscardMoveRequest,
     options?: { readonly signal?: AbortSignal },
   ) => Promise<TransactionMoveActionData>;
-  readonly submitToday: (
-    input: TransactionSubmitTodayRequest,
+  readonly confirm: (
+    input: TransactionConfirmRequest,
     options?: { readonly signal?: AbortSignal },
-  ) => Promise<TransactionSubmitTodayData>;
+  ) => Promise<TransactionMoveConfirmationData>;
 };

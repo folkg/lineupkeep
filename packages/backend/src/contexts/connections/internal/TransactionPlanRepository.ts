@@ -46,6 +46,11 @@ import {
   TransactionMoveValidationStatus,
   TransactionPlanPersistenceFailed,
   TransactionPlanRecord,
+  TransactionPlanRunCounts,
+  TransactionPlanRunRefusal,
+  TransactionRunId,
+  TransactionRunRecord,
+  TransactionRunTrigger,
   isOpenMove,
 } from "./TransactionPlanRecord.ts";
 import type { StoredMoveStep, TransactionMoveRowRecord } from "./TransactionPlanRecord.ts";
@@ -53,11 +58,13 @@ import {
   StoredMoveStepRow,
   TransactionMoveRow,
   TransactionPlanRow,
+  TransactionRunRow,
   openMovePredicate,
   transactionMoveClaims,
   transactionMoves,
   transactionMoveSteps,
   transactionPlans,
+  transactionRuns,
 } from "./TransactionPlanTables.ts";
 
 export type TransactionMoveContent = {
@@ -77,6 +84,8 @@ export type TransactionMoveContent = {
   readonly effectiveDate: StoredMoveDate | undefined;
   readonly decision: TransactionMoveDecision;
   readonly decidedAt: DateTime.Utc | undefined;
+  readonly confirmedAt: DateTime.Utc | undefined;
+  readonly confirmedBy: UserId | undefined;
   readonly validation: StoredMoveValidation;
 };
 
@@ -95,6 +104,7 @@ export type TransactionMoveSettlement = {
   readonly runDay: StoredMoveDate;
   readonly effectiveDate: StoredMoveDate | undefined;
   readonly runPosition: number | undefined;
+  readonly run: { readonly id: TransactionRunId; readonly at: DateTime.Utc } | undefined;
   readonly steps: ReadonlyArray<StoredMoveStep>;
 };
 
@@ -117,6 +127,7 @@ type TransactionMoveDay = {
   readonly move: TransactionMoveId;
   readonly runDay: StoredMoveDate | undefined;
   readonly effectiveDate: StoredMoveDate | undefined;
+  readonly decision: TransactionMoveDecision;
 };
 
 type TransactionRunClaim =
@@ -268,8 +279,10 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                   .set({
                     runDay: day.runDay ?? null,
                     effectiveDate: day.effectiveDate ?? null,
-                    decision: day.runDay === undefined ? "now" : "saved",
+                    decision: day.decision,
                     decidedAt: at,
+                    confirmedAt: null,
+                    confirmedBy: null,
                     updatedAt: at,
                   })
                   .where(
@@ -339,6 +352,186 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
           )
           .pipe(Effect.mapError(persistenceFailure));
       });
+
+      const confirmMoves = Effect.fn("TransactionPlanRepository.confirmMoves")(function* (input: {
+        readonly userId: UserId;
+        readonly team: TeamId;
+        readonly confirmedBy: UserId;
+        readonly moves: Array.NonEmptyReadonlyArray<{
+          readonly move: TransactionMoveId;
+          readonly decision: TransactionMoveDecision;
+        }>;
+        readonly at: DateTime.Utc;
+      }) {
+        const at = DateTime.toDateUtc(input.at);
+        return yield* database
+          .transaction((tx) =>
+            Effect.gen(function* () {
+              if (!(yield* lockPlan(tx, input))) {
+                return false;
+              }
+              for (const move of input.moves) {
+                yield* tx
+                  .update(transactionMoves)
+                  .set({
+                    decision: move.decision,
+                    decidedAt: at,
+                    confirmedAt: at,
+                    confirmedBy: input.confirmedBy,
+                    updatedAt: at,
+                  })
+                  .where(
+                    and(
+                      eq(transactionMoves.userId, input.userId),
+                      eq(transactionMoves.teamId, input.team),
+                      eq(transactionMoves.id, move.move),
+                    ),
+                  );
+              }
+              yield* tx
+                .update(transactionPlans)
+                .set({ updatedAt: at })
+                .where(
+                  and(
+                    eq(transactionPlans.userId, input.userId),
+                    eq(transactionPlans.teamId, input.team),
+                  ),
+                );
+              return true;
+            }),
+          )
+          .pipe(Effect.mapError(persistenceFailure));
+      });
+
+      const beginRun = Effect.fn("TransactionPlanRepository.beginRun")(function* (input: {
+        readonly userId: UserId;
+        readonly team: TeamId;
+        readonly run: TransactionRunId;
+        readonly trigger: TransactionRunTrigger;
+        readonly key: string | undefined;
+        readonly counts: TransactionPlanRunCounts;
+        readonly refusals: ReadonlyArray<TransactionPlanRunRefusal>;
+        readonly at: DateTime.Utc;
+      }) {
+        const at = DateTime.toDateUtc(input.at);
+        return yield* database
+          .transaction((tx) =>
+            Effect.gen(function* () {
+              yield* ensurePlan(tx, input);
+              const inserted = yield* tx
+                .insert(transactionRuns)
+                .values({
+                  id: input.run,
+                  userId: input.userId,
+                  teamId: input.team,
+                  trigger: input.trigger,
+                  key: input.key ?? null,
+                  at,
+                  counts: input.counts,
+                  refusals: input.refusals,
+                  createdAt: at,
+                })
+                .onConflictDoNothing()
+                .returning();
+              const created = inserted[0];
+              if (created !== undefined) {
+                return { status: "started", run: yield* decodeRun(created) } as const;
+              }
+              if (input.key === undefined) {
+                return yield* Effect.die(
+                  new Error("A tick run without an idempotency key was not recorded"),
+                );
+              }
+              const existing = yield* tx
+                .select()
+                .from(transactionRuns)
+                .where(
+                  and(
+                    eq(transactionRuns.userId, input.userId),
+                    eq(transactionRuns.teamId, input.team),
+                    eq(transactionRuns.key, input.key),
+                  ),
+                )
+                .limit(1);
+              const row = existing[0];
+              if (row === undefined) {
+                return yield* Effect.die(
+                  new Error("A recorded run was not found after its key conflicted"),
+                );
+              }
+              return { status: "recorded", run: yield* decodeRun(row) } as const;
+            }),
+          )
+          .pipe(Effect.mapError(persistenceFailure));
+      });
+
+      const finishRun = Effect.fn("TransactionPlanRepository.finishRun")(function* (input: {
+        readonly run: TransactionRunId;
+        readonly counts: TransactionPlanRunCounts;
+        readonly refusals: ReadonlyArray<TransactionPlanRunRefusal>;
+        readonly at: DateTime.Utc;
+      }) {
+        const at = DateTime.toDateUtc(input.at);
+        const updated = yield* database
+          .update(transactionRuns)
+          .set({
+            finishedAt: at,
+            counts: input.counts,
+            refusals: input.refusals,
+          })
+          .where(eq(transactionRuns.id, input.run))
+          .returning()
+          .pipe(Effect.mapError(persistenceFailure));
+        const row = updated[0];
+        if (row === undefined) {
+          return yield* Effect.die(new Error("A finished run was not found"));
+        }
+        return yield* decodeRun(row).pipe(Effect.mapError(persistenceFailure));
+      });
+
+      const readRun = Effect.fn("TransactionPlanRepository.readRun")(function* (input: {
+        readonly userId: UserId;
+        readonly team: TeamId;
+        readonly run: TransactionRunId;
+      }) {
+        const rows = yield* database
+          .select()
+          .from(transactionRuns)
+          .where(
+            and(
+              eq(transactionRuns.userId, input.userId),
+              eq(transactionRuns.teamId, input.team),
+              eq(transactionRuns.id, input.run),
+            ),
+          )
+          .limit(1);
+        const row = rows[0];
+        return row === undefined
+          ? Option.none<TransactionRunRecord>()
+          : Option.some(yield* decodeRun(row));
+      }, Effect.mapError(persistenceFailure));
+
+      const readRunByKey = Effect.fn("TransactionPlanRepository.readRunByKey")(function* (input: {
+        readonly userId: UserId;
+        readonly team: TeamId;
+        readonly key: string;
+      }) {
+        const rows = yield* database
+          .select()
+          .from(transactionRuns)
+          .where(
+            and(
+              eq(transactionRuns.userId, input.userId),
+              eq(transactionRuns.teamId, input.team),
+              eq(transactionRuns.key, input.key),
+            ),
+          )
+          .limit(1);
+        const row = rows[0];
+        return row === undefined
+          ? Option.none<TransactionRunRecord>()
+          : Option.some(yield* decodeRun(row));
+      }, Effect.mapError(persistenceFailure));
 
       const claimRun = Effect.fn("TransactionPlanRepository.claimRun")(function* (input: {
         readonly userId: UserId;
@@ -515,8 +708,6 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                     result: settlement.result,
                     resultDetail: settlement.detail ?? null,
                     resultAt: at,
-                    decision: "now",
-                    decidedAt: at,
                     runDay: settlement.runDay,
                     effectiveDate: settlement.effectiveDate ?? null,
                     validation: settlement.validation.status,
@@ -526,6 +717,12 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                         : DateTime.toDateUtc(settlement.validation.checkedAt),
                     validationReasons: settlement.validation.reasons,
                     runPosition: settlement.runPosition ?? null,
+                    ...(settlement.run === undefined
+                      ? {}
+                      : {
+                          runId: settlement.run.id,
+                          runAt: DateTime.toDateUtc(settlement.run.at),
+                        }),
                     updatedAt: at,
                   })
                   .where(
@@ -587,7 +784,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
               and(
                 openMovePredicate(transactionMoves),
                 isNull(transactionMoves.result),
-                anyOf(transactionMoves.decision, ["now", "saved"]),
+                anyOf(transactionMoves.decision, ["now", "confirmed"]),
                 not(eq(transactionMoves.kind, "trade")),
                 or(isNull(transactionMoves.runDay), lte(transactionMoves.runDay, input.before)),
               ),
@@ -622,7 +819,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                   scope,
                   openMovePredicate(transactionMoves),
                   isNull(transactionMoves.result),
-                  anyOf(transactionMoves.decision, ["now", "saved"]),
+                  anyOf(transactionMoves.decision, ["now", "confirmed"]),
                   not(eq(transactionMoves.kind, "trade")),
                   or(isNull(transactionMoves.runDay), lte(transactionMoves.runDay, input.before)),
                 ),
@@ -897,6 +1094,11 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
         appendMoves,
         editMove,
         discardMoves,
+        confirmMoves,
+        beginRun,
+        finishRun,
+        readRun,
+        readRunByKey,
         claimRun,
         releaseRun,
         recordResult,
@@ -1104,6 +1306,8 @@ function moveValues(
   readonly effectiveDate: string | null;
   readonly decision: TransactionMoveDecision;
   readonly decidedAt: Date | null;
+  readonly confirmedAt: Date | null;
+  readonly confirmedBy: string | null;
   readonly validation: TransactionMoveValidationStatus;
   readonly checkedAt: Date | null;
   readonly validationReasons: ReadonlyArray<unknown>;
@@ -1126,6 +1330,8 @@ function moveValues(
     effectiveDate: content.effectiveDate ?? null,
     decision: content.decision,
     decidedAt: content.decidedAt === undefined ? null : DateTime.toDateUtc(content.decidedAt),
+    confirmedAt: content.confirmedAt === undefined ? null : DateTime.toDateUtc(content.confirmedAt),
+    confirmedBy: content.confirmedBy ?? null,
     validation: content.validation.status,
     checkedAt:
       content.validation.checkedAt === undefined
@@ -1138,6 +1344,10 @@ function moveValues(
 
 function decodePlan(row: unknown): Effect.Effect<TransactionPlanRecord, Schema.SchemaError> {
   return Schema.decodeUnknownEffect(TransactionPlanRow)(row);
+}
+
+function decodeRun(row: unknown): Effect.Effect<TransactionRunRecord, Schema.SchemaError> {
+  return Schema.decodeUnknownEffect(TransactionRunRow)(row);
 }
 
 function decodeMove(row: unknown): Effect.Effect<TransactionMoveRowRecord, Schema.SchemaError> {
@@ -1175,7 +1385,10 @@ function readStatePredicate(state: TransactionMoveReadState): SQL | undefined {
         or(eq(transactionMoves.decision, "undecided"), eq(transactionMoves.decision, "now")),
       );
     case "saved":
-      return and(open, eq(transactionMoves.decision, "saved"));
+      return and(
+        open,
+        or(eq(transactionMoves.decision, "saved"), eq(transactionMoves.decision, "confirmed")),
+      );
     case "ended":
       return not(open);
   }
@@ -1188,7 +1401,7 @@ function moveCountBucket(
   if (!isOpenMove({ decision, ...(result === null ? {} : { result }) })) {
     return "ended";
   }
-  return decision === "saved" ? "saved" : "today";
+  return decision === "saved" || decision === "confirmed" ? "saved" : "today";
 }
 
 function afterCursorPredicate(cursor: TransactionMoveCursor): SQL | undefined {

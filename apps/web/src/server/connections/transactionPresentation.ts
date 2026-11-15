@@ -12,6 +12,7 @@ import { DateTime, Schema } from "effect";
 
 import type {
   TransactionMoveActionData,
+  TransactionMoveConfirmationData,
   TransactionMoveDayView,
   TransactionMoveListData,
   TransactionMoveTeamDayView,
@@ -95,6 +96,16 @@ function toMoveView(move: TransactionMoveRead): TransactionMoveView {
     ...(move.bid === undefined ? {} : { bid: move.bid }),
     ...(move.runDay === undefined ? {} : { runDay: move.runDay }),
     ...(move.effectiveDate === undefined ? {} : { effectiveDate: move.effectiveDate }),
+    ...(move.decidedAt === undefined ? {} : { decidedAt: DateTime.formatIso(move.decidedAt) }),
+    ...(move.confirmation === undefined
+      ? {}
+      : {
+          confirmation: {
+            by: move.confirmation.by,
+            at: DateTime.formatIso(move.confirmation.at),
+          },
+        }),
+    ...(move.runAt === undefined ? {} : { runAt: DateTime.formatIso(move.runAt) }),
     validation: validationView(move.validation),
     check: move.check,
     ...(move.result === undefined ? {} : { result: move.result }),
@@ -161,6 +172,31 @@ export function mapTransactionError(
     case "transaction_plan.persistence_failed":
       return { type: "transactions.persistence_failed", outcome: "failure" };
   }
+}
+
+export function confirmationOf(input: {
+  readonly confirmed: ReadonlyArray<string>;
+  readonly counts: {
+    readonly moves: number;
+    readonly executed: number;
+    readonly pending: number;
+    readonly failed: number;
+    readonly skipped: number;
+    readonly unknown: number;
+  };
+  readonly refusals: ReadonlyArray<{ readonly code: string; readonly detail: string }>;
+}): TransactionMoveConfirmationData {
+  return input.refusals.length === 0
+    ? {
+        status: "confirmed",
+        confirmed: input.confirmed,
+        counts: input.counts,
+        refusals: [],
+      }
+    : {
+        status: "refused",
+        refusals: input.refusals.map((entry) => ({ code: entry.code, detail: entry.detail })),
+      };
 }
 
 export function actionOf(

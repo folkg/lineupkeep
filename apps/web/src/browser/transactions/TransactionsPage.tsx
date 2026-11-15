@@ -9,13 +9,11 @@ import { Box } from "#browser/shared-ui/Box.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { Definition, DefinitionList } from "#browser/shared-ui/DefinitionList.tsx";
-import { Dock, DockSpacer } from "#browser/shared-ui/Dock.tsx";
 import { Form } from "#browser/shared-ui/Form.tsx";
 import { formatCalendarDate, formatDateTime } from "#browser/shared-ui/formatTime.ts";
 import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
-import { ResponsiveContent } from "#browser/shared-ui/ResponsiveContent.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
@@ -75,19 +73,14 @@ export function TransactionsPage(props: TransactionsPageProps): JSX.Element {
             }
             when={page.failure() === null}
           >
-            <DockSpacer active={page.todayMoves().length > 0}>
-              <Stack gap="xl">
-                <ActionFeedback feedback={page.feedback()} />
-                <SummaryLine page={page} />
-                <TodayZone page={page} />
-                <GroupsZone page={page} />
-                <PlanningSheet page={page} />
-                <EarlierSection page={page} />
-              </Stack>
-            </DockSpacer>
-            <Show when={page.todayMoves().length > 0}>
-              <PhoneDock page={page} />
-            </Show>
+            <Stack gap="xl">
+              <ActionFeedback feedback={page.feedback()} />
+              <SummaryLine page={page} />
+              <TodayZone page={page} />
+              <GroupsZone page={page} />
+              <PlanningSheet page={page} />
+              <EarlierSection page={page} />
+            </Stack>
           </Show>
         </Show>
       </Page>
@@ -110,32 +103,11 @@ function SummaryLine(props: SectionProps): JSX.Element {
 
 function TodayZone(props: SectionProps): JSX.Element {
   const total = (): number => props.page.todayMoves().length;
-  const chosen = (): number => total() - props.page.undecidedTodayCount();
+  const pending = (): number => props.page.pendingTodayCount();
   return (
     <Band labelledBy="today-title">
       <Stack gap="md">
-        <SectionTitle
-          id="today-title"
-          focusable
-          action={
-            <Show when={total() > 0}>
-              <ResponsiveContent
-                phone={<></>}
-                wide={
-                  <Button
-                    state={props.page.submitting() ? "working" : "idle"}
-                    disabled={!props.page.canSubmitToday()}
-                    aria-describedby="today-choice-hint"
-                    aria-label="Submit today's chosen moves"
-                    onClick={props.page.submitToday}
-                  >
-                    {props.page.submitting() ? "Submitting" : "Submit today"}
-                  </Button>
-                }
-              />
-            </Show>
-          }
-        >
+        <SectionTitle id="today-title" focusable>
           Today
         </SectionTitle>
         <Stack gap="2xs">
@@ -143,18 +115,22 @@ function TodayZone(props: SectionProps): JSX.Element {
             {total() > 0 ? `${moveCount(total())} for today` : "Nothing for today"}
           </Text>
           <Text size="body" tone="muted">
-            {todayCopy(total(), chosen())}
+            {todayCopy(total(), pending())}
           </Text>
         </Stack>
         <Show
           fallback={
             <EmptyState title="No moves due">
-              When a move is due today, it appears here for a choice.
+              When a move is due today, it appears here for your confirmation.
             </EmptyState>
           }
           when={total() > 0}
         >
-          <ChoiceHint page={props.page} />
+          <Show when={pending() > 0}>
+            <Text id="today-choice-hint" size="caption" tone="danger">
+              {`${moveCount(pending())} still ${pending() === 1 ? "needs" : "need"} your confirmation. A move runs only after you confirm it.`}
+            </Text>
+          </Show>
           <Stack gap="lg">
             <For each={props.page.todayMoves()}>
               {(move) => <TodayCard move={move} page={props.page} />}
@@ -166,37 +142,9 @@ function TodayZone(props: SectionProps): JSX.Element {
   );
 }
 
-function ChoiceHint(props: SectionProps): JSX.Element {
-  const remaining = (): number => props.page.undecidedTodayCount();
-  return (
-    <Show
-      fallback={
-        <Text size="caption" tone="muted">
-          Every move today has a choice.
-        </Text>
-      }
-      when={remaining() > 0}
-    >
-      <Text id="today-choice-hint" size="caption" tone="danger">
-        {`${moveCount(remaining())} still ${remaining() === 1 ? "needs" : "need"} a choice. Choose Do it now or Discard for each move before you submit.`}
-      </Text>
-    </Show>
-  );
-}
-
 function TodayCard(props: TodayCardProps): JSX.Element {
-  const choice = (): TodayChoice | undefined => props.page.choiceFor(props.move);
   const invalid = (): boolean => props.move.validation.status !== "current";
-  const status = (): string => {
-    switch (choice()) {
-      case "now":
-        return "Runs when you submit.";
-      case "discard":
-        return "Discarded when you submit.";
-      case undefined:
-        return "Not chosen yet.";
-    }
-  };
+  const working = (): boolean => props.page.confirming() === props.move.move;
   return (
     <Box rule="top" ruleTone="ink" space="lg">
       <Stack gap="md">
@@ -212,6 +160,9 @@ function TodayCard(props: TodayCardProps): JSX.Element {
         <Stack gap="2xs">
           <Inline gap="sm" align="baseline">
             <Badge tone="accent">{kindLabel(props.move.kind)}</Badge>
+            <Badge tone={isPending(props.move) ? "neutral" : "accent"}>
+              {decisionLabel(props.move)}
+            </Badge>
             <Text size="item" weight="semibold">
               {moveSummary(props.move)}
             </Text>
@@ -221,34 +172,54 @@ function TodayCard(props: TodayCardProps): JSX.Element {
               {props.move.reason}
             </Text>
           </Show>
+          <MoveState move={props.move} />
+          <Show when={props.move.result !== undefined}>
+            <Text
+              size="caption"
+              tone={
+                props.move.result === "failed" || props.move.result === "unknown"
+                  ? "danger"
+                  : "muted"
+              }
+            >
+              {resultLabel(props.move)}
+            </Text>
+          </Show>
           <MoveCheck move={props.move} />
         </Stack>
-        <Stack gap="sm">
-          <Text size="caption" tone={choice() === undefined ? "danger" : "muted"}>
-            {status()}
-          </Text>
-          <Inline gap="sm" align="baseline" justify="end">
+        <Inline gap="sm" align="baseline" justify="end">
+          <Show when={isPending(props.move) && props.move.result === undefined}>
             <Button
-              variant={choice() === "now" ? "secondary" : "quiet"}
-              aria-pressed={choice() === "now" ? "true" : "false"}
-              disabled={invalid() || props.page.submitting()}
-              aria-label={`Do it now: ${moveLabel(props.move)}`}
-              onClick={() => props.page.chooseToday(props.move, "now")}
+              variant="secondary"
+              disabled={invalid() || props.page.confirming() !== undefined}
+              state={working() ? "working" : "idle"}
+              aria-label={`Confirm and run: ${moveLabel(props.move)}`}
+              onClick={() => props.page.confirmMove(props.move)}
             >
-              Do it now
+              {working() ? "Confirming" : "Confirm and run"}
             </Button>
+          </Show>
+          <Show when={isConfirmed(props.move) && props.move.result === undefined}>
             <Button
-              variant={choice() === "discard" ? "secondary" : "quiet"}
-              tone="danger"
-              aria-pressed={choice() === "discard" ? "true" : "false"}
-              disabled={props.page.submitting()}
-              aria-label={`Discard: ${moveLabel(props.move)}`}
-              onClick={() => props.page.chooseToday(props.move, "discard")}
+              variant="secondary"
+              disabled={invalid() || props.page.confirming() !== undefined}
+              state={working() ? "working" : "idle"}
+              aria-label={`Run now: ${moveLabel(props.move)}`}
+              onClick={() => props.page.confirmMove(props.move)}
             >
-              Discard
+              {working() ? "Running" : "Run now"}
             </Button>
-          </Inline>
-        </Stack>
+          </Show>
+          <Button
+            variant="quiet"
+            tone="danger"
+            disabled={working() || props.page.discarding() !== undefined}
+            aria-label={`Discard: ${moveLabel(props.move)}`}
+            onClick={() => props.page.discardMove(props.move)}
+          >
+            Discard
+          </Button>
+        </Inline>
       </Stack>
     </Box>
   );
@@ -313,7 +284,8 @@ function PlanningSheet(props: SectionProps): JSX.Element {
         </Text>
       </Inline>
       <Text size="body" tone="muted">
-        Each waits for its day. You can change or discard any saved move until then.
+        Each waits for its day until you confirm it. You can change or discard any saved move until
+        then.
       </Text>
       <Show
         fallback={
@@ -382,6 +354,9 @@ function SavedMoveRow(props: SavedMoveRowProps): JSX.Element {
         <Stack gap="2xs">
           <Inline gap="sm" align="baseline">
             <Badge tone="accent">{kindLabel(props.move.kind)}</Badge>
+            <Badge tone={isPending(props.move) ? "neutral" : "accent"}>
+              {decisionLabel(props.move)}
+            </Badge>
             <Text size="item" weight="semibold">
               {moveSummary(props.move)}
             </Text>
@@ -392,10 +367,22 @@ function SavedMoveRow(props: SavedMoveRowProps): JSX.Element {
             </Text>
           </Show>
           <DateFacts move={props.move} />
+          <MoveState move={props.move} />
           <MoveCheck move={props.move} />
         </Stack>
         <Stack gap="sm">
           <Inline gap="sm" align="baseline" justify="end">
+            <Show when={isPending(props.move) && props.move.result === undefined}>
+              <Button
+                variant="secondary"
+                disabled={invalid() || props.page.confirming() !== undefined}
+                state={props.page.confirming() === props.move.move ? "working" : "idle"}
+                aria-label={`Confirm: ${moveLabel(props.move)}`}
+                onClick={() => props.page.confirmMove(props.move)}
+              >
+                {props.page.confirming() === props.move.move ? "Confirming" : "Confirm"}
+              </Button>
+            </Show>
             <Show when={!invalid()}>
               <Button
                 variant="link"
@@ -429,7 +416,7 @@ function SavedMoveRow(props: SavedMoveRowProps): JSX.Element {
               onInput={(event) => props.page.setEditingDate(event.currentTarget.value)}
             />
             <Text size="caption" tone="muted">
-              Saving changes the day this move runs. It does not run it.
+              Saving changes the day this move runs and clears your confirmation.
             </Text>
             <Show when={props.page.editingError()}>
               {(error) => (
@@ -475,6 +462,43 @@ function DateFacts(props: { readonly move: TransactionMoveView }): JSX.Element {
         }
       />
     </DefinitionList>
+  );
+}
+
+function MoveState(props: { readonly move: TransactionMoveView }): JSX.Element {
+  const confirmation = (): string | undefined => {
+    const confirmed = props.move.confirmation;
+    if (confirmed !== undefined) {
+      return props.move.runAt === undefined
+        ? `You confirmed this on ${formatDateTime(confirmed.at)}. It has not run yet.`
+        : `You confirmed this on ${formatDateTime(confirmed.at)}. It ran on ${formatDateTime(props.move.runAt)}.`;
+    }
+    if (props.move.decision === "discarded") {
+      return props.move.decidedAt === undefined
+        ? "Discarded."
+        : `Discarded on ${formatDateTime(props.move.decidedAt)}.`;
+    }
+    if (props.move.result !== undefined) {
+      return undefined;
+    }
+    if (isConfirmed(props.move)) {
+      return "Confirmed. It has not run yet.";
+    }
+    if (props.move.decision === "saved") {
+      return props.move.runDay === undefined
+        ? "Saved. Waiting for your confirmation."
+        : `Saved for ${formatCalendarDate(props.move.runDay)}. Waiting for your confirmation.`;
+    }
+    return "Waiting for your confirmation.";
+  };
+  return (
+    <Show when={confirmation()}>
+      {(line) => (
+        <Text size="caption" tone={props.move.decision === "discarded" ? "faint" : "muted"}>
+          {line()}
+        </Text>
+      )}
+    </Show>
   );
 }
 
@@ -598,55 +622,38 @@ function EarlierRow(props: { readonly move: TransactionMoveView }): JSX.Element 
           {props.move.team.name} · {leagueDisplayName(props.move.team.league)} ·{" "}
           {sportDisplayName(props.move.team.sport)}
         </Text>
+        <MoveState move={props.move} />
       </Stack>
     </RuleListItem>
   );
 }
 
-function PhoneDock(props: SectionProps): JSX.Element {
-  return (
-    <Stack hide="wide" gap="2xs">
-      <Dock id="today-dock">
-        <Inline gap="sm" justify="between">
-          <Stack gap="2xs">
-            <Text numeric size="body" weight="semibold">
-              {`${moveCount(props.page.todayMoves().length)} today`}
-            </Text>
-            <Show
-              fallback={
-                <Text size="caption" tone="muted">
-                  Every move has a choice.
-                </Text>
-              }
-              when={props.page.undecidedTodayCount() > 0}
-            >
-              <Text size="caption" tone="danger">
-                {`${moveCount(props.page.undecidedTodayCount())} still ${props.page.undecidedTodayCount() === 1 ? "needs" : "need"} a choice.`}
-              </Text>
-            </Show>
-          </Stack>
-          <Button
-            state={props.page.submitting() ? "working" : "idle"}
-            disabled={!props.page.canSubmitToday()}
-            aria-label="Submit today's moves"
-            onClick={props.page.submitToday}
-          >
-            {props.page.submitting() ? "Submitting" : "Submit today"}
-          </Button>
-        </Inline>
-      </Dock>
-    </Stack>
-  );
-}
-
-function todayCopy(total: number, chosen: number): string {
+function todayCopy(total: number, pending: number): string {
   if (total === 0) {
     return "No move is waiting to run today.";
   }
-  if (chosen === total) {
-    return `All ${String(total)} ${total === 1 ? "is" : "are"} chosen. Submitting runs ${total === 1 ? "it" : "them"} now.`;
+  if (pending === 0) {
+    return `All ${String(total)} ${total === 1 ? "is" : "are"} confirmed. A confirmed move runs now or on the next check.`;
   }
-  return `${String(chosen)} of ${String(total)} chosen. Submitting runs only the moves you chose.`;
+  return `${String(pending)} of ${String(total)} waiting for your confirmation. Nothing runs until you confirm it.`;
+}
+
+function decisionLabel(move: TransactionMoveView): string {
+  if (move.decision === "discarded") {
+    return "Discarded";
+  }
+  if (isConfirmed(move)) {
+    return "Confirmed";
+  }
+  return isPending(move) ? "Pending" : "Open";
+}
+
+function isPending(move: TransactionMoveView): boolean {
+  return move.decision === "undecided" || move.decision === "saved";
+}
+
+function isConfirmed(move: TransactionMoveView): boolean {
+  return move.decision === "now" || move.decision === "confirmed";
 }
 
 function resultLabel(move: TransactionMoveView): string {
@@ -660,7 +667,7 @@ function resultLabel(move: TransactionMoveView): string {
     return "Skipped";
   }
   if (move.result === "unknown") {
-    return "Not confirmed";
+    return "Unknown";
   }
   if (move.result === "pending") {
     return "Waiting on the league";
@@ -688,8 +695,6 @@ type TransactionsPageProps = {
 type SectionProps = {
   readonly page: TransactionsPageController;
 };
-
-type TodayChoice = "now" | "discard";
 
 type TodayCardProps = {
   readonly move: TransactionMoveView;

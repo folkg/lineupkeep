@@ -1,4 +1,4 @@
-import { and, isNull, ne, or } from "drizzle-orm";
+import { and, isNotNull, isNull, ne, or } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { createSelectSchema } from "drizzle-orm/effect-schema";
 import type { PgColumn } from "drizzle-orm/pg-core";
@@ -38,6 +38,11 @@ import {
   TransactionMoveRowRecord,
   TransactionMoveValidationStatus,
   TransactionPlanRecord,
+  TransactionPlanRunCounts,
+  TransactionPlanRunRefusal,
+  TransactionRunId,
+  TransactionRunRecord,
+  TransactionRunTrigger,
 } from "./TransactionPlanRecord.ts";
 
 export const transactionPlans = pgTable(
@@ -80,8 +85,14 @@ export const transactionMoves = pgTable(
     reason: text("reason").notNull(),
     runDay: text("run_day"),
     effectiveDate: text("effective_date"),
-    decision: text("decision", { enum: ["undecided", "saved", "now", "discarded"] }).notNull(),
+    decision: text("decision", {
+      enum: ["undecided", "saved", "now", "confirmed", "discarded"],
+    }).notNull(),
     decidedAt: timestamp("decided_at", { withTimezone: true }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    confirmedBy: text("confirmed_by"),
+    runId: text("run_id"),
+    runAt: timestamp("run_at", { withTimezone: true }),
     validation: text("validation", {
       enum: ["unchecked", "current", "stale", "illegal"],
     }).notNull(),
@@ -112,6 +123,32 @@ export const transactionMoves = pgTable(
     index("transaction_moves_due_idx")
       .on(table.runDay, table.decision)
       .where(openMovePredicate(table)),
+  ],
+);
+
+export const transactionRuns = pgTable(
+  "transaction_runs",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    teamId: text("team_id").notNull(),
+    trigger: text("trigger", { enum: ["submit", "tick"] }).notNull(),
+    key: text("key"),
+    at: timestamp("at", { withTimezone: true }).notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    counts: jsonb("counts").notNull(),
+    refusals: jsonb("refusals").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.userId, table.teamId],
+      foreignColumns: [transactionPlans.userId, transactionPlans.teamId],
+    }).onDelete("cascade"),
+    uniqueIndex("transaction_runs_owner_key_idx")
+      .on(table.userId, table.teamId, table.key)
+      .where(isNotNull(table.key)),
+    index("transaction_runs_team_at_idx").on(table.userId, table.teamId, table.at),
   ],
 );
 
@@ -270,6 +307,10 @@ const TransactionMoveSelect = createSelectSchema(transactionMoves, {
   effectiveDate: Schema.NullOr(StoredMoveDate),
   decision: TransactionMoveDecision,
   decidedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
+  confirmedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
+  confirmedBy: Schema.NullOr(UserId),
+  runId: Schema.NullOr(TransactionRunId),
+  runAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
   validation: TransactionMoveValidationStatus,
   checkedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
   validationReasons: Schema.Unknown,
@@ -340,6 +381,10 @@ export const TransactionMoveRow = TransactionMoveSelect.pipe(
             ...(row.effectiveDate === null ? {} : { effectiveDate: row.effectiveDate }),
             decision: row.decision,
             ...(row.decidedAt === null ? {} : { decidedAt: row.decidedAt }),
+            ...(row.confirmedAt === null ? {} : { confirmedAt: row.confirmedAt }),
+            ...(row.confirmedBy === null ? {} : { confirmedBy: row.confirmedBy }),
+            ...(row.runId === null ? {} : { runId: row.runId }),
+            ...(row.runAt === null ? {} : { runAt: row.runAt }),
             validation: {
               status: row.validation,
               ...(row.checkedAt === null ? {} : { checkedAt: row.checkedAt }),
@@ -393,6 +438,10 @@ export const TransactionMoveRow = TransactionMoveSelect.pipe(
             effectiveDate: record.effectiveDate ?? null,
             decision: record.decision,
             decidedAt: record.decidedAt ?? null,
+            confirmedAt: record.confirmedAt ?? null,
+            confirmedBy: record.confirmedBy ?? null,
+            runId: record.runId ?? null,
+            runAt: record.runAt ?? null,
             validation: record.validation.status,
             checkedAt: record.validation.checkedAt ?? null,
             validationReasons: reasons,
@@ -402,6 +451,66 @@ export const TransactionMoveRow = TransactionMoveSelect.pipe(
             proposedBy: record.proposedBy,
             createdAt: record.createdAt,
             updatedAt: record.updatedAt,
+          };
+        }),
+    }),
+  ),
+);
+
+const TransactionRunSelect = createSelectSchema(transactionRuns, {
+  id: TransactionRunId,
+  userId: UserId,
+  teamId: TeamId,
+  trigger: TransactionRunTrigger,
+  key: Schema.NullOr(Schema.NonEmptyString),
+  at: Schema.DateTimeUtcFromDate,
+  finishedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
+  counts: Schema.Unknown,
+  refusals: Schema.Unknown,
+  createdAt: Schema.DateTimeUtcFromDate,
+});
+
+export const TransactionRunRow = TransactionRunSelect.pipe(
+  Schema.decodeTo(
+    TransactionRunRecord,
+    SchemaTransformation.transformEffect<TransactionRunRecord, typeof TransactionRunSelect.Type>({
+      decode: (row) =>
+        Effect.gen(function* () {
+          const counts = yield* SchemaParser.decodeUnknownEffect(TransactionPlanRunCounts)(
+            row.counts,
+          );
+          const refusals = yield* SchemaParser.decodeUnknownEffect(
+            Schema.Array(TransactionPlanRunRefusal),
+          )(row.refusals);
+          return {
+            run: row.id,
+            userId: row.userId,
+            team: row.teamId,
+            trigger: row.trigger,
+            ...(row.key === null ? {} : { key: row.key }),
+            at: row.at,
+            ...(row.finishedAt === null ? {} : { finishedAt: row.finishedAt }),
+            counts,
+            refusals,
+          };
+        }),
+      encode: (record) =>
+        Effect.gen(function* () {
+          const counts = yield* SchemaParser.encodeEffect(TransactionPlanRunCounts)(record.counts);
+          const refusals = yield* SchemaParser.encodeEffect(
+            Schema.Array(TransactionPlanRunRefusal),
+          )(record.refusals);
+          return {
+            id: record.run,
+            userId: record.userId,
+            teamId: record.team,
+            trigger: record.trigger,
+            key: record.key ?? null,
+            at: record.at,
+            finishedAt: record.finishedAt ?? null,
+            counts,
+            refusals,
+            createdAt: record.at,
           };
         }),
     }),

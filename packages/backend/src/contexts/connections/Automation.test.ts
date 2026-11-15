@@ -203,6 +203,59 @@ it.effect("leaves a saved move for the owner when its date arrives on the hourly
   }).pipe(Effect.provide(AutomationTestLayer)),
 );
 
+it.effect("runs a confirmed move when its date arrives on the hourly tick", () =>
+  Effect.gen(function* () {
+    const confirmedAt = DateTime.makeUnsafe("2026-10-31T18:00:00.000Z");
+    const runAt = DateTime.makeUnsafe("2026-11-01T18:00:00.000Z");
+    yield* TestClock.setTime(DateTime.toEpochMillis(confirmedAt));
+    const automation = yield* Automation;
+    const plans = yield* TransactionPlanService;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
+    yield* refuseCustomPlanning(fake);
+    const proposed = yield* plans.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [
+        {
+          kind: "drop",
+          drops: ["461.p.10002"],
+          runDay: "2026-11-01",
+          reason: "Drop the bench quarterback tomorrow.",
+        },
+      ],
+    });
+    const move = proposed.plan.moves[0];
+    if (move === undefined) {
+      throw new Error("The plan carried no move to confirm");
+    }
+    yield* plans.confirm(owner, { team, moves: [move.move], key: "confirm-tick" });
+
+    yield* TestClock.setTime(DateTime.toEpochMillis(runAt));
+    const summary = yield* automation.run(10);
+    const plan = yield* plans.plan(owner, { team });
+    const executed = plan.moves[0];
+
+    assert.strictEqual(summary.dueMoves, 1);
+    assert.strictEqual(summary.dueIncluded, 1);
+    assert.strictEqual(summary.dueRefused, 0);
+    assert.strictEqual(executed?.result, "executed");
+    assert.strictEqual(executed?.decision, "confirmed");
+    assert.strictEqual(
+      DateTime.formatIso(Option.getOrThrow(Option.fromNullishOr(executed?.confirmation?.at))),
+      DateTime.formatIso(confirmedAt),
+    );
+    assert.strictEqual(
+      DateTime.formatIso(Option.getOrThrow(Option.fromNullishOr(executed?.runAt))),
+      DateTime.formatIso(runAt),
+    );
+    assert.deepStrictEqual(
+      (yield* fake.transactionRequests).map((request) => request.drops),
+      [["461.p.10002"]],
+    );
+  }).pipe(Effect.provide(AutomationTestLayer)),
+);
+
 it.effect("uses the league's published week start for a weekly-lock move", () =>
   Effect.gen(function* () {
     yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-10T18:00:00Z")));

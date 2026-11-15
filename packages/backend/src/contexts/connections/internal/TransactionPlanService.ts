@@ -3,6 +3,7 @@ import {
   Context,
   Crypto,
   DateTime,
+  Duration,
   Effect,
   Layer,
   Option,
@@ -25,6 +26,7 @@ import {
   TransactionPlanRunInProgress,
   TransactionPlanService,
   TransactionPlanTeamNotFound,
+  TransactionRunId as TransactionRunIdSchema,
   isOpenMove,
 } from "#contexts/connections/TransactionPlans.ts";
 import type {
@@ -41,6 +43,8 @@ import type {
   TransactionMoveProvenance,
   TransactionMoveReadState,
   TransactionMoveResult,
+  TransactionPlanConfirmation,
+  TransactionPlanConfirmInput,
   TransactionPlanCountsInput,
   TransactionPlanDiscardInput,
   TransactionPlanEditInput,
@@ -56,10 +60,11 @@ import type {
   TransactionPlanRunRefusal,
   TransactionPlanSaveInput,
   TransactionPlanServiceError,
+  TransactionPlanSubmission,
   TransactionPlanSubmitInput,
-  TransactionPlanTodayInput,
-  TransactionPlanTodaySubmission,
   TransactionPlanView,
+  TransactionRunId,
+  TransactionRunRecord,
   TransactionTimelineInput,
 } from "#contexts/connections/TransactionPlans.ts";
 
@@ -94,7 +99,11 @@ import {
   StoredMoveDate,
   TransactionMoveId as TransactionMoveIdSchema,
 } from "./TransactionPlanRecord.ts";
-import type { TransactionMoveRecord, TransactionMoveRowRecord } from "./TransactionPlanRecord.ts";
+import type {
+  TransactionMoveRecord,
+  TransactionMoveRowRecord,
+  TransactionPlanRecord,
+} from "./TransactionPlanRecord.ts";
 import type {
   TransactionMoveAppend,
   TransactionMoveContent,
@@ -112,11 +121,12 @@ import type {
 export {
   TransactionPlanFactsUnavailable,
   TransactionPlanPersistenceFailed,
-  TransactionPlanRunInProgress,
   TransactionPlanService,
 } from "#contexts/connections/TransactionPlans.ts";
 
 const transactionPlanRunStaleMillis = 10 * 60 * 1000;
+const transactionRunWaitAttempts = 120;
+const transactionRunPollMillis = 250;
 
 export type TransactionPlanFactsShape = {
   readonly read: (input: {
@@ -149,6 +159,36 @@ export const TransactionPlanServiceLive = Layer.effect(
     const newClaim = crypto.randomULID.pipe(
       Effect.mapError((cause) => TransactionPlanPersistenceFailed.make({ cause })),
     );
+    const newRunId = crypto.randomULID.pipe(
+      Effect.map((id) => Schema.decodeSync(TransactionRunIdSchema)(id)),
+      Effect.mapError((cause) => TransactionPlanPersistenceFailed.make({ cause })),
+    );
+
+    const finishedRun = (
+      recorded: TransactionRunRecord,
+      attempt: number,
+    ): Effect.Effect<TransactionRunRecord, TransactionPlanServiceError> =>
+      Effect.gen(function* () {
+        if (recorded.finishedAt !== undefined) {
+          return recorded;
+        }
+        if (attempt >= transactionRunWaitAttempts) {
+          return yield* TransactionPlanRunInProgress.make({
+            team: recorded.team,
+            detail: "Another run holds this team's plan, so the repeated submit is still waiting.",
+          });
+        }
+        yield* Effect.sleep(Duration.millis(transactionRunPollMillis));
+        const refreshed = yield* repository.readRun({
+          userId: recorded.userId,
+          team: recorded.team,
+          run: recorded.run,
+        });
+        if (Option.isNone(refreshed)) {
+          return yield* Effect.die(new Error("A recorded run was not found while waiting"));
+        }
+        return yield* finishedRun(refreshed.value, attempt + 1);
+      });
 
     const readView = Effect.fn("TransactionPlanService.readView")(function* (input: {
       readonly userId: UserId;
@@ -647,7 +687,7 @@ export const TransactionPlanServiceLive = Layer.effect(
       const peers = [...groupPeers(open, move), ...fixPeers(open, move)];
       const changed = open.map((entry) =>
         entry.id === move.id || peers.some((peer) => peer.id === entry.id)
-          ? movedToDay(entry, input.runDay)
+          ? movedToDay(entry, input.runDay, facts.today)
           : entry,
       );
       const after = evaluateTransactionPlan({ facts, moves: changed, checkedAt: at });
@@ -687,13 +727,14 @@ export const TransactionPlanServiceLive = Layer.effect(
         move: move.id,
         at,
         edit: {
-          content: contentOfMove(move, entry, input.runDay, at),
+          content: contentOfMove(move, entry, input.runDay, facts.today, at),
           claims: planClaims.claims.get(move.id) ?? [],
         },
         groupDays: peers.map((peer) => ({
           move: peer.id,
           runDay: input.runDay,
           effectiveDate: entryOf(evaluatedMoves(after), peer.id).effectiveDate,
+          decision: decisionFor(input.runDay, facts.today),
         })),
       });
 
@@ -776,7 +817,10 @@ export const TransactionPlanServiceLive = Layer.effect(
           !peers.some((peer) => peer.id === entry.id) &&
           !replacedFixes.some((fix) => fix.id === entry.id),
       );
-      const withPeers = [...surviving, ...peers.map((peer) => movedToDay(peer, runDay))];
+      const withPeers = [
+        ...surviving,
+        ...peers.map((peer) => movedToDay(peer, runDay, facts.today)),
+      ];
       const fixed = yield* rosterFixedEntries({
         facts,
         rule,
@@ -831,13 +875,14 @@ export const TransactionPlanServiceLive = Layer.effect(
         move: move.id,
         at,
         edit: {
-          content: contentOfCandidate(candidate, entry, at),
+          content: contentOfCandidate(candidate, entry, facts.today, at),
           claims: planClaims.claims.get(move.id) ?? [],
         },
         groupDays: peers.map((peer) => ({
           move: peer.id,
           runDay,
           effectiveDate: entryOf(evaluatedAfter, peer.id).effectiveDate,
+          decision: decisionFor(runDay, facts.today),
         })),
       });
       if (replacedFixes.length > 0) {
@@ -923,6 +968,7 @@ export const TransactionPlanServiceLive = Layer.effect(
       readonly facts: TransactionPlanTeamFacts;
       readonly open: ReadonlyArray<TransactionMoveRowRecord>;
       readonly mode: "submit" | "due";
+      readonly runId: TransactionRunId;
     }) {
       const evaluation = evaluateTransactionPlan({
         facts: input.facts,
@@ -980,6 +1026,7 @@ export const TransactionPlanServiceLive = Layer.effect(
               at: input.at,
               attempted: false,
               actions: [],
+              run: undefined,
             }),
           ),
         );
@@ -1011,6 +1058,7 @@ export const TransactionPlanServiceLive = Layer.effect(
               at: input.at,
               attempted: true,
               actions: decided.actions,
+              run: { id: input.runId, at: input.at },
             }),
           ]);
           const rest = state.members.slice(state.index + 1);
@@ -1069,6 +1117,7 @@ export const TransactionPlanServiceLive = Layer.effect(
                 at: input.at,
                 attempted: false,
                 actions: [],
+                run: undefined,
               }),
             ]);
             yield* skip(
@@ -1114,6 +1163,7 @@ export const TransactionPlanServiceLive = Layer.effect(
                 at: input.at,
                 attempted: false,
                 actions: [],
+                run: undefined,
               }),
             ),
           );
@@ -1139,6 +1189,7 @@ export const TransactionPlanServiceLive = Layer.effect(
                     at: input.at,
                     attempted: false,
                     actions: [],
+                    run: undefined,
                   })
                 : settlementOf({
                     move,
@@ -1149,6 +1200,7 @@ export const TransactionPlanServiceLive = Layer.effect(
                     at: input.at,
                     attempted: false,
                     actions: [],
+                    run: undefined,
                   });
             }),
           );
@@ -1173,54 +1225,131 @@ export const TransactionPlanServiceLive = Layer.effect(
       return { counts, refusals: selection.refused };
     });
 
+    const claimRunWithWait = (input: {
+      readonly userId: UserId;
+      readonly team: TeamId;
+      readonly runClaim: string;
+      readonly at: DateTime.Utc;
+      readonly attempt: number;
+    }): Effect.Effect<TransactionPlanRecord, TransactionPlanServiceError> =>
+      Effect.gen(function* () {
+        const claimed = yield* repository.claimRun({
+          userId: input.userId,
+          team: input.team,
+          runClaim: input.runClaim,
+          at: input.at,
+        });
+        if (claimed.status === "claimed") {
+          return claimed.plan;
+        }
+        if (input.attempt >= transactionRunWaitAttempts) {
+          return yield* TransactionPlanRunInProgress.make({
+            team: input.team,
+            detail: "Another run holds this team's plan, so this submit is still waiting.",
+          });
+        }
+        yield* Effect.sleep(Duration.millis(transactionRunPollMillis));
+        return yield* claimRunWithWait({ ...input, attempt: input.attempt + 1 });
+      });
+
+    const recordedSubmission = Effect.fn("TransactionPlanService.recordedSubmission")(function* (
+      userId: UserId,
+      team: TeamId,
+      recorded: TransactionRunRecord,
+      at: DateTime.Utc,
+    ) {
+      const finished = yield* finishedRun(recorded, 0);
+      const stored = yield* repository.readPlanMoves({ userId, team });
+      const facts = yield* factsPort.read({
+        userId,
+        team,
+        at,
+        players: namedPlayers(stored.filter(isOpenMove)),
+        needsBudget: needsBudget(stored.filter(isOpenMove)),
+      });
+      return {
+        team,
+        today: facts.today,
+        counts: finished.counts,
+        refusals: finished.refusals,
+        plan: planViewOf({ stored, facts, checkedAt: at, team }),
+      } satisfies TransactionPlanSubmission;
+    });
+
     const submit = Effect.fn("TransactionPlanService.submit")(function* (
       userId: UserId,
       input: TransactionPlanSubmitInput,
     ) {
       const at = yield* DateTime.now;
+      const recorded = yield* repository.readRunByKey({
+        userId,
+        team: input.team,
+        key: input.key,
+      });
+      if (Option.isSome(recorded)) {
+        return yield* recordedSubmission(userId, input.team, recorded.value, at);
+      }
       const runClaim = yield* newClaim;
-      const claimed = yield* repository.claimRun({
+      yield* claimRunWithWait({
         userId,
         team: input.team,
         runClaim,
         at,
+        attempt: 0,
       });
-      if (claimed.status === "held") {
-        return yield* TransactionPlanRunInProgress.make({
-          team: input.team,
-          detail: `Another run holds this team's plan, so today's moves wait for it to finish.`,
-        });
+      const runId = yield* newRunId;
+      const started = yield* repository.beginRun({
+        userId,
+        team: input.team,
+        run: runId,
+        trigger: "submit",
+        key: input.key,
+        counts: emptyRunCounts(),
+        refusals: [],
+        at,
+      });
+      if (started.status === "recorded") {
+        yield* repository.releaseRun({ userId, team: input.team, runClaim, at });
+        return yield* recordedSubmission(userId, input.team, started.run, at);
       }
       return yield* Effect.gen(function* () {
         const stored = yield* repository.readPlanMoves({ userId, team: input.team });
+        const open = stored.filter(isOpenMove);
         const facts = yield* factsPort.read({
           userId,
           team: input.team,
           at,
-          players: namedPlayers(stored.filter(isOpenMove)),
-          needsBudget: needsBudget(stored.filter(isOpenMove)),
+          players: namedPlayers(open),
+          needsBudget: needsBudget(open),
         });
         const run = yield* runMoves({
           userId,
           team: input.team,
           at,
           facts,
-          open: stored.filter(isOpenMove),
+          open,
           mode: "submit",
+          runId,
         });
-        const plan = planViewOf({
-          stored: yield* repository.readPlanMoves({ userId, team: input.team }),
-          facts,
-          checkedAt: at,
-          team: input.team,
+        const counts = { ...run.counts, plans: 1, claimed: 1 };
+        yield* repository.finishRun({
+          run: runId,
+          counts,
+          refusals: run.refusals,
+          at,
         });
         return {
           team: input.team,
           today: facts.today,
-          counts: { ...run.counts, plans: 1, claimed: 1 },
+          counts,
           refusals: run.refusals,
-          plan,
-        };
+          plan: planViewOf({
+            stored: yield* repository.readPlanMoves({ userId, team: input.team }),
+            facts,
+            checkedAt: at,
+            team: input.team,
+          }),
+        } satisfies TransactionPlanSubmission;
       }).pipe(
         Effect.ensuring(
           repository.releaseRun({ userId, team: input.team, runClaim, at }).pipe(Effect.ignore),
@@ -1228,56 +1357,85 @@ export const TransactionPlanServiceLive = Layer.effect(
       );
     });
 
-    const submitToday = Effect.fn("TransactionPlanService.submitToday")(function* (
+    const confirm = Effect.fn("TransactionPlanService.confirm")(function* (
       userId: UserId,
-      input: TransactionPlanTodayInput,
+      input: TransactionPlanConfirmInput,
     ) {
-      const held = new Map<TeamId, { readonly discard: Array<TransactionMoveId>; now: boolean }>();
-      for (const choice of input.choices) {
-        const team = held.get(choice.team) ?? { discard: [], now: false };
-        if (choice.choice === "discard") {
-          team.discard.push(choice.move);
-        } else {
-          team.now = true;
+      const at = yield* DateTime.now;
+      const stored = yield* repository.readPlanMoves({ userId, team: input.team });
+      const open = stored.filter(isOpenMove);
+      const requested: Array<TransactionMoveRecord> = [];
+      for (const move of input.moves) {
+        const found = stored.find((entry) => entry.id === move);
+        if (found === undefined) {
+          return yield* TransactionPlanMoveNotFound.make({ team: input.team, move });
         }
-        held.set(choice.team, team);
+        requested.push(found);
       }
-      const counts = emptyRunCounts();
-      const refusals: Array<TransactionPlanRunRefusal> = [];
-      let discarded = 0;
-      for (const [team, choices] of held) {
-        let blocked = false;
-        for (const move of choices.discard) {
-          const result = yield* discard(userId, { team, move });
-          if (result.refused.length > 0) {
-            blocked = true;
-            for (const refusal of result.refused) {
-              refusals.push({
-                code: refusal.code,
-                team,
-                detail: refusal.detail,
-                moves: [move],
-              });
-            }
-            continue;
-          }
-          discarded += 1;
-        }
-        if (blocked || !choices.now) {
-          continue;
-        }
-        const submission = yield* submit(userId, { team });
-        mergeRunCounts(counts, submission.counts);
-        for (const refusal of submission.refusals) {
-          refusals.push(refusal);
-        }
+      const refused = requested.flatMap((move) => {
+        const refusal = moveChangeRefusal({ team: input.team, move });
+        return refusal === undefined ? [] : [refusal];
+      });
+      if (refused.length > 0) {
+        return {
+          status: "confirmed",
+          confirmed: [],
+          counts: emptyRunCounts(),
+          refusals: refused.map((entry) => ({
+            code: entry.code,
+            team: input.team,
+            detail: entry.detail,
+            moves: [...input.moves],
+          })),
+          plan: yield* plan(userId, { team: input.team }),
+        } satisfies TransactionPlanConfirmation;
       }
+      const targets = confirmationTargets(open, requested);
+      const facts = yield* factsPort.read({
+        userId,
+        team: input.team,
+        at,
+        players: namedPlayers(open),
+        needsBudget: needsBudget(open),
+      });
+      const decisions = targets.map((move) => ({
+        move: move.id,
+        decision: isDueMove(move, facts.today) ? ("now" as const) : ("confirmed" as const),
+      }));
+      const [first, ...rest] = decisions;
+      if (first === undefined) {
+        return {
+          status: "confirmed",
+          confirmed: [],
+          counts: emptyRunCounts(),
+          refusals: [],
+          plan: yield* plan(userId, { team: input.team }),
+        } satisfies TransactionPlanConfirmation;
+      }
+      yield* repository.confirmMoves({
+        userId,
+        team: input.team,
+        confirmedBy: userId,
+        moves: [first, ...rest],
+        at,
+      });
+      if (!decisions.some((entry) => entry.decision === "now")) {
+        return {
+          status: "confirmed",
+          confirmed: decisions.map((entry) => entry.move),
+          counts: emptyRunCounts(),
+          refusals: [],
+          plan: yield* plan(userId, { team: input.team }),
+        } satisfies TransactionPlanConfirmation;
+      }
+      const submission = yield* submit(userId, { team: input.team, key: input.key });
       return {
-        status: "submitted",
-        counts,
-        discarded,
-        refusals,
-      } satisfies TransactionPlanTodaySubmission;
+        status: "confirmed",
+        confirmed: decisions.map((entry) => entry.move),
+        counts: submission.counts,
+        refusals: submission.refusals,
+        plan: yield* plan(userId, { team: input.team }),
+      } satisfies TransactionPlanConfirmation;
     });
 
     const runDue = Effect.fn("TransactionPlanService.runDue")(function* (
@@ -1389,13 +1547,34 @@ export const TransactionPlanServiceLive = Layer.effect(
           const planMoves = open.filter(
             (move) => move.userId === entry.plan.userId && move.team === entry.plan.team,
           );
-          const run = yield* runMoves({
+          const runId = yield* newRunId;
+          yield* repository.beginRun({
             userId: entry.plan.userId,
             team: entry.plan.team,
+            run: runId,
+            trigger: "tick",
+            key: undefined,
+            counts: emptyRunCounts(),
+            refusals: [],
             at,
-            facts: entry.facts,
-            open: planMoves,
-            mode: "due",
+          });
+          const run = yield* Effect.gen(function* () {
+            const result = yield* runMoves({
+              userId: entry.plan.userId,
+              team: entry.plan.team,
+              at,
+              facts: entry.facts,
+              open: planMoves,
+              mode: "due",
+              runId,
+            });
+            yield* repository.finishRun({
+              run: runId,
+              counts: result.counts,
+              refusals: result.refusals,
+              at,
+            });
+            return result;
           }).pipe(
             Effect.ensuring(
               repository
@@ -1678,8 +1857,8 @@ export const TransactionPlanServiceLive = Layer.effect(
       save,
       edit,
       discard,
+      confirm,
       submit,
-      submitToday,
       runDue,
       timeline,
       list,
@@ -2007,7 +2186,6 @@ function selectRunGroups(input: {
       move,
       entry: entryOf(input.entries, move.id),
       mode: input.mode,
-      today: input.facts.today,
     }),
   );
   const dueIds = new Set(due.map((move) => move.id));
@@ -2032,8 +2210,8 @@ function selectRunGroups(input: {
         team: input.team,
         detail:
           input.mode === "submit"
-            ? "A group runs whole, so every move in it must be chosen for today."
-            : "A group runs whole, so every move in it must be due on the same league day.",
+            ? "A group runs whole, so every move in it must be confirmed for today."
+            : "A group runs whole, so every move in it must be confirmed and due on the same league day.",
         moves: members.map((move) => move.id),
       });
       continue;
@@ -2060,13 +2238,12 @@ function runCandidate(input: {
   readonly move: TransactionMoveRowRecord;
   readonly entry: TransactionPlanMoveEvaluation;
   readonly mode: "submit" | "due";
-  readonly today: StoredMoveDate;
 }): boolean {
   if (!isOpenMove(input.move) || input.move.result !== undefined) {
     return false;
   }
   if (input.mode === "submit") {
-    return input.move.decision === "now" && input.entry.runDay === input.today;
+    return input.entry.dueToday;
   }
   return input.entry.dueToday && input.move.kind !== "trade";
 }
@@ -2184,6 +2361,7 @@ function settlementOf(input: {
   readonly at: DateTime.Utc;
   readonly attempted: boolean;
   readonly actions: ReadonlyArray<TransactionPlanAction>;
+  readonly run: { readonly id: TransactionRunId; readonly at: DateTime.Utc } | undefined;
 }): TransactionMoveSettlement {
   return {
     move: input.move.id,
@@ -2193,25 +2371,11 @@ function settlementOf(input: {
     runDay: input.entry.runDay,
     effectiveDate: input.entry.effectiveDate,
     runPosition: input.entry.runPosition,
+    run: input.run,
     steps: input.attempted
       ? input.actions.map((action) => ({ ...action, decidedAt: input.at }))
       : [],
   };
-}
-
-function mergeRunCounts(target: MutableRunCounts, source: TransactionPlanRunCounts): void {
-  target.plans += source.plans;
-  target.claimed += source.claimed;
-  target.busy += source.busy;
-  target.recovered += source.recovered;
-  target.unavailable += source.unavailable;
-  target.moves += source.moves;
-  target.executed += source.executed;
-  target.pending += source.pending;
-  target.failed += source.failed;
-  target.skipped += source.skipped;
-  target.unknown += source.unknown;
-  target.retry += source.retry;
 }
 
 function emptyRunCounts(): MutableRunCounts {
@@ -2307,7 +2471,9 @@ function planViewOf(input: {
   return {
     team: input.team,
     today: input.facts.today,
-    moves: ordered.map((move) => moveView(move, evaluated.get(move.id), blockages.get(move.id))),
+    moves: ordered.map((move) =>
+      moveView(move, evaluated.get(move.id), blockages.get(move.id), input.facts.today),
+    ),
     groups: evaluation.groups,
   };
 }
@@ -2316,6 +2482,7 @@ function moveView(
   move: TransactionMoveRecord,
   entry: TransactionPlanMoveEvaluation | undefined,
   blockage: string | undefined,
+  today: StoredMoveDate,
 ): TransactionPlanMoveView {
   return {
     move: move.id,
@@ -2330,7 +2497,7 @@ function moveView(
     counterpartyKey: move.counterpartyKey,
     bid: move.bid,
     reason: move.reason,
-    decision: planDecision(move),
+    decision: planDecision(move, today),
     runDay: entry?.runDay ?? move.runDay,
     effectiveDate: entry?.effectiveDate ?? move.effectiveDate,
     dueToday: entry?.dueToday ?? false,
@@ -2341,6 +2508,11 @@ function moveView(
     dependsOn: entry?.dependsOn ?? [],
     blockage,
     projection: entry?.projectedRoster ?? [],
+    ...(move.decidedAt === undefined ? {} : { decidedAt: move.decidedAt }),
+    ...(move.confirmedAt === undefined || move.confirmedBy === undefined
+      ? {}
+      : { confirmation: { by: move.confirmedBy, at: move.confirmedAt } }),
+    ...(move.runAt === undefined ? {} : { runAt: move.runAt }),
   };
 }
 
@@ -2371,7 +2543,7 @@ function draftCandidate(input: {
     bid: draft.bid,
     reason: draft.reason,
     runDay: draft.runDay,
-    decision: draft.runDay === undefined ? "now" : "saved",
+    decision: decisionFor(draft.runDay, input.facts.today),
     result: undefined,
   };
 }
@@ -2471,7 +2643,9 @@ function appendOf(
       runDay: candidate.runDay,
       effectiveDate: entry.effectiveDate,
       decision: candidate.decision,
-      decidedAt: candidate.runDay === undefined ? undefined : at,
+      decidedAt: candidate.decision === "saved" ? at : undefined,
+      confirmedAt: undefined,
+      confirmedBy: undefined,
       validation: entry.validation,
     },
     claims,
@@ -2482,6 +2656,7 @@ function contentOfMove(
   move: TransactionMoveRecord,
   entry: TransactionPlanMoveEvaluation,
   runDay: StoredMoveDate | undefined,
+  today: StoredMoveDate,
   at: DateTime.Utc,
 ): TransactionMoveContent {
   return {
@@ -2499,8 +2674,10 @@ function contentOfMove(
     reason: move.reason,
     runDay,
     effectiveDate: entry.effectiveDate,
-    decision: runDay === undefined ? "now" : "saved",
-    decidedAt: runDay === undefined ? undefined : at,
+    decision: decisionFor(runDay, today),
+    decidedAt: decisionFor(runDay, today) === "saved" ? at : undefined,
+    confirmedAt: undefined,
+    confirmedBy: undefined,
     validation: entry.validation,
   };
 }
@@ -2508,6 +2685,7 @@ function contentOfMove(
 function contentOfCandidate(
   candidate: CandidateMove,
   entry: TransactionPlanMoveEvaluation,
+  today: StoredMoveDate,
   at: DateTime.Utc,
 ): TransactionMoveContent {
   return {
@@ -2525,8 +2703,10 @@ function contentOfCandidate(
     reason: candidate.reason,
     runDay: candidate.runDay,
     effectiveDate: entry.effectiveDate,
-    decision: candidate.decision,
-    decidedAt: candidate.decision === "saved" ? at : undefined,
+    decision: decisionFor(candidate.runDay, today),
+    decidedAt: decisionFor(candidate.runDay, today) === "saved" ? at : undefined,
+    confirmedAt: undefined,
+    confirmedBy: undefined,
     validation: entry.validation,
   };
 }
@@ -2534,8 +2714,9 @@ function contentOfCandidate(
 function movedToDay(
   move: TransactionPlanMove,
   runDay: StoredMoveDate | undefined,
+  today: StoredMoveDate,
 ): TransactionPlanMove {
-  return { ...move, runDay, decision: runDay === undefined ? "now" : "saved" };
+  return { ...move, runDay, decision: decisionFor(runDay, today) };
 }
 
 function groupMemberOf(
@@ -2584,6 +2765,35 @@ function nonEmpty<A>(values: ReadonlyArray<A>, detail: string): readonly [A, ...
     throw new Error(detail);
   }
   return [first, ...rest];
+}
+
+function confirmationTargets(
+  open: ReadonlyArray<TransactionMoveRecord>,
+  requested: ReadonlyArray<TransactionMoveRecord>,
+): ReadonlyArray<TransactionMoveRecord> {
+  const selected = new Set<TransactionMoveId>();
+  for (const move of requested) {
+    selected.add(move.id);
+    for (const peer of groupPeers(open, move)) {
+      selected.add(peer.id);
+    }
+    for (const fix of fixPeers(open, move)) {
+      selected.add(fix.id);
+    }
+    const funded = open.find((entry) => rosterFixGroupOf(entry.id) === move.group);
+    if (funded === undefined) {
+      continue;
+    }
+    selected.add(funded.id);
+    for (const fix of fixPeers(open, funded)) {
+      selected.add(fix.id);
+    }
+  }
+  return open.filter((move) => selected.has(move.id));
+}
+
+function isDueMove(move: TransactionMoveRecord, today: StoredMoveDate): boolean {
+  return move.runDay === undefined || move.runDay <= today;
 }
 
 function groupPeers(
@@ -2665,14 +2875,24 @@ function requireMove(
   return entry;
 }
 
-function planDecision(move: TransactionMoveRecord): TransactionPlanDecision {
+function planDecision(move: TransactionMoveRecord, today: StoredMoveDate): TransactionPlanDecision {
   if (move.decision === "discarded") {
     return "discarded";
   }
-  return move.runDay === undefined ? "now" : "saved";
+  if (move.decision === "saved" && (move.runDay === undefined || move.runDay <= today)) {
+    return "undecided";
+  }
+  return move.decision;
 }
 
-type TransactionPlanDecision = "now" | "saved" | "discarded";
+function decisionFor(
+  runDay: StoredMoveDate | undefined,
+  today: StoredMoveDate,
+): TransactionPlanDecision {
+  return runDay === undefined || runDay <= today ? "undecided" : "saved";
+}
+
+type TransactionPlanDecision = "undecided" | "saved" | "now" | "confirmed" | "discarded";
 
 function namedPlayers(
   moves: ReadonlyArray<{

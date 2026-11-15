@@ -44,13 +44,14 @@ export function moveReadView(input: {
 }): TransactionMoveRead {
   const move = input.move;
   const team = input.team;
+  const today = input.check?.status === "checked" ? input.check.today : undefined;
   const content = {
     move: move.id,
     team,
     ...(move.group === undefined ? {} : { group: move.group }),
     kind: move.kind,
     position: move.position,
-    decision: move.decision,
+    decision: displayedDecision(move, today),
     reason: move.reason,
     adds: move.adds.map(playerView),
     fallbacks: move.fallbacks.map(playerView),
@@ -71,6 +72,11 @@ export function moveReadView(input: {
           },
         }),
     ...(move.bid === undefined ? {} : { bid: move.bid }),
+    ...(move.decidedAt === undefined ? {} : { decidedAt: move.decidedAt }),
+    ...(move.confirmedAt === undefined || move.confirmedBy === undefined
+      ? {}
+      : { confirmation: { by: move.confirmedBy, at: move.confirmedAt } }),
+    ...(move.runAt === undefined ? {} : { runAt: move.runAt }),
   };
   if (!isOpenMove(move)) {
     return {
@@ -111,6 +117,19 @@ export function moveReadView(input: {
     check: { status: "checked" },
     ...(move.result === undefined ? {} : { result: move.result }),
   };
+}
+
+function displayedDecision(
+  move: TransactionMoveRecord,
+  today: StoredMoveDate | undefined,
+): TransactionMoveRecord["decision"] {
+  if (
+    move.decision === "saved" &&
+    (move.runDay === undefined || (today !== undefined && move.runDay <= today))
+  ) {
+    return "undecided";
+  }
+  return move.decision;
 }
 
 export function moveDays(input: {

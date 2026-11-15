@@ -8,10 +8,10 @@ import type { ActionFeedbackState, RecoveryAction } from "#browser/shared-ui/Act
 import { formatCalendarDate } from "#browser/shared-ui/formatTime.ts";
 import type {
   TransactionMoveActionData,
+  TransactionMoveConfirmationData,
   TransactionMoveTeamDayView,
   TransactionMoveView,
   TransactionPlanGroupView,
-  TransactionSubmitTodayData,
   TransactionTeamFactsView,
 } from "#contracts/connections/transactionContract.ts";
 
@@ -29,7 +29,7 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     enabled: earlierEnabled(),
   }));
   const [feedback, setFeedback] = createSignal<ActionFeedbackState>();
-  const [choices, setChoices] = createSignal<Readonly<Record<string, TodayChoice>>>({});
+  const [confirmKeys, setConfirmKeys] = createSignal<Readonly<Record<string, string>>>({});
   const [editing, setEditing] = createSignal<string>();
   const [editingDate, setEditingDate] = createSignal("");
   const [editingError, setEditingError] = createSignal<string>();
@@ -75,19 +75,14 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
   const savedTeams = createMemo(() => {
     const todayIds = new Set(todayMoves().map((move) => move.move));
     return groupByTeam(
-      openMoves().filter((move) => !todayIds.has(move.move) && move.decision === "saved"),
+      openMoves().filter(
+        (move) =>
+          !todayIds.has(move.move) && (move.decision === "saved" || move.decision === "confirmed"),
+      ),
     );
   });
-  const undecidedTodayCount = createMemo(
-    () => todayMoves().filter((move) => choices()[choiceKey(move)] === undefined).length,
-  );
-  const canSubmitToday = createMemo(
-    () =>
-      todayMoves().length > 0 &&
-      todayMoves().every((move) => {
-        const choice = choices()[choiceKey(move)];
-        return choice === "discard" || (choice === "now" && move.validation.status === "current");
-      }),
+  const pendingTodayCount = createMemo(
+    () => todayMoves().filter((move) => isPending(move) && move.result === undefined).length,
   );
 
   const refresh = (): void => {
@@ -97,21 +92,34 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     }
   };
 
-  const submit = useMutation(() => ({
-    mutationKey: ["transactions", "submit-today"],
-    mutationFn: (moves: ReadonlyArray<TransactionMoveView>) =>
-      props.remote().submitToday({
-        choices: moves.flatMap((move) => {
-          const choice = choices()[choiceKey(move)];
-          return choice === undefined ? [] : [{ team: move.team.id, move: move.move, choice }];
-        }),
+  const confirm = useMutation(() => ({
+    mutationKey: ["transactions", "confirm"],
+    mutationFn: (input: { readonly move: TransactionMoveView; readonly key: string }) =>
+      props.remote().confirm({
+        team: input.move.team.id,
+        moves: [input.move.move],
+        key: input.key,
       }),
-    onSuccess: (outcome: TransactionSubmitTodayData) => {
-      setFeedback({
-        type: outcome.refusals.length > 0 ? "attention" : "success",
-        message: submissionMessage(outcome),
-      });
-      setChoices({});
+    onSuccess: (
+      outcome: TransactionMoveConfirmationData,
+      input: { readonly move: TransactionMoveView; readonly key: string },
+    ) => {
+      if (outcome.status === "refused") {
+        setFeedback({
+          type: "attention",
+          message: outcome.refusals.map((entry) => entry.detail).join(" "),
+        });
+      } else {
+        setFeedback({
+          type: outcome.counts.failed > 0 || outcome.counts.unknown > 0 ? "attention" : "success",
+          message: confirmationMessage(outcome),
+        });
+        setConfirmKeys((current) =>
+          Object.fromEntries(
+            Object.entries(current).filter(([key]) => !key.startsWith(`${input.move.team.id}:`)),
+          ),
+        );
+      }
       refresh();
     },
     onError: (error: Error) => {
@@ -144,7 +152,7 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
         setEditingError(undefined);
         setFeedback({
           type: "success",
-          message: `Saved for ${formatCalendarDate(input.runDay)}.`,
+          message: `Saved for ${formatCalendarDate(input.runDay)}. Confirm it when you are ready.`,
         });
       }
       void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
@@ -190,20 +198,14 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     },
   }));
 
-  const chooseToday = (move: TransactionMoveView, choice: TodayChoice): void => {
-    if (submit.isPending) {
+  const confirmMove = (move: TransactionMoveView): void => {
+    if (!canConfirm(move) || confirm.isPending) {
       return;
     }
     setFeedback(undefined);
-    setChoices((current) => ({ ...current, [choiceKey(move)]: choice }));
-  };
-
-  const submitToday = (): void => {
-    if (!canSubmitToday() || submit.isPending) {
-      return;
-    }
-    setFeedback(undefined);
-    void submit.mutate(todayMoves());
+    const key = confirmKeys()[confirmationKey(move)] ?? crypto.randomUUID();
+    setConfirmKeys((current) => ({ ...current, [confirmationKey(move)]: key }));
+    void confirm.mutate({ move, key });
   };
 
   const startEdit = (move: TransactionMoveView): void => {
@@ -231,7 +233,7 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
   };
 
   const discardMove = (move: TransactionMoveView): void => {
-    if (!discard.isPending && !submit.isPending) {
+    if (!discard.isPending && !confirm.isPending) {
       setFeedback(undefined);
       void discard.mutate(move);
     }
@@ -245,12 +247,10 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     teamCount,
     teamFacts,
     groups,
-    choiceFor: (move) => choices()[choiceKey(move)],
-    chooseToday,
-    undecidedTodayCount,
-    canSubmitToday,
-    submitToday,
-    submitting: () => submit.isPending,
+    pendingTodayCount,
+    canConfirm,
+    confirmMove,
+    confirming: () => (confirm.isPending ? confirm.variables?.move.move : undefined),
     discardMove,
     discarding: () => (discard.isPending ? discard.variables?.move : undefined),
     startEdit,
@@ -290,6 +290,14 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
   };
 }
 
+function canConfirm(move: TransactionMoveView): boolean {
+  return move.validation.status === "current" && move.result === undefined;
+}
+
+function isPending(move: TransactionMoveView): boolean {
+  return move.decision === "undecided" || move.decision === "saved";
+}
+
 function groupByTeam(
   moves: ReadonlyArray<TransactionMoveView>,
 ): ReadonlyArray<TransactionMoveTeamDayView> {
@@ -310,7 +318,7 @@ function groupByTeam(
     .map((entry) => ({ team: entry.team, moves: entry.moves }));
 }
 
-function choiceKey(move: TransactionMoveView): string {
+function confirmationKey(move: TransactionMoveView): string {
   return `${move.team.id}:${move.move}`;
 }
 
@@ -318,21 +326,29 @@ function compareMoveCards(left: TransactionMoveView, right: TransactionMoveView)
   return left.team.name.localeCompare(right.team.name) || left.position - right.position;
 }
 
-function submissionMessage(outcome: TransactionSubmitTodayData): string {
+function confirmationMessage(outcome: TransactionMoveConfirmationData): string {
+  if (outcome.status === "refused") {
+    return outcome.refusals.map((entry) => entry.detail).join(" ");
+  }
   const parts: Array<string> = [];
-  if (outcome.counts.moves > 0) {
-    parts.push(`Submitted ${moveCount(outcome.counts.moves)}.`);
+  if (outcome.counts.moves === 0) {
+    parts.push(`Confirmed ${moveCount(outcome.confirmed.length)}. It will run on its day.`);
+  } else {
+    parts.push(`Confirmed and ran ${moveCount(outcome.counts.moves)}.`);
   }
   if (outcome.counts.pending > 0) {
     parts.push(`${moveCount(outcome.counts.pending)} waiting on the league.`);
   }
-  if (outcome.discarded > 0) {
-    parts.push(`Discarded ${moveCount(outcome.discarded)}.`);
+  if (outcome.counts.failed > 0) {
+    parts.push(`${moveCount(outcome.counts.failed)} failed.`);
+  }
+  if (outcome.counts.unknown > 0) {
+    parts.push(`${moveCount(outcome.counts.unknown)} has an unknown outcome.`);
   }
   for (const refusal of outcome.refusals) {
     parts.push(refusal.detail);
   }
-  return parts.length === 0 ? "Nothing was submitted." : parts.join(" ");
+  return parts.join(" ");
 }
 
 export type TransactionsPageController = {
@@ -348,12 +364,10 @@ export type TransactionsPageController = {
   readonly teamCount: Accessor<number>;
   readonly teamFacts: Accessor<ReadonlyMap<string, TransactionTeamFactsView>>;
   readonly groups: Accessor<ReadonlyArray<TransactionPlanGroupView>>;
-  readonly choiceFor: (move: TransactionMoveView) => TodayChoice | undefined;
-  readonly chooseToday: (move: TransactionMoveView, choice: TodayChoice) => void;
-  readonly undecidedTodayCount: () => number;
-  readonly canSubmitToday: () => boolean;
-  readonly submitToday: () => void;
-  readonly submitting: () => boolean;
+  readonly pendingTodayCount: () => number;
+  readonly canConfirm: (move: TransactionMoveView) => boolean;
+  readonly confirmMove: (move: TransactionMoveView) => void;
+  readonly confirming: () => string | undefined;
   readonly discardMove: (move: TransactionMoveView) => void;
   readonly discarding: () => string | undefined;
   readonly startEdit: (move: TransactionMoveView) => void;
@@ -387,5 +401,3 @@ export type TransactionsPageController = {
 type TransactionsPageOptions = {
   readonly remote: Accessor<TransactionRemote>;
 };
-
-type TodayChoice = "now" | "discard";

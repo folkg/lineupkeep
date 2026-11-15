@@ -1,10 +1,9 @@
-import { TeamId } from "@lineupkeep/backend/connections/FantasyTeam";
 import {
+  ConfirmTransactionMovesInput,
   DiscardTransactionMoveInput,
   ListTransactionMovesInput,
   SaveTransactionMoveInput,
   TransactionMoveCursor,
-  TransactionMoveId,
   TransactionMovePageLimit,
   TransactionPlanInput,
   TransactionPlanService,
@@ -14,14 +13,15 @@ import { getRequest } from "@tanstack/solid-start/server";
 import { Effect, Schema } from "effect";
 
 import type {
+  TransactionMoveConfirmationData,
   TransactionMoveListData,
   TransactionPlanData,
-  TransactionSubmitTodayData,
 } from "#contracts/connections/transactionContract.ts";
 import { runUseCase } from "#server/backendEntry.ts";
 import {
   TransactionInputInvalid,
   actionOf,
+  confirmationOf,
   mapTransactionError,
   toTransactionMoveListView,
   toTransactionPlanData,
@@ -161,39 +161,27 @@ export const discardTransactionMoveServerFn = createServerFn({ method: "POST" })
     );
   });
 
-export const submitTransactionTodayServerFn = createServerFn({ method: "POST" })
-  .validator(
-    (raw: {
-      readonly choices: ReadonlyArray<{
-        readonly team: string;
-        readonly move: string;
-        readonly choice: "now" | "discard";
-      }>;
-    }) =>
-      Schema.decodeResult(
-        Schema.Struct({
-          choices: Schema.Array(
-            Schema.Struct({
-              team: TeamId,
-              move: TransactionMoveId,
-              choice: Schema.Literals(["now", "discard"]),
-            }),
-          ).pipe(Schema.check(Schema.isMinLength(1))),
-        }),
-      )(raw),
+export const confirmTransactionMovesServerFn = createServerFn({ method: "POST" })
+  .validator((raw: typeof ConfirmTransactionMovesInput.Encoded) =>
+    Schema.decodeResult(ConfirmTransactionMovesInput)(raw),
   )
   .handler(({ data }) => {
     const request = getRequest();
     return runUseCase(
       request,
-      "transactions.submit",
+      "transactions.confirm",
       (userId) =>
         Effect.gen(function* () {
           const input = yield* Effect.fromResult(data).pipe(
             Effect.mapError(() => TransactionInputInvalid.make({})),
           );
           const plans = yield* TransactionPlanService;
-          return (yield* plans.submitToday(userId, input)) satisfies TransactionSubmitTodayData;
+          const result = yield* plans.confirm(userId, input);
+          return confirmationOf({
+            confirmed: result.confirmed,
+            counts: result.counts,
+            refusals: result.refusals,
+          }) satisfies TransactionMoveConfirmationData;
         }),
       (error) =>
         error._tag === "TransactionInputInvalid"

@@ -544,6 +544,8 @@ function moveContent(content: Partial<TransactionMoveContent> = {}): Transaction
     effectiveDate: "2026-11-15",
     decision: "undecided",
     decidedAt: undefined,
+    confirmedAt: undefined,
+    confirmedBy: undefined,
     validation: { status: "current", checkedAt: at, reasons: [] },
     ...content,
   };

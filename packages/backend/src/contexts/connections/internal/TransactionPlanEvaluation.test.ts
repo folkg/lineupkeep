@@ -300,7 +300,7 @@ it("refuses a stash to a reserve list that does not accept the player's position
   assert.deepStrictEqual(evaluation.order.steps, []);
 });
 
-it("rechecks a saved move whose day arrived as due today and stale", () => {
+it("rechecks a saved move whose day arrived without marking it due", () => {
   const evaluation = evaluate({
     facts: facts({
       slots: [bench("BN", 1)],
@@ -321,7 +321,7 @@ it("rechecks a saved move whose day arrived as due today and stale", () => {
 
   assert.strictEqual(evaluation.moves[0]?.runDay, "2026-11-10");
   assert.strictEqual(evaluation.moves[0]?.effectiveDate, "2026-11-10");
-  assert.strictEqual(evaluation.moves[0]?.dueToday, true);
+  assert.strictEqual(evaluation.moves[0]?.dueToday, false);
   assert.strictEqual(evaluation.moves[0]?.validation.status, "stale");
   assert.deepStrictEqual(
     evaluation.moves[0]?.validation.reasons.map((reason) => reason.code),
@@ -1030,7 +1030,7 @@ it("applies a same-day move on its run day", () => {
       timing: { rule: "same_day", currentDate: "2026-11-10", periodStart: undefined },
     }),
     moves: [
-      move("today", { kind: "drop", drops: [player("p1", "Roster One")], decision: "saved" }),
+      move("today", { kind: "drop", drops: [player("p1", "Roster One")], decision: "confirmed" }),
       move("later", {
         kind: "drop",
         drops: [player("p2", "Roster Two")],
@@ -1059,7 +1059,7 @@ it("applies a next-day move on the day after its run day", () => {
       timing: { rule: "next_day", currentDate: "2026-11-10", periodStart: undefined },
     }),
     moves: [
-      move("today", { kind: "drop", drops: [player("p1", "Roster One")], decision: "saved" }),
+      move("today", { kind: "drop", drops: [player("p1", "Roster One")], decision: "confirmed" }),
       move("later", {
         kind: "drop",
         drops: [player("p2", "Roster Two")],
@@ -1092,7 +1092,7 @@ it("applies a weekly-lock move at the start of the locked week, not at its propo
       },
     }),
     moves: [
-      move("today", { kind: "drop", drops: [player("p1", "Roster One")], decision: "saved" }),
+      move("today", { kind: "drop", drops: [player("p1", "Roster One")], decision: "confirmed" }),
       move("later", {
         kind: "drop",
         drops: [player("p2", "Roster Two")],
@@ -1154,7 +1154,7 @@ it("publishes no weekly-lock date when the league publishes no week start", () =
       },
     }),
     moves: [
-      move("today", { kind: "drop", drops: [player("p1", "Roster One")], decision: "saved" }),
+      move("today", { kind: "drop", drops: [player("p1", "Roster One")], decision: "confirmed" }),
     ],
   });
 

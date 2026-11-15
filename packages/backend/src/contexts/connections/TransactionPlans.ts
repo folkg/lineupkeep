@@ -1,7 +1,7 @@
 import { Context, Effect, Schema } from "effect";
 import type { DateTime } from "effect";
 
-import type { UserId } from "#contexts/auth/User.ts";
+import { UserId } from "#contexts/auth/User.ts";
 
 import { FantasyLeague, FantasySport, TeamId } from "./FantasyTeam.ts";
 import { CounterpartyRef, PlayerRef, ReserveList, RosterPlaces } from "./QueryValues.ts";
@@ -25,8 +25,25 @@ export const TransactionMoveKind = Schema.Literals([
 ]);
 export type TransactionMoveKind = typeof TransactionMoveKind.Type;
 
-export const TransactionMoveDecision = Schema.Literals(["undecided", "saved", "now", "discarded"]);
+export const TransactionMoveDecision = Schema.Literals([
+  "undecided",
+  "saved",
+  "now",
+  "confirmed",
+  "discarded",
+]);
 export type TransactionMoveDecision = typeof TransactionMoveDecision.Type;
+
+export const TransactionRunId = LineupgradeId.pipe(Schema.brand("TransactionRunId"));
+export type TransactionRunId = typeof TransactionRunId.Type;
+
+export const TransactionRunTrigger = Schema.Literals(["submit", "tick"]);
+export type TransactionRunTrigger = typeof TransactionRunTrigger.Type;
+const TransactionMoveConfirmation = Schema.Struct({
+  by: UserId,
+  at: Schema.DateTimeUtc,
+});
+type TransactionMoveConfirmation = typeof TransactionMoveConfirmation.Type;
 
 export const TransactionMoveValidationStatus = Schema.Literals([
   "unchecked",
@@ -232,6 +249,9 @@ export const TransactionMoveRead = Schema.Struct({
   bid: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   runDay: Schema.optional(StoredMoveDate),
   effectiveDate: Schema.optional(StoredMoveDate),
+  decidedAt: Schema.optional(Schema.DateTimeUtc),
+  confirmation: Schema.optional(TransactionMoveConfirmation),
+  runAt: Schema.optional(Schema.DateTimeUtc),
   validation: TransactionMoveValidationView,
   check: TransactionMoveCheckView,
   result: Schema.optional(TransactionMoveResult),
@@ -462,48 +482,40 @@ export type TransactionPlanDiscardInput = {
 
 export type TransactionPlanSubmitInput = {
   readonly team: TeamId;
+  readonly key: string;
 };
 
-type TransactionPlanTodayChoice = {
+export type TransactionPlanConfirmInput = {
   readonly team: TeamId;
-  readonly move: TransactionMoveId;
-  readonly choice: "now" | "discard";
-};
-
-export type TransactionPlanTodayInput = {
-  readonly choices: ReadonlyArray<TransactionPlanTodayChoice>;
-};
-
-export type TransactionPlanTodaySubmission = {
-  readonly status: "submitted";
-  readonly counts: TransactionPlanRunCounts;
-  readonly discarded: number;
-  readonly refusals: ReadonlyArray<TransactionPlanRunRefusal>;
-};
-
-export type TransactionPlanRunCounts = {
-  readonly plans: number;
-  readonly claimed: number;
-  readonly busy: number;
-  readonly recovered: number;
-  readonly unavailable: number;
-  readonly moves: number;
-  readonly executed: number;
-  readonly pending: number;
-  readonly failed: number;
-  readonly skipped: number;
-  readonly unknown: number;
-  readonly retry: number;
-};
-
-export type TransactionPlanRunRefusal = {
-  readonly code: string;
-  readonly team: TeamId;
-  readonly detail: string;
   readonly moves: ReadonlyArray<TransactionMoveId>;
+  readonly key: string;
 };
 
-type TransactionPlanSubmission = {
+export const TransactionPlanRunCounts = Schema.Struct({
+  plans: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  claimed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  busy: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  recovered: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  unavailable: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  moves: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  executed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  pending: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  failed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  skipped: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  unknown: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  retry: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+export type TransactionPlanRunCounts = typeof TransactionPlanRunCounts.Type;
+
+export const TransactionPlanRunRefusal = Schema.Struct({
+  code: Schema.NonEmptyString,
+  team: TeamId,
+  detail: Schema.NonEmptyString,
+  moves: Schema.Array(TransactionMoveId),
+});
+export type TransactionPlanRunRefusal = typeof TransactionPlanRunRefusal.Type;
+
+export type TransactionPlanSubmission = {
   readonly team: TeamId;
   readonly today: StoredMoveDate;
   readonly counts: TransactionPlanRunCounts;
@@ -511,12 +523,31 @@ type TransactionPlanSubmission = {
   readonly plan: TransactionPlanView;
 };
 
+export type TransactionPlanConfirmation = {
+  readonly status: "confirmed";
+  readonly confirmed: ReadonlyArray<TransactionMoveId>;
+  readonly counts: TransactionPlanRunCounts;
+  readonly refusals: ReadonlyArray<TransactionPlanRunRefusal>;
+  readonly plan: TransactionPlanRead;
+};
+export type TransactionRunRecord = {
+  readonly run: TransactionRunId;
+  readonly userId: UserId;
+  readonly team: TeamId;
+  readonly trigger: TransactionRunTrigger;
+  readonly key?: string;
+  readonly at: DateTime.Utc;
+  readonly finishedAt?: DateTime.Utc;
+  readonly counts: TransactionPlanRunCounts;
+  readonly refusals: ReadonlyArray<TransactionPlanRunRefusal>;
+};
+
 type TransactionPlanDueResult = {
   readonly at: DateTime.Utc;
   readonly counts: TransactionPlanRunCounts;
 };
 
-type TransactionPlanDecision = "now" | "saved" | "discarded";
+type TransactionPlanDecision = "undecided" | "saved" | "now" | "confirmed" | "discarded";
 
 type TransactionPlanRosterPlayer = {
   readonly key: string;
@@ -551,6 +582,9 @@ export type TransactionPlanMoveView = {
   readonly dependsOn: ReadonlyArray<TransactionMoveId>;
   readonly blockage: string | undefined;
   readonly projection: ReadonlyArray<TransactionPlanRosterPlayer>;
+  readonly decidedAt?: DateTime.Utc;
+  readonly confirmation?: TransactionMoveConfirmation;
+  readonly runAt?: DateTime.Utc;
 };
 
 export type TransactionPlanView = {
@@ -656,15 +690,15 @@ export type TransactionPlanServiceShape = {
     input: TransactionPlanDiscardInput,
   ) => Effect.Effect<TransactionPlanResult, TransactionPlanServiceError>;
 
+  readonly confirm: (
+    userId: UserId,
+    input: TransactionPlanConfirmInput,
+  ) => Effect.Effect<TransactionPlanConfirmation, TransactionPlanServiceError>;
+
   readonly submit: (
     userId: UserId,
     input: TransactionPlanSubmitInput,
   ) => Effect.Effect<TransactionPlanSubmission, TransactionPlanServiceError>;
-
-  readonly submitToday: (
-    userId: UserId,
-    input: TransactionPlanTodayInput,
-  ) => Effect.Effect<TransactionPlanTodaySubmission, TransactionPlanServiceError>;
 
   readonly runDue: (
     limit: number,
@@ -767,6 +801,15 @@ export const SaveTransactionMoveInput = Schema.Struct({
   runDay: StoredMoveDate,
 });
 export type SaveTransactionMoveInput = typeof SaveTransactionMoveInput.Type;
+
+export const ConfirmTransactionMovesInput = Schema.Struct({
+  team: TeamId,
+  moves: Schema.Array(TransactionMoveId).pipe(
+    Schema.check(Schema.isMinLength(1), Schema.isMaxLength(50)),
+  ),
+  key: Schema.NonEmptyString.pipe(Schema.check(Schema.isMaxLength(80))),
+});
+export type ConfirmTransactionMovesInput = typeof ConfirmTransactionMovesInput.Type;
 
 export const DiscardTransactionMoveInput = Schema.Struct({
   team: TeamId,
