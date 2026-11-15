@@ -129,3 +129,12 @@ Each slice ships alone, ends with the project checks, and keeps the live page wo
 
 1. When a group partly lands, should the remaining moves stay in the queue as invalid until the owner repairs or discards them, or should the whole group be rebuilt? This design keeps them, marked invalid, with a repair action.
 2. Should a confirmation for a later day be one decision per group, or can the owner confirm a whole team's saved plan at once? This design confirms a group, because a group is the unit that runs together.
+
+
+## 10. Roster fixes
+
+To fit an add, the server may need to legalize the roster first: move a healthy player off an injury list, move an injured player onto it, or shift a bench place. The same placement engine used for lineups runs in reverse here, with the target "make the roster legal and free the places the confirmed move needs", choosing the smallest set of eligibility moves.
+
+The generated moves appear as one group labelled "Roster fixes", editable and discardable like any other move. The agent still asks only for the add, drop, or reserve move; the server does the shuffle and shows it. Validation uses the planner to answer whether an add can fit and, when it cannot, to state the exact cure.
+
+Roster fixes are generated for slice 3 with groups, ordered before the move they fund.
