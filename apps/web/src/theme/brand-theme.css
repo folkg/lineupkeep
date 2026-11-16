@@ -35,8 +35,8 @@
   --theme-text-wordmark-line-height: 1.2;
   --theme-text-wordmark-letter-spacing: 0.16em;
 
-  --theme-text-display: 2.5rem;
-  --theme-text-display-line-height: 1.05;
+  --theme-text-display: clamp(2.75rem, 5vw, 4.25rem);
+  --theme-text-display-line-height: 0.98;
   --theme-text-display-letter-spacing: -0.035em;
 
   --theme-text-page-title: clamp(2.75rem, 5.4vw, 4.375rem);

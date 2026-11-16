@@ -3,7 +3,6 @@ import { For, Show } from "solid-js";
 import type { Accessor } from "solid-js";
 
 import { AppShell } from "#browser/app-shell/AppShell.tsx";
-import { ButtonLink } from "#browser/shared-ui/ButtonLink.tsx";
 import { LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { Definition, DefinitionList } from "#browser/shared-ui/DefinitionList.tsx";
 import { formatDateTime, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
@@ -90,13 +89,9 @@ export function RunDetailPage(props: RunDetailPageProps): JSX.Element {
           <Show when={page.run()}>
             {(run) => (
               <Inline gap="sm">
-                <ButtonLink
-                  variant="secondary"
-                  search={{ surface: "run", team: run().team }}
-                  to="/feedback"
-                >
+                <TextLink search={{ surface: "run", team: run().team }} tone="quiet" to="/feedback">
                   Report a problem with this run
-                </ButtonLink>
+                </TextLink>
               </Inline>
             )}
           </Show>

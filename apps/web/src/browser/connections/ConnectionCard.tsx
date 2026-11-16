@@ -17,7 +17,7 @@ import { providerDisplayName } from "#contracts/connections/providerLabels.ts";
 
 export function ConnectionCard(props: ConnectionCardProps): JSX.Element {
   return (
-    <RuleListItem layout="columns" leaving={props.leaving}>
+    <RuleListItem dense layout="columns" leaving={props.leaving}>
       <Stack gap="sm">
         <Inline gap="sm">
           <Heading level={3} size="item">

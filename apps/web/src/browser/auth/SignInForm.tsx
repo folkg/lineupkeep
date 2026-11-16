@@ -5,8 +5,8 @@ import type { Accessor } from "solid-js";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { Form } from "#browser/shared-ui/Form.tsx";
-import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { ArrowUpRightIcon, GoogleGIcon } from "#browser/shared-ui/icons.tsx";
+import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextField } from "#browser/shared-ui/TextField.tsx";
@@ -38,9 +38,7 @@ export function SignInForm(props: SignInFormProps): JSX.Element {
       <Match when={form.step() === "email"}>
         <Stack gap="xl">
           <Stack gap="md">
-            <Heading level={2} size="section">
-              Sign in or start fresh.
-            </Heading>
+            <SectionTitle id="sign-in-email-title">Sign in or start fresh.</SectionTitle>
             <Text tone="muted">The first sign-in creates your account.</Text>
           </Stack>
           <Stack gap="lg">
@@ -91,9 +89,7 @@ export function SignInForm(props: SignInFormProps): JSX.Element {
       <Match when={form.step() === "code"}>
         <Stack gap="xl">
           <Stack gap="md">
-            <Heading level={2} size="section">
-              Check your email.
-            </Heading>
+            <SectionTitle id="sign-in-code-title">Check your email.</SectionTitle>
             <Text tone="muted">
               We sent a 6-digit code to {form.sentTo()}. It expires in 10 minutes.
             </Text>

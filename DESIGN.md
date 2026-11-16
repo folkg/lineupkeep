@@ -49,9 +49,9 @@ typography:
     letterSpacing: "0.16em"
   display:
     fontFamily: "Bricolage Grotesque Variable, sans-serif"
-    fontSize: "2.5rem"
+    fontSize: "clamp(2.75rem, 5vw, 4.25rem)"
     fontWeight: 800
-    lineHeight: 1.05
+    lineHeight: 0.98
     letterSpacing: "-0.035em"
   page-title:
     fontFamily: "Bricolage Grotesque Variable, sans-serif"
@@ -275,7 +275,8 @@ The display scale:
 
 - **Page title** — `clamp(44px, 5.4vw, 70px)`, weight 800, line height 0.95, `-0.035em` tracking,
   uppercase. A team name used as a page title takes the team-name size and keeps its case.
-- **Display** — 40px, weight 800, line height 1.05, `-0.035em`. The landing statement only.
+- **Display** — `clamp(44px, 5vw, 68px)`, weight 800, line height 0.98, `-0.035em`. The
+  landing statement only.
 - **Statement** — 28px, weight 800, line height 1.15, `-0.02em`. Auth and quiet statements.
 - **Section title** — 22px, weight 800, line height 1.2, `-0.02em`.
 - **Team name** — 26px, weight 800, line height 1.05, `-0.02em`.

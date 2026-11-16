@@ -7,6 +7,8 @@ import { Button } from "#browser/shared-ui/Button.tsx";
 import { Form } from "#browser/shared-ui/Form.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
+import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
+import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 
@@ -41,13 +43,26 @@ export function ConsentPage(props: {
                   <Text tone="muted">Calls itself “{name()}”. Names are not verified.</Text>
                 )}
               </Show>
-              <Text size="caption" tone="faint">
-                Client identifier
-              </Text>
-              <Text size="body" wrap="words">
-                {request().client.id}
-              </Text>
-              <For each={request().scopes}>{(scope) => <Text>{scope.description}</Text>}</For>
+              <Stack gap="sm">
+                <Text size="label" tone="faint">
+                  Client identifier
+                </Text>
+                <Text size="body" wrap="words">
+                  {request().client.id}
+                </Text>
+              </Stack>
+              <Stack gap="sm">
+                <SectionTitle id="consent-permissions-title">Permissions</SectionTitle>
+                <RuleList>
+                  <For each={request().scopes}>
+                    {(scope) => (
+                      <RuleListItem dense>
+                        <Text size="body">{scope.description}</Text>
+                      </RuleListItem>
+                    )}
+                  </For>
+                </RuleList>
+              </Stack>
               <Inline gap="sm">
                 <Form
                   gap="md"

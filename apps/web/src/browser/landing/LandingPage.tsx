@@ -4,7 +4,9 @@ import { For } from "solid-js";
 import { AppShell } from "#browser/app-shell/AppShell.tsx";
 import { useSessionActions } from "#browser/app-shell/useSessionActions.ts";
 import { ButtonLink } from "#browser/shared-ui/ButtonLink.tsx";
+import { HalftoneScreen } from "#browser/shared-ui/HalftoneScreen.tsx";
 import { Heading } from "#browser/shared-ui/Heading.tsx";
+import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Spread } from "#browser/shared-ui/Spread.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
@@ -38,6 +40,12 @@ export function LandingPage(): JSX.Element {
         start={
           <Stack gap="xl">
             <Stack gap="lg">
+              <Inline gap="md" justify="between">
+                <Text as="span" size="label" tone="muted">
+                  Your lineup. Looked after.
+                </Text>
+                <HalftoneScreen variant="strip" />
+              </Inline>
               <Heading level={1} size="display">
                 Lineupgrade sets your fantasy lineup.
               </Heading>

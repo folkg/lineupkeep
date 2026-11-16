@@ -8,7 +8,6 @@ import {
   UnsavedNavigationGuard,
 } from "#browser/navigation/UnsavedChanges.tsx";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
-import { ButtonLink } from "#browser/shared-ui/ButtonLink.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
@@ -95,9 +94,9 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
         </Stack>
         <TeamControls team={props.team} remote={props.remote} />
         <Inline gap="sm">
-          <ButtonLink to="/transactions" variant="secondary">
+          <TextLink tone="quiet" to="/transactions">
             Transactions
-          </ButtonLink>
+          </TextLink>
         </Inline>
       </Stack>
 
@@ -114,17 +113,17 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
       <TeamNote note={note} />
 
       <Inline gap="sm">
-        <ButtonLink
-          variant="secondary"
+        <TextLink
           search={{
             surface: "team",
             team: props.team.team.id,
             teamName: props.team.team.name,
           }}
+          tone="quiet"
           to="/feedback"
         >
           Report a problem with this team
-        </ButtonLink>
+        </TextLink>
       </Inline>
     </Stack>
   );
