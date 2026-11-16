@@ -27,6 +27,7 @@ import {
   StatWindow,
   TeamListRow,
   TeamOwnerNote,
+  WaiverBid,
 } from "./QueryValues.ts";
 
 const ScheduleWindowDate = Schema.String.pipe(
@@ -1990,6 +1991,12 @@ export const TeamSummaryData = Schema.Struct({
   team: QueryTeam,
   period: Schema.optional(QueryPeriod),
   league: Schema.optional(SummaryLeague),
+  waiverBid: Schema.optional(WaiverBid).pipe(
+    Schema.annotate({
+      description:
+        "The league's waiver bid shape: `published` with this team's remaining FAAB, or `bidless`. Present when the league was read; a balance the league does not publish reads as `bidless`.",
+    }),
+  ),
   standing: Schema.optional(SummaryStanding),
   record: Schema.optional(SummaryRecord),
   categoryTotals: Schema.optional(SummaryCategories),

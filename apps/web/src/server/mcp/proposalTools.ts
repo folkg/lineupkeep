@@ -109,7 +109,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_transaction_plan", {
     description:
-      "Read one team's transaction queue in run order by day, with each move's check, time, and confirmation. It reports the team's places, each reserve list by the league's own name, and each group as ready, blocked, ran in part, or done, with its actions and plain sentence.",
+      "Read one team's queue in run order by day: each move's check, decision actor, surface, and confirmation; the snapshot its places came from; the league's waiver bid shape; each reserve list by name; and each group's status, actions, and plain sentence.",
     parameters: TransactionPlanInput,
     success: Schema.toCodecJson(TransactionPlanRead),
     failure: ToolFailure,
@@ -153,6 +153,7 @@ export function proposalToolHandlers(
           plans
             .proposeRefs(agent.userId, {
               team: input.team,
+              decision: { decidedBy: "agent", surface: "propose_transactions" },
               proposedBy: {
                 ...proposer,
                 ...(input.client === undefined || input.client === null
@@ -199,18 +200,24 @@ export function proposalToolHandlers(
         list_transaction_proposals: (input) => plans.list(agent.userId, input).pipe(mapPlanFailure),
         get_transaction_plan: (input) => plans.plan(agent.userId, input).pipe(mapPlanFailure),
         discard_transaction_move: (input) =>
-          plans.discard(agent.userId, { team: input.team, move: input.move }).pipe(
-            Effect.flatMap((result) =>
-              plans.plan(agent.userId, { team: input.team }).pipe(
-                Effect.map((plan) => ({
-                  ...plan,
-                  refused: result.refused,
-                  ...(input.reason === undefined ? {} : { reason: input.reason }),
-                })),
+          plans
+            .discard(agent.userId, {
+              team: input.team,
+              move: input.move,
+              decision: { decidedBy: "agent", surface: "discard_transaction_move" },
+            })
+            .pipe(
+              Effect.flatMap((result) =>
+                plans.plan(agent.userId, { team: input.team }).pipe(
+                  Effect.map((plan) => ({
+                    ...plan,
+                    refused: result.refused,
+                    ...(input.reason === undefined ? {} : { reason: input.reason }),
+                  })),
+                ),
               ),
+              mapPlanFailure,
             ),
-            mapPlanFailure,
-          ),
       });
     }),
   );

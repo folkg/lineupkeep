@@ -36,9 +36,15 @@ run holds the queue. A team cannot have two plans.
 
 `id` primary key, `user_id`, `team_id`, `group_id`, `position`, `run_position`, `kind`, `adds`,
 `fallbacks`, `drops`, `picks`, `slot_move`, `intent`, `placement`, `counterparty_key`, `external_ref`,
-`bid`, `reason`, `run_day`, `effective_date`, `decision`, `decided_at`, `confirmed_at`,
-`confirmed_by`, `run_id`, `run_at`, `validation`, `checked_at`, `validation_reasons`, `result`,
-`result_detail`, `result_at`, `proposed_by`, `created_at`, `updated_at`.
+`bid`, `reason`, `run_day`, `effective_date`, `decision`, `decided_at`, `decided_by`,
+`decided_surface`, `confirmed_at`, `confirmed_by`, `run_id`, `run_at`, `validation`, `checked_at`,
+`validation_reasons`, `result`, `result_detail`, `result_at`, `proposed_by`, `created_at`,
+`updated_at`.
+
+`decided_by` is `owner`, `agent`, or `system`, and `decided_surface` names the route or tool that
+decided it (`transactions.confirm`, `discard_transaction_move`, or `automation.run`). The same two
+columns on `transaction_runs` name who started the run and from where; the move's columns name the
+run and surface that settled it.
 
 `(user_id, team_id)` references the plan. `position` is the server's append order. `run_position` is
 the order for the next run. `run_day` is the day the move runs in the league's day. `effective_date` is

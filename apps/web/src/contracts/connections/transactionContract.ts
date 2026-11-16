@@ -69,8 +69,12 @@ export type TransactionMoveView = {
   readonly runDay?: string;
   readonly effectiveDate?: string;
   readonly decidedAt?: string;
+  readonly decidedBy?: "owner" | "agent" | "system";
+  readonly surface?: string;
   readonly confirmation?: { readonly by: string; readonly at: string };
   readonly runAt?: string;
+  readonly runDecidedBy?: "owner" | "agent" | "system";
+  readonly runSurface?: string;
   readonly validation: TransactionMoveValidationView;
   readonly check: TransactionMoveCheckView;
   readonly result?:
@@ -174,9 +178,20 @@ export type TransactionMoveListData = {
   };
 };
 
+type WaiverBidView =
+  | { readonly kind: "published"; readonly balance: number }
+  | { readonly kind: "bidless" };
+
+type TransactionPlanSnapshotView =
+  | { readonly status: "live"; readonly checkedAt: string; readonly source: string }
+  | { readonly status: "stored"; readonly checkedAt: string; readonly note: string }
+  | { readonly status: "unavailable"; readonly note: string };
+
 export type TransactionPlanData = {
   readonly team: TransactionMoveTeamView;
   readonly today?: string;
+  readonly snapshot: TransactionPlanSnapshotView;
+  readonly waiverBid?: WaiverBidView;
   readonly places?: RosterPlacesView;
   readonly reserve?: ReadonlyArray<ReserveListView>;
   readonly moves: ReadonlyArray<TransactionMoveView>;

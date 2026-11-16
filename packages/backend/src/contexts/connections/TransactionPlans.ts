@@ -4,7 +4,7 @@ import type { DateTime } from "effect";
 import { UserId } from "#contexts/auth/User.ts";
 
 import { FantasyLeague, FantasySport, TeamId } from "./FantasyTeam.ts";
-import { CounterpartyRef, PlayerRef, ReserveList, RosterPlaces } from "./QueryValues.ts";
+import { CounterpartyRef, PlayerRef, ReserveList, RosterPlaces, WaiverBid } from "./QueryValues.ts";
 
 const LineupgradeId = Schema.Union([
   Schema.String.pipe(Schema.check(Schema.isUUID())),
@@ -39,6 +39,20 @@ export type TransactionRunId = typeof TransactionRunId.Type;
 
 export const TransactionRunTrigger = Schema.Literals(["submit", "tick"]);
 export type TransactionRunTrigger = typeof TransactionRunTrigger.Type;
+
+export const TransactionDecisionActor = Schema.Literals(["owner", "agent", "system"]);
+export type TransactionDecisionActor = typeof TransactionDecisionActor.Type;
+
+export const TransactionDecisionSurface = Schema.NonEmptyString.pipe(
+  Schema.check(Schema.isMaxLength(100)),
+);
+export type TransactionDecisionSurface = typeof TransactionDecisionSurface.Type;
+
+export const TransactionDecision = Schema.Struct({
+  decidedBy: TransactionDecisionActor,
+  surface: TransactionDecisionSurface,
+});
+export type TransactionDecision = typeof TransactionDecision.Type;
 const TransactionMoveConfirmation = Schema.Struct({
   by: UserId,
   at: Schema.DateTimeUtc,
@@ -252,6 +266,24 @@ export const TransactionMoveRead = Schema.Struct({
   decidedAt: Schema.optional(Schema.DateTimeUtc),
   confirmation: Schema.optional(TransactionMoveConfirmation),
   runAt: Schema.optional(Schema.DateTimeUtc),
+  runDecidedBy: Schema.optional(TransactionDecisionActor).pipe(
+    Schema.annotate({
+      description: "Who started the run that settled this move: owner, agent, or system.",
+    }),
+  ),
+  runSurface: Schema.optional(TransactionDecisionSurface).pipe(
+    Schema.annotate({
+      description: "The route or tool that started the run that settled this move.",
+    }),
+  ),
+  decidedBy: Schema.optional(TransactionDecisionActor).pipe(
+    Schema.annotate({
+      description: "Who made this move's current decision: owner, agent, or system.",
+    }),
+  ),
+  surface: Schema.optional(TransactionDecisionSurface).pipe(
+    Schema.annotate({ description: "The route or tool that made this move's current decision." }),
+  ),
   validation: TransactionMoveValidationView,
   check: TransactionMoveCheckView,
   result: Schema.optional(TransactionMoveResult),
@@ -316,9 +348,53 @@ const TransactionTeamFacts = Schema.Struct({
   reserve: Schema.Array(ReserveList),
 });
 
+export const TransactionWaiverBid = WaiverBid;
+export type TransactionWaiverBid = typeof TransactionWaiverBid.Type;
+
+export const TransactionPlanSnapshot = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("live"),
+    checkedAt: Schema.DateTimeUtc,
+    source: Schema.NonEmptyString,
+  }).pipe(
+    Schema.annotate({
+      description:
+        "The live roster and league rules read that produced `places` and `reserve`, with the coverage its source names.",
+    }),
+  ),
+  Schema.Struct({
+    status: Schema.Literal("stored"),
+    checkedAt: Schema.DateTimeUtc,
+    note: Schema.NonEmptyString,
+  }).pipe(
+    Schema.annotate({
+      description:
+        "The live facts could not be read, so the moves show their most recent recorded check at this time.",
+    }),
+  ),
+  Schema.Struct({ status: Schema.Literal("unavailable"), note: Schema.NonEmptyString }).pipe(
+    Schema.annotate({
+      description: "The live facts could not be read and no move carries a recorded check.",
+    }),
+  ),
+]);
+export type TransactionPlanSnapshot = typeof TransactionPlanSnapshot.Type;
+
 export const TransactionPlanRead = Schema.Struct({
   team: TransactionMoveTeam,
   today: Schema.optional(StoredMoveDate),
+  snapshot: TransactionPlanSnapshot.pipe(
+    Schema.annotate({
+      description:
+        "The roster and league snapshot that produced `places` and `reserve`, or the last recorded check when the live read failed.",
+    }),
+  ),
+  waiverBid: Schema.optional(TransactionWaiverBid).pipe(
+    Schema.annotate({
+      description:
+        "The league's waiver bid shape: `published` with this team's remaining FAAB, or `bidless`. Absent when the league and roster could not be read.",
+    }),
+  ),
   places: Schema.optional(RosterPlaces).pipe(
     Schema.annotate({
       description:
@@ -433,6 +509,7 @@ export type TransactionPlanMoveDraft = {
 export type TransactionPlanProposeInput = {
   readonly team: TeamId;
   readonly proposedBy: TransactionMoveProvenance;
+  readonly decision?: TransactionDecision;
   readonly moves: ReadonlyArray<TransactionPlanMoveDraft>;
 };
 
@@ -460,6 +537,7 @@ export type TransactionPlanRefMoveDraft = {
 export type TransactionPlanRefProposeInput = {
   readonly team: TeamId;
   readonly proposedBy: TransactionMoveProvenance;
+  readonly decision?: TransactionDecision;
   readonly moves: ReadonlyArray<TransactionPlanRefMoveDraft>;
 };
 
@@ -467,28 +545,33 @@ export type TransactionPlanSaveInput = {
   readonly team: TeamId;
   readonly move: TransactionMoveId;
   readonly runDay: StoredMoveDate;
+  readonly decision?: TransactionDecision;
 };
 
 export type TransactionPlanEditInput = {
   readonly team: TeamId;
   readonly move: TransactionMoveId;
   readonly change: TransactionPlanMoveDraft;
+  readonly decision?: TransactionDecision;
 };
 
 export type TransactionPlanDiscardInput = {
   readonly team: TeamId;
   readonly move: TransactionMoveId;
+  readonly decision?: TransactionDecision;
 };
 
 export type TransactionPlanSubmitInput = {
   readonly team: TeamId;
   readonly key: string;
+  readonly decision?: TransactionDecision;
 };
 
 export type TransactionPlanConfirmInput = {
   readonly team: TeamId;
   readonly moves: ReadonlyArray<TransactionMoveId>;
   readonly key: string;
+  readonly decision?: TransactionDecision;
 };
 
 export const TransactionPlanRunCounts = Schema.Struct({
@@ -535,6 +618,8 @@ export type TransactionRunRecord = {
   readonly userId: UserId;
   readonly team: TeamId;
   readonly trigger: TransactionRunTrigger;
+  readonly decidedBy?: TransactionDecisionActor;
+  readonly surface?: string;
   readonly key?: string;
   readonly at: DateTime.Utc;
   readonly finishedAt?: DateTime.Utc;

@@ -54,6 +54,21 @@ export function toTransactionPlanData(plan: TransactionPlanRead): TransactionPla
   return {
     team: plan.team,
     ...(plan.today === undefined ? {} : { today: plan.today }),
+    snapshot:
+      plan.snapshot.status === "live"
+        ? {
+            status: "live",
+            checkedAt: DateTime.formatIso(plan.snapshot.checkedAt),
+            source: plan.snapshot.source,
+          }
+        : plan.snapshot.status === "stored"
+          ? {
+              status: "stored",
+              checkedAt: DateTime.formatIso(plan.snapshot.checkedAt),
+              note: plan.snapshot.note,
+            }
+          : { status: "unavailable", note: plan.snapshot.note },
+    ...(plan.waiverBid === undefined ? {} : { waiverBid: plan.waiverBid }),
     ...(plan.places === undefined ? {} : { places: plan.places }),
     ...(plan.reserve === undefined ? {} : { reserve: plan.reserve }),
     moves: plan.moves.map(toMoveView),
@@ -97,6 +112,8 @@ function toMoveView(move: TransactionMoveRead): TransactionMoveView {
     ...(move.runDay === undefined ? {} : { runDay: move.runDay }),
     ...(move.effectiveDate === undefined ? {} : { effectiveDate: move.effectiveDate }),
     ...(move.decidedAt === undefined ? {} : { decidedAt: DateTime.formatIso(move.decidedAt) }),
+    ...(move.decidedBy === undefined ? {} : { decidedBy: move.decidedBy }),
+    ...(move.surface === undefined ? {} : { surface: move.surface }),
     ...(move.confirmation === undefined
       ? {}
       : {
@@ -106,6 +123,8 @@ function toMoveView(move: TransactionMoveRead): TransactionMoveView {
           },
         }),
     ...(move.runAt === undefined ? {} : { runAt: DateTime.formatIso(move.runAt) }),
+    ...(move.runDecidedBy === undefined ? {} : { runDecidedBy: move.runDecidedBy }),
+    ...(move.runSurface === undefined ? {} : { runSurface: move.runSurface }),
     validation: validationView(move.validation),
     check: move.check,
     ...(move.result === undefined ? {} : { result: move.result }),

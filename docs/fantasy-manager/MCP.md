@@ -25,7 +25,7 @@ Status: proposed surface and acceptance criteria. Names other than the agreed ge
 | `get_players`         | Explicit-list hydration of up to 25 selected-player references, returned whole; stats, availability, draft provenance, and the week's projection where published                                             |
 | `get_matchups`        | Selected matchup/scoreboard data with explicit period, category values/winners, and remaining player-games                                                                                                   |
 | `get_transactions`    | Bounded transaction history with team scope and date filtering, two-sided player movements, trade parties, traded draft picks, and explicit incompleteness; no execution                                     |
-| `get_team_summary`    | One bounded per-team snapshot: league, standing and record, standings, current matchup, and a compact roster carrying draft provenance and starting status                                                   |
+| `get_team_summary`    | One bounded per-team snapshot: league with its waiver bid shape, standing and record, standings, current matchup, and a compact roster carrying draft provenance and starting status                         |
 | `set_lineup`          | The sole roster mutation operation; creates durable team runs and returns verified or pending outcomes                                                                                                       |
 | `set_team_automation` | Enable, disable, pause for the rest of the fantasy day, or resume owned team automation; reports resulting state                                                                                             |
 | `get_lineup_runs`     | Owned run status, safe concise explanations, observed changes, and unresolved conditions                                                                                                                     |
@@ -461,7 +461,11 @@ object also carries the owner's own note as `ownerNote`: `{ status: "provided", 
 when one is stored or `{ status: "not_set" }` otherwise. It is owner context, not league or provider
 data, and the field description says so; it is never sent to the provider. A note is limited to
 2,000 characters, is stored with the team, and is editable only on the team page. Text that looks
-like a credential is refused with an explanation rather than stored or echoed. Roster entries in
+like a credential is refused with an explanation rather than stored or echoed. The summary also
+carries `waiverBid`: `published` with the owning team's remaining FAAB when the league uses FAAB and
+publishes the balance, or `bidless` when the league takes no FAAB bid. A waiver claim names a bid
+from 0 to the published balance, and a bidless league refuses any bid and accepts a claim without
+one. Roster entries in
 this summary carry the same `transactionTrend` shape as `search_players`, with the same current-day
 window and the same `not_published` rule, and the same `startingStatus` as a team roster row. Its
 league section is the compact static context (name, team count, scoring type, week window, and
@@ -826,10 +830,13 @@ contacts no write endpoint and spends nothing.
 
 `get_transaction_plan` reads one owned team's queue in order, grouped by run day, today first. Each
 move carries its stored validation and the time it was checked, its effective date, its decision,
-its confirmation, and the check that carried it out once it has run. A decision reads `undecided`,
-`saved`, `now`, `confirmed`, or `discarded`. The read reports the team's places as used, maximum, and
-free, and each reserve list by the league's own name with its eligibility, capacity, occupancy, and
-free count. Each group says ready, blocked, ran in part, or done, with the action that landed, the
+the actor and surface that decided it (`decidedBy` and `surface`), its confirmation, and the check
+that carried it out once it has run. A decision reads `undecided`, `saved`, `now`, `confirmed`, or
+`discarded`. `snapshot` says whether the places came from a live read, with its time and the coverage
+it names, or from the most recent recorded check when the live read failed. `waiverBid` names the
+league's bid shape: `published` with this team's remaining FAAB, or `bidless`. The read reports the
+team's places as used, maximum, and free, and each reserve list by the league's own name with its
+eligibility, capacity, occupancy, and free count. Each group says ready, blocked, ran in part, or done, with the action that landed, the
 action that failed, the actions that did not run, and a plain cure. The read uses stored state and
 does not change the queue. A team the account does not own is reported as not found.
 

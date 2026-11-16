@@ -587,6 +587,39 @@ it.effect("carries the league's roster-change timing on the team summary", () =>
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+it.effect("publishes the league's waiver bid shape on the team summary", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+
+    const bidless = yield* queries.getTeamSummary(owner, { team: teamId, groups: ["league"] });
+    assert.strictEqual(bidless.status, "ok");
+    if (bidless.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(bidless.waiverBid, { kind: "bidless" });
+
+    yield* fake.setLeague({ ...leagueFixture, usesFaab: true });
+    yield* fake.setLeagueTeams([
+      {
+        providerTeamKey: "461.l.1000.t.1",
+        providerLeagueKey: "461.l.1000",
+        name: "Alpha",
+        acquisitionUsage: { seasonMoves: undefined, weeklyAdds: undefined },
+        remainingBudget: 42,
+      },
+    ]);
+    const published = yield* queries.getTeamSummary(owner, { team: teamId, groups: ["league"] });
+    assert.strictEqual(published.status, "ok");
+    if (published.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(published.waiverBid, { kind: "published", balance: 42 });
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
 it.effect("publishes an innings cap only for a league that declares one", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;

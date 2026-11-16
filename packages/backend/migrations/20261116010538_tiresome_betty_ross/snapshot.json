@@ -1,0 +1,167 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "7539b0fc-4ff4-43d3-8e43-fa8024ee06cf",
+  "prevIds": ["de791e1d-916f-4fee-904f-8163384434e0"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_moves", "decided_by"],
+      "writes": [
+        "s|col|public.transaction_moves.decided_by",
+        "n|col|public.transaction_moves.decided_by",
+        "e|col|public.transaction_moves.decided_by"
+      ],
+      "reads": ["n|tbl|public.transaction_moves", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_moves", "decided_surface"],
+      "writes": [
+        "s|col|public.transaction_moves.decided_surface",
+        "n|col|public.transaction_moves.decided_surface",
+        "e|col|public.transaction_moves.decided_surface"
+      ],
+      "reads": ["n|tbl|public.transaction_moves", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_moves", "run_decided_by"],
+      "writes": [
+        "s|col|public.transaction_moves.run_decided_by",
+        "n|col|public.transaction_moves.run_decided_by",
+        "e|col|public.transaction_moves.run_decided_by"
+      ],
+      "reads": ["n|tbl|public.transaction_moves", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_moves", "run_decided_surface"],
+      "writes": [
+        "s|col|public.transaction_moves.run_decided_surface",
+        "n|col|public.transaction_moves.run_decided_surface",
+        "e|col|public.transaction_moves.run_decided_surface"
+      ],
+      "reads": ["n|tbl|public.transaction_moves", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_runs", "decided_by"],
+      "writes": [
+        "s|col|public.transaction_runs.decided_by",
+        "n|col|public.transaction_runs.decided_by",
+        "e|col|public.transaction_runs.decided_by"
+      ],
+      "reads": ["n|tbl|public.transaction_runs", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_runs", "decided_surface"],
+      "writes": [
+        "s|col|public.transaction_runs.decided_surface",
+        "n|col|public.transaction_runs.decided_surface",
+        "e|col|public.transaction_runs.decided_surface"
+      ],
+      "reads": ["n|tbl|public.transaction_runs", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_moves",
+        "name": "decided_by",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_moves",
+        "name": "decided_surface",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_moves",
+        "name": "run_decided_by",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_moves",
+        "name": "run_decided_surface",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_runs",
+        "name": "decided_by",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_runs",
+        "name": "decided_surface",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

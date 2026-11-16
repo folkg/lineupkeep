@@ -125,7 +125,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_team_summary", {
     description:
-      "One bounded snapshot of one linked team: league, standing, record, standings, matchup, remaining player-games, and roster. `groups` selects the sections.",
+      "One bounded snapshot of one linked team: league, standing, record, standings, matchup, remaining player-games, and roster, with the league's waiver bid shape on the league group. `groups` selects the sections.",
     parameters: GetTeamSummaryInput,
     success: Schema.toCodecJson(TeamSummaryResult),
     failure: ToolFailure,

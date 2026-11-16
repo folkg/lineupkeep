@@ -476,19 +476,26 @@ function MoveState(props: { readonly move: TransactionMoveView }): JSX.Element {
   const confirmation = (): string | undefined => {
     const confirmed = props.move.confirmation;
     if (confirmed !== undefined) {
-      return props.move.runAt === undefined
-        ? `You confirmed this on ${formatCalendarDate(confirmed.at)}. It has not run yet.`
-        : `You confirmed this on ${formatCalendarDate(confirmed.at)}. It ran on the ${formatCalendarDate(props.move.runAt)} check.`;
+      if (props.move.result === undefined) {
+        return `You confirmed this on ${formatCalendarDate(confirmed.at)}${surfaceCopy(props.move)}. It has not run yet.`;
+      }
+      return props.move.runDecidedBy === "system" && props.move.runAt !== undefined
+        ? `You confirmed this on ${formatCalendarDate(confirmed.at)}${surfaceCopy(props.move)}. The scheduled check ran it on the ${formatCalendarDate(props.move.runAt)} check.`
+        : `You confirmed this on ${formatCalendarDate(confirmed.at)}${surfaceCopy(props.move)}. It ran on the ${formatCalendarDate(props.move.runAt ?? confirmed.at)} check.`;
     }
     if (props.move.decision === "discarded") {
       return props.move.decidedAt === undefined
-        ? "Discarded."
-        : `Discarded on ${formatCalendarDate(props.move.decidedAt)}.`;
+        ? decidedByCopy(props.move, "discarded this")
+        : `${decidedByCopy(props.move, "discarded this")} on ${formatCalendarDate(props.move.decidedAt)}.`;
     }
     if (props.move.result === "executed") {
-      return props.move.runAt === undefined
-        ? "It ran on the check."
-        : `It ran on the ${formatCalendarDate(props.move.runAt)} check.`;
+      const ran =
+        props.move.runAt === undefined
+          ? "It ran on the check."
+          : `It ran on the ${formatCalendarDate(props.move.runAt)} check.`;
+      return props.move.runDecidedBy === "system"
+        ? ran.replace("It ran", "The scheduled check ran")
+        : ran;
     }
     if (props.move.result !== undefined) {
       return undefined;
@@ -512,6 +519,30 @@ function MoveState(props: { readonly move: TransactionMoveView }): JSX.Element {
       )}
     </Show>
   );
+}
+
+function decidedByCopy(move: TransactionMoveView, action: string): string {
+  switch (move.decidedBy) {
+    case "agent":
+      return `An agent ${action}${surfaceCopy(move)}`;
+    case "system":
+      return `The scheduled check ${action}`;
+    case "owner":
+    case undefined:
+      return `You ${action}${surfaceCopy(move)}`;
+  }
+}
+
+function surfaceCopy(move: TransactionMoveView): string {
+  switch (move.surface) {
+    case undefined:
+      return "";
+    case "transaction_plan.tick":
+    case "automation.run":
+      return "";
+    default:
+      return move.surface.startsWith("transactions.") ? " in the app" : ` over ${move.surface}`;
+  }
 }
 
 function MoveCheck(props: { readonly move: TransactionMoveView }): JSX.Element {

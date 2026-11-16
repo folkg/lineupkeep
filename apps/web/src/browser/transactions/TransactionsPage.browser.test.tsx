@@ -254,6 +254,8 @@ it("shows undecided, confirmed, ran, and discarded moves in plain words", async 
     runDay: "2026-11-13",
     adds: [player("Amon-Ra St. Brown")],
     confirmation: { by: "owner", at: "2026-11-11T17:35:00.000Z" },
+    decidedBy: "owner",
+    surface: "transactions.confirm",
   });
   const ran = move({
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c7",
@@ -264,6 +266,10 @@ it("shows undecided, confirmed, ran, and discarded moves in plain words", async 
     confirmation: { by: "owner", at: "2026-11-11T17:35:00.000Z" },
     runAt: "2026-11-11T18:05:00.000Z",
     result: "executed",
+    decidedBy: "owner",
+    surface: "transactions.confirm",
+    runDecidedBy: "system",
+    runSurface: "automation.run",
   });
   const discarded = move({
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c6",
@@ -285,7 +291,7 @@ it("shows undecided, confirmed, ran, and discarded moves in plain words", async 
   await expect
     .element(
       page.getByText(
-        `You confirmed this on ${formatCalendarDate("2026-11-11T17:35:00.000Z")}. It has not run yet.`,
+        `You confirmed this on ${formatCalendarDate("2026-11-11T17:35:00.000Z")} in the app. It has not run yet.`,
         { exact: true },
       ),
     )
@@ -296,7 +302,7 @@ it("shows undecided, confirmed, ran, and discarded moves in plain words", async 
   await expect
     .element(
       page.getByText(
-        `You confirmed this on ${formatCalendarDate("2026-11-11T17:35:00.000Z")}. It ran on the ${formatCalendarDate("2026-11-11T18:05:00.000Z")} check.`,
+        `You confirmed this on ${formatCalendarDate("2026-11-11T17:35:00.000Z")} in the app. The scheduled check ran it on the ${formatCalendarDate("2026-11-11T18:05:00.000Z")} check.`,
         { exact: true },
       ),
     )
@@ -304,9 +310,37 @@ it("shows undecided, confirmed, ran, and discarded moves in plain words", async 
   await expect.element(page.getByText("Discarded", { exact: true })).toBeVisible();
   await expect
     .element(
-      page.getByText(`Discarded on ${formatCalendarDate("2026-11-10T15:10:00.000Z")}.`, {
+      page.getByText(`You discarded this on ${formatCalendarDate("2026-11-10T15:10:00.000Z")}.`, {
         exact: true,
       }),
+    )
+    .toBeVisible();
+});
+
+it("names an agent's discard and the surface it happened on", async () => {
+  await page.viewport(1280, 900);
+  const discarded = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d1",
+    team: beta,
+    kind: "drop",
+    decision: "discarded",
+    decidedAt: "2026-11-10T15:10:00.000Z",
+    decidedBy: "agent",
+    surface: "discard_transaction_move",
+    drops: [player("Tyler Boyd")],
+  });
+  using _app = setupTransactionsPage({
+    open: listData([], { open: 0, today: 0, saved: 0, ended: 1 }),
+    ended: listData([discarded], { open: 0, today: 0, saved: 0, ended: 1 }),
+  });
+
+  await page.getByRole("button", { name: "Show earlier moves" }).click();
+  await expect
+    .element(
+      page.getByText(
+        `An agent discarded this over discard_transaction_move on ${formatCalendarDate("2026-11-10T15:10:00.000Z")}.`,
+        { exact: true },
+      ),
     )
     .toBeVisible();
 });
@@ -589,7 +623,18 @@ function setupTransactionsPage(options: {
           ? (options.ended ?? listData([], { open: 0, today: 0, saved: 0, ended: 0 }))
           : open,
       ),
-    plan: () => Promise.resolve({ team: alpha, moves: [], days: [], groups: [] }),
+    plan: () =>
+      Promise.resolve({
+        team: alpha,
+        snapshot: {
+          status: "live",
+          checkedAt: "2026-11-11T12:00:00.000Z",
+          source: "week 1",
+        },
+        moves: [],
+        days: [],
+        groups: [],
+      }),
     save: options.save ?? (() => Promise.reject(new Error("Unexpected save"))),
     discard: options.discard ?? (() => Promise.reject(new Error("Unexpected discard"))),
     confirm: options.confirm ?? (() => Promise.reject(new Error("Unexpected confirmation"))),

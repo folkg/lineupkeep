@@ -111,7 +111,9 @@ The league publishes one add/drop request, so an add and a drop can travel toget
 
 **Groups.** Report each group's members in order, its status (ready, blocked, partly done, done), the action that landed, the action that failed, the actions that did not run, and the cure. Plain copy: "This group ran in part. The drop reached your league. The move to IR failed: the player was already there. The add did not run. Check your roster."
 
-**MCP fields.** Use the same names on the roster read, the team summary, and the plan read: `places` with `used`, `maximum`, `free`; `reserve` as a list of `name`, `eligibility`, `capacity`, `occupied`, `free`; per move `placesFreed`, `placesUsed`, `reserveFreed`, `reserveUsed`, `dependsOn`, `blockedBy`, `group`, `confirmation`, `actions`. No write tool.
+**MCP fields.** Use the same names on the roster read, the team summary, and the plan read: `places` with `used`, `maximum`, `free`; `reserve` as a list of `name`, `eligibility`, `capacity`, `occupied`, `free`; per move `placesFreed`, `placesUsed`, `reserveFreed`, `reserveUsed`, `dependsOn`, `blockedBy`, `group`, `confirmation`, `actions`,
+`decidedBy`, `surface`, `runDecidedBy`, and `runSurface`. The plan read also carries `snapshot` and the
+league's `waiverBid` shape. No write tool.
 
 ## 8. Slices
 

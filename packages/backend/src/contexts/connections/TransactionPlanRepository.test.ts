@@ -232,6 +232,7 @@ it.effect("discards a move and releases the claims it held", () =>
       userId: owner,
       team: firstTeam,
       moves: [stored.id],
+      decision: { decidedBy: "owner", surface: "transactions.discard" },
       at,
     });
 
@@ -341,6 +342,7 @@ it.effect("pages one owner's moves by state and orders them by run day, team, an
       userId: owner,
       team: firstTeam,
       moves: [discarded.id],
+      decision: { decidedBy: "owner", surface: "transactions.discard" },
       at,
     });
     yield* repository.appendMoves({
@@ -544,6 +546,8 @@ function moveContent(content: Partial<TransactionMoveContent> = {}): Transaction
     effectiveDate: "2026-11-15",
     decision: "undecided",
     decidedAt: undefined,
+    decidedBy: "agent",
+    surface: "propose_transactions",
     confirmedAt: undefined,
     confirmedBy: undefined,
     validation: { status: "current", checkedAt: at, reasons: [] },

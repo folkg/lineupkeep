@@ -33,6 +33,8 @@ import {
   StoredMovePlayer,
   StoredMoveSlot,
   StoredMoveValidation,
+  TransactionDecision,
+  TransactionDecisionActor,
   TransactionMoveCursor,
   TransactionMoveDecision,
   TransactionMoveId,
@@ -84,6 +86,8 @@ export type TransactionMoveContent = {
   readonly effectiveDate: StoredMoveDate | undefined;
   readonly decision: TransactionMoveDecision;
   readonly decidedAt: DateTime.Utc | undefined;
+  readonly decidedBy: TransactionDecisionActor | undefined;
+  readonly surface: string | undefined;
   readonly confirmedAt: DateTime.Utc | undefined;
   readonly confirmedBy: UserId | undefined;
   readonly validation: StoredMoveValidation;
@@ -104,7 +108,14 @@ export type TransactionMoveSettlement = {
   readonly runDay: StoredMoveDate;
   readonly effectiveDate: StoredMoveDate | undefined;
   readonly runPosition: number | undefined;
-  readonly run: { readonly id: TransactionRunId; readonly at: DateTime.Utc } | undefined;
+  readonly run:
+    | {
+        readonly id: TransactionRunId;
+        readonly at: DateTime.Utc;
+        readonly decidedBy: TransactionDecisionActor | undefined;
+        readonly surface: string | undefined;
+      }
+    | undefined;
   readonly steps: ReadonlyArray<StoredMoveStep>;
 };
 
@@ -128,6 +139,8 @@ type TransactionMoveDay = {
   readonly runDay: StoredMoveDate | undefined;
   readonly effectiveDate: StoredMoveDate | undefined;
   readonly decision: TransactionMoveDecision;
+  readonly decidedBy: TransactionDecisionActor;
+  readonly surface: string;
 };
 
 type TransactionRunClaim =
@@ -281,6 +294,8 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                     effectiveDate: day.effectiveDate ?? null,
                     decision: day.decision,
                     decidedAt: at,
+                    decidedBy: day.decidedBy,
+                    decidedSurface: day.surface,
                     confirmedAt: null,
                     confirmedBy: null,
                     updatedAt: at,
@@ -315,6 +330,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
         readonly userId: UserId;
         readonly team: TeamId;
         readonly moves: Array.NonEmptyReadonlyArray<TransactionMoveId>;
+        readonly decision: TransactionDecision;
         readonly at: DateTime.Utc;
       }) {
         const at = DateTime.toDateUtc(input.at);
@@ -326,7 +342,13 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
               }
               const updated = yield* tx
                 .update(transactionMoves)
-                .set({ decision: "discarded", decidedAt: at, updatedAt: at })
+                .set({
+                  decision: "discarded",
+                  decidedAt: at,
+                  decidedBy: input.decision.decidedBy,
+                  decidedSurface: input.decision.surface,
+                  updatedAt: at,
+                })
                 .where(
                   and(
                     eq(transactionMoves.userId, input.userId),
@@ -357,6 +379,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
         readonly userId: UserId;
         readonly team: TeamId;
         readonly confirmedBy: UserId;
+        readonly decision: TransactionDecision;
         readonly moves: Array.NonEmptyReadonlyArray<{
           readonly move: TransactionMoveId;
           readonly decision: TransactionMoveDecision;
@@ -376,6 +399,8 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                   .set({
                     decision: move.decision,
                     decidedAt: at,
+                    decidedBy: input.decision.decidedBy,
+                    decidedSurface: input.decision.surface,
                     confirmedAt: at,
                     confirmedBy: input.confirmedBy,
                     updatedAt: at,
@@ -408,6 +433,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
         readonly team: TeamId;
         readonly run: TransactionRunId;
         readonly trigger: TransactionRunTrigger;
+        readonly decision: TransactionDecision;
         readonly key: string | undefined;
         readonly counts: TransactionPlanRunCounts;
         readonly refusals: ReadonlyArray<TransactionPlanRunRefusal>;
@@ -425,6 +451,8 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                   userId: input.userId,
                   teamId: input.team,
                   trigger: input.trigger,
+                  decidedBy: input.decision.decidedBy,
+                  decidedSurface: input.decision.surface,
                   key: input.key ?? null,
                   at,
                   counts: input.counts,
@@ -722,6 +750,8 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                       : {
                           runId: settlement.run.id,
                           runAt: DateTime.toDateUtc(settlement.run.at),
+                          runDecidedBy: settlement.run.decidedBy ?? null,
+                          runDecidedSurface: settlement.run.surface ?? null,
                         }),
                     updatedAt: at,
                   })
@@ -1306,6 +1336,8 @@ function moveValues(
   readonly effectiveDate: string | null;
   readonly decision: TransactionMoveDecision;
   readonly decidedAt: Date | null;
+  readonly decidedBy: TransactionDecisionActor | null;
+  readonly decidedSurface: string | null;
   readonly confirmedAt: Date | null;
   readonly confirmedBy: string | null;
   readonly validation: TransactionMoveValidationStatus;
@@ -1330,6 +1362,8 @@ function moveValues(
     effectiveDate: content.effectiveDate ?? null,
     decision: content.decision,
     decidedAt: content.decidedAt === undefined ? null : DateTime.toDateUtc(content.decidedAt),
+    decidedBy: content.decidedBy ?? null,
+    decidedSurface: content.surface ?? null,
     confirmedAt: content.confirmedAt === undefined ? null : DateTime.toDateUtc(content.confirmedAt),
     confirmedBy: content.confirmedBy ?? null,
     validation: content.validation.status,

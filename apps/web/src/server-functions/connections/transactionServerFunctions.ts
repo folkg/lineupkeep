@@ -126,7 +126,10 @@ export const saveTransactionMoveServerFn = createServerFn({ method: "POST" })
             Effect.mapError(() => TransactionInputInvalid.make({})),
           );
           const plans = yield* TransactionPlanService;
-          const result = yield* plans.save(userId, input);
+          const result = yield* plans.save(userId, {
+            ...input,
+            decision: { decidedBy: "owner", surface: "transactions.save" },
+          });
           return actionOf(input.move, "saved", result.refused);
         }),
       (error) =>
@@ -151,7 +154,10 @@ export const discardTransactionMoveServerFn = createServerFn({ method: "POST" })
             Effect.mapError(() => TransactionInputInvalid.make({})),
           );
           const plans = yield* TransactionPlanService;
-          const result = yield* plans.discard(userId, input);
+          const result = yield* plans.discard(userId, {
+            ...input,
+            decision: { decidedBy: "owner", surface: "transactions.discard" },
+          });
           return actionOf(input.move, "discarded", result.refused);
         }),
       (error) =>
@@ -176,7 +182,10 @@ export const confirmTransactionMovesServerFn = createServerFn({ method: "POST" }
             Effect.mapError(() => TransactionInputInvalid.make({})),
           );
           const plans = yield* TransactionPlanService;
-          const result = yield* plans.confirm(userId, input);
+          const result = yield* plans.confirm(userId, {
+            ...input,
+            decision: { decidedBy: "owner", surface: "transactions.confirm" },
+          });
           return confirmationOf({
             confirmed: result.confirmed,
             counts: result.counts,

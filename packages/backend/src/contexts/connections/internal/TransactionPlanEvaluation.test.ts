@@ -1549,6 +1549,11 @@ function facts(input: {
       periodStart: undefined,
     },
     budget: input.budget,
+    waiverBid:
+      input.budget === undefined
+        ? { kind: "bidless" }
+        : { kind: "published", balance: input.budget },
+    rosterSource: "week 1",
   };
 }
 

@@ -115,6 +115,7 @@ import {
   QuerySelectionInvalid,
   type StatRef,
   type TeamOwnerNote,
+  type WaiverBid,
 } from "#contexts/connections/QueryValues.ts";
 import {
   rosterOccupancy,
@@ -2917,6 +2918,46 @@ export const FantasyQueriesLive = Layer.effect(
         failures.push(leagueOutcome.failure);
       }
 
+      const waiverBidOutcome =
+        league?.usesFaab === true
+          ? yield* readOutcome(
+              context,
+              "league_teams",
+              context.provider.readLeagueTeams({
+                ...providerIdentity(context),
+                providerLeagueKey: context.owned.team.providerLeagueKey,
+              }),
+            )
+          : undefined;
+      const waiverBid: TeamSummaryData["waiverBid"] =
+        league === undefined
+          ? undefined
+          : league.usesFaab === true
+            ? waiverBidOf(waiverBidOutcome, context.owned.team.providerTeamKey)
+            : { kind: "bidless" };
+      if (waiverBidOutcome !== undefined) {
+        coverageEntries.push(
+          waiverBidOutcome._tag === "ok"
+            ? coverage("waiver_bid", "league_teams", fetchedAt)
+            : waiverBidOutcome._tag === "unsupported"
+              ? unsupportedCoverage(
+                  "waiver_bid",
+                  "league_teams",
+                  fetchedAt,
+                  waiverBidOutcome.detail,
+                )
+              : degradedCoverage(
+                  "waiver_bid",
+                  "league_teams",
+                  fetchedAt,
+                  waiverBidOutcome.failure.message,
+                ),
+        );
+        if (waiverBidOutcome._tag === "failed") {
+          failures.push(waiverBidOutcome.failure);
+        }
+      }
+
       const standingsNeeded = includes("standings") || includes("categories");
       const standingsOutcome = standingsNeeded
         ? yield* readOutcome(
@@ -3739,6 +3780,7 @@ export const FantasyQueriesLive = Layer.effect(
         ...(remainingGamesSection === undefined
           ? {}
           : { remainingPlayerGames: remainingGamesSection }),
+        ...(waiverBid === undefined ? {} : { waiverBid }),
         ...(includes("roster")
           ? {
               illegalSlots,
@@ -5303,6 +5345,19 @@ function periodKindRefusal(period: ProviderStatPeriod): string {
 
 function leagueOverview(league: ProviderLeagueSettings): NonNullable<LeagueData["overview"]> {
   return { ...leagueFacts(league), transactionRules: leagueTransactionRules(league) };
+}
+
+function waiverBidOf(
+  outcome: ReadOutcome<ReadonlyArray<ProviderLeagueTeam>> | undefined,
+  providerTeamKey: string,
+): WaiverBid | undefined {
+  if (outcome?._tag !== "ok") {
+    return undefined;
+  }
+  const balance = outcome.value.find(
+    (team) => team.providerTeamKey === providerTeamKey,
+  )?.remainingBudget;
+  return balance === undefined ? { kind: "bidless" } : { kind: "published", balance };
 }
 
 function leagueFacts(

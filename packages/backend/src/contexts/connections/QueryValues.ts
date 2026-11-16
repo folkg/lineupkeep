@@ -252,6 +252,25 @@ export const ReserveEligibility = Schema.Union([
 ]).pipe(Schema.annotate({ description: "Who a reserve list accepts." }));
 export type ReserveEligibility = typeof ReserveEligibility.Type;
 
+export const WaiverBid = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("published"),
+    balance: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  }).pipe(
+    Schema.annotate({
+      description:
+        "The league takes a FAAB bid and publishes this team's remaining balance; a waiver claim names a bid from 0 to the balance.",
+    }),
+  ),
+  Schema.Struct({ kind: Schema.Literal("bidless") }).pipe(
+    Schema.annotate({
+      description:
+        "The league takes no FAAB bid, so a waiver claim names no bid and a bid is refused.",
+    }),
+  ),
+]);
+export type WaiverBid = typeof WaiverBid.Type;
+
 export const ReserveList = Schema.Struct({
   name: Schema.NonEmptyString.pipe(
     Schema.annotate({ description: "The league's own name for this list." }),

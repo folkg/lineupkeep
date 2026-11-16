@@ -11,6 +11,7 @@ import {
   slotPlacement,
 } from "#contexts/connections/RosterSlots.ts";
 import type { RosterRule } from "#contexts/connections/RosterSlots.ts";
+import type { TransactionWaiverBid } from "#contexts/connections/TransactionPlans.ts";
 
 import type {
   StoredMoveClaim,
@@ -475,24 +476,34 @@ function identityReasons(
       }
     }
   }
-  if (move.bid !== undefined) {
-    if (move.kind !== "waiver_claim") {
-      stale(reasons, "bid_not_available", undefined, "Only a waiver claim carries a FAAB bid.");
-    } else if (projection.budget === undefined) {
+  if (move.kind === "waiver_claim") {
+    if (facts.waiverBid.kind === "published") {
+      const balance = projection.budget ?? facts.waiverBid.balance;
+      if (move.bid === undefined) {
+        stale(
+          reasons,
+          "bid_required",
+          undefined,
+          `This league takes a FAAB bid and publishes the balance: name a bid from 0 to ${String(balance)}.`,
+        );
+      } else if (move.bid > balance) {
+        stale(
+          reasons,
+          "bid_exceeds_budget",
+          undefined,
+          `A bid of ${String(move.bid)} is more than the ${String(balance)} FAAB this team has left.`,
+        );
+      }
+    } else if (move.bid !== undefined) {
       stale(
         reasons,
         "bid_not_available",
         undefined,
-        "The league does not publish the FAAB this team has left, so this bid cannot be checked.",
-      );
-    } else if (move.bid > projection.budget) {
-      stale(
-        reasons,
-        "bid_exceeds_budget",
-        undefined,
-        `A bid of ${String(move.bid)} is more than the ${String(projection.budget)} FAAB this team has left.`,
+        "This league takes no FAAB bid: name the claim without a bid.",
       );
     }
+  } else if (move.bid !== undefined) {
+    stale(reasons, "bid_not_available", undefined, "Only a waiver claim carries a FAAB bid.");
   }
   if (move.kind === "trade" && move.runDay !== undefined && move.runDay > facts.today) {
     stale(
@@ -2048,6 +2059,8 @@ export type TransactionPlanTeamFacts = {
   readonly today: StoredMoveDate;
   readonly timing: TransactionPlanTiming;
   readonly budget: number | undefined;
+  readonly waiverBid: TransactionWaiverBid;
+  readonly rosterSource: string;
 };
 
 export type TransactionPlanMove = Pick<

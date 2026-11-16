@@ -151,6 +151,8 @@ function teamFacts(input: {
     today: "2026-11-14",
     timing: { rule: "next_day", currentDate: "2026-11-14", periodStart: undefined },
     budget: undefined,
+    waiverBid: { kind: "bidless" },
+    rosterSource: "week 1",
   };
 }
 

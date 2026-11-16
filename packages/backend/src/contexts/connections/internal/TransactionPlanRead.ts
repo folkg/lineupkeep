@@ -19,6 +19,8 @@ import type {
   TransactionMoveCounts,
   TransactionMoveValidationView,
   TransactionPlanDay,
+  TransactionPlanSnapshot,
+  TransactionWaiverBid,
 } from "#contexts/connections/TransactionPlans.ts";
 import { isOpenMove } from "#contexts/connections/TransactionPlans.ts";
 
@@ -73,10 +75,14 @@ export function moveReadView(input: {
         }),
     ...(move.bid === undefined ? {} : { bid: move.bid }),
     ...(move.decidedAt === undefined ? {} : { decidedAt: move.decidedAt }),
+    ...(move.decidedBy === undefined ? {} : { decidedBy: move.decidedBy }),
+    ...(move.surface === undefined ? {} : { surface: move.surface }),
     ...(move.confirmedAt === undefined || move.confirmedBy === undefined
       ? {}
       : { confirmation: { by: move.confirmedBy, at: move.confirmedAt } }),
     ...(move.runAt === undefined ? {} : { runAt: move.runAt }),
+    ...(move.runDecidedBy === undefined ? {} : { runDecidedBy: move.runDecidedBy }),
+    ...(move.runSurface === undefined ? {} : { runSurface: move.runSurface }),
   };
   if (!isOpenMove(move)) {
     return {
@@ -295,8 +301,10 @@ export type TransactionTeamCheck =
   | {
       readonly status: "checked";
       readonly today: StoredMoveDate;
+      readonly snapshot: TransactionPlanSnapshot;
       readonly places: RosterPlaces;
       readonly reserve: ReadonlyArray<ReserveList>;
+      readonly waiverBid: TransactionWaiverBid;
       readonly moves: ReadonlyMap<TransactionMoveRecord["id"], TransactionPlanMoveEvaluation>;
       readonly blocked: ReadonlyMap<TransactionMoveRecord["id"], string>;
     }

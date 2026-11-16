@@ -883,6 +883,8 @@ it("appends moves to one team queue and lists them across teams", async () => {
       at: DateTime.makeUnsafe("2026-11-11T16:00:00.000Z"),
     },
     runAt: DateTime.makeUnsafe("2026-11-11T17:00:00.000Z"),
+    decidedBy: "owner" as const,
+    surface: "transactions.confirm",
     validation: { status: "current" as const, reasons: [] },
     check: { status: "checked" as const },
   };
@@ -899,9 +901,19 @@ it("appends moves to one team queue and lists them across teams", async () => {
       readonly moves: ReadonlyArray<typeof move>;
     }>;
     readonly groups: ReadonlyArray<never>;
+    readonly snapshot: {
+      readonly status: "live";
+      readonly checkedAt: DateTime.Utc;
+      readonly source: string;
+    };
   } => ({
     team: target,
     today: "2026-11-11",
+    snapshot: {
+      status: "live",
+      checkedAt: DateTime.makeUnsafe("2026-11-11T12:00:00.000Z"),
+      source: "week 1",
+    },
     moves,
     days: moves.length === 0 ? [] : [{ day: "2026-11-11", today: true, moves }],
     groups: [],
@@ -1101,6 +1113,8 @@ it("appends moves to one team queue and lists them across teams", async () => {
               at: "2026-11-11T16:00:00.000Z",
             },
             runAt: "2026-11-11T17:00:00.000Z",
+            decidedBy: "owner",
+            surface: "transactions.confirm",
           },
         ],
       },
@@ -1136,6 +1150,11 @@ it("discards one saved move and reports why a run move stays", async () => {
   const planRead = {
     team: teamView,
     today: "2026-11-11",
+    snapshot: {
+      status: "live" as const,
+      checkedAt: DateTime.makeUnsafe("2026-11-11T12:00:00.000Z"),
+      source: "week 1",
+    },
     moves: [move],
     days: [{ day: "2026-11-11", today: true, moves: [move] }],
     groups: [],
@@ -1215,7 +1234,16 @@ it("discards one saved move and reports why a run move stays", async () => {
       structuredContent: { team: { id: team }, reason: "Duplicate.", refused: [] },
     },
   });
-  expect(discarded).toEqual([{ userId: "reader", input: { team, move: moveId } }]);
+  expect(discarded).toEqual([
+    {
+      userId: "reader",
+      input: {
+        team,
+        move: moveId,
+        decision: { decidedBy: "agent", surface: "discard_transaction_move" },
+      },
+    },
+  ]);
 
   outcome = "ended";
   const ended = await run(

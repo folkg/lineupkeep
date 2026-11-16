@@ -1,9 +1,8 @@
-import { DateTime, Effect, Layer } from "effect";
+import { DateTime, Effect, Layer, Result } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import { fantasyDayLabel } from "#contexts/connections/FantasyDay.ts";
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
-import { rosterChangeDate } from "#contexts/connections/ProposalOrder.ts";
 import type {
   ProviderLeagueSettings,
   ProviderPlayerDetail,
@@ -61,23 +60,11 @@ export const TransactionPlanFactsLive = Layer.effect(
           sport: context.owned.team.sport,
         }),
       });
-      const coverage = coverageOf(league);
-      if (coverage === undefined) {
-        return yield* unavailable(
-          input.team,
-          "The league publishes no current date or scoring week, so the roster could not be read.",
-        );
-      }
-      const roster = yield* providerRead({
+      const roster = yield* rosterRead({
         queries,
         context,
         team: input.team,
-        operation: "the roster",
-        read: context.provider.readRoster({
-          ...providerIdentity(context),
-          providerTeamKey: context.owned.team.providerTeamKey,
-          period: coverage,
-        }),
+        league,
       });
       const details = yield* playerDetails({
         context,
@@ -90,11 +77,16 @@ export const TransactionPlanFactsLive = Layer.effect(
         context,
         team: input.team,
         queries,
-        enabled: input.needsBudget,
+        enabled: input.needsBudget || league.usesFaab === true,
       });
       const periodStart = yield* publishedPeriodStart({ context, league });
       return {
         roster: rosterPlayers(roster),
+        rosterSource: rosterSourceOf(roster.coverage),
+        waiverBid:
+          league.usesFaab === true && budget !== undefined
+            ? { kind: "published" as const, balance: budget }
+            : { kind: "bidless" as const },
         pool: poolPlayers(details),
         slots: league.rosterPositions.map((slot) => ({
           position: slot.position,
@@ -129,21 +121,37 @@ function providerRead<A>(input: {
       if (result._tag === "Success") {
         return Effect.succeed(result.success);
       }
-      const failure = unavailable(
-        input.team,
-        `Current state could not be read: ${input.operation} failed.`,
-      );
-      return result.failure._tag === "provider.session_rejected"
-        ? input.queries
-            .recordSessionRejected(
-              input.context.userId,
-              input.context.owned,
-              sessionEvidenceOf(result.failure),
-            )
-            .pipe(Effect.andThen(failure))
-        : failure;
+      return providerFailure({
+        queries: input.queries,
+        context: input.context,
+        team: input.team,
+        operation: input.operation,
+        failure: result.failure,
+      });
     }),
   );
+}
+
+function providerFailure(input: {
+  readonly queries: QueryRepository["Service"];
+  readonly context: TeamContext;
+  readonly team: TeamId;
+  readonly operation: string;
+  readonly failure: ProviderReadFailure;
+}): Effect.Effect<never, TransactionPlanFactsUnavailable> {
+  const failure = unavailable(
+    input.team,
+    `Current state could not be read: ${input.operation} failed.`,
+  );
+  return input.failure._tag === "provider.session_rejected"
+    ? input.queries
+        .recordSessionRejected(
+          input.context.userId,
+          input.context.owned,
+          sessionEvidenceOf(input.failure),
+        )
+        .pipe(Effect.andThen(failure))
+    : failure;
 }
 
 function playerDetails(input: {
@@ -291,16 +299,58 @@ function publishedPeriodStart(input: {
   );
 }
 
-function coverageOf(league: ProviderLeagueSettings): ProviderRosterCoverage | undefined {
-  if (league.rosterCoverage === "week") {
-    const week = league.periodWindow?.current;
-    return week === undefined ? undefined : { type: "week", week };
-  }
-  const date = rosterChangeDate({
-    rule: league.rosterChange?.rule,
-    currentDate: league.currentDate,
+function rosterRead(input: {
+  readonly queries: QueryRepository["Service"];
+  readonly context: TeamContext;
+  readonly team: TeamId;
+  readonly league: ProviderLeagueSettings;
+}): Effect.Effect<ProviderRoster, TransactionPlanFactsUnavailable> {
+  const read = (
+    period: ProviderRosterCoverage | undefined,
+  ): Effect.Effect<Result.Result<ProviderRoster, ProviderReadFailure>> =>
+    Effect.result(
+      input.context.provider.readRoster({
+        ...providerIdentity(input.context),
+        providerTeamKey: input.context.owned.team.providerTeamKey,
+        period,
+      }),
+    );
+  return Effect.gen(function* () {
+    const coverage = currentRosterCoverage(input.league);
+    const first = yield* read(coverage);
+    if (first._tag === "Success") {
+      return first.success;
+    }
+    if (coverage !== undefined && first.failure._tag === "provider.period_mismatch") {
+      const fallback = yield* read(undefined);
+      if (fallback._tag === "Success") {
+        return fallback.success;
+      }
+      return yield* providerFailure({
+        queries: input.queries,
+        context: input.context,
+        team: input.team,
+        operation: "the roster",
+        failure: fallback.failure,
+      });
+    }
+    return yield* providerFailure({
+      queries: input.queries,
+      context: input.context,
+      team: input.team,
+      operation: "the roster",
+      failure: first.failure,
+    });
   });
-  return date === undefined ? undefined : { type: "date", date };
+}
+
+function currentRosterCoverage(league: ProviderLeagueSettings): ProviderRosterCoverage | undefined {
+  const week = league.periodWindow?.current;
+  return week === undefined ? undefined : { type: "week", week };
+}
+
+function rosterSourceOf(coverage: ProviderRosterCoverage): string {
+  return coverage.type === "week" ? `week ${String(coverage.week)}` : `the ${coverage.date} roster`;
 }
 
 function unavailable(
