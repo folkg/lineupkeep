@@ -30,7 +30,6 @@ import { TeamPlaces } from "./TeamPlaces";
 import {
   endedMoveCount,
   groupStatusLabel,
-  groupTitle,
   kindLabel,
   moveCount,
   moveSummary,
@@ -39,6 +38,14 @@ import {
 } from "./transactionCopy";
 import { TransactionAuthenticationFailure } from "./transactionFailure";
 import type { TransactionRemote } from "./transactionRemote";
+import {
+  formatLocalDate,
+  groupTimingLine,
+  moveTimingLine,
+  resultRunLabel,
+} from "./transactionTimes";
+import { useGroupConfirmation } from "./useGroupConfirmation";
+import type { GroupConfirmation } from "./useGroupConfirmation";
 import { useTransactionsPage } from "./useTransactionsPage";
 import type { TransactionsPageController } from "./useTransactionsPage";
 
@@ -76,9 +83,8 @@ export function TransactionsPage(props: TransactionsPageProps): JSX.Element {
             <Stack gap="xl">
               <ActionFeedback feedback={page.feedback()} />
               <SummaryLine page={page} />
-              <TodayZone page={page} />
-              <GroupsZone page={page} />
-              <PlanningSheet page={page} />
+              <TodayZone page={page} remote={props.remote} />
+              <PlanningSheet page={page} remote={props.remote} />
               <EarlierSection page={page} />
             </Stack>
           </Show>
@@ -101,7 +107,7 @@ function SummaryLine(props: SectionProps): JSX.Element {
   );
 }
 
-function TodayZone(props: SectionProps): JSX.Element {
+function TodayZone(props: RemoteSectionProps): JSX.Element {
   const total = (): number => props.page.todayMoves().length;
   const pending = (): number => props.page.pendingTodayCount();
   return (
@@ -128,12 +134,12 @@ function TodayZone(props: SectionProps): JSX.Element {
         >
           <Show when={pending() > 0}>
             <Text id="today-choice-hint" size="caption" tone="danger">
-              {`${moveCount(pending())} still ${pending() === 1 ? "needs" : "need"} your confirmation. A move runs only after you confirm it.`}
+              {`${moveCount(pending())} still ${pending() === 1 ? "needs" : "need"} your confirmation. A group runs only after you confirm it.`}
             </Text>
           </Show>
-          <Stack gap="lg">
-            <For each={props.page.todayMoves()}>
-              {(move) => <TodayCard move={move} page={props.page} />}
+          <Stack gap="xl">
+            <For each={props.page.todayTeams()}>
+              {(team) => <TeamGroups card={team} page={props.page} remote={props.remote} today />}
             </For>
           </Stack>
         </Show>
@@ -142,139 +148,7 @@ function TodayZone(props: SectionProps): JSX.Element {
   );
 }
 
-function TodayCard(props: TodayCardProps): JSX.Element {
-  const invalid = (): boolean => props.move.validation.status !== "current";
-  const working = (): boolean => props.page.confirming() === props.move.move;
-  return (
-    <Box rule="top" ruleTone="ink" space="lg">
-      <Stack gap="md">
-        <Stack gap="2xs">
-          <Text size="caption" weight="semibold">
-            {props.move.team.name}
-          </Text>
-          <Text size="caption" tone="muted">
-            {leagueDisplayName(props.move.team.league)} · {sportDisplayName(props.move.team.sport)}
-          </Text>
-          <TeamPlaces facts={props.page.teamFacts().get(props.move.team.id)} />
-        </Stack>
-        <Stack gap="2xs">
-          <Inline gap="sm" align="baseline">
-            <Badge tone="accent">{kindLabel(props.move.kind)}</Badge>
-            <Badge tone={isPending(props.move) ? "neutral" : "accent"}>
-              {decisionLabel(props.move)}
-            </Badge>
-            <Text size="item" weight="semibold">
-              {moveSummary(props.move)}
-            </Text>
-          </Inline>
-          <Show when={props.move.reason.length > 0}>
-            <Text size="caption" tone="muted">
-              {props.move.reason}
-            </Text>
-          </Show>
-          <MoveState move={props.move} />
-          <Show when={props.move.result !== undefined}>
-            <Text
-              size="caption"
-              tone={
-                props.move.result === "failed" || props.move.result === "unknown"
-                  ? "danger"
-                  : "muted"
-              }
-            >
-              {resultLabel(props.move)}
-            </Text>
-          </Show>
-          <MoveCheck move={props.move} />
-        </Stack>
-        <Inline gap="sm" align="baseline" justify="end">
-          <Show when={isPending(props.move) && props.move.result === undefined}>
-            <Button
-              variant="secondary"
-              disabled={invalid() || props.page.confirming() !== undefined}
-              state={working() ? "working" : "idle"}
-              aria-label={`Confirm and run: ${moveLabel(props.move)}`}
-              onClick={() => props.page.confirmMove(props.move)}
-            >
-              {working() ? "Confirming" : "Confirm and run"}
-            </Button>
-          </Show>
-          <Show when={isConfirmed(props.move) && props.move.result === undefined}>
-            <Button
-              variant="secondary"
-              disabled={invalid() || props.page.confirming() !== undefined}
-              state={working() ? "working" : "idle"}
-              aria-label={`Run now: ${moveLabel(props.move)}`}
-              onClick={() => props.page.confirmMove(props.move)}
-            >
-              {working() ? "Running" : "Run now"}
-            </Button>
-          </Show>
-          <Button
-            variant="quiet"
-            tone="danger"
-            disabled={working() || props.page.discarding() !== undefined}
-            aria-label={`Discard: ${moveLabel(props.move)}`}
-            onClick={() => props.page.discardMove(props.move)}
-          >
-            Discard
-          </Button>
-        </Inline>
-      </Stack>
-    </Box>
-  );
-}
-
-function GroupsZone(props: SectionProps): JSX.Element {
-  return (
-    <Show when={props.page.groups().length > 0}>
-      <Band labelledBy="groups-title">
-        <Stack gap="md">
-          <SectionTitle id="groups-title" focusable>
-            Groups
-          </SectionTitle>
-          <Text size="body" tone="muted">
-            A group runs whole, in the order its moves need. If your league accepts one write and
-            rejects a later one, the group says what ran in part.
-          </Text>
-          <Stack gap="lg">
-            <For each={props.page.groups()}>{(group) => <GroupCard group={group} />}</For>
-          </Stack>
-        </Stack>
-      </Band>
-    </Show>
-  );
-}
-
-function GroupCard(props: { readonly group: TransactionPlanGroupView }): JSX.Element {
-  return (
-    <Box rule="top" ruleTone="ink" space="lg">
-      <Stack gap="2xs">
-        <Inline gap="sm" align="baseline">
-          <Badge tone={props.group.status === "blocked" ? "neutral" : "accent"}>
-            {groupStatusLabel(props.group.status)}
-          </Badge>
-          <Text size="item" weight="semibold">
-            {groupTitle(props.group)}
-          </Text>
-          <Text numeric size="caption" tone="faint">
-            {moveCount(props.group.moves.length)}
-          </Text>
-        </Inline>
-        <Text size="caption" tone={props.group.status === "ready" ? "muted" : "default"}>
-          {props.group.detail}
-        </Text>
-        <Show when={props.group.label === "Roster fixes"}>
-          <Text size="caption" tone="muted">
-            These moves make the roster legal and free the places your move needs.
-          </Text>
-        </Show>
-      </Stack>
-    </Box>
-  );
-}
-
-function PlanningSheet(props: SectionProps): JSX.Element {
+function PlanningSheet(props: RemoteSectionProps): JSX.Element {
   const teams = (): ReadonlyArray<TransactionMoveTeamDayView> => props.page.savedTeams();
   return (
     <Stack as="section" gap="md" labelledBy="saved-title">
@@ -290,8 +164,8 @@ function PlanningSheet(props: SectionProps): JSX.Element {
         </Text>
       </Inline>
       <Text size="body" tone="muted">
-        Each saved move waits for its day. On that day it waits in Today for your confirmation; once
-        confirmed, the check runs it. You can change or discard it until then.
+        A saved group waits for its day. Confirming is your decision; the group runs at its
+        scheduled time that day. You can change the day or discard a move until then.
       </Text>
       <Show
         fallback={
@@ -303,7 +177,9 @@ function PlanningSheet(props: SectionProps): JSX.Element {
         when={teams().length > 0}
       >
         <Stack gap="xl">
-          <For each={teams()}>{(card) => <SavedTeamCard card={card} page={props.page} />}</For>
+          <For each={teams()}>
+            {(card) => <SavedTeamGroups card={card} page={props.page} remote={props.remote} />}
+          </For>
         </Stack>
       </Show>
       <Show when={props.page.hasMoreOpen()}>
@@ -321,8 +197,13 @@ function PlanningSheet(props: SectionProps): JSX.Element {
   );
 }
 
-function SavedTeamCard(props: SavedTeamCardProps): JSX.Element {
+function SavedTeamGroups(props: SavedTeamGroupsProps): JSX.Element {
   const titleId = (): string => `saved-team-${props.card.team.id}`;
+  const confirmation = useGroupConfirmation({
+    team: () => props.card.team.id,
+    remote: () => props.remote,
+    page: () => props.page,
+  });
   return (
     <Box rule="top" ruleTone="ink" space="lg">
       <Stack as="section" gap="md" labelledBy={titleId()}>
@@ -340,19 +221,166 @@ function SavedTeamCard(props: SavedTeamCardProps): JSX.Element {
           </Text>
           <TeamPlaces facts={props.page.teamFacts().get(props.card.team.id)} />
         </Stack>
-        <Box rule="top" space="none">
-          <RuleList>
-            <For each={props.card.moves}>
-              {(move) => <SavedMoveRow move={move} page={props.page} />}
-            </For>
-          </RuleList>
-        </Box>
+        <For each={savedDays(props.card.moves)}>
+          {(day) => (
+            <Stack gap="md">
+              <Heading level={4} size="item">
+                {day.day === undefined ? "No day set" : formatCalendarDate(day.day)}
+              </Heading>
+              <For each={runCards(day.moves, props.page.groups(), false)}>
+                {(card) => (
+                  <RunGroupCard card={card} page={props.page} confirmation={confirmation} />
+                )}
+              </For>
+            </Stack>
+          )}
+        </For>
       </Stack>
     </Box>
   );
 }
 
-function SavedMoveRow(props: SavedMoveRowProps): JSX.Element {
+function TeamGroups(props: TeamGroupsProps): JSX.Element {
+  const confirmation = useGroupConfirmation({
+    team: () => props.card.team.id,
+    remote: () => props.remote,
+    page: () => props.page,
+  });
+  return (
+    <Stack gap="lg">
+      <Stack gap="2xs">
+        <Heading level={3} size="item">
+          {props.card.team.name}
+        </Heading>
+        <Text size="caption" tone="muted">
+          {leagueDisplayName(props.card.team.league)} · {sportDisplayName(props.card.team.sport)}
+        </Text>
+        <TeamPlaces facts={props.page.teamFacts().get(props.card.team.id)} />
+      </Stack>
+      <For each={runCards(props.card.moves, props.page.groups(), props.today)}>
+        {(card) => <RunGroupCard card={card} page={props.page} confirmation={confirmation} />}
+      </For>
+    </Stack>
+  );
+}
+
+function RunGroupCard(props: RunGroupCardProps): JSX.Element {
+  const lead = (): TransactionMoveView => props.card.lead;
+  const all = (): ReadonlyArray<TransactionMoveView> => [...props.card.moves, ...props.card.fixes];
+  const confirmed = (): boolean =>
+    props.card.moves.every(
+      (move) =>
+        move.decision === "confirmed" || move.decision === "now" || move.result !== undefined,
+    );
+  const pending = (): boolean =>
+    props.card.moves.some(
+      (move) =>
+        move.result === undefined && (move.decision === "undecided" || move.decision === "saved"),
+    );
+  const hasOpen = (): boolean => all().some((move) => move.result === undefined);
+  const confirmable = (): boolean =>
+    all().every((move) => move.validation.status === "current" && move.result === undefined);
+  const working = (): boolean => props.confirmation.pending();
+  const controlLabel = (): string => {
+    if (props.card.today) {
+      return pending() ? "Confirm and run" : "Run now";
+    }
+    return "Confirm";
+  };
+  const workingLabel = (): string => (props.card.today && !pending() ? "Running" : "Confirming");
+  const actionLabel = (): string => `${controlLabel()}: ${cardTitle(props.card)}`;
+  return (
+    <Box rule="top" ruleTone="ink" space="lg">
+      <Stack gap="md">
+        <Stack gap="2xs">
+          <Inline gap="sm" align="baseline">
+            <Show when={props.card.group}>
+              {(group) => (
+                <Badge tone={group().status === "blocked" ? "neutral" : "accent"}>
+                  {groupStatusLabel(group().status)}
+                </Badge>
+              )}
+            </Show>
+            <Show when={props.card.moves.length > 1 || props.card.group?.label !== undefined}>
+              <Text size="item" weight="semibold">
+                {cardTitle(props.card)}
+              </Text>
+              <Text numeric size="caption" tone="faint">
+                {moveCount(props.card.moves.length)}
+              </Text>
+            </Show>
+          </Inline>
+          <Text size="caption" tone="muted">
+            {`${groupTimingLine({
+              today: props.card.today,
+              runDay: lead().runDay,
+              confirmed: confirmed(),
+              nextRunAt: props.page.nextRunAt(),
+            })}.`}
+          </Text>
+          <Show when={props.card.group}>
+            {(group) => (
+              <Text size="caption" tone={group().status === "ready" ? "muted" : "default"}>
+                {group().detail}
+              </Text>
+            )}
+          </Show>
+        </Stack>
+        <RuleList>
+          <For each={props.card.moves}>
+            {(move) => (
+              <GroupMoveRow
+                move={move}
+                page={props.page}
+                today={props.card.today}
+                working={working()}
+              />
+            )}
+          </For>
+        </RuleList>
+        <Show when={props.card.fixes.length > 0}>
+          <Box rule="top" space="sm">
+            <Stack gap="2xs">
+              <Text size="caption" weight="semibold">
+                Roster fixes
+              </Text>
+              <Text size="caption" tone="muted">
+                These moves make room for your add. They run first.
+              </Text>
+              <RuleList>
+                <For each={props.card.fixes}>
+                  {(move) => (
+                    <GroupMoveRow
+                      move={move}
+                      page={props.page}
+                      today={props.card.today}
+                      working={working()}
+                    />
+                  )}
+                </For>
+              </RuleList>
+            </Stack>
+          </Box>
+        </Show>
+        <Inline gap="sm" align="baseline" justify="end">
+          <Show when={(props.card.today || pending()) && hasOpen()}>
+            <Button
+              variant="secondary"
+              disabled={!confirmable() || working()}
+              state={working() ? "working" : "idle"}
+              aria-label={actionLabel()}
+              onClick={() => props.confirmation.start(all())}
+            >
+              {working() ? workingLabel() : controlLabel()}
+            </Button>
+          </Show>
+        </Inline>
+      </Stack>
+    </Box>
+  );
+}
+
+function GroupMoveRow(props: GroupMoveRowProps): JSX.Element {
   const invalid = (): boolean => props.move.validation.status !== "current";
   const editing = (): boolean => props.page.editing() === props.move.move;
   return (
@@ -373,45 +401,55 @@ function SavedMoveRow(props: SavedMoveRowProps): JSX.Element {
               {props.move.reason}
             </Text>
           </Show>
-          <DateFacts move={props.move} />
-          <MoveState move={props.move} />
+          <Show when={props.move.placement}>
+            {(placement) => (
+              <Text size="caption" tone="muted">
+                {placement().detail}
+              </Text>
+            )}
+          </Show>
+          <MoveState move={props.move} page={props.page} today={props.today} />
+          <Show when={props.move.result !== undefined}>
+            <Text
+              size="caption"
+              tone={
+                props.move.result === "failed" || props.move.result === "unknown"
+                  ? "danger"
+                  : "muted"
+              }
+            >
+              {resultLabel(props.move)}
+            </Text>
+          </Show>
+          <Show when={!props.today}>
+            <DateFacts move={props.move} />
+          </Show>
           <MoveCheck move={props.move} />
         </Stack>
-        <Stack gap="sm">
-          <Inline gap="sm" align="baseline" justify="end">
-            <Show when={isPending(props.move) && props.move.result === undefined}>
-              <Button
-                variant="secondary"
-                disabled={invalid() || props.page.confirming() !== undefined}
-                state={props.page.confirming() === props.move.move ? "working" : "idle"}
-                aria-label={`Confirm: ${moveLabel(props.move)}`}
-                onClick={() => props.page.confirmMove(props.move)}
-              >
-                {props.page.confirming() === props.move.move ? "Confirming" : "Confirm"}
-              </Button>
-            </Show>
-            <Show when={!invalid()}>
-              <Button
-                variant="link"
-                disabled={props.page.saving() || props.page.discarding() !== undefined}
-                aria-label={`Change date: ${moveLabel(props.move)}`}
-                onClick={() => props.page.startEdit(props.move)}
-              >
-                {props.move.runDay === undefined ? "Set date" : "Change date"}
-              </Button>
-            </Show>
+        <Inline gap="sm" align="baseline" justify="end">
+          <Show when={!props.today && !invalid()}>
             <Button
-              variant="quiet"
-              tone="danger"
-              disabled={props.page.saving() || props.page.discarding() !== undefined}
-              state={props.page.discarding() === props.move.move ? "working" : "idle"}
-              aria-label={`Discard: ${moveLabel(props.move)}`}
-              onClick={() => props.page.discardMove(props.move)}
+              variant="link"
+              disabled={
+                props.page.saving() || props.page.discarding() !== undefined || props.working
+              }
+              aria-label={`Change date: ${moveSummary(props.move)}`}
+              onClick={() => props.page.startEdit(props.move)}
             >
-              {props.page.discarding() === props.move.move ? "Discarding" : "Discard"}
+              {props.move.runDay === undefined ? "Set date" : "Change date"}
             </Button>
-          </Inline>
-        </Stack>
+          </Show>
+          <Button
+            variant="quiet"
+            tone="danger"
+            disabled={props.page.saving() || props.page.discarding() !== undefined || props.working}
+            state={props.page.discarding() === props.move.move ? "working" : "idle"}
+            aria-label={`Discard: ${moveSummary(props.move)}`}
+            onClick={() => props.page.discardMove(props.move)}
+          >
+            {props.page.discarding() === props.move.move ? "Discarding" : "Discard"}
+          </Button>
+        </Inline>
       </Inline>
       <Show when={editing()}>
         <Form gap="sm" onSubmit={() => props.page.saveEdit(props.move)}>
@@ -436,7 +474,7 @@ function SavedMoveRow(props: SavedMoveRowProps): JSX.Element {
               <Button
                 type="submit"
                 state={props.page.saving() ? "working" : "idle"}
-                disabled={invalid() || props.page.discarding() !== undefined}
+                disabled={invalid() || props.page.discarding() !== undefined || props.working}
               >
                 {props.page.saving() ? "Saving" : "Save changes"}
               </Button>
@@ -472,49 +510,46 @@ function DateFacts(props: { readonly move: TransactionMoveView }): JSX.Element {
   );
 }
 
-function MoveState(props: { readonly move: TransactionMoveView }): JSX.Element {
-  const confirmation = (): string | undefined => {
-    const confirmed = props.move.confirmation;
-    if (confirmed !== undefined) {
-      if (props.move.result === undefined) {
-        return `You confirmed this on ${formatCalendarDate(confirmed.at)}${surfaceCopy(props.move)}. It has not run yet.`;
-      }
-      return props.move.runDecidedBy === "system" && props.move.runAt !== undefined
-        ? `You confirmed this on ${formatCalendarDate(confirmed.at)}${surfaceCopy(props.move)}. The scheduled check ran it on the ${formatCalendarDate(props.move.runAt)} check.`
-        : `You confirmed this on ${formatCalendarDate(confirmed.at)}${surfaceCopy(props.move)}. It ran on the ${formatCalendarDate(props.move.runAt ?? confirmed.at)} check.`;
+function MoveState(props: MoveStateProps): JSX.Element {
+  const line = (): string | undefined => {
+    const move = props.move;
+    const timing = moveTimingLine({
+      move,
+      today: props.today,
+      nextRunAt: props.page.nextRunAt(),
+    });
+    if (move.confirmation !== undefined) {
+      const confirmed = `You confirmed this on ${formatLocalDate(move.confirmation.at)}${surfaceCopy(move)}.`;
+      return timing === undefined
+        ? confirmed
+        : `${confirmed} ${timing.endsWith(".") ? timing : `${timing}.`}`;
     }
-    if (props.move.decision === "discarded") {
-      return props.move.decidedAt === undefined
-        ? decidedByCopy(props.move, "discarded this")
-        : `${decidedByCopy(props.move, "discarded this")} on ${formatCalendarDate(props.move.decidedAt)}.`;
+    if (move.decision === "discarded") {
+      return move.decidedAt === undefined
+        ? decidedByCopy(move, "discarded this")
+        : `${decidedByCopy(move, "discarded this")} on ${formatLocalDate(move.decidedAt)}.`;
     }
-    if (props.move.result === "executed") {
-      const ran =
-        props.move.runAt === undefined
-          ? "It ran on the check."
-          : `It ran on the ${formatCalendarDate(props.move.runAt)} check.`;
-      return props.move.runDecidedBy === "system"
-        ? ran.replace("It ran", "The scheduled check ran")
-        : ran;
+    if (timing !== undefined) {
+      return timing.endsWith(".") ? timing : `${timing}.`;
     }
-    if (props.move.result !== undefined) {
+    if (move.result !== undefined) {
       return undefined;
     }
-    if (isConfirmed(props.move)) {
+    if (isConfirmed(move)) {
       return "Confirmed. It has not run yet.";
     }
-    if (props.move.decision === "saved") {
-      return props.move.runDay === undefined
+    if (move.decision === "saved") {
+      return move.runDay === undefined
         ? "It waits for your confirmation."
-        : `It waits for ${formatCalendarDate(props.move.runDay)}. It runs only after you confirm it on that day.`;
+        : `It waits for ${formatCalendarDate(move.runDay)}. Nothing runs until you confirm it.`;
     }
     return "Nothing runs until you confirm it.";
   };
   return (
-    <Show when={confirmation()}>
-      {(line) => (
+    <Show when={line()}>
+      {(held) => (
         <Text size="caption" tone={props.move.decision === "discarded" ? "faint" : "muted"}>
-          {line()}
+          {held()}
         </Text>
       )}
     </Show>
@@ -526,7 +561,7 @@ function decidedByCopy(move: TransactionMoveView, action: string): string {
     case "agent":
       return `An agent ${action}${surfaceCopy(move)}`;
     case "system":
-      return `The scheduled check ${action}`;
+      return `The scheduled run ${action}`;
     case "owner":
     case undefined:
       return `You ${action}${surfaceCopy(move)}`;
@@ -566,9 +601,9 @@ function MoveCheck(props: { readonly move: TransactionMoveView }): JSX.Element {
           </Text>
         </Show>
         <Show when={checked()}>
-          {(line) => (
+          {(held) => (
             <Text size="caption" tone="faint">
-              {line()}
+              {held()}
             </Text>
           )}
         </Show>
@@ -627,7 +662,9 @@ function EarlierSection(props: SectionProps): JSX.Element {
             when={props.page.earlier().length > 0}
           >
             <RuleList>
-              <For each={props.page.earlier()}>{(move) => <EarlierRow move={move} />}</For>
+              <For each={props.page.earlier()}>
+                {(move) => <EarlierRow move={move} page={props.page} />}
+              </For>
             </RuleList>
             <Show when={props.page.hasMoreEarlier()}>
               <Inline gap="sm">
@@ -649,7 +686,7 @@ function EarlierSection(props: SectionProps): JSX.Element {
   );
 }
 
-function EarlierRow(props: { readonly move: TransactionMoveView }): JSX.Element {
+function EarlierRow(props: EarlierRowProps): JSX.Element {
   return (
     <RuleListItem layout="stack" dense>
       <Stack gap="2xs">
@@ -665,7 +702,7 @@ function EarlierRow(props: { readonly move: TransactionMoveView }): JSX.Element 
           {props.move.team.name} · {leagueDisplayName(props.move.team.league)} ·{" "}
           {sportDisplayName(props.move.team.sport)}
         </Text>
-        <MoveState move={props.move} />
+        <MoveState move={props.move} page={props.page} today={false} />
       </Stack>
     </RuleListItem>
   );
@@ -676,7 +713,7 @@ function todayCopy(total: number, pending: number): string {
     return "No move is waiting to run today.";
   }
   if (pending === 0) {
-    return `All ${String(total)} ${total === 1 ? "is" : "are"} confirmed. A confirmed move runs now, or on the check when its day arrives.`;
+    return `All ${String(total)} ${total === 1 ? "is" : "are"} confirmed. A confirmed group runs now.`;
   }
   return `${String(pending)} of ${String(total)} waiting for your confirmation. Nothing runs until you confirm it.`;
 }
@@ -711,7 +748,7 @@ function isConfirmed(move: TransactionMoveView): boolean {
 
 function resultLabel(move: TransactionMoveView): string {
   if (move.result === "executed") {
-    return "Ran on the check";
+    return resultRunLabel(move);
   }
   if (move.result === "failed") {
     return "Failed";
@@ -737,8 +774,102 @@ function resultLabel(move: TransactionMoveView): string {
   return "Undecided";
 }
 
-function moveLabel(move: TransactionMoveView): string {
-  return `${moveSummary(move)} for ${move.team.name}`;
+function cardTitle(card: RunGroupCardView): string {
+  if (card.group?.label !== undefined) {
+    return card.group.label;
+  }
+  if (card.moves.length === 1) {
+    const only = card.moves[0];
+    return only === undefined ? "This move" : moveSummary(only);
+  }
+  return `Group of ${moveCount(card.moves.length)}`;
+}
+
+function runCards(
+  moves: ReadonlyArray<TransactionMoveView>,
+  groups: ReadonlyArray<TransactionPlanGroupView>,
+  today: boolean,
+): ReadonlyArray<RunGroupCardView> {
+  const byGroup = new Map(groups.map((group) => [group.group, group] as const));
+  const fixesByFunded = new Map<string, Array<TransactionMoveView>>();
+  const leads = new Map<string, Array<TransactionMoveView>>();
+  for (const move of moves) {
+    const group = move.group === undefined ? undefined : byGroup.get(move.group);
+    if (group?.fixesFor !== undefined) {
+      const held = fixesByFunded.get(group.fixesFor) ?? [];
+      held.push(move);
+      fixesByFunded.set(group.fixesFor, held);
+      continue;
+    }
+    const key = move.group ?? move.move;
+    const held = leads.get(key) ?? [];
+    held.push(move);
+    leads.set(key, held);
+  }
+  const cards: Array<RunGroupCardView> = [];
+  for (const [key, members] of leads) {
+    const ordered = [...members].sort((left, right) => left.position - right.position);
+    const lead = ordered[0];
+    if (lead === undefined) {
+      continue;
+    }
+    const group = byGroup.get(key);
+    cards.push({
+      key,
+      lead,
+      moves: ordered,
+      fixes: ordered.flatMap((move) => fixesByFunded.get(move.move) ?? []),
+      today,
+      ...(group === undefined ? {} : { group }),
+    });
+  }
+  for (const [funded, fixes] of fixesByFunded) {
+    if (cards.some((card) => card.moves.some((move) => move.move === funded))) {
+      continue;
+    }
+    const ordered = [...fixes].sort((left, right) => left.position - right.position);
+    const lead = ordered[0];
+    if (lead !== undefined) {
+      cards.push({
+        key: `fixes:${funded}`,
+        lead,
+        moves: ordered,
+        fixes: [],
+        today,
+      });
+    }
+  }
+  return cards.sort(
+    (left, right) =>
+      cardPosition(left) - cardPosition(right) ||
+      left.lead.team.name.localeCompare(right.lead.team.name),
+  );
+}
+
+function cardPosition(card: RunGroupCardView): number {
+  return Math.min(
+    ...card.moves.map((move) => move.position),
+    ...card.fixes.map((move) => move.position),
+  );
+}
+
+function savedDays(moves: ReadonlyArray<TransactionMoveView>): ReadonlyArray<{
+  readonly day: string | undefined;
+  readonly moves: ReadonlyArray<TransactionMoveView>;
+}> {
+  const byDay = new Map<string, Array<TransactionMoveView>>();
+  for (const move of moves) {
+    const key = move.runDay ?? "";
+    const held = byDay.get(key) ?? [];
+    held.push(move);
+    byDay.set(key, held);
+  }
+  return [...byDay]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([day, held]) => ({
+      day: day === "" ? undefined : day,
+      moves: [...held].sort((left, right) => left.position - right.position),
+    }));
 }
 
 type TransactionsPageProps = {
@@ -749,17 +880,52 @@ type SectionProps = {
   readonly page: TransactionsPageController;
 };
 
-type TodayCardProps = {
-  readonly move: TransactionMoveView;
-  readonly page: TransactionsPageController;
+type RemoteSectionProps = SectionProps & {
+  readonly remote: TransactionRemote;
 };
 
-type SavedTeamCardProps = {
+type TeamGroupsProps = {
   readonly card: TransactionMoveTeamDayView;
   readonly page: TransactionsPageController;
+  readonly remote: TransactionRemote;
+  readonly today: boolean;
 };
 
-type SavedMoveRowProps = {
+type SavedTeamGroupsProps = {
+  readonly card: TransactionMoveTeamDayView;
+  readonly page: TransactionsPageController;
+  readonly remote: TransactionRemote;
+};
+
+type RunGroupCardProps = {
+  readonly card: RunGroupCardView;
+  readonly page: TransactionsPageController;
+  readonly confirmation: GroupConfirmation;
+};
+
+type GroupMoveRowProps = {
   readonly move: TransactionMoveView;
   readonly page: TransactionsPageController;
+  readonly today: boolean;
+  readonly working: boolean;
+};
+
+type MoveStateProps = {
+  readonly move: TransactionMoveView;
+  readonly page: TransactionsPageController;
+  readonly today: boolean;
+};
+
+type EarlierRowProps = {
+  readonly move: TransactionMoveView;
+  readonly page: TransactionsPageController;
+};
+
+type RunGroupCardView = {
+  readonly key: string;
+  readonly lead: TransactionMoveView;
+  readonly moves: ReadonlyArray<TransactionMoveView>;
+  readonly fixes: ReadonlyArray<TransactionMoveView>;
+  readonly today: boolean;
+  readonly group?: TransactionPlanGroupView;
 };

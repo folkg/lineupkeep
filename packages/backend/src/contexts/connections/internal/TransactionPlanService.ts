@@ -71,6 +71,7 @@ import type {
   TransactionTimelineInput,
 } from "#contexts/connections/TransactionPlans.ts";
 
+import { nextCheckAt } from "./CheckSchedule.ts";
 import { QueryTokens } from "./QueryTokens.ts";
 import {
   claimTransactionPlanMoves,
@@ -143,6 +144,11 @@ export type TransactionPlanFactsShape = {
     readonly players: ReadonlyArray<string>;
     readonly needsBudget: boolean;
   }) => Effect.Effect<TransactionPlanTeamFacts, TransactionPlanFactsUnavailable>;
+  readonly today: (input: {
+    readonly userId: UserId;
+    readonly team: TeamId;
+    readonly at: DateTime.Utc;
+  }) => Effect.Effect<StoredMoveDate, TransactionPlanFactsUnavailable>;
 };
 
 export class TransactionPlanFacts extends Context.Service<
@@ -208,6 +214,31 @@ export const TransactionPlanServiceLive = Layer.effect(
         team: input.team,
       });
       return planViewOf({ stored, facts: input.facts, checkedAt: input.at, team: input.team });
+    });
+
+    const storedRead = Effect.fn("TransactionPlanService.storedRead")(function* (input: {
+      readonly userId: UserId;
+      readonly team: TeamId;
+      readonly at: DateTime.Utc;
+      readonly today?: StoredMoveDate;
+    }) {
+      const stored = yield* repository.readPlanMoves({
+        userId: input.userId,
+        team: input.team,
+      });
+      const team = yield* teamSummary(input.userId, input.team);
+      const moves = stored.map((move) =>
+        moveReadView({ move, team, check: { status: "unavailable" } }),
+      );
+      return {
+        team,
+        ...(input.today === undefined ? {} : { today: input.today }),
+        nextRunAt: nextCheckAt(input.at),
+        snapshot: storedSnapshot(stored),
+        moves,
+        days: planDays({ moves, today: input.today }),
+        groups: yield* groupReadsFor({ moves: stored, check: undefined }),
+      } satisfies TransactionPlanRead;
     });
 
     const rosterFixedEntries = Effect.fn("TransactionPlanService.rosterFixedEntries")(
@@ -1418,20 +1449,23 @@ export const TransactionPlanServiceLive = Layer.effect(
             detail: entry.detail,
             moves: [...input.moves],
           })),
-          plan: yield* plan(userId, { team: input.team }),
+          plan: yield* storedRead({ userId, team: input.team, at }),
         } satisfies TransactionPlanConfirmation;
       }
       const targets = confirmationTargets(open, requested);
-      const facts = yield* factsPort.read({
-        userId,
-        team: input.team,
-        at,
-        players: namedPlayers(open),
-        needsBudget: needsBudget(open),
-      });
+      if (targets.length === 0) {
+        return {
+          status: "confirmed",
+          confirmed: [],
+          counts: emptyRunCounts(),
+          refusals: [],
+          plan: yield* storedRead({ userId, team: input.team, at }),
+        } satisfies TransactionPlanConfirmation;
+      }
+      const today = yield* factsPort.today({ userId, team: input.team, at });
       const decisions = targets.map((move) => ({
         move: move.id,
-        decision: isDueMove(move, facts.today) ? ("now" as const) : ("confirmed" as const),
+        decision: isDueMove(move, today) ? ("now" as const) : ("confirmed" as const),
       }));
       const [first, ...rest] = decisions;
       if (first === undefined) {
@@ -1440,7 +1474,7 @@ export const TransactionPlanServiceLive = Layer.effect(
           confirmed: [],
           counts: emptyRunCounts(),
           refusals: [],
-          plan: yield* plan(userId, { team: input.team }),
+          plan: yield* storedRead({ userId, team: input.team, at, today }),
         } satisfies TransactionPlanConfirmation;
       }
       yield* repository.confirmMoves({
@@ -1457,7 +1491,7 @@ export const TransactionPlanServiceLive = Layer.effect(
           confirmed: decisions.map((entry) => entry.move),
           counts: emptyRunCounts(),
           refusals: [],
-          plan: yield* plan(userId, { team: input.team }),
+          plan: yield* storedRead({ userId, team: input.team, at, today }),
         } satisfies TransactionPlanConfirmation;
       }
       const submission = yield* submit(userId, {
@@ -1713,6 +1747,9 @@ export const TransactionPlanServiceLive = Layer.effect(
                   },
                   places: occupancy.places,
                   reserve: occupancy.reserve,
+                  addsPossible:
+                    occupancy.places.free +
+                    occupancy.reserve.reduce((total, list) => total + list.free, 0),
                   waiverBid: read.success.waiverBid,
                   moves: new Map(evaluation.moves.map((entry) => [entry.move, entry] as const)),
                   blocked: new Map(
@@ -1820,6 +1857,7 @@ export const TransactionPlanServiceLive = Layer.effect(
       return {
         status: "ok",
         team,
+        nextRunAt: nextCheckAt(at),
         moves,
         days: moveDays({ moves, todayOf }),
         teamFacts,
@@ -1878,9 +1916,15 @@ export const TransactionPlanServiceLive = Layer.effect(
       return {
         team,
         today,
+        nextRunAt: nextCheckAt(at),
         snapshot: check?.status === "checked" ? check.snapshot : storedSnapshot(stored),
         ...(check?.status === "checked"
-          ? { places: check.places, reserve: check.reserve, waiverBid: check.waiverBid }
+          ? {
+              places: check.places,
+              reserve: check.reserve,
+              addsPossible: check.addsPossible,
+              waiverBid: check.waiverBid,
+            }
           : {}),
         moves,
         days: planDays({ moves, today }),

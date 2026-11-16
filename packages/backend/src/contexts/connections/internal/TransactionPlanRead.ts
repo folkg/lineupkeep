@@ -304,6 +304,7 @@ export type TransactionTeamCheck =
       readonly snapshot: TransactionPlanSnapshot;
       readonly places: RosterPlaces;
       readonly reserve: ReadonlyArray<ReserveList>;
+      readonly addsPossible: number;
       readonly waiverBid: TransactionWaiverBid;
       readonly moves: ReadonlyMap<TransactionMoveRecord["id"], TransactionPlanMoveEvaluation>;
       readonly blocked: ReadonlyMap<TransactionMoveRecord["id"], string>;

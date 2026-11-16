@@ -3789,6 +3789,9 @@ export const FantasyQueriesLive = Layer.effect(
                 : {
                     places: rosterSummary.places,
                     reserve: rosterSummary.reserve,
+                    addsPossible:
+                      rosterSummary.places.free +
+                      rosterSummary.reserve.reduce((total, list) => total + list.free, 0),
                   }),
             }
           : {}),

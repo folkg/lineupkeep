@@ -1416,6 +1416,7 @@ it.effect("publishes place accounting and each reserve list on the roster and te
     ]);
     assert.deepStrictEqual(summary.places, read.places);
     assert.deepStrictEqual(summary.reserve, read.reserve);
+    assert.strictEqual(summary.addsPossible, 1);
 
     const plainLeague = yield* seed(fake, [team("461.l.1000.t.3", "Gamma")], {
       roster: rosterFixture({

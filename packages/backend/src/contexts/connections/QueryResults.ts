@@ -2036,6 +2036,12 @@ export const TeamSummaryData = Schema.Struct({
         "Each reserve list the league publishes, by its own name. Present when the league rules and the roster were read; a league with no reserve lists publishes none.",
     }),
   ),
+  addsPossible: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))).pipe(
+    Schema.annotate({
+      description:
+        "How many adds fit right now: the free active places plus the free reserve places.",
+    }),
+  ),
   roster: Schema.optional(Schema.Array(SummaryRosterPlayer)).pipe(
     Schema.annotate({
       description:

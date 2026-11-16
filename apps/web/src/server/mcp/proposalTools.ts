@@ -3,6 +3,7 @@ import type { AuthenticatedAgent } from "@lineupkeep/backend/auth/Auth";
 import { providerSessionRefusal } from "@lineupkeep/backend/connections/Connection";
 import { TeamId } from "@lineupkeep/backend/connections/FantasyTeam";
 import { fantasyQueryScopes } from "@lineupkeep/backend/connections/QueryScopes";
+import { PlayerRef } from "@lineupkeep/backend/connections/QueryValues";
 import {
   PendingTradeOffersInput,
   PendingTradeOffersResult,
@@ -11,7 +12,6 @@ import {
 import type { TransactionOffersError } from "@lineupkeep/backend/connections/TransactionOffers";
 import {
   ListTransactionMovesInput,
-  ProposeTransactionMovesInput,
   TransactionMoveId,
   TransactionMoveList,
   TransactionMoveRead,
@@ -49,6 +49,51 @@ const ProposedTransactions = Schema.Struct({
   refused: Schema.Array(PlanRefusal),
 });
 
+const AgentTransactionMove = Schema.Struct({
+  move: Schema.optional(TransactionMoveId).annotate({
+    description: "A queued move to change in place; omit it to add a move.",
+  }),
+  group: Schema.optional(Schema.NonEmptyString).annotate({
+    description: "A label shared by moves that run together; omit it for one move.",
+  }),
+  kind: Schema.Literals(["free_agent_add", "waiver_claim", "drop"]).annotate({
+    description: "An add or claim names one player to add; a drop names one player to drop.",
+  }),
+  adds: Schema.Array(PlayerRef).pipe(
+    Schema.check(Schema.isMaxLength(1)),
+    Schema.withDecodingDefaultKey(Effect.succeed([])),
+  ),
+  fallbacks: Schema.optional(
+    Schema.NullOr(
+      Schema.Array(PlayerRef).pipe(
+        Schema.check(Schema.isMaxLength(10)),
+        Schema.annotate({ description: "Other players to try in order." }),
+      ),
+    ),
+  ),
+  drops: Schema.Array(PlayerRef).pipe(
+    Schema.check(Schema.isMaxLength(1)),
+    Schema.withDecodingDefaultKey(Effect.succeed([])),
+  ),
+  bid: Schema.optional(
+    Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))).annotate({
+      description: "A claim's FAAB bid in a league that publishes a balance.",
+    }),
+  ),
+  reason: Schema.NonEmptyString,
+  window: Schema.optional(Schema.NullOr(StoredMoveDate)).annotate({
+    description: "The day the move should run; omit it to run today.",
+  }),
+});
+
+const ProposeAgentTransactionsInput = Schema.Struct({
+  team: TeamId,
+  moves: Schema.Array(AgentTransactionMove).pipe(
+    Schema.check(Schema.isMinLength(1), Schema.isMaxLength(20)),
+  ),
+  client: Schema.optional(Schema.NullOr(Schema.Trim.pipe(Schema.check(Schema.isMaxLength(60))))),
+});
+
 const DiscardTransactionMoveToolInput = Schema.Struct({
   team: TeamId,
   move: TransactionMoveId.annotate({ description: "The saved move to discard." }),
@@ -70,8 +115,8 @@ const DiscardedTransactionPlan = Schema.Struct({
 export const proposalTools = Toolkit.make(
   Tool.make("propose_transactions", {
     description:
-      "Add moves to one team's transaction queue, or amend a move in place by naming its move id. Nothing is submitted, executed, or spent. A saved move whose day arrives waits in Today until the owner confirms it; no tool confirms a move. `discard_transaction_move` removes one move. A move that cannot run is returned in `refused` with its position and reason and is not stored.",
-    parameters: ProposeTransactionMovesInput,
+      "Add moves to one team's queue: an add, a claim, or a drop, and an add may name one drop. Name no place: the server places the player and attaches the roster fixes that make room. Nothing is submitted or spent. A saved move waits in Today for the owner to confirm it; no tool confirms a move. `discard_transaction_move` removes a move; a refused move returns its reason and is not stored.",
+    parameters: ProposeAgentTransactionsInput,
     success: Schema.toCodecJson(ProposedTransactions),
     failure: ToolFailure,
   })
@@ -109,7 +154,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_transaction_plan", {
     description:
-      "Read one team's queue in run order by day: each move's check, decision actor, surface, and confirmation; the snapshot its places came from; the league's waiver bid shape; each reserve list by name; and each group's status, actions, and plain sentence.",
+      "Read one team's queue in run order by day: each move's check, decision, actor, surface, confirmation, and the exact next run time. `addsPossible` says how many adds fit now, with the free places and each list by name. A group carries its status, actions, and a plain sentence.",
     parameters: TransactionPlanInput,
     success: Schema.toCodecJson(TransactionPlanRead),
     failure: ToolFailure,
@@ -169,17 +214,6 @@ export function proposalToolHandlers(
                   ? {}
                   : { fallbacks: move.fallbacks }),
                 drops: move.drops,
-                ...(move.to === undefined || move.to === null ? {} : { to: move.to }),
-                ...(move.player === undefined || move.player === null
-                  ? {}
-                  : { player: move.player }),
-                ...(move.slotMove === undefined || move.slotMove === null
-                  ? {}
-                  : { slotMove: move.slotMove }),
-                ...(move.picks === undefined || move.picks === null ? {} : { picks: move.picks }),
-                ...(move.counterparty === undefined || move.counterparty === null
-                  ? {}
-                  : { counterparty: move.counterparty }),
                 ...(move.bid === undefined || move.bid === null ? {} : { bid: move.bid }),
                 reason: move.reason,
                 ...(move.window === undefined || move.window === null

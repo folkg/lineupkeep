@@ -27,6 +27,7 @@ export function toTransactionMoveListView(list: TransactionMoveList): Transactio
   return {
     status: "ok",
     ...(list.team === undefined ? {} : { team: list.team }),
+    nextRunAt: DateTime.formatIso(list.nextRunAt),
     moves: list.moves.map(toMoveView),
     days: list.days.map(toMoveDayView),
     groups: list.groups.map(toGroupView),
@@ -54,6 +55,7 @@ export function toTransactionPlanData(plan: TransactionPlanRead): TransactionPla
   return {
     team: plan.team,
     ...(plan.today === undefined ? {} : { today: plan.today }),
+    nextRunAt: DateTime.formatIso(plan.nextRunAt),
     snapshot:
       plan.snapshot.status === "live"
         ? {
@@ -71,6 +73,7 @@ export function toTransactionPlanData(plan: TransactionPlanRead): TransactionPla
     ...(plan.waiverBid === undefined ? {} : { waiverBid: plan.waiverBid }),
     ...(plan.places === undefined ? {} : { places: plan.places }),
     ...(plan.reserve === undefined ? {} : { reserve: plan.reserve }),
+    ...(plan.addsPossible === undefined ? {} : { addsPossible: plan.addsPossible }),
     moves: plan.moves.map(toMoveView),
     days: plan.days.map(toPlanDayView),
     groups: plan.groups.map(toGroupView),
@@ -84,6 +87,7 @@ function toGroupView(group: TransactionPlanGroupRead): TransactionPlanGroupView 
     ...(group.label === undefined ? {} : { label: group.label }),
     status: group.status,
     moves: group.moves,
+    ...(group.fixesFor === undefined ? {} : { fixesFor: group.fixesFor }),
     actions: group.actions,
     ...(group.failed === undefined ? {} : { failed: group.failed }),
     notRun: group.notRun,

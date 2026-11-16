@@ -145,6 +145,7 @@ export type TransactionPlanGroupView = {
   readonly label?: string;
   readonly status: "ready" | "blocked" | "partly_done" | "done";
   readonly moves: ReadonlyArray<string>;
+  readonly fixesFor?: string;
   readonly actions: ReadonlyArray<TransactionPlanGroupActionView>;
   readonly failed?: TransactionPlanGroupActionView;
   readonly notRun: ReadonlyArray<string>;
@@ -155,6 +156,7 @@ export type TransactionPlanGroupView = {
 export type TransactionMoveListData = {
   readonly status: "ok";
   readonly team?: TransactionMoveTeamView;
+  readonly nextRunAt: string;
   readonly moves: ReadonlyArray<TransactionMoveView>;
   readonly days: ReadonlyArray<TransactionMoveDayView>;
   readonly teamFacts: ReadonlyArray<TransactionTeamFactsView>;
@@ -190,10 +192,12 @@ type TransactionPlanSnapshotView =
 export type TransactionPlanData = {
   readonly team: TransactionMoveTeamView;
   readonly today?: string;
+  readonly nextRunAt: string;
   readonly snapshot: TransactionPlanSnapshotView;
   readonly waiverBid?: WaiverBidView;
   readonly places?: RosterPlacesView;
   readonly reserve?: ReadonlyArray<ReserveListView>;
+  readonly addsPossible?: number;
   readonly moves: ReadonlyArray<TransactionMoveView>;
   readonly days: ReadonlyArray<TransactionPlanDayView>;
   readonly groups: ReadonlyArray<TransactionPlanGroupView>;

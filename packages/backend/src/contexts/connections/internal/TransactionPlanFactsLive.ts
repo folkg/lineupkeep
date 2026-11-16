@@ -105,7 +105,35 @@ export const TransactionPlanFactsLive = Layer.effect(
       };
     });
 
-    return { read };
+    const today = Effect.fn("TransactionPlanFacts.today")(function* (input: {
+      readonly userId: UserId;
+      readonly team: TeamId;
+      readonly at: DateTime.Utc;
+    }) {
+      const providerKey = yield* queries.readTeamProvider(input.userId, input.team).pipe(
+        Effect.mapError(() =>
+          TransactionPlanFactsUnavailable.make({
+            team: input.team,
+            detail: "This team's connection could not be read.",
+          }),
+        ),
+      );
+      if (providerKey === undefined) {
+        return yield* TransactionPlanFactsUnavailable.make({
+          team: input.team,
+          detail: "This team is not available to this account.",
+        });
+      }
+      const provider = registry.get(providerKey);
+      if (provider === undefined) {
+        return yield* Effect.die(
+          new Error(`Team ${input.team} references an unregistered provider`),
+        );
+      }
+      return fantasyDayLabel(input.at, provider.capabilities.fantasyDay);
+    });
+
+    return { read, today };
   }),
 );
 

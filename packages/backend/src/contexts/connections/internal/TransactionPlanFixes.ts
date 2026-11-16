@@ -1,3 +1,5 @@
+import { Schema } from "effect";
+
 import { rosterOccupancy, slotCapacity, slotPlacement } from "#contexts/connections/RosterSlots.ts";
 import type { RosterRule } from "#contexts/connections/RosterSlots.ts";
 
@@ -7,7 +9,8 @@ import type {
   TransactionPlanRosterPlayer,
   TransactionPlanTeamFacts,
 } from "./TransactionPlanEvaluation.ts";
-import type { StoredMoveValidationReason, TransactionMoveId } from "./TransactionPlanRecord.ts";
+import { TransactionMoveId } from "./TransactionPlanRecord.ts";
+import type { StoredMoveValidationReason } from "./TransactionPlanRecord.ts";
 
 const rosterFixGroupPrefix = "roster-fixes:";
 
@@ -19,6 +22,13 @@ export function rosterFixGroupOf(move: TransactionMoveId): string {
 
 export function isRosterFixGroup(group: string | undefined): boolean {
   return group !== undefined && group.startsWith(rosterFixGroupPrefix);
+}
+
+export function rosterFixFundedMove(group: string | undefined): TransactionMoveId | undefined {
+  if (group === undefined || !isRosterFixGroup(group)) {
+    return undefined;
+  }
+  return Schema.decodeSync(TransactionMoveId)(group.slice(rosterFixGroupPrefix.length));
 }
 
 export function searchRosterFixes(input: {

@@ -4,7 +4,7 @@ import type {
   TransactionPlanGroupStatus,
 } from "#contexts/connections/TransactionPlans.ts";
 
-import { isRosterFixGroup, rosterFixLabel } from "./TransactionPlanFixes.ts";
+import { isRosterFixGroup, rosterFixFundedMove, rosterFixLabel } from "./TransactionPlanFixes.ts";
 import type {
   TransactionMoveId,
   TransactionMoveRecord,
@@ -64,10 +64,12 @@ function groupReadOf(
     status === "partly_done" || (status === "blocked" && actions.length > 0)
       ? "Check your roster, then choose the move again or discard it."
       : undefined;
+  const fixesFor = rosterFixFundedMove(group);
   return {
     group,
     team: firstMember(members).move.team,
     ...(isRosterFixGroup(group) ? { label: rosterFixLabel } : {}),
+    ...(fixesFor === undefined ? {} : { fixesFor }),
     status,
     moves: members.map((member) => member.move.id),
     actions,

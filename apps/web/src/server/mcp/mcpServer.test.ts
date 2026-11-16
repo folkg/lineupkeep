@@ -894,6 +894,7 @@ it("appends moves to one team queue and lists them across teams", async () => {
   ): {
     readonly team: TransactionMoveTeam;
     readonly today: string;
+    readonly nextRunAt: DateTime.Utc;
     readonly moves: ReadonlyArray<typeof move>;
     readonly days: ReadonlyArray<{
       readonly day: string;
@@ -909,6 +910,7 @@ it("appends moves to one team queue and lists them across teams", async () => {
   } => ({
     team: target,
     today: "2026-11-11",
+    nextRunAt: DateTime.makeUnsafe("2026-11-11T12:55:00.000Z"),
     snapshot: {
       status: "live",
       checkedAt: DateTime.makeUnsafe("2026-11-11T12:00:00.000Z"),
@@ -949,6 +951,7 @@ it("appends moves to one team queue and lists them across teams", async () => {
       });
       const data = {
         status: "ok" as const,
+        nextRunAt: DateTime.makeUnsafe("2026-11-11T12:55:00.000Z"),
         ...(input.team === undefined
           ? {}
           : { team: input.team === team ? teamView : otherTeamView }),
@@ -1150,6 +1153,7 @@ it("discards one saved move and reports why a run move stays", async () => {
   const planRead = {
     team: teamView,
     today: "2026-11-11",
+    nextRunAt: DateTime.makeUnsafe("2026-11-11T12:55:00.000Z"),
     snapshot: {
       status: "live" as const,
       checkedAt: DateTime.makeUnsafe("2026-11-11T12:00:00.000Z"),
@@ -1898,10 +1902,38 @@ it("leaves confirmation to the owner and says a saved move waits", async () => {
   }
 
   expect(listed.result.tools.map((tool) => tool.name)).not.toContain("confirm_transaction_move");
-  expect(propose.description).toContain(
-    "A saved move whose day arrives waits in Today until the owner confirms it",
-  );
+  expect(propose.description).toContain("A saved move waits in Today for the owner to confirm it");
   expect(propose.description).toContain("no tool confirms a move");
+});
+
+it("asks an agent only for adds and drops, in plain words", async () => {
+  const response = await handle(request("tools/list", {}, "read"));
+  const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
+  const propose = listed.result.tools.find((tool) => tool.name === "propose_transactions");
+  if (propose === undefined) {
+    throw new Error("Expected the tool list to include propose_transactions");
+  }
+
+  const wording = [
+    propose.description,
+    ...schemaDescriptions(propose.inputSchema, "propose_transactions.input").map(
+      (field) => field.text,
+    ),
+  ].join(" ");
+  expect(wording).not.toMatch(/reserve/iu);
+  expect(wording).not.toMatch(/slot/iu);
+  const kinds = schemaLiterals(propose.inputSchema).filter((value) =>
+    ["free_agent_add", "waiver_claim", "drop", "trade", "activate", "stash", "slot_move"].includes(
+      value,
+    ),
+  );
+  expect(kinds.sort()).toEqual(["drop", "free_agent_add", "waiver_claim"]);
+  const names = schemaPropertyNames(propose.inputSchema);
+  expect(names).toContain("adds");
+  expect(names).toContain("drops");
+  expect(names).not.toContain("slotMove");
+  expect(names).not.toContain("to");
+  expect(names).not.toContain("player");
 });
 
 it("publishes fallback choices, a group label, and a stored check on the plan", async () => {
@@ -2138,4 +2170,39 @@ function schemaDescriptions(schema: unknown, path: string): ReadonlyArray<Schema
       ? [{ path, text: value }]
       : schemaDescriptions(value, `${path}.${key}`),
   );
+}
+
+function schemaLiterals(schema: unknown): ReadonlyArray<string> {
+  if (Array.isArray(schema)) {
+    return schema.flatMap((entry) => schemaLiterals(entry));
+  }
+  if (typeof schema !== "object" || schema === null) {
+    return [];
+  }
+  const record: Readonly<Record<string, unknown>> = { ...schema };
+  return Object.entries(record).flatMap(([key, value]) => {
+    if (key === "const" && typeof value === "string") {
+      return [value];
+    }
+    if (key === "enum" && Array.isArray(value)) {
+      return value.filter((entry): entry is string => typeof entry === "string");
+    }
+    return schemaLiterals(value);
+  });
+}
+
+function schemaPropertyNames(schema: unknown): ReadonlyArray<string> {
+  if (Array.isArray(schema)) {
+    return schema.flatMap((entry) => schemaPropertyNames(entry));
+  }
+  if (typeof schema !== "object" || schema === null) {
+    return [];
+  }
+  const record: Readonly<Record<string, unknown>> = { ...schema };
+  return Object.entries(record).flatMap(([key, value]) => {
+    if (key === "properties" && typeof value === "object" && value !== null) {
+      return [...Object.keys(value), ...schemaPropertyNames(value)];
+    }
+    return schemaPropertyNames(value);
+  });
 }

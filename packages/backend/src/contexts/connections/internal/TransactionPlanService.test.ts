@@ -20,6 +20,7 @@ import type {
   TransactionPlanView,
 } from "#contexts/connections/TransactionPlans.ts";
 
+import { nextCheckAt } from "./CheckSchedule.ts";
 import { ConnectionsDatabase } from "./ConnectionsDatabase.ts";
 import { ConnectionsDatabaseTest } from "./ConnectionsDatabaseTest.ts";
 import { providerTeams } from "./ConnectionTables.ts";
@@ -1127,6 +1128,8 @@ it.effect("publishes places and each reserve list on the plan read", () => {
         free: 1,
       },
     ]);
+    assert.strictEqual(read.addsPossible, 1);
+    assert.strictEqual(DateTime.formatIso(read.nextRunAt), DateTime.formatIso(nextCheckAt(at)));
   }).pipe(Effect.provide(mutableFactsLayer(facts)));
 });
 
@@ -1175,6 +1178,7 @@ it.effect("counts a player in IR+ and accepts an add that fits", () => {
         free: 1,
       },
     ]);
+    assert.strictEqual(read.addsPossible, 2);
     assert.deepStrictEqual(read.moves[0]?.validation, {
       status: "current",
       checkedAt: at,
@@ -1944,6 +1948,7 @@ it.effect("runs a confirmed future move on the check after its day, recording bo
   const facts = new Map<TeamId, TransactionPlanTeamFacts>();
   const writes = writeLayer(() => ({ status: "executed" }));
   const later = DateTime.makeUnsafe("2026-11-15T12:00:00.000Z");
+  let providerReads = 0;
   return Effect.gen(function* () {
     const service = yield* TransactionPlanService;
     const repository = yield* TransactionPlanRepository;
@@ -1957,6 +1962,7 @@ it.effect("runs a confirmed future move on the check after its day, recording bo
       proposedBy: proposer,
       moves: [{ ...drop("a1", "Roster One"), runDay: "2026-11-15" }],
     });
+    providerReads = 0;
     const confirmed = yield* service.confirm(owner, {
       team,
       moves: [requireMoveId(proposed.plan.moves[0])],
@@ -1975,6 +1981,7 @@ it.effect("runs a confirmed future move on the check after its day, recording bo
     assert.strictEqual(confirmedMove?.runAt, undefined);
     assert.strictEqual(confirmedMove?.decidedBy, "owner");
     assert.strictEqual(confirmedMove?.surface, "transactions.confirm");
+    assert.strictEqual(providerReads, 0);
 
     const early = yield* service.runDue(10, at);
     assert.strictEqual(early.counts.moves, 0);
@@ -2028,7 +2035,13 @@ it.effect("runs a confirmed future move on the check after its day, recording bo
       Option.getOrThrow(Option.fromNullishOr(tickRun.finishedAt)).toISOString(),
       DateTime.formatIso(later),
     );
-  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+  }).pipe(
+    Effect.provide(
+      mutableFactsLayer(facts, writes.layer, () => {
+        providerReads += 1;
+      }),
+    ),
+  );
 });
 
 it.effect("records an agent's discard over MCP", () => {
@@ -3095,13 +3108,16 @@ it.effect("adds a visible Roster fixes group before the add it funds", () => {
 
     const read = yield* service.plan(owner, { team });
     const group = read.groups[0];
+    const funded = read.moves.find((move) => move.kind === "free_agent_add");
     assert.strictEqual(group?.label, "Roster fixes");
     assert.strictEqual(group?.status, "ready");
     assert.strictEqual(group?.moves.length, 1);
+    assert.strictEqual(group?.fixesFor, funded?.move);
     assert.strictEqual(read.moves.find((move) => move.move === group?.moves[0])?.kind, "stash");
     assert.include(read.moves[0]?.reason ?? "", "to free a place");
 
-    yield* confirmDue(service, team);
+    const confirmed = yield* confirmDue(service, team);
+    assert.strictEqual(confirmed.counts.executed, 2);
     assert.deepStrictEqual(
       writes.requests.map((request) => request.kind),
       ["stash", "free_agent_add"],
@@ -3220,6 +3236,7 @@ it.effect("names the cure when no roster fix can make an add fit", () =>
       result.refused[0]?.detail ?? "",
       "no injured player on the roster can move to a reserve list to free one",
     );
+    assert.include(result.refused[0]?.detail ?? "", "Add a drop");
     assert.deepStrictEqual(result.plan.moves, []);
   }).pipe(
     Effect.provide(
@@ -3357,36 +3374,66 @@ function serviceLayer(
   TransactionPlanService | TransactionPlanRepository | ConnectionsDatabase | QueryTokens
 > {
   const byTeam = new Map(leagues.map((entry) => [entry.team, entry.facts] as const));
-  return layerWith((input) => {
-    const facts = byTeam.get(input.team);
-    return facts === undefined
-      ? Effect.fail(
-          TransactionPlanFactsUnavailable.make({
-            team: input.team,
-            detail: `No league facts for ${input.team}.`,
-          }),
-        )
-      : Effect.succeed(facts);
-  }, writes);
+  return layerWith(
+    (input) => {
+      const facts = byTeam.get(input.team);
+      return facts === undefined
+        ? Effect.fail(
+            TransactionPlanFactsUnavailable.make({
+              team: input.team,
+              detail: `No league facts for ${input.team}.`,
+            }),
+          )
+        : Effect.succeed(facts);
+    },
+    writes,
+    (input) => {
+      const facts = byTeam.get(input.team);
+      return facts === undefined
+        ? Effect.fail(
+            TransactionPlanFactsUnavailable.make({
+              team: input.team,
+              detail: `No league facts for ${input.team}.`,
+            }),
+          )
+        : Effect.succeed(facts.today);
+    },
+  );
 }
 
 function mutableFactsLayer(
   facts: Map<TeamId, TransactionPlanTeamFacts>,
   writes: Layer.Layer<TransactionPlanWrites> = executedWrites(),
+  onRead?: () => void,
 ): Layer.Layer<
   TransactionPlanService | TransactionPlanRepository | ConnectionsDatabase | QueryTokens
 > {
-  return layerWith((input) => {
-    const found = facts.get(input.team);
-    return found === undefined
-      ? Effect.fail(
-          TransactionPlanFactsUnavailable.make({
-            team: input.team,
-            detail: "The league could not be read.",
-          }),
-        )
-      : Effect.succeed(found);
-  }, writes);
+  return layerWith(
+    (input) => {
+      onRead?.();
+      const found = facts.get(input.team);
+      return found === undefined
+        ? Effect.fail(
+            TransactionPlanFactsUnavailable.make({
+              team: input.team,
+              detail: "The league could not be read.",
+            }),
+          )
+        : Effect.succeed(found);
+    },
+    writes,
+    (input) => {
+      const found = facts.get(input.team);
+      return found === undefined
+        ? Effect.fail(
+            TransactionPlanFactsUnavailable.make({
+              team: input.team,
+              detail: "The league could not be read.",
+            }),
+          )
+        : Effect.succeed(found.today);
+    },
+  );
 }
 
 function executedWrites(): Layer.Layer<TransactionPlanWrites> {
@@ -3496,10 +3543,12 @@ function planActions(request: TransactionPlanWriteRequest): ReadonlyArray<Transa
 function layerWith(
   read: TransactionPlanFactsShape["read"],
   writes: Layer.Layer<TransactionPlanWrites> = executedWrites(),
+  today: TransactionPlanFactsShape["today"] = (input) =>
+    read({ ...input, players: [], needsBudget: false }).pipe(Effect.map((facts) => facts.today)),
 ): Layer.Layer<
   TransactionPlanService | TransactionPlanRepository | ConnectionsDatabase | QueryTokens
 > {
-  const Facts = Layer.succeed(TransactionPlanFacts)({ read });
+  const Facts = Layer.succeed(TransactionPlanFacts)({ read, today });
   return TransactionPlanServiceLive.pipe(
     Layer.provideMerge(TransactionPlanRepository.layer),
     Layer.provide(Facts),

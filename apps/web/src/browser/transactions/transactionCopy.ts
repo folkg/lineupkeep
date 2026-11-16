@@ -77,10 +77,6 @@ export function groupStatusLabel(status: TransactionPlanGroupView["status"]): st
   }
 }
 
-export function groupTitle(group: TransactionPlanGroupView): string {
-  return group.label ?? `Group of ${moveCount(group.moves.length)}`;
-}
-
 export function moveCount(count: number): string {
   return `${String(count)} ${count === 1 ? "move" : "moves"}`;
 }

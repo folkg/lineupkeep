@@ -334,6 +334,7 @@ export const TransactionPlanGroupRead = Schema.Struct({
   label: Schema.optional(Schema.NonEmptyString),
   status: TransactionPlanGroupStatus,
   moves: Schema.Array(TransactionMoveId),
+  fixesFor: Schema.optional(TransactionMoveId),
   actions: Schema.Array(TransactionPlanGroupAction),
   failed: Schema.optional(TransactionPlanGroupAction),
   notRun: Schema.Array(TransactionMoveId),
@@ -383,6 +384,11 @@ export type TransactionPlanSnapshot = typeof TransactionPlanSnapshot.Type;
 export const TransactionPlanRead = Schema.Struct({
   team: TransactionMoveTeam,
   today: Schema.optional(StoredMoveDate),
+  nextRunAt: Schema.DateTimeUtc.pipe(
+    Schema.annotate({
+      description: "The exact time of the next hourly run, at the 55 minute mark.",
+    }),
+  ),
   snapshot: TransactionPlanSnapshot.pipe(
     Schema.annotate({
       description:
@@ -405,6 +411,12 @@ export const TransactionPlanRead = Schema.Struct({
     Schema.annotate({
       description:
         "Each reserve list by the league's own name with its own capacity, occupancy, and free places. Absent when the roster could not be read; a league with no reserve lists publishes none.",
+    }),
+  ),
+  addsPossible: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))).pipe(
+    Schema.annotate({
+      description:
+        "How many adds fit right now: the free active places plus the free reserve places.",
     }),
   ),
   moves: Schema.Array(TransactionMoveRead),
@@ -445,6 +457,11 @@ type TransactionPlanCounts = typeof TransactionPlanCounts.Type;
 export const TransactionMoveList = Schema.Struct({
   status: Schema.Literal("ok"),
   team: Schema.optional(TransactionMoveTeam),
+  nextRunAt: Schema.DateTimeUtc.pipe(
+    Schema.annotate({
+      description: "The exact time of the next hourly run, at the 55 minute mark.",
+    }),
+  ),
   moves: Schema.Array(TransactionMoveRead),
   days: Schema.Array(TransactionMoveDay),
   teamFacts: Schema.Array(TransactionTeamFacts).pipe(
@@ -810,60 +827,6 @@ export type TransactionPlanServiceShape = {
     input: TransactionPlanCountsInput,
   ) => Effect.Effect<TransactionPlanCounts, TransactionPlanServiceError>;
 };
-
-const ProposeTransactionMoveInput = Schema.Struct({
-  move: Schema.optional(TransactionMoveId).annotate({
-    description: "A move in this team's queue to change in place; omit it to add a new move.",
-  }),
-  group: Schema.optional(Schema.NonEmptyString).annotate({
-    description: "A label shared by moves that go in one group; omit it for a group of one.",
-  }),
-  kind: TransactionMoveKind.annotate({
-    description: "A drop adds nobody and carries no bid; a free-agent add cannot bid either.",
-  }),
-  adds: Schema.Array(PlayerRef).pipe(
-    Schema.check(Schema.isMaxLength(10)),
-    Schema.withDecodingDefaultKey(Effect.succeed([])),
-  ),
-  fallbacks: Schema.optional(Schema.NullOr(Schema.Array(PlayerRef))).annotate({
-    description: "Other players to try in order when the first cannot be added.",
-  }),
-  drops: Schema.Array(PlayerRef).pipe(
-    Schema.check(Schema.isMaxLength(10)),
-    Schema.withDecodingDefaultKey(Effect.succeed([])),
-  ),
-  picks: Schema.optional(
-    Schema.NullOr(
-      Schema.Array(
-        Schema.Struct({
-          round: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
-          from: Schema.NonEmptyString,
-          to: Schema.NonEmptyString,
-        }),
-      ).pipe(Schema.check(Schema.isMaxLength(20))),
-    ),
-  ),
-  slotMove: Schema.optional(
-    Schema.NullOr(Schema.Struct({ player: PlayerRef, toSlot: Schema.NonEmptyString })),
-  ),
-  to: Schema.optional(Schema.NullOr(Schema.Literals(["active", "reserve"]))),
-  player: Schema.optional(Schema.NullOr(PlayerRef)),
-  counterparty: Schema.optional(Schema.NullOr(CounterpartyRef)),
-  bid: Schema.optional(Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)))),
-  reason: Schema.NonEmptyString,
-  window: Schema.optional(Schema.NullOr(StoredMoveDate)).annotate({
-    description: "The fantasy day the move should run; omit it to run today.",
-  }),
-});
-
-export const ProposeTransactionMovesInput = Schema.Struct({
-  team: TeamId,
-  moves: Schema.Array(ProposeTransactionMoveInput).pipe(
-    Schema.check(Schema.isMinLength(1), Schema.isMaxLength(20)),
-  ),
-  client: Schema.optional(Schema.NullOr(Schema.Trim.pipe(Schema.check(Schema.isMaxLength(60))))),
-});
-export type ProposeTransactionMovesInput = typeof ProposeTransactionMovesInput.Type;
 
 export const ListTransactionMovesInput = Schema.Struct({
   team: Schema.optional(TeamId).annotate({

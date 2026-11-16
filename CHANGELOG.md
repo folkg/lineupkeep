@@ -3,6 +3,21 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
+## Unreleased - agent adds and drops, scheduled confirmation, exact run times
+
+- `propose_transactions` accepts a plain add, a plain drop, or an add with one drop. It names no place
+  and no reserve list, and the `slot_move`, `activate`, `stash`, and `trade` shapes are no longer part
+  of the agent contract. The server decides whether the add fits and attaches the `Roster fixes`
+  group that makes room, with `fixesFor` naming the add. When nothing can make room, the refusal
+  states the fact and the cure.
+- The team summary and plan read carry `addsPossible`, the free active places plus the free reserve
+  places. The plan read and the move list carry `nextRunAt`, the exact next hourly run at the 55
+  minute mark.
+- Confirming a move for a later day stores the owner's decision, actor, surface, and time and
+  contacts no provider. The transactions page shows one card per group with one control, names the
+  reader's local time a move ran or will run, and confirms groups on different teams at the same
+  time.
+
 ## Unreleased — amend or discard a saved move
 
 - `propose_transactions` items accept an optional `move` id. Naming a saved move's id changes that

@@ -19,6 +19,7 @@ import { moveCount } from "./transactionCopy";
 import { describeTransactionActionFailure } from "./transactionFailure";
 import { transactionQueries } from "./transactionQueries";
 import type { TransactionRemote } from "./transactionRemote";
+import { scheduledRunLine } from "./transactionTimes";
 
 export function useTransactionsPage(props: TransactionsPageOptions): TransactionsPageController {
   const signIn = useSignInRecovery();
@@ -29,7 +30,6 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     enabled: earlierEnabled(),
   }));
   const [feedback, setFeedback] = createSignal<ActionFeedbackState>();
-  const [confirmKeys, setConfirmKeys] = createSignal<Readonly<Record<string, string>>>({});
   const [editing, setEditing] = createSignal<string>();
   const [editingDate, setEditingDate] = createSignal("");
   const [editingError, setEditingError] = createSignal<string>();
@@ -84,6 +84,8 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
   const pendingTodayCount = createMemo(
     () => todayMoves().filter((move) => isPending(move) && move.result === undefined).length,
   );
+  const nextRunAt = (): string | undefined =>
+    open.isSuccess ? open.data.pages[0]?.nextRunAt : undefined;
 
   const refresh = (): void => {
     void open.refetch();
@@ -91,47 +93,6 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
       void earlier.refetch();
     }
   };
-
-  const confirm = useMutation(() => ({
-    mutationKey: ["transactions", "confirm"],
-    mutationFn: (input: { readonly move: TransactionMoveView; readonly key: string }) =>
-      props.remote().confirm({
-        team: input.move.team.id,
-        moves: [input.move.move],
-        key: input.key,
-      }),
-    onSuccess: (
-      outcome: TransactionMoveConfirmationData,
-      input: { readonly move: TransactionMoveView; readonly key: string },
-    ) => {
-      if (outcome.status === "refused") {
-        setFeedback({
-          type: "attention",
-          message: outcome.refusals.map((entry) => entry.detail).join(" "),
-        });
-      } else {
-        setFeedback({
-          type: outcome.counts.failed > 0 || outcome.counts.unknown > 0 ? "attention" : "success",
-          message: confirmationMessage(outcome),
-        });
-        setConfirmKeys((current) =>
-          Object.fromEntries(
-            Object.entries(current).filter(([key]) => !key.startsWith(`${input.move.team.id}:`)),
-          ),
-        );
-      }
-      refresh();
-    },
-    onError: (error: Error) => {
-      const failure = describeTransactionActionFailure(error);
-      setFeedback({
-        type: "attention",
-        message: failure.message,
-        ...(failure.kind === "authentication" ? { recovery: signIn } : {}),
-      });
-      refresh();
-    },
-  }));
 
   const save = useMutation(() => ({
     mutationKey: ["transactions", "save"],
@@ -198,14 +159,34 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     },
   }));
 
-  const confirmMove = (move: TransactionMoveView): void => {
-    if (!canConfirm(move) || confirm.isPending) {
+  const reportConfirmation = (
+    outcome: TransactionMoveConfirmationData,
+    runDay: string | undefined,
+  ): void => {
+    if (outcome.status === "refused") {
+      setFeedback({
+        type: "attention",
+        message: outcome.refusals.map((entry) => entry.detail).join(" "),
+      });
       return;
     }
-    setFeedback(undefined);
-    const key = confirmKeys()[confirmationKey(move)] ?? crypto.randomUUID();
-    setConfirmKeys((current) => ({ ...current, [confirmationKey(move)]: key }));
-    void confirm.mutate({ move, key });
+    setFeedback({
+      type: outcome.counts.failed > 0 || outcome.counts.unknown > 0 ? "attention" : "success",
+      message: confirmationMessage(outcome, runDay, nextRunAt()),
+    });
+  };
+
+  const reportConfirmationFailure = (error: unknown): void => {
+    const failure = describeTransactionActionFailure(error);
+    setFeedback({
+      type: "attention",
+      message: failure.message,
+      ...(failure.kind === "authentication" ? { recovery: signIn } : {}),
+    });
+  };
+
+  const confirmationSettled = (): void => {
+    refresh();
   };
 
   const startEdit = (move: TransactionMoveView): void => {
@@ -233,7 +214,7 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
   };
 
   const discardMove = (move: TransactionMoveView): void => {
-    if (!discard.isPending && !confirm.isPending) {
+    if (!discard.isPending) {
       setFeedback(undefined);
       void discard.mutate(move);
     }
@@ -247,10 +228,12 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     teamCount,
     teamFacts,
     groups,
+    nextRunAt,
     pendingTodayCount,
     canConfirm,
-    confirmMove,
-    confirming: () => (confirm.isPending ? confirm.variables?.move.move : undefined),
+    reportConfirmation,
+    reportConfirmationFailure,
+    confirmationSettled,
     discardMove,
     discarding: () => (discard.isPending ? discard.variables?.move : undefined),
     startEdit,
@@ -318,21 +301,25 @@ function groupByTeam(
     .map((entry) => ({ team: entry.team, moves: entry.moves }));
 }
 
-function confirmationKey(move: TransactionMoveView): string {
-  return `${move.team.id}:${move.move}`;
-}
-
 function compareMoveCards(left: TransactionMoveView, right: TransactionMoveView): number {
   return left.team.name.localeCompare(right.team.name) || left.position - right.position;
 }
 
-function confirmationMessage(outcome: TransactionMoveConfirmationData): string {
+function confirmationMessage(
+  outcome: TransactionMoveConfirmationData,
+  runDay: string | undefined,
+  nextRunAt: string | undefined,
+): string {
   if (outcome.status === "refused") {
     return outcome.refusals.map((entry) => entry.detail).join(" ");
   }
   const parts: Array<string> = [];
   if (outcome.counts.moves === 0) {
-    parts.push(`Confirmed ${moveCount(outcome.confirmed.length)}. It runs on its day's check.`);
+    parts.push(
+      runDay === undefined || nextRunAt === undefined
+        ? `Confirmed ${moveCount(outcome.confirmed.length)}.`
+        : `Confirmed ${moveCount(outcome.confirmed.length)}. ${scheduledRunLine(runDay, nextRunAt)}.`,
+    );
   } else {
     parts.push(`Confirmed and ran ${moveCount(outcome.counts.moves)}.`);
   }
@@ -364,10 +351,15 @@ export type TransactionsPageController = {
   readonly teamCount: Accessor<number>;
   readonly teamFacts: Accessor<ReadonlyMap<string, TransactionTeamFactsView>>;
   readonly groups: Accessor<ReadonlyArray<TransactionPlanGroupView>>;
+  readonly nextRunAt: () => string | undefined;
   readonly pendingTodayCount: () => number;
   readonly canConfirm: (move: TransactionMoveView) => boolean;
-  readonly confirmMove: (move: TransactionMoveView) => void;
-  readonly confirming: () => string | undefined;
+  readonly reportConfirmation: (
+    outcome: TransactionMoveConfirmationData,
+    runDay: string | undefined,
+  ) => void;
+  readonly reportConfirmationFailure: (error: unknown) => void;
+  readonly confirmationSettled: () => void;
   readonly discardMove: (move: TransactionMoveView) => void;
   readonly discarding: () => string | undefined;
   readonly startEdit: (move: TransactionMoveView) => void;
