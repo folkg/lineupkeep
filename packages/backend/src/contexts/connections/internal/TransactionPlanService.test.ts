@@ -1335,6 +1335,68 @@ it.effect("reads a healthy player in an injury reserve place as illegal", () => 
       move?.validation.reasons[0]?.detail ?? "",
       "Healthy Reserve is no longer injured but sits in IR.",
     );
+    assert.deepStrictEqual(
+      read.illegal?.map(({ name, slot, fact, cure }) => ({ name, slot, fact, cure })),
+      [
+        {
+          name: "Healthy Reserve",
+          slot: "IR",
+          fact: "Healthy Reserve is no longer injured but sits in IR.",
+          cure: "Activate Healthy Reserve, or drop Healthy Reserve.",
+        },
+      ],
+    );
+    const tokens = yield* QueryTokens;
+    const refs = yield* tokens.openPlayerRefs({
+      userId: owner,
+      leagueKey: `league-${team}`,
+      refs: read.illegal?.map((entry) => entry.player) ?? [],
+    });
+    assert.deepStrictEqual(refs, ["h1"]);
+    assert.deepStrictEqual(read.canFree, []);
+    assert.strictEqual(read.addsWithFixes, 1);
+  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+});
+
+it.effect("publishes both reserve moves and the adds a full roster gains from them", () => {
+  const facts = new Map<TeamId, TransactionPlanTeamFacts>();
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    const tokens = yield* QueryTokens;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+    facts.set(
+      team,
+      league(
+        [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
+        [],
+        {
+          slots: [bench("BN", 2), reserve("IR", ["RB"]), reserve("IR+", ["RB"])],
+          constraints: constraints(2),
+        },
+      ).facts,
+    );
+
+    const read = yield* service.plan(owner, { team });
+
+    assert.deepStrictEqual(read.places, { used: 2, maximum: 2, free: 0 });
+    assert.strictEqual(read.addsPossible, 2);
+    assert.deepStrictEqual(
+      read.canFree?.map(({ name, list, place }) => ({ name, list, place })),
+      [
+        { name: "Roster One", list: "IR", place: "BN" },
+        { name: "Roster Two", list: "IR+", place: "BN" },
+      ],
+    );
+    assert.strictEqual(read.addsWithFixes, 4);
+    assert.deepStrictEqual(read.illegal, []);
+    const refs = yield* tokens.openPlayerRefs({
+      userId: owner,
+      leagueKey: `league-${team}`,
+      refs: read.canFree?.map((entry) => entry.player) ?? [],
+    });
+    assert.deepStrictEqual(refs, ["a1", "a2"]);
   }).pipe(Effect.provide(mutableFactsLayer(facts)));
 });
 
@@ -3702,6 +3764,7 @@ function leagueFor(
           ? { kind: "bidless" }
           : { kind: "published", balance: overrides.budget }),
       rosterSource: "week 1",
+      leagueKey: `league-${teamId}`,
     },
   };
 }

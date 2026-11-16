@@ -109,6 +109,8 @@ import {
   type CounterpartyRef,
   type PlayerRef,
   type QueryTeam,
+  type RosterBlocker,
+  type RosterFreeablePlace,
   type StartingStatus,
   type StatWindow,
   QueryPersistenceFailed,
@@ -3763,6 +3765,35 @@ export const FantasyQueriesLive = Layer.effect(
               },
             ];
       });
+      const canFree: ReadonlyArray<RosterFreeablePlace> = (rosterSummary?.freeable ?? []).flatMap(
+        (place) => {
+          const row = rosterRowByKey.get(place.key);
+          return row === undefined
+            ? []
+            : [{ player: row.player, name: place.name, list: place.list, place: place.place }];
+        },
+      );
+      const illegal: ReadonlyArray<RosterBlocker> = (rosterSummary?.illegal ?? []).flatMap(
+        (blocker) => {
+          const row = rosterRowByKey.get(blocker.key);
+          return row === undefined
+            ? []
+            : [
+                {
+                  player: row.player,
+                  name: blocker.name,
+                  slot: blocker.slot,
+                  fact: blocker.fact,
+                  cure: blocker.cure,
+                },
+              ];
+        },
+      );
+      const possibleAdds =
+        rosterSummary === undefined
+          ? undefined
+          : rosterSummary.places.free +
+            rosterSummary.reserve.reduce((total, list) => total + list.free, 0);
       const base: Omit<TeamSummaryData, "roster" | "page" | "schedule"> = {
         status,
         team,
@@ -3784,14 +3815,15 @@ export const FantasyQueriesLive = Layer.effect(
         ...(includes("roster")
           ? {
               illegalSlots,
-              ...(rosterSummary === undefined
+              ...(rosterSummary === undefined || possibleAdds === undefined
                 ? {}
                 : {
                     places: rosterSummary.places,
                     reserve: rosterSummary.reserve,
-                    addsPossible:
-                      rosterSummary.places.free +
-                      rosterSummary.reserve.reduce((total, list) => total + list.free, 0),
+                    addsPossible: possibleAdds,
+                    canFree,
+                    addsWithFixes: possibleAdds + canFree.length,
+                    illegal,
                   }),
             }
           : {}),

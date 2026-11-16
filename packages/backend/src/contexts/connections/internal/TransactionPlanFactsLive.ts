@@ -83,6 +83,7 @@ export const TransactionPlanFactsLive = Layer.effect(
       return {
         roster: rosterPlayers(roster),
         rosterSource: rosterSourceOf(roster.coverage),
+        leagueKey: context.owned.team.providerLeagueKey,
         waiverBid:
           league.usesFaab === true && budget !== undefined
             ? { kind: "published" as const, balance: budget }

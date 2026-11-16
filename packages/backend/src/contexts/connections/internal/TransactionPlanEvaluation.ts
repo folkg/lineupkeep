@@ -2061,6 +2061,7 @@ export type TransactionPlanTeamFacts = {
   readonly budget: number | undefined;
   readonly waiverBid: TransactionWaiverBid;
   readonly rosterSource: string;
+  readonly leagueKey: string;
 };
 
 export type TransactionPlanMove = Pick<

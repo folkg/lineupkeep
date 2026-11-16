@@ -122,22 +122,18 @@ export function rosterOccupancy(input: {
       });
     }
   }
-  const illegal = mismatched.map((player) => ({
-    ...player,
-    detail: slotMismatchDetail({
+  const illegal = mismatched.map((player) => {
+    const blocker = rosterBlocker({
       name: player.name,
       slot: player.slot,
       kind: player.kind,
       positions: player.positions,
       reserveEligibility: input.rule.reserveEligibility,
-      injured: player.injured,
-      mismatch: {
-        kind: "occupied" as const,
-        occupied,
-        maximum: input.rule.rosterMaximum,
-      },
-    }),
-  }));
+      occupied,
+      maximum: input.rule.rosterMaximum,
+    });
+    return { ...player, ...blocker, detail: illegalRosterDetail(blocker) };
+  });
   const overflow: Array<RosterSlotShortfall> = [];
   for (const slot of input.rule.slots) {
     const occupants = occupancy.get(slot.position) ?? 0;
@@ -168,8 +164,46 @@ export function rosterOccupancy(input: {
         };
       }),
     illegal,
+    freeable: freeablePlaces(input.rule, input.players, occupancy),
     overflow,
   };
+}
+
+function freeablePlaces(
+  rule: RosterRule,
+  players: ReadonlyArray<RosterPlayerPlace>,
+  occupancy: ReadonlyMap<string, number>,
+): ReadonlyArray<FreeablePlace> {
+  const remaining = new Map<string, number>();
+  for (const slot of rule.slots) {
+    if (slot.kind === "reserve") {
+      remaining.set(slot.position, Math.max(0, slot.count - (occupancy.get(slot.position) ?? 0)));
+    }
+  }
+  const freeable: Array<FreeablePlace> = [];
+  for (const player of players) {
+    const current = player.slot === undefined ? undefined : rule.byPosition.get(player.slot);
+    if (current === undefined || current.kind === "reserve") {
+      continue;
+    }
+    const list = rule.slots.find(
+      (slot) =>
+        slot.kind === "reserve" &&
+        (remaining.get(slot.position) ?? 0) > 0 &&
+        slotPlacement(rule, slot.position, player).legal === true,
+    );
+    if (list === undefined) {
+      continue;
+    }
+    remaining.set(list.position, (remaining.get(list.position) ?? 0) - 1);
+    freeable.push({
+      key: player.key,
+      name: player.name,
+      list: list.position,
+      place: current.position,
+    });
+  }
+  return freeable;
 }
 
 function reserveEligibilityFacts(rule: RosterRule, slot: RosterSlot): ReserveEligibility {
@@ -192,39 +226,60 @@ export function slotMismatchDetail(input: {
   readonly injured: boolean;
   readonly mismatch: SlotMismatch;
 }): string {
+  if (input.mismatch.kind === "occupied") {
+    return illegalRosterDetail(
+      rosterBlocker({
+        name: input.name,
+        slot: input.slot,
+        kind: input.kind,
+        positions: input.positions,
+        reserveEligibility: input.reserveEligibility,
+        occupied: input.mismatch.occupied,
+        maximum: input.mismatch.maximum,
+      }),
+    );
+  }
   if (input.kind === "reserve" && input.reserveEligibility.kind === "injury_status") {
-    if (input.mismatch.kind === "destination") {
-      return `${input.name} is not injured, so they cannot move to ${input.slot}: it only accepts an injured player.`;
-    }
-    return illegalRosterDetail({
-      fact: `${input.name} is no longer injured but sits in ${input.slot}.`,
-      cure: reserveCure(input.mismatch.occupied, input.mismatch.maximum),
-    });
+    return `${input.name} is not injured, so they cannot move to ${input.slot}: it only accepts an injured player.`;
   }
-  const fact = `${input.name} sits in ${input.slot}, but ${input.slot} does not accept their positions (${input.positions.join(", ")}).`;
-  if (input.mismatch.kind === "destination") {
-    return `${input.name} cannot move to ${input.slot}: it does not accept their positions (${input.positions.join(", ")}).`;
-  }
-  return illegalRosterDetail({
-    fact,
-    cure:
-      input.kind === "reserve"
-        ? reserveCure(input.mismatch.occupied, input.mismatch.maximum)
-        : "Move them to a place that accepts their positions, or drop them.",
-  });
+  return `${input.name} cannot move to ${input.slot}: it does not accept their positions (${input.positions.join(", ")}).`;
 }
 
-function illegalRosterDetail(input: { readonly fact: string; readonly cure: string }): string {
+function rosterBlocker(input: {
+  readonly name: string;
+  readonly slot: string;
+  readonly kind: "starting" | "bench" | "reserve";
+  readonly positions: ReadonlyArray<string>;
+  readonly reserveEligibility: ProviderReserveEligibility;
+  readonly occupied: number;
+  readonly maximum: number;
+}): RosterBlockerFacts {
+  if (input.kind === "reserve" && input.reserveEligibility.kind === "injury_status") {
+    return {
+      fact: `${input.name} is no longer injured but sits in ${input.slot}.`,
+      cure: reserveCure(input.name, input.occupied, input.maximum),
+    };
+  }
+  return {
+    fact: `${input.name} sits in ${input.slot}, but ${input.slot} does not accept their positions (${input.positions.join(", ")}).`,
+    cure:
+      input.kind === "reserve"
+        ? reserveCure(input.name, input.occupied, input.maximum)
+        : `Move ${input.name} to a place that accepts their positions, or drop ${input.name}.`,
+  };
+}
+
+function illegalRosterDetail(input: RosterBlockerFacts): string {
   return `${input.fact} This roster is illegal, so all adds and drops are blocked until it is cured. ${input.cure}`;
 }
 
-function reserveCure(occupied: number, maximum: number): string {
+function reserveCure(name: string, occupied: number, maximum: number): string {
   if (maximum === 0) {
-    return "Drop them.";
+    return `Drop ${name}.`;
   }
   return occupied >= maximum
-    ? `Activate them, and at ${String(occupied)} of ${String(maximum)} places a drop is required, or drop them.`
-    : "Activate them, or drop them.";
+    ? `Activate ${name}, and at ${String(occupied)} of ${String(maximum)} places a drop is required, or drop ${name}.`
+    : `Activate ${name}, or drop ${name}.`;
 }
 
 export function rosterPlayerInjured(player: {
@@ -256,13 +311,27 @@ export type RosterOccupancy = {
   readonly places: RosterPlaces;
   readonly reserve: ReadonlyArray<ReserveList>;
   readonly illegal: ReadonlyArray<IneligibleSlotOccupant>;
+  readonly freeable: ReadonlyArray<FreeablePlace>;
   readonly overflow: ReadonlyArray<RosterSlotShortfall>;
 };
 
-type IneligibleSlotOccupant = RosterPlayerPlace & {
-  readonly slot: string;
-  readonly kind: "starting" | "bench" | "reserve";
-  readonly detail: string;
+type IneligibleSlotOccupant = RosterPlayerPlace &
+  RosterBlockerFacts & {
+    readonly slot: string;
+    readonly kind: "starting" | "bench" | "reserve";
+    readonly detail: string;
+  };
+
+type RosterBlockerFacts = {
+  readonly fact: string;
+  readonly cure: string;
+};
+
+type FreeablePlace = {
+  readonly key: string;
+  readonly name: string;
+  readonly list: string;
+  readonly place: string;
 };
 
 type RosterSlotShortfall = {

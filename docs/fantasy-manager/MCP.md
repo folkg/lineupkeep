@@ -14,21 +14,21 @@ Status: proposed surface and acceptance criteria. Names other than the agreed ge
 
 ## Proposed tool families
 
-| Tool                  | Purpose and important limits                                                                                                                                                                                 |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `list_connections`    | Safe owned provider connection metadata/status only                                                                                                                                                          |
-| `list_teams`          | Compact owned team discovery with season/sport/connection filters; stable paging                                                                                                                             |
-| `get_calendar`        | Valid current/historical periods and relevant fantasy-day/lock context; no guessed week equivalence                                                                                                          |
-| `get_league`          | Selected league settings, scoring definitions, roster rules, standings with records, season points, and category totals, and completed draft history; bounded groups/pages                                   |
-| `get_rosters`         | Exact selected team/period rosters, or every team's roster in a linked league paged by whole teams; professional-team abbreviation and goalie/pitcher starting status; full detail carries the owner note    |
-| `search_players`      | Bounded league/sport-context player search with ownership/started signals, validated sorts including the league's published recent-form windows, draft provenance, and optional professional games remaining |
-| `get_players`         | Explicit-list hydration of up to 25 selected-player references, returned whole; stats, availability, draft provenance, and the week's projection where published                                             |
-| `get_matchups`        | Selected matchup/scoreboard data with explicit period, category values/winners, and remaining player-games                                                                                                   |
-| `get_transactions`    | Bounded transaction history with team scope and date filtering, two-sided player movements, trade parties, traded draft picks, and explicit incompleteness; no execution                                     |
-| `get_team_summary`    | One bounded per-team snapshot: league with its waiver bid shape, standing and record, standings, current matchup, and a compact roster carrying draft provenance and starting status                         |
-| `set_lineup`          | The sole roster mutation operation; creates durable team runs and returns verified or pending outcomes                                                                                                       |
-| `set_team_automation` | Enable, disable, pause for the rest of the fantasy day, or resume owned team automation; reports resulting state                                                                                             |
-| `get_lineup_runs`     | Owned run status, safe concise explanations, observed changes, and unresolved conditions                                                                                                                     |
+| Tool                  | Purpose and important limits                                                                                                                                                                                                          |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_connections`    | Safe owned provider connection metadata/status only                                                                                                                                                                                   |
+| `list_teams`          | Compact owned team discovery with season/sport/connection filters; stable paging                                                                                                                                                      |
+| `get_calendar`        | Valid current/historical periods and relevant fantasy-day/lock context; no guessed week equivalence                                                                                                                                   |
+| `get_league`          | Selected league settings, scoring definitions, roster rules, standings with records, season points, and category totals, and completed draft history; bounded groups/pages                                                            |
+| `get_rosters`         | Exact selected team/period rosters, or every team's roster in a linked league paged by whole teams; professional-team abbreviation and goalie/pitcher starting status; full detail carries the owner note                             |
+| `search_players`      | Bounded league/sport-context player search with ownership/started signals, validated sorts including the league's published recent-form windows, draft provenance, and optional professional games remaining                          |
+| `get_players`         | Explicit-list hydration of up to 25 selected-player references, returned whole; stats, availability, draft provenance, and the week's projection where published                                                                      |
+| `get_matchups`        | Selected matchup/scoreboard data with explicit period, category values/winners, and remaining player-games                                                                                                                            |
+| `get_transactions`    | Bounded transaction history with team scope and date filtering, two-sided player movements, trade parties, traded draft picks, and explicit incompleteness; no execution                                                              |
+| `get_team_summary`    | One bounded per-team snapshot: league with its waiver bid shape, standing and record, standings, current matchup, places, reserve lists, freeable moves, blockers, and a compact roster carrying draft provenance and starting status |
+| `set_lineup`          | The sole roster mutation operation; creates durable team runs and returns verified or pending outcomes                                                                                                                                |
+| `set_team_automation` | Enable, disable, pause for the rest of the fantasy day, or resume owned team automation; reports resulting state                                                                                                                      |
+| `get_lineup_runs`     | Owned run status, safe concise explanations, observed changes, and unresolved conditions                                                                                                                                              |
 
 Do not expose a general policy-mode selector, native/premium action selector, custom formula, or fallback override. Return the implementation actually used. The MCP surface covers automation enrollment, pause, and resume because an agent must be able to manage a team it owns; it still does not expose registration, provider session upload, or every frontend control as tools.
 
@@ -456,7 +456,10 @@ count, so `transactionRules.detailNote` states that only the league's games cap 
 
 `get_team_summary` composes the league overview, the linked team's standing and record, league
 standings, the owning team's acquisition usage, the current matchup, this week's and next week's
-remaining player-games, and, only when the `roster` group is selected, a compact roster. The team
+remaining player-games, and, only when the `roster` group is selected, a compact roster. When the
+league rules and the roster are read, the summary also publishes the team's `places`, its `reserve`
+lists, `addsPossible`, `canFree`, `addsWithFixes`, and `illegal`: the same facts the plan read
+carries. The team
 object also carries the owner's own note as `ownerNote`: `{ status: "provided", text, updatedAt }`
 when one is stored or `{ status: "not_set" }` otherwise. It is owner context, not league or provider
 data, and the field description says so; it is never sent to the provider. A note is limited to
@@ -844,8 +847,13 @@ it names, or from the most recent recorded check when the live read failed. `wai
 league's bid shape: `published` with this team's remaining FAAB, or `bidless`. The read reports the
 team's places as used, maximum, and free, and each reserve list by the league's own name with its
 eligibility, capacity, occupancy, and free count. `addsPossible` counts how many adds fit right now:
-the free active places plus the free reserve places. `nextRunAt` is the exact time of the next hourly
-run, at the 55 minute mark, so a client never computes it. A move that ran carries `runAt` and the
+the free active places plus the free reserve places. `canFree` names each player who can move to a
+reserve list that accepts them now, with the list and the active place it frees; one entry per move
+the lists have room for. `addsWithFixes` is `addsPossible` plus those freeable moves. `illegal`
+names each blocker that makes the roster illegal, the fact that blocks it, and the plain cure,
+including the drop that clears it; adds and drops wait until every blocker is cured. `nextRunAt` is
+the exact time of the next hourly run, at the 55 minute mark, so a client never computes it. A move
+that ran carries `runAt` and the
 actor that started the run; a confirmed later move carries its confirmation and waits for
 `nextRunAt` on its day. Each group says ready, blocked, ran in part, or done, with the action that
 landed, the action that failed, the actions that did not run, and a plain cure. The read uses stored

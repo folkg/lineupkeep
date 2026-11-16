@@ -1,7 +1,12 @@
 import { DateTime } from "effect";
 
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
-import type { ReserveList, RosterPlaces } from "#contexts/connections/QueryValues.ts";
+import type {
+  ReserveList,
+  RosterBlocker,
+  RosterFreeablePlace,
+  RosterPlaces,
+} from "#contexts/connections/QueryValues.ts";
 import type {
   StoredMoveDate,
   StoredMovePlacement,
@@ -305,6 +310,9 @@ export type TransactionTeamCheck =
       readonly places: RosterPlaces;
       readonly reserve: ReadonlyArray<ReserveList>;
       readonly addsPossible: number;
+      readonly addsWithFixes: number;
+      readonly canFree: ReadonlyArray<RosterFreeablePlace>;
+      readonly illegal: ReadonlyArray<RosterBlocker>;
       readonly waiverBid: TransactionWaiverBid;
       readonly moves: ReadonlyMap<TransactionMoveRecord["id"], TransactionPlanMoveEvaluation>;
       readonly blocked: ReadonlyMap<TransactionMoveRecord["id"], string>;

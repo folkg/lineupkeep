@@ -1554,6 +1554,7 @@ function facts(input: {
         ? { kind: "bidless" }
         : { kind: "published", balance: input.budget },
     rosterSource: "week 1",
+    leagueKey: "461.l.1000",
   };
 }
 

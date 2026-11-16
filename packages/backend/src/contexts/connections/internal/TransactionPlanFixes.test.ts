@@ -153,6 +153,7 @@ function teamFacts(input: {
     budget: undefined,
     waiverBid: { kind: "bidless" },
     rosterSource: "week 1",
+    leagueKey: "461.l.1000",
   };
 }
 

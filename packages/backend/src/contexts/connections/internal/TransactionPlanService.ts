@@ -1710,7 +1710,7 @@ export const TransactionPlanServiceLive = Layer.effect(
         held.push(move);
         movesByTeam.set(move.team, held);
       }
-      const checks = yield* Effect.forEach(
+      const reads = yield* Effect.forEach(
         input.teams,
         (team) =>
           Effect.result(
@@ -1721,47 +1721,103 @@ export const TransactionPlanServiceLive = Layer.effect(
               players: namedPlayers(movesByTeam.get(team) ?? []),
               needsBudget: needsBudget(movesByTeam.get(team) ?? []),
             }),
-          ).pipe(
-            Effect.map((read): readonly [TeamId, TransactionTeamCheck] => {
-              if (read._tag === "Failure") {
-                return [team, { status: "unavailable" }];
-              }
-              const evaluation = evaluateTransactionPlan({
-                facts: read.success,
-                moves: movesByTeam.get(team) ?? [],
-                checkedAt: input.at,
-              });
-              const occupancy = rosterOccupancy({
-                rule: rosterRuleOf(read.success.constraints, read.success.slots),
-                players: read.success.roster,
-              });
-              return [
-                team,
-                {
-                  status: "checked",
-                  today: read.success.today,
-                  snapshot: {
-                    status: "live",
-                    checkedAt: input.at,
-                    source: read.success.rosterSource,
-                  },
-                  places: occupancy.places,
-                  reserve: occupancy.reserve,
-                  addsPossible:
-                    occupancy.places.free +
-                    occupancy.reserve.reduce((total, list) => total + list.free, 0),
-                  waiverBid: read.success.waiverBid,
-                  moves: new Map(evaluation.moves.map((entry) => [entry.move, entry] as const)),
-                  blocked: new Map(
-                    evaluation.order.blocked.map((entry) => [entry.move, entry.detail] as const),
-                  ),
-                },
-              ];
-            }),
-          ),
+          ).pipe(Effect.map((read) => ({ team, read }))),
         { concurrency: 3 },
       );
-      return new Map(checks);
+      const checked = reads.flatMap(({ team, read }) => {
+        if (read._tag === "Failure") {
+          return [];
+        }
+        const facts = read.success;
+        const occupancy = rosterOccupancy({
+          rule: rosterRuleOf(facts.constraints, facts.slots),
+          players: facts.roster,
+        });
+        return [
+          {
+            team,
+            facts,
+            occupancy,
+            evaluation: evaluateTransactionPlan({
+              facts,
+              moves: movesByTeam.get(team) ?? [],
+              checkedAt: input.at,
+            }),
+            playerKeys: [
+              ...new Set([
+                ...occupancy.freeable.map((entry) => entry.key),
+                ...occupancy.illegal.map((entry) => entry.key),
+              ]),
+            ],
+          },
+        ];
+      });
+      const sealed = yield* tokens.sealPlayerRefGroups({
+        userId: input.userId,
+        groups: checked.map((entry) => ({
+          leagueKey: entry.facts.leagueKey,
+          playerKeys: entry.playerKeys,
+        })),
+      });
+      return new Map<TeamId, TransactionTeamCheck>([
+        ...checked.map((entry, index): readonly [TeamId, TransactionTeamCheck] => {
+          const playerRefs = sealed[index];
+          if (playerRefs === undefined) {
+            throw new Error("A checked team was not sealed");
+          }
+          const refByKey = new Map(
+            entry.playerKeys.map((key, held) => [key, playerRefs[held]] as const),
+          );
+          const refOf = (key: string): PlayerRef => {
+            const ref = refByKey.get(key);
+            if (ref === undefined) {
+              throw new Error("A roster player was published without a reference");
+            }
+            return ref;
+          };
+          const addsPossible =
+            entry.occupancy.places.free +
+            entry.occupancy.reserve.reduce((total, list) => total + list.free, 0);
+          return [
+            entry.team,
+            {
+              status: "checked",
+              today: entry.facts.today,
+              snapshot: {
+                status: "live",
+                checkedAt: input.at,
+                source: entry.facts.rosterSource,
+              },
+              places: entry.occupancy.places,
+              reserve: entry.occupancy.reserve,
+              addsPossible,
+              addsWithFixes: addsPossible + entry.occupancy.freeable.length,
+              canFree: entry.occupancy.freeable.map((place) => ({
+                player: refOf(place.key),
+                name: place.name,
+                list: place.list,
+                place: place.place,
+              })),
+              illegal: entry.occupancy.illegal.map((blocker) => ({
+                player: refOf(blocker.key),
+                name: blocker.name,
+                slot: blocker.slot,
+                fact: blocker.fact,
+                cure: blocker.cure,
+              })),
+              waiverBid: entry.facts.waiverBid,
+              moves: new Map(entry.evaluation.moves.map((held) => [held.move, held] as const)),
+              blocked: new Map(
+                entry.evaluation.order.blocked.map((held) => [held.move, held.detail] as const),
+              ),
+            },
+          ];
+        }),
+        ...reads.flatMap(
+          ({ team, read }): ReadonlyArray<readonly [TeamId, TransactionTeamCheck]> =>
+            read._tag === "Failure" ? [[team, { status: "unavailable" }] as const] : [],
+        ),
+      ]);
     });
 
     const groupReadsFor = Effect.fn("TransactionPlanService.groupReadsFor")(function* (input: {
@@ -1923,6 +1979,9 @@ export const TransactionPlanServiceLive = Layer.effect(
               places: check.places,
               reserve: check.reserve,
               addsPossible: check.addsPossible,
+              addsWithFixes: check.addsWithFixes,
+              canFree: check.canFree,
+              illegal: check.illegal,
               waiverBid: check.waiverBid,
             }
           : {}),

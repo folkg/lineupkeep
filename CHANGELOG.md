@@ -3,6 +3,15 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
+## Unreleased - the roster state an agent needs before it acts
+
+- The team summary and plan read publish `canFree`: each player who can move to a reserve list that
+  accepts them, with the list and the active place it frees, one entry per move the lists have room
+  for. `addsWithFixes` is `addsPossible` plus those moves.
+- The same reads publish `illegal`: each blocker that makes the roster illegal, the fact that blocks
+  it, and the plain cure, including the drop that clears it. Empty when the roster is legal. Adds and
+  drops wait until every blocker is cured.
+
 ## Unreleased - agent adds and drops, scheduled confirmation, exact run times
 
 - `propose_transactions` accepts a plain add, a plain drop, or an add with one drop. It names no place

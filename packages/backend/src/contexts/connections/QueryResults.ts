@@ -20,6 +20,8 @@ import {
   QueryTeam,
   RecentFormWindow,
   ReserveList,
+  RosterBlocker,
+  RosterFreeablePlace,
   RosterPlaces,
   RosterSlot,
   StartingStatus,
@@ -2040,6 +2042,24 @@ export const TeamSummaryData = Schema.Struct({
     Schema.annotate({
       description:
         "How many adds fit right now: the free active places plus the free reserve places.",
+    }),
+  ),
+  canFree: Schema.optional(Schema.Array(RosterFreeablePlace)).pipe(
+    Schema.annotate({
+      description:
+        "Each player who can move to a reserve list that accepts them now, with the list and the active place it frees.",
+    }),
+  ),
+  addsWithFixes: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))).pipe(
+    Schema.annotate({
+      description:
+        "How many adds fit after the published freeable moves: `addsPossible` plus `canFree`.",
+    }),
+  ),
+  illegal: Schema.optional(Schema.Array(RosterBlocker)).pipe(
+    Schema.annotate({
+      description:
+        "Each player whose place the league does not accept, with the fact and the plain cure. Adds and drops stay blocked until every blocker is cured.",
     }),
   ),
   roster: Schema.optional(Schema.Array(SummaryRosterPlayer)).pipe(

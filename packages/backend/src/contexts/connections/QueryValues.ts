@@ -293,6 +293,45 @@ export const ReserveList = Schema.Struct({
 );
 export type ReserveList = typeof ReserveList.Type;
 
+export const RosterFreeablePlace = Schema.Struct({
+  player: PlayerRef,
+  name: Schema.NonEmptyString,
+  list: Schema.NonEmptyString.pipe(
+    Schema.annotate({ description: "The reserve list the league accepts this player on." }),
+  ),
+  place: Schema.NonEmptyString.pipe(
+    Schema.annotate({ description: "The active place this move frees." }),
+  ),
+}).pipe(
+  Schema.annotate({
+    description:
+      "One player who can move to a reserve list right now, with the list and the active place it frees.",
+  }),
+);
+export type RosterFreeablePlace = typeof RosterFreeablePlace.Type;
+
+export const RosterBlocker = Schema.Struct({
+  player: PlayerRef,
+  name: Schema.NonEmptyString,
+  slot: Schema.NonEmptyString.pipe(
+    Schema.annotate({ description: "The place this player holds." }),
+  ),
+  fact: Schema.NonEmptyString.pipe(
+    Schema.annotate({ description: "Why this player makes the roster illegal." }),
+  ),
+  cure: Schema.NonEmptyString.pipe(
+    Schema.annotate({
+      description: "The plain cure, including the drop that clears this player.",
+    }),
+  ),
+}).pipe(
+  Schema.annotate({
+    description:
+      "One player whose place the league does not accept. Adds and drops stay blocked until every blocker is cured.",
+  }),
+);
+export type RosterBlocker = typeof RosterBlocker.Type;
+
 export const StartingStatus = Schema.Literals([
   "confirmed_starting",
   "confirmed_not_starting",

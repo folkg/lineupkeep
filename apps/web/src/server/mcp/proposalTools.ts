@@ -154,7 +154,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_transaction_plan", {
     description:
-      "Read one team's queue in run order by day: each move's check, decision, actor, surface, confirmation, and the exact next run time. `addsPossible` says how many adds fit now, with the free places and each list by name. A group carries its status, actions, and a plain sentence.",
+      "Read one team's queue in run order by day: each move's check, decision, actor, confirmation, and next run time. `addsPossible`, `addsWithFixes`, `canFree`, and `illegal` say what fits, what a reserve move frees, and what blocks it. A group carries its status, actions, and a plain sentence.",
     parameters: TransactionPlanInput,
     success: Schema.toCodecJson(TransactionPlanRead),
     failure: ToolFailure,

@@ -1888,6 +1888,9 @@ it("publishes one queue per team", async () => {
   expect(JSON.stringify(plan.outputSchema)).toContain('"validation"');
   expect(JSON.stringify(plan.outputSchema)).toContain('"places"');
   expect(JSON.stringify(plan.outputSchema)).toContain('"reserve"');
+  expect(JSON.stringify(plan.outputSchema)).toContain('"canFree"');
+  expect(JSON.stringify(plan.outputSchema)).toContain('"addsWithFixes"');
+  expect(JSON.stringify(plan.outputSchema)).toContain('"illegal"');
   expect(JSON.stringify(plan.outputSchema)).toContain('"groups"');
   expect(JSON.stringify(plan.outputSchema)).toContain('"partly_done"');
   expect(JSON.stringify(plan.outputSchema)).toContain('"actions"');
@@ -2074,6 +2077,9 @@ it("publishes the accepted player-statistics periods and the compact standings f
   expect(summaryOutput).toContain('"unknown"');
   expect(summaryOutput).toContain("transactionTiming");
   expect(summaryOutput).toContain("rosterChange");
+  expect(summaryOutput).toContain('"canFree"');
+  expect(summaryOutput).toContain('"addsWithFixes"');
+  expect(summaryOutput).toContain('"illegal"');
   expect(searchWindow).toContain("gamesWindow");
   expect(searchWindow).toContain("next_weeks");
   expect(JSON.stringify(tool("search_players").outputSchema)).toContain("gameDays");

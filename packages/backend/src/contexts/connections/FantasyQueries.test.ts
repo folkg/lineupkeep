@@ -1324,7 +1324,18 @@ it.effect(
             slot: "IR",
             eligiblePositions: ["QB"],
             detail:
-              "Synthetic 0 sits in IR, but IR does not accept their positions (QB). This roster is illegal, so all adds and drops are blocked until it is cured. Activate them, or drop them.",
+              "Synthetic 0 sits in IR, but IR does not accept their positions (QB). This roster is illegal, so all adds and drops are blocked until it is cured. Activate Synthetic 0, or drop Synthetic 0.",
+          },
+        ],
+      );
+      assert.deepStrictEqual(
+        summary.illegal?.map(({ name, slot, fact, cure }) => ({ name, slot, fact, cure })),
+        [
+          {
+            name: "Synthetic 0",
+            slot: "IR",
+            fact: "Synthetic 0 sits in IR, but IR does not accept their positions (QB).",
+            cure: "Activate Synthetic 0, or drop Synthetic 0.",
           },
         ],
       );
@@ -1417,6 +1428,16 @@ it.effect("publishes place accounting and each reserve list on the roster and te
     assert.deepStrictEqual(summary.places, read.places);
     assert.deepStrictEqual(summary.reserve, read.reserve);
     assert.strictEqual(summary.addsPossible, 1);
+    assert.deepStrictEqual(
+      summary.canFree?.map(({ name, list, place }) => ({ name, list, place })),
+      [{ name: "Synthetic 1", list: "IR+", place: "BN" }],
+    );
+    assert.strictEqual(
+      summary.canFree?.[0]?.player,
+      summary.roster?.find((player) => player.name === "Synthetic 1")?.player,
+    );
+    assert.strictEqual(summary.addsWithFixes, 2);
+    assert.deepStrictEqual(summary.illegal, []);
 
     const plainLeague = yield* seed(fake, [team("461.l.1000.t.3", "Gamma")], {
       roster: rosterFixture({
@@ -1433,6 +1454,48 @@ it.effect("publishes place accounting and each reserve list on the roster and te
       assert.deepStrictEqual(plain.places, { used: 3, maximum: 7, free: 4 });
       assert.deepStrictEqual(plain.reserve, []);
     }
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("publishes each reserve move a full roster can make and the adds they allow", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const positions = [
+      ...leagueFixture.rosterPositions,
+      { position: "IR", positionType: "R", count: 1, kind: "reserve", eligibility: ["QB"] },
+      { position: "IR+", positionType: "R", count: 1, kind: "reserve", eligibility: ["QB"] },
+    ] satisfies ReadonlyArray<ProviderRosterPosition>;
+    const league: ProviderLeagueSettings = {
+      ...leagueFixture,
+      rosterPositions: positions,
+      rosterConstraints: declaredRosterConstraints(positions),
+    };
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      league,
+      roster: rosterFixture({ count: 7 }),
+    });
+
+    const summary = yield* queries.getTeamSummary(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      groups: ["roster"],
+    });
+
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(summary.places, { used: 7, maximum: 7, free: 0 });
+    assert.strictEqual(summary.addsPossible, 2);
+    assert.deepStrictEqual(
+      summary.canFree?.map(({ name, list, place }) => ({ name, list, place })),
+      [
+        { name: "Synthetic 0", list: "IR", place: "QB" },
+        { name: "Synthetic 1", list: "IR+", place: "BN" },
+      ],
+    );
+    assert.strictEqual(summary.addsWithFixes, 4);
+    assert.deepStrictEqual(summary.illegal, []);
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
