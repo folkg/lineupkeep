@@ -140,6 +140,8 @@ import {
   isLeagueOffNight,
   leagueGamesByDate,
 } from "./LeagueSchedule.ts";
+import { planReserveMoves } from "./LineupPlanning.ts";
+import type { RosterPlacementPlayer } from "./LineupPlanning.ts";
 import { uniqueProviderTeamKeys } from "./ProfessionalTeamIdentity.ts";
 import { ProviderOpponentFactStale, readProviderOpponent } from "./ProviderOpponentFacts.ts";
 import { fitPage, playerListBudget, queryBudget, summaryBudget } from "./QueryBudget.ts";
@@ -3749,6 +3751,13 @@ export const FantasyQueriesLive = Layer.effect(
               rule: rosterRuleOf(league.rosterConstraints, league.rosterPositions),
               players: rosterPlacePlayers(rosterPlayers),
             });
+      const freeable =
+        !includes("roster") || rosterOutcome?._tag !== "ok" || league === undefined
+          ? []
+          : planReserveMoves({
+              rule: rosterRuleOf(league.rosterConstraints, league.rosterPositions),
+              players: rosterPlacementPlayers(rosterPlayers),
+            });
       const illegalSlots: ReadonlyArray<SummaryIllegalSlot> = (
         rosterSummary?.illegal ?? []
       ).flatMap((occupant) => {
@@ -3765,14 +3774,19 @@ export const FantasyQueriesLive = Layer.effect(
               },
             ];
       });
-      const canFree: ReadonlyArray<RosterFreeablePlace> = (rosterSummary?.freeable ?? []).flatMap(
-        (place) => {
-          const row = rosterRowByKey.get(place.key);
-          return row === undefined
-            ? []
-            : [{ player: row.player, name: place.name, list: place.list, place: place.place }];
-        },
-      );
+      const canFree: ReadonlyArray<RosterFreeablePlace> = freeable.flatMap((move) => {
+        const row = rosterRowByKey.get(move.playerKey);
+        return row === undefined
+          ? []
+          : [
+              {
+                player: row.player,
+                name: move.playerName,
+                list: move.toSlot,
+                place: move.fromSlot,
+              },
+            ];
+      });
       const illegal: ReadonlyArray<RosterBlocker> = (rosterSummary?.illegal ?? []).flatMap(
         (blocker) => {
           const row = rosterRowByKey.get(blocker.key);
@@ -5663,6 +5677,19 @@ function rosterPlacePlayers(
     slot: player.slot.status === "verified" ? player.slot.slot : undefined,
     positions: player.eligiblePositions,
     injured: rosterPlayerInjured(player),
+  }));
+}
+
+function rosterPlacementPlayers(
+  players: ReadonlyArray<ProviderRosterPlayer>,
+): ReadonlyArray<RosterPlacementPlayer> {
+  return players.map((player) => ({
+    key: player.providerPlayerKey,
+    name: player.name,
+    slot: player.slot.status === "verified" ? player.slot.slot : undefined,
+    positions: player.eligiblePositions,
+    injured: rosterPlayerInjured(player),
+    editable: player.isEditable === true,
   }));
 }
 

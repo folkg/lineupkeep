@@ -3632,6 +3632,46 @@ it.effect("names the cure when no roster fix can make an add fit", () =>
   ),
 );
 
+it.effect("names the illegal blocker and its cure when no fix can cure it", () =>
+  Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const result = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [add("fa1", "Free Agent One")],
+    });
+
+    assert.strictEqual(result.refused.length, 1);
+    assert.include(
+      result.refused[0]?.detail ?? "",
+      "Healthy Reserve is no longer injured but sits in IR.",
+    );
+    assert.include(result.refused[0]?.detail ?? "", "Activate Healthy Reserve");
+    assert.include(result.refused[0]?.detail ?? "", "drop Healthy Reserve");
+    assert.deepStrictEqual(result.plan.moves, []);
+  }).pipe(
+    Effect.provide(
+      serviceLayer([
+        league(
+          [
+            rostered("a1", "Roster One", "BN", ["RB"]),
+            rostered("h1", "Healthy Reserve", "IR", ["RB"]),
+          ],
+          [freeAgent("fa1", "Free Agent One", ["RB"])],
+          {
+            slots: [bench("BN", 1), reserve("IR", ["RB"])],
+            constraints: constraints(1, { reserveEligibility: { kind: "injury_status" } }),
+          },
+        ),
+      ]),
+    ),
+  ),
+);
+
 it.effect("regenerates a move's Roster fixes when it is edited", () =>
   Effect.gen(function* () {
     const service = yield* TransactionPlanService;

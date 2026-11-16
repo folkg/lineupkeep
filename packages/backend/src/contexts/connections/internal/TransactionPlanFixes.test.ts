@@ -3,6 +3,7 @@ import { Schema } from "effect";
 
 import { rosterRuleOf } from "#contexts/connections/RosterSlots.ts";
 
+import { planReserveMoves } from "./LineupPlanning.ts";
 import type {
   TransactionPlanMove,
   TransactionPlanRosterPlayer,
@@ -154,6 +155,74 @@ it("finds no fix for a reason that is not about places or eligibility", () => {
   });
 
   assert.deepStrictEqual(search, { fixes: [], detail: undefined });
+});
+
+it("stashes to a reserve list that has room before the activate that frees another", () => {
+  const facts = teamFacts({
+    roster: [
+      player("a1", "Roster One", "BN"),
+      player("a2", "Roster Two", "IR"),
+      { ...player("a3", "Roster Three", "BN"), injured: true },
+    ],
+    slots: [bench("BN", 2), reserve("IR"), reserve("IR+")],
+    maximum: 2,
+    reserveEligibility: { kind: "injury_status" },
+  });
+
+  const search = searchRosterFixes({
+    facts,
+    rule: rosterRuleOf(facts.constraints, facts.slots),
+    funded: fundedMove(),
+    reasons: [{ code: "slot_illegal", playerKey: "a2", detail: "Roster Two sits in IR." }],
+  });
+
+  assert.deepStrictEqual(
+    search.fixes.map((fix) => [fix.kind, fix.playerKey]),
+    [
+      ["stash", "a3"],
+      ["activate", "a2"],
+    ],
+  );
+  assert.include(search.fixes[0]?.detail ?? "", "to the IR+ reserve list");
+});
+
+it("plans a reserve move through the same rule for another sport's slot names", () => {
+  const facts = teamFacts({
+    roster: [
+      {
+        key: "b1",
+        name: "Batter One",
+        positions: ["OF"],
+        slot: "BENCH",
+        injured: false,
+        editable: true,
+      },
+    ],
+    slots: [bench("BENCH", 1), reserve("IL", ["OF"]), reserve("NA", ["P"])],
+    maximum: 1,
+  });
+  const rule = rosterRuleOf(facts.constraints, facts.slots);
+
+  const search = searchRosterFixes({
+    facts,
+    rule,
+    funded: fundedMove(),
+    reasons: [{ code: "roster_full", detail: "The roster is full." }],
+  });
+
+  assert.deepStrictEqual(
+    search.fixes.map((fix) => [fix.kind, fix.playerKey]),
+    [["stash", "b1"]],
+  );
+  assert.include(search.fixes[0]?.detail ?? "", "IL reserve list");
+  assert.deepStrictEqual(
+    planReserveMoves({ rule, players: facts.roster }).map((move) => [
+      move.playerKey,
+      move.fromSlot,
+      move.toSlot,
+    ]),
+    [["b1", "BENCH", "IL"]],
+  );
 });
 
 function teamFacts(input: {

@@ -1,8 +1,10 @@
 import { Schema } from "effect";
 
-import { rosterOccupancy, slotCapacity, slotPlacement } from "#contexts/connections/RosterSlots.ts";
+import { rosterOccupancy, slotPlacement } from "#contexts/connections/RosterSlots.ts";
 import type { RosterRule } from "#contexts/connections/RosterSlots.ts";
 
+import { planRosterPlacement } from "./LineupPlanning.ts";
+import type { RosterPlacementMove } from "./LineupPlanning.ts";
 import { describeTransactionPlanMove } from "./TransactionPlanEvaluation.ts";
 import type {
   TransactionPlanMove,
@@ -46,132 +48,166 @@ export function searchRosterFixes(input: {
     (player) => !input.funded.drops.some((drop) => drop.key === player.key),
   );
   const occupancy = rosterOccupancy({ rule: input.rule, players: roster });
-  const illegal = new Map(occupancy.illegal.map((entry) => [entry.key, entry.detail] as const));
-  const legalizing: Array<RosterFixDraft> = [];
-  let free = occupancy.places.free;
-  let needsPlace = false;
-
-  for (const reason of input.reasons) {
-    if (reason.code === "roster_full") {
-      needsPlace = true;
-      continue;
-    }
-    if (reason.code !== "slot_illegal") {
-      continue;
-    }
-    const occupant = roster.find((player) => player.key === reason.playerKey);
-    if (occupant === undefined) {
-      needsPlace = true;
-      continue;
-    }
-    const fix = legalizingFix({ rule: input.rule, roster, occupant });
-    if (fix === undefined) {
-      return { fixes: [], detail: illegal.get(occupant.key) };
-    }
-    free -= placesUsedBy(fix);
-    if (!legalizing.some((held) => held.kind === fix.kind && held.playerKey === fix.playerKey)) {
-      legalizing.push(fix);
-    }
+  const needsPlace = input.reasons.some(
+    (reason) =>
+      reason.code === "roster_full" ||
+      (reason.code === "slot_illegal" && !roster.some((player) => player.key === reason.playerKey)),
+  );
+  const illegalDetail = illegalDetailOf(input.reasons, occupancy.illegal);
+  const placement = planRosterPlacement({ rule: input.rule, players: roster });
+  if (placement.kind === "refused") {
+    return { fixes: [], detail: illegalDetail ?? noPlaceCure(input.funded) };
   }
-
-  const needed = needsPlace ? 1 : 0;
-  const fixes = [...legalizing];
-  if (free < needed) {
-    const freeing = freeingFix({ rule: input.rule, roster });
-    if (freeing === undefined) {
-      return { fixes: [], detail: noPlaceCure(input.funded) };
-    }
-    fixes.unshift(freeing);
-    free += 1;
+  if (!curesIllegalOccupants(input.reasons, roster, placement.placements, input.rule)) {
+    return { fixes: [], detail: illegalDetail ?? noPlaceCure(input.funded) };
   }
-  if (fixes.length === 0 || free < needed) {
+  const fixes = orderPlacementMoves(input.rule, roster, placement.moves).flatMap((move) =>
+    fixOf(input.rule, move),
+  );
+  if (fixes.length === 0) {
+    return { fixes: [], detail: illegalDetail ?? noPlaceCure(input.funded) };
+  }
+  if (needsPlace && !fixes.some(freesPlace)) {
     return { fixes: [], detail: noPlaceCure(input.funded) };
   }
   return { fixes, detail: undefined };
 }
 
-function legalizingFix(input: {
-  readonly rule: RosterRule;
-  readonly roster: ReadonlyArray<TransactionPlanRosterPlayer>;
-  readonly occupant: TransactionPlanRosterPlayer;
-}): RosterFixDraft | undefined {
-  const declared =
-    input.occupant.slot === undefined ? undefined : input.rule.byPosition.get(input.occupant.slot);
-  if (declared === undefined) {
-    return undefined;
+function illegalDetailOf(
+  reasons: ReadonlyArray<StoredMoveValidationReason>,
+  illegal: ReadonlyArray<{ readonly key: string; readonly detail: string }>,
+): string | undefined {
+  for (const reason of reasons) {
+    if (reason.code !== "slot_illegal") {
+      continue;
+    }
+    const blocker = illegal.find((entry) => entry.key === reason.playerKey);
+    if (blocker !== undefined) {
+      return blocker.detail;
+    }
   }
-  if (declared.kind === "reserve") {
-    return {
-      kind: "activate",
-      playerKey: input.occupant.key,
-      playerName: input.occupant.name,
-      detail: `${input.occupant.name} moves back to the active roster, because ${declared.position} no longer accepts them.`,
-    };
-  }
-  const destination = openActivePlace(input);
-  return destination === undefined
-    ? undefined
-    : {
-        kind: "slot_move",
-        playerKey: input.occupant.key,
-        playerName: input.occupant.name,
-        toSlot: destination,
-        detail: `${input.occupant.name} moves to ${destination}, which accepts their positions.`,
-      };
+  return illegal[0]?.detail;
 }
 
-function openActivePlace(input: {
-  readonly rule: RosterRule;
-  readonly roster: ReadonlyArray<TransactionPlanRosterPlayer>;
-  readonly occupant: TransactionPlanRosterPlayer;
-}): string | undefined {
-  const ordered = [
-    ...input.rule.slots.filter((slot) => slot.kind === "bench"),
-    ...input.rule.slots.filter((slot) => slot.kind === "starting"),
-  ];
-  for (const slot of ordered) {
-    const capacity = slotCapacity(input.rule, slot);
-    const occupants = input.roster.filter((player) => player.slot === slot.position).length;
-    if (capacity !== undefined && occupants >= capacity) {
-      continue;
+function curesIllegalOccupants(
+  reasons: ReadonlyArray<StoredMoveValidationReason>,
+  roster: ReadonlyArray<TransactionPlanRosterPlayer>,
+  placements: ReadonlyMap<string, string>,
+  rule: RosterRule,
+): boolean {
+  return reasons.every((reason) => {
+    if (reason.code !== "slot_illegal") {
+      return true;
     }
-    if (slotPlacement(input.rule, slot.position, input.occupant).legal === true) {
-      return slot.position;
+    const occupant = roster.find((player) => player.key === reason.playerKey);
+    if (occupant === undefined) {
+      return true;
     }
-  }
-  return undefined;
+    const planned = placements.get(occupant.key);
+    return planned !== undefined && slotPlacement(rule, planned, occupant).legal === true;
+  });
 }
 
-function freeingFix(input: {
-  readonly rule: RosterRule;
-  readonly roster: ReadonlyArray<TransactionPlanRosterPlayer>;
-}): RosterFixDraft | undefined {
-  for (const player of input.roster) {
-    const slot = player.slot === undefined ? undefined : input.rule.byPosition.get(player.slot);
-    if (slot === undefined || slot.kind === "reserve" || !player.injured) {
-      continue;
-    }
-    const list = input.rule.slots.find(
-      (held) =>
-        held.kind === "reserve" &&
-        slotPlacement(input.rule, held.position, player).legal === true &&
-        input.roster.filter((occupant) => occupant.slot === held.position).length < held.count,
-    );
-    if (list === undefined) {
-      continue;
-    }
+function fixOf(rule: RosterRule, move: RosterPlacementMove): RosterFixDraft {
+  const destination = rule.byPosition.get(move.toSlot);
+  const origin = rule.byPosition.get(move.fromSlot);
+  if (destination?.kind === "reserve" && origin?.kind !== "reserve") {
     return {
       kind: "stash",
-      playerKey: player.key,
-      playerName: player.name,
-      detail: `${player.name} moves to the ${list.position} reserve list, which accepts them, to free a place.`,
+      playerKey: move.playerKey,
+      playerName: move.playerName,
+      detail: `${move.playerName} moves to the ${destination.position} reserve list, which accepts them, to free a place.`,
     };
   }
-  return undefined;
+  if (origin?.kind === "reserve" && destination !== undefined && destination.kind !== "reserve") {
+    return {
+      kind: "activate",
+      playerKey: move.playerKey,
+      playerName: move.playerName,
+      detail: `${move.playerName} moves back to the active roster at ${destination.position}.`,
+    };
+  }
+  return {
+    kind: "slot_move",
+    playerKey: move.playerKey,
+    playerName: move.playerName,
+    toSlot: move.toSlot,
+    detail: `${move.playerName} moves to ${move.toSlot}, which accepts their positions.`,
+  };
 }
 
-function placesUsedBy(fix: RosterFixDraft): number {
-  return fix.kind === "activate" ? 1 : 0;
+function freesPlace(fix: RosterFixDraft): boolean {
+  return fix.kind === "stash";
+}
+
+function orderPlacementMoves(
+  rule: RosterRule,
+  roster: ReadonlyArray<TransactionPlanRosterPlayer>,
+  moves: ReadonlyArray<RosterPlacementMove>,
+): ReadonlyArray<RosterPlacementMove> {
+  const occupancy = rosterOccupancy({ rule, players: roster });
+  let freeActive = Math.max(0, rule.rosterMaximum - occupancy.occupied);
+  const freeReserve = new Map(occupancy.reserve.map((list) => [list.name, list.free] as const));
+  const pending = [...moves];
+  const ordered: Array<RosterPlacementMove> = [];
+  while (pending.length > 0) {
+    const index = pending.findIndex((move) => fits(move, freeActive, freeReserve, rule));
+    if (index < 0) {
+      return [...ordered, ...pending];
+    }
+    const move = pending.splice(index, 1)[0];
+    if (move === undefined) {
+      return [...ordered, ...pending];
+    }
+    ordered.push(move);
+    const delta = placementDelta(rule, move);
+    freeActive += delta.freesActive - delta.usesActive;
+    applyReserve(freeReserve, delta.usesReserve, -1);
+    applyReserve(freeReserve, delta.freesReserve, 1);
+  }
+  return ordered;
+}
+
+function applyReserve(
+  freeReserve: Map<string, number>,
+  delta: ReserveDelta | undefined,
+  direction: 1 | -1,
+): void {
+  if (delta === undefined) {
+    return;
+  }
+  freeReserve.set(delta.list, (freeReserve.get(delta.list) ?? 0) + direction * delta.count);
+}
+
+function fits(
+  move: RosterPlacementMove,
+  freeActive: number,
+  freeReserve: ReadonlyMap<string, number>,
+  rule: RosterRule,
+): boolean {
+  const delta = placementDelta(rule, move);
+  return (
+    delta.usesActive <= freeActive &&
+    (delta.usesReserve === undefined ||
+      (freeReserve.get(delta.usesReserve.list) ?? 0) >= delta.usesReserve.count)
+  );
+}
+
+function placementDelta(rule: RosterRule, move: RosterPlacementMove): PlacementDelta {
+  const fromReserve = rule.byPosition.get(move.fromSlot)?.kind === "reserve";
+  const toReserve = rule.byPosition.get(move.toSlot)?.kind === "reserve";
+  return {
+    usesActive: fromReserve && !toReserve ? 1 : 0,
+    freesActive: !fromReserve && toReserve ? 1 : 0,
+    usesReserve:
+      toReserve && (!fromReserve || move.fromSlot !== move.toSlot)
+        ? { list: move.toSlot, count: 1 }
+        : undefined,
+    freesReserve:
+      fromReserve && (!toReserve || move.fromSlot !== move.toSlot)
+        ? { list: move.fromSlot, count: 1 }
+        : undefined,
+  };
 }
 
 function noPlaceCure(funded: TransactionPlanMove): string {
@@ -189,4 +225,16 @@ export type RosterFixDraft = {
 export type RosterFixSearch = {
   readonly fixes: ReadonlyArray<RosterFixDraft>;
   readonly detail: string | undefined;
+};
+
+type PlacementDelta = {
+  readonly usesActive: number;
+  readonly freesActive: number;
+  readonly usesReserve: ReserveDelta | undefined;
+  readonly freesReserve: ReserveDelta | undefined;
+};
+
+type ReserveDelta = {
+  readonly list: string;
+  readonly count: number;
 };

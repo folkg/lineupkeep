@@ -339,12 +339,13 @@ function buildAssignmentMatrix(prepared: PreparedProblem): AssignmentMatrix {
     players.map((player) => prepared.problem.availabilityTiers.indexOf(player.availabilityTier)),
   );
   const costs: Array<Array<bigint>> = [];
+  const placementsOnly = prepared.problem.objective === "places";
 
   for (let row = 0; row < unitCount; row += 1) {
     const player = row < playerCount ? players[row] : undefined;
     const rowCosts: Array<bigint> = [];
     for (let column = 0; column < unitCount; column += 1) {
-      rowCosts.push(cellCost(player, row, column, scale, units, leftWithoutSlot));
+      rowCosts.push(cellCost(player, row, column, scale, units, leftWithoutSlot, placementsOnly));
     }
     costs.push(rowCosts);
   }
@@ -362,15 +363,20 @@ function costScale(
   const canonicalBase = BigInt(unitCount + 1);
   const largestCanonicalWeight = playerCount === 0 ? 0n : canonicalBase ** BigInt(playerCount - 1);
   const canonicalMax = BigInt(playerCount * (unitCount - 1)) * largestCanonicalWeight;
-  const changeWeight = canonicalMax + 1n;
+  const vacancyWeight = canonicalMax + 1n;
+  const changeWeight = BigInt(playerCount) * vacancyWeight + canonicalMax + 1n;
   const occupancyWeight = BigInt(playerCount) * changeWeight + canonicalMax + 1n;
-  const valueWeight =
+  const preferenceWeight =
     BigInt(unitCount) * occupancyWeight + BigInt(playerCount) * changeWeight + canonicalMax + 1n;
+  const valueWeight =
+    BigInt(unitCount) * preferenceWeight + BigInt(playerCount) * changeWeight + canonicalMax + 1n;
   const valueBound = BigInt(unitCount) * BigInt(maxAbsValue) * valueWeight;
   const belowTierBound =
     valueBound +
+    BigInt(unitCount) * preferenceWeight +
     BigInt(unitCount) * occupancyWeight +
-    BigInt(playerCount) * changeWeight +
+    BigInt(unitCount) * changeWeight +
+    BigInt(playerCount) * vacancyWeight +
     canonicalMax;
 
   const tierWeights: Array<bigint> = [];
@@ -384,8 +390,10 @@ function costScale(
   const legalCellBound =
     BigInt(maxAbsValue) * valueWeight +
     tierWeights.reduce((total, weight) => total + weight, 0n) +
+    preferenceWeight +
     occupancyWeight +
     changeWeight +
+    vacancyWeight +
     canonicalMax;
   const legalPlanBound = BigInt(unitCount) * legalCellBound;
   const retainWeight = legalPlanBound * 3n + 1n;
@@ -393,8 +401,10 @@ function costScale(
 
   return {
     valueWeight,
+    preferenceWeight,
     occupancyWeight,
     changeWeight,
+    vacancyWeight,
     retainWeight,
     forbiddenCost,
     canonicalWeights: Array.from(
@@ -422,6 +432,7 @@ function cellCost(
   scale: CostScale,
   units: ReadonlyArray<SlotUnit>,
   leftWithoutSlot: ReadonlyArray<PlayerId>,
+  placementsOnly: boolean,
 ): bigint {
   const canonicalWeight = scale.canonicalWeights[row] ?? 0n;
   if (column >= units.length) {
@@ -454,13 +465,24 @@ function cellCost(
   }
 
   const value = starting && player.selection.kind === "known" ? player.selection.units : 0;
-  const valueCost = starting ? -BigInt(value) * scale.valueWeight : 0n;
-  const availabilityCost = starting && value >= 0 ? -(scale.tierWeightByPlayerRow[row] ?? 0n) : 0n;
-  const occupancyCost = starting && value === 0 ? -scale.occupancyWeight : 0n;
+  const valueCost = !placementsOnly && starting ? -BigInt(value) * scale.valueWeight : 0n;
+  const availabilityCost =
+    !placementsOnly && starting && value >= 0 ? -(scale.tierWeightByPlayerRow[row] ?? 0n) : 0n;
+  const occupancyCost = !placementsOnly && starting && value === 0 ? -scale.occupancyWeight : 0n;
+  const preferenceCost = unit.slot.preferred === true ? -scale.preferenceWeight : 0n;
+  const vacancyCost = unit.slot.vacant === false ? scale.vacancyWeight : 0n;
   const changeCost = player.currentSlotId === unit.slot.id ? 0n : scale.changeWeight;
   const canonicalCost = BigInt(unit.index) * canonicalWeight;
 
-  return valueCost + availabilityCost + occupancyCost + changeCost + canonicalCost;
+  return (
+    valueCost +
+    availabilityCost +
+    occupancyCost +
+    preferenceCost +
+    vacancyCost +
+    changeCost +
+    canonicalCost
+  );
 }
 
 function playerAllowedOnUnit(player: RosterPlayer, unit: SlotUnit): boolean {
@@ -679,8 +701,10 @@ type PreparedProblem = ProblemBase & {
 
 type CostScale = {
   readonly valueWeight: bigint;
+  readonly preferenceWeight: bigint;
   readonly occupancyWeight: bigint;
   readonly changeWeight: bigint;
+  readonly vacancyWeight: bigint;
   readonly retainWeight: bigint;
   readonly forbiddenCost: bigint;
   readonly canonicalWeights: ReadonlyArray<bigint>;

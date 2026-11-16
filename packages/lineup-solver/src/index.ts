@@ -22,6 +22,7 @@ export type {
   BenchSlot,
   LineupAssignment,
   LineupComparison,
+  LineupObjective,
   LineupPlan,
   LineupProblem,
   LineupRefusal,

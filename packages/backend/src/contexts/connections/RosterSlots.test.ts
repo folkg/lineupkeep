@@ -52,61 +52,6 @@ it("accepts the same player on an injury-based reserve list while injured", () =
   assert.deepStrictEqual(occupancy.illegal, []);
 });
 
-it("publishes the reserve move each player can make and the active place it frees", () => {
-  const rule = rosterRuleOf(
-    {
-      rosterMaximum: 2,
-      benchCapacity: "generic",
-      startingSlotsMayStandEmpty: true,
-      reserveEligibility: { kind: "published_positions" },
-    },
-    [
-      { position: "C", kind: "starting", count: 1, eligibility: ["C"] },
-      { position: "BN", kind: "bench", count: 1, eligibility: [] },
-      { position: "IR", kind: "reserve", count: 1, eligibility: ["C"] },
-      { position: "IR+", kind: "reserve", count: 1, eligibility: ["C"] },
-    ],
-  );
-  const occupancy = rosterOccupancy({
-    rule,
-    players: [
-      place("center", "Roster Center", "C", ["C"], true),
-      place("bench", "Roster Bench", "BN", ["C"], true),
-    ],
-  });
-
-  assert.deepStrictEqual(occupancy.freeable, [
-    { key: "center", name: "Roster Center", list: "IR", place: "C" },
-    { key: "bench", name: "Roster Bench", list: "IR+", place: "BN" },
-  ]);
-});
-
-it("stops publishing reserve moves when the only eligible list is full", () => {
-  const rule = rosterRuleOf(
-    {
-      rosterMaximum: 2,
-      benchCapacity: "generic",
-      startingSlotsMayStandEmpty: true,
-      reserveEligibility: { kind: "published_positions" },
-    },
-    [
-      { position: "BN", kind: "bench", count: 2, eligibility: [] },
-      { position: "IR", kind: "reserve", count: 1, eligibility: ["C"] },
-    ],
-  );
-  const occupancy = rosterOccupancy({
-    rule,
-    players: [
-      place("one", "Roster One", "BN", ["C"], true),
-      place("two", "Roster Two", "BN", ["C"], true),
-    ],
-  });
-
-  assert.deepStrictEqual(occupancy.freeable, [
-    { key: "one", name: "Roster One", list: "IR", place: "BN" },
-  ]);
-});
-
 it("publishes the blocker's fact and the drop that cures it", () => {
   const occupancy = rosterOccupancy({
     rule: injuryRule,
@@ -277,14 +222,6 @@ it("uses the roster row's reserve names on an injury-based list", () => {
 
   assert.strictEqual(slotPlacement(rule, "IR", dayToDay).legal, false);
   assert.strictEqual(slotPlacement(rule, "IR+", dayToDay).legal, true);
-
-  const occupancy = rosterOccupancy({
-    rule,
-    players: [{ key: "day", name: "Day To Day", slot: "BN", ...dayToDay }],
-  });
-  assert.deepStrictEqual(occupancy.freeable, [
-    { key: "day", name: "Day To Day", list: "IR+", place: "BN" },
-  ]);
 });
 
 function place(

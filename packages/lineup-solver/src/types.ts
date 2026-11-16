@@ -3,7 +3,10 @@ export type LineupProblem = {
   readonly availabilityTiers: ReadonlyArray<AvailabilityTier>;
   readonly slots: ReadonlyArray<RosterSlot>;
   readonly players: ReadonlyArray<RosterPlayer>;
+  readonly objective?: LineupObjective;
 };
+
+export type LineupObjective = "selection" | "places";
 
 export type LineupSolveResult =
   | { readonly kind: "plan"; readonly plan: LineupPlan }
@@ -133,26 +136,25 @@ export type LineupAssignment = {
 
 export type RosterSlot = StartingSlot | BenchSlot | ReserveSlot;
 
-export type StartingSlot = {
+type SlotShape = {
+  readonly id: SlotId;
+  readonly capacity: number;
+  readonly eligibility: SlotEligibility;
+  readonly preferred?: boolean;
+  readonly vacant?: boolean;
+};
+
+export type StartingSlot = SlotShape & {
   readonly kind: "starting";
-  readonly id: SlotId;
-  readonly capacity: number;
   readonly requirement: StartingPositionRequirement;
-  readonly eligibility: SlotEligibility;
 };
 
-export type BenchSlot = {
+export type BenchSlot = SlotShape & {
   readonly kind: "bench";
-  readonly id: SlotId;
-  readonly capacity: number;
-  readonly eligibility: SlotEligibility;
 };
 
-export type ReserveSlot = {
+export type ReserveSlot = SlotShape & {
   readonly kind: "reserve";
-  readonly id: SlotId;
-  readonly capacity: number;
-  readonly eligibility: SlotEligibility;
 };
 
 export type StartingPositionRequirement = "required" | "optional";
@@ -167,6 +169,7 @@ export type RosterPlayer = {
   readonly availabilityTier: AvailabilityTier;
   readonly selection: PlayerSelection;
   readonly reserveEligible: boolean;
+  readonly reserveSlotIds?: ReadonlyArray<SlotId>;
   readonly lockedSlotId: SlotId | undefined;
   readonly currentSlotId: SlotId | undefined;
   readonly mayBeLeftInPlace?: boolean;

@@ -20,8 +20,13 @@ export function playerMayOccupySlot(player: RosterPlayer, slot: RosterSlot): boo
   if (player.lockedSlotId !== undefined && player.lockedSlotId !== slot.id) {
     return false;
   }
-  if (slot.kind === "reserve" && !player.reserveEligible) {
-    return false;
+  if (slot.kind === "reserve") {
+    if (!player.reserveEligible) {
+      return false;
+    }
+    if (player.reserveSlotIds !== undefined && !player.reserveSlotIds.includes(slot.id)) {
+      return false;
+    }
   }
   return eligibilityAcceptsPositions(slot.eligibility, player.eligiblePositions);
 }

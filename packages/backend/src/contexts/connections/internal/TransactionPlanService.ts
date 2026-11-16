@@ -74,6 +74,7 @@ import type {
 } from "#contexts/connections/TransactionPlans.ts";
 
 import { nextCheckAt } from "./CheckSchedule.ts";
+import { planReserveMoves } from "./LineupPlanning.ts";
 import { QueryTokens } from "./QueryTokens.ts";
 import {
   claimTransactionPlanMoves,
@@ -1769,15 +1770,15 @@ export const TransactionPlanServiceLive = Layer.effect(
           return [];
         }
         const facts = read.success;
-        const occupancy = rosterOccupancy({
-          rule: rosterRuleOf(facts.constraints, facts.slots),
-          players: facts.roster,
-        });
+        const rule = rosterRuleOf(facts.constraints, facts.slots);
+        const occupancy = rosterOccupancy({ rule, players: facts.roster });
+        const freeable = planReserveMoves({ rule, players: facts.roster });
         return [
           {
             team,
             facts,
             occupancy,
+            freeable,
             evaluation: evaluateTransactionPlan({
               facts,
               moves: movesByTeam.get(team) ?? [],
@@ -1785,7 +1786,7 @@ export const TransactionPlanServiceLive = Layer.effect(
             }),
             playerKeys: [
               ...new Set([
-                ...occupancy.freeable.map((entry) => entry.key),
+                ...freeable.map((move) => move.playerKey),
                 ...occupancy.illegal.map((entry) => entry.key),
               ]),
             ],
@@ -1831,12 +1832,12 @@ export const TransactionPlanServiceLive = Layer.effect(
               places: entry.occupancy.places,
               reserve: entry.occupancy.reserve,
               addsPossible,
-              addsWithFixes: addsPossible + entry.occupancy.freeable.length,
-              canFree: entry.occupancy.freeable.map((place) => ({
-                player: refOf(place.key),
-                name: place.name,
-                list: place.list,
-                place: place.place,
+              addsWithFixes: addsPossible + entry.freeable.length,
+              canFree: entry.freeable.map((move) => ({
+                player: refOf(move.playerKey),
+                name: move.playerName,
+                list: move.toSlot,
+                place: move.fromSlot,
               })),
               illegal: entry.occupancy.illegal.map((blocker) => ({
                 player: refOf(blocker.key),

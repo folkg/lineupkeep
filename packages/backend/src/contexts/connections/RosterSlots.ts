@@ -171,46 +171,8 @@ export function rosterOccupancy(input: {
         };
       }),
     illegal,
-    freeable: freeablePlaces(input.rule, input.players, occupancy),
     overflow,
   };
-}
-
-function freeablePlaces(
-  rule: RosterRule,
-  players: ReadonlyArray<RosterPlayerPlace>,
-  occupancy: ReadonlyMap<string, number>,
-): ReadonlyArray<FreeablePlace> {
-  const remaining = new Map<string, number>();
-  for (const slot of rule.slots) {
-    if (slot.kind === "reserve") {
-      remaining.set(slot.position, Math.max(0, slot.count - (occupancy.get(slot.position) ?? 0)));
-    }
-  }
-  const freeable: Array<FreeablePlace> = [];
-  for (const player of players) {
-    const current = player.slot === undefined ? undefined : rule.byPosition.get(player.slot);
-    if (current === undefined || current.kind === "reserve") {
-      continue;
-    }
-    const list = rule.slots.find(
-      (slot) =>
-        slot.kind === "reserve" &&
-        (remaining.get(slot.position) ?? 0) > 0 &&
-        slotPlacement(rule, slot.position, player).legal === true,
-    );
-    if (list === undefined) {
-      continue;
-    }
-    remaining.set(list.position, (remaining.get(list.position) ?? 0) - 1);
-    freeable.push({
-      key: player.key,
-      name: player.name,
-      list: list.position,
-      place: current.position,
-    });
-  }
-  return freeable;
 }
 
 function reserveEligibilityFacts(rule: RosterRule, slot: RosterSlot): ReserveEligibility {
@@ -318,7 +280,6 @@ export type RosterOccupancy = {
   readonly places: RosterPlaces;
   readonly reserve: ReadonlyArray<ReserveList>;
   readonly illegal: ReadonlyArray<IneligibleSlotOccupant>;
-  readonly freeable: ReadonlyArray<FreeablePlace>;
   readonly overflow: ReadonlyArray<RosterSlotShortfall>;
 };
 
@@ -332,13 +293,6 @@ type IneligibleSlotOccupant = RosterPlayerPlace &
 type RosterBlockerFacts = {
   readonly fact: string;
   readonly cure: string;
-};
-
-type FreeablePlace = {
-  readonly key: string;
-  readonly name: string;
-  readonly list: string;
-  readonly place: string;
 };
 
 type RosterSlotShortfall = {
