@@ -7,7 +7,7 @@ export function Badge(props: BadgeProps): JSX.Element {
   return (
     <span
       class={cx(
-        "inline-flex items-center text-label leading-none font-semibold uppercase tracking-label",
+        "inline-flex items-center border-2 border-rule-strong bg-paper px-2 py-1 text-label leading-none font-semibold uppercase tracking-label",
         props.tone === "accent" ? "text-action" : "text-ink-faint",
       )}
     >

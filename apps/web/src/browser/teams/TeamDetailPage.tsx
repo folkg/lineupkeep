@@ -54,6 +54,7 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
         }
         title={team()?.team.name ?? "Team"}
         titleAside={titleAside()}
+        titleVariant="name"
       >
         <UnsavedChangesScope>
           <Stack gap="lg">

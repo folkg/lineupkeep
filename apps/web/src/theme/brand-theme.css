@@ -1,27 +1,32 @@
 @import "@fontsource-variable/schibsted-grotesk/wght.css";
+@import "@fontsource-variable/bricolage-grotesque/wght.css";
 
 :root {
   color-scheme: light;
 
-  --theme-canvas: #fbfbfa;
-  --theme-paper: #ffffff;
-  --theme-ink: #101014;
-  --theme-ink-soft: #5d5d68;
-  --theme-ink-faint: #6a6a72;
-  --theme-rule: #e2e2dc;
-  --theme-rule-strong: #101014;
+  --theme-canvas: #f4efe4;
+  --theme-paper: #fffdf7;
+  --theme-ink: #141217;
+  --theme-ink-soft: #6a6470;
+  --theme-ink-faint: #6f6875;
+  --theme-rule: #cdc5b7;
+  --theme-rule-strong: #141217;
+  --theme-rule-section: 3px;
   --theme-action: #5b21b6;
   --theme-action-hover: #4c1d95;
   --theme-action-soft: #f3eeff;
-  --theme-on-action: #fbfbfa;
+  --theme-action-offset: rgb(91 33 182 / 0.72);
+  --theme-on-action: #fffdf7;
   --theme-accent: #e0b64a;
   --theme-on-accent: #101014;
+  --theme-spot: #d9482b;
   --theme-danger: #a33432;
   --theme-danger-hover: #802421;
   --theme-danger-soft: #faece9;
   --theme-scrim: rgb(16 16 20 / 0.55);
+  --theme-shadow-panel: 8px 8px 0 var(--theme-action-offset);
 
-  --theme-font-display: "Schibsted Grotesk Variable", sans-serif;
+  --theme-font-display: "Bricolage Grotesque Variable", sans-serif;
   --theme-font-sans:
     "Schibsted Grotesk Variable", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
@@ -32,12 +37,19 @@
 
   --theme-text-display: 2.5rem;
   --theme-text-display-line-height: 1.05;
-  --theme-text-display-letter-spacing: -0.03em;
+  --theme-text-display-letter-spacing: -0.035em;
+
+  --theme-text-page-title: clamp(2.75rem, 5.4vw, 4.375rem);
+  --theme-text-page-title-line-height: 0.95;
+  --theme-text-page-title-letter-spacing: -0.035em;
 
   --theme-text-title: 1.75rem;
   --theme-text-title-line-height: 1.15;
   --theme-text-section-title: 1.375rem;
   --theme-text-section-title-line-height: 1.2;
+  --theme-text-team-name: 1.625rem;
+  --theme-text-team-name-line-height: 1.05;
+  --theme-text-team-name-letter-spacing: -0.02em;
   --theme-text-body: 0.9375rem;
   --theme-text-body-line-height: 1.55;
   --theme-text-meta: 0.75rem;
@@ -45,6 +57,7 @@
   --theme-text-label: 0.6875rem;
   --theme-text-label-line-height: 1.2;
   --theme-tracking-tight: -0.02em;
+  --theme-tracking-display: -0.035em;
   --theme-tracking-label: 0.16em;
 
   --theme-size-tap-target: 2.75rem;
@@ -82,9 +95,11 @@
   --theme-action: #c4b5fd;
   --theme-action-hover: #d8c6ff;
   --theme-action-soft: #2a2150;
+  --theme-action-offset: rgb(196 181 253 / 0.55);
   --theme-on-action: #17122a;
   --theme-accent: #e0b64a;
   --theme-on-accent: #101014;
+  --theme-spot: #ff9e7a;
   --theme-danger: #ffb9b0;
   --theme-danger-hover: #ffd1c9;
   --theme-danger-soft: #492b27;

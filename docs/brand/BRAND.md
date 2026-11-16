@@ -40,7 +40,7 @@ Do not use hype, exclamation-heavy success messages, “AI-powered” decoration
 
 ## Visual expression
 
-**Royal violet and gold is the owner-approved palette.** Vivid violet actions and deep violet ink give Lineupgrade fantasy-sports energy without trophies, betting imagery, or theatrical effects. Gold fills the square brand mark and is used nowhere else on a page. This is a custom pairing, not the original site's Material preset. Do not substitute green or reopen palette selection during routine implementation.
+**Royal violet and gold is the owner-approved palette.** Vivid violet actions and deep violet ink give Lineupgrade fantasy-sports energy without trophies, betting imagery, or theatrical effects. The page is warm newsprint with near-black ink; Bricolage Grotesque carries the page title, section titles, and team names, while Schibsted Grotesk carries the body, labels, controls, and the wordmark. Gold fills the square brand mark and is used nowhere else on a page. A single spot ink marks urgency. This is a custom pairing, not the original site's Material preset. Do not substitute green or reopen palette selection during routine implementation.
 
 [DESIGN.md](../../DESIGN.md) owns the exact semantic palette, typography, components, spacing, states, and accessibility rules. Violet carries everyday interaction; the gold mark carries identity. Colour alone never communicates success or risk. Light and dark are complete palettes; the Account theme setting defaults to System and follows the device.
 
@@ -50,7 +50,7 @@ The [specimen](preview.html) demonstrates the visual foundation. Any team/contro
 
 - App wordmark and mark: [BrandLink.tsx](../../apps/web/src/browser/brand-ui/BrandLink.tsx), [BrandMark.tsx](../../apps/web/src/browser/brand-ui/BrandMark.tsx).
 - Favicon: [lineupgrade-mark.svg](../../apps/web/public/brand/lineupgrade-mark.svg).
-- Self-hosted font: `@fontsource-variable/schibsted-grotesk@5.3.0`, sourced through Bun at preparation. SIL Open Font License is distributed in the dependency; no Google Fonts/browser network dependency.
+- Self-hosted fonts: `@fontsource-variable/schibsted-grotesk@5.3.0` and `@fontsource-variable/bricolage-grotesque@5.3.0`, sourced through Bun at preparation. SIL Open Font License is distributed in each dependency; no Google Fonts/browser network dependency.
 - Preview font is embedded from that same package; [font license](FONT-LICENSE.txt) accompanies the specimen.
 
 No professional trademark clearance is claimed. The owner selected Lineupgrade after the preliminary [naming screen](../fantasy-manager/NAMING-RESEARCH.md). No domain has been purchased, reserved, or added to a cart, and no production hostname has been selected.

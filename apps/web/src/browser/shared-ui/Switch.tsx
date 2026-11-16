@@ -34,23 +34,17 @@ export function Switch(props: SwitchProps): JSX.Element {
       <span class={props.compact === true ? "sr-only" : undefined}>{props.children}</span>
       <span
         aria-hidden="true"
-        class={cx(
-          "relative inline-flex h-[1.375rem] w-[2.5rem] shrink-0 items-center overflow-hidden p-[3px] transition-colors duration-quick ease-out-cubic",
-          props.checked ? "bg-action" : "bg-rule",
-        )}
+        class="relative inline-flex h-[1.375rem] w-[2.5rem] shrink-0 items-center overflow-hidden border-2 border-rule-strong bg-paper p-[3px] transition-colors duration-quick ease-out-cubic"
       >
         <span
           class={cx(
             "size-4 transition-transform duration-quick ease-out-cubic",
-            props.checked ? "translate-x-[1.125rem] bg-on-action" : "translate-x-0 bg-paper",
+            props.checked ? "translate-x-3.5 bg-action" : "translate-x-0 bg-ink-faint",
           )}
         />
         <Show when={working()}>
           <WorkMark
-            class={cx(
-              "inset-x-0 bottom-0 w-[34%]",
-              props.checked ? "bg-on-action" : "bg-rule-strong",
-            )}
+            class={cx("inset-x-0 bottom-0 w-[34%]", props.checked ? "bg-action" : "bg-ink-faint")}
           />
         </Show>
       </span>

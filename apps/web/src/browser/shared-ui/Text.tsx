@@ -32,6 +32,7 @@ const sizeClass = {
   body: "max-w-[42.5rem] text-pretty text-body",
   item: "max-w-[42.5rem] text-pretty text-item",
   caption: "max-w-[42.5rem] text-caption",
+  label: "max-w-[42.5rem] text-label font-semibold uppercase tracking-label",
 };
 
 const toneClass: Record<TextTone, string> = {

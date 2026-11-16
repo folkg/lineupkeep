@@ -5,7 +5,7 @@ import { Heading } from "./Heading";
 
 export function SectionTitle(props: SectionTitleProps): JSX.Element {
   return (
-    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-rule pb-2">
+    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b-section pb-3">
       <Heading
         id={props.id}
         level={props.level ?? 2}

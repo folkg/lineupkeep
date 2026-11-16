@@ -28,6 +28,7 @@
   --color-on-action: var(--theme-on-action);
   --color-accent: var(--theme-accent);
   --color-on-accent: var(--theme-on-accent);
+  --color-spot: var(--theme-spot);
   --color-danger: var(--theme-danger);
   --color-danger-hover: var(--theme-danger-hover);
   --color-danger-soft: var(--theme-danger-soft);
@@ -48,6 +49,14 @@
   --text-display: var(--theme-text-display);
   --text-display--line-height: var(--theme-text-display-line-height);
   --text-display--letter-spacing: var(--theme-text-display-letter-spacing);
+
+  --text-page-title: var(--theme-text-page-title);
+  --text-page-title--line-height: var(--theme-text-page-title-line-height);
+  --text-page-title--letter-spacing: var(--theme-text-page-title-letter-spacing);
+
+  --text-team-name: var(--theme-text-team-name);
+  --text-team-name--line-height: var(--theme-text-team-name-line-height);
+  --text-team-name--letter-spacing: var(--theme-text-team-name-letter-spacing);
 
   --text-statement: var(--theme-text-title);
   --text-statement--line-height: var(--theme-text-title-line-height);
@@ -92,6 +101,7 @@
   --text-google--line-height: 1.25rem;
 
   --tracking-tight: var(--theme-tracking-tight);
+  --tracking-display: var(--theme-tracking-display);
   --tracking-label: var(--theme-tracking-label);
 
   --spacing-tap-target: var(--theme-size-tap-target);
@@ -110,6 +120,7 @@
   --radius-surface: 0px;
 
   --shadow-focus: 0 0 0 2px var(--theme-canvas), 0 0 0 4px var(--theme-action);
+  --shadow-panel: var(--theme-shadow-panel);
 
   --ease-out-cubic: var(--theme-ease-out);
 
@@ -224,8 +235,23 @@
   transition-duration: var(--theme-duration-reveal);
 }
 
+@utility border-b-section {
+  border-bottom-width: var(--theme-rule-section);
+  border-bottom-color: var(--theme-rule-strong);
+}
+
 [data-action-track] {
   container-type: inline-size;
+}
+
+[data-print="halftone"] {
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    var(--theme-action) 1.2px,
+    transparent 1.4px
+  );
+  background-size: 7px 7px;
+  opacity: 0.26;
 }
 
 [data-action-mark="work"] {

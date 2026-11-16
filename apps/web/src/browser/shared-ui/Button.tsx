@@ -66,11 +66,9 @@ export function buttonClass(options: ButtonOptions = {}): string {
 }
 
 const buttonBase =
-  "relative inline-flex items-center justify-center gap-2 overflow-hidden border no-underline transition-[color,background-color,border-color,transform] duration-quick ease-out-cubic focus-visible:outline-none focus-visible:shadow-focus disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50";
+  "relative inline-flex items-center justify-center gap-2 overflow-hidden border-0 no-underline transition-[color,background-color,border-color,transform] duration-quick ease-out-cubic focus-visible:outline-none focus-visible:shadow-focus disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50";
 
 const confirmedShape = "ps-9 pe-9";
-
-const buttonBorderless = "border-transparent";
 
 const filledShape =
   "min-h-button px-5 text-control font-semibold uppercase tracking-label leading-none";
@@ -79,7 +77,7 @@ const quietShape =
   "min-h-tap-target px-2 text-control font-semibold uppercase tracking-label leading-none";
 
 const linkShape =
-  "min-h-tap-target p-0 text-body font-semibold normal-case tracking-normal leading-tight underline decoration-1 underline-offset-4";
+  "min-h-tap-target p-0 text-body font-semibold normal-case tracking-normal leading-tight underline decoration-2 underline-offset-4";
 
 const quietNeutral = "text-ink-soft hover:text-action";
 
@@ -90,7 +88,7 @@ export const iconButtonClass = cx(
 );
 
 export const iconButtonFrameClass =
-  "pointer-events-none absolute inset-2 border border-rule-strong transition-colors duration-quick ease-out-cubic group-hover:border-action group-focus-visible:border-action";
+  "pointer-events-none absolute inset-2 border-2 border-rule-strong transition-colors duration-quick ease-out-cubic group-hover:border-action group-focus-visible:border-action";
 
 const buttonStyles: Record<ButtonStyleKey, string> = {
   "google:neutral": cx(
@@ -98,44 +96,39 @@ const buttonStyles: Record<ButtonStyleKey, string> = {
   ),
   "link:danger": cx(
     buttonBase,
-    buttonBorderless,
     linkShape,
     "bg-transparent text-danger hover:bg-transparent hover:text-danger-hover",
   ),
   "link:neutral": cx(
     buttonBase,
-    buttonBorderless,
     linkShape,
     "bg-transparent text-action hover:bg-transparent hover:text-action-hover",
   ),
   "primary:danger": cx(
     buttonBase,
-    buttonBorderless,
     filledShape,
-    "bg-danger text-on-action hover:bg-danger-hover",
+    "border-2 border-danger bg-danger text-on-action hover:bg-danger-hover",
   ),
   "primary:neutral": cx(
     buttonBase,
-    buttonBorderless,
     filledShape,
-    "bg-action text-on-action hover:bg-action-hover",
+    "border-2 border-rule-strong bg-action text-on-action hover:bg-action-hover",
   ),
   "quiet:danger": cx(
     buttonBase,
-    buttonBorderless,
     quietShape,
     "text-danger hover:bg-danger-soft hover:text-danger-hover",
   ),
-  "quiet:neutral": cx(buttonBase, buttonBorderless, quietShape, quietNeutral),
+  "quiet:neutral": cx(buttonBase, quietShape, quietNeutral),
   "secondary:danger": cx(
     buttonBase,
     filledShape,
-    "border-danger bg-transparent text-danger hover:border-danger-hover hover:text-danger-hover",
+    "border-2 border-danger bg-transparent text-danger hover:border-danger-hover hover:text-danger-hover",
   ),
   "secondary:neutral": cx(
     buttonBase,
     filledShape,
-    "border-rule-strong bg-transparent text-ink hover:border-action hover:text-action",
+    "border-2 border-rule-strong bg-transparent text-ink hover:border-action hover:text-action",
   ),
 };
 

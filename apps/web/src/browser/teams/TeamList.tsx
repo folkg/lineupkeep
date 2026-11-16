@@ -1,3 +1,4 @@
+import type { FantasyLeague } from "@lineupkeep/backend/connections/FantasyTeam";
 import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 import type { Accessor } from "solid-js";
@@ -17,6 +18,7 @@ import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
 import { createMinuteClock } from "#browser/timing/minuteClock.ts";
 import type { TeamSummaryView } from "#contracts/connections/teamContract.ts";
+import { leagueDisplayName } from "#contracts/connections/teamVocabulary.ts";
 
 import { TeamAttention } from "./TeamAttention";
 import { TeamControls } from "./TeamControls";
@@ -84,11 +86,31 @@ export function TeamList(props: TeamListProps): JSX.Element {
             }
             when={props.teams().length > 0}
           >
-            <RuleList settling={settling()}>
-              <For each={props.teams()}>
-                {(team) => <TeamRow now={clock.now} team={team} remote={props.remote} />}
-              </For>
-            </RuleList>
+            <For each={leagueGroups(props.teams())}>
+              {(group) => {
+                const titleId = `teams-league-${group.league}`;
+                return (
+                  <Stack as="section" gap="sm" labelledBy={titleId}>
+                    <SectionTitle
+                      id={titleId}
+                      level={3}
+                      action={
+                        <Text as="span" numeric size="label" tone="faint">
+                          {group.teams.length} {group.teams.length === 1 ? "team" : "teams"}
+                        </Text>
+                      }
+                    >
+                      {leagueDisplayName(group.league)}
+                    </SectionTitle>
+                    <RuleList settling={settling()}>
+                      <For each={group.teams}>
+                        {(team) => <TeamRow now={clock.now} team={team} remote={props.remote} />}
+                      </For>
+                    </RuleList>
+                  </Stack>
+                );
+              }}
+            </For>
           </Show>
         </Show>
       </Show>
@@ -101,7 +123,7 @@ function TeamRow(props: TeamRowProps): JSX.Element {
     <RuleListItem dense layout="columns">
       <Stack gap="xs">
         <Inline gap="sm">
-          <TextLink params={{ teamId: props.team.team.id }} size="item" to="/teams/$teamId">
+          <TextLink params={{ teamId: props.team.team.id }} size="team" to="/teams/$teamId">
             {props.team.team.name}
           </TextLink>
           <TeamProviderLink team={props.team.team} />
@@ -163,6 +185,19 @@ type TeamRowProps = {
   readonly remote: TeamRemote;
 };
 
+function leagueGroups(teams: ReadonlyArray<TeamSummaryView>): ReadonlyArray<LeagueGroup> {
+  const held = new Map<FantasyLeague, Array<TeamSummaryView>>();
+  for (const team of teams) {
+    const group = held.get(team.team.league);
+    if (group === undefined) {
+      held.set(team.team.league, [team]);
+    } else {
+      group.push(team);
+    }
+  }
+  return [...held].map(([league, group]) => ({ league, teams: group }));
+}
+
 function allTeamsIdle(teams: ReadonlyArray<TeamSummaryView>): boolean {
   return (
     teams.length > 0 &&
@@ -172,3 +207,8 @@ function allTeamsIdle(teams: ReadonlyArray<TeamSummaryView>): boolean {
     )
   );
 }
+
+type LeagueGroup = {
+  readonly league: FantasyLeague;
+  readonly teams: ReadonlyArray<TeamSummaryView>;
+};

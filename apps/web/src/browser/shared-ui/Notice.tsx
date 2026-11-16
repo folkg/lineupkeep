@@ -9,7 +9,7 @@ export function Notice(props: NoticeProps): JSX.Element {
     <div
       id={props.id}
       class={cx(
-        "grid max-w-[42.5rem] gap-1.5 border-l ps-4",
+        "grid max-w-[42.5rem] gap-1.5 border-l-2 ps-4",
         props.tone === "danger" ? "border-danger" : "border-rule-strong",
       )}
     >

@@ -59,7 +59,7 @@ export function fieldControlClass(options: FieldControlOptions = {}): string {
       : "hover:border-action focus:border-action";
 
   return cx(
-    "w-full select-text border bg-paper px-3 text-body text-ink transition-[border-color,box-shadow] duration-quick ease-out-cubic placeholder:text-ink-faint focus:outline-none focus-visible:shadow-focus",
+    "w-full select-text border-2 bg-paper px-3 text-body text-ink transition-[border-color,box-shadow] duration-quick ease-out-cubic placeholder:text-ink-faint focus:outline-none focus-visible:shadow-focus",
     border,
     interaction,
   );

@@ -7,14 +7,23 @@ import { Inline } from "./Inline";
 import { Text } from "./Text";
 
 export function Page(props: PageProps): JSX.Element {
+  const variant = (): TitleVariant => props.titleVariant ?? "page";
   return (
-    <section class="w-full pt-[clamp(32px,4vw,48px)] pb-[max(48px,env(safe-area-inset-bottom))] max-sm:pt-8">
-      <Show when={props.back}>{(back) => <div class="mb-6">{back()}</div>}</Show>
-      <header class="mb-8 grid max-w-[42.5rem] gap-2">
-        <Show when={props.titleAside} fallback={<PageTitle>{props.title}</PageTitle>}>
+    <section class="relative w-full pt-[clamp(32px,4vw,48px)] pb-[max(48px,env(safe-area-inset-bottom))] max-sm:pt-8">
+      <div
+        aria-hidden="true"
+        data-print="halftone"
+        class="pointer-events-none absolute end-0 top-4 hidden h-28 w-56 md:block motion-reduce:hidden"
+      />
+      <Show when={props.back}>{(back) => <div class="relative mb-6">{back()}</div>}</Show>
+      <header class="relative mb-8 grid max-w-[42.5rem] gap-3">
+        <Show
+          when={props.titleAside}
+          fallback={<PageTitle variant={variant()}>{props.title}</PageTitle>}
+        >
           {(aside) => (
             <Inline gap="sm" align="baseline" nowrap>
-              <PageTitle>{props.title}</PageTitle>
+              <PageTitle variant={variant()}>{props.title}</PageTitle>
               {aside()}
             </Inline>
           )}
@@ -32,18 +41,26 @@ export function Page(props: PageProps): JSX.Element {
   );
 }
 
-function PageTitle(props: { readonly children: string }): JSX.Element {
+function PageTitle(props: PageTitleProps): JSX.Element {
   return (
-    <Heading level={1} size="headline">
+    <Heading level={1} size={props.variant === "name" ? "name" : "page"}>
       {props.children}
     </Heading>
   );
 }
 
+type TitleVariant = "page" | "name";
+
 type PageProps = {
   readonly back?: Element;
   readonly title: string;
   readonly titleAside?: Element;
+  readonly titleVariant?: TitleVariant;
   readonly lede?: string;
   readonly children: Element;
+};
+
+type PageTitleProps = {
+  readonly variant: TitleVariant;
+  readonly children: string;
 };

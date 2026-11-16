@@ -2,19 +2,21 @@
 name: Lineupgrade
 description: "Your lineup. Looked after."
 colors:
-  canvas: "#fbfbfa"
-  paper: "#ffffff"
-  ink: "#101014"
-  ink-soft: "#5d5d68"
-  ink-faint: "#6a6a72"
-  rule: "#e2e2dc"
-  rule-strong: "#101014"
+  canvas: "#f4efe4"
+  paper: "#fffdf7"
+  ink: "#141217"
+  ink-soft: "#6a6470"
+  ink-faint: "#6f6875"
+  rule: "#cdc5b7"
+  rule-strong: "#141217"
   action: "#5b21b6"
   action-hover: "#4c1d95"
   action-soft: "#f3eeff"
-  on-action: "#fbfbfa"
+  action-offset: "rgb(91 33 182 / 0.72)"
+  on-action: "#fffdf7"
   accent: "#e0b64a"
   on-accent: "#101014"
+  spot: "#d9482b"
   danger: "#a33432"
   danger-hover: "#802421"
   danger-soft: "#faece9"
@@ -29,9 +31,11 @@ colors:
   dark-action: "#c4b5fd"
   dark-action-hover: "#d8c6ff"
   dark-action-soft: "#2a2150"
+  dark-action-offset: "rgb(196 181 253 / 0.55)"
   dark-on-action: "#17122a"
   dark-accent: "#e0b64a"
   dark-on-accent: "#101014"
+  dark-spot: "#ff9e7a"
   dark-danger: "#ffb9b0"
   dark-danger-hover: "#ffd1c9"
   dark-danger-soft: "#492b27"
@@ -44,22 +48,35 @@ typography:
     lineHeight: 1.2
     letterSpacing: "0.16em"
   display:
-    fontFamily: "Schibsted Grotesk Variable, sans-serif"
+    fontFamily: "Bricolage Grotesque Variable, sans-serif"
     fontSize: "2.5rem"
-    fontWeight: 600
+    fontWeight: 800
     lineHeight: 1.05
-    letterSpacing: "-0.03em"
+    letterSpacing: "-0.035em"
   page-title:
-    fontFamily: "Schibsted Grotesk Variable, sans-serif"
+    fontFamily: "Bricolage Grotesque Variable, sans-serif"
+    fontSize: "clamp(2.75rem, 5.4vw, 4.375rem)"
+    fontWeight: 800
+    lineHeight: 0.95
+    letterSpacing: "-0.035em"
+    textTransform: "uppercase"
+  statement:
+    fontFamily: "Bricolage Grotesque Variable, sans-serif"
     fontSize: "1.75rem"
-    fontWeight: 600
+    fontWeight: 800
     lineHeight: 1.15
     letterSpacing: "-0.02em"
   section-title:
-    fontFamily: "Schibsted Grotesk Variable, sans-serif"
+    fontFamily: "Bricolage Grotesque Variable, sans-serif"
     fontSize: "1.375rem"
-    fontWeight: 600
+    fontWeight: 800
     lineHeight: 1.2
+    letterSpacing: "-0.02em"
+  team-name:
+    fontFamily: "Bricolage Grotesque Variable, sans-serif"
+    fontSize: "1.625rem"
+    fontWeight: 800
+    lineHeight: 1.05
     letterSpacing: "-0.02em"
   body:
     fontFamily: "Schibsted Grotesk Variable, sans-serif"
@@ -92,10 +109,15 @@ spacing:
   control-min: "44px"
   content-max: "680px"
   table-max: "960px"
+shadows:
+  focus: "0 0 0 2px {colors.canvas}, 0 0 0 4px {colors.action}"
+  panel: "8px 8px 0 {colors.action-offset}"
 components:
   button-primary:
     backgroundColor: "{colors.action}"
     textColor: "{colors.on-action}"
+    borderColor: "{colors.rule-strong}"
+    borderWidth: "2px"
     typography: "{typography.label}"
     rounded: "{rounded.control}"
     height: "44px"
@@ -105,6 +127,7 @@ components:
   button-secondary:
     textColor: "{colors.ink}"
     borderColor: "{colors.rule-strong}"
+    borderWidth: "2px"
     typography: "{typography.label}"
     rounded: "{rounded.control}"
     height: "44px"
@@ -113,35 +136,53 @@ components:
     backgroundColor: "{colors.paper}"
     textColor: "{colors.ink}"
     borderColor: "{colors.rule-strong}"
+    borderWidth: "2px"
     rounded: "{rounded.control}"
     height: "44px"
   badge:
+    backgroundColor: "{colors.paper}"
     textColor: "{colors.action}"
+    borderColor: "{colors.rule-strong}"
+    borderWidth: "2px"
     typography: "{typography.label}"
     rounded: "{rounded.badge}"
+    padding: "4px 8px"
+  section-title:
+    borderColor: "{colors.rule-strong}"
+    borderWidth: "3px"
+    typography: "{typography.section-title}"
+  queue-panel:
+    backgroundColor: "{colors.paper}"
+    borderColor: "{colors.rule-strong}"
+    borderWidth: "2px"
+    boxShadow: "{shadows.panel}"
 ---
 
 # Design System: Lineupgrade
 
 ## Overview
 
-**Creative North Star: "The Technical Sheet"**
+**Creative North Star: "Ink and halftone"**
 
-Lineupgrade reads as one precise sheet: a single grotesk, square controls, a short measure, and
-hairlines that do the work a card used to do. Royal violet is spent in one place per view. Gold
-exists only in the mark. The product is calm enough to check in the morning and precise enough to
-trust with a lineup.
+Lineupgrade reads as a printed sports sheet: warm newsprint, near-black ink, a display face for the
+page and the teams, and Schibsted for the work in between. Section rules are 3px ink; row hairlines
+stay 1px. A queue panel is the one box, lifted by one hard violet offset with no blur. Royal violet
+is spent on interaction, gold exists only in the mark, and one spot ink marks urgency. The product
+is calm enough to check in the morning and precise enough to trust with a lineup.
 
 This is an Operate product: information before spectacle, familiar controls, direct labels, and
-honest state. Light is a warm paper; dark is a tinted violet sheet. Both are complete palettes.
+honest state. Light is warm newsprint; dark is a tinted violet sheet. Both are complete palettes.
 
 **Key Characteristics:**
 
-- One grotesk, six text sizes, no serif
-- Square everywhere; hairlines instead of boxes
+- Bricolage Grotesque Variable for page titles, section titles, and team names at weight 800;
+  Schibsted Grotesk Variable for body, meta, labels, controls, and the wordmark
+- Square everywhere; 3px ink section rules and 1px row hairlines instead of cards
 - One 680px measure and one solid action per view
+- One 8px hard violet offset on a queue panel, and no other shadow
+- A clipped halftone dot screen behind wide page titles, and no other print texture
 - Numbers aligned with tabular figures, never prose tracking
-- Royal violet for interaction; gold only in the mark
+- Royal violet for interaction; gold only in the mark; spot ink only for urgency
 - Light and dark designed together
 
 Runtime values live in [brand-theme.css](apps/web/src/theme/brand-theme.css);
@@ -152,57 +193,63 @@ all three aligned.
 ## Colour, exactly
 
 Violet owns interaction. Ink and rule carry everything else. Gold is the brand mark's fill and is
-never used for text, actions, status, or decoration.
+never used for text, actions, status, or decoration. Spot ink is the one urgency accent; danger
+remains the error and destructive colour.
 
 ### Paper light
 
-| Token          | Value                  | Role                                                      |
-| -------------- | ---------------------- | --------------------------------------------------------- |
-| `canvas`       | `#fbfbfa`              | Page field                                                |
-| `paper`        | `#ffffff`              | Inputs and the mark's surroundings, not cards             |
-| `ink`          | `#101014`              | Primary text, headings, mark strokes                      |
-| `ink-soft`     | `#5d5d68`              | Secondary text, quiet links, quiet controls               |
-| `ink-faint`    | `#6a6a72`              | Metadata, labels, placeholders                            |
-| `rule`         | `#e2e2dc`              | Hairlines between rows and under section titles           |
-| `rule-strong`  | `#101014`              | Masthead rule, control and field borders, active nav rule |
-| `action`       | `#5b21b6`              | The one solid action, action links, live controls, focus  |
-| `action-hover` | `#4c1d95`              | Action hover                                              |
-| `action-soft`  | `#f3eeff`              | Selection and quiet interactive ground                    |
-| `on-action`    | `#fbfbfa`              | Text on a solid action, toggle knob when on               |
-| `accent`       | `#e0b64a`              | Brand mark fill only                                      |
-| `on-accent`    | `#101014`              | Mark strokes only                                         |
-| `danger`       | `#a33432`              | Errors, destructive actions, attention text               |
-| `danger-hover` | `#802421`              | Danger hover                                              |
-| `danger-soft`  | `#faece9`              | Danger hover ground                                       |
-| `scrim`        | `rgb(16 16 20 / 0.55)` | Modal scrim                                               |
+| Token           | Value                   | Role                                                      |
+| --------------- | ----------------------- | --------------------------------------------------------- |
+| `canvas`        | `#f4efe4`               | Warm newsprint page field                                 |
+| `paper`         | `#fffdf7`               | Inputs, badges, queue panels, and the mark's surroundings |
+| `ink`           | `#141217`               | Primary text, headings, mark strokes                      |
+| `ink-soft`      | `#6a6470`               | Secondary text, quiet links, quiet controls               |
+| `ink-faint`     | `#6f6875`               | Metadata, labels, placeholders                            |
+| `rule`          | `#cdc5b7`               | 1px hairlines between rows                                |
+| `rule-strong`   | `#141217`               | 3px section rules, 2px control borders, active nav rule   |
+| `action`        | `#5b21b6`               | The one solid action, action links, live controls, focus  |
+| `action-hover`  | `#4c1d95`               | Action hover                                              |
+| `action-soft`   | `#f3eeff`               | Selection and quiet interactive ground                    |
+| `action-offset` | `rgb(91 33 182 / 0.72)` | The hard violet offset behind a queue panel               |
+| `on-action`     | `#fffdf7`               | Text on a solid action                                    |
+| `accent`        | `#e0b64a`               | Brand mark fill only                                      |
+| `on-accent`     | `#101014`               | Mark strokes only                                         |
+| `spot`          | `#d9482b`               | Urgency only: runs immediately, illegal roster, stamp     |
+| `danger`        | `#a33432`               | Errors, destructive actions, attention text               |
+| `danger-hover`  | `#802421`               | Danger hover                                              |
+| `danger-soft`   | `#faece9`               | Danger hover ground                                       |
+| `scrim`         | `rgb(16 16 20 / 0.55)`  | Modal scrim                                               |
 
 ### Tinted dark
 
-| Token          | Value               | Role                                                      |
-| -------------- | ------------------- | --------------------------------------------------------- |
-| `canvas`       | `#17122a`           | Page field                                                |
-| `paper`        | `#1e1836`           | Inputs, one step above the field                          |
-| `ink`          | `#efeafc`           | Primary text, headings                                    |
-| `ink-soft`     | `#b3a4d8`           | Secondary text, quiet links, quiet controls               |
-| `ink-faint`    | `#9b8cc4`           | Metadata, labels, placeholders                            |
-| `rule`         | `#34285c`           | Hairlines between rows and under section titles           |
-| `rule-strong`  | `#b9a6e8`           | Masthead rule, control and field borders, active nav rule |
-| `action`       | `#c4b5fd`           | The one solid action, action links, live controls, focus  |
-| `action-hover` | `#d8c6ff`           | Action hover                                              |
-| `action-soft`  | `#2a2150`           | Selection and quiet interactive ground                    |
-| `on-action`    | `#17122a`           | Text on a solid action, toggle knob when on               |
-| `accent`       | `#e0b64a`           | Brand mark fill only                                      |
-| `on-accent`    | `#101014`           | Mark strokes only                                         |
-| `danger`       | `#ffb9b0`           | Errors, destructive actions, attention text               |
-| `danger-hover` | `#ffd1c9`           | Danger hover                                              |
-| `danger-soft`  | `#492b27`           | Danger hover ground                                       |
-| `scrim`        | `rgb(0 0 0 / 0.65)` | Modal scrim                                               |
+| Token          | Value               | Role                                                     |
+| -------------- | ------------------- | -------------------------------------------------------- |
+| `canvas`       | `#17122a`           | Page field                                               |
+| `paper`        | `#1e1836`           | Inputs and queue panels, one step above the field        |
+| `ink`          | `#efeafc`           | Primary text, headings                                   |
+| `ink-soft`     | `#b3a4d8`           | Secondary text, quiet links, quiet controls              |
+| `ink-faint`    | `#9b8cc4`           | Metadata, labels, placeholders                           |
+| `rule`         | `#34285c`           | 1px hairlines between rows                               |
+| `rule-strong`  | `#b9a6e8`           | 3px section rules, 2px control borders, active nav rule  |
+| `action`       | `#c4b5fd`           | The one solid action, action links, live controls, focus |
+| `action-hover` | `#d8c6ff`           | Action hover                                             |
+| `action-soft`  | `#2a2150`           | Selection and quiet interactive ground                   |
+| `on-action`    | `#17122a`           | Text on a solid action                                   |
+| `accent`       | `#e0b64a`           | Brand mark fill only                                     |
+| `on-accent`    | `#101014`           | Mark strokes only                                        |
+| `spot`         | `#ff9e7a`           | Urgency only: runs immediately, illegal roster, stamp    |
+| `danger`       | `#ffb9b0`           | Errors, destructive actions, attention text              |
+| `danger-hover` | `#ffd1c9`           | Danger hover                                             |
+| `danger-soft`  | `#492b27`           | Danger hover ground                                      |
+| `scrim`        | `rgb(0 0 0 / 0.65)` | Modal scrim                                              |
 
-**Measured pairs.** Text pairs clear WCAG AA: ink 18.3:1 (light) and 15.4:1 (dark); ink-soft
-6.3:1 and 8.0:1; ink-faint 5.2:1 and 6.0:1; action 8.7:1 and 9.8:1; on-action on action 8.7:1
-and 9.8:1; action on action-soft 7.9:1 in both; danger 6.6:1 and 11.1:1; danger on danger-soft
-5.9:1 and 7.7:1; on-accent on accent 9.9:1 in both. Hairlines are non-text. The mark's strokes
-are a graphic and clear 9.9:1. Gold never carries text on the page.
+**Measured pairs.** Body and interface text pairs clear WCAG AA: ink 16.2:1 (light) and 15.4:1
+(dark); ink-soft 5.0:1 and 8.0:1; ink-faint 4.7:1 and 6.0:1; action 7.8:1 on canvas and 9.8:1 on
+the dark field; on-action on action 8.8:1 and 9.8:1; action on action-soft 7.9:1 in both; danger
+5.9:1 and 11.1:1; danger on danger-soft 5.9:1 and 7.7:1; on-accent on accent 9.9:1 in both.
+Hairlines are non-text. The mark's strokes are a graphic and clear 9.9:1. Gold never carries text
+on the page. Spot ink is 3.7:1 on canvas and 4.2:1 on paper in light, and 9.0:1 in dark; it is
+reserved for short, bold urgency marks and the square, never for body copy.
 
 **The One Violet Rule.** Per view, one solid violet element: the primary action. Links and live
 controls carry violet as text, underline, or border. Everything else is ink, soft ink, and rule.
@@ -211,32 +258,46 @@ Danger is a semantic exception, used only for errors and destructive actions.
 **The Gold Reserve Rule.** Gold belongs to the mark and nowhere else. It is not a status, a
 highlight, a badge, or a second action.
 
+**The Spot Ink Rule.** Spot ink is reserved for three urgency marks: a group that runs immediately,
+a roster that blocks adds and drops, and the printed stamp. It is not an error colour; danger owns
+errors and destructive actions.
+
 ## Typography
 
-**One family:** Schibsted Grotesk Variable, self-hosted through Fontsource. No serif, no display
-face, no second grotesk. Google's branded button keeps Google's prescribed G and type.
+**Two faces with separate jobs.** Display type is Bricolage Grotesque Variable, self-hosted through
+Fontsource (`@fontsource-variable/bricolage-grotesque`). Work type is Schibsted Grotesk Variable,
+self-hosted through Fontsource. Bricolage carries page titles, section titles, team names, the
+landing statement, and the display scale at weight 800. Schibsted carries body, meta, labels,
+controls, and the wordmark. No serif, no third face. Google's branded button keeps Google's
+prescribed G and type.
 
-The pages use six text sizes, and no others:
+The display scale:
+
+- **Page title** — `clamp(44px, 5.4vw, 70px)`, weight 800, line height 0.95, `-0.035em` tracking,
+  uppercase. A team name used as a page title takes the team-name size and keeps its case.
+- **Display** — 40px, weight 800, line height 1.05, `-0.035em`. The landing statement only.
+- **Statement** — 28px, weight 800, line height 1.15, `-0.02em`. Auth and quiet statements.
+- **Section title** — 22px, weight 800, line height 1.2, `-0.02em`.
+- **Team name** — 26px, weight 800, line height 1.05, `-0.02em`.
+
+The work scale:
 
 - **11px label** — uppercase, weight 600, `0.16em` tracking. Masthead, nav, control labels, field
-  labels, status words, section kickers.
+  labels, status words, section counts.
 - **12px meta** — weight 400, line height 1.5. League context, timestamps, helper copy, feedback.
 - **15px body** — weight 400, line height 1.55. Prose, rows, links, field values.
-- **22px section title** — weight 600, line height 1.2. Section headings and auth form headings.
-- **28px page title** — weight 600, line height 1.15. Page and auth titles.
-- **40px display** — weight 600, line height 1.05. The landing statement only.
 
-Tracking belongs to labels. Body, meta, and titles use normal tracking; titles may use `-0.02em`
-to `-0.03em`. Never add letter spacing to body text.
+Tracking belongs to display type and labels. Body and meta use normal tracking; display and team
+names use `-0.02em` to `-0.035em`. Never add letter spacing to body text.
 
 **Numerals.** Use `font-variant-numeric: tabular-nums` on anything compared to anything else:
 `time`, counts in a row, attempts, ratios, and record tallies. Apply it to the numeric element or
 line, never to prose: in Schibsted Grotesk tabular figures widen punctuation and produce gaps
 before commas and full stops.
 
-**The Wordmark Rule.** The wordmark stays continuous lowercase `lineupgrade` at the 11px label
-weight and tracking, beside the square mark. Use Lineupgrade in prose. Do not uppercase, split,
-outline, or colour the syllables.
+**The Wordmark Rule.** The wordmark stays continuous lowercase `lineupgrade` in Schibsted Grotesk at
+the 11px label weight and tracking, beside the square mark. Bricolage never sets the wordmark. Use
+Lineupgrade in prose. Do not uppercase, split, outline, or colour the syllables.
 
 **The Mark.** A 20px gold square with ink `lu` strokes: a lowercase l with a short foot so it
 cannot read as an I, and a square u with a rounded inner corner, 6 units of stroke in a 64 unit
@@ -249,18 +310,20 @@ else.
 columns genuinely need it; no content runs the viewport width. The masthead, section rules, row
 rules, and controls share the column's left and right edges.
 
-**The masthead** is two rows inside the measure: the brand mark and lowercase wordmark, then the
-primary navigation. There is no theme control or sign-out utility in the masthead. One 1px
-`rule-strong` rule closes it. Navigation labels are 11px caps; the active item carries a 1px rule
-that spans exactly the item, not a short bar or an overhanging block. At narrow widths the four
-links wrap as whole items, with no utility action left on a line of its own.
+**The masthead** is one row inside the measure on wide screens: the brand mark and lowercase
+wordmark at the left, the primary navigation at the right. Below 560px the navigation wraps under
+the brand. There is no theme control or sign-out utility in the masthead. One 3px `rule-strong`
+rule closes it. Navigation labels are 11px caps; the active item carries a 2px ink rule that spans
+exactly the item, not a short bar or an overhanging block. The links wrap as whole items, with no
+utility action left on a line of its own.
 
 **Rows** are two columns from 560px: text at the left, one control cluster at the right. A team
-row puts its provider jump-out beside the team name in the text column; the right cluster carries
-only the checks toggle and pause, so every row has the same control shape. The pause stays in
-place and is disabled while checks are off. Below 560px a row stacks: full-width text first, then
-the controls on their own line, aligned left. A long team or league name wraps; it never
-truncates. Controls never overlap a name.
+row puts its provider jump-out beside the 26px team name in the text column; the right cluster
+carries the checks toggle and the pause control, so every row has the same control shape. The
+pause is a 44px bordered text control reading Pause or Resume while its accessible name stays the
+full sentence; it stays in place and is disabled while checks are off. Below 560px a row stacks:
+full-width text first, then the controls on their own line, aligned left. A long team or league
+name wraps; it never truncates. Controls never overlap a name.
 
 **Team detail order** is fixed: back link, title with the provider jump-out beside it, one
 metadata line (sport and league), one control row with toggle and pause on the same line, a quiet
@@ -268,24 +331,37 @@ report link, then the activity section behind its rule, then the owner note. The
 sits beside the title here and beside the name on the list. Nothing floats to the right of the
 metadata line.
 
+**League sections.** The team list groups teams under their league. Each league section owns one
+3px ink rule under its heading and a right-aligned count in 11px caps. Team names are 26px
+Bricolage; the meta and status lines stay 12px Schibsted.
+
 **Activity ranges** omit a repeated date: `Nov 1, 11:44 AM to 1:12 PM`. When the group is a
 single instant, say `at Nov 1, 11:44 AM`; when it crosses the reader's midnight, show both full
 dates.
 
 **Alignment.** Text shares one left edge. Controls share one right edge above 560px and one left
-edge below it. Toggle, pause, and provider controls sit on the text's first-line baseline.
+edge below it. Toggle, pause, and provider controls sit on the text's first-line baseline; the
+toggle and pause share one horizontal line.
 
 ## Elevation and shape
 
 There are no rounded corners. Controls, toggles, inputs, badges, dialogs, and surfaces are square.
 Radii are `0px` in the tokens, and a component must not add one.
 
-There are no shadows, gradients, or layered panels. Hierarchy comes from ink weight, the 680px
-measure, and 1px rules. A surface earns a border only when it is a control: an input, a button, the
-hosted browser viewport, or a dialog. Prose, lists, notices, and empty states use rules, not boxes.
+There is one hard shadow: a queue group is a `paper` panel with a 2px ink border and an 8px violet
+offset, no blur. The offset is the only shadow a surface casts; the focus ring is the only other
+shadow in the interface. Buttons, fields, rows, notices, and quiet surfaces cast none. There are no
+gradients except the phone submit sheet fade. A surface earns a border when it is a control (an
+input, a button, the hosted browser viewport, or a dialog) or when it is the queue panel. Prose,
+lists, notices, and empty states use rules, not boxes.
 
-**The Rule, Not a Box Rule.** A section title owns one hairline. List rows own one hairline between
-them. Status and empty states use a leading rule or plain text, never a dashed or bordered card.
+**The Rule, Not a Box Rule.** A section title owns one 3px ink rule. List rows own 1px hairlines
+between them. Queue groups are the one bordered panel. Status and empty states use a leading rule
+or plain text, never a dashed or bordered card.
+
+**The Halftone Screen.** A clipped dot screen may sit behind a page title on wide screens. It is
+decoration: low contrast, hidden below 768px and under reduced motion, and always `aria-hidden`.
+It is the one print texture; nothing else on the page imitates paper or ink grain.
 
 **The Phone Submit Sheet.** Below 560px the submit controls sit in a sheet fixed to the bottom with
 no rule of their own. A 16px canvas fade above it takes the rule's place, so the page blends into
@@ -330,14 +406,17 @@ and note save are decided there and are not retimed by a motion pass.
 
 ### Actions
 
-- **Primary:** solid `action`, `on-action` text, 44px high, 11px caps, square. One per view.
-- **Secondary:** 1px `rule-strong` border, ink text, 44px, square.
+- **Primary:** solid `action`, `on-action` text, a 2px ink border, 44px high, 11px caps, square.
+  One per view.
+- **Secondary:** 2px `rule-strong` border, ink text, 44px, square.
 - **Quiet:** 11px caps ink-soft text, no border; used for sign-out and other low-stakes controls.
-- **Link:** 15px action violet with a 1px underline, used for navigation and recovery. Quiet links
+- **Link:** 15px action violet with a 2px underline, used for navigation and recovery. Quiet links
   use ink-soft, not violet.
-- **Icon:** a 28px square frame with a 1px `rule-strong` border inside a 44px hit area. The frame
-  sits flush with the column edge; the hit area may extend into the gutter. Pause, provider, and
-  theme toggle use this control.
+- **Pause:** a secondary 44px text control reading Pause or Resume, beside the team's checks
+  toggle. Its accessible name remains the full pause or resume sentence.
+- **Icon:** a 28px square frame with a 2px `rule-strong` border inside a 44px hit area. The frame
+  sits flush with the column edge; the hit area may extend into the gutter. Provider jump-outs and
+  the refresh control use this control.
 - **Google:** Google's G and prescribed light/dark fill, square to match the sheet, with its own
   14px type as the one branded exception.
 
@@ -346,29 +425,29 @@ ring with 2px separation; it is visible on every ground and does not rely on col
 
 ### Fields
 
-Labels are 11px caps. Inputs are 44px, 15px body, square, with a 1px `rule-strong` border and
+Labels are 11px caps. Inputs are 44px, 15px body, square, with a 2px `rule-strong` border and
 `paper` ground. Descriptions and errors are 12px; errors are danger and sit beside the field.
 Placeholders are not labels. The caret and selection use action tokens.
 
 ### Toggle
 
-A 40×22 square track with a 16px square knob. On is `action` with an `on-action` knob; off is
-`rule` with a `paper` knob. The track carries a 44px hit area. In a list of teams the label is
-hidden and the row's name identifies the toggle; on a single team the `LINEUP CHECKS` label is
-visible. The pause control always sits beside the toggle; when checks are off it is disabled with
-an explanatory title rather than removed.
+A 40×22 square track with a 2px ink border on a `paper` ground and a 16px square knob. On is an
+`action` knob; off is an `ink-faint` knob. The track carries a 44px hit area. In a list of teams
+the label is hidden and the row's name identifies the toggle; on a single team the `LINEUP CHECKS`
+label is visible. The pause control always sits beside the toggle; when checks are off it is
+disabled with an explanatory title rather than removed.
 
 ### Lists and status
 
-Team and connection rows use 15px text with 12px meta, a 22px name where the row is a primary
-destination, and a bottom hairline. Status is a labelled word in caps, never a colour alone. Team
-rows keep one status line under the league context in every state — the next check, a pause with
-its resume time, checks off, or a check in progress — then what the last check did, when, and the
-recent tally. The status line reserves two lines so its sentence cannot change the row's height. A
-provider jump-out sits beside the team name; the right cluster is the toggle and pause only. A
-list never repeats a control label on every row.
+Team and connection rows use 15px text with 12px meta and a 1px bottom hairline. A team name is
+26px Bricolage at 800 where the row is a primary destination. Status is a labelled word in caps,
+never a colour alone. Team rows keep one status line under the league context in every state — the
+next check, a pause with its resume time, checks off, or a check in progress — then what the last
+check did, when, and the recent tally. The status line reserves two lines so its sentence cannot
+change the row's height. A provider jump-out sits beside the team name; the right cluster is the
+toggle and pause only. A list never repeats a control label on every row.
 
-Notices are a 1px leading rule with caps title and 12px detail. Empty and loading states are a
+Notices are a 2px leading rule with caps title and 12px detail. Empty and loading states are a
 top rule with a 15px title and soft text. The live status region stays in the accessibility tree
 when empty (visually hidden) and becomes visible when a message arrives.
 
@@ -441,10 +520,13 @@ or connection health.
 - Do use semantic tokens and both complete themes.
 - Do keep controls, inputs, badges, and dialogs square.
 - Do keep the 680px measure and let tables exceed it only with a reason.
-- Do use one hairline under a section title and between list rows.
+- Do use one 3px ink rule under a section title and 1px hairlines between list rows.
+- Do set page titles, section titles, and team names in Bricolage at weight 800.
 - Do spend violet once per view on the primary action.
 - Do apply tabular numerals to comparable numbers only.
-- Do keep the wordmark lowercase and the mark gold.
+- Do keep the wordmark lowercase in Schibsted and the mark gold.
+- Do use the 8px violet offset only on a queue panel.
+- Do reserve spot ink for urgency and the halftone for wide page titles.
 - Do keep motion to the rare moments named under [Motion](#motion), on the theme's duration and
   easing tokens.
 - Do preserve keyboard access, visible focus, selection, zoom, and reduced motion.
@@ -453,9 +535,13 @@ or connection health.
 
 ### Don't
 
-- Don't add border radii, shadows, gradients, or a second accent.
+- Don't add border radii, a shadow beyond the queue panel offset, a colour gradient beyond the
+  phone submit sheet fade, or a second accent.
 - Don't use gold outside the mark.
-- Don't use a serif or a second typeface.
+- Don't use a serif or a third face.
+- Don't set body, meta, labels, controls, or the wordmark in Bricolage.
+- Don't use spot ink for errors, destructive actions, or general status; danger owns those.
+- Don't add a second print texture or show the halftone on phones or under reduced motion.
 - Don't box prose, lists, notices, or empty states.
 - Don't add letter spacing to body text or apply tabular figures to prose.
 - Don't repeat a control label on every row of a list.

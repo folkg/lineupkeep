@@ -11,7 +11,7 @@ function BrandAnchor(props: JSX.AnchorHTMLAttributes<HTMLAnchorElement>): JSX.El
   return (
     <a
       {...rest}
-      class="inline-flex min-h-tap-target items-center gap-2.5 font-display text-wordmark font-semibold text-ink lowercase no-underline focus-visible:outline-none focus-visible:shadow-focus"
+      class="inline-flex min-h-tap-target items-center gap-2.5 font-sans text-wordmark font-semibold text-ink lowercase no-underline focus-visible:outline-none focus-visible:shadow-focus"
     >
       <BrandMark />
       <span>{props.children}</span>

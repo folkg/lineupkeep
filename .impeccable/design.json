@@ -1,43 +1,43 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-04T12:00:00.000Z",
+  "generatedAt": "2026-11-16T12:00:00.000Z",
   "title": "Design System: Lineupgrade",
   "extensions": {
     "colorMeta": {
       "canvas": {
         "role": "neutral",
         "displayName": "Canvas",
-        "canonical": "#fbfbfa"
+        "canonical": "#f4efe4"
       },
       "paper": {
         "role": "neutral",
         "displayName": "Paper",
-        "canonical": "#ffffff"
+        "canonical": "#fffdf7"
       },
       "ink": {
         "role": "neutral",
         "displayName": "Ink",
-        "canonical": "#101014"
+        "canonical": "#141217"
       },
       "ink-soft": {
         "role": "neutral",
         "displayName": "Ink Soft",
-        "canonical": "#5d5d68"
+        "canonical": "#6a6470"
       },
       "ink-faint": {
         "role": "neutral",
         "displayName": "Ink Faint",
-        "canonical": "#6a6a72"
+        "canonical": "#6f6875"
       },
       "rule": {
         "role": "neutral",
         "displayName": "Rule",
-        "canonical": "#e2e2dc"
+        "canonical": "#cdc5b7"
       },
       "rule-strong": {
         "role": "neutral",
         "displayName": "Rule Strong",
-        "canonical": "#101014"
+        "canonical": "#141217"
       },
       "action": {
         "role": "primary",
@@ -54,10 +54,15 @@
         "displayName": "Action Soft",
         "canonical": "#f3eeff"
       },
+      "action-offset": {
+        "role": "primary",
+        "displayName": "Panel Offset",
+        "canonical": "rgb(91 33 182 / 0.72)"
+      },
       "on-action": {
         "role": "primary",
         "displayName": "On Action",
-        "canonical": "#fbfbfa"
+        "canonical": "#fffdf7"
       },
       "accent": {
         "role": "secondary",
@@ -68,6 +73,11 @@
         "role": "secondary",
         "displayName": "On Brand Gold",
         "canonical": "#101014"
+      },
+      "spot": {
+        "role": "tertiary",
+        "displayName": "Spot Ink",
+        "canonical": "#d9482b"
       },
       "danger": {
         "role": "tertiary",
@@ -139,6 +149,11 @@
         "displayName": "Dark Action Soft",
         "canonical": "#2a2150"
       },
+      "dark-action-offset": {
+        "role": "primary",
+        "displayName": "Dark Panel Offset",
+        "canonical": "rgb(196 181 253 / 0.55)"
+      },
       "dark-on-action": {
         "role": "primary",
         "displayName": "Dark On Action",
@@ -153,6 +168,11 @@
         "role": "secondary",
         "displayName": "On Brand Gold · Dark",
         "canonical": "#101014"
+      },
+      "dark-spot": {
+        "role": "tertiary",
+        "displayName": "Spot Ink · Dark",
+        "canonical": "#ff9e7a"
       },
       "dark-danger": {
         "role": "tertiary",
@@ -178,19 +198,23 @@
     "typographyMeta": {
       "wordmark": {
         "displayName": "Continuous Wordmark",
-        "purpose": "Home identity beside the square mark; lowercase at label weight."
+        "purpose": "Home identity beside the square mark; lowercase Schibsted at label weight."
       },
       "display": {
         "displayName": "Display",
-        "purpose": "The landing statement only."
+        "purpose": "Bricolage at 800 for the landing statement."
       },
       "page-title": {
         "displayName": "Page Title",
-        "purpose": "One per page."
+        "purpose": "One per page; uppercase Bricolage at 800, tight tracking."
       },
       "section-title": {
         "displayName": "Section Title",
-        "purpose": "Section headings and auth form headings."
+        "purpose": "Section headings and auth form headings; Bricolage at 800."
+      },
+      "team-name": {
+        "displayName": "Team Name",
+        "purpose": "26px Bricolage at 800 for a team that leads a row or a page."
       },
       "body": {
         "displayName": "Body",
@@ -209,7 +233,12 @@
       {
         "name": "focus",
         "value": "0 0 0 2px var(--theme-canvas), 0 0 0 4px var(--theme-action)",
-        "purpose": "Visible focus with separation; the only allowed shadow."
+        "purpose": "Visible focus with separation; the only shadow on a control."
+      },
+      {
+        "name": "panel",
+        "value": "8px 8px 0 var(--theme-action-offset)",
+        "purpose": "Hard violet offset with no blur; only a queue-group panel casts it."
       }
     ],
     "motion": [
@@ -281,7 +310,7 @@
       "tool": "Impeccable",
       "directionSeed": "5547f54d66619d8a2a94b7456b419072",
       "assignedCandidate": 5,
-      "selection": "Owner selected the technical sheet from rendered studies, then corrected punctuation spacing, row stacking, team-detail order, activity ranges, and the masthead mark. The masthead keeps no utility controls: theme and sign out live on the Account page, the active nav rule spans exactly its item, and the team list puts the provider jump-out with the name. Royal violet and gold remain the approved identity; gold is reserved for the mark."
+      "selection": "Owner selected Ink and halftone from the rendered directions. This slice applies its warm newsprint, Bricolage display face, spot ink, panel offset, masthead rule, and league sections. The masthead keeps no utility controls: theme and sign out live on the Account page, the active nav rule spans exactly its item, and the team list puts the provider jump-out with the name. Royal violet and gold remain the approved identity; gold is reserved for the mark."
     }
   },
   "components": [
@@ -291,7 +320,7 @@
       "refersTo": "button-primary",
       "description": "The one solid action in a view.",
       "html": "<button class=\"ds-primary\">Primary action</button>",
-      "css": ".ds-primary{min-height:44px;padding:0 20px;border:0;background:var(--theme-action,#5b21b6);color:var(--theme-on-action,#fbfbfa);font:600 11px \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:.16em;text-transform:uppercase;cursor:pointer}.ds-primary:hover{background:var(--theme-action-hover,#4c1d95)}.ds-primary:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#fbfbfa),0 0 0 4px var(--theme-action,#5b21b6)}.ds-primary:disabled{opacity:.5;cursor:default}"
+      "css": ".ds-primary{min-height:44px;padding:0 20px;border:2px solid var(--theme-rule-strong,#141217);background:var(--theme-action,#5b21b6);color:var(--theme-on-action,#fffdf7);font:600 11px \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:.16em;text-transform:uppercase;cursor:pointer}.ds-primary:hover{background:var(--theme-action-hover,#4c1d95)}.ds-primary:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#f4efe4),0 0 0 4px var(--theme-action,#5b21b6)}.ds-primary:disabled{opacity:.5;cursor:default}"
     },
     {
       "name": "Secondary Button",
@@ -299,14 +328,14 @@
       "refersTo": "button-secondary",
       "description": "A bordered action beside the one solid action.",
       "html": "<button class=\"ds-secondary\">Secondary action</button>",
-      "css": ".ds-secondary{min-height:44px;padding:0 20px;border:1px solid var(--theme-rule-strong,#101014);background:transparent;color:var(--theme-ink,#101014);font:600 11px \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:.16em;text-transform:uppercase;cursor:pointer}.ds-secondary:hover{border-color:var(--theme-action,#5b21b6);color:var(--theme-action,#5b21b6)}.ds-secondary:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#fbfbfa),0 0 0 4px var(--theme-action,#5b21b6)}"
+      "css": ".ds-secondary{min-height:44px;padding:0 20px;border:2px solid var(--theme-rule-strong,#141217);background:transparent;color:var(--theme-ink,#141217);font:600 11px \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:.16em;text-transform:uppercase;cursor:pointer}.ds-secondary:hover{border-color:var(--theme-action,#5b21b6);color:var(--theme-action,#5b21b6)}.ds-secondary:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#f4efe4),0 0 0 4px var(--theme-action,#5b21b6)}"
     },
     {
       "name": "Quiet Icon Button",
       "kind": "button",
       "description": "A 28px square frame with a 44px hit area, flush with the column edge.",
-      "html": "<button class=\"ds-icon\" aria-label=\"Pause\">II</button>",
-      "css": ".ds-icon{position:relative;display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;margin-inline-end:-8px;border:0;background:transparent;color:var(--theme-ink,#101014);cursor:pointer}.ds-icon::before{content:'';position:absolute;inset:8px;border:1px solid var(--theme-rule-strong,#101014)}.ds-icon:hover{color:var(--theme-action,#5b21b6)}.ds-icon:hover::before{border-color:var(--theme-action,#5b21b6)}.ds-icon:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#fbfbfa),0 0 0 4px var(--theme-action,#5b21b6)}"
+      "html": "<button class=\"ds-icon\" aria-label=\"Refresh teams\">&#8635;</button>",
+      "css": ".ds-icon{position:relative;display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;margin-inline-end:-8px;border:0;background:transparent;color:var(--theme-ink,#141217);cursor:pointer}.ds-icon::before{content:'';position:absolute;inset:8px;border:2px solid var(--theme-rule-strong,#141217)}.ds-icon:hover{color:var(--theme-action,#5b21b6)}.ds-icon:hover::before{border-color:var(--theme-action,#5b21b6)}.ds-icon:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#f4efe4),0 0 0 4px var(--theme-action,#5b21b6)}"
     },
     {
       "name": "Text Field",
@@ -314,36 +343,71 @@
       "refersTo": "text-field",
       "description": "A square, 44px field with a caps label.",
       "html": "<label class=\"ds-field\">Email address<input type=\"email\"/></label>",
-      "css": ".ds-field{display:grid;gap:8px;color:var(--theme-ink,#101014);font:600 11px \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:.16em;text-transform:uppercase}.ds-field input{min-height:44px;padding:0 12px;border:1px solid var(--theme-rule-strong,#101014);background:var(--theme-paper,#ffffff);color:var(--theme-ink,#101014);font:400 15px \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:normal;text-transform:none;caret-color:var(--theme-action,#5b21b6)}.ds-field input:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#fbfbfa),0 0 0 4px var(--theme-action,#5b21b6)}"
+      "css": ".ds-field{display:grid;gap:8px;color:var(--theme-ink,#141217);font:600 11px \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:.16em;text-transform:uppercase}.ds-field input{min-height:44px;padding:0 12px;border:2px solid var(--theme-rule-strong,#141217);background:var(--theme-paper,#fffdf7);color:var(--theme-ink,#141217);font:400 15px \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:normal;text-transform:none;caret-color:var(--theme-action,#5b21b6)}.ds-field input:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#f4efe4),0 0 0 4px var(--theme-action,#5b21b6)}"
     },
     {
       "name": "Navigation",
       "kind": "nav",
       "description": "Caps navigation; the active item carries a rule across exactly that item.",
       "html": "<nav class=\"ds-nav\" aria-label=\"Primary navigation\"><a href=\"#example\" aria-current=\"page\">Teams</a><a href=\"#example\">Connections</a><a href=\"#example\">Account</a></nav>",
-      "css": ".ds-nav{display:flex;flex-wrap:wrap;align-items:center;gap:0 12px;font:600 11px \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:.16em;text-transform:uppercase}.ds-nav a{position:relative;display:inline-flex;align-items:center;min-height:44px;color:var(--theme-ink-soft,#5d5d68);text-decoration:none}.ds-nav a::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:transparent}.ds-nav a[aria-current]{color:var(--theme-ink,#101014)}.ds-nav a[aria-current]::after{background:var(--theme-rule-strong,#101014)}.ds-nav a:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#fbfbfa),0 0 0 4px var(--theme-action,#5b21b6)}"
+      "css": ".ds-nav{display:flex;flex-wrap:wrap;align-items:center;gap:0 20px;font:600 11px \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:.16em;text-transform:uppercase}.ds-nav a{position:relative;display:inline-flex;align-items:center;min-height:44px;color:var(--theme-ink-soft,#6a6470);text-decoration:none}.ds-nav a::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2px;background:transparent}.ds-nav a[aria-current]{color:var(--theme-ink,#141217)}.ds-nav a[aria-current]::after{background:var(--theme-rule-strong,#141217)}.ds-nav a:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#f4efe4),0 0 0 4px var(--theme-action,#5b21b6)}"
     },
     {
       "name": "Metadata Badge",
       "kind": "chip",
       "refersTo": "badge",
-      "description": "A caps word, never a solid block or a colour-only status.",
+      "description": "A caps word in a 2px ink box, never a colour-only status.",
       "html": "<span class=\"ds-badge\">Waiver claim</span>",
-      "css": ".ds-badge{display:inline-flex;align-items:center;font:600 11px \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--theme-action,#5b21b6)}"
+      "css": ".ds-badge{display:inline-flex;align-items:center;padding:4px 8px;border:2px solid var(--theme-rule-strong,#141217);background:var(--theme-paper,#fffdf7);font:600 11px \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--theme-action,#5b21b6)}"
     },
     {
       "name": "Square Toggle",
       "kind": "toggle",
-      "description": "A 40x22 track with a 16px knob and a 44px hit area.",
+      "description": "A 40x22 paper track with a 2px ink border, a 16px violet knob, and a 44px hit area.",
       "html": "<button class=\"ds-toggle\" role=\"switch\" aria-checked=\"true\" aria-label=\"Lineup checks\"><span></span></button>",
-      "css": ".ds-toggle{display:inline-flex;min-height:44px;align-items:center;padding:0;border:0;background:transparent;cursor:pointer}.ds-toggle span{display:inline-flex;width:40px;height:22px;padding:3px;background:var(--theme-action,#5b21b6)}.ds-toggle span::before{content:'';width:16px;height:16px;transform:translateX(18px);background:var(--theme-on-action,#fbfbfa)}.ds-toggle:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#fbfbfa),0 0 0 4px var(--theme-action,#5b21b6)}"
+      "css": ".ds-toggle{display:inline-flex;min-height:44px;align-items:center;padding:0;border:0;background:transparent;cursor:pointer}.ds-toggle span{display:inline-flex;width:40px;height:22px;padding:3px;border:2px solid var(--theme-rule-strong,#141217);background:var(--theme-paper,#fffdf7)}.ds-toggle span::before{content:'';width:16px;height:16px;transform:translateX(14px);background:var(--theme-action,#5b21b6)}.ds-toggle:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#f4efe4),0 0 0 4px var(--theme-action,#5b21b6)}"
     },
     {
       "name": "Section Title",
       "kind": "heading",
-      "description": "A 22px heading with one hairline under it.",
+      "description": "A 22px Bricolage heading with one 3px ink rule under it.",
       "html": "<div class=\"ds-section\"><h2>Recent activity</h2></div>",
-      "css": ".ds-section{padding-bottom:8px;border-bottom:1px solid var(--theme-rule,#e2e2dc);font-family:\"Schibsted Grotesk Variable\",sans-serif}.ds-section h2{margin:0;font-size:22px;line-height:1.2;font-weight:600;letter-spacing:-.02em;color:var(--theme-ink,#101014)}"
+      "css": ".ds-section{padding-bottom:12px;border-bottom:3px solid var(--theme-rule-strong,#141217)}.ds-section h2{margin:0;font:800 22px/1.2 \"Bricolage Grotesque Variable\",sans-serif;letter-spacing:-.02em;color:var(--theme-ink,#141217)}"
+    },
+    {
+      "name": "Page Title",
+      "kind": "heading",
+      "description": "Uppercase Bricolage at 800; one per page.",
+      "html": "<h1 class=\"ds-page-title\">Teams</h1>",
+      "css": ".ds-page-title{margin:0;font:800 clamp(44px,5.4vw,70px)/.95 \"Bricolage Grotesque Variable\",sans-serif;letter-spacing:-.035em;text-transform:uppercase;color:var(--theme-ink,#141217)}"
+    },
+    {
+      "name": "Team Name Link",
+      "kind": "link",
+      "description": "A 26px Bricolage team name that leads a row.",
+      "html": "<a class=\"ds-team\" href=\"#example\">$G-Money$</a>",
+      "css": ".ds-team{font:800 26px/1.05 \"Bricolage Grotesque Variable\",sans-serif;letter-spacing:-.02em;color:var(--theme-ink,#141217);text-decoration:none}.ds-team:hover{color:var(--theme-action,#5b21b6)}.ds-team:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#f4efe4),0 0 0 4px var(--theme-action,#5b21b6)}"
+    },
+    {
+      "name": "Inline Link",
+      "kind": "link",
+      "description": "Action violet with a 2px underline.",
+      "html": "<a class=\"ds-link\" href=\"#example\">Open</a>",
+      "css": ".ds-link{font:600 15px \"Schibsted Grotesk Variable\",sans-serif;color:var(--theme-action,#5b21b6);text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px}.ds-link:hover{color:var(--theme-action-hover,#4c1d95)}"
+    },
+    {
+      "name": "Notice",
+      "kind": "notice",
+      "description": "A 2px leading rule with a caps title and 12px detail.",
+      "html": "<div class=\"ds-notice\"><p>No teams are being checked.</p><span>Turn on Lineup checks for the teams you want managed.</span></div>",
+      "css": ".ds-notice{display:grid;gap:6px;border-left:2px solid var(--theme-rule-strong,#141217);padding-left:16px}.ds-notice p{margin:0;font:600 11px \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--theme-ink,#141217)}.ds-notice span{font:400 12px \"Schibsted Grotesk Variable\",sans-serif;color:var(--theme-ink-soft,#6a6470)}"
+    },
+    {
+      "name": "Queue Panel",
+      "kind": "panel",
+      "description": "A queue group with a 2px ink border and one hard violet offset.",
+      "html": "<section class=\"ds-panel\">Queue group</section>",
+      "css": ".ds-panel{border:2px solid var(--theme-rule-strong,#141217);background:var(--theme-paper,#fffdf7);box-shadow:8px 8px 0 var(--theme-action-offset)}"
     },
     {
       "name": "Brand Mark",
@@ -354,14 +418,16 @@
     }
   ],
   "narrative": {
-    "northStar": "The Technical Sheet",
-    "overview": "Lineupgrade reads as one precise sheet: a single grotesk, square controls, a short measure, and hairlines that do the work a card used to do. Royal violet is spent in one place per view. Gold exists only in the mark. The product is calm enough to check in the morning and precise enough to trust with a lineup.\n\nThis is an Operate product: information before spectacle, familiar controls, direct labels, and honest state. Light is a warm paper; dark is a tinted violet sheet. Both are complete palettes.",
+    "northStar": "Ink and halftone",
+    "overview": "Lineupgrade reads as a printed sports sheet: warm newsprint, near-black ink, a display face for the page and the teams, and Schibsted for the work in between. Section rules are 3px ink; row hairlines stay 1px. A queue panel is the one box, lifted by one hard violet offset with no blur. Royal violet is spent on interaction, gold exists only in the mark, and one spot ink marks urgency. The product is calm enough to check in the morning and precise enough to trust with a lineup.\n\nThis is an Operate product: information before spectacle, familiar controls, direct labels, and honest state. Light is warm newsprint; dark is a tinted violet sheet. Both are complete palettes.",
     "keyCharacteristics": [
-      "One grotesk, six text sizes, no serif",
-      "Square everywhere; hairlines instead of boxes",
+      "Bricolage Grotesque Variable for page titles, section titles, and team names at 800; Schibsted Grotesk Variable for body, meta, labels, controls, and the wordmark",
+      "Square everywhere; 3px ink section rules and 1px row hairlines instead of cards",
       "One 680px measure and one solid action per view",
+      "One 8px hard violet offset on a queue panel, and no other shadow",
+      "A clipped halftone dot screen behind wide page titles, and no other print texture",
       "Numbers aligned with tabular figures, never prose tracking",
-      "Royal violet for interaction; gold only in the mark",
+      "Royal violet for interaction; gold only in the mark; spot ink only for urgency",
       "Light and dark designed together"
     ],
     "rules": [
@@ -376,13 +442,23 @@
         "section": "colors"
       },
       {
+        "name": "The Spot Ink Rule",
+        "body": "Spot ink is reserved for three urgency marks: a group that runs immediately, a roster that blocks adds and drops, and the printed stamp. It is not an error colour; danger owns errors and destructive actions.",
+        "section": "colors"
+      },
+      {
         "name": "The Rule, Not a Box Rule",
-        "body": "A section title owns one hairline. List rows own one hairline between them. Status and empty states use a leading rule or plain text, never a dashed or bordered card.",
+        "body": "A section title owns one 3px ink rule. List rows own 1px hairlines between them. Queue groups are the one bordered panel. Status and empty states use a leading rule or plain text, never a dashed or bordered card.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Queue Panel Rule",
+        "body": "A queue group is the one bordered panel: 2px ink, paper ground, and one 8px hard violet offset with no blur. No other surface casts a shadow, and the halftone screen is the only print texture.",
         "section": "elevation"
       },
       {
         "name": "The Wordmark Rule",
-        "body": "The wordmark stays continuous lowercase lineupgrade at the 11px label weight and tracking, beside the square mark. Gold appears nowhere else.",
+        "body": "The wordmark stays continuous lowercase lineupgrade in Schibsted Grotesk at the 11px label weight and tracking, beside the square mark. Bricolage never sets the wordmark. Gold appears nowhere else.",
         "section": "typography"
       }
     ],
@@ -390,16 +466,22 @@
       "Do use semantic tokens and both complete themes.",
       "Do keep controls, inputs, badges, and dialogs square.",
       "Do keep the 680px measure and let tables exceed it only with a reason.",
-      "Do use one hairline under a section title and between list rows.",
+      "Do use one 3px ink rule under a section title and 1px hairlines between list rows.",
+      "Do set page titles, section titles, and team names in Bricolage at weight 800.",
       "Do spend violet once per view on the primary action.",
       "Do apply tabular numerals to comparable numbers only.",
-      "Do keep the wordmark lowercase and the mark gold.",
+      "Do keep the wordmark lowercase in Schibsted and the mark gold.",
+      "Do use the 8px violet offset only on a queue panel.",
+      "Do reserve spot ink for urgency and the halftone for wide page titles.",
       "Do preserve keyboard access, visible focus, selection, zoom, and reduced motion."
     ],
     "donts": [
-      "Don't add border radii, shadows, gradients, or a second accent.",
+      "Don't add border radii, a shadow beyond the queue panel offset, a colour gradient beyond the phone submit sheet fade, or a second accent.",
       "Don't use gold outside the mark.",
-      "Don't use a serif or a second typeface.",
+      "Don't use a serif or a third face.",
+      "Don't set body, meta, labels, controls, or the wordmark in Bricolage.",
+      "Don't use spot ink for errors, destructive actions, or general status; danger owns those.",
+      "Don't add a second print texture or show the halftone on phones or under reduced motion.",
       "Don't box prose, lists, notices, or empty states.",
       "Don't add letter spacing to body text or apply tabular figures to prose.",
       "Don't repeat a control label on every row of a list.",
