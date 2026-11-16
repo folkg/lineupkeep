@@ -59,28 +59,6 @@ export function moveTimingLine(input: {
     : `Waits for ${formatCalendarDate(move.runDay)}. Confirming runs the group that day`;
 }
 
-export function groupTimingLine(input: {
-  readonly today: boolean;
-  readonly runDay: string | undefined;
-  readonly confirmed: boolean;
-  readonly nextRunAt: string | undefined;
-  readonly reader?: ClockReader;
-}): string {
-  if (input.today) {
-    return input.confirmed
-      ? "This group is confirmed. It runs now"
-      : "Confirming runs this group now";
-  }
-  if (input.runDay === undefined) {
-    return input.confirmed
-      ? "This group is confirmed and waits for its day"
-      : "Confirming saves the decision for its day";
-  }
-  return input.confirmed
-    ? scheduledRunLine(input.runDay, input.nextRunAt, input.reader)
-    : `Confirming saves the decision. ${scheduledRunLine(input.runDay, input.nextRunAt, input.reader)}`;
-}
-
 export function resultRunLabel(move: TransactionMoveView): string {
   return move.runDecidedBy === "system" ? "Ran on schedule" : "Ran now";
 }

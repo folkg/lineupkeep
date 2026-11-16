@@ -3,12 +3,7 @@ import { expect, it } from "vitest";
 import { formatCalendarDate } from "#browser/shared-ui/formatTime.ts";
 import type { TransactionMoveView } from "#contracts/connections/transactionContract.ts";
 
-import {
-  formatLocalDate,
-  groupTimingLine,
-  moveTimingLine,
-  scheduledRunLine,
-} from "./transactionTimes.ts";
+import { formatLocalDate, moveTimingLine, scheduledRunLine } from "./transactionTimes.ts";
 
 const reader = { locale: "en-US", timeZone: "America/New_York" } as const;
 
@@ -36,27 +31,6 @@ it("renders the exact run time in the reader's chosen zone", () => {
 
 it("keeps dates in the reader's zone beside the scheduled clock", () => {
   expect(formatLocalDate("2026-11-12T02:30:00.000Z", reader)).toBe("November 11");
-});
-
-it("says when a later group runs and that a today group runs now", () => {
-  expect(
-    groupTimingLine({
-      today: false,
-      runDay: "2026-11-17",
-      confirmed: true,
-      nextRunAt: "2026-11-17T21:55:00.000Z",
-      reader,
-    }),
-  ).toBe(`Runs ${formatCalendarDate("2026-11-17")} at 4:55 PM`);
-  expect(
-    groupTimingLine({
-      today: true,
-      runDay: "2026-11-17",
-      confirmed: false,
-      nextRunAt: "2026-11-17T21:55:00.000Z",
-      reader,
-    }),
-  ).toBe("Confirming runs this group now");
 });
 
 function executed(runAt: string, runDecidedBy: "owner" | "system"): TransactionMoveView {

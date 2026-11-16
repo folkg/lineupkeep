@@ -105,26 +105,28 @@ it("shows every team's moves today and keeps saved moves on per team planning sh
   await expect.element(page.getByText("2 moves for today", { exact: true })).toBeVisible();
   await expect.element(page.getByText("Drop Riley Chen", { exact: true })).toBeVisible();
   await expect.element(page.getByText("Add Jordan Lee", { exact: true })).toBeVisible();
-  await expect.element(page.getByRole("heading", { name: "Saved for later" })).toBeVisible();
+  await expect
+    .element(page.getByRole("heading", { name: formatCalendarDate("2026-11-12") }))
+    .toBeVisible();
+  await expect
+    .element(page.getByRole("heading", { name: formatCalendarDate("2026-11-14") }))
+    .toBeVisible();
   await expect
     .element(
       page
-        .getByRole("region", { name: "Alpha" })
+        .getByRole("region", { name: formatCalendarDate("2026-11-12") })
         .getByText("Claim Amon-Ra St. Brown and drop Romeo Doubs", { exact: true }),
     )
     .toBeVisible();
   await expect
     .element(
       page
-        .getByRole("region", { name: "Beta" })
+        .getByRole("region", { name: formatCalendarDate("2026-11-14") })
         .getByText("Add Tank Bigsby and drop Tyler Boyd", { exact: true }),
     )
     .toBeVisible();
   await expect
-    .element(page.getByText(formatCalendarDate("2026-11-12"), { exact: true }).first())
-    .toBeVisible();
-  await expect
-    .element(page.getByText(formatCalendarDate("2026-11-13"), { exact: true }).first())
+    .element(page.getByText(`Takes effect ${formatCalendarDate("2026-11-13")}.`, { exact: true }))
     .toBeVisible();
 });
 
@@ -197,7 +199,7 @@ it("confirms today's move, runs it, and returns the recorded outcome", async () 
     .element(page.getByText("Nothing runs until you confirm it.", { exact: true }).first())
     .toBeVisible();
 
-  await page.getByRole("button", { name: /Confirm and run: Drop Riley Chen/u }).click();
+  await page.getByRole("button", { name: /Confirm group and run now: Drop Riley Chen/u }).click();
 
   await expect.element(page.getByText("Confirmed and ran 1 move.", { exact: true })).toBeVisible();
   expect(confirmed).toHaveLength(1);
@@ -232,7 +234,7 @@ it("confirms a saved move for its day without running it", async () => {
     },
   });
 
-  await page.getByRole("button", { name: /Confirm: Claim Amon-Ra St. Brown/u }).click();
+  await page.getByRole("button", { name: /Confirm group: Claim Amon-Ra St. Brown/u }).click();
 
   await expect
     .element(
@@ -292,9 +294,7 @@ it("shows undecided, confirmed, ran, and discarded moves in plain words", async 
   });
 
   await expect.element(page.getByText("Undecided", { exact: true }).first()).toBeVisible();
-  await expect
-    .element(page.getByText(`Confirmed for ${formatCalendarDate("2026-11-13")}`, { exact: true }))
-    .toBeVisible();
+  await expect.element(page.getByText("Confirmed", { exact: true }).first()).toBeVisible();
   await expect
     .element(
       page.getByText(
@@ -389,7 +389,9 @@ it("edits and discards one saved move at a time", async () => {
     },
   });
 
-  await expect.element(page.getByRole("region", { name: "Alpha" })).toBeVisible();
+  await expect
+    .element(page.getByRole("region", { name: formatCalendarDate("2026-11-13") }))
+    .toBeVisible();
   await expect
     .element(
       page
@@ -482,7 +484,7 @@ it("marks a move that cannot run and disables its choice", async () => {
     )
     .toBeVisible();
   await expect
-    .element(page.getByRole("button", { name: /Confirm and run: Drop Riley Chen/u }))
+    .element(page.getByRole("button", { name: /Confirm group and run now: Drop Riley Chen/u }))
     .toBeDisabled();
   await expect
     .element(page.getByRole("button", { name: /Discard: Drop Riley Chen/u }))
@@ -584,13 +586,60 @@ it("shows a group as one card that lists every move and confirms once", async ()
   await expect.element(page.getByText("Weekend moves", { exact: true })).toBeVisible();
   await expect.element(page.getByText("Drop Riley Chen", { exact: true })).toBeVisible();
   await expect.element(page.getByText("Stash Amon-Ra St. Brown", { exact: true })).toBeVisible();
-  expect(page.getByRole("button", { name: /Confirm and run:/u }).elements()).toHaveLength(1);
+  expect(page.getByRole("button", { name: /Confirm group and run now:/u }).elements()).toHaveLength(
+    1,
+  );
 
-  await page.getByRole("button", { name: "Confirm and run: Weekend moves" }).click();
+  await page.getByRole("button", { name: "Confirm group and run now: Weekend moves" }).click();
 
   await expect.element(page.getByText("Confirmed and ran 2 moves.", { exact: true })).toBeVisible();
   expect(confirmed).toHaveLength(1);
   expect(confirmed[0]?.moves).toStrictEqual([drop.move, stash.move]);
+});
+
+it("names a group's move count beside the action that runs it immediately", async () => {
+  await page.viewport(1280, 900);
+  const group = "018f79ea-7d86-7c18-9b4a-8b4d0c9165e1";
+  const drop = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d1",
+    team: alpha,
+    group,
+    kind: "drop",
+    drops: [player("Riley Chen")],
+  });
+  const stash = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d2",
+    team: alpha,
+    group,
+    kind: "stash",
+    drops: [],
+    intent: { kind: "stash", player: player("Amon-Ra St. Brown") },
+  });
+  using _app = setupTransactionsPage({
+    open: listData(
+      [drop, stash],
+      { open: 2, today: 2, saved: 0, ended: 0 },
+      [],
+      [
+        {
+          group,
+          team: alpha.id,
+          label: "Weekend moves",
+          status: "ready",
+          moves: [drop.move, stash.move],
+          actions: [],
+          notRun: [],
+          detail:
+            "This group is ready to run whole, in this order: Drop Riley Chen, Stash Amon-Ra St. Brown.",
+        },
+      ],
+    ),
+  });
+
+  await expect.element(page.getByText("Runs immediately · 2 moves", { exact: true })).toBeVisible();
+  expect(page.getByRole("button", { name: /Confirm group and run now:/u }).elements()).toHaveLength(
+    1,
+  );
 });
 
 it("shows the fixes that make room inside the group they run with", async () => {
@@ -644,14 +693,19 @@ it("shows the fixes that make room inside the group they run with", async () => 
   });
 
   await expect.element(page.getByText("Add Jordan Lee", { exact: true })).toBeVisible();
-  await expect.element(page.getByText("Roster fixes", { exact: true })).toBeVisible();
   await expect
-    .element(page.getByText("These moves make room for your add. They run first.", { exact: true }))
+    .element(
+      page.getByText("Added by the server so the add fits. You can edit or discard it.", {
+        exact: true,
+      }),
+    )
     .toBeVisible();
   await expect.element(page.getByText("Stash Amon-Ra St. Brown", { exact: true })).toBeVisible();
-  expect(page.getByRole("button", { name: /Confirm and run:/u }).elements()).toHaveLength(1);
+  expect(page.getByRole("button", { name: /Confirm group and run now:/u }).elements()).toHaveLength(
+    1,
+  );
 
-  await page.getByRole("button", { name: "Confirm and run: Add Jordan Lee" }).click();
+  await page.getByRole("button", { name: "Confirm group and run now: Add Jordan Lee" }).click();
   expect(confirmed).toHaveLength(1);
   expect(confirmed[0]?.moves).toStrictEqual([add.move, stash.move]);
 });
@@ -738,8 +792,12 @@ it("confirms groups on two teams at the same time with per team progress", async
     },
   });
 
-  const alphaButton = page.getByRole("button", { name: "Confirm and run: Drop Riley Chen" });
-  const betaButton = page.getByRole("button", { name: "Confirm and run: Add Jordan Lee" });
+  const alphaButton = page.getByRole("button", {
+    name: "Confirm group and run now: Drop Riley Chen",
+  });
+  const betaButton = page.getByRole("button", {
+    name: "Confirm group and run now: Add Jordan Lee",
+  });
   await alphaButton.click();
   await betaButton.click();
 
@@ -781,7 +839,7 @@ it("keeps today's count and confirmation on a phone line", async () => {
 
     await expect.element(page.getByText("1 move for today", { exact: true })).toBeVisible();
     await expect
-      .element(page.getByRole("button", { name: /Confirm and run: Drop Riley Chen/u }))
+      .element(page.getByRole("button", { name: /Confirm group and run now: Drop Riley Chen/u }))
       .toBeEnabled();
     const root = document.documentElement;
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);

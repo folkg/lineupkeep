@@ -9,6 +9,7 @@ import { formatCalendarDate } from "#browser/shared-ui/formatTime.ts";
 import type {
   TransactionMoveActionData,
   TransactionMoveConfirmationData,
+  TransactionMoveDayView,
   TransactionMoveTeamDayView,
   TransactionMoveView,
   TransactionPlanGroupView,
@@ -34,9 +35,6 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
   const [editingDate, setEditingDate] = createSignal("");
   const [editingError, setEditingError] = createSignal<string>();
 
-  const openMoves = createMemo(() =>
-    open.isSuccess ? open.data.pages.flatMap((page) => page.moves) : [],
-  );
   const counts = createMemo(() => {
     const first = open.isSuccess ? open.data.pages[0] : undefined;
     return first?.counts ?? { open: 0, today: 0, saved: 0, ended: 0 };
@@ -63,27 +61,24 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     }
     return [...held.values()];
   });
-  const todayMoves = createMemo(() => {
-    const days = open.isSuccess ? open.data.pages.flatMap((page) => page.days) : [];
-    return days
-      .filter((day) => day.today)
-      .flatMap((day) => day.teams.flatMap((team) => team.moves))
-      .sort(compareMoveCards);
+  const days = createMemo(() => {
+    const held = new Map<string, MutableMoveDay>();
+    for (const data of open.isSuccess ? open.data.pages : []) {
+      for (const day of data.days) {
+        addMoveDay(held, day);
+      }
+    }
+    return [...held.values()].map(moveDayView).sort(compareMoveDays);
   });
-  const todayTeams = createMemo(() => groupByTeam(todayMoves()));
-
-  const savedTeams = createMemo(() => {
-    const todayIds = new Set(todayMoves().map((move) => move.move));
-    return groupByTeam(
-      openMoves().filter(
-        (move) =>
-          !todayIds.has(move.move) && (move.decision === "saved" || move.decision === "confirmed"),
-      ),
-    );
+  const pendingTodayCount = createMemo(() => {
+    const today = days().find((day) => day.today);
+    if (today === undefined) {
+      return 0;
+    }
+    return today.teams
+      .flatMap((team) => team.moves)
+      .filter((move) => isPending(move) && move.result === undefined).length;
   });
-  const pendingTodayCount = createMemo(
-    () => todayMoves().filter((move) => isPending(move) && move.result === undefined).length,
-  );
   const nextRunAt = (): string | undefined =>
     open.isSuccess ? open.data.pages[0]?.nextRunAt : undefined;
 
@@ -224,9 +219,7 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
   };
 
   return {
-    todayMoves,
-    todayTeams,
-    savedTeams,
+    days,
     counts,
     teamCount,
     teamFacts,
@@ -284,29 +277,73 @@ function isPending(move: TransactionMoveView): boolean {
   return move.decision === "undecided" || move.decision === "saved";
 }
 
-function groupByTeam(
-  moves: ReadonlyArray<TransactionMoveView>,
-): ReadonlyArray<TransactionMoveTeamDayView> {
-  const byTeam = new Map<
-    string,
-    { readonly team: TransactionMoveView["team"]; moves: Array<TransactionMoveView> }
-  >();
-  for (const move of moves) {
-    const held = byTeam.get(move.team.id);
-    if (held === undefined) {
-      byTeam.set(move.team.id, { team: move.team, moves: [move] });
+function addMoveDay(held: Map<string, MutableMoveDay>, day: TransactionMoveDayView): void {
+  const key = day.today ? "today" : (day.day ?? "");
+  const grouped = held.get(key);
+  if (grouped === undefined) {
+    held.set(key, {
+      ...(day.day === undefined ? {} : { day: day.day }),
+      today: day.today,
+      teams: new Map(
+        day.teams.map((team) => [team.team.id, { team: team.team, moves: [...team.moves] }]),
+      ),
+    });
+    return;
+  }
+  for (const team of day.teams) {
+    const existing = grouped.teams.get(team.team.id);
+    if (existing === undefined) {
+      grouped.teams.set(team.team.id, { team: team.team, moves: [...team.moves] });
     } else {
-      held.moves.push(move);
+      for (const move of team.moves) {
+        existing.moves.push(move);
+      }
     }
   }
-  return [...byTeam.values()]
-    .sort((left, right) => left.team.name.localeCompare(right.team.name))
-    .map((entry) => ({ team: entry.team, moves: entry.moves }));
+}
+
+function moveDayView(day: MutableMoveDay): TransactionMoveDayView {
+  return {
+    ...(day.day === undefined ? {} : { day: day.day }),
+    today: day.today,
+    teams: [...day.teams.values()]
+      .map((team) => ({
+        team: team.team,
+        moves: [...team.moves].sort(compareMoveCards),
+      }))
+      .sort(compareTeamNames),
+  };
+}
+
+function compareMoveDays(left: TransactionMoveDayView, right: TransactionMoveDayView): number {
+  if (left.today !== right.today) {
+    return left.today ? -1 : 1;
+  }
+  if (left.day === undefined || right.day === undefined) {
+    return left.day === right.day ? 0 : left.day === undefined ? 1 : -1;
+  }
+  return left.day.localeCompare(right.day);
+}
+
+function compareTeamNames(
+  left: TransactionMoveTeamDayView,
+  right: TransactionMoveTeamDayView,
+): number {
+  return left.team.name.localeCompare(right.team.name) || left.team.id.localeCompare(right.team.id);
 }
 
 function compareMoveCards(left: TransactionMoveView, right: TransactionMoveView): number {
-  return left.team.name.localeCompare(right.team.name) || left.position - right.position;
+  return left.position - right.position || left.move.localeCompare(right.move);
 }
+
+type MutableMoveDay = {
+  readonly day?: string;
+  readonly today: boolean;
+  readonly teams: Map<
+    string,
+    { readonly team: TransactionMoveView["team"]; readonly moves: Array<TransactionMoveView> }
+  >;
+};
 
 function confirmationMessage(
   outcome: TransactionMoveConfirmationData,
@@ -342,9 +379,7 @@ function confirmationMessage(
 }
 
 export type TransactionsPageController = {
-  readonly todayMoves: Accessor<ReadonlyArray<TransactionMoveView>>;
-  readonly todayTeams: Accessor<ReadonlyArray<TransactionMoveTeamDayView>>;
-  readonly savedTeams: Accessor<ReadonlyArray<TransactionMoveTeamDayView>>;
+  readonly days: Accessor<ReadonlyArray<TransactionMoveDayView>>;
   readonly counts: Accessor<{
     readonly open: number;
     readonly today: number;

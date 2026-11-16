@@ -1,7 +1,6 @@
 import type {
   TransactionMovePlayerView,
   TransactionMoveView,
-  TransactionPlanGroupView,
 } from "#contracts/connections/transactionContract.ts";
 
 export function moveSummary(move: TransactionMoveView): string {
@@ -11,7 +10,8 @@ export function moveSummary(move: TransactionMoveView): string {
       : `Move ${move.slotMove.playerName ?? "this player"} to ${move.slotMove.toSlot}`;
   }
   if (move.kind === "activate" || move.kind === "stash") {
-    return `${kindLabel(move.kind)} ${move.placement?.playerName ?? move.intent?.player?.name ?? "this player"}`;
+    const player = move.placement?.playerName ?? move.intent?.player?.name ?? "this player";
+    return `${move.kind === "activate" ? "Activate" : "Stash"} ${player}`;
   }
   const adds = playerNames(move.adds);
   const drops = playerNames(move.drops);
@@ -43,38 +43,6 @@ export function moveSummary(move: TransactionMoveView): string {
     return `Drop ${drops}`;
   }
   return "This move";
-}
-
-export function kindLabel(kind: TransactionMoveView["kind"]): string {
-  switch (kind) {
-    case "waiver_claim":
-      return "Claim";
-    case "free_agent_add":
-      return "Add";
-    case "drop":
-      return "Drop";
-    case "trade":
-      return "Trade";
-    case "slot_move":
-      return "Slot move";
-    case "activate":
-      return "Activate";
-    case "stash":
-      return "Stash";
-  }
-}
-
-export function groupStatusLabel(status: TransactionPlanGroupView["status"]): string {
-  switch (status) {
-    case "ready":
-      return "Ready";
-    case "blocked":
-      return "Blocked";
-    case "partly_done":
-      return "Ran in part";
-    case "done":
-      return "Done";
-  }
 }
 
 export function moveCount(count: number): string {

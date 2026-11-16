@@ -17,6 +17,13 @@ export function Page(props: PageProps): JSX.Element {
       />
       <Show when={props.back}>{(back) => <div class="relative mb-6">{back()}</div>}</Show>
       <header class="relative mb-8 grid max-w-[42.5rem] gap-3">
+        <Show when={props.kicker}>
+          {(kicker) => (
+            <div class="text-label font-semibold uppercase tracking-label text-action">
+              {kicker()}
+            </div>
+          )}
+        </Show>
         <Show
           when={props.titleAside}
           fallback={<PageTitle variant={variant()}>{props.title}</PageTitle>}
@@ -53,6 +60,7 @@ type TitleVariant = "page" | "name";
 
 type PageProps = {
   readonly back?: Element;
+  readonly kicker?: Element;
   readonly title: string;
   readonly titleAside?: Element;
   readonly titleVariant?: TitleVariant;

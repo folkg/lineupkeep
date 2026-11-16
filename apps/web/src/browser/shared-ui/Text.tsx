@@ -40,9 +40,10 @@ const toneClass: Record<TextTone, string> = {
   muted: "text-ink-soft",
   faint: "text-ink-faint",
   danger: "text-danger",
+  spot: "text-spot",
 };
 
-type TextTone = "default" | "muted" | "faint" | "danger";
+type TextTone = "default" | "muted" | "faint" | "danger" | "spot";
 
 type TextProps = {
   readonly size?: keyof typeof sizeClass;

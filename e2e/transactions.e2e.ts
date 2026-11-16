@@ -76,7 +76,9 @@ test("proposes a move into one team queue and confirms it from the transactions 
   await expect(page.getByText("Undecided", { exact: true })).toBeVisible();
   await expect(page.getByText("Nothing runs until you confirm it.", { exact: true })).toBeVisible();
 
-  const confirm = page.getByRole("button", { name: /Confirm and run: Drop Riverside Receiver/u });
+  const confirm = page.getByRole("button", {
+    name: /Confirm group and run now: Drop Riverside Receiver/u,
+  });
   await expect(confirm).toBeEnabled();
   await confirm.click();
 
