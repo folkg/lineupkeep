@@ -73,8 +73,8 @@ test("proposes a move into one team queue and confirms it from the transactions 
   await expect(page.getByText("1 move for today", { exact: true })).toBeVisible();
   await expect(page.getByText(reason, { exact: true })).toBeVisible();
   await expect(page.getByText("Embedded Browser Team", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("Pending", { exact: true })).toBeVisible();
-  await expect(page.getByText("Waiting for your confirmation.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Undecided", { exact: true })).toBeVisible();
+  await expect(page.getByText("Nothing runs until you confirm it.", { exact: true })).toBeVisible();
 
   const confirm = page.getByRole("button", { name: /Confirm and run: Drop Riverside Receiver/u });
   await expect(confirm).toBeEnabled();
@@ -86,7 +86,7 @@ test("proposes a move into one team queue and confirms it from the transactions 
   const earlier = page.getByRole("button", { name: "Show earlier moves" });
   await expect(earlier).toHaveAttribute("aria-expanded", "false");
   await earlier.click();
-  await expect(page.getByText("Ran", { exact: true })).toBeVisible();
+  await expect(page.getByText("Ran on the check", { exact: true })).toBeVisible();
   await expect(page.getByText("Drop Riverside Receiver", { exact: true })).toBeVisible();
   await expect(page.getByText("1 ended move", { exact: true })).toBeVisible();
 
