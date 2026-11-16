@@ -256,6 +256,37 @@ it("does not treat a healthy player as eligible for an injury-only list", () => 
   assert.strictEqual(placement.legal, false);
 });
 
+it("uses the roster row's reserve names on an injury-based list", () => {
+  const rule = rosterRuleOf(
+    {
+      rosterMaximum: 1,
+      benchCapacity: "generic",
+      startingSlotsMayStandEmpty: true,
+      reserveEligibility: { kind: "injury_status" },
+    },
+    [
+      { position: "BN", kind: "bench", count: 1, eligibility: [] },
+      { position: "IR", kind: "reserve", count: 1, eligibility: ["IR"] },
+      { position: "IR+", kind: "reserve", count: 1, eligibility: ["IR+"] },
+    ],
+  );
+  const dayToDay = {
+    positions: ["LW", "RW", "Util", "IR+"],
+    injured: true,
+  };
+
+  assert.strictEqual(slotPlacement(rule, "IR", dayToDay).legal, false);
+  assert.strictEqual(slotPlacement(rule, "IR+", dayToDay).legal, true);
+
+  const occupancy = rosterOccupancy({
+    rule,
+    players: [{ key: "day", name: "Day To Day", slot: "BN", ...dayToDay }],
+  });
+  assert.deepStrictEqual(occupancy.freeable, [
+    { key: "day", name: "Day To Day", list: "IR+", place: "BN" },
+  ]);
+});
+
 function place(
   key: string,
   name: string,

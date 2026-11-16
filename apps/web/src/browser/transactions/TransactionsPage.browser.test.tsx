@@ -377,7 +377,11 @@ it("edits and discards one saved move at a time", async () => {
     open: listData([first, second], { open: 2, today: 0, saved: 2, ended: 0 }),
     save: (input) => {
       saved.push(input);
-      return Promise.resolve({ status: "saved", move: input.move });
+      return Promise.resolve({
+        status: "saved",
+        move: input.move,
+        confirmationCleared: true,
+      });
     },
     discard: (input) => {
       discarded.push(input);
@@ -386,6 +390,16 @@ it("edits and discards one saved move at a time", async () => {
   });
 
   await expect.element(page.getByRole("region", { name: "Alpha" })).toBeVisible();
+  await expect
+    .element(
+      page
+        .getByText(
+          `Waits for ${formatCalendarDate("2026-11-13")}. Confirming runs the group that day.`,
+          { exact: true },
+        )
+        .first(),
+    )
+    .toBeVisible();
   expect(page.getByRole("button", { name: /Change date:/u }).elements()).toHaveLength(2);
   expect(page.getByRole("button", { name: /Discard:/u }).elements()).toHaveLength(2);
 
@@ -405,7 +419,7 @@ it("edits and discards one saved move at a time", async () => {
   await expect
     .element(
       page.getByText(
-        `Saved for ${formatCalendarDate("2026-11-17")}. It waits in Today that day until you confirm it.`,
+        `Saved for ${formatCalendarDate("2026-11-17")}. Your earlier confirmation was cleared, so confirm the move again when it is due.`,
         { exact: true },
       ),
     )

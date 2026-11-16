@@ -209,7 +209,12 @@ type TransactionRefusalView = {
 };
 
 export type TransactionMoveActionData =
-  | { readonly status: "saved" | "discarded"; readonly move: string }
+  | {
+      readonly status: "saved";
+      readonly move: string;
+      readonly confirmationCleared: boolean;
+    }
+  | { readonly status: "discarded"; readonly move: string }
   | { readonly status: "refused"; readonly refusals: ReadonlyArray<TransactionRefusalView> };
 
 export type TransactionMoveConfirmationData =

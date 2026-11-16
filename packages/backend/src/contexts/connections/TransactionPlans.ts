@@ -742,6 +742,10 @@ type TransactionPlanResult = {
   readonly refused: ReadonlyArray<TransactionPlanRefusal>;
 };
 
+type TransactionPlanChangeResult = TransactionPlanResult & {
+  readonly confirmationCleared: boolean;
+};
+
 export class TransactionPlanFactsUnavailable extends Schema.TaggedError<
   TransactionPlanFactsUnavailable,
   { readonly brand: unique symbol }
@@ -801,17 +805,17 @@ export type TransactionPlanServiceShape = {
   readonly proposeRefs: (
     userId: UserId,
     input: TransactionPlanRefProposeInput,
-  ) => Effect.Effect<TransactionPlanResult, TransactionPlanServiceError>;
+  ) => Effect.Effect<TransactionPlanChangeResult, TransactionPlanServiceError>;
 
   readonly save: (
     userId: UserId,
     input: TransactionPlanSaveInput,
-  ) => Effect.Effect<TransactionPlanResult, TransactionPlanServiceError>;
+  ) => Effect.Effect<TransactionPlanChangeResult, TransactionPlanServiceError>;
 
   readonly edit: (
     userId: UserId,
     input: TransactionPlanEditInput,
-  ) => Effect.Effect<TransactionPlanResult, TransactionPlanServiceError>;
+  ) => Effect.Effect<TransactionPlanChangeResult, TransactionPlanServiceError>;
 
   readonly discard: (
     userId: UserId,

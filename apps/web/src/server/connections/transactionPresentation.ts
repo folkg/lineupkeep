@@ -226,11 +226,13 @@ export function actionOf(
   move: string,
   status: "saved" | "discarded",
   refused: ReadonlyArray<{ readonly code: string; readonly detail: string }>,
+  confirmationCleared = false,
 ): TransactionMoveActionData {
-  return refused.length === 0
-    ? { status, move }
-    : {
-        status: "refused",
-        refusals: refused.map((entry) => ({ code: entry.code, detail: entry.detail })),
-      };
+  if (refused.length > 0) {
+    return {
+      status: "refused",
+      refusals: refused.map((entry) => ({ code: entry.code, detail: entry.detail })),
+    };
+  }
+  return status === "saved" ? { status, move, confirmationCleared } : { status, move };
 }

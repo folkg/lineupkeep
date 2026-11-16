@@ -86,6 +86,38 @@ it("adds the stash that frees the place an activate needs", () => {
   );
 });
 
+it("stashes an injured player only to the reserve list the roster row names", () => {
+  const facts = teamFacts({
+    roster: [
+      {
+        key: "a1",
+        name: "Day To Day",
+        positions: ["LW", "RW", "Util", "IR+"],
+        slot: "BN",
+        injured: true,
+        editable: true,
+      },
+    ],
+    slots: [bench("BN", 1), reserve("IR", ["IR"]), reserve("IR+", ["IR+"])],
+    maximum: 1,
+    reserveEligibility: { kind: "injury_status" },
+  });
+
+  const search = searchRosterFixes({
+    facts,
+    rule: rosterRuleOf(facts.constraints, facts.slots),
+    funded: fundedMove(),
+    reasons: [{ code: "roster_full", detail: "The roster is full." }],
+  });
+
+  assert.deepStrictEqual(
+    search.fixes.map((fix) => [fix.kind, fix.playerKey]),
+    [["stash", "a1"]],
+  );
+  assert.include(search.fixes[0]?.detail ?? "", "to the IR+ reserve list");
+  assert.notInclude(search.fixes[0]?.detail ?? "", "to the IR reserve list");
+});
+
 it("names the cure when no eligibility move can free a place", () => {
   const facts = teamFacts({
     roster: [player("a1", "Roster One", "BN")],
@@ -184,6 +216,6 @@ function bench(position: string, count: number): TransactionPlanSlot {
   return { position, kind: "bench", count, eligibility: [] };
 }
 
-function reserve(position: string): TransactionPlanSlot {
-  return { position, kind: "reserve", count: 1, eligibility: [] };
+function reserve(position: string, eligibility: ReadonlyArray<string> = []): TransactionPlanSlot {
+  return { position, kind: "reserve", count: 1, eligibility };
 }

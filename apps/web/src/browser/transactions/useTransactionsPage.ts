@@ -113,7 +113,10 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
         setEditingError(undefined);
         setFeedback({
           type: "success",
-          message: `Saved for ${formatCalendarDate(input.runDay)}. It waits in Today that day until you confirm it.`,
+          message:
+            data.status === "saved" && data.confirmationCleared
+              ? `Saved for ${formatCalendarDate(input.runDay)}. Your earlier confirmation was cleared, so confirm the move again when it is due.`
+              : `Saved for ${formatCalendarDate(input.runDay)}. It waits in Today that day until you confirm it.`,
         });
       }
       void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });

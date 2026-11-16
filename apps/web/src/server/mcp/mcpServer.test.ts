@@ -925,7 +925,11 @@ it("appends moves to one team queue and lists them across teams", async () => {
     userId: string;
     input: {
       readonly team: string;
-      readonly moves: ReadonlyArray<{ readonly move?: TransactionMoveId }>;
+      readonly moves: ReadonlyArray<{
+        readonly move?: TransactionMoveId;
+        readonly kind?: string;
+        readonly player?: string;
+      }>;
     };
   }> = [];
   const plans: TransactionPlanServiceShape = {
@@ -940,6 +944,7 @@ it("appends moves to one team queue and lists them across teams", async () => {
           groups: [],
         },
         refused: [],
+        confirmationCleared: input.moves.some((entry) => entry.move !== undefined),
       });
     },
     plan: (_userId, input) =>
@@ -1025,7 +1030,10 @@ it("appends moves to one team queue and lists them across teams", async () => {
   const proposedBody = await json(proposedOnce);
   expect(proposedOnce.status).toBe(200);
   expect(proposedBody).toMatchObject({
-    result: { isError: false, structuredContent: { team: { id: team }, refused: [] } },
+    result: {
+      isError: false,
+      structuredContent: { team: { id: team }, refused: [], confirmationCleared: false },
+    },
   });
 
   const proposedAgain = await run(
@@ -1071,6 +1079,30 @@ it("appends moves to one team queue and lists them across teams", async () => {
   expect(amended.status).toBe(200);
   expect(proposed).toHaveLength(3);
   expect(proposed[2]?.input.moves[0]?.move).toBe(moveId);
+  const amendedBody = await json(amended);
+  expect(amendedBody).toMatchObject({
+    result: { isError: false, structuredContent: { confirmationCleared: true } },
+  });
+
+  const stashed = await run(
+    request(
+      "tools/call",
+      {
+        name: "propose_transactions",
+        arguments: {
+          team,
+          moves: [{ kind: "stash", player: "r1.stashed", reason: "Park a player." }],
+        },
+      },
+      "review",
+    ),
+  );
+  expect(stashed.status).toBe(200);
+  expect(proposed).toHaveLength(4);
+  expect(proposed[3]?.input.moves[0]).toMatchObject({
+    kind: "stash",
+    player: "r1.stashed",
+  });
 
   const listedResponse = await run(
     request(
@@ -1909,7 +1941,7 @@ it("leaves confirmation to the owner and says a saved move waits", async () => {
   expect(propose.description).toContain("no tool confirms a move");
 });
 
-it("asks an agent only for adds and drops, in plain words", async () => {
+it("asks an agent for adds, drops, reserves, and activations, in plain words", async () => {
   const response = await handle(request("tools/list", {}, "read"));
   const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
   const propose = listed.result.tools.find((tool) => tool.name === "propose_transactions");
@@ -1923,20 +1955,20 @@ it("asks an agent only for adds and drops, in plain words", async () => {
       (field) => field.text,
     ),
   ].join(" ");
-  expect(wording).not.toMatch(/reserve/iu);
-  expect(wording).not.toMatch(/slot/iu);
+  expect(wording).toMatch(/the server chooses the place/u);
+  expect(wording).toMatch(/Name no slot/u);
   const kinds = schemaLiterals(propose.inputSchema).filter((value) =>
     ["free_agent_add", "waiver_claim", "drop", "trade", "activate", "stash", "slot_move"].includes(
       value,
     ),
   );
-  expect(kinds.sort()).toEqual(["drop", "free_agent_add", "waiver_claim"]);
+  expect(kinds.sort()).toEqual(["activate", "drop", "free_agent_add", "stash", "waiver_claim"]);
   const names = schemaPropertyNames(propose.inputSchema);
   expect(names).toContain("adds");
   expect(names).toContain("drops");
+  expect(names).toContain("player");
   expect(names).not.toContain("slotMove");
   expect(names).not.toContain("to");
-  expect(names).not.toContain("player");
 });
 
 it("publishes fallback choices, a group label, and a stored check on the plan", async () => {

@@ -814,8 +814,10 @@ the id of a move changes that move instead of adding another. A move id that is 
 owner's team queue is refused as `move_not_found`.
 
 The input is one `team` and one or more `moves`. Each move names a `kind` (`free_agent_add`,
-`waiver_claim`, or `drop`), the players to `adds` and `drops`, an optional `reason`, and an optional
-`window`. A move adds one player, drops one player, or adds one and drops one. `window` is one
+`waiver_claim`, `drop`, `stash`, or `activate`), the players to `adds` and `drops`, an optional
+`reason`, and an optional `window`. A move adds one player, drops one player, or adds one and drops
+one. A stash or activate names its one rostered player in `player` and no place: the server chooses
+the reserve list the player's roster row makes them eligible for, or the active place. `window` is one
 calendar date written `YYYY-MM-DD`, read in the league's own fantasy day; it becomes the move's run
 day and the move starts saved. A move with no window is due today and starts undecided. A one-player
 add or waiver claim may name `fallbacks`, an ordered list of alternatives stored beside the move. The
@@ -825,9 +827,11 @@ account or league is refused.
 An add names no place and no reserve list. The server projects the team, decides whether the add
 fits, and attaches the Roster fixes that make room, choosing the list itself. The fixes appear as a
 group labelled `Roster fixes`, carry `fixesFor` naming the add, and run first when the add is
-confirmed. When nothing can make room, the refusal states the fact and the cure in plain words. The
-literal `slot_move` remains available to the internal planner and to a person who chooses one
-deliberately; it is not part of the agent contract.
+confirmed. When nothing can make room, the refusal states the fact and the cure in plain words. A
+stash and an activate likewise name no place: the server places the player on the reserve list their
+roster row makes them eligible for, or on an active place. The literal `slot_move` remains available
+to the internal planner and to a person who chooses one deliberately; it is not part of the agent
+contract.
 
 The call reads current league, roster, player, and budget state once for the team, then validates the
 new and changed moves together with the moves already stored and still open. An accepted move is
@@ -836,7 +840,9 @@ move's queue position unless its run day changes; a new run day moves it in the 
 moves after it. A move that cannot run is not stored; it is
 returned in `refused` with its position in the request, a code, and a plain sentence that names what
 would make it valid. A refused move does not make the other accepted moves fail. A queue write
-contacts no write endpoint and spends nothing.
+contacts no write endpoint and spends nothing. The response carries `confirmationCleared`: true when
+the amend changed a confirmed move, which now waits for the owner to confirm it again; false when
+the amend changed nothing and kept the confirmation.
 
 `get_transaction_plan` reads one owned team's queue in order, grouped by run day, today first. Each
 move carries its stored validation and the time it was checked, its effective date, its decision,
@@ -882,7 +888,14 @@ cannot be read marks only its own moves. A saved move can be changed on the team
 amend until its run day. The page edit changes the run day; an MCP amend replaces the move's shape
 and rechecks the whole queue. Neither edit runs the move, and changing a move's day clears its
 confirmation. An add that needs a place gets a server-generated group labelled `Roster fixes`,
-ordered before the move it funds; it is editable and discardable like any other move.
+ordered before the move it funds; it is editable and discardable like any other move. A waiver
+claim's bid shape comes from the league, not from whether the request carries a bid: a league that
+publishes a balance and takes a bid refuses a bidless claim at save, amend, and read, naming the
+accepted shape; a league that takes bidless claims refuses a bid. A move that read current stays
+current while the team and league facts it was checked against are unchanged. An amend that changes
+a confirmed move clears its confirmation and returns `confirmationCleared`; the page says the earlier
+confirmation was cleared and shows the move waiting for confirmation again. An amend with no change
+keeps the confirmation.
 
 No MCP tool submits, executes, spends, or confirms. Confirmation is the signed-in owner's, on the
 transactions page, and a saved move whose day arrives waits in Today until they confirm it. The page

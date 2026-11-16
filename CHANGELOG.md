@@ -3,6 +3,21 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
+## Unreleased - reserve moves, a stable bid shape, and a stated amend reset
+
+- `propose_transactions` restores `stash` and `activate` as agent kinds. Each names one rostered
+  player in `player` and no place; the server chooses the reserve list the roster row makes them
+  eligible for, or the active place. `slot_move` stays outside the agent contract. The generated
+  Roster fix, `canFree`, and validation use that same eligibility rule, so an injured player whose
+  roster row names only `IR+` is never stashed to plain `IR`.
+- A waiver claim's bid shape comes from the league, not from whether the request carries a bid. A
+  league that publishes a balance refuses a bidless claim at save with the accepted shape named; a
+  league that takes bidless claims refuses a bid. Save, amend, and read agree, so a move that read
+  current stays current while the team and league facts it was checked against are unchanged.
+- An amend that changes a confirmed move clears its confirmation and returns
+  `confirmationCleared: true`; the page says the move waits for confirmation again. An amend with
+  no change keeps the confirmation.
+
 ## Unreleased - the roster state an agent needs before it acts
 
 - The team summary and plan read publish `canFree`: each player who can move to a reserve list that

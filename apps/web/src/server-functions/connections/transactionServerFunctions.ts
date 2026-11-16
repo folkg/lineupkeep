@@ -130,7 +130,7 @@ export const saveTransactionMoveServerFn = createServerFn({ method: "POST" })
             ...input,
             decision: { decidedBy: "owner", surface: "transactions.save" },
           });
-          return actionOf(input.move, "saved", result.refused);
+          return actionOf(input.move, "saved", result.refused, result.confirmationCleared);
         }),
       (error) =>
         error._tag === "TransactionInputInvalid"

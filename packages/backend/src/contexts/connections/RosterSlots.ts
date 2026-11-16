@@ -56,21 +56,28 @@ export function slotPlacement(
       return {
         kind: "reserve",
         countsAsPlace: false,
-        legal: reserveLegality(rule.reserveEligibility, declared.eligibility, player),
+        legal: reserveLegality(rule, declared, player),
       };
   }
 }
 
 function reserveLegality(
-  eligibility: ProviderReserveEligibility,
-  slotEligibility: ReadonlyArray<string>,
+  rule: RosterRule,
+  slot: RosterSlot,
   player: RosterPlaceFacts,
 ): boolean | "unknown" {
-  switch (eligibility.kind) {
+  switch (rule.reserveEligibility.kind) {
     case "published_positions":
-      return acceptsPositions(slotEligibility, player.positions);
-    case "injury_status":
-      return player.injured;
+      return acceptsPositions(slot.eligibility, player.positions);
+    case "injury_status": {
+      if (!player.injured) {
+        return false;
+      }
+      const named = rule.slots.filter(
+        (held) => held.kind === "reserve" && player.positions.includes(held.position),
+      );
+      return named.length === 0 || named.some((held) => held.position === slot.position);
+    }
     case "not_published":
       return "unknown";
   }

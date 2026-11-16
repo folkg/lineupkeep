@@ -47,6 +47,12 @@ const ProposedTransactions = Schema.Struct({
   days: Schema.Array(TransactionPlanDay),
   groups: Schema.Array(TransactionPlanGroupRead),
   refused: Schema.Array(PlanRefusal),
+  confirmationCleared: Schema.Boolean.pipe(
+    Schema.annotate({
+      description:
+        "True when an amend cleared an earlier confirmation, so the owner must confirm the move again.",
+    }),
+  ),
 });
 
 const AgentTransactionMove = Schema.Struct({
@@ -56,8 +62,9 @@ const AgentTransactionMove = Schema.Struct({
   group: Schema.optional(Schema.NonEmptyString).annotate({
     description: "A label shared by moves that run together; omit it for one move.",
   }),
-  kind: Schema.Literals(["free_agent_add", "waiver_claim", "drop"]).annotate({
-    description: "An add or claim names one player to add; a drop names one player to drop.",
+  kind: Schema.Literals(["free_agent_add", "waiver_claim", "drop", "stash", "activate"]).annotate({
+    description:
+      "An add or claim names one player to add; a drop names one player to drop; a stash or activate names one player in `player`.",
   }),
   adds: Schema.Array(PlayerRef).pipe(
     Schema.check(Schema.isMaxLength(1)),
@@ -75,6 +82,10 @@ const AgentTransactionMove = Schema.Struct({
     Schema.check(Schema.isMaxLength(1)),
     Schema.withDecodingDefaultKey(Effect.succeed([])),
   ),
+  player: Schema.optional(PlayerRef).annotate({
+    description:
+      "The rostered player a stash or activate moves; the server chooses the reserve list or active place.",
+  }),
   bid: Schema.optional(
     Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))).annotate({
       description: "A claim's FAAB bid in a league that publishes a balance.",
@@ -115,7 +126,7 @@ const DiscardedTransactionPlan = Schema.Struct({
 export const proposalTools = Toolkit.make(
   Tool.make("propose_transactions", {
     description:
-      "Add moves to one team's queue: an add, a claim, or a drop, and an add may name one drop. Name no place: the server places the player and attaches the roster fixes that make room. Nothing is submitted or spent. A saved move waits in Today for the owner to confirm it; no tool confirms a move. `discard_transaction_move` removes a move; a refused move returns its reason and is not stored.",
+      "Add or amend moves in one team's queue: an add, a claim, a drop, a stash, or an activate. A stash or activate names one player in `player`; the server chooses the place. Name no slot. Nothing is submitted or spent. A saved move waits in Today for the owner to confirm it; no tool confirms a move. `discard_transaction_move` removes a move; a refused move returns its reason.",
     parameters: ProposeAgentTransactionsInput,
     success: Schema.toCodecJson(ProposedTransactions),
     failure: ToolFailure,
@@ -214,6 +225,7 @@ export function proposalToolHandlers(
                   ? {}
                   : { fallbacks: move.fallbacks }),
                 drops: move.drops,
+                ...(move.player === undefined ? {} : { player: move.player }),
                 ...(move.bid === undefined || move.bid === null ? {} : { bid: move.bid }),
                 reason: move.reason,
                 ...(move.window === undefined || move.window === null
@@ -223,9 +235,13 @@ export function proposalToolHandlers(
             })
             .pipe(
               Effect.flatMap((result) =>
-                plans
-                  .plan(agent.userId, { team: input.team })
-                  .pipe(Effect.map((plan) => ({ ...plan, refused: result.refused }))),
+                plans.plan(agent.userId, { team: input.team }).pipe(
+                  Effect.map((plan) => ({
+                    ...plan,
+                    refused: result.refused,
+                    confirmationCleared: result.confirmationCleared,
+                  })),
+                ),
               ),
               mapPlanFailure,
             ),

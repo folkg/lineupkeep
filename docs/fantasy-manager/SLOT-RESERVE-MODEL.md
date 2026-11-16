@@ -29,7 +29,7 @@ Every run records the confirmation and the moves it attempted.
 
 A reserve player is on the roster but does not count against the maximum. Capacity is per list, never pooled. IR and IR+ differ in eligibility and capacity.
 
-**Eligibility.** A starting place accepts its declared positions, or any player if it declares none; a bench place accepts any player; a reserve list accepts a player only under its rule. A mismatch makes the roster illegal, and adds and drops wait for a cure. Injured means the league reports an injury.
+**Eligibility.** A starting place accepts its declared positions, or any player if it declares none; a bench place accepts any player; a reserve list accepts a player only under its rule. When the roster row names reserve lists, only those lists accept the player, and an injury-based list still requires an injured player. A mismatch makes the roster illegal, and adds and drops wait for a cure. Injured means the league reports an injury.
 
 **The maximum.** Starting and bench occupants count; reserve occupants do not. An unreported place counts as a place. A player no longer eligible for their reserve list still does not count, but the roster is illegal.
 

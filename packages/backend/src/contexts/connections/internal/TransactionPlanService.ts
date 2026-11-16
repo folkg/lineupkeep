@@ -32,6 +32,7 @@ import {
 import type {
   StoredMoveClaim,
   StoredMoveIntent,
+  StoredMovePick,
   StoredMovePlacement,
   StoredMovePlayer,
   StoredMoveSlot,
@@ -39,6 +40,7 @@ import type {
   TransactionDecisionActor,
   TransactionMoveCursor,
   TransactionMoveId,
+  TransactionMoveKind,
   TransactionMoveList,
   TransactionMoveListInput,
   TransactionMovePageLimit,
@@ -350,7 +352,7 @@ export const TransactionPlanServiceLive = Layer.effect(
         team: input.team,
         at,
         players: [...new Set([...namedPlayers(open), ...draftPlayers(input.moves)])],
-        needsBudget: needsBudget(open) || input.moves.some((move) => move.bid !== undefined),
+        needsBudget: needsBudget(open) || needsBudget(input.moves),
       });
       const roster = new Map(facts.roster.map((player) => [player.key, player] as const));
       const rule = rosterRuleOf(facts.constraints, facts.slots);
@@ -596,11 +598,12 @@ export const TransactionPlanServiceLive = Layer.effect(
           team: input.team,
           at,
           players: [],
-          needsBudget: false,
+          needsBudget: needsBudget(stored.filter(isOpenMove)),
         });
         return {
           plan: planViewOf({ stored, facts, checkedAt: at, team: input.team }),
           refused,
+          confirmationCleared: false,
         };
       }
       const resolvedMoves = resolved.flatMap((entry) =>
@@ -624,6 +627,7 @@ export const TransactionPlanServiceLive = Layer.effect(
         }
       }
       let plan: TransactionPlanView | undefined;
+      let confirmationCleared = false;
       for (const amendment of amendments) {
         const result = yield* edit(userId, {
           team: input.team,
@@ -631,6 +635,7 @@ export const TransactionPlanServiceLive = Layer.effect(
           change: amendment.draft,
           ...(input.decision === undefined ? {} : { decision: input.decision }),
         });
+        confirmationCleared = confirmationCleared || result.confirmationCleared;
         for (const refusal of result.refused) {
           refused.push({
             ...refusal,
@@ -655,7 +660,7 @@ export const TransactionPlanServiceLive = Layer.effect(
         plan = result.plan;
       }
       if (plan !== undefined) {
-        return { plan, refused };
+        return { plan, refused, confirmationCleared };
       }
       const at = yield* DateTime.now;
       const stored = yield* repository.readPlanMoves({ userId, team: input.team });
@@ -664,11 +669,12 @@ export const TransactionPlanServiceLive = Layer.effect(
         team: input.team,
         at,
         players: [],
-        needsBudget: false,
+        needsBudget: needsBudget(stored.filter(isOpenMove)),
       });
       return {
         plan: planViewOf({ stored, facts, checkedAt: at, team: input.team }),
         refused,
+        confirmationCleared: false,
       };
     });
 
@@ -697,6 +703,7 @@ export const TransactionPlanServiceLive = Layer.effect(
         return {
           plan: planViewOf({ stored, facts, checkedAt: at, team: input.team }),
           refused: [refused],
+          confirmationCleared: false,
         };
       }
       if (!Schema.is(StoredMoveDate)(input.runDay)) {
@@ -710,6 +717,7 @@ export const TransactionPlanServiceLive = Layer.effect(
               moves: [0],
             },
           ],
+          confirmationCleared: false,
         };
       }
       if (input.runDay < facts.today) {
@@ -723,11 +731,16 @@ export const TransactionPlanServiceLive = Layer.effect(
               moves: [0],
             },
           ],
+          confirmationCleared: false,
         };
       }
 
+      const dayChanged = input.runDay !== move.runDay;
       const before = evaluateTransactionPlan({ facts, moves: open, checkedAt: at });
-      const peers = [...groupPeers(open, move), ...fixPeers(open, move)];
+      const peers = dayChanged ? [...groupPeers(open, move), ...fixPeers(open, move)] : [];
+      const confirmationCleared =
+        dayChanged &&
+        (move.confirmedAt !== undefined || peers.some((peer) => peer.confirmedAt !== undefined));
       const changed = open.map((entry) =>
         entry.id === move.id || peers.some((peer) => peer.id === entry.id)
           ? movedToDay(entry, input.runDay, facts.today)
@@ -740,13 +753,14 @@ export const TransactionPlanServiceLive = Layer.effect(
         moves: open,
         before,
         after,
-        requireTarget: false,
+        requireTarget: true,
         indexes: [0],
       });
       if (revalidation !== undefined) {
         return {
           plan: planViewOf({ stored, facts, checkedAt: at, team: input.team }),
           refused: [revalidation],
+          confirmationCleared: false,
         };
       }
       const planClaims = claimPlan({
@@ -760,17 +774,19 @@ export const TransactionPlanServiceLive = Layer.effect(
         return {
           plan: planViewOf({ stored, facts, checkedAt: at, team: input.team }),
           refused: [claimRefusalOf(input.team, collision, [0])],
+          confirmationCleared: false,
         };
       }
 
       const entry = entryOf(evaluatedMoves(after), move.id);
+      const content = contentOfMove(move, entry, input.runDay, facts.today, decision, at);
       yield* repository.editMove({
         userId,
         team: input.team,
         move: move.id,
         at,
         edit: {
-          content: contentOfMove(move, entry, input.runDay, facts.today, decision, at),
+          content: dayChanged ? content : { ...content, ...preservedDecisionOf(move) },
           claims: planClaims.claims.get(move.id) ?? [],
         },
         groupDays: peers.map((peer) => ({
@@ -783,7 +799,11 @@ export const TransactionPlanServiceLive = Layer.effect(
         })),
       });
 
-      return { plan: yield* readView({ userId, team: input.team, facts, at }), refused: [] };
+      return {
+        plan: yield* readView({ userId, team: input.team, facts, at }),
+        refused: [],
+        confirmationCleared,
+      };
     });
 
     const edit = Effect.fn("TransactionPlanService.edit")(function* (
@@ -803,7 +823,7 @@ export const TransactionPlanServiceLive = Layer.effect(
         team: input.team,
         at,
         players: namedPlayers(open),
-        needsBudget: needsBudget(open),
+        needsBudget: needsBudget(open) || needsBudget([input.change]),
       });
       const roster = new Map(facts.roster.map((player) => [player.key, player] as const));
       const refused = moveChangeRefusal({ team: input.team, move });
@@ -811,6 +831,7 @@ export const TransactionPlanServiceLive = Layer.effect(
         return {
           plan: planViewOf({ stored, facts, checkedAt: at, team: input.team }),
           refused: [refused],
+          confirmationCleared: false,
         };
       }
       const runDay = input.change.runDay ?? move.runDay;
@@ -825,6 +846,7 @@ export const TransactionPlanServiceLive = Layer.effect(
               moves: [0],
             },
           ],
+          confirmationCleared: false,
         };
       }
       if (runDay !== undefined && runDay < facts.today) {
@@ -838,6 +860,7 @@ export const TransactionPlanServiceLive = Layer.effect(
               moves: [0],
             },
           ],
+          confirmationCleared: false,
         };
       }
       const change = {
@@ -853,9 +876,13 @@ export const TransactionPlanServiceLive = Layer.effect(
         roster,
         facts,
       });
+      const unchanged = sameMoveShape(move, candidate);
       const rule = rosterRuleOf(facts.constraints, facts.slots);
       const before = evaluateTransactionPlan({ facts, moves: open, checkedAt: at });
       const peers = runDay === move.runDay ? [] : groupPeers(open, move);
+      const confirmationCleared =
+        !unchanged &&
+        (move.confirmedAt !== undefined || peers.some((peer) => peer.confirmedAt !== undefined));
       const replacedFixes = fixPeers(open, move);
       const surviving = open.filter(
         (entry) =>
@@ -897,6 +924,7 @@ export const TransactionPlanServiceLive = Layer.effect(
         return {
           plan: planViewOf({ stored, facts, checkedAt: at, team: input.team }),
           refused: [withCure(revalidation, fixed.cures.get(candidate.id))],
+          confirmationCleared: false,
         };
       }
       const planClaims = claimPlan({
@@ -910,6 +938,14 @@ export const TransactionPlanServiceLive = Layer.effect(
         return {
           plan: planViewOf({ stored, facts, checkedAt: at, team: input.team }),
           refused: [claimRefusalOf(input.team, collision, [0])],
+          confirmationCleared: false,
+        };
+      }
+      if (unchanged) {
+        return {
+          plan: planViewOf({ stored, facts, checkedAt: at, team: input.team }),
+          refused: [],
+          confirmationCleared,
         };
       }
 
@@ -969,7 +1005,11 @@ export const TransactionPlanServiceLive = Layer.effect(
         });
       }
 
-      return { plan: yield* readView({ userId, team: input.team, facts, at }), refused: [] };
+      return {
+        plan: yield* readView({ userId, team: input.team, facts, at }),
+        refused: [],
+        confirmationCleared,
+      };
     });
 
     const discard = Effect.fn("TransactionPlanService.discard")(function* (
@@ -978,14 +1018,14 @@ export const TransactionPlanServiceLive = Layer.effect(
     ) {
       const at = yield* DateTime.now;
       const decision = input.decision ?? ownerDecision("transactions.discard");
+      const stored = yield* repository.readPlanMoves({ userId, team: input.team });
       const facts = yield* factsPort.read({
         userId,
         team: input.team,
         at,
         players: [],
-        needsBudget: false,
+        needsBudget: needsBudget(stored.filter(isOpenMove)),
       });
-      const stored = yield* repository.readPlanMoves({ userId, team: input.team });
       const move = stored.find((entry) => entry.id === input.move);
       if (move === undefined) {
         return yield* TransactionPlanMoveNotFound.make({ team: input.team, move: input.move });
@@ -2902,6 +2942,80 @@ function contentOfCandidate(
   };
 }
 
+function preservedDecisionOf(
+  move: TransactionMoveRecord,
+): Pick<
+  TransactionMoveContent,
+  "decision" | "decidedAt" | "decidedBy" | "surface" | "confirmedAt" | "confirmedBy"
+> {
+  return {
+    decision: move.decision,
+    decidedAt: move.decidedAt,
+    decidedBy: move.decidedBy,
+    surface: move.surface,
+    confirmedAt: move.confirmedAt,
+    confirmedBy: move.confirmedBy,
+  };
+}
+
+function sameMoveShape(move: TransactionMoveRecord, candidate: CandidateMove): boolean {
+  return (
+    move.kind === candidate.kind &&
+    samePlayerKeys(move.adds, candidate.adds) &&
+    samePlayerKeys(move.fallbacks, candidate.fallbacks) &&
+    samePlayerKeys(move.drops, candidate.drops) &&
+    samePicks(move.picks, candidate.picks) &&
+    sameSlot(move.slotMove, candidate.slotMove) &&
+    sameIntent(move.intent, candidate.intent) &&
+    move.counterpartyKey === candidate.counterpartyKey &&
+    move.bid === candidate.bid &&
+    move.reason === candidate.reason &&
+    move.runDay === candidate.runDay
+  );
+}
+
+function samePlayerKeys(
+  left: ReadonlyArray<StoredMovePlayer>,
+  right: ReadonlyArray<StoredMovePlayer>,
+): boolean {
+  return (
+    left.length === right.length && left.every((player, index) => player.key === right[index]?.key)
+  );
+}
+
+function samePicks(
+  left: ReadonlyArray<StoredMovePick>,
+  right: ReadonlyArray<StoredMovePick>,
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((pick, index) => {
+      const other = right[index];
+      return (
+        other !== undefined &&
+        pick.round === other.round &&
+        pick.sourceTeamKey === other.sourceTeamKey &&
+        pick.destinationTeamKey === other.destinationTeamKey
+      );
+    })
+  );
+}
+
+function sameSlot(left: StoredMoveSlot | undefined, right: StoredMoveSlot | undefined): boolean {
+  return left === undefined || right === undefined
+    ? left === right
+    : left.playerKey === right.playerKey && left.toSlot === right.toSlot;
+}
+
+function sameIntent(
+  left: StoredMoveIntent | undefined,
+  right: StoredMoveIntent | undefined,
+): boolean {
+  return left === undefined || right === undefined
+    ? left === right
+    : left.kind === right.kind && left.to === right.to && left.player?.key === right.player?.key;
+}
+
 function movedToDay(
   move: TransactionPlanMove,
   runDay: StoredMoveDate | undefined,
@@ -3102,8 +3216,10 @@ function draftPlayers(drafts: ReadonlyArray<TransactionPlanMoveDraft>): Readonly
   ];
 }
 
-function needsBudget(moves: ReadonlyArray<{ readonly bid?: number }>): boolean {
-  return moves.some((move) => move.bid !== undefined);
+function needsBudget(
+  moves: ReadonlyArray<{ readonly kind?: TransactionMoveKind; readonly bid?: number }>,
+): boolean {
+  return moves.some((move) => move.kind === "waiver_claim" || move.bid !== undefined);
 }
 
 function requireId(ids: ReadonlyArray<TransactionMoveId>, index: number): TransactionMoveId {
