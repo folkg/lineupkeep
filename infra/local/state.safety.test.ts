@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 
+import * as Core from "@alchemy.run/test/Core";
+import * as Test from "@alchemy.run/test/Vitest";
 import { NodeServices } from "@effect/platform-node";
 import * as Alchemy from "alchemy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Command from "alchemy/Command";
 import { State } from "alchemy/State";
-import * as Core from "alchemy/Test/Core";
-import * as Test from "alchemy/Test/Vitest";
 import { ConfigProvider, Effect, Layer, Result } from "effect";
 
 import { deploymentState } from "#infra/state.ts";

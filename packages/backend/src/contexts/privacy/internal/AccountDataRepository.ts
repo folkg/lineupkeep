@@ -1,4 +1,5 @@
-import { Context, Crypto, DateTime, Effect, Layer, Schema } from "effect";
+import { Context, DateTime, Effect, Layer, Schema } from "effect";
+import { Digest } from "effect/crypto";
 
 import { signInCodeQuotaKeyFor } from "#contexts/auth/SignInCodeQuotaKey.ts";
 import type { UserId } from "#contexts/auth/User.ts";
@@ -38,7 +39,7 @@ export class AccountDataRepository extends Context.Service<
     AccountDataRepository,
     Effect.gen(function* () {
       const database = yield* PrivacyDatabase;
-      const crypto = yield* Crypto.Crypto;
+      const digest = yield* Digest.Digest;
 
       const erase = Effect.fn("AccountDataRepository.erase")(function* (userId: UserId) {
         const outcome = yield* database
@@ -61,7 +62,7 @@ export class AccountDataRepository extends Context.Service<
                   ? {
                       userId,
                       email,
-                      signInCodeQuotaKey: yield* signInCodeQuotaKeyFor(crypto, email),
+                      signInCodeQuotaKey: yield* signInCodeQuotaKeyFor(digest, email),
                     }
                   : undefined;
               const owner: OwnedAccount = identity ?? {
@@ -102,7 +103,7 @@ export class AccountDataRepository extends Context.Service<
                   ? {
                       userId,
                       email,
-                      signInCodeQuotaKey: yield* signInCodeQuotaKeyFor(crypto, email),
+                      signInCodeQuotaKey: yield* signInCodeQuotaKeyFor(digest, email),
                     }
                   : undefined;
               const account: OwnedAccount = identity ?? {

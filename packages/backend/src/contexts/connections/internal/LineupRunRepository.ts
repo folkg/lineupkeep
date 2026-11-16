@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, gte, isNull, lte, ne, notInArray, or } from "drizzle-orm";
-import { Array, Context, Crypto, DateTime, Effect, Equal, Layer, Option, Schema } from "effect";
+import { Array, Context, DateTime, Effect, Equal, Layer, Option, Schema } from "effect";
+import { SecureRandom } from "effect/crypto";
 
 import { UserId } from "#contexts/auth/User.ts";
 import { ConnectionId } from "#contexts/connections/Connection.ts";
@@ -127,9 +128,9 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
   {
     make: Effect.gen(function* () {
       const database = yield* ConnectionsDatabase;
-      const crypto = yield* Crypto.Crypto;
+      const random = yield* SecureRandom.SecureRandom;
 
-      const newId = crypto.randomULID;
+      const newId = random.ulid;
 
       const createRequest = Effect.fn("LineupRunRepository.createRequest")(function* (input: {
         readonly userId: UserId;

@@ -2,7 +2,8 @@ import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { eq } from "drizzle-orm";
-import { Array, Crypto, DateTime, Effect, Layer, Redacted, Schema } from "effect";
+import { Array, DateTime, Effect, Layer, Redacted, Schema } from "effect";
+import { SecureRandom } from "effect/crypto";
 import { TestClock } from "effect/testing";
 
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
@@ -297,14 +298,14 @@ it.effect("rejects disconnect before a credential exists", () =>
 );
 
 function ConnectionsLayerFor(
-  crypto: Layer.Layer<Crypto.Crypto>,
+  random: Layer.Layer<SecureRandom.SecureRandom>,
 ): Layer.Layer<Connections | ConnectionsDatabase | FakeProviderWorld | ProviderRegistry> {
   return ConnectionsLive.pipe(
     Layer.provide(ConnectionRepository.layer),
     Layer.provideMerge(ConnectionsDatabaseTest),
     Layer.provideMerge(ProviderFakeTest),
     Layer.provide(EncryptionTestLayer),
-    Layer.provide(crypto),
+    Layer.provide(random),
     Layer.orDie,
   );
 }

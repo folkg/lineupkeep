@@ -1,6 +1,6 @@
+import * as Neon from "@alchemy.run/neon";
 import * as Alchemy from "alchemy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
-import * as Neon from "alchemy/Neon";
 import * as Output from "alchemy/Output";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Secrets from "alchemy/Secrets";

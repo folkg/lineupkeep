@@ -1736,7 +1736,8 @@ function adapterLayer(
   | AuthDatabaseStatements
   | BackgroundWork
   | BetterAuthAdapter
-  | import("effect/Crypto").Crypto
+  | import("effect/crypto").Digest.Digest
+  | import("effect/crypto").SecureRandom.SecureRandom
   | EmailDelivery
   | EmailOutbox
   | PublicInternet

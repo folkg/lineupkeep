@@ -2,11 +2,11 @@ import { createServer } from "node:net";
 import { loadEnvFile } from "node:process";
 import { createInterface } from "node:readline/promises";
 
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Core from "@alchemy.run/test/Core";
 import * as Alchemy from "alchemy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Command from "alchemy/Command";
-import * as Core from "alchemy/Test/Core";
 import { Effect, Exit, Layer, Scope } from "effect";
 
 import { developmentApplicationConfig, developmentEnvironmentNames } from "#infra/config.ts";

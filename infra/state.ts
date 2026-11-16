@@ -1,6 +1,6 @@
+import { postgresState } from "@alchemy.run/sql/PostgresState";
 import * as Alchemy from "alchemy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
-import { postgresState } from "alchemy/State/PostgresState";
 import { Config, Effect, Layer, Redacted } from "effect";
 
 export const deploymentState = Layer.unwrap(

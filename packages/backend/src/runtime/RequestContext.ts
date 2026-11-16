@@ -1,5 +1,6 @@
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
-import { Context, Crypto, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Schema } from "effect";
+import { SecureRandom } from "effect/crypto";
 import { dual } from "effect/Function";
 
 export class RequestContext extends Context.Service<RequestContext, RequestContextShape>()(
@@ -13,19 +14,15 @@ export function makeRequestContext(request: Request): Effect.Effect<RequestConte
   );
 }
 
-export function correlateRequestEffect(request: Request): Effect.Effect<
-  {
-    request: Request;
-    requestId: string;
-  },
-  Effect.Error<Crypto.Crypto["randomULID"]>,
-  never
-> {
+export function correlateRequestEffect(request: Request): Effect.Effect<{
+  request: Request;
+  requestId: string;
+}> {
   const upstream = request.headers.get("x-request-id");
   if (upstream !== null && isValidRequestId(upstream)) {
     return Effect.succeed({ request, requestId: upstream });
   }
-  return Crypto.Crypto.use((crypto) => crypto.randomULID).pipe(
+  return SecureRandom.SecureRandom.use((random) => random.ulid).pipe(
     Effect.map((requestId) => ({
       request: withRequestHeaders(request, { "x-request-id": requestId }),
       requestId,

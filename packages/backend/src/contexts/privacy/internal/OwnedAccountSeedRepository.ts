@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-import { Crypto, Effect } from "effect";
+import { Effect } from "effect";
+import { Digest } from "effect/crypto";
 
 import { signInCodeQuotaKeyFor } from "#contexts/auth/SignInCodeQuotaKey.ts";
 import { decodeUserId } from "#contexts/auth/User.ts";
@@ -54,9 +55,9 @@ const instant = "2026-10-01T12:00:00Z";
 
 export const seedOwnedAccount = Effect.gen(function* () {
   const database = yield* PrivacyDatabase;
-  const crypto = yield* Crypto.Crypto;
-  const ownerQuotaKey = yield* signInCodeQuotaKeyFor(crypto, owner.email).pipe(Effect.orDie);
-  const otherQuotaKey = yield* signInCodeQuotaKeyFor(crypto, otherOwner.email).pipe(Effect.orDie);
+  const digest = yield* Digest.Digest;
+  const ownerQuotaKey = yield* signInCodeQuotaKeyFor(digest, owner.email).pipe(Effect.orDie);
+  const otherQuotaKey = yield* signInCodeQuotaKeyFor(digest, otherOwner.email).pipe(Effect.orDie);
   const run = (statement: SQL): ReturnType<typeof database.execute> => database.execute(statement);
 
   yield* run(

@@ -1,7 +1,6 @@
 import {
   Array as EffectArray,
   Context,
-  Crypto,
   DateTime,
   Duration,
   Effect,
@@ -9,6 +8,7 @@ import {
   Option,
   Schema,
 } from "effect";
+import { SecureRandom } from "effect/crypto";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import { TeamId } from "#contexts/connections/FantasyTeam.ts";
@@ -168,16 +168,11 @@ export const TransactionPlanServiceLive = Layer.effect(
     const factsPort = yield* TransactionPlanFacts;
     const tokens = yield* QueryTokens;
     const writes = yield* TransactionPlanWrites;
-    const crypto = yield* Crypto.Crypto;
-    const newId = crypto.randomULID.pipe(
-      Effect.mapError((cause) => TransactionPlanPersistenceFailed.make({ cause })),
-    );
-    const newClaim = crypto.randomULID.pipe(
-      Effect.mapError((cause) => TransactionPlanPersistenceFailed.make({ cause })),
-    );
-    const newRunId = crypto.randomULID.pipe(
+    const random = yield* SecureRandom.SecureRandom;
+    const newId = random.ulid;
+    const newClaim = random.ulid;
+    const newRunId = random.ulid.pipe(
       Effect.map((id) => Schema.decodeSync(TransactionRunIdSchema)(id)),
-      Effect.mapError((cause) => TransactionPlanPersistenceFailed.make({ cause })),
     );
 
     const finishedRun = (

@@ -1,13 +1,13 @@
-import { Crypto, Effect } from "effect";
+import { Effect } from "effect";
+import { Digest } from "effect/crypto";
 import { Hex } from "effect/encoding";
 
-import { AuthenticationUnavailable } from "#contexts/auth/Auth.ts";
+import type { AuthenticationUnavailable } from "#contexts/auth/Auth.ts";
 
 export const signInCodeQuotaKeyFor = (
-  crypto: Crypto.Crypto,
+  digest: Digest.Digest["Service"],
   email: string,
 ): Effect.Effect<string, AuthenticationUnavailable> =>
-  crypto.digest("SHA-256", new TextEncoder().encode(email.trim().toLowerCase())).pipe(
-    Effect.mapError((cause) => AuthenticationUnavailable.make({ cause })),
-    Effect.map((digest) => `email:${Hex.encode(digest)}`),
-  );
+  digest
+    .digest(Digest.sha256, new TextEncoder().encode(email.trim().toLowerCase()))
+    .pipe(Effect.map((bytes) => `email:${Hex.encode(bytes)}`));

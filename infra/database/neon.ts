@@ -1,4 +1,4 @@
-import * as Neon from "alchemy/Neon";
+import * as Neon from "@alchemy.run/neon";
 import * as Output from "alchemy/Output";
 import { Effect, Layer, Redacted } from "effect";
 

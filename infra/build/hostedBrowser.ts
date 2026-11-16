@@ -1,5 +1,5 @@
+import * as Docker from "@alchemy.run/docker";
 import * as Command from "alchemy/Command";
-import * as Docker from "alchemy/Docker";
 import { Effect } from "effect";
 
 export function buildHostedBrowserImage(): Effect.Effect<

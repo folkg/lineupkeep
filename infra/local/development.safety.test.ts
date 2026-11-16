@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 
+import * as Test from "@alchemy.run/test/Vitest";
 import { docker } from "@lineupkeep/tools/local-stack/postgresContainer.ts";
-import * as Test from "alchemy/Test/Vitest";
 import { Effect, Redacted } from "effect";
 
 import { developmentDatabaseIdentity, resetDevelopmentDatabase } from "./developmentDatabase.ts";

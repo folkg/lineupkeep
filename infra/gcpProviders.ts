@@ -1,4 +1,4 @@
-import * as GCP from "alchemy/GCP";
+import * as GCP from "@alchemy.run/gcp";
 import { Effect, Layer } from "effect";
 
 const credentialsWithQuotaProject = Layer.effect(

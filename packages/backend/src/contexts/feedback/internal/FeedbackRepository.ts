@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
-import { Array, Context, Crypto, DateTime, Effect, Layer, Schema } from "effect";
+import { Array, Context, DateTime, Effect, Layer, Schema } from "effect";
+import { SecureRandom } from "effect/crypto";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import type {
@@ -31,10 +32,8 @@ export class FeedbackRepository extends Context.Service<FeedbackRepository>()(
   {
     make: Effect.gen(function* () {
       const database = yield* FeedbackDatabase;
-      const crypto = yield* Crypto.Crypto;
-      const newId = crypto.randomULID.pipe(
-        Effect.mapError((cause) => FeedbackPersistenceFailed.make({ cause })),
-      );
+      const random = yield* SecureRandom.SecureRandom;
+      const newId = random.ulid;
 
       const reserve = Effect.fn("FeedbackRepository.reserve")(function* (
         entries: ReadonlyArray<QuotaReservation>,

@@ -1,7 +1,8 @@
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { signInCodeQuotaKeyFor } from "@lineupkeep/backend/auth/SignInCodeQuotaKey";
-import { Crypto, Duration, Effect, Exit, Layer } from "effect";
+import { Duration, Effect, Exit, Layer } from "effect";
+import { Digest } from "effect/crypto";
 import { TestClock } from "effect/testing";
 
 import { AccountErasure } from "./AccountErasure.ts";
@@ -236,10 +237,10 @@ it.effect(
 const ownedAccount = (
   userId: typeof owner.id,
   email: string,
-): Effect.Effect<OwnedAccount, never, Crypto.Crypto> =>
+): Effect.Effect<OwnedAccount, never, Digest.Digest> =>
   Effect.gen(function* () {
-    const crypto = yield* Crypto.Crypto;
-    const signInCodeQuotaKey = yield* signInCodeQuotaKeyFor(crypto, email).pipe(Effect.orDie);
+    const digest = yield* Digest.Digest;
+    const signInCodeQuotaKey = yield* signInCodeQuotaKeyFor(digest, email).pipe(Effect.orDie);
     return { userId, email, signInCodeQuotaKey } satisfies OwnedAccount;
   });
 

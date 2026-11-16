@@ -41,6 +41,7 @@ export default ({ production }: { readonly production?: boolean }): KnipConfig =
         "local/*.container-safety.test.ts",
         "local/nodeEntry.ts!",
         "local/loopbackRelay.ts!",
+        "state.ts!",
       ],
       project: ["**/*.ts"],
     },

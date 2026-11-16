@@ -1,4 +1,5 @@
-import { Array, Crypto, DateTime, Effect, Layer, Schema } from "effect";
+import { Array, DateTime, Effect, Layer, Schema } from "effect";
+import { SecureRandom } from "effect/crypto";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import {
@@ -44,7 +45,7 @@ export const ConnectionsLive = Layer.effect(
     const repository = yield* ConnectionRepository;
     const registry = yield* ProviderRegistry;
     const encryption = yield* ConnectionCredentialEncryption;
-    const crypto = yield* Crypto.Crypto;
+    const random = yield* SecureRandom.SecureRandom;
 
     const list = (
       userId: UserId,
@@ -152,8 +153,7 @@ export const ConnectionsLive = Layer.effect(
           return [];
         }
         const starts = yield* Effect.forEach(inputs, (input) =>
-          crypto.randomULID.pipe(
-            Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+          random.ulid.pipe(
             Effect.flatMap((requestId) =>
               Schema.decodeEffect(StartLinkingInputSchema)({
                 requestId,

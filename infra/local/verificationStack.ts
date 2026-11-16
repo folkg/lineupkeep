@@ -1,12 +1,12 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Docker from "@alchemy.run/docker";
 import type { LocalRun } from "@lineupkeep/tools/local-stack/contract.ts";
 import * as Alchemy from "alchemy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Command from "alchemy/Command";
-import * as Docker from "alchemy/Docker";
 import * as Output from "alchemy/Output";
 import { Effect, Layer, Redacted } from "effect";
 

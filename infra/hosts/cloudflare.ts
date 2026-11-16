@@ -1,8 +1,8 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import {
   assertPublicRouting,
   workerConfiguration,
 } from "@lineupkeep/web/deploy/cloudflare/settings.ts";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Output from "alchemy/Output";
 import { Effect, Layer, Redacted } from "effect";
 

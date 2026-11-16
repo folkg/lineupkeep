@@ -1,8 +1,8 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Docker from "@alchemy.run/docker";
 import * as Alchemy from "alchemy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Command from "alchemy/Command";
-import * as Docker from "alchemy/Docker";
 import * as Secrets from "alchemy/Secrets";
 import { Stage } from "alchemy/Stage";
 import { Effect, Layer } from "effect";

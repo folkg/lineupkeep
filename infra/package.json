@@ -15,7 +15,12 @@
     "deploy:database": "env -u npm_execpath node ../node_modules/alchemy/bin/cli.js deploy database.run.ts"
   },
   "dependencies": {
+    "@alchemy.run/cloudflare": "catalog:",
+    "@alchemy.run/docker": "catalog:",
     "@alchemy.run/frontend-frameworks": "catalog:",
+    "@alchemy.run/gcp": "catalog:",
+    "@alchemy.run/neon": "catalog:",
+    "@alchemy.run/sql": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/sql-pg": "catalog:",
     "@lineupkeep/tools": "workspace:*",
@@ -25,6 +30,7 @@
     "vite": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/test": "catalog:",
     "@effect/vitest": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

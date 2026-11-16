@@ -1,5 +1,6 @@
 import { and, asc, eq, getTableColumns, notInArray, or } from "drizzle-orm";
-import { Array, Context, Crypto, DateTime, Effect, Layer, Schema } from "effect";
+import { Array, Context, DateTime, Effect, Layer, Schema } from "effect";
+import { SecureRandom } from "effect/crypto";
 
 import { UserId } from "#contexts/auth/User.ts";
 import {
@@ -88,14 +89,9 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
   {
     make: Effect.gen(function* () {
       const database = yield* ConnectionsDatabase;
-      const crypto = yield* Crypto.Crypto;
-      const generateConnectionId = crypto.randomULID.pipe(
-        Effect.map(decodeConnectionId),
-        Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
-      );
-      const newNotificationId = crypto.randomULID.pipe(
-        Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
-      );
+      const random = yield* SecureRandom.SecureRandom;
+      const generateConnectionId = random.ulid.pipe(Effect.map(decodeConnectionId));
+      const newNotificationId = random.ulid;
 
       const listConnections = Effect.fn("ConnectionRepository.listConnections")(function* (
         userId: UserId,
@@ -705,9 +701,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                     );
                     if (candidates.length > 0) {
                       const incidentIds = yield* Effect.replicateEffect(candidates.length)(
-                        crypto.randomULID,
-                      ).pipe(
-                        Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+                        random.ulid,
                       );
                       yield* transaction
                         .insert(connectionIncidents)
@@ -846,8 +840,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
             Effect.forEach(
               teams,
               (team) =>
-                crypto.randomULID.pipe(
-                  Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+                random.ulid.pipe(
                   Effect.map((id) => ({
                     id: decodeTeamId(id),
                     connectionId,

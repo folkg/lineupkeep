@@ -1,12 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import * as Core from "@alchemy.run/test/Core";
 import { LocalEndpointsSchema, LocalRunSchema } from "@lineupkeep/tools/local-stack/contract.ts";
 import type { LocalRun } from "@lineupkeep/tools/local-stack/contract.ts";
 import * as Alchemy from "alchemy";
 import * as Command from "alchemy/Command";
 import * as Output from "alchemy/Output";
-import * as Core from "alchemy/Test/Core";
 import { Effect, Layer, Redacted, Schema } from "effect";
 
 import { localPostgres } from "#infra/database/localPostgres.ts";

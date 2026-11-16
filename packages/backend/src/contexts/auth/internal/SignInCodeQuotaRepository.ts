@@ -1,5 +1,6 @@
 import { and, eq, lt } from "drizzle-orm";
-import { Context, Crypto, DateTime, Duration, Effect, Layer } from "effect";
+import { Context, DateTime, Duration, Effect, Layer } from "effect";
+import { Digest } from "effect/crypto";
 
 import { AuthenticationUnavailable } from "#contexts/auth/Auth.ts";
 import { signInCodeQuotaKeyFor } from "#contexts/auth/SignInCodeQuotaKey.ts";
@@ -12,7 +13,7 @@ export class SignInCodeQuotaRepository extends Context.Service<SignInCodeQuotaRe
   {
     make: Effect.gen(function* () {
       const database = yield* AuthDatabase;
-      const crypto = yield* Crypto.Crypto;
+      const digest = yield* Digest.Digest;
 
       const query = <A>(
         run: () => Promise<A>,
@@ -23,7 +24,7 @@ export class SignInCodeQuotaRepository extends Context.Service<SignInCodeQuotaRe
         });
 
       const keyFor = (email: string): Effect.Effect<string, AuthenticationUnavailable> =>
-        signInCodeQuotaKeyFor(crypto, email);
+        signInCodeQuotaKeyFor(digest, email);
 
       const attempt = Effect.fn("SignInCodeQuotaRepository.attempt")(function* (
         key: string,

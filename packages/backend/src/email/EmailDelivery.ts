@@ -3,7 +3,6 @@ import {
   ConfigProvider,
   Console,
   Context,
-  Crypto,
   Effect,
   Layer,
   Option,
@@ -11,6 +10,7 @@ import {
   Schedule,
   Schema,
 } from "effect";
+import { SecureRandom } from "effect/crypto";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import type { HttpClientError } from "effect/http";
 import nodemailer from "nodemailer";
@@ -47,7 +47,7 @@ export class EmailDelivery extends Context.Service<EmailDelivery, EmailDeliveryS
     Layer.effect(EmailDelivery)(
       Effect.gen(function* () {
         const config = yield* resendConfig;
-        const crypto = yield* Crypto.Crypto;
+        const random = yield* SecureRandom.SecureRandom;
         const client = (yield* HttpClient.HttpClient).pipe(
           HttpClient.mapRequest(HttpClientRequest.prependUrl(config.baseUrl.href)),
           HttpClient.mapRequest(HttpClientRequest.bearerToken(Redacted.value(config.apiKey))),
@@ -61,11 +61,7 @@ export class EmailDelivery extends Context.Service<EmailDelivery, EmailDeliveryS
             "email.provider": "resend",
             "email.purpose": message.purpose,
           });
-          const idempotencyKey =
-            message.idempotencyKey ??
-            (yield* crypto.randomULID.pipe(
-              Effect.mapError(() => EmailDeliveryFailed.make({ reason: "unavailable" })),
-            ));
+          const idempotencyKey = message.idempotencyKey ?? (yield* random.ulid);
           const response = yield* HttpClientRequest.post("/emails").pipe(
             HttpClientRequest.setHeader("idempotency-key", idempotencyKey),
             HttpClientRequest.bodyJsonUnsafe({
@@ -310,7 +306,7 @@ function configError(message: string): Config.ConfigError {
 
 const ResendEmailResponse = Schema.Struct({ id: Schema.String });
 
-export type EmailTransport = HttpClient.HttpClient | Crypto.Crypto;
+export type EmailTransport = HttpClient.HttpClient | SecureRandom.SecureRandom;
 
 type SmtpSettings = {
   readonly host: string;

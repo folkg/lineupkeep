@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { access, rm } from "node:fs/promises";
 
+import * as Test from "@alchemy.run/test/Vitest";
 import { docker } from "@lineupkeep/tools/local-stack/postgresContainer.ts";
-import * as Test from "alchemy/Test/Vitest";
 import { Effect, Exit } from "effect";
 
 import { localDatabaseName } from "./Postgres.ts";

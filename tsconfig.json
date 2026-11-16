@@ -36,7 +36,7 @@
           "effect/ai",
           "effect/http",
           "effect/observability",
-          "effect/Crypto",
+          "effect/crypto",
           "effect/Arbitrary",
           "effect/testing",
           "@effect/sql-pg",

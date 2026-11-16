@@ -141,7 +141,7 @@ it.each([
   const result = await checkArchitecture({
     ...featureFixture,
     [path]:
-      'export { Stack } from "alchemy"; export { Worker } from "alchemy/Cloudflare"; import * as sdk from "@google-cloud/storage"; export { sdk };',
+      'export { Stack } from "alchemy"; export { Worker } from "@alchemy.run/cloudflare"; import * as sdk from "@google-cloud/storage"; export { sdk };',
   });
 
   expect(result.status).toBeGreaterThan(0);
@@ -1398,7 +1398,7 @@ const featureFixture = {
   "packages/backend/src/contexts/uploads/Uploads.ts":
     'import { Context, Effect } from "effect"; export class Uploads extends Context.Service<Uploads, { readonly read: (key: string) => Effect.Effect<string> }>()("Uploads") {}',
   [featureModule]:
-    'export { Uploads } from "@lineupkeep/backend/uploads/Uploads"; export { Layer } from "effect"; export { Bucket } from "alchemy/Cloudflare/R2"; export * as storage from "@distilled.cloud/gcp/storage_v1"; export const uploads = {};',
+    'export { Uploads } from "@lineupkeep/backend/uploads/Uploads"; export { Layer } from "effect"; export { Bucket } from "@alchemy.run/cloudflare/R2"; export * as storage from "@distilled.cloud/gcp/storage_v1"; export const uploads = {};',
 };
 
 it("accepts a pure lineup-solver module that imports only its assignment dependency", async () => {

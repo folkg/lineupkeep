@@ -1,7 +1,7 @@
 import { createServer, isIP } from "node:net";
 
+import * as Docker from "@alchemy.run/docker";
 import * as Command from "alchemy/Command";
-import * as Docker from "alchemy/Docker";
 import * as Output from "alchemy/Output";
 import { Stage } from "alchemy/Stage";
 import { Effect, Layer, Redacted, Schema } from "effect";

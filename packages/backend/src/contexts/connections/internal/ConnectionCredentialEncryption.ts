@@ -1,4 +1,5 @@
-import { Config, Context, Crypto, Effect, Layer, Redacted, Schema } from "effect";
+import { Config, Context, Effect, Layer, Redacted, Schema } from "effect";
+import { SecureRandom } from "effect/crypto";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import type { ConnectionId, ProviderKey } from "#contexts/connections/Connection.ts";
@@ -54,10 +55,10 @@ export class ConnectionCredentialEncryption extends Context.Service<
   static readonly layer = Layer.effect(
     ConnectionCredentialEncryption,
     Effect.gen(function* () {
-      const crypto = yield* Crypto.Crypto;
+      const random = yield* SecureRandom.SecureRandom;
       const keyring = yield* loadConnectionEncryptionKeyring;
       const credentials = yield* ConnectionCredentialRepository;
-      return convergingEncryption(credentialCipher(keyring, crypto), credentials);
+      return convergingEncryption(credentialCipher(keyring, random), credentials);
     }),
   ).pipe(
     Layer.provide(ConnectionEncryptionKey.layer),
@@ -66,13 +67,13 @@ export class ConnectionCredentialEncryption extends Context.Service<
 
   static forKey(
     key: Layer.Layer<ConnectionEncryptionKey>,
-  ): Layer.Layer<ConnectionCredentialEncryption, never, Crypto.Crypto> {
+  ): Layer.Layer<ConnectionCredentialEncryption, never, SecureRandom.SecureRandom> {
     return Layer.effect(
       ConnectionCredentialEncryption,
       Effect.gen(function* () {
-        const crypto = yield* Crypto.Crypto;
+        const random = yield* SecureRandom.SecureRandom;
         const current = yield* ConnectionEncryptionKey;
-        return plainEncryption(credentialCipher(keyringOf(current, []), crypto));
+        return plainEncryption(credentialCipher(keyringOf(current, []), random));
       }),
     ).pipe(Layer.provide(key));
   }
@@ -80,11 +81,11 @@ export class ConnectionCredentialEncryption extends Context.Service<
   static forKeyring(input: {
     readonly current: { readonly bytes: Uint8Array; readonly keyVersion: number };
     readonly retained?: ReadonlyArray<{ readonly bytes: Uint8Array; readonly keyVersion: number }>;
-  }): Layer.Layer<ConnectionCredentialEncryption, Config.ConfigError, Crypto.Crypto> {
+  }): Layer.Layer<ConnectionCredentialEncryption, Config.ConfigError, SecureRandom.SecureRandom> {
     return Layer.effect(
       ConnectionCredentialEncryption,
       Effect.gen(function* () {
-        const crypto = yield* Crypto.Crypto;
+        const random = yield* SecureRandom.SecureRandom;
         const current = yield* importConnectionEncryptionKey(
           input.current.bytes,
           input.current.keyVersion,
@@ -92,7 +93,7 @@ export class ConnectionCredentialEncryption extends Context.Service<
         const retained = yield* Effect.forEach(input.retained ?? [], (entry) =>
           importConnectionEncryptionKey(entry.bytes, entry.keyVersion),
         );
-        return plainEncryption(credentialCipher(keyringOf(current, retained), crypto));
+        return plainEncryption(credentialCipher(keyringOf(current, retained), random));
       }),
     );
   }
@@ -157,14 +158,12 @@ function plainEncryption(cipher: CredentialCipher): ConnectionCredentialEncrypti
 
 function credentialCipher(
   keyring: ConnectionEncryptionKeyring,
-  crypto: Crypto.Crypto,
+  random: SecureRandom.SecureRandom["Service"],
 ): CredentialCipher {
   const encrypt = Effect.fn("ConnectionCredentialEncryption.encrypt")(function* (
     input: SealCredentialInput,
   ) {
-    const nonce = yield* crypto
-      .randomBytes(credentialNonceBytes)
-      .pipe(Effect.mapError(() => CredentialEncryptionFailed.make({})));
+    const nonce = yield* random.randomBytes(credentialNonceBytes);
     const keyVersion = keyring.current.keyVersion;
     const ciphertext = yield* encryptBytes({
       key: keyring.current.key,

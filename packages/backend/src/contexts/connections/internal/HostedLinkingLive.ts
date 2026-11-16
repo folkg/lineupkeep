@@ -1,4 +1,5 @@
-import { Array, Crypto, DateTime, Duration, Effect, Layer, Redacted, Schema } from "effect";
+import { Array, DateTime, Duration, Effect, Layer, Redacted, Schema } from "effect";
+import { Digest, SecureRandom } from "effect/crypto";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import { ConnectionLinkRejected, ConnectionNotFound } from "#contexts/connections/Connection.ts";
@@ -33,7 +34,8 @@ export const HostedLinkingLive = Layer.effect(
   Effect.gen(function* () {
     const repository = yield* HostedLinkingRepository;
     const connections = yield* Connections;
-    const crypto = yield* Crypto.Crypto;
+    const random = yield* SecureRandom.SecureRandom;
+    const digest = yield* Digest.Digest;
 
     const start = Effect.fn("HostedLinking.start")(function* (
       userId: UserId,
@@ -58,9 +60,7 @@ export const HostedLinkingLive = Layer.effect(
         return yield* HostedLinkingRateLimited.make({});
       }
 
-      const idValue = yield* crypto.randomULID.pipe(
-        Effect.mapError((cause) => HostedLinkingPersistenceFailed.make({ cause })),
-      );
+      const idValue = yield* random.ulid;
       const id = yield* Schema.decodeEffect(HostedLinkingSessionId)(idValue).pipe(
         Effect.mapError((cause) => HostedLinkingPersistenceFailed.make({ cause })),
       );
@@ -175,9 +175,7 @@ export const HostedLinkingLive = Layer.effect(
       HostedLinkingPersistenceFailed
     > {
       return Effect.gen(function* () {
-        const bytes = yield* crypto
-          .randomBytes(ticketBytes)
-          .pipe(Effect.mapError((cause) => HostedLinkingPersistenceFailed.make({ cause })));
+        const bytes = yield* random.randomBytes(ticketBytes);
         const value = yield* Schema.encodeEffect(Schema.Uint8ArrayFromBase64Url)(bytes).pipe(
           Effect.mapError((cause) => HostedLinkingPersistenceFailed.make({ cause })),
         );
@@ -187,8 +185,8 @@ export const HostedLinkingLive = Layer.effect(
 
     function hashTicket(value: string): Effect.Effect<string, HostedLinkingPersistenceFailed> {
       return Effect.gen(function* () {
-        const digest = yield* crypto.digest("SHA-256", new TextEncoder().encode(value));
-        return yield* Schema.encodeEffect(Schema.Uint8ArrayFromBase64Url)(digest);
+        const hashed = yield* digest.digest(Digest.sha256, new TextEncoder().encode(value));
+        return yield* Schema.encodeEffect(Schema.Uint8ArrayFromBase64Url)(hashed);
       }).pipe(Effect.mapError((cause) => HostedLinkingPersistenceFailed.make({ cause })));
     }
 

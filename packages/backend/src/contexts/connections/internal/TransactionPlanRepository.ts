@@ -16,7 +16,8 @@ import {
 } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
-import { Array, Context, Crypto, DateTime, Effect, Layer, Option, Schema } from "effect";
+import { Array, Context, DateTime, Effect, Layer, Option, Schema } from "effect";
+import { SecureRandom } from "effect/crypto";
 
 import { UserId } from "#contexts/auth/User.ts";
 import { TeamId } from "#contexts/connections/FantasyTeam.ts";
@@ -152,9 +153,9 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
   {
     make: Effect.gen(function* () {
       const database = yield* ConnectionsDatabase;
-      const crypto = yield* Crypto.Crypto;
+      const random = yield* SecureRandom.SecureRandom;
 
-      const newStepId = crypto.randomULID.pipe(Effect.mapError(persistenceFailure));
+      const newStepId = random.ulid;
 
       const loadPlan = Effect.fn("TransactionPlanRepository.loadPlan")(function* (input: {
         readonly userId: UserId;

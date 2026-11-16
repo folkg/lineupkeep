@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 
+import * as GCP from "@alchemy.run/gcp";
 import * as Command from "alchemy/Command";
-import * as GCP from "alchemy/GCP";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import { Stage } from "alchemy/Stage";
@@ -22,7 +22,7 @@ export function cloudRunHost(
   Config.ConfigError,
   | import("alchemy").Provider<Command.Build>
   | import("alchemy").Provider<Command.Exec>
-  | import("alchemy/Docker/Providers").Providers
+  | import("@alchemy.run/docker/Providers").Providers
   | GCP.Providers
   | Stage
 > {
@@ -412,13 +412,13 @@ export function cloudRunContainer(): {
 function publishImage(
   id: string,
   tag: string,
-  build: import("alchemy/Docker").Image,
+  build: import("@alchemy.run/docker").Image,
   registry: Output.Output<string>,
   region: string,
 ): Effect.Effect<
   Output.Output<string>,
   never,
-  import("alchemy").Provider<Command.Exec> | import("alchemy/Docker/Providers").Providers
+  import("alchemy").Provider<Command.Exec> | import("@alchemy.run/docker/Providers").Providers
 > {
   return Effect.gen(function* () {
     const image = Output.map(Output.all(registry, build.imageId), ([name, hash]) => {

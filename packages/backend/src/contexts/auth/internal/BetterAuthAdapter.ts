@@ -12,7 +12,6 @@ import { eq } from "drizzle-orm";
 import {
   Cause,
   Config,
-  Crypto,
   Data,
   ConfigProvider,
   Context,
@@ -26,6 +25,7 @@ import {
   Schema,
 } from "effect";
 import type { Scope } from "effect";
+import { Digest } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 
 import { appEnvironmentConfig } from "#config/AppEnvironment.ts";
@@ -58,7 +58,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
   {
     make: Effect.gen(function* () {
       const database = yield* AuthDatabase;
-      const crypto = yield* Crypto.Crypto;
+      const digest = yield* Digest.Digest;
       const background = yield* BackgroundWork;
       const internet = yield* PublicInternet;
       const emailDelivery = yield* EmailDelivery;
@@ -198,7 +198,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
         }
 
         const exchange = yield* defaultTokenExchangeResource(request, tokenPath, oauthResource);
-        const exchangeFacts = yield* describeTokenExchange(exchange, tokenPath, database, crypto);
+        const exchangeFacts = yield* describeTokenExchange(exchange, tokenPath, database, digest);
         const response = yield* runAuthHandler(exchange);
         yield* annotateTokenExchange(exchangeFacts, response);
 
@@ -480,7 +480,7 @@ function describeTokenExchange(
   request: Request,
   tokenPath: string,
   database: AuthDatabase["Service"],
-  crypto: Crypto.Crypto,
+  digest: Digest.Digest["Service"],
 ): Effect.Effect<TokenExchangeFacts> {
   return Effect.gen(function* () {
     const notATokenExchange: TokenExchangeFacts = {
@@ -511,19 +511,19 @@ function describeTokenExchange(
       refreshToken:
         presented === null || presented === ""
           ? "absent"
-          : yield* describeRefreshToken(database, crypto, presented),
+          : yield* describeRefreshToken(database, digest, presented),
     };
   });
 }
 
 function describeRefreshToken(
   database: AuthDatabase["Service"],
-  crypto: Crypto.Crypto,
+  digest: Digest.Digest["Service"],
   presented: string,
 ): Effect.Effect<RefreshTokenPresentation | "missing" | "unavailable"> {
   return Effect.gen(function* () {
     const now = DateTime.nowUnsafe().epochMilliseconds;
-    const tokenHash = yield* providerRefreshTokenHash(crypto, presented);
+    const tokenHash = yield* providerRefreshTokenHash(digest, presented);
     const stored = yield* Effect.tryPromise(() =>
       database
         .select({
@@ -600,10 +600,13 @@ function annotateTokenExchange(facts: TokenExchangeFacts, response: Response): E
   });
 }
 
-function providerRefreshTokenHash(crypto: Crypto.Crypto, token: string): Effect.Effect<string> {
-  return crypto.digest("SHA-256", new TextEncoder().encode(token)).pipe(
+function providerRefreshTokenHash(
+  digest: Digest.Digest["Service"],
+  token: string,
+): Effect.Effect<string> {
+  return digest.digest(Digest.sha256, new TextEncoder().encode(token)).pipe(
     Effect.orDie,
-    Effect.map((digest) => Base64Url.encode(digest)),
+    Effect.map((bytes) => Base64Url.encode(bytes)),
   );
 }
 
