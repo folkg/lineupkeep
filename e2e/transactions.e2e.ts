@@ -1,12 +1,13 @@
 import { Schema } from "effect";
 
 import { expect, signUp, test } from "./support";
+import { captureCheckpoint } from "./verify/capture";
 
 test("proposes a move into one team queue and confirms it from the transactions page", async ({
   page,
   services,
   mcp,
-}) => {
+}, info) => {
   await signUp(page);
   const discovered = Schema.decodeUnknownSync(
     Schema.Array(
@@ -66,6 +67,16 @@ test("proposes a move into one team queue and confirms it from the transactions 
   expect(queued.moves).toHaveLength(1);
   expect(queued.refused).toStrictEqual([]);
 
+  await page.goto("/teams");
+  await expect(page.getByRole("heading", { name: "Teams", exact: true })).toBeVisible();
+  await captureCheckpoint(page, info, "teams-list");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await captureCheckpoint(page, info, "teams-list-phone");
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.evaluate(() => document.documentElement.classList.add("dark"));
+  await captureCheckpoint(page, info, "teams-list-dark");
+  await page.evaluate(() => document.documentElement.classList.remove("dark"));
+
   await page.goto("/transactions");
   await expect(page.getByRole("heading", { name: "Transactions" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
@@ -75,6 +86,15 @@ test("proposes a move into one team queue and confirms it from the transactions 
   await expect(page.getByText("Embedded Browser Team", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Undecided", { exact: true })).toBeVisible();
   await expect(page.getByText("Nothing runs until you confirm it.", { exact: true })).toBeVisible();
+  await captureCheckpoint(page, info, "transactions-today");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await captureCheckpoint(page, info, "transactions-today-phone");
+  await page.setViewportSize({ width: 1280, height: 1000 });
+
+  await page.evaluate(() => document.documentElement.classList.add("dark"));
+  await captureCheckpoint(page, info, "transactions-today-dark");
+  await page.evaluate(() => document.documentElement.classList.remove("dark"));
 
   const confirm = page.getByRole("button", {
     name: /Confirm group and run now: Drop Riverside Receiver/u,
@@ -83,6 +103,7 @@ test("proposes a move into one team queue and confirms it from the transactions 
   await confirm.click();
 
   await expect(page.getByText("Confirmed and ran 1 move.", { exact: true })).toBeVisible();
+  await captureCheckpoint(page, info, "transactions-ran");
   await expect(page.getByText("Nothing for today", { exact: true }).first()).toBeVisible();
 
   const earlier = page.getByRole("button", { name: "Show earlier moves" });

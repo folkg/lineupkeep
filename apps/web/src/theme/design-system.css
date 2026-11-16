@@ -324,3 +324,10 @@
     animation: none;
   }
 }
+
+@media (max-width: 560px) {
+  :root {
+    --theme-text-team-name: 1.375rem;
+    --theme-text-team-name-line-height: 1.1;
+  }
+}
