@@ -207,7 +207,7 @@ export function cloudRunHost(
         role: "roles/run.invoker",
         member: Output.map(queueEnqueuer.email, (email) => `serviceAccount:${email}`),
       });
-      yield* GCP.IAM.Member("QueueEnqueuer", {
+      yield* GCP.IAM.Member("QueueEnqueuerEnqueue", {
         kind: "cloudtasks.queue",
         name: queue.name,
         role: "roles/cloudtasks.enqueuer",
