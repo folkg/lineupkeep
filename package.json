@@ -75,6 +75,7 @@
     "oxc-parser": "0.155.0",
     "oxfmt": "0.74.0",
     "oxlint": "1.93.0",
+    "oxlint-tsgolint": "7.0.2007",
     "playwright": "catalog:",
     "postgres": "catalog:",
     "typescript": "catalog:",
