@@ -20,7 +20,8 @@ import { moveCount } from "./transactionCopy";
 import { describeTransactionActionFailure } from "./transactionFailure";
 import { transactionQueries } from "./transactionQueries";
 import type { TransactionRemote } from "./transactionRemote";
-import { scheduledRunLine } from "./transactionTimes";
+import { scheduledMoment } from "./transactionTimes";
+import type { ConfirmationTarget } from "./useGroupConfirmation";
 
 export function useTransactionsPage(props: TransactionsPageOptions): TransactionsPageController {
   const signIn = useSignInRecovery();
@@ -70,15 +71,6 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     }
     return [...held.values()].map(moveDayView).sort(compareMoveDays);
   });
-  const pendingTodayCount = createMemo(() => {
-    const today = days().find((day) => day.today);
-    if (today === undefined) {
-      return 0;
-    }
-    return today.teams
-      .flatMap((team) => team.moves)
-      .filter((move) => isPending(move) && move.result === undefined).length;
-  });
   const nextRunAt = (): string | undefined =>
     open.isSuccess ? open.data.pages[0]?.nextRunAt : undefined;
 
@@ -110,8 +102,8 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
           type: "success",
           message:
             data.status === "saved" && data.confirmationCleared
-              ? `Saved for ${formatCalendarDate(input.runDay)}. Your earlier confirmation was cleared, so confirm the move again when it is due.`
-              : `Saved for ${formatCalendarDate(input.runDay)}. It waits in Today that day until you confirm it.`,
+              ? `Saved for ${formatCalendarDate(input.runDay)}. Your earlier decision was cleared, so choose the move again when it is due.`
+              : `Saved for ${formatCalendarDate(input.runDay)}. It waits in Today that day for your decision.`,
         });
       }
       void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
@@ -159,7 +151,7 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
 
   const reportConfirmation = (
     outcome: TransactionMoveConfirmationData,
-    runDay: string | undefined,
+    target: ConfirmationTarget,
   ): void => {
     if (outcome.status === "refused") {
       setFeedback({
@@ -170,7 +162,7 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     }
     setFeedback({
       type: outcome.counts.failed > 0 || outcome.counts.unknown > 0 ? "attention" : "success",
-      message: confirmationMessage(outcome, runDay, nextRunAt()),
+      message: confirmationMessage(outcome, target, nextRunAt()),
     });
   };
 
@@ -225,7 +217,6 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     teamFacts,
     groups,
     nextRunAt,
-    pendingTodayCount,
     canConfirm,
     reportConfirmation,
     reportConfirmationFailure,
@@ -271,10 +262,6 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
 
 function canConfirm(move: TransactionMoveView): boolean {
   return move.validation.status === "current" && move.result === undefined;
-}
-
-function isPending(move: TransactionMoveView): boolean {
-  return move.decision === "undecided" || move.decision === "saved";
 }
 
 function addMoveDay(held: Map<string, MutableMoveDay>, day: TransactionMoveDayView): void {
@@ -347,7 +334,7 @@ type MutableMoveDay = {
 
 function confirmationMessage(
   outcome: TransactionMoveConfirmationData,
-  runDay: string | undefined,
+  target: ConfirmationTarget,
   nextRunAt: string | undefined,
 ): string {
   if (outcome.status === "refused") {
@@ -356,15 +343,15 @@ function confirmationMessage(
   const parts: Array<string> = [];
   if (outcome.counts.moves === 0) {
     parts.push(
-      runDay === undefined || nextRunAt === undefined
-        ? `Confirmed ${moveCount(outcome.confirmed.length)}.`
-        : `Confirmed ${moveCount(outcome.confirmed.length)}. ${scheduledRunLine(runDay, nextRunAt)}.`,
+      target.today || target.runDay === undefined
+        ? `Submitted ${moveCount(outcome.confirmed.length)}.`
+        : `Scheduled ${moveCount(outcome.confirmed.length)} for ${scheduledMoment(target.runDay, nextRunAt)}.`,
     );
   } else {
-    parts.push(`Confirmed and ran ${moveCount(outcome.counts.moves)}.`);
+    parts.push(`Ran ${moveCount(outcome.counts.moves)}.`);
   }
   if (outcome.counts.pending > 0) {
-    parts.push(`${moveCount(outcome.counts.pending)} waiting on the league.`);
+    parts.push(`${moveCount(outcome.counts.pending)} waiting for the league.`);
   }
   if (outcome.counts.failed > 0) {
     parts.push(`${moveCount(outcome.counts.failed)} failed.`);
@@ -390,11 +377,10 @@ export type TransactionsPageController = {
   readonly teamFacts: Accessor<ReadonlyMap<string, TransactionTeamFactsView>>;
   readonly groups: Accessor<ReadonlyArray<TransactionPlanGroupView>>;
   readonly nextRunAt: () => string | undefined;
-  readonly pendingTodayCount: () => number;
   readonly canConfirm: (move: TransactionMoveView) => boolean;
   readonly reportConfirmation: (
     outcome: TransactionMoveConfirmationData,
-    runDay: string | undefined,
+    target: ConfirmationTarget,
   ) => void;
   readonly reportConfirmationFailure: (error: unknown) => void;
   readonly confirmationSettled: () => void;

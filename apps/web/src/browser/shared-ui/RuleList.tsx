@@ -10,7 +10,7 @@ export function RuleList(props: {
 }): JSX.Element {
   return (
     <ol
-      class={props.surface === "cards" ? "grid w-full gap-4" : "w-full"}
+      class={props.surface === "cards" ? "grid w-full gap-6" : "w-full"}
       data-motion={props.settling === true ? "settle" : undefined}
     >
       {props.children}

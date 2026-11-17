@@ -416,7 +416,10 @@ it("frames a team card with the shared card structure", async () => {
   }
 
   expect(getComputedStyle(card).borderTopWidth).toBe("2px");
-  expect(getComputedStyle(card).boxShadow).toContain("8px 8px");
+  expect(getComputedStyle(card).boxShadow).toBe("none");
+  const list = card.parentElement;
+  expect(list, "the team card list").not.toBeNull();
+  expect(Number.parseFloat(getComputedStyle(list ?? card).rowGap)).toBeGreaterThanOrEqual(24);
   for (const part of ["header", "meta", "body", "footer"]) {
     expect(card.querySelector(`[data-card-${part}]`), `the ${part} slot`).not.toBeNull();
   }

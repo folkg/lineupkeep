@@ -120,7 +120,6 @@
   --radius-surface: 0px;
 
   --shadow-focus: 0 0 0 2px var(--theme-canvas), 0 0 0 4px var(--theme-action);
-  --shadow-panel: var(--theme-shadow-panel);
 
   --ease-out-cubic: var(--theme-ease-out);
 

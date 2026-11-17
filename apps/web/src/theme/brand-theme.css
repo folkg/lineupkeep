@@ -15,7 +15,6 @@
   --theme-action: #5b21b6;
   --theme-action-hover: #4c1d95;
   --theme-action-soft: #f3eeff;
-  --theme-action-offset: rgb(91 33 182 / 0.72);
   --theme-on-action: #fffdf7;
   --theme-accent: #e0b64a;
   --theme-on-accent: #101014;
@@ -24,7 +23,6 @@
   --theme-danger-hover: #802421;
   --theme-danger-soft: #faece9;
   --theme-scrim: rgb(16 16 20 / 0.55);
-  --theme-shadow-panel: 8px 8px 0 var(--theme-action-offset);
 
   --theme-font-display: "Archivo Variable", sans-serif;
   --theme-font-sans:
@@ -95,7 +93,6 @@
   --theme-action: #c4b5fd;
   --theme-action-hover: #d8c6ff;
   --theme-action-soft: #2a2150;
-  --theme-action-offset: rgb(196 181 253 / 0.55);
   --theme-on-action: #17122a;
   --theme-accent: #e0b64a;
   --theme-on-accent: #101014;

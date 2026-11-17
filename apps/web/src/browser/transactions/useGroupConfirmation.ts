@@ -17,12 +17,13 @@ export function useGroupConfirmation(input: {
   readonly team: Accessor<string>;
   readonly remote: Accessor<TransactionRemote>;
   readonly page: Accessor<GroupConfirmationPage>;
+  readonly today: Accessor<boolean>;
 }): GroupConfirmation {
   const [key, setKey] = createSignal<string>();
   const confirm = useMutation(() => ({
     ...transactionMutations.confirmGroup(input.remote(), input.team()),
     onSuccess: (outcome: TransactionMoveConfirmationData, variables: ConfirmGroupVariables) => {
-      input.page().reportConfirmation(outcome, variables.runDay);
+      input.page().reportConfirmation(outcome, variables);
       setKey(undefined);
     },
     onError: (error: Error) => {
@@ -53,6 +54,7 @@ export function useGroupConfirmation(input: {
       moves: moves.map((move) => move.move),
       key: held,
       runDay: moves.find((move) => move.runDay !== undefined)?.runDay,
+      today: input.today(),
     });
   };
 
@@ -73,10 +75,15 @@ export type GroupConfirmation = {
   readonly pendingMoves: () => ReadonlyArray<string>;
 };
 
+export type ConfirmationTarget = {
+  readonly today: boolean;
+  readonly runDay: string | undefined;
+};
+
 type GroupConfirmationPage = {
   readonly reportConfirmation: (
     outcome: TransactionMoveConfirmationData,
-    runDay: string | undefined,
+    target: ConfirmationTarget,
   ) => void;
   readonly reportConfirmationFailure: (error: unknown) => void;
   readonly confirmationSettled: () => void;

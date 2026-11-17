@@ -54,11 +54,6 @@
         "displayName": "Action Soft",
         "canonical": "#f3eeff"
       },
-      "action-offset": {
-        "role": "primary",
-        "displayName": "Panel Offset",
-        "canonical": "rgb(91 33 182 / 0.72)"
-      },
       "on-action": {
         "role": "primary",
         "displayName": "On Action",
@@ -149,11 +144,6 @@
         "displayName": "Dark Action Soft",
         "canonical": "#2a2150"
       },
-      "dark-action-offset": {
-        "role": "primary",
-        "displayName": "Dark Panel Offset",
-        "canonical": "rgb(196 181 253 / 0.55)"
-      },
       "dark-on-action": {
         "role": "primary",
         "displayName": "Dark On Action",
@@ -234,11 +224,6 @@
         "name": "focus",
         "value": "0 0 0 2px var(--theme-canvas), 0 0 0 4px var(--theme-action)",
         "purpose": "Visible focus with separation; the only shadow on a control."
-      },
-      {
-        "name": "panel",
-        "value": "8px 8px 0 var(--theme-action-offset)",
-        "purpose": "Hard violet offset with no blur; only a queue-group panel casts it."
       }
     ],
     "motion": [
@@ -405,9 +390,9 @@
     {
       "name": "Queue Panel",
       "kind": "panel",
-      "description": "A queue group with a 2px ink border and one hard violet offset.",
+      "description": "A queue group on the shared card frame: 2px ink rule, paper ground, no shadow.",
       "html": "<section class=\"ds-panel\">Queue group</section>",
-      "css": ".ds-panel{border:2px solid var(--theme-rule-strong,#141217);background:var(--theme-paper,#fffdf7);box-shadow:8px 8px 0 var(--theme-action-offset)}"
+      "css": ".ds-panel{border:2px solid var(--theme-rule-strong,#141217);background:var(--theme-paper,#fffdf7)}"
     },
     {
       "name": "Brand Mark",
@@ -419,12 +404,12 @@
   ],
   "narrative": {
     "northStar": "Ink and paper",
-    "overview": "Lineupgrade reads as a printed sports sheet: warm newsprint, near-black ink, a display face for the page and the teams, and Schibsted for the work in between. Section rules are 3px ink; row hairlines stay 1px. A queue panel is the one offset panel, lifted by one hard violet offset with no blur; team cards are plain 2px-ruled boxes on paper. Royal violet is spent on interaction, gold exists only in the mark, and one spot ink marks urgency. The product is calm enough to check in the morning and precise enough to trust with a lineup.\n\nThis is an Operate product: information before spectacle, familiar controls, direct labels, and honest state. Light is warm newsprint; dark is a tinted violet sheet. Both are complete palettes.",
+    "overview": "Lineupgrade reads as a printed sports sheet: warm newsprint, near-black ink, a display face for the page and the teams, and Schibsted for the work in between. Section rules are 3px ink; row hairlines stay 1px. Team cards and queue groups are the same plain 2px-ruled box on paper, set at least 24px apart. Royal violet is spent on interaction, gold exists only in the mark, and one spot ink marks urgency. The product is calm enough to check in the morning and precise enough to trust with a lineup.\n\nThis is an Operate product: information before spectacle, familiar controls, direct labels, and honest state. Light is warm newsprint; dark is a tinted violet sheet. Both are complete palettes.",
     "keyCharacteristics": [
       "Archivo Variable for page titles, section titles, and team names at 800; Schibsted Grotesk Variable for body, meta, labels, controls, and the wordmark",
       "Square everywhere; 3px ink section rules, 1px row hairlines, and a 2px ink rule around each team card",
       "One 680px measure and one solid action per view",
-      "One 8px hard violet offset on a queue panel, and no other shadow",
+      "One 2px ink frame for every card, and no shadow beyond the focus ring",
       "Numbers aligned with tabular figures, never prose tracking",
       "Royal violet for interaction; gold only in the mark; spot ink only for urgency",
       "Light and dark designed together"
@@ -447,12 +432,12 @@
       },
       {
         "name": "The Rule, Not a Box Rule",
-        "body": "A section title owns one 3px ink rule. Connection rows own 1px hairlines between them. Team cards own a 2px ink rule each. Queue groups are the one offset panel. Status and empty states use a leading rule or plain text, never a dashed or bordered card.",
+        "body": "A section title owns one 3px ink rule. Connection rows own 1px hairlines between them. Team cards and queue groups own the same 2px ink rule each. Status and empty states use a leading rule or plain text, never a dashed or bordered card.",
         "section": "elevation"
       },
       {
         "name": "The Queue Panel Rule",
-        "body": "A queue group is the one offset panel: 2px ink, paper ground, and one 8px hard violet offset with no blur. Team cards use a 2px ink rule on paper with no offset. No other surface casts a shadow.",
+        "body": "A queue group uses the shared card frame: 2px ink, paper ground, and at least 24px between cards. Team cards use the same frame. No surface casts a shadow.",
         "section": "elevation"
       },
       {
@@ -470,12 +455,12 @@
       "Do spend violet once per view on the primary action.",
       "Do apply tabular numerals to comparable numbers only.",
       "Do keep the wordmark lowercase in Schibsted and the mark gold.",
-      "Do use the 8px violet offset only on a queue panel.",
+      "Do frame every card with the same 2px ink rule and at least 24px between cards.",
       "Do reserve spot ink for urgency.",
       "Do preserve keyboard access, visible focus, selection, zoom, and reduced motion."
     ],
     "donts": [
-      "Don't add border radii, a shadow beyond the queue panel offset, a colour gradient beyond the phone submit sheet fade, or a second accent.",
+      "Don't add border radii, a shadow beyond the focus ring, a colour gradient beyond the phone submit sheet fade, or a second accent.",
       "Don't use gold outside the mark.",
       "Don't use a serif or a third face.",
       "Don't set body, meta, labels, controls, or the wordmark in Archivo.",

@@ -33,12 +33,10 @@ import type { TransactionRemote } from "./transactionRemote.ts";
 import { TransactionsNavLink } from "./TransactionsNavLink.tsx";
 import { TransactionsPage } from "./TransactionsPage.tsx";
 import {
-  confirmationLine,
   discardLine,
   resultDetailLine,
-  resultTimeLine,
-  scheduledRunLine,
-  waitingOnLeagueLine,
+  scheduledMoment,
+  submittedLine,
 } from "./transactionTimes.ts";
 
 type TransactionMoveTeamView = TransactionMoveView["team"];
@@ -106,7 +104,7 @@ it("shows every team's moves today and keeps saved moves on per team planning sh
   await expect.element(page.getByRole("heading", { name: "Transactions" })).toBeVisible();
   await expect.element(page.getByText("4 open moves", { exact: true })).toBeVisible();
   await expect
-    .element(page.getByText("· 2 today · 2 saved · 2 teams", { exact: true }))
+    .element(page.getByText("· 2 today · 2 later · 2 teams", { exact: true }))
     .toBeVisible();
   await expect.element(page.getByRole("heading", { name: "Today" })).toBeVisible();
   await expect.element(page.getByText("2 moves for today", { exact: true })).toBeVisible();
@@ -155,7 +153,7 @@ it("names every effect an activate carries, including its funding drop", async (
     .toBeVisible();
 });
 
-it("keeps a failed move's reason and time on its row", async () => {
+it("carries a failed move's refusal as the one status's next action", async () => {
   await page.viewport(1280, 900);
   const failed = move({
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165b6",
@@ -175,7 +173,7 @@ it("keeps a failed move's reason and time on its row", async () => {
   await expect
     .element(page.getByText(resultDetailLine(failed) ?? "", { exact: true }))
     .toBeVisible();
-  await expect.element(page.getByText(resultTimeLine(failed) ?? "", { exact: true })).toBeVisible();
+  expect(page.getByText("Failed", { exact: true }).elements()).toHaveLength(1);
 });
 
 it("folds the active places and each reserve list into a blocked card's explanation", async () => {
@@ -211,6 +209,9 @@ it("folds the active places and each reserve list into a blocked card's explanat
 
   await expect.element(page.getByText("Blocked", { exact: true })).toBeVisible();
   await expect
+    .element(page.getByText("Riley Chen is not on the roster.", { exact: true }))
+    .toBeVisible();
+  await expect
     .element(page.getByText("Places: 5 of 5 used, 0 free.", { exact: true }))
     .not.toBeVisible();
   await page.getByText("Why these moves", { exact: true }).click();
@@ -222,7 +223,7 @@ it("folds the active places and each reserve list into a blocked card's explanat
     .toBeVisible();
 });
 
-it("confirms today's move, runs it, and returns the recorded outcome", async () => {
+it("runs today's move now and returns the recorded outcome", async () => {
   await page.viewport(1280, 900);
   const first = move({
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c1",
@@ -252,21 +253,21 @@ it("confirms today's move, runs it, and returns the recorded outcome", async () 
     },
   });
 
-  await expect.element(page.getByText(/2 moves still need your confirmation/u)).toBeVisible();
+  await expect.element(page.getByText(/2 moves still need your decision/u)).toBeVisible();
   await expect
-    .element(page.getByText("Nothing runs until you confirm it.", { exact: true }).first())
+    .element(page.getByText("Nothing runs until you decide.", { exact: true }).first())
     .toBeVisible();
 
-  await page.getByRole("button", { name: /Confirm and run: Drop Riley Chen/u }).click();
+  await page.getByRole("button", { name: /Run now: Drop Riley Chen/u }).click();
 
-  await expect.element(page.getByText("Confirmed and ran 1 move.", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Ran 1 move.", { exact: true })).toBeVisible();
   expect(confirmed).toHaveLength(1);
   expect(confirmed[0]?.team).toBe(alpha.id);
   expect(confirmed[0]?.moves).toStrictEqual([first.move]);
   expect(confirmed[0]?.key.length).toBeGreaterThan(0);
 });
 
-it("confirms a saved move for its day without running it", async () => {
+it("schedules a saved move for its day without running it", async () => {
   await page.viewport(1280, 900);
   const saved = move({
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c3",
@@ -292,16 +293,18 @@ it("confirms a saved move for its day without running it", async () => {
     },
   });
 
-  const confirm = page.getByRole("button", { name: /^Confirm: Claim Amon-Ra St\. Brown/u });
-  await expect.element(confirm).toBeVisible();
-  expect(confirm.element().closest("[data-card-footer]")?.textContent).toContain(
-    `${scheduledRunLine("2026-11-13", nextRunAt)}.`,
+  const schedule = page.getByRole("button", {
+    name: /^Schedule for .+: Claim Amon-Ra St\. Brown/u,
+  });
+  await expect.element(schedule).toBeVisible();
+  expect(schedule.element().closest("[data-card-footer]")?.textContent).toBe(
+    `Schedule for ${formatCalendarDate("2026-11-13")}`,
   );
-  await confirm.click();
+  await schedule.click();
 
   await expect
     .element(
-      page.getByText(`Confirmed 1 move. ${scheduledRunLine("2026-11-13", nextRunAt)}.`, {
+      page.getByText(`Scheduled 1 move for ${scheduledMoment("2026-11-13", nextRunAt)}.`, {
         exact: true,
       }),
     )
@@ -309,7 +312,7 @@ it("confirms a saved move for its day without running it", async () => {
   expect(confirmed[0]?.moves).toStrictEqual([saved.move]);
 });
 
-it("shows undecided, confirmed, ran, and discarded moves in plain words", async () => {
+it("says needs your decision, scheduled for a day, ran, and discarded in plain words", async () => {
   await page.viewport(1280, 900);
   const pending = move({
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c4",
@@ -356,21 +359,24 @@ it("shows undecided, confirmed, ran, and discarded moves in plain words", async 
     ended: listData([discarded, ran], { open: 0, today: 0, saved: 0, ended: 2 }),
   });
 
-  await expect.element(page.getByText("Undecided", { exact: true }).first()).toBeVisible();
-  await expect.element(page.getByText("Confirmed", { exact: true }).first()).toBeVisible();
   await expect
-    .element(page.getByText(confirmationLine(confirmed) ?? "", { exact: true }))
+    .element(page.getByText("Needs your decision", { exact: true }).first())
     .toBeVisible();
   await expect
     .element(
-      page.getByText(`${scheduledRunLine("2026-11-13", nextRunAt)}.`, { exact: true }).first(),
+      page
+        .getByText(`Scheduled for ${scheduledMoment("2026-11-13", nextRunAt)}`, { exact: true })
+        .first(),
     )
+    .toBeVisible();
+  await expect
+    .element(page.getByText(submittedLine(confirmed, nextRunAt) ?? "", { exact: true }))
     .toBeVisible();
 
   await page.getByRole("button", { name: "Show earlier moves" }).click();
   await expect.element(page.getByText("Ran on schedule", { exact: true })).toBeVisible();
   await expect
-    .element(page.getByText(confirmationLine(ran) ?? "", { exact: true }).first())
+    .element(page.getByText(submittedLine(ran, nextRunAt) ?? "", { exact: true }).first())
     .toBeVisible();
   await expect.element(page.getByText("Discarded", { exact: true })).toBeVisible();
   await expect.element(page.getByText(discardLine(discarded) ?? "", { exact: true })).toBeVisible();
@@ -437,18 +443,13 @@ it("edits and discards one saved move at a time", async () => {
   await expect
     .element(page.getByRole("region", { name: formatCalendarDate("2026-11-13") }))
     .toBeVisible();
-  await expect
-    .element(
-      page.getByText(`${scheduledRunLine("2026-11-13", nextRunAt)}.`, { exact: true }).first(),
-    )
-    .toBeVisible();
   expect(page.getByRole("button", { name: /Change date:/u }).elements()).toHaveLength(2);
   expect(page.getByRole("button", { name: /Discard:/u }).elements()).toHaveLength(2);
 
   await page.getByRole("button", { name: /Change date: Drop Riley Chen/u }).click();
   await expect
     .element(
-      page.getByText("Saving changes the day this move runs and clears your confirmation.", {
+      page.getByText("Saving changes the day this move runs and clears your decision.", {
         exact: true,
       }),
     )
@@ -461,7 +462,7 @@ it("edits and discards one saved move at a time", async () => {
   await expect
     .element(
       page.getByText(
-        `Saved for ${formatCalendarDate("2026-11-17")}. Your earlier confirmation was cleared, so confirm the move again when it is due.`,
+        `Saved for ${formatCalendarDate("2026-11-17")}. Your earlier decision was cleared, so choose the move again when it is due.`,
         { exact: true },
       ),
     )
@@ -474,7 +475,7 @@ it("edits and discards one saved move at a time", async () => {
   expect(discarded).toStrictEqual([{ team: alpha.id, move: second.move }]);
 });
 
-it("marks a move that cannot run and disables its choice", async () => {
+it("blocks a move that cannot run and leaves its reason beside the discard action", async () => {
   await page.viewport(1280, 900);
   const stale = move({
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165e1",
@@ -523,9 +524,7 @@ it("marks a move that cannot run and disables its choice", async () => {
       ),
     )
     .toBeVisible();
-  await expect
-    .element(page.getByRole("button", { name: /Confirm and run: Drop Riley Chen/u }))
-    .toBeDisabled();
+  expect(page.getByRole("button", { name: /Run now:/u }).elements()).toHaveLength(0);
   await expect
     .element(page.getByRole("button", { name: /Discard: Drop Riley Chen/u }))
     .toBeEnabled();
@@ -552,13 +551,12 @@ it("shows clear teams when nothing is open", async () => {
 
   await expect.element(page.getByText("0 open moves", { exact: true })).toBeVisible();
   await expect.element(page.getByText("Nothing for today", { exact: true }).first()).toBeVisible();
-  await expect.element(page.getByText("Nothing saved", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Nothing scheduled", { exact: true })).toBeVisible();
   await expect
     .element(
-      page.getByText(
-        "Every team is clear. When you propose a change, it appears here with the day it waits for.",
-        { exact: true },
-      ),
+      page.getByText("A move you set for a later day appears here with that day.", {
+        exact: true,
+      }),
     )
     .toBeVisible();
 });
@@ -574,7 +572,7 @@ it("offers a retry when the read fails", async () => {
   await expect.element(page.getByRole("button", { name: "Try again" })).toBeVisible();
 });
 
-it("shows a group as one card that lists every move and confirms once", async () => {
+it("shows a group as one card that lists every move and runs once", async () => {
   await page.viewport(1280, 900);
   const group = "018f79ea-7d86-7c18-9b4a-8b4d0c9165e1";
   const drop = move({
@@ -626,11 +624,11 @@ it("shows a group as one card that lists every move and confirms once", async ()
   await expect.element(page.getByText("Weekend moves", { exact: true })).toBeVisible();
   await expect.element(page.getByText("Drop Riley Chen", { exact: true })).toBeVisible();
   await expect.element(page.getByText("Stash Amon-Ra St. Brown", { exact: true })).toBeVisible();
-  expect(page.getByRole("button", { name: /Confirm and run:/u }).elements()).toHaveLength(1);
+  expect(page.getByRole("button", { name: /Run now:/u }).elements()).toHaveLength(1);
 
-  await page.getByRole("button", { name: "Confirm and run: Weekend moves" }).click();
+  await page.getByRole("button", { name: "Run now: Weekend moves" }).click();
 
-  await expect.element(page.getByText("Confirmed and ran 2 moves.", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Ran 2 moves.", { exact: true })).toBeVisible();
   expect(confirmed).toHaveLength(1);
   expect(confirmed[0]?.moves).toStrictEqual([drop.move, stash.move]);
 });
@@ -656,15 +654,20 @@ it("frames a transaction group with the shared card structure", async () => {
   }
 
   expect(getComputedStyle(card).borderTopWidth).toBe("2px");
-  expect(getComputedStyle(card).boxShadow).toContain("8px 8px");
+  expect(getComputedStyle(card).boxShadow).toBe("none");
+  const list = card.parentElement;
+  expect(list, "the group card list").not.toBeNull();
+  expect(Number.parseFloat(getComputedStyle(list ?? card).rowGap)).toBeGreaterThanOrEqual(24);
   for (const part of ["header", "meta", "body", "footer"]) {
     expect(card.querySelector(`[data-card-${part}]`), `the ${part} slot`).not.toBeNull();
   }
-  expect(card.querySelector("[data-card-header] [data-card-badge]")?.textContent).toBe("Undecided");
-  expect(card.querySelector("[data-card-footer]")?.textContent).toBe("Confirm and run");
+  expect(card.querySelector("[data-card-header] [data-card-badge]")?.textContent).toBe(
+    "Needs your decision",
+  );
+  expect(card.querySelector("[data-card-footer]")?.textContent).toBe("Run now");
 });
 
-it("names today's confirm and run without a separate run note", async () => {
+it("names today's run now without a separate run note", async () => {
   await page.viewport(1280, 900);
   const group = "018f79ea-7d86-7c18-9b4a-8b4d0c9165e1";
   const drop = move({
@@ -703,15 +706,13 @@ it("names today's confirm and run without a separate run note", async () => {
     ),
   });
 
-  await expect
-    .element(page.getByRole("button", { name: "Confirm and run: Weekend moves" }))
-    .toBeVisible();
+  await expect.element(page.getByRole("button", { name: "Run now: Weekend moves" })).toBeVisible();
   expect(
     page
-      .getByRole("button", { name: "Confirm and run: Weekend moves" })
+      .getByRole("button", { name: "Run now: Weekend moves" })
       .element()
       .closest("[data-card-footer]")?.textContent,
-  ).toBe("Confirm and run");
+  ).toBe("Run now");
   expect(page.getByText("Runs immediately.").elements()).toHaveLength(0);
 });
 
@@ -774,14 +775,14 @@ it("shows the fixes that make room inside the group they run with", async () => 
     )
     .toBeVisible();
   await expect.element(page.getByText("Stash Amon-Ra St. Brown", { exact: true })).toBeVisible();
-  expect(page.getByRole("button", { name: /Confirm and run:/u }).elements()).toHaveLength(1);
+  expect(page.getByRole("button", { name: /Run now:/u }).elements()).toHaveLength(1);
 
-  await page.getByRole("button", { name: "Confirm and run: Add Jordan Lee" }).click();
+  await page.getByRole("button", { name: "Run now: Add Jordan Lee" }).click();
   expect(confirmed).toHaveLength(1);
   expect(confirmed[0]?.moves).toStrictEqual([add.move, stash.move]);
 });
 
-it("leaves a partly run group without a discard action and folds its explanation", async () => {
+it("leaves a partly run group without a run action and folds its explanation", async () => {
   await page.viewport(1280, 900);
   const group = "018f79ea-7d86-7c18-9b4a-8b4d0c9165d1";
   const drop = move({
@@ -844,15 +845,14 @@ it("leaves a partly run group without a discard action and folds its explanation
   await expect.element(page.getByText("Partly ran", { exact: true })).toBeVisible();
   await expect
     .element(
-      page.getByText("1 of 2 moves ran: Drop Riley Chen ran; Stash Amon-Ra St. Brown failed.", {
+      page.getByText("Check your roster, then choose the move again or discard it.", {
         exact: true,
       }),
     )
     .toBeVisible();
-  await expect.element(page.getByText("Ran when you confirmed", { exact: true })).toBeVisible();
-  await expect.element(page.getByText("Failed", { exact: true })).toBeVisible();
   expect(page.getByRole("button", { name: /Discard:/u }).elements()).toHaveLength(0);
-  expect(page.getByRole("button", { name: /^Confirm/u }).elements()).toHaveLength(0);
+  expect(page.getByRole("button", { name: /Run now/u }).elements()).toHaveLength(0);
+  expect(page.getByText("Partly ran", { exact: true }).elements()).toHaveLength(1);
   await expect.element(page.getByText(sentence, { exact: true })).not.toBeVisible();
 
   await page.getByText("Why these moves", { exact: true }).click();
@@ -881,7 +881,7 @@ it("reads a discarded move as discarded, not failed", async () => {
   await expect.element(page.getByText(discardLine(discarded) ?? "", { exact: true })).toBeVisible();
 });
 
-it("labels a move that ran on confirmation as ran when you confirmed", async () => {
+it("labels a move that ran after you submitted as ran after you submitted", async () => {
   await page.viewport(1280, 900);
   const ran = move({
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d5",
@@ -900,11 +900,11 @@ it("labels a move that ran on confirmation as ran when you confirmed", async () 
   });
 
   await page.getByRole("button", { name: "Show earlier moves" }).click();
-  await expect.element(page.getByText("Ran when you confirmed", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Ran after you submitted", { exact: true })).toBeVisible();
   expect(page.getByText("Ran now", { exact: true }).elements()).toHaveLength(0);
 });
 
-it("renders a confirmation timestamp in the reader's local date and time", async () => {
+it("renders a submission timestamp in the reader's local date and time", async () => {
   await page.viewport(1280, 900);
   const ran = move({
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d6",
@@ -923,17 +923,12 @@ it("renders a confirmation timestamp in the reader's local date and time", async
   });
 
   await page.getByRole("button", { name: "Show earlier moves" }).click();
-  const line = confirmationLine(ran) ?? "";
+  const line = submittedLine(ran, nextRunAt) ?? "";
   await expect.element(page.getByText(line, { exact: true })).toBeVisible();
-  expect(line).toContain(" at ");
-  expect(page.getByText(line, { exact: true }).element().textContent).toContain(
-    new Intl.DateTimeFormat(undefined, { month: "short" }).format(
-      new Date(ran.confirmation?.at ?? ""),
-    ),
-  );
+  expect(line).toMatch(/^You submitted this on .+ at .+\.$/u);
 });
 
-it("keeps the confirmation line apart from the run time", async () => {
+it("keeps the submission line apart from the run time", async () => {
   await page.viewport(1280, 900);
   const ran = move({
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d7",
@@ -952,21 +947,23 @@ it("keeps the confirmation line apart from the run time", async () => {
   });
 
   await page.getByRole("button", { name: "Show earlier moves" }).click();
-  const confirmation = page.getByText(confirmationLine(ran) ?? "", { exact: true });
-  await expect.element(confirmation).toBeVisible();
-  await expect.element(page.getByText("Ran when you confirmed", { exact: true })).toBeVisible();
+  const submission = page.getByText(submittedLine(ran, nextRunAt) ?? "", { exact: true });
+  await expect.element(submission).toBeVisible();
+  await expect.element(page.getByText("Ran after you submitted", { exact: true })).toBeVisible();
   const runClock = new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(ran.runAt ?? ""));
-  expect(confirmation.element().textContent).not.toContain(runClock);
+  expect(submission.element().textContent).not.toContain(runClock);
 });
 
-it("names the league's next run while a waiver waits", async () => {
+it("moves a submitted group with a pending waiver into earlier, not today", async () => {
   await page.viewport(1280, 900);
-  const waiting = move({
+  const group = "018f79ea-7d86-7c18-9b4a-8b4d0c9165e9";
+  const claim = move({
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d8",
     team: alpha,
+    group,
     kind: "waiver_claim",
     decision: "now",
     adds: [player("Amon-Ra St. Brown")],
@@ -974,15 +971,150 @@ it("names the league's next run while a waiver waits", async () => {
     confirmation: { by: "owner", at: "2026-11-11T17:35:00.000Z" },
     result: "pending",
   });
+  const stash = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d9",
+    team: alpha,
+    group,
+    position: 1,
+    kind: "stash",
+    drops: [],
+    intent: { kind: "stash", player: player("Amon-Ra St. Brown") },
+    decision: "now",
+    confirmation: { by: "owner", at: "2026-11-11T17:35:00.000Z" },
+    result: "pending",
+  });
   using _app = setupTransactionsPage({
-    open: listData([waiting], { open: 1, today: 1, saved: 0, ended: 0 }),
+    open: listData(
+      [claim, stash],
+      { open: 2, today: 2, saved: 0, ended: 0 },
+      [],
+      [
+        {
+          group,
+          team: alpha.id,
+          label: "Weekend moves",
+          status: "blocked",
+          moves: [claim.move, stash.move],
+          actions: [],
+          notRun: [],
+          detail: "This group does not run.",
+        },
+      ],
+    ),
   });
 
-  await expect.element(page.getByText("Confirmed", { exact: true })).toBeVisible();
-  await expect.element(page.getByText("Waiting", { exact: true })).toBeVisible();
   await expect
-    .element(page.getByText(waitingOnLeagueLine(nextRunAt), { exact: true }))
+    .element(page.getByText("· 0 today · 0 later · 1 team", { exact: true }))
     .toBeVisible();
+  await expect.element(page.getByText("Nothing for today", { exact: true }).first()).toBeVisible();
+  expect(page.getByText("Waiting for the league", { exact: true }).elements()).toHaveLength(0);
+  await expect.element(page.getByText("2 moves", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Show earlier moves" }).click();
+  await expect.element(page.getByText("Waiting for the league", { exact: true })).toBeVisible();
+  expect(page.getByText("Waiting for the league", { exact: true }).elements()).toHaveLength(1);
+  await expect.element(page.getByText("Weekend moves", { exact: true })).toBeVisible();
+  await expect
+    .element(page.getByText(submittedLine(claim, nextRunAt) ?? "", { exact: true }))
+    .toBeVisible();
+  expect(page.getByText("Waiting on the league until", { exact: false }).elements()).toHaveLength(
+    0,
+  );
+  expect(page.getByText("This group does not run.", { exact: true }).elements()).toHaveLength(0);
+});
+
+it("shows one status on a blocked card and the action that clears it", async () => {
+  await page.viewport(1280, 900);
+  const group = "018f79ea-7d86-7c18-9b4a-8b4d0c9165e8";
+  const drop = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d8",
+    team: alpha,
+    group,
+    kind: "drop",
+    decision: "now",
+    drops: [player("Riley Chen")],
+  });
+  using _app = setupTransactionsPage({
+    open: listData(
+      [drop],
+      { open: 1, today: 1, saved: 0, ended: 0 },
+      [],
+      [
+        {
+          group,
+          team: alpha.id,
+          status: "blocked",
+          moves: [drop.move],
+          actions: [],
+          notRun: [],
+          detail: "This group does not run.",
+          cure: "Check your roster, then choose the move again or discard it.",
+        },
+      ],
+    ),
+  });
+
+  await expect.element(page.getByText("Blocked", { exact: true })).toBeVisible();
+  expect(page.getByText("Blocked", { exact: true }).elements()).toHaveLength(1);
+  await expect
+    .element(
+      page.getByText("Check your roster, then choose the move again or discard it.", {
+        exact: true,
+      }),
+    )
+    .toBeVisible();
+  await expect
+    .element(page.getByText("This group does not run.", { exact: true }))
+    .not.toBeVisible();
+  expect(page.getByRole("button", { name: /Run now/u }).elements()).toHaveLength(0);
+  await expect
+    .element(page.getByRole("button", { name: /Discard: Drop Riley Chen/u }))
+    .toBeEnabled();
+});
+
+it("never says confirmed in the provenance of a submitted move", async () => {
+  await page.viewport(1280, 900);
+  const scheduled = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165da",
+    team: alpha,
+    kind: "waiver_claim",
+    decision: "confirmed",
+    runDay: "2026-11-13",
+    adds: [player("Amon-Ra St. Brown")],
+    drops: [player("Romeo Doubs")],
+    confirmation: { by: "owner", at: "2026-11-11T17:35:00.000Z" },
+  });
+  using _app = setupTransactionsPage({
+    open: listData([scheduled], { open: 1, today: 0, saved: 1, ended: 0 }),
+  });
+
+  const line = submittedLine(scheduled, nextRunAt) ?? "";
+  await expect.element(page.getByText(line, { exact: true })).toBeVisible();
+  expect(line.toLowerCase()).not.toContain("confirm");
+  expect(document.body.textContent.toLowerCase()).not.toContain("confirm");
+});
+
+it("starts the explanation closed and drops an agent's plan letter", async () => {
+  await page.viewport(1280, 900);
+  const drop = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165db",
+    team: alpha,
+    kind: "drop",
+    drops: [player("Riley Chen")],
+    reason: "11A: Open a bench place for the incoming receiver.",
+  });
+  using _app = setupTransactionsPage({
+    open: listData([drop], { open: 1, today: 1, saved: 0, ended: 0 }),
+  });
+
+  await expect
+    .element(page.getByText("Open a bench place for the incoming receiver.", { exact: true }))
+    .not.toBeVisible();
+  await page.getByText("Why these moves", { exact: true }).click();
+  await expect
+    .element(page.getByText("Open a bench place for the incoming receiver.", { exact: true }))
+    .toBeVisible();
+  expect(document.body.textContent).not.toContain("11A");
 });
 
 it("shows earlier moves newest first and loads the next older page", async () => {
@@ -1033,7 +1165,7 @@ it("shows earlier moves newest first and loads the next older page", async () =>
     endedPages: [first, listData([oldest], counts)],
   });
 
-  await expect.element(page.getByText("3 ended moves", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("3 moves", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Show earlier moves" }).click();
 
   const newestRow = page.getByText("Drop Riley Chen", { exact: true });
@@ -1055,7 +1187,7 @@ it("shows earlier moves newest first and loads the next older page", async () =>
   expect(page.getByRole("button", { name: "Load more" }).elements()).toHaveLength(0);
 });
 
-it("confirms groups on two teams at the same time with per team progress", async () => {
+it("runs groups on two teams at the same time with per team progress", async () => {
   await page.viewport(1280, 900);
   const alphaMove = move({
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165f1",
@@ -1082,10 +1214,10 @@ it("confirms groups on two teams at the same time with per team progress", async
   });
 
   const alphaButton = page.getByRole("button", {
-    name: "Confirm and run: Drop Riley Chen",
+    name: "Run now: Drop Riley Chen",
   });
   const betaButton = page.getByRole("button", {
-    name: "Confirm and run: Add Jordan Lee",
+    name: "Run now: Add Jordan Lee",
   });
   await alphaButton.click();
   await betaButton.click();
@@ -1115,7 +1247,7 @@ it("confirms groups on two teams at the same time with per team progress", async
   await expect.element(betaButton).not.toHaveAttribute("aria-busy", "true");
 });
 
-it("keeps today's count and confirmation on a phone line", async () => {
+it("keeps today's count and decision on a phone line", async () => {
   const only = move({
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165f1",
     team: alpha,
@@ -1130,7 +1262,7 @@ it("keeps today's count and confirmation on a phone line", async () => {
 
     await expect.element(page.getByText("1 move for today", { exact: true })).toBeVisible();
     await expect
-      .element(page.getByRole("button", { name: /Confirm and run: Drop Riley Chen/u }))
+      .element(page.getByRole("button", { name: /Run now: Drop Riley Chen/u }))
       .toBeEnabled();
     const root = document.documentElement;
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);

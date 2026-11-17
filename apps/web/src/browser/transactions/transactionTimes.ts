@@ -6,14 +6,14 @@ const clockFormats = new Map<string, Intl.DateTimeFormat>();
 const dayFormats = new Map<string, Intl.DateTimeFormat>();
 const dayKeyFormats = new Map<string, Intl.DateTimeFormat>();
 
-export function scheduledRunLine(
+export function scheduledMoment(
   runDay: string,
   nextRunAt: string | Date | undefined,
   reader: ClockReader = {},
 ): string {
   return nextRunAt === undefined
-    ? `Runs ${formatCalendarDate(runDay)}`
-    : `Runs ${formatCalendarDate(runDay)} at ${clockFormat(reader).format(toDate(nextRunAt))}`;
+    ? formatCalendarDate(runDay)
+    : `${formatCalendarDate(runDay)} at ${clockFormat(reader).format(toDate(nextRunAt))}`;
 }
 
 function formatLocalMoment(
@@ -31,12 +31,15 @@ function formatLocalMoment(
   return `${dayFormat(reader, day.year !== current.year).format(date)} at ${clock}`;
 }
 
-export function waitingOnLeagueLine(
-  nextRunAt: string | Date,
+function formatDatedMoment(
+  value: string | Date,
   reader: ClockReader = {},
   now: Date = new Date(),
 ): string {
-  return `Waiting on the league until ${formatLocalMoment(nextRunAt, reader, now)}.`;
+  const date = toDate(value);
+  const day = localDay(date, reader);
+  const current = localDay(now, reader);
+  return `${dayFormat(reader, day.year !== current.year).format(date)} at ${clockFormat(reader).format(date)}`;
 }
 
 export function moveOutcomeLabel(move: TransactionMoveView): string | undefined {
@@ -47,7 +50,7 @@ export function moveOutcomeLabel(move: TransactionMoveView): string | undefined 
     case "executed":
       return executedLabel(move);
     case "pending":
-      return "Waiting";
+      return "Waiting for the league";
     case "failed":
       return "Failed";
     case "skipped":
@@ -77,14 +80,19 @@ export function resultTimeLine(
     : `${moveOutcomeLabel(move) ?? "Ended"} ${formatLocalMoment(move.resultAt, reader, now)}.`;
 }
 
-export function confirmationLine(
+export function submittedLine(
   move: TransactionMoveView,
+  nextRunAt: string | Date | undefined,
   reader: ClockReader = {},
   now: Date = new Date(),
 ): string | undefined {
-  return move.confirmation === undefined
-    ? undefined
-    : `You confirmed this on ${formatLocalMoment(move.confirmation.at, reader, now)}.`;
+  if (move.confirmation === undefined) {
+    return undefined;
+  }
+  const at = formatDatedMoment(move.confirmation.at, reader, now);
+  return move.decision === "confirmed" && move.runDay !== undefined
+    ? `Scheduled on ${at} for ${scheduledMoment(move.runDay, nextRunAt, reader)}.`
+    : `You submitted this on ${at}.`;
 }
 
 export function discardLine(
@@ -109,13 +117,7 @@ export function discardLine(
 }
 
 function executedLabel(move: TransactionMoveView): string {
-  if (move.runDecidedBy === "system") {
-    return "Ran on schedule";
-  }
-  if (move.confirmation !== undefined) {
-    return "Ran when you confirmed";
-  }
-  return move.runDecidedBy === "agent" ? "An agent changed this" : "You changed this";
+  return move.runDecidedBy === "system" ? "Ran on schedule" : "Ran after you submitted";
 }
 
 function clockFormat(reader: ClockReader): Intl.DateTimeFormat {

@@ -12,7 +12,6 @@ colors:
   action: "#5b21b6"
   action-hover: "#4c1d95"
   action-soft: "#f3eeff"
-  action-offset: "rgb(91 33 182 / 0.72)"
   on-action: "#fffdf7"
   accent: "#e0b64a"
   on-accent: "#101014"
@@ -31,7 +30,6 @@ colors:
   dark-action: "#c4b5fd"
   dark-action-hover: "#d8c6ff"
   dark-action-soft: "#2a2150"
-  dark-action-offset: "rgb(196 181 253 / 0.55)"
   dark-on-action: "#17122a"
   dark-accent: "#e0b64a"
   dark-on-accent: "#101014"
@@ -111,7 +109,6 @@ spacing:
   table-max: "960px"
 shadows:
   focus: "0 0 0 2px {colors.canvas}, 0 0 0 4px {colors.action}"
-  panel: "8px 8px 0 {colors.action-offset}"
 components:
   button-primary:
     backgroundColor: "{colors.action}"
@@ -155,7 +152,6 @@ components:
     backgroundColor: "{colors.paper}"
     borderColor: "{colors.rule-strong}"
     borderWidth: "2px"
-    boxShadow: "{shadows.panel}"
 ---
 
 # Design System: Lineupgrade
@@ -166,8 +162,8 @@ components:
 
 Lineupgrade reads as a printed sports sheet: warm newsprint, near-black ink, a display face for the
 page and the teams, and Schibsted for the work in between. Section rules are 3px ink; row hairlines
-stay 1px. A queue panel is the one offset panel, lifted by one hard violet offset with no blur;
-team cards are plain 2px-ruled boxes on paper. Royal violet
+stay 1px. Team cards and queue groups are the same plain 2px-ruled box on paper, set at least 24px
+apart. Royal violet
 is spent on interaction, gold exists only in the mark, and one spot ink marks urgency. The product
 is calm enough to check in the morning and precise enough to trust with a lineup.
 
@@ -181,7 +177,7 @@ honest state. Light is warm newsprint; dark is a tinted violet sheet. Both are c
 - Square everywhere; 3px ink section rules, 1px row hairlines, and a 2px ink rule around each team
   card
 - One 680px measure and one solid action per view
-- One 8px hard violet offset on a queue panel, and no other shadow
+- One 2px ink frame for every card, and no shadow beyond the focus ring
 - Numbers aligned with tabular figures, never prose tracking
 - Royal violet for interaction; gold only in the mark; spot ink only for urgency
 - Light and dark designed together
@@ -199,27 +195,26 @@ remains the error and destructive colour.
 
 ### Paper light
 
-| Token           | Value                   | Role                                                      |
-| --------------- | ----------------------- | --------------------------------------------------------- |
-| `canvas`        | `#f4efe4`               | Warm newsprint page field                                 |
-| `paper`         | `#fffdf7`               | Inputs, badges, queue panels, and the mark's surroundings |
-| `ink`           | `#141217`               | Primary text, headings, mark strokes                      |
-| `ink-soft`      | `#6a6470`               | Secondary text, quiet links, quiet controls               |
-| `ink-faint`     | `#6f6875`               | Metadata, labels, placeholders                            |
-| `rule`          | `#cdc5b7`               | 1px hairlines between rows                                |
-| `rule-strong`   | `#141217`               | 3px section rules, 2px control borders, active nav rule   |
-| `action`        | `#5b21b6`               | The one solid action, action links, live controls, focus  |
-| `action-hover`  | `#4c1d95`               | Action hover                                              |
-| `action-soft`   | `#f3eeff`               | Selection and quiet interactive ground                    |
-| `action-offset` | `rgb(91 33 182 / 0.72)` | The hard violet offset behind a queue panel               |
-| `on-action`     | `#fffdf7`               | Text on a solid action                                    |
-| `accent`        | `#e0b64a`               | Brand mark fill only                                      |
-| `on-accent`     | `#101014`               | Mark strokes only                                         |
-| `spot`          | `#d9482b`               | Urgency only: runs immediately, illegal roster, stamp     |
-| `danger`        | `#a33432`               | Errors, destructive actions, attention text               |
-| `danger-hover`  | `#802421`               | Danger hover                                              |
-| `danger-soft`   | `#faece9`               | Danger hover ground                                       |
-| `scrim`         | `rgb(16 16 20 / 0.55)`  | Modal scrim                                               |
+| Token          | Value                  | Role                                                      |
+| -------------- | ---------------------- | --------------------------------------------------------- |
+| `canvas`       | `#f4efe4`              | Warm newsprint page field                                 |
+| `paper`        | `#fffdf7`              | Inputs, badges, queue panels, and the mark's surroundings |
+| `ink`          | `#141217`              | Primary text, headings, mark strokes                      |
+| `ink-soft`     | `#6a6470`              | Secondary text, quiet links, quiet controls               |
+| `ink-faint`    | `#6f6875`              | Metadata, labels, placeholders                            |
+| `rule`         | `#cdc5b7`              | 1px hairlines between rows                                |
+| `rule-strong`  | `#141217`              | 3px section rules, 2px control borders, active nav rule   |
+| `action`       | `#5b21b6`              | The one solid action, action links, live controls, focus  |
+| `action-hover` | `#4c1d95`              | Action hover                                              |
+| `action-soft`  | `#f3eeff`              | Selection and quiet interactive ground                    |
+| `on-action`    | `#fffdf7`              | Text on a solid action                                    |
+| `accent`       | `#e0b64a`              | Brand mark fill only                                      |
+| `on-accent`    | `#101014`              | Mark strokes only                                         |
+| `spot`         | `#d9482b`              | Urgency only: runs immediately, illegal roster, stamp     |
+| `danger`       | `#a33432`              | Errors, destructive actions, attention text               |
+| `danger-hover` | `#802421`              | Danger hover                                              |
+| `danger-soft`  | `#faece9`              | Danger hover ground                                       |
+| `scrim`        | `rgb(16 16 20 / 0.55)` | Modal scrim                                               |
 
 ### Tinted dark
 
@@ -336,7 +331,7 @@ metadata line.
 
 **Team cards.** The team list puts each team in its own card, sorted by sport then name; the
 sport is already in the card's meta line, so there are no league headings or counts. A card has
-a 2px ink rule and the normal `paper` ground, never the queue offset. Team names are 26px
+a 2px ink rule and the normal `paper` ground. Team names are 26px
 Archivo; the meta and status lines stay 12px Schibsted.
 
 **Activity ranges** omit a repeated date: `Nov 1, 11:44 AM to 1:12 PM`. When the group is a
@@ -352,15 +347,14 @@ toggle and pause share one horizontal line.
 There are no rounded corners. Controls, toggles, inputs, badges, dialogs, and surfaces are square.
 Radii are `0px` in the tokens, and a component must not add one.
 
-There is one hard shadow: a queue group is a `paper` panel with a 2px ink border and an 8px violet
-offset, no blur. The offset is the only shadow a surface casts; the focus ring is the only other
-shadow in the interface. Buttons, fields, team cards, notices, and quiet surfaces cast none. There
-are no gradients except the phone submit sheet fade. A surface earns a border when it is a control
-(an input, a button, the hosted browser viewport, or a dialog), a team card, or the queue panel.
+Nothing casts a shadow. The focus ring is the only shadow in the interface; buttons, fields, team
+cards, queue groups, notices, and quiet surfaces all cast none. There are no gradients except the
+phone submit sheet fade. A surface earns a border when it is a control (an input, a button, the
+hosted browser viewport, or a dialog), a team card, or a queue group. Cards sit at least 24px apart.
 Prose, connection lists, notices, and empty states use rules, not boxes.
 
 **The Rule, Not a Box Rule.** A section title owns one 3px ink rule. Connection rows own 1px
-hairlines between them. Team cards own a 2px ink rule each. Queue groups are the one offset panel.
+hairlines between them. Team cards and queue groups own the same 2px ink rule each.
 Status and empty states use a leading rule or plain text, never a dashed or bordered card.
 
 **The Phone Submit Sheet.** Below 560px the submit controls sit in a sheet fixed to the bottom with
@@ -443,9 +437,9 @@ than removed.
 ### Lists and status
 
 Connection rows use 15px text with 12px meta and a 1px bottom hairline. Team cards and
-transaction group cards share one Card frame: a 2px ink rule on the `paper` ground with an 8px hard
-violet offset, one header rule, and one footer rule. A team name is 26px Archivo at 800 where the card is a primary
-destination. Status is a labelled word in caps, never a colour alone. Team cards keep one status
+transaction group cards share one Card frame: a 2px ink rule on the `paper` ground, one header rule,
+and one footer rule, with at least 24px between cards. A team name is 26px Archivo at 800 where the
+card is a primary destination. Status is a labelled word in caps, never a colour alone. Team cards keep one status
 line under the league context in every state — the next check, a pause with its resume time,
 checks off, or a check in progress — then what the last check did, when, and the recent tally. The
 status line reserves two lines so its sentence cannot change the card's height. A provider
@@ -533,7 +527,7 @@ or connection health.
 - Do spend violet once per view on the primary action.
 - Do apply tabular numerals to comparable numbers only.
 - Do keep the wordmark lowercase in Schibsted and the mark gold.
-- Do use the 8px violet offset only on a queue panel.
+- Do frame every card with the same 2px ink rule and at least 24px between cards.
 - Do reserve spot ink for urgency.
 - Do keep motion to the rare moments named under [Motion](#motion), on the theme's duration and
   easing tokens.
@@ -543,8 +537,8 @@ or connection health.
 
 ### Don't
 
-- Don't add border radii, a shadow beyond the queue panel offset, a colour gradient beyond the
-  phone submit sheet fade, or a second accent.
+- Don't add border radii, a shadow beyond the focus ring, a colour gradient beyond the phone
+  submit sheet fade, or a second accent.
 - Don't use gold outside the mark.
 - Don't use a serif or a third face.
 - Don't set body, meta, labels, controls, or the wordmark in Archivo.

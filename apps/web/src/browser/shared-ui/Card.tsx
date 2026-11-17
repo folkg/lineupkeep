@@ -3,7 +3,7 @@ import { dynamic } from "@solidjs/web";
 import { Show } from "solid-js";
 import type { Element } from "solid-js";
 
-const frameClass = "border-2 border-rule-strong bg-paper shadow-panel";
+const frameClass = "border-2 border-rule-strong bg-paper";
 const headerClass =
   "flex flex-wrap items-center gap-x-3 gap-y-2 border-b-2 border-rule-strong bg-action-soft px-4 py-3";
 const bodyClass = "grid gap-3 px-4 py-3";
@@ -41,10 +41,6 @@ export function Card(props: CardProps): JSX.Element {
       </Show>
     </Tag>
   );
-}
-
-export function CardSection(props: { readonly children: Element }): JSX.Element {
-  return <div class="grid gap-1 border-b border-rule pb-3">{props.children}</div>;
 }
 
 export function CardNote(props: { readonly children: Element }): JSX.Element {

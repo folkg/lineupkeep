@@ -399,16 +399,17 @@ What a person chose for one move: `undecided` for a move due today with no choic
 later day with no choice yet, `now` for a move confirmed for today, `confirmed` for a move confirmed
 for a later day, or `discarded` for a move the person removed. A later day starts saved; today starts
 undecided. A saved move whose day arrives waits in Today and never runs until it is confirmed, and a
-confirmed later move runs on the check when its day arrives. The page says undecided, confirmed for a
-day, ran on a check, or discarded. The decision is stored on the move and a read never infers it.
+confirmed later move runs on the check when its day arrives. The page says needs your decision,
+scheduled for a day, ran on schedule or after you submitted, waiting for the league, blocked, or
+failed. The decision is stored on the move and a read never infers it.
 _Avoid_: Approval when confirmation is meant, pending when no confirmation has been made
 
 **Move confirmation**:
 The signed-in owner's recorded decision to let one move run, stored with who confirmed it and when.
 Today's confirmation runs the move now; a later day's confirmation lets the check run it on that day.
 An agent never confirms a move and no MCP tool offers one. The move read publishes the confirmation
-and the check that carried it out, and the page says undecided, confirmed for a day, ran on a check,
-or discarded.
+and the check that carried it out, and the page says needs your decision, scheduled for a day, ran
+after you submitted, or discarded.
 _Avoid_: Approval, submission when one move is confirmed
 
 **Move validation**:
@@ -480,12 +481,13 @@ One recorded action inside a move: a reserve move added by the server to free a 
 _Avoid_: Sub-transaction, retry, hidden precondition
 
 **Transaction page**:
-The signed-in page that reads the account's queues, today first. Its Today zone gathers every move
-due today across teams, each with its own `Confirm and run` or `Discard` choice, and shows each
-team's places and reserve lists by name. Below it, one planning sheet per team holds saved moves,
-their run and effective dates, save and discard actions, and the reason an invalid move cannot be
-chosen. It says where a move stands: undecided, confirmed for a day, ran on a check, or discarded.
-It carries open, today, saved, and ended counts; it has no dependency graph and no progress line.
+The signed-in page that reads the account's queues, today first. Its Today zone gathers every group
+across teams that still has a decision to make, each with its own `Run now`, `Schedule for <day>`, or
+`Discard` choice. A group whose moves were all submitted and have nothing left for the person moves
+into the earlier list, including a claim waiting for the league. One card carries one status in its
+header and one short provenance line; the long explanation and the team's places sit behind
+"Why these moves". It carries open, today, later, and earlier counts; it has no dependency graph and
+no progress line.
 _Avoid_: Review screen, approval page, cart
 
 **Pending trade offer**:

@@ -6,7 +6,7 @@ import { expect, it } from "vitest";
 import { Badge } from "./Badge";
 import { Card } from "./Card";
 
-it("owns the frame, the hard offset, the header rule, and the padding", () => {
+it("owns the frame, the header rule, and the padding", () => {
   using mounted = mount(() => (
     <Card
       badge={<Badge>Checks on</Badge>}
@@ -37,7 +37,7 @@ it("owns the frame, the hard offset, the header rule, and the padding", () => {
   }
 
   expect(getComputedStyle(card).borderTopWidth).toBe("2px");
-  expect(getComputedStyle(card).boxShadow).toContain("8px 8px");
+  expect(getComputedStyle(card).boxShadow).toBe("none");
   expect(getComputedStyle(header).borderBottomWidth).toBe("2px");
   expect(getComputedStyle(footer).borderTopWidth).toBe("2px");
   for (const part of [header, body, footer]) {

@@ -4,61 +4,79 @@ import { formatCalendarDate } from "#browser/shared-ui/formatTime.ts";
 import type { TransactionMoveView } from "#contracts/connections/transactionContract.ts";
 
 import {
-  confirmationLine,
   discardLine,
   moveOutcomeLabel,
-  scheduledRunLine,
-  waitingOnLeagueLine,
+  scheduledMoment,
+  submittedLine,
 } from "./transactionTimes.ts";
 
 const reader = { locale: "en-US", timeZone: "America/New_York" } as const;
+const nextRunAt = "2026-11-17T21:55:00.000Z";
 
-it("names a scheduled run at the 55 minute mark in the reader's local time", () => {
-  expect(scheduledRunLine("2026-11-17", "2026-11-17T21:55:00.000Z", reader)).toBe(
-    `Runs ${formatCalendarDate("2026-11-17")} at 4:55 PM`,
+it("names a scheduled moment at the 55 minute mark in the reader's local time", () => {
+  expect(scheduledMoment("2026-11-17", nextRunAt, reader)).toBe(
+    `${formatCalendarDate("2026-11-17")} at 4:55 PM`,
   );
 });
 
-it("shows the date when the moment is not today, in the reader's zone", () => {
+it("shows the day of a submission, in the reader's zone and never as a bare clock", () => {
   expect(
-    confirmationLine(
+    submittedLine(
       executed({ confirmation: { by: "owner", at: "2026-11-12T02:30:00.000Z" } }),
+      nextRunAt,
       reader,
       new Date("2026-11-12T18:00:00.000Z"),
     ),
-  ).toBe("You confirmed this on Nov 11 at 9:30 PM.");
+  ).toBe("You submitted this on Nov 11 at 9:30 PM.");
   expect(
-    confirmationLine(
+    submittedLine(
       executed({ confirmation: { by: "owner", at: "2026-11-11T17:35:00.000Z" } }),
+      nextRunAt,
       reader,
       new Date("2026-11-11T18:00:00.000Z"),
     ),
-  ).toBe("You confirmed this on 12:35 PM.");
+  ).toBe("You submitted this on Nov 11 at 12:35 PM.");
   expect(
-    confirmationLine(
+    submittedLine(
       executed({ confirmation: { by: "owner", at: "2025-11-11T17:35:00.000Z" } }),
+      nextRunAt,
       reader,
       new Date("2026-11-11T18:00:00.000Z"),
     ),
-  ).toBe("You confirmed this on Nov 11, 2025 at 12:35 PM.");
+  ).toBe("You submitted this on Nov 11, 2025 at 12:35 PM.");
 });
 
-it("keeps one confirmation line apart from the run outcome", () => {
+it("dates a later day's submission and the day it runs", () => {
+  expect(
+    submittedLine(
+      executed({
+        decision: "confirmed",
+        runDay: "2026-11-17",
+        confirmation: { by: "owner", at: "2026-11-16T13:55:00.000Z" },
+      }),
+      nextRunAt,
+      reader,
+      new Date("2026-11-17T12:00:00.000Z"),
+    ),
+  ).toBe(`Scheduled on Nov 16 at 8:55 AM for ${formatCalendarDate("2026-11-17")} at 4:55 PM.`);
+});
+
+it("keeps one submission line apart from the run outcome", () => {
   const move = executed({
     confirmation: { by: "owner", at: "2026-11-11T17:35:00.000Z" },
     runAt: "2026-11-11T18:05:00.000Z",
   });
-  expect(confirmationLine(move, reader, new Date("2026-11-17T12:00:00.000Z"))).toBe(
-    "You confirmed this on Nov 11 at 12:35 PM.",
+  expect(submittedLine(move, nextRunAt, reader, new Date("2026-11-17T12:00:00.000Z"))).toBe(
+    "You submitted this on Nov 11 at 12:35 PM.",
   );
-  expect(moveOutcomeLabel(move)).toBe("Ran when you confirmed");
+  expect(moveOutcomeLabel(move)).toBe("Ran after you submitted");
 });
 
 it("names the run outcome without inventing a time", () => {
   expect(moveOutcomeLabel(executed({ runDecidedBy: "system" }))).toBe("Ran on schedule");
-  expect(moveOutcomeLabel(executed({}))).toBe("You changed this");
-  expect(moveOutcomeLabel(executed({ runDecidedBy: "agent" }))).toBe("An agent changed this");
-  expect(moveOutcomeLabel(executed({ result: "pending" }))).toBe("Waiting");
+  expect(moveOutcomeLabel(executed({}))).toBe("Ran after you submitted");
+  expect(moveOutcomeLabel(executed({ runDecidedBy: "owner" }))).toBe("Ran after you submitted");
+  expect(moveOutcomeLabel(executed({ result: "pending" }))).toBe("Waiting for the league");
   expect(moveOutcomeLabel(executed({ result: "failed" }))).toBe("Failed");
 });
 
@@ -76,12 +94,6 @@ it("lets a discard win over every recorded result", () => {
       new Date("2026-11-17T12:00:00.000Z"),
     ),
   ).toBe("You discarded this on Nov 10 at 10:10 AM.");
-});
-
-it("names the league's next run while a waiver waits", () => {
-  expect(
-    waitingOnLeagueLine("2026-11-17T21:55:00.000Z", reader, new Date("2026-11-17T18:00:00.000Z")),
-  ).toBe("Waiting on the league until 4:55 PM.");
 });
 
 function executed(overrides: Partial<TransactionMoveView>): TransactionMoveView {

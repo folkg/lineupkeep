@@ -3,7 +3,7 @@ import { Schema } from "effect";
 import { expect, signUp, test } from "./support";
 import { captureCheckpoint } from "./verify/capture";
 
-test("proposes a move into one team queue and confirms it from the transactions page", async ({
+test("proposes a move into one team queue and runs it from the transactions page", async ({
   page,
   services,
   mcp,
@@ -82,10 +82,10 @@ test("proposes a move into one team queue and confirms it from the transactions 
   await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
   await expect(page.getByText("1 open move", { exact: true })).toBeVisible();
   await expect(page.getByText("1 move for today", { exact: true })).toBeVisible();
-  await expect(page.getByText(reason, { exact: true })).toBeVisible();
+  await expect(page.getByText(reason, { exact: true })).toBeHidden();
   await expect(page.getByText("Embedded Browser Team", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("Undecided", { exact: true })).toBeVisible();
-  await expect(page.getByText("Nothing runs until you confirm it.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Needs your decision", { exact: true })).toBeVisible();
+  await expect(page.getByText("Nothing runs until you decide.", { exact: true })).toBeVisible();
   await captureCheckpoint(page, info, "transactions-today");
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -96,22 +96,27 @@ test("proposes a move into one team queue and confirms it from the transactions 
   await captureCheckpoint(page, info, "transactions-today-dark");
   await page.evaluate(() => document.documentElement.classList.remove("dark"));
 
-  const confirm = page.getByRole("button", {
-    name: /Confirm and run: Drop Riverside Receiver/u,
-  });
-  await expect(confirm).toBeEnabled();
-  await confirm.click();
+  const why = page.getByText("Why these moves", { exact: true });
+  await why.click();
+  await expect(page.getByText(reason, { exact: true })).toBeVisible();
+  await why.click();
 
-  await expect(page.getByText("Confirmed and ran 1 move.", { exact: true })).toBeVisible();
+  const runNow = page.getByRole("button", {
+    name: /Run now: Drop Riverside Receiver/u,
+  });
+  await expect(runNow).toBeEnabled();
+  await runNow.click();
+
+  await expect(page.getByText("Ran 1 move.", { exact: true })).toBeVisible();
   await captureCheckpoint(page, info, "transactions-ran");
   await expect(page.getByText("Nothing for today", { exact: true }).first()).toBeVisible();
 
   const earlier = page.getByRole("button", { name: "Show earlier moves" });
   await expect(earlier).toHaveAttribute("aria-expanded", "false");
   await earlier.click();
-  await expect(page.getByText("Ran when you confirmed", { exact: true })).toBeVisible();
+  await expect(page.getByText("Ran after you submitted", { exact: true })).toBeVisible();
   await expect(page.getByText("Drop Riverside Receiver", { exact: true })).toBeVisible();
-  await expect(page.getByText("1 ended move", { exact: true })).toBeVisible();
+  await expect(page.getByText("1 move", { exact: true })).toBeVisible();
 
   const content = await page.content();
   expect(content).not.toContain("461.p.90001");

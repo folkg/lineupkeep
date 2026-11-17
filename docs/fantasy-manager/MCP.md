@@ -898,17 +898,18 @@ confirmation was cleared and shows the move waiting for confirmation again. An a
 keeps the confirmation.
 
 No MCP tool submits, executes, spends, or confirms. Confirmation is the signed-in owner's, on the
-transactions page, and a saved move whose day arrives waits in Today until they confirm it. The page
+transactions page, and a saved move whose day arrives waits in Today until they decide it. The page
 shows a group as one card that lists every move in it, with one control for the group. A today group's
-control confirms and runs it now. A later group's control stores the owner's decision, who made it,
-the surface, and the time, and names the scheduled time it runs. An executed move says `Ran when you
-confirmed` when the confirmation started it, `Ran on schedule` when the scheduled run did, and `You
-changed this` when it changed outside a confirmation. A confirmation or discard line carries its own
-date and time in the reader's local time, apart from the run outcome, and a later move says `Runs
-<date> at <time>`. A move waiting on the league says `Waiting on the league until <time>`. A group
-that ran in part says how many of its moves ran and which ran, failed, or was skipped. Only confirmed
-moves are sent, a saved move that is not due today is left alone, and confirms for different teams
-proceed at the same time. A confirmed later move runs at its scheduled time on its day, through the same write path; a
+control is `Run now`. A later group's control is `Schedule for <date>` and stores the owner's
+decision, who made it, the surface, and the time. One card carries one status in its header: `Needs
+your decision`, `Scheduled for <date> at <time>`, `Waiting for the league`, `Ran on schedule`, `Ran
+after you submitted`, `Partly ran`, `Blocked`, or `Failed`, and a blocked or failed card also says what
+the person can do next. A submitted move carries one provenance line, either `You submitted this on
+<date> at <time>` or `Scheduled on <date> for <date> at <time>`, apart from the run outcome. A group
+whose moves were all submitted and have nothing left for the person, including a claim waiting for the
+league, moves into the earlier list instead of Today; the long explanation and the team's places sit
+behind `Why these moves`. Only confirmed moves are sent, a saved move that is not due today is left
+alone, and confirms for different teams proceed at the same time. A confirmed later move runs at its scheduled time on its day, through the same write path; a
 run skips a team another run already claims and records a failed, pending, or unknown outcome rather
 than retrying a write that may have applied.
 
