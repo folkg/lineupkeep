@@ -32,6 +32,7 @@ export function TeamsPage(props: TeamsPageProps): JSX.Element {
             refreshState={page.refreshState}
             remote={props.remote}
             teams={page.teams}
+            onOptimistic={page.beginControl}
             onRefresh={page.refresh}
             onRefreshTeams={page.refreshTeams}
           />

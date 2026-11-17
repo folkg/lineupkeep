@@ -12,14 +12,18 @@ import type {
 
 import { describeControlFailure } from "./teamFailure";
 import { teamMutations } from "./teamMutations";
+import { teamAutomation } from "./teamPending";
 import type { TeamRemote } from "./teamRemote";
 
-export function useTeamControls(props: TeamControlsOptions): TeamControlsController {
+export function useTeamControls(options: TeamControlsOptions): TeamControlsController {
   const signIn = useSignInRecovery();
   const [feedback, setFeedback] = createSignal<ActionFeedbackState>();
 
   const control = useMutation(() => ({
-    ...teamMutations.control(props.remote()),
+    ...teamMutations.control(options.remote()),
+    onMutate: (input: TeamControlData) => {
+      options.onOptimistic(input);
+    },
     onError: (error: Error) => {
       const failure = describeControlFailure(error);
       setFeedback({
@@ -30,40 +34,21 @@ export function useTeamControls(props: TeamControlsOptions): TeamControlsControl
     },
   }));
 
-  const automation = (): TeamAutomationView =>
-    control.isPending && control.variables !== undefined
-      ? optimisticAutomation(props.team().team.automation, control.variables.action)
-      : props.team().team.automation;
-
   return {
-    automation,
-    pendingAction: () => (control.isPending ? control.variables?.action : undefined),
+    automation: () => teamAutomation(options.team()),
     feedback,
     control: (action) => {
+      if (options.team().pending !== undefined) {
+        return;
+      }
       setFeedback(undefined);
-      void control.mutate({ team: props.team().team.id, action });
+      void control.mutate({ team: options.team().team.id, action });
     },
   };
 }
 
-function optimisticAutomation(
-  current: TeamAutomationView,
-  next: TeamControlData["action"],
-): TeamAutomationView {
-  switch (next) {
-    case "enable":
-    case "resume":
-      return { status: "enabled", changedAt: current.changedAt };
-    case "disable":
-      return { status: "disabled", changedAt: current.changedAt };
-    case "pause-today":
-      return { status: "paused-until-fantasy-day-end", changedAt: current.changedAt };
-  }
-}
-
 export type TeamControlsController = {
   readonly automation: Accessor<TeamAutomationView>;
-  readonly pendingAction: Accessor<TeamControlData["action"] | undefined>;
   readonly feedback: Accessor<ActionFeedbackState | undefined>;
   readonly control: (action: TeamControlData["action"]) => void;
 };
@@ -71,4 +56,5 @@ export type TeamControlsController = {
 type TeamControlsOptions = {
   readonly team: Accessor<TeamSummaryView>;
   readonly remote: Accessor<TeamRemote>;
+  readonly onOptimistic: (input: TeamControlData) => void;
 };

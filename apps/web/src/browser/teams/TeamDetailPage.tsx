@@ -17,13 +17,14 @@ import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
 import { Time } from "#browser/shared-ui/Time.tsx";
-import type { TeamSummaryView } from "#contracts/connections/teamContract.ts";
+import type { TeamControlData, TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
 import { RunActivity } from "./RunActivity";
 import { TeamAttention } from "./TeamAttention";
 import { TeamControls } from "./TeamControls";
 import { teamContextLabel } from "./teamLabels";
 import { TeamNote } from "./TeamNote";
+import { teamLastRun } from "./teamPending";
 import { TeamProviderLink } from "./TeamProviderLink";
 import type { TeamListQueryOptions } from "./teamQueries";
 import type { TeamRemote } from "./teamRemote";
@@ -69,7 +70,13 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
                 }
                 when={team()}
               >
-                {(summary) => <TeamDetail team={summary()} remote={props.remote} />}
+                {(summary) => (
+                  <TeamDetail
+                    team={summary()}
+                    remote={props.remote}
+                    onOptimistic={page.beginControl}
+                  />
+                )}
               </Show>
             </Show>
             <ActionFeedback feedback={page.feedback()} />
@@ -92,7 +99,7 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
           </Text>
           <TeamAttention team={props.team} />
         </Stack>
-        <TeamControls team={props.team} remote={props.remote} />
+        <TeamControls team={props.team} remote={props.remote} onOptimistic={props.onOptimistic} />
         <Inline gap="sm">
           <TextLink tone="quiet" to="/transactions">
             Transactions
@@ -134,7 +141,7 @@ function NoChecksToday(props: NoChecksTodayProps): JSX.Element {
     <EmptyState title="No checks today.">
       <Show
         fallback="Checks will appear here after the first scheduled or manual run."
-        when={props.team.lastRun}
+        when={teamLastRun(props.team)}
       >
         {(run) => (
           <>
@@ -157,6 +164,7 @@ type TeamDetailPageProps = {
 type TeamDetailProps = {
   readonly team: TeamSummaryView;
   readonly remote: TeamRemote;
+  readonly onOptimistic: (input: TeamControlData) => void;
 };
 
 type NoChecksTodayProps = {

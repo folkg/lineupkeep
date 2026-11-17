@@ -107,12 +107,21 @@ export type LineupRunView = {
   };
 };
 
+export type TeamPendingAction = "enable" | "disable" | "pause" | "resume" | "refresh";
+
+export type TeamPendingView = {
+  readonly action: TeamPendingAction;
+  readonly automation: TeamAutomationView;
+  readonly lastRun?: LineupRunView;
+};
+
 export type TeamSummaryView = {
   readonly team: TeamView;
   readonly connectionStatus: ConnectionStatus;
   readonly connectionCount: number;
   readonly lastRun?: LineupRunView;
   readonly recentRuns: ReadonlyArray<LineupRunView>;
+  readonly pending?: TeamPendingView;
 };
 
 export type TeamChangeView = {

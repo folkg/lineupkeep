@@ -18,12 +18,13 @@ import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
 import { createMinuteClock } from "#browser/timing/minuteClock.ts";
-import type { TeamSummaryView } from "#contracts/connections/teamContract.ts";
+import type { TeamControlData, TeamSummaryView } from "#contracts/connections/teamContract.ts";
 import { sportDisplayName } from "#contracts/connections/teamVocabulary.ts";
 
 import { TeamAttention } from "./TeamAttention";
 import { TeamControls } from "./TeamControls";
 import { checkTallyLabel, lastCheckLine, teamContextLabel } from "./teamLabels";
+import { teamAutomation, teamLastRun } from "./teamPending";
 import { TeamProviderLink } from "./TeamProviderLink";
 import type { TeamRemote } from "./teamRemote";
 import { teamStatusBadge, teamStatusLine } from "./teamStatus";
@@ -40,6 +41,7 @@ export function TeamList(props: TeamListProps): JSX.Element {
         action={
           <IconButton
             confirmed
+            disabled={props.teams().some((team) => team.pending !== undefined)}
             label="Refresh teams"
             state={props.refreshState()}
             onClick={props.onRefreshTeams}
@@ -88,9 +90,20 @@ export function TeamList(props: TeamListProps): JSX.Element {
             }
             when={props.teams().length > 0}
           >
-            <RuleList settling={settling()} surface="cards">
+            <RuleList
+              busy={props.refreshState() === "working"}
+              settling={settling()}
+              surface="cards"
+            >
               <For each={teamsBySportThenName(props.teams())}>
-                {(team) => <TeamCard now={clock.now} team={team} remote={props.remote} />}
+                {(team) => (
+                  <TeamCard
+                    now={clock.now}
+                    team={team}
+                    remote={props.remote}
+                    onOptimistic={props.onOptimistic}
+                  />
+                )}
               </For>
             </RuleList>
           </Show>
@@ -109,7 +122,13 @@ function TeamCard(props: TeamCardProps): JSX.Element {
       as="li"
       badge={<Badge tone={statusBadge().tone}>{statusBadge().label}</Badge>}
       footer={
-        <TeamControls compact showPauseNote={false} team={props.team} remote={props.remote} />
+        <TeamControls
+          compact
+          showPauseNote={false}
+          team={props.team}
+          remote={props.remote}
+          onOptimistic={props.onOptimistic}
+        />
       }
       header={
         <Inline gap="sm">
@@ -141,7 +160,7 @@ function TeamCard(props: TeamCardProps): JSX.Element {
               No lineup checks have run yet.
             </Text>
           }
-          when={props.team.lastRun}
+          when={teamLastRun(props.team)}
         >
           {(run) => (
             <Text numeric size="caption" tone="muted">
@@ -168,6 +187,7 @@ type TeamListProps = {
   readonly loadFailure: Accessor<Error | null>;
   readonly refreshState: Accessor<ActionState>;
   readonly dataUpdatedAt: Accessor<number>;
+  readonly onOptimistic: (input: TeamControlData) => void;
   readonly onRefresh: () => Promise<void>;
   readonly onRefreshTeams: () => void;
   readonly remote: TeamRemote;
@@ -177,6 +197,7 @@ type TeamCardProps = {
   readonly team: TeamSummaryView;
   readonly now: Accessor<Date>;
   readonly remote: TeamRemote;
+  readonly onOptimistic: (input: TeamControlData) => void;
 };
 
 function teamsBySportThenName(
@@ -195,7 +216,7 @@ function allTeamsIdle(teams: ReadonlyArray<TeamSummaryView>): boolean {
     teams.length > 0 &&
     teams.every(
       (summary) =>
-        summary.connectionStatus === "ready" && summary.team.automation.status === "disabled",
+        summary.connectionStatus === "ready" && teamAutomation(summary).status === "disabled",
     )
   );
 }

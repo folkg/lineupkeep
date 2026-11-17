@@ -9,7 +9,11 @@ import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Switch } from "#browser/shared-ui/Switch.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
-import type { TeamSummaryView } from "#contracts/connections/teamContract.ts";
+import type {
+  TeamControlData,
+  TeamPendingAction,
+  TeamSummaryView,
+} from "#contracts/connections/teamContract.ts";
 
 import { pauseResumeLabel } from "./teamLabels";
 import type { TeamRemote } from "./teamRemote";
@@ -20,19 +24,17 @@ const resumeLabel = "Resume lineup checks";
 const turnOnFirst = "Turn on lineup checks to pause the rest of the fantasy day.";
 
 export function TeamControls(props: TeamControlsProps): JSX.Element {
-  const controls = useTeamControls({ team: () => props.team, remote: () => props.remote });
+  const controls = useTeamControls({
+    team: () => props.team,
+    remote: () => props.remote,
+    onOptimistic: (input) => props.onOptimistic(input),
+  });
   const enabled = (): boolean => controls.automation().status !== "disabled";
   const paused = (): boolean => controls.automation().status === "paused-until-fantasy-day-end";
+  const pendingAction = (): TeamPendingAction | undefined => props.team.pending?.action;
   const switchPending = (): boolean =>
-    controls.pendingAction() === "enable" || controls.pendingAction() === "disable";
-  const pausePending = (): boolean =>
-    controls.pendingAction() === "pause-today" || controls.pendingAction() === "resume";
-  const resumeAction = (): boolean =>
-    controls.pendingAction() === "resume"
-      ? true
-      : controls.pendingAction() === "pause-today"
-        ? false
-        : paused();
+    pendingAction() === "enable" || pendingAction() === "disable";
+  const pausePending = (): boolean => pendingAction() === "pause" || pendingAction() === "resume";
   const switchState = (): ActionState => (switchPending() ? "working" : "idle");
   const pauseState = (): ActionState => (pausePending() ? "working" : "idle");
 
@@ -42,7 +44,7 @@ export function TeamControls(props: TeamControlsProps): JSX.Element {
         <Switch
           compact={props.compact}
           checked={enabled()}
-          disabled={pausePending()}
+          disabled={pendingAction() !== undefined}
           name={`Lineup checks for ${props.team.team.name}`}
           state={switchState()}
           onToggle={() => controls.control(enabled() ? "disable" : "enable")}
@@ -50,13 +52,13 @@ export function TeamControls(props: TeamControlsProps): JSX.Element {
           Lineup checks
         </Switch>
         <IconButton
-          disabled={!enabled() || switchPending()}
-          label={resumeAction() ? resumeLabel : pauseLabel}
+          disabled={!enabled() || pendingAction() !== undefined}
+          label={paused() ? resumeLabel : pauseLabel}
           title={!enabled() ? turnOnFirst : undefined}
           state={pauseState()}
-          onClick={() => controls.control(resumeAction() ? "resume" : "pause-today")}
+          onClick={() => controls.control(paused() ? "resume" : "pause-today")}
         >
-          <Show fallback={<PauseIcon size="md" />} when={resumeAction()}>
+          <Show fallback={<PauseIcon size="md" />} when={paused()}>
             <PlayIcon size="md" />
           </Show>
         </IconButton>
@@ -79,4 +81,5 @@ type TeamControlsProps = {
   readonly showPauseNote?: boolean;
   readonly team: TeamSummaryView;
   readonly remote: TeamRemote;
+  readonly onOptimistic: (input: TeamControlData) => void;
 };

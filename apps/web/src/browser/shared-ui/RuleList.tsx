@@ -6,12 +6,15 @@ import { cx } from "./cx";
 export function RuleList(props: {
   readonly children: Element;
   readonly settling?: boolean;
+  readonly busy?: boolean;
   readonly surface?: "rules" | "cards";
 }): JSX.Element {
   return (
     <ol
+      aria-busy={props.busy === true ? "true" : undefined}
       class={props.surface === "cards" ? "grid w-full gap-6" : "w-full"}
       data-motion={props.settling === true ? "settle" : undefined}
+      data-state={props.busy === true ? "working" : undefined}
     >
       {props.children}
     </ol>

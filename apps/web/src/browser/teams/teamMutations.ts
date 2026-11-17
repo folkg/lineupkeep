@@ -63,7 +63,7 @@ function storeRefreshedTeams(
   _onMutateResult: unknown,
   context: MutationFunctionContext,
 ): void {
-  storeRefreshedTeamList(change, _variables, _onMutateResult, context);
+  void context.client.setQueryData(teamQueries.listKey, change.teams);
 }
 
 export function storeRefreshedTeamList(

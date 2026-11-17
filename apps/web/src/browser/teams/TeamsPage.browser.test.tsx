@@ -21,6 +21,7 @@ import type {
   LineupRunView,
   TeamChangeView,
   TeamMutationError,
+  TeamRefreshView,
   TeamSummaryView,
 } from "#contracts/connections/teamContract.ts";
 
@@ -346,6 +347,136 @@ it("pauses an enabled team for the rest of the fantasy day", async () => {
     .toBeVisible();
   await expect.element(page.getByRole("button", { name: "Resume lineup checks" })).toBeVisible();
   expect(changes).toEqual([{ team: teamId, action: "pause-today" }]);
+});
+
+it("pauses the icon, the status word, and the check line together before the server answers", async () => {
+  const answer = Promise.withResolvers<TeamChangeView>();
+  using _app = setupTeamsPage([enabledTeam], { control: () => answer.promise });
+
+  const row = page.getByRole("listitem").filter({ hasText: "Alpha" });
+  const toggle = row.getByRole("switch", { name: "Lineup checks for Alpha" });
+  await expect.element(row.getByText(/^Next check at /u)).toBeVisible();
+  await row
+    .getByRole("button", { name: "Pause lineup checks for the rest of the fantasy day" })
+    .click();
+
+  await expect.element(row.getByRole("button", { name: "Resume lineup checks" })).toBeVisible();
+  await expect.element(row.getByText("Paused", { exact: true })).toBeVisible();
+  await expect
+    .element(row.getByText("Paused for the rest of the fantasy day.", { exact: true }))
+    .toBeVisible();
+  await expect.element(row.getByText(/^Next check at /u)).not.toBeInTheDocument();
+  await expect.element(toggle).toHaveAttribute("aria-checked", "true");
+
+  answer.resolve({ changed: [pausedTeam], teams: [pausedTeam] });
+  await expect
+    .element(row.getByText(/^Paused for the rest of the fantasy day · resumes at /u))
+    .toBeVisible();
+});
+
+it("restores the icon, the status word, and the check line when a pause fails", async () => {
+  const answer = Promise.withResolvers<TeamChangeView>();
+  using _app = setupTeamsPage([enabledTeam], { control: () => answer.promise });
+
+  const row = page.getByRole("listitem").filter({ hasText: "Alpha" });
+  await row
+    .getByRole("button", { name: "Pause lineup checks for the rest of the fantasy day" })
+    .click();
+  await expect.element(row.getByRole("button", { name: "Resume lineup checks" })).toBeVisible();
+  await expect.element(row.getByText("Paused", { exact: true })).toBeVisible();
+  await expect
+    .element(row.getByText("Paused for the rest of the fantasy day.", { exact: true }))
+    .toBeVisible();
+
+  answer.reject(new Error("Network"));
+
+  await expect
+    .element(
+      row.getByRole("button", { name: "Pause lineup checks for the rest of the fantasy day" }),
+    )
+    .toBeVisible();
+  await expect.element(row.getByText("Checks on", { exact: true })).toBeVisible();
+  await expect.element(row.getByText(/^Next check at /u)).toBeVisible();
+  await expect.element(row.getByText("Paused", { exact: true })).not.toBeInTheDocument();
+  await expect
+    .element(
+      page.getByText(
+        "We could not confirm the change, so the control returned to the last known state. Check the latest list before trying again.",
+      ),
+    )
+    .toBeVisible();
+});
+
+it("shows a working refresh on the control and the list", async () => {
+  const answer = Promise.withResolvers<TeamRefreshView>();
+  using _app = setupTeamsPage([enabledTeam], { refresh: () => answer.promise });
+
+  const refresh = page.getByRole("button", { name: "Refresh teams" });
+  const toggle = page.getByRole("switch", { name: "Lineup checks for Alpha" });
+  await expect.element(page.getByRole("listitem").filter({ hasText: "Alpha" })).toBeVisible();
+  const list = page.getByRole("listitem").filter({ hasText: "Alpha" }).element().parentElement;
+
+  await refresh.click();
+
+  await expect.element(refresh).toHaveAttribute("data-state", "working");
+  await expect.element(refresh).toHaveAttribute("aria-busy", "true");
+  expect(list?.getAttribute("data-state")).toBe("working");
+  expect(list?.getAttribute("aria-busy")).toBe("true");
+  await expect.element(toggle).toBeDisabled();
+
+  answer.resolve({ teams: [enabledTeam] });
+
+  await expect.element(refresh).toHaveAttribute("data-state", "done");
+  expect(list?.getAttribute("aria-busy")).toBeNull();
+  await expect.element(toggle).not.toBeDisabled();
+});
+
+it("keeps one pending action on a team when the controls are pressed together", async () => {
+  const answer = Promise.withResolvers<TeamChangeView>();
+  const changes: Array<{ readonly team: string; readonly action: string }> = [];
+  const refreshes: Array<void> = [];
+  using _app = setupTeamsPage([enabledTeam], {
+    control: (input) => {
+      changes.push(input);
+      return answer.promise;
+    },
+    refresh: () => {
+      refreshes.push(undefined);
+      return Promise.resolve({ teams: [enabledTeam] });
+    },
+  });
+
+  const row = page.getByRole("listitem").filter({ hasText: "Alpha" });
+  const toggle = row.getByRole("switch", { name: "Lineup checks for Alpha" });
+  const refresh = page.getByRole("button", { name: "Refresh teams" });
+
+  await row
+    .getByRole("button", { name: "Pause lineup checks for the rest of the fantasy day" })
+    .click();
+  const resume = row.getByRole("button", { name: "Resume lineup checks" });
+  await expect.element(resume).toHaveAttribute("data-state", "working");
+  await expect.element(toggle).toBeDisabled();
+  await expect.element(toggle).not.toHaveAttribute("aria-busy");
+  await expect.element(refresh).toHaveAttribute("aria-disabled", "true");
+
+  const toggleElement = toggle.element();
+  if (toggleElement instanceof HTMLButtonElement) {
+    toggleElement.click();
+  }
+  const refreshElement = refresh.element();
+  if (refreshElement instanceof HTMLButtonElement) {
+    refreshElement.click();
+  }
+
+  expect(changes).toEqual([{ team: teamId, action: "pause-today" }]);
+  expect(refreshes).toHaveLength(0);
+  await expect.element(resume).toHaveAttribute("data-state", "working");
+
+  answer.resolve({ changed: [pausedTeam], teams: [pausedTeam] });
+
+  await expect.element(toggle).not.toBeDisabled();
+  await expect.element(refresh).not.toHaveAttribute("aria-disabled");
+  await expect.element(resume).not.toHaveAttribute("aria-busy");
 });
 
 it("disables the pause control while the switch is saving", async () => {

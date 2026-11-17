@@ -2,6 +2,7 @@ import { formatClockTime } from "#browser/shared-ui/formatTime.ts";
 import type { TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
 import { runIsCheckingNow } from "./teamLabels";
+import { teamAutomation, teamLastRun } from "./teamPending";
 
 const hourlyCheckMinuteUtc = 55;
 
@@ -15,13 +16,14 @@ export function nextScheduledCheck(at: Date): Date {
 }
 
 export function teamStatusBadge(team: TeamSummaryView): TeamStatusBadge {
-  if (team.lastRun?.status === "queued") {
+  const lastRun = teamLastRun(team);
+  if (lastRun?.status === "queued") {
     return { label: "Waiting", tone: "neutral" };
   }
-  if (team.lastRun !== undefined && runIsCheckingNow(team.lastRun.status)) {
+  if (lastRun !== undefined && runIsCheckingNow(lastRun.status)) {
     return { label: "Checking", tone: "accent" };
   }
-  const automation = team.team.automation;
+  const automation = teamAutomation(team);
   switch (automation.status) {
     case "paused-until-fantasy-day-end":
       return { label: "Paused", tone: "neutral" };
@@ -33,13 +35,14 @@ export function teamStatusBadge(team: TeamSummaryView): TeamStatusBadge {
 }
 
 export function teamStatusLine(team: TeamSummaryView, now: Date): string {
-  if (team.lastRun?.status === "queued") {
+  const lastRun = teamLastRun(team);
+  if (lastRun?.status === "queued") {
     return "A check is waiting to start.";
   }
-  if (team.lastRun !== undefined && runIsCheckingNow(team.lastRun.status)) {
+  if (lastRun !== undefined && runIsCheckingNow(lastRun.status)) {
     return "Checking now. This usually takes under a minute.";
   }
-  const automation = team.team.automation;
+  const automation = teamAutomation(team);
   switch (automation.status) {
     case "paused-until-fantasy-day-end":
       return automation.resumesAt === undefined
