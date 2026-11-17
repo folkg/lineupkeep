@@ -166,7 +166,7 @@ it("keeps Bun-dispatched Alchemy on its Node branch without inherited credential
   });
 }, 30_000);
 
-it("includes root tooling and scratch scenarios without generated TypeScript", async () => {
+it("includes root tooling without generated TypeScript or scratch scenarios", async () => {
   await using temporary = await mkdtempDisposable(join(tmpdir(), "tooling-membership-"));
   const directory = temporary.path;
   const expected = [
@@ -177,9 +177,9 @@ it("includes root tooling and scratch scenarios without generated TypeScript", a
     "infra/example.ts",
     "scripts/example.ts",
     "tools/example.ts",
-    "e2e/scratch/example.ts",
   ];
-  const generated = [
+  const excluded = [
+    "e2e/scratch/example.ts",
     "apps/web/dist/generated.ts",
     "apps/web/.output/generated.ts",
     "infra/.alchemy/generated.ts",
@@ -189,7 +189,7 @@ it("includes root tooling and scratch scenarios without generated TypeScript", a
     join(directory, "tsconfig.json"),
     await readFile(new URL("../tsconfig.json", import.meta.url), "utf8"),
   );
-  for (const path of [...expected, ...generated]) {
+  for (const path of [...expected, ...excluded]) {
     await mkdir(dirname(join(directory, path)), { recursive: true });
     await writeFile(join(directory, path), "export {};");
   }
@@ -213,7 +213,7 @@ it("includes root tooling and scratch scenarios without generated TypeScript", a
   )(output);
 
   expect(config.files).toEqual(expect.arrayContaining(expected.map((path) => `./${path}`)));
-  for (const path of generated) {
+  for (const path of excluded) {
     expect(config.files).not.toContain(`./${path}`);
   }
 });

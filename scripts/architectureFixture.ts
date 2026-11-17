@@ -49,7 +49,9 @@ export async function checkLint(
   fix = false,
 ): Promise<CommandResult & { readonly sources: Readonly<Record<string, string>> }> {
   return withFixture(files, async (cwd) => ({
-    ...(await runTool(cwd, join(repositoryRoot, "node_modules/oxlint/bin/oxlint"), [
+    ...(await runTool(cwd, join(repositoryRoot, "node_modules/@effect/tsgo/dist/effect-tsgo.cjs"), [
+      "--tsrs-lint",
+      "oxlint",
       "--format",
       "agent",
       ...(fix ? ["--fix"] : []),
