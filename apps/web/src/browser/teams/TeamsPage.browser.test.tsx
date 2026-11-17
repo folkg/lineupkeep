@@ -392,6 +392,7 @@ it("keeps quiet rows to league context and the last check", async () => {
   const context = page.getByText("Football · NFL 2026");
   await expect.element(context).toBeVisible();
   expect(context.element().textContent).toBe("Football · NFL 2026");
+  await expect.element(page.getByText("Checks on", { exact: true })).toBeVisible();
   await expect.element(page.getByText(/^ ·/u)).not.toBeInTheDocument();
   await expect
     .element(page.getByText(`Last check changed nothing · ${formatReaderTime(twoHoursAgo)}`))
@@ -401,6 +402,25 @@ it("keeps quiet rows to league context and the last check", async () => {
   await expect.element(page.getByText("Lineup checks on")).not.toBeInTheDocument();
   await expect.element(page.getByText("Reconnect Yahoo")).not.toBeInTheDocument();
   await expect.element(page.getByRole("link", { name: /^Open /u })).not.toBeInTheDocument();
+});
+
+it("frames a team card with the shared card structure", async () => {
+  using _app = setupTeamsPage([enabledTeam]);
+
+  const name = page.getByRole("link", { name: "Alpha", exact: true });
+  await expect.element(name).toBeVisible();
+  const card = name.element().closest<HTMLElement>("[data-card]");
+  expect(card, "a team card uses the shared frame").not.toBeNull();
+  if (card === null) {
+    return;
+  }
+
+  expect(getComputedStyle(card).borderTopWidth).toBe("2px");
+  expect(getComputedStyle(card).boxShadow).toContain("8px 8px");
+  for (const part of ["header", "meta", "body", "footer"]) {
+    expect(card.querySelector(`[data-card-${part}]`), `the ${part} slot`).not.toBeNull();
+  }
+  expect(card.querySelector("[data-card-header] [data-card-badge]")?.textContent).toBe("Checks on");
 });
 
 it("shows the fantasy league name and a provider jump out for the team", async () => {
@@ -566,6 +586,7 @@ it("says the next check, the pause, checks off, or a check in flight", async () 
   const mounted = setupTeamsPage([enabledTeam]);
   try {
     await expect.element(page.getByText(/^Next check at \d{1,2}:\d{2}( [ap]m)?$/u)).toBeVisible();
+    await expect.element(page.getByText("Checks on", { exact: true })).toBeVisible();
   } finally {
     mounted[Symbol.dispose]();
   }
@@ -581,6 +602,7 @@ it("says the next check, the pause, checks off, or a check in flight", async () 
         ),
       )
       .toBeVisible();
+    await expect.element(page.getByText("Paused", { exact: true })).toBeVisible();
   } finally {
     paused[Symbol.dispose]();
   }
@@ -594,6 +616,7 @@ it("says the next check, the pause, checks off, or a check in flight", async () 
         }),
       )
       .toBeVisible();
+    await expect.element(page.getByText("Checks off", { exact: true })).toBeVisible();
   } finally {
     off[Symbol.dispose]();
   }
@@ -605,6 +628,7 @@ it("says the next check, the pause, checks off, or a check in flight", async () 
     await expect
       .element(page.getByText("Checking now. This usually takes under a minute.", { exact: true }))
       .toBeVisible();
+    await expect.element(page.getByText("Checking", { exact: true })).toBeVisible();
   } finally {
     inFlight[Symbol.dispose]();
   }
@@ -614,6 +638,7 @@ it("says the next check, the pause, checks off, or a check in flight", async () 
     await expect
       .element(page.getByText("A check is waiting to start.", { exact: true }))
       .toBeVisible();
+    await expect.element(page.getByText("Waiting", { exact: true })).toBeVisible();
   } finally {
     waiting[Symbol.dispose]();
   }

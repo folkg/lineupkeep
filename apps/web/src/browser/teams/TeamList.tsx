@@ -4,12 +4,14 @@ import type { Accessor } from "solid-js";
 
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import type { ActionState } from "#browser/shared-ui/actionState.ts";
+import { Badge } from "#browser/shared-ui/Badge.tsx";
+import { Card } from "#browser/shared-ui/Card.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { IconButton } from "#browser/shared-ui/IconButton.tsx";
 import { RefreshIcon } from "#browser/shared-ui/icons.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Notice } from "#browser/shared-ui/Notice.tsx";
-import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
+import { RuleList } from "#browser/shared-ui/RuleList.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { createSettle } from "#browser/shared-ui/settle.ts";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
@@ -24,7 +26,8 @@ import { TeamControls } from "./TeamControls";
 import { checkTallyLabel, lastCheckLine, teamContextLabel } from "./teamLabels";
 import { TeamProviderLink } from "./TeamProviderLink";
 import type { TeamRemote } from "./teamRemote";
-import { teamStatusLine } from "./teamStatus";
+import { teamStatusBadge, teamStatusLine } from "./teamStatus";
+import type { TeamStatusBadge } from "./teamStatus";
 
 export function TeamList(props: TeamListProps): JSX.Element {
   const clock = createMinuteClock(() => props.dataUpdatedAt());
@@ -98,18 +101,37 @@ export function TeamList(props: TeamListProps): JSX.Element {
 }
 
 function TeamCard(props: TeamCardProps): JSX.Element {
+  const nameId = (): string => `team-card-${props.team.team.id}`;
+  const statusBadge = (): TeamStatusBadge => teamStatusBadge(props.team);
+
   return (
-    <RuleListItem layout="columns" surface="card">
-      <Stack gap="xs">
+    <Card
+      as="li"
+      badge={<Badge tone={statusBadge().tone}>{statusBadge().label}</Badge>}
+      footer={
+        <TeamControls compact showPauseNote={false} team={props.team} remote={props.remote} />
+      }
+      header={
         <Inline gap="sm">
-          <TextLink params={{ teamId: props.team.team.id }} size="team" to="/teams/$teamId">
+          <TextLink
+            id={nameId()}
+            params={{ teamId: props.team.team.id }}
+            size="team"
+            to="/teams/$teamId"
+          >
             {props.team.team.name}
           </TextLink>
           <TeamProviderLink team={props.team.team} />
         </Inline>
+      }
+      labelledBy={nameId()}
+      meta={
         <Text size="caption" tone="muted">
           {teamContextLabel(props.team.team, props.team.connectionCount)}
         </Text>
+      }
+    >
+      <Stack gap="xs">
         <Text reserve="two-lines" size="caption" tone="muted">
           {teamStatusLine(props.team, props.now())}
         </Text>
@@ -136,14 +158,7 @@ function TeamCard(props: TeamCardProps): JSX.Element {
         </Show>
         <TeamAttention team={props.team} />
       </Stack>
-      <TeamControls
-        align="end"
-        compact
-        showPauseNote={false}
-        team={props.team}
-        remote={props.remote}
-      />
-    </RuleListItem>
+    </Card>
   );
 }
 

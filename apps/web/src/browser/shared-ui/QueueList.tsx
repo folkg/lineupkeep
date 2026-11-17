@@ -9,7 +9,7 @@ export function QueueList(props: { readonly children: Element }): JSX.Element {
 export function QueueListItem(props: QueueListItemProps): JSX.Element {
   return (
     <li class="border-b border-rule last:border-b-0">
-      <div class="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-x-2 px-4 py-3">
+      <div class="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-x-2 py-3">
         <span aria-hidden="true" class="text-caption font-semibold tabular-nums text-action">
           {String(props.number)}
         </span>
@@ -32,7 +32,7 @@ export function QueueListItem(props: QueueListItemProps): JSX.Element {
 }
 
 export function QueueListNote(props: { readonly children: Element }): JSX.Element {
-  return <li class="border-b border-rule py-3 ps-12 pe-4">{props.children}</li>;
+  return <li class="border-b border-rule py-3 ps-8">{props.children}</li>;
 }
 
 type QueueListItemProps = {

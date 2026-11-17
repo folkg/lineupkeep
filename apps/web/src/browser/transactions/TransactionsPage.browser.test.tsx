@@ -257,7 +257,7 @@ it("confirms today's move, runs it, and returns the recorded outcome", async () 
     .element(page.getByText("Nothing runs until you confirm it.", { exact: true }).first())
     .toBeVisible();
 
-  await page.getByRole("button", { name: /Confirm group and run now: Drop Riley Chen/u }).click();
+  await page.getByRole("button", { name: /Confirm and run: Drop Riley Chen/u }).click();
 
   await expect.element(page.getByText("Confirmed and ran 1 move.", { exact: true })).toBeVisible();
   expect(confirmed).toHaveLength(1);
@@ -292,7 +292,12 @@ it("confirms a saved move for its day without running it", async () => {
     },
   });
 
-  await page.getByRole("button", { name: /Confirm group: Claim Amon-Ra St. Brown/u }).click();
+  const confirm = page.getByRole("button", { name: /^Confirm: Claim Amon-Ra St\. Brown/u });
+  await expect.element(confirm).toBeVisible();
+  expect(confirm.element().closest("[data-card-footer]")?.textContent).toContain(
+    `${scheduledRunLine("2026-11-13", nextRunAt)}.`,
+  );
+  await confirm.click();
 
   await expect
     .element(
@@ -519,7 +524,7 @@ it("marks a move that cannot run and disables its choice", async () => {
     )
     .toBeVisible();
   await expect
-    .element(page.getByRole("button", { name: /Confirm group and run now: Drop Riley Chen/u }))
+    .element(page.getByRole("button", { name: /Confirm and run: Drop Riley Chen/u }))
     .toBeDisabled();
   await expect
     .element(page.getByRole("button", { name: /Discard: Drop Riley Chen/u }))
@@ -621,18 +626,45 @@ it("shows a group as one card that lists every move and confirms once", async ()
   await expect.element(page.getByText("Weekend moves", { exact: true })).toBeVisible();
   await expect.element(page.getByText("Drop Riley Chen", { exact: true })).toBeVisible();
   await expect.element(page.getByText("Stash Amon-Ra St. Brown", { exact: true })).toBeVisible();
-  expect(page.getByRole("button", { name: /Confirm group and run now:/u }).elements()).toHaveLength(
-    1,
-  );
+  expect(page.getByRole("button", { name: /Confirm and run:/u }).elements()).toHaveLength(1);
 
-  await page.getByRole("button", { name: "Confirm group and run now: Weekend moves" }).click();
+  await page.getByRole("button", { name: "Confirm and run: Weekend moves" }).click();
 
   await expect.element(page.getByText("Confirmed and ran 2 moves.", { exact: true })).toBeVisible();
   expect(confirmed).toHaveLength(1);
   expect(confirmed[0]?.moves).toStrictEqual([drop.move, stash.move]);
 });
 
-it("names the immediate run beside the action that confirms a group", async () => {
+it("frames a transaction group with the shared card structure", async () => {
+  await page.viewport(1280, 900);
+  const only = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d1",
+    team: alpha,
+    kind: "drop",
+    drops: [player("Riley Chen")],
+  });
+  using _app = setupTransactionsPage({
+    open: listData([only], { open: 1, today: 1, saved: 0, ended: 0 }),
+  });
+
+  const heading = page.getByRole("heading", { name: "Alpha", exact: true });
+  await expect.element(heading).toBeVisible();
+  const card = heading.element().closest<HTMLElement>("[data-card]");
+  expect(card, "a transaction group uses the shared frame").not.toBeNull();
+  if (card === null) {
+    return;
+  }
+
+  expect(getComputedStyle(card).borderTopWidth).toBe("2px");
+  expect(getComputedStyle(card).boxShadow).toContain("8px 8px");
+  for (const part of ["header", "meta", "body", "footer"]) {
+    expect(card.querySelector(`[data-card-${part}]`), `the ${part} slot`).not.toBeNull();
+  }
+  expect(card.querySelector("[data-card-header] [data-card-badge]")?.textContent).toBe("Undecided");
+  expect(card.querySelector("[data-card-footer]")?.textContent).toBe("Confirm and run");
+});
+
+it("names today's confirm and run without a separate run note", async () => {
   await page.viewport(1280, 900);
   const group = "018f79ea-7d86-7c18-9b4a-8b4d0c9165e1";
   const drop = move({
@@ -671,10 +703,16 @@ it("names the immediate run beside the action that confirms a group", async () =
     ),
   });
 
-  await expect.element(page.getByText("Runs immediately.", { exact: true })).toBeVisible();
-  expect(page.getByRole("button", { name: /Confirm group and run now:/u }).elements()).toHaveLength(
-    1,
-  );
+  await expect
+    .element(page.getByRole("button", { name: "Confirm and run: Weekend moves" }))
+    .toBeVisible();
+  expect(
+    page
+      .getByRole("button", { name: "Confirm and run: Weekend moves" })
+      .element()
+      .closest("[data-card-footer]")?.textContent,
+  ).toBe("Confirm and run");
+  expect(page.getByText("Runs immediately.").elements()).toHaveLength(0);
 });
 
 it("shows the fixes that make room inside the group they run with", async () => {
@@ -736,11 +774,9 @@ it("shows the fixes that make room inside the group they run with", async () => 
     )
     .toBeVisible();
   await expect.element(page.getByText("Stash Amon-Ra St. Brown", { exact: true })).toBeVisible();
-  expect(page.getByRole("button", { name: /Confirm group and run now:/u }).elements()).toHaveLength(
-    1,
-  );
+  expect(page.getByRole("button", { name: /Confirm and run:/u }).elements()).toHaveLength(1);
 
-  await page.getByRole("button", { name: "Confirm group and run now: Add Jordan Lee" }).click();
+  await page.getByRole("button", { name: "Confirm and run: Add Jordan Lee" }).click();
   expect(confirmed).toHaveLength(1);
   expect(confirmed[0]?.moves).toStrictEqual([add.move, stash.move]);
 });
@@ -816,7 +852,7 @@ it("leaves a partly run group without a discard action and folds its explanation
   await expect.element(page.getByText("Ran when you confirmed", { exact: true })).toBeVisible();
   await expect.element(page.getByText("Failed", { exact: true })).toBeVisible();
   expect(page.getByRole("button", { name: /Discard:/u }).elements()).toHaveLength(0);
-  expect(page.getByRole("button", { name: /Confirm group/u }).elements()).toHaveLength(0);
+  expect(page.getByRole("button", { name: /^Confirm/u }).elements()).toHaveLength(0);
   await expect.element(page.getByText(sentence, { exact: true })).not.toBeVisible();
 
   await page.getByText("Why these moves", { exact: true }).click();
@@ -1046,10 +1082,10 @@ it("confirms groups on two teams at the same time with per team progress", async
   });
 
   const alphaButton = page.getByRole("button", {
-    name: "Confirm group and run now: Drop Riley Chen",
+    name: "Confirm and run: Drop Riley Chen",
   });
   const betaButton = page.getByRole("button", {
-    name: "Confirm group and run now: Add Jordan Lee",
+    name: "Confirm and run: Add Jordan Lee",
   });
   await alphaButton.click();
   await betaButton.click();
@@ -1094,7 +1130,7 @@ it("keeps today's count and confirmation on a phone line", async () => {
 
     await expect.element(page.getByText("1 move for today", { exact: true })).toBeVisible();
     await expect
-      .element(page.getByRole("button", { name: /Confirm group and run now: Drop Riley Chen/u }))
+      .element(page.getByRole("button", { name: /Confirm and run: Drop Riley Chen/u }))
       .toBeEnabled();
     const root = document.documentElement;
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);

@@ -97,7 +97,7 @@ test("proposes a move into one team queue and confirms it from the transactions 
   await page.evaluate(() => document.documentElement.classList.remove("dark"));
 
   const confirm = page.getByRole("button", {
-    name: /Confirm group and run now: Drop Riverside Receiver/u,
+    name: /Confirm and run: Drop Riverside Receiver/u,
   });
   await expect(confirm).toBeEnabled();
   await confirm.click();

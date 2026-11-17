@@ -14,6 +14,24 @@ export function nextScheduledCheck(at: Date): Date {
   return next;
 }
 
+export function teamStatusBadge(team: TeamSummaryView): TeamStatusBadge {
+  if (team.lastRun?.status === "queued") {
+    return { label: "Waiting", tone: "neutral" };
+  }
+  if (team.lastRun !== undefined && runIsCheckingNow(team.lastRun.status)) {
+    return { label: "Checking", tone: "accent" };
+  }
+  const automation = team.team.automation;
+  switch (automation.status) {
+    case "paused-until-fantasy-day-end":
+      return { label: "Paused", tone: "neutral" };
+    case "disabled":
+      return { label: "Checks off", tone: "neutral" };
+    case "enabled":
+      return { label: "Checks on", tone: "accent" };
+  }
+}
+
 export function teamStatusLine(team: TeamSummaryView, now: Date): string {
   if (team.lastRun?.status === "queued") {
     return "A check is waiting to start.";
@@ -33,3 +51,8 @@ export function teamStatusLine(team: TeamSummaryView, now: Date): string {
       return `Next check at ${formatClockTime(nextScheduledCheck(now))}`;
   }
 }
+
+export type TeamStatusBadge = {
+  readonly label: string;
+  readonly tone: "accent" | "neutral";
+};

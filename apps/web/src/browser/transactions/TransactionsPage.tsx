@@ -5,6 +5,7 @@ import { AppShell } from "#browser/app-shell/AppShell.tsx";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Badge } from "#browser/shared-ui/Badge.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
+import { Card, CardNote, CardSection } from "#browser/shared-ui/Card.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { Disclosure } from "#browser/shared-ui/Disclosure.tsx";
 import { Form } from "#browser/shared-ui/Form.tsx";
@@ -13,7 +14,6 @@ import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
 import { QueueList, QueueListItem, QueueListNote } from "#browser/shared-ui/QueueList.tsx";
-import { QueuePanel, QueuePanelNote, QueuePanelStatus } from "#browser/shared-ui/QueuePanel.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
@@ -264,17 +264,12 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
   const state = (): GroupState => (working() ? "Running" : panelState(props.card));
   const stopped = (): boolean => state() === "Partly ran" || state() === "Blocked";
   const showControl = (): boolean => (props.card.today || pending()) && hasOpen() && opened();
-  const controlLabel = (): string => {
-    if (props.card.today) {
-      return pending() ? "Confirm group and run now" : "Run group now";
-    }
-    return "Confirm group";
-  };
+  const controlLabel = (): string => (props.card.today ? "Confirm and run" : "Confirm");
   const workingLabel = (): string => (props.card.today && !pending() ? "Running" : "Confirming");
   const actionLabel = (): string => `${controlLabel()}: ${cardTitle(props.card)}`;
-  const note = (): string => {
+  const runLine = (): string | undefined => {
     if (props.card.today) {
-      return "Runs immediately.";
+      return undefined;
     }
     const runDay = props.card.lead.runDay;
     return runDay === undefined
@@ -316,26 +311,38 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
       : undefined;
   const hasDetail = (): boolean => detail() !== undefined || facts() !== undefined;
   return (
-    <QueuePanel
-      action={
+    <Card
+      badge={<Badge tone={groupStateTone(state())}>{state()}</Badge>}
+      footer={
         showControl() ? (
-          <Button
-            variant="primary"
-            disabled={!confirmable() || busy()}
-            state={working() ? "working" : "idle"}
-            aria-label={actionLabel()}
-            onClick={() => props.confirmation.start(all())}
-          >
-            {working() ? workingLabel() : controlLabel()}
-          </Button>
+          <>
+            <Button
+              variant="primary"
+              disabled={!confirmable() || busy()}
+              state={working() ? "working" : "idle"}
+              aria-label={actionLabel()}
+              onClick={() => props.confirmation.start(all())}
+            >
+              {working() ? workingLabel() : controlLabel()}
+            </Button>
+            <Show when={runLine()}>
+              {(line) => (
+                <Text as="span" size="label" tone="muted">
+                  {line()}
+                </Text>
+              )}
+            </Show>
+          </>
         ) : undefined
       }
-      badge={<Badge tone={groupStateTone(state())}>{state()}</Badge>}
       header={
+        <Heading id={headingId()} level={3} size="section">
+          {team().name}
+        </Heading>
+      }
+      labelledBy={headingId()}
+      meta={
         <>
-          <Heading id={headingId()} level={3} size="section">
-            {team().name}
-          </Heading>
           <Text as="span" size="caption" tone="muted">
             {leagueDisplayName(team().league)} · {sportDisplayName(team().sport)}
           </Text>
@@ -348,17 +355,9 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
           </Show>
         </>
       }
-      labelledBy={headingId()}
-      note={
-        showControl() ? (
-          <Text size="label" tone={props.card.today ? "spot" : "muted"}>
-            {note()}
-          </Text>
-        ) : undefined
-      }
     >
       <Show when={statusLines().length > 0}>
-        <QueuePanelStatus>
+        <CardSection>
           <For each={statusLines()}>
             {(line) => (
               <Text size="caption" tone={line.tone}>
@@ -366,7 +365,7 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
               </Text>
             )}
           </For>
-        </QueuePanelStatus>
+        </CardSection>
       </Show>
       <QueueList>
         <For each={props.card.moves}>
@@ -402,7 +401,7 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
         </Show>
       </QueueList>
       <Show when={hasDetail()}>
-        <QueuePanelNote>
+        <CardNote>
           <Disclosure summary="Why these moves">
             <Stack gap="md">
               <Show when={detail()}>
@@ -415,9 +414,9 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
               <Show when={facts()}>{(held) => <TeamPlaces facts={held()} />}</Show>
             </Stack>
           </Disclosure>
-        </QueuePanelNote>
+        </CardNote>
       </Show>
-    </QueuePanel>
+    </Card>
   );
 }
 
