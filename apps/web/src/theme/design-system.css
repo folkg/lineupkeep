@@ -244,16 +244,6 @@
   container-type: inline-size;
 }
 
-[data-print="halftone"] {
-  background-image: radial-gradient(
-    circle at 1px 1px,
-    var(--theme-action) 1.2px,
-    transparent 1.4px
-  );
-  background-size: 7px 7px;
-  opacity: 0.26;
-}
-
 [data-action-mark="work"] {
   animation: action-work var(--theme-duration-work) linear infinite;
   will-change: transform;

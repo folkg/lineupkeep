@@ -85,12 +85,14 @@ function AccountContent(props: AccountPageProps): JSX.Element {
           isLoading={sessions.isLoading}
           loadFailure={sessions.loadFailure}
           sessions={sessions.sessions}
+          signingOut={session.isSigningOut()}
           onEnd={sessions.endSession}
           onEndOthers={sessions.endOtherSessions}
           onRefresh={sessions.refresh}
+          onSignOut={() => void session.signOut()}
         />
-        <Stack as="section" gap="md" labelledBy="export-title">
-          <SectionTitle id="export-title">Your data</SectionTitle>
+        <Stack as="section" gap="md" labelledBy="data-title">
+          <SectionTitle id="data-title">Your data</SectionTitle>
           <Text>
             The file includes your account, connections, teams, lineup runs, transaction proposals,
             feedback, and sign-in records. Sign-in sessions, passwords, and agent tokens are left
@@ -107,24 +109,6 @@ function AccountContent(props: AccountPageProps): JSX.Element {
               </Text>
             )}
           </Show>
-        </Stack>
-        <Stack as="section" gap="md" labelledBy="sign-out-title">
-          <SectionTitle id="sign-out-title">Sign out</SectionTitle>
-          <Text>
-            Signing out ends this browser session. Your account, connections, and data stay.
-          </Text>
-          <Inline gap="sm">
-            <Button
-              state={session.isSigningOut() ? "working" : "idle"}
-              variant="secondary"
-              onClick={() => void session.signOut()}
-            >
-              Sign out this device
-            </Button>
-          </Inline>
-        </Stack>
-        <Stack as="section" gap="md" labelledBy="erase-title">
-          <SectionTitle id="erase-title">Erase your account</SectionTitle>
           <Text>
             This deletes everything listed above, plus every sign-in session and the grants agents
             hold. It happens as soon as you confirm, and it cannot be undone.

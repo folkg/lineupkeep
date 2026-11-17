@@ -202,19 +202,19 @@
       },
       "display": {
         "displayName": "Display",
-        "purpose": "Bricolage at 800 for the landing statement."
+        "purpose": "Archivo at 800 for the landing statement."
       },
       "page-title": {
         "displayName": "Page Title",
-        "purpose": "One per page; uppercase Bricolage at 800, tight tracking."
+        "purpose": "One per page; uppercase Archivo at 800, tight tracking."
       },
       "section-title": {
         "displayName": "Section Title",
-        "purpose": "Section headings and auth form headings; Bricolage at 800."
+        "purpose": "Section headings and auth form headings; Archivo at 800."
       },
       "team-name": {
         "displayName": "Team Name",
-        "purpose": "26px Bricolage at 800 for a team that leads a row or a page."
+        "purpose": "26px Archivo at 800 for a team that leads a card or a page."
       },
       "body": {
         "displayName": "Body",
@@ -310,7 +310,7 @@
       "tool": "Impeccable",
       "directionSeed": "5547f54d66619d8a2a94b7456b419072",
       "assignedCandidate": 5,
-      "selection": "Owner selected Ink and halftone from the rendered directions. This slice applies its warm newsprint, Bricolage display face, spot ink, panel offset, masthead rule, and league sections. The masthead keeps no utility controls: theme and sign out live on the Account page, the active nav rule spans exactly its item, and the team list puts the provider jump-out with the name. Royal violet and gold remain the approved identity; gold is reserved for the mark."
+      "selection": "Owner selected the ink and paper direction from the rendered directions. This slice applies its warm newsprint, Archivo display face, spot ink, panel offset, and masthead rule. The masthead keeps no utility controls: theme and sign out live on the Account page, the active nav rule spans exactly its item, and the team card puts the provider jump-out with the name. Royal violet and gold remain the approved identity; gold is reserved for the mark."
     }
   },
   "components": [
@@ -363,30 +363,30 @@
     {
       "name": "Square Toggle",
       "kind": "toggle",
-      "description": "A 40x22 paper track with a 2px ink border, a 16px violet knob, and a 44px hit area.",
+      "description": "A 40x22 filled track with 3px padding, a 16px knob, and a 44px hit area.",
       "html": "<button class=\"ds-toggle\" role=\"switch\" aria-checked=\"true\" aria-label=\"Lineup checks\"><span></span></button>",
-      "css": ".ds-toggle{display:inline-flex;min-height:44px;align-items:center;padding:0;border:0;background:transparent;cursor:pointer}.ds-toggle span{display:inline-flex;width:40px;height:22px;padding:3px;border:2px solid var(--theme-rule-strong,#141217);background:var(--theme-paper,#fffdf7)}.ds-toggle span::before{content:'';width:16px;height:16px;transform:translateX(14px);background:var(--theme-action,#5b21b6)}.ds-toggle:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#f4efe4),0 0 0 4px var(--theme-action,#5b21b6)}"
+      "css": ".ds-toggle{display:inline-flex;min-height:44px;align-items:center;padding:0;border:0;background:transparent;cursor:pointer}.ds-toggle span{display:inline-flex;width:40px;height:22px;padding:3px;background:var(--theme-rule,#cdc5b7);box-sizing:border-box}.ds-toggle span::before{content:'';width:16px;height:16px;background:var(--theme-paper,#fffdf7)}.ds-toggle[aria-checked=true] span{background:var(--theme-action,#5b21b6)}.ds-toggle[aria-checked=true] span::before{transform:translateX(18px);background:var(--theme-on-action,#fffdf7)}.ds-toggle:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#f4efe4),0 0 0 4px var(--theme-action,#5b21b6)}"
     },
     {
       "name": "Section Title",
       "kind": "heading",
-      "description": "A 22px Bricolage heading with one 3px ink rule under it.",
+      "description": "A 22px Archivo heading with one 3px ink rule under it.",
       "html": "<div class=\"ds-section\"><h2>Recent activity</h2></div>",
-      "css": ".ds-section{padding-bottom:12px;border-bottom:3px solid var(--theme-rule-strong,#141217)}.ds-section h2{margin:0;font:800 22px/1.2 \"Bricolage Grotesque Variable\",sans-serif;letter-spacing:-.02em;color:var(--theme-ink,#141217)}"
+      "css": ".ds-section{padding-bottom:12px;border-bottom:3px solid var(--theme-rule-strong,#141217)}.ds-section h2{margin:0;font:800 22px/1.2 \"Archivo Variable\",sans-serif;letter-spacing:-.02em;color:var(--theme-ink,#141217)}"
     },
     {
       "name": "Page Title",
       "kind": "heading",
-      "description": "Uppercase Bricolage at 800; one per page.",
+      "description": "Uppercase Archivo at 800; one per page.",
       "html": "<h1 class=\"ds-page-title\">Teams</h1>",
-      "css": ".ds-page-title{margin:0;font:800 clamp(44px,5.4vw,70px)/.95 \"Bricolage Grotesque Variable\",sans-serif;letter-spacing:-.035em;text-transform:uppercase;color:var(--theme-ink,#141217)}"
+      "css": ".ds-page-title{margin:0;font:800 clamp(44px,5.4vw,70px)/.95 \"Archivo Variable\",sans-serif;letter-spacing:-.035em;text-transform:uppercase;color:var(--theme-ink,#141217)}"
     },
     {
       "name": "Team Name Link",
       "kind": "link",
-      "description": "A 26px Bricolage team name that leads a row.",
+      "description": "A 26px Archivo team name that leads a card.",
       "html": "<a class=\"ds-team\" href=\"#example\">$G-Money$</a>",
-      "css": ".ds-team{font:800 26px/1.05 \"Bricolage Grotesque Variable\",sans-serif;letter-spacing:-.02em;color:var(--theme-ink,#141217);text-decoration:none}.ds-team:hover{color:var(--theme-action,#5b21b6)}.ds-team:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#f4efe4),0 0 0 4px var(--theme-action,#5b21b6)}"
+      "css": ".ds-team{font:800 26px/1.05 \"Archivo Variable\",sans-serif;letter-spacing:-.02em;color:var(--theme-ink,#141217);text-decoration:none}.ds-team:hover{color:var(--theme-action,#5b21b6)}.ds-team:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#f4efe4),0 0 0 4px var(--theme-action,#5b21b6)}"
     },
     {
       "name": "Inline Link",
@@ -418,14 +418,13 @@
     }
   ],
   "narrative": {
-    "northStar": "Ink and halftone",
-    "overview": "Lineupgrade reads as a printed sports sheet: warm newsprint, near-black ink, a display face for the page and the teams, and Schibsted for the work in between. Section rules are 3px ink; row hairlines stay 1px. A queue panel is the one box, lifted by one hard violet offset with no blur. Royal violet is spent on interaction, gold exists only in the mark, and one spot ink marks urgency. The product is calm enough to check in the morning and precise enough to trust with a lineup.\n\nThis is an Operate product: information before spectacle, familiar controls, direct labels, and honest state. Light is warm newsprint; dark is a tinted violet sheet. Both are complete palettes.",
+    "northStar": "Ink and paper",
+    "overview": "Lineupgrade reads as a printed sports sheet: warm newsprint, near-black ink, a display face for the page and the teams, and Schibsted for the work in between. Section rules are 3px ink; row hairlines stay 1px. A queue panel is the one offset panel, lifted by one hard violet offset with no blur; team cards are plain 2px-ruled boxes on paper. Royal violet is spent on interaction, gold exists only in the mark, and one spot ink marks urgency. The product is calm enough to check in the morning and precise enough to trust with a lineup.\n\nThis is an Operate product: information before spectacle, familiar controls, direct labels, and honest state. Light is warm newsprint; dark is a tinted violet sheet. Both are complete palettes.",
     "keyCharacteristics": [
-      "Bricolage Grotesque Variable for page titles, section titles, and team names at 800; Schibsted Grotesk Variable for body, meta, labels, controls, and the wordmark",
-      "Square everywhere; 3px ink section rules and 1px row hairlines instead of cards",
+      "Archivo Variable for page titles, section titles, and team names at 800; Schibsted Grotesk Variable for body, meta, labels, controls, and the wordmark",
+      "Square everywhere; 3px ink section rules, 1px row hairlines, and a 2px ink rule around each team card",
       "One 680px measure and one solid action per view",
       "One 8px hard violet offset on a queue panel, and no other shadow",
-      "A clipped halftone dot screen behind wide page titles, and no other print texture",
       "Numbers aligned with tabular figures, never prose tracking",
       "Royal violet for interaction; gold only in the mark; spot ink only for urgency",
       "Light and dark designed together"
@@ -448,17 +447,17 @@
       },
       {
         "name": "The Rule, Not a Box Rule",
-        "body": "A section title owns one 3px ink rule. List rows own 1px hairlines between them. Queue groups are the one bordered panel. Status and empty states use a leading rule or plain text, never a dashed or bordered card.",
+        "body": "A section title owns one 3px ink rule. Connection rows own 1px hairlines between them. Team cards own a 2px ink rule each. Queue groups are the one offset panel. Status and empty states use a leading rule or plain text, never a dashed or bordered card.",
         "section": "elevation"
       },
       {
         "name": "The Queue Panel Rule",
-        "body": "A queue group is the one bordered panel: 2px ink, paper ground, and one 8px hard violet offset with no blur. No other surface casts a shadow, and the halftone screen is the only print texture.",
+        "body": "A queue group is the one offset panel: 2px ink, paper ground, and one 8px hard violet offset with no blur. Team cards use a 2px ink rule on paper with no offset. No other surface casts a shadow.",
         "section": "elevation"
       },
       {
         "name": "The Wordmark Rule",
-        "body": "The wordmark stays continuous lowercase lineupgrade in Schibsted Grotesk at the 11px label weight and tracking, beside the square mark. Bricolage never sets the wordmark. Gold appears nowhere else.",
+        "body": "The wordmark stays continuous lowercase lineupgrade in Schibsted Grotesk at the 11px label weight and tracking, beside the square mark. Archivo never sets the wordmark. Gold appears nowhere else.",
         "section": "typography"
       }
     ],
@@ -467,22 +466,22 @@
       "Do keep controls, inputs, badges, and dialogs square.",
       "Do keep the 680px measure and let tables exceed it only with a reason.",
       "Do use one 3px ink rule under a section title and 1px hairlines between list rows.",
-      "Do set page titles, section titles, and team names in Bricolage at weight 800.",
+      "Do set page titles, section titles, and team names in Archivo at weight 800.",
       "Do spend violet once per view on the primary action.",
       "Do apply tabular numerals to comparable numbers only.",
       "Do keep the wordmark lowercase in Schibsted and the mark gold.",
       "Do use the 8px violet offset only on a queue panel.",
-      "Do reserve spot ink for urgency and the halftone for wide page titles.",
+      "Do reserve spot ink for urgency.",
       "Do preserve keyboard access, visible focus, selection, zoom, and reduced motion."
     ],
     "donts": [
       "Don't add border radii, a shadow beyond the queue panel offset, a colour gradient beyond the phone submit sheet fade, or a second accent.",
       "Don't use gold outside the mark.",
       "Don't use a serif or a third face.",
-      "Don't set body, meta, labels, controls, or the wordmark in Bricolage.",
+      "Don't set body, meta, labels, controls, or the wordmark in Archivo.",
       "Don't use spot ink for errors, destructive actions, or general status; danger owns those.",
-      "Don't add a second print texture or show the halftone on phones or under reduced motion.",
-      "Don't box prose, lists, notices, or empty states.",
+      "Don't add a print texture.",
+      "Don't box prose, connection rows, notices, or empty states.",
       "Don't add letter spacing to body text or apply tabular figures to prose.",
       "Don't repeat a control label on every row of a list.",
       "Don't float controls to the right of a metadata line.",

@@ -76,7 +76,7 @@ const thisDevice: SignInSessionView = {
   current: true,
 };
 
-it("puts appearance, connections, sessions, data, sign out, and erasure in order", async () => {
+it("puts appearance, connections, sessions, and data in order", async () => {
   using _app = setupAccountPage();
 
   await expect.element(page.getByRole("heading", { name: "Account" })).toBeVisible();
@@ -84,18 +84,21 @@ it("puts appearance, connections, sessions, data, sign out, and erasure in order
   await expect.element(page.getByText("Chrome on macOS")).toBeVisible();
 
   const headings = [...document.querySelectorAll("h2")].map((heading) => heading.textContent);
-  expect(headings).toEqual([
-    "Appearance",
-    "Connections",
-    "Sign-in sessions",
-    "Your data",
-    "Sign out",
-    "Erase your account",
-  ]);
+  expect(headings).toEqual(["Appearance", "Connections", "Sign-in sessions", "Your data"]);
 
   const copy = document.body.textContent.replace(/\s+/g, " ");
   expect(copy).not.toContain("Yahoo is connected. Lineup checks use this connection.");
   expect(copy).not.toContain("Your connections");
+});
+
+it("signs out only from the current device with the signed-in sessions", async () => {
+  using _app = setupAccountPage();
+
+  const currentDevice = page.getByRole("listitem").filter({ hasText: "This device" });
+  await expect
+    .element(currentDevice.getByRole("button", { name: "Sign out this device" }))
+    .toBeVisible();
+  expect(page.getByRole("heading", { name: "Sign out" }).elements()).toHaveLength(0);
 });
 
 it("offers an export and explains what erasure cannot undo", async () => {
@@ -103,7 +106,6 @@ it("offers an export and explains what erasure cannot undo", async () => {
 
   await expect.element(page.getByRole("heading", { name: "Account" })).toBeVisible();
   await expect.element(page.getByRole("heading", { name: "Your data" })).toBeVisible();
-  await expect.element(page.getByRole("heading", { name: "Sign out" })).toBeVisible();
   const copy = document.body.textContent.replace(/\s+/g, " ");
   expect(copy).toContain(
     "The file includes your account, connections, teams, lineup runs, transaction proposals, feedback, and sign-in records. Sign-in sessions, passwords, and agent tokens are left out, because a copy should not let anyone sign in as you.",
@@ -128,7 +130,7 @@ it("explains that erasing needs an export and hides the control", async () => {
     status: () => Promise.resolve(noExportStatus),
   });
 
-  await expect.element(page.getByRole("heading", { name: "Erase your account" })).toBeVisible();
+  await expect.element(page.getByRole("heading", { name: "Your data" })).toBeVisible();
   await expect.element(page.getByText("Take an export before erasing")).toBeVisible();
   await expect.element(page.getByText(/Erasing needs an export you already hold/u)).toBeVisible();
   await expect.element(page.getByRole("link", { name: "Download an export" })).toBeVisible();

@@ -3,7 +3,8 @@ import { Show } from "solid-js";
 
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import type { ActionState } from "#browser/shared-ui/actionState.ts";
-import { Button } from "#browser/shared-ui/Button.tsx";
+import { IconButton } from "#browser/shared-ui/IconButton.tsx";
+import { PauseIcon, PlayIcon } from "#browser/shared-ui/icons.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Switch } from "#browser/shared-ui/Switch.tsx";
@@ -48,16 +49,17 @@ export function TeamControls(props: TeamControlsProps): JSX.Element {
         >
           Lineup checks
         </Switch>
-        <Button
-          variant="secondary"
-          aria-label={resumeAction() ? resumeLabel : pauseLabel}
+        <IconButton
           disabled={!enabled() || switchPending()}
+          label={resumeAction() ? resumeLabel : pauseLabel}
+          title={!enabled() ? turnOnFirst : undefined}
           state={pauseState()}
-          title={!enabled() ? turnOnFirst : resumeAction() ? resumeLabel : pauseLabel}
           onClick={() => controls.control(resumeAction() ? "resume" : "pause-today")}
         >
-          {resumeAction() ? "Resume" : "Pause"}
-        </Button>
+          <Show fallback={<PauseIcon size="md" />} when={resumeAction()}>
+            <PlayIcon size="md" />
+          </Show>
+        </IconButton>
       </Inline>
       <Show when={props.showPauseNote !== false && pauseResumeLabel(controls.automation())}>
         {(note) => (

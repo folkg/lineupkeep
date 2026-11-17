@@ -4,6 +4,7 @@ import type { Accessor } from "solid-js";
 
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
+import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
@@ -29,21 +30,17 @@ export function ConnectionsSection(props: ConnectionsSectionProps): JSX.Element 
 
   return (
     <Stack as="section" gap="md" labelledBy="connections-title">
-      <SectionTitle
-        action={
-          <Show when={hasConnection() && hosted.session() === undefined}>
-            <Button variant="secondary" onClick={() => void hosted.start()}>
-              Connect another account
-            </Button>
-          </Show>
-        }
-        id="connections-title"
-      >
-        Connections
-      </SectionTitle>
+      <SectionTitle id="connections-title">Connections</SectionTitle>
       <Text size="caption" tone="muted">
         Lineupgrade keeps the encrypted sign-in session, not your password.
       </Text>
+      <Show when={hasConnection() && hosted.session() === undefined}>
+        <Inline gap="sm">
+          <Button variant="secondary" onClick={() => void hosted.start()}>
+            Connect another account
+          </Button>
+        </Inline>
+      </Show>
       <HostedBrowserPanel
         connected={hasConnection()}
         controller={hosted}

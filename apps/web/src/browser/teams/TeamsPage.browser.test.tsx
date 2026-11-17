@@ -528,6 +528,40 @@ it("keeps the same row height in every check state on a phone and a desktop", as
   }
 });
 
+it("sorts team cards by sport then name across leagues", async () => {
+  const named = (
+    name: string,
+    sport: TeamSummaryView["team"]["sport"],
+    league: TeamSummaryView["team"]["league"],
+  ): TeamSummaryView => ({
+    ...enabledTeam,
+    team: {
+      ...enabledTeam.team,
+      id: crypto.randomUUID(),
+      league,
+      name,
+      sport,
+    },
+  });
+  using _app = setupTeamsPage([
+    named("Zulu Hockey", "hockey", "nhl"),
+    named("Bravo Football", "football", "nfl"),
+    named("Alpha Football", "football", "nfl"),
+    named("Charlie Baseball", "baseball", "mlb"),
+  ]);
+
+  await expect
+    .element(page.getByRole("link", { name: "Alpha Football", exact: true }))
+    .toBeVisible();
+  const names = page
+    .getByRole("listitem")
+    .elements()
+    .map((row) => row.querySelector("a")?.textContent);
+  expect(names).toEqual(["Charlie Baseball", "Alpha Football", "Bravo Football", "Zulu Hockey"]);
+  await expect.element(page.getByRole("heading", { name: "NFL" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("heading", { name: "Your teams" })).toBeVisible();
+});
+
 it("says the next check, the pause, checks off, or a check in flight", async () => {
   const mounted = setupTeamsPage([enabledTeam]);
   try {

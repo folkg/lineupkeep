@@ -1,5 +1,5 @@
 @import "@fontsource-variable/schibsted-grotesk/wght.css";
-@import "@fontsource-variable/bricolage-grotesque/wght.css";
+@import "@fontsource-variable/archivo/wght.css";
 
 :root {
   color-scheme: light;
@@ -26,7 +26,7 @@
   --theme-scrim: rgb(16 16 20 / 0.55);
   --theme-shadow-panel: 8px 8px 0 var(--theme-action-offset);
 
-  --theme-font-display: "Bricolage Grotesque Variable", sans-serif;
+  --theme-font-display: "Archivo Variable", sans-serif;
   --theme-font-sans:
     "Schibsted Grotesk Variable", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;

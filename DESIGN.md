@@ -48,32 +48,32 @@ typography:
     lineHeight: 1.2
     letterSpacing: "0.16em"
   display:
-    fontFamily: "Bricolage Grotesque Variable, sans-serif"
+    fontFamily: "Archivo Variable, sans-serif"
     fontSize: "clamp(2.75rem, 5vw, 4.25rem)"
     fontWeight: 800
     lineHeight: 0.98
     letterSpacing: "-0.035em"
   page-title:
-    fontFamily: "Bricolage Grotesque Variable, sans-serif"
+    fontFamily: "Archivo Variable, sans-serif"
     fontSize: "clamp(2.75rem, 5.4vw, 4.375rem)"
     fontWeight: 800
     lineHeight: 0.95
     letterSpacing: "-0.035em"
     textTransform: "uppercase"
   statement:
-    fontFamily: "Bricolage Grotesque Variable, sans-serif"
+    fontFamily: "Archivo Variable, sans-serif"
     fontSize: "1.75rem"
     fontWeight: 800
     lineHeight: 1.15
     letterSpacing: "-0.02em"
   section-title:
-    fontFamily: "Bricolage Grotesque Variable, sans-serif"
+    fontFamily: "Archivo Variable, sans-serif"
     fontSize: "1.375rem"
     fontWeight: 800
     lineHeight: 1.2
     letterSpacing: "-0.02em"
   team-name:
-    fontFamily: "Bricolage Grotesque Variable, sans-serif"
+    fontFamily: "Archivo Variable, sans-serif"
     fontSize: "1.625rem"
     fontWeight: 800
     lineHeight: 1.05
@@ -162,11 +162,12 @@ components:
 
 ## Overview
 
-**Creative North Star: "Ink and halftone"**
+**Creative North Star: "Ink and paper"**
 
 Lineupgrade reads as a printed sports sheet: warm newsprint, near-black ink, a display face for the
 page and the teams, and Schibsted for the work in between. Section rules are 3px ink; row hairlines
-stay 1px. A queue panel is the one box, lifted by one hard violet offset with no blur. Royal violet
+stay 1px. A queue panel is the one offset panel, lifted by one hard violet offset with no blur;
+team cards are plain 2px-ruled boxes on paper. Royal violet
 is spent on interaction, gold exists only in the mark, and one spot ink marks urgency. The product
 is calm enough to check in the morning and precise enough to trust with a lineup.
 
@@ -175,12 +176,12 @@ honest state. Light is warm newsprint; dark is a tinted violet sheet. Both are c
 
 **Key Characteristics:**
 
-- Bricolage Grotesque Variable for page titles, section titles, and team names at weight 800;
+- Archivo Variable for page titles, section titles, and team names at weight 800;
   Schibsted Grotesk Variable for body, meta, labels, controls, and the wordmark
-- Square everywhere; 3px ink section rules and 1px row hairlines instead of cards
+- Square everywhere; 3px ink section rules, 1px row hairlines, and a 2px ink rule around each team
+  card
 - One 680px measure and one solid action per view
 - One 8px hard violet offset on a queue panel, and no other shadow
-- A clipped halftone dot screen behind wide page titles, and no other print texture
 - Numbers aligned with tabular figures, never prose tracking
 - Royal violet for interaction; gold only in the mark; spot ink only for urgency
 - Light and dark designed together
@@ -264,9 +265,9 @@ errors and destructive actions.
 
 ## Typography
 
-**Two faces with separate jobs.** Display type is Bricolage Grotesque Variable, self-hosted through
-Fontsource (`@fontsource-variable/bricolage-grotesque`). Work type is Schibsted Grotesk Variable,
-self-hosted through Fontsource. Bricolage carries page titles, section titles, team names, the
+**Two faces with separate jobs.** Display type is Archivo Variable, self-hosted through
+Fontsource (`@fontsource-variable/archivo`). Work type is Schibsted Grotesk Variable,
+self-hosted through Fontsource. Archivo carries page titles, section titles, team names, the
 landing statement, and the display scale at weight 800. Schibsted carries body, meta, labels,
 controls, and the wordmark. No serif, no third face. Google's branded button keeps Google's
 prescribed G and type.
@@ -297,7 +298,7 @@ line, never to prose: in Schibsted Grotesk tabular figures widen punctuation and
 before commas and full stops.
 
 **The Wordmark Rule.** The wordmark stays continuous lowercase `lineupgrade` in Schibsted Grotesk at
-the 11px label weight and tracking, beside the square mark. Bricolage never sets the wordmark. Use
+the 11px label weight and tracking, beside the square mark. Archivo never sets the wordmark. Use
 Lineupgrade in prose. Do not uppercase, split, outline, or colour the syllables.
 
 **The Mark.** A 20px gold square with ink `lu` strokes: a lowercase l with a short foot so it
@@ -318,13 +319,14 @@ rule closes it. Navigation labels are 11px caps; the active item carries a 2px i
 exactly the item, not a short bar or an overhanging block. The links wrap as whole items, with no
 utility action left on a line of its own.
 
-**Rows** are two columns from 560px: text at the left, one control cluster at the right. A team
-row puts its provider jump-out beside the 26px team name in the text column; the right cluster
-carries the checks toggle and the pause control, so every row has the same control shape. The
-pause is a 44px bordered text control reading Pause or Resume while its accessible name stays the
-full sentence; it stays in place and is disabled while checks are off. Below 560px a row stacks:
-full-width text first, then the controls on their own line, aligned left. A long team or league
-name wraps; it never truncates. Controls never overlap a name.
+**Rows and cards** use two columns from 560px: text at the left, one control cluster at the right. A team
+card puts its provider jump-out beside the 26px team name in the text column; the right cluster
+carries the checks toggle and the pause control, so every card has the same control shape. The
+pause is a 28px square icon frame showing Pause or Play, so changing state never shifts the
+cluster; its accessible name stays the full pause or resume sentence, and it stays in place and
+is disabled while checks are off. Below 560px a card stacks: full-width text first, then the
+controls on their own line, aligned left. A long team or league name wraps; it never truncates.
+Controls never overlap a name.
 
 **Team detail order** is fixed: back link, title with the provider jump-out beside it, one
 metadata line (sport and league), one control row with toggle and pause on the same line, a quiet
@@ -332,9 +334,10 @@ report link, then the activity section behind its rule, then the owner note. The
 sits beside the title here and beside the name on the list. Nothing floats to the right of the
 metadata line.
 
-**League sections.** The team list groups teams under their league. Each league section owns one
-3px ink rule under its heading and a right-aligned count in 11px caps. Team names are 26px
-Bricolage; the meta and status lines stay 12px Schibsted.
+**Team cards.** The team list puts each team in its own card, sorted by sport then name; the
+sport is already in the card's meta line, so there are no league headings or counts. A card has
+a 2px ink rule and the normal `paper` ground, never the queue offset. Team names are 26px
+Archivo; the meta and status lines stay 12px Schibsted.
 
 **Activity ranges** omit a repeated date: `Nov 1, 11:44 AM to 1:12 PM`. When the group is a
 single instant, say `at Nov 1, 11:44 AM`; when it crosses the reader's midnight, show both full
@@ -351,18 +354,14 @@ Radii are `0px` in the tokens, and a component must not add one.
 
 There is one hard shadow: a queue group is a `paper` panel with a 2px ink border and an 8px violet
 offset, no blur. The offset is the only shadow a surface casts; the focus ring is the only other
-shadow in the interface. Buttons, fields, rows, notices, and quiet surfaces cast none. There are no
-gradients except the phone submit sheet fade. A surface earns a border when it is a control (an
-input, a button, the hosted browser viewport, or a dialog) or when it is the queue panel. Prose,
-lists, notices, and empty states use rules, not boxes.
+shadow in the interface. Buttons, fields, team cards, notices, and quiet surfaces cast none. There
+are no gradients except the phone submit sheet fade. A surface earns a border when it is a control
+(an input, a button, the hosted browser viewport, or a dialog), a team card, or the queue panel.
+Prose, connection lists, notices, and empty states use rules, not boxes.
 
-**The Rule, Not a Box Rule.** A section title owns one 3px ink rule. List rows own 1px hairlines
-between them. Queue groups are the one bordered panel. Status and empty states use a leading rule
-or plain text, never a dashed or bordered card.
-
-**The Halftone Screen.** A clipped dot screen may sit behind a page title on wide screens. It is
-decoration: low contrast, hidden below 768px and under reduced motion, and always `aria-hidden`.
-It is the one print texture; nothing else on the page imitates paper or ink grain.
+**The Rule, Not a Box Rule.** A section title owns one 3px ink rule. Connection rows own 1px
+hairlines between them. Team cards own a 2px ink rule each. Queue groups are the one offset panel.
+Status and empty states use a leading rule or plain text, never a dashed or bordered card.
 
 **The Phone Submit Sheet.** Below 560px the submit controls sit in a sheet fixed to the bottom with
 no rule of their own. A 16px canvas fade above it takes the rule's place, so the page blends into
@@ -413,11 +412,12 @@ and note save are decided there and are not retimed by a motion pass.
 - **Quiet:** 11px caps ink-soft text, no border; used for sign-out and other low-stakes controls.
 - **Link:** 15px action violet with a 2px underline, used for navigation and recovery. Quiet links
   use ink-soft, not violet.
-- **Pause:** a secondary 44px text control reading Pause or Resume, beside the team's checks
-  toggle. Its accessible name remains the full pause or resume sentence.
+- **Pause:** an icon control in the 28px square frame inside a 44px hit area, beside the team's
+  checks toggle. It shows Pause or Play so the control keeps its place; its accessible name
+  remains the full pause or resume sentence.
 - **Icon:** a 28px square frame with a 2px `rule-strong` border inside a 44px hit area. The frame
-  sits flush with the column edge; the hit area may extend into the gutter. Provider jump-outs and
-  the refresh control use this control.
+  sits flush with the column edge; the hit area may extend into the gutter. Provider jump-outs,
+  the pause control, and the refresh control use this control.
 - **Google:** Google's G and prescribed light/dark fill, square to match the sheet, with its own
   14px type as the one branded exception.
 
@@ -432,21 +432,23 @@ Placeholders are not labels. The caret and selection use action tokens.
 
 ### Toggle
 
-A 40×22 square track with a 2px ink border on a `paper` ground and a 16px square knob. On is an
-`action` knob; off is an `ink-faint` knob. The track carries a 44px hit area. In a list of teams
-the label is hidden and the row's name identifies the toggle; on a single team the `LINEUP CHECKS`
-label is visible. The pause control always sits beside the toggle; when checks are off it is
-disabled with an explanatory title rather than removed.
+A 40×22 filled track with 3px padding and a 16px square knob. On fills the track with `action`
+and draws the knob in `on-action`; off fills the track with `rule` and draws the knob in `paper`.
+The track carries a 44px hit area. In a list of teams the label is hidden and the card's name
+identifies the toggle; on a single team the `LINEUP CHECKS` label is visible. The pause control
+always sits beside the toggle; when checks are off it is disabled with an explanatory title rather
+than removed.
 
 ### Lists and status
 
-Team and connection rows use 15px text with 12px meta and a 1px bottom hairline. A team name is
-26px Bricolage at 800 where the row is a primary destination. Status is a labelled word in caps,
-never a colour alone. Team rows keep one status line under the league context in every state — the
-next check, a pause with its resume time, checks off, or a check in progress — then what the last
-check did, when, and the recent tally. The status line reserves two lines so its sentence cannot
-change the row's height. A provider jump-out sits beside the team name; the right cluster is the
-toggle and pause only. A list never repeats a control label on every row.
+Connection rows use 15px text with 12px meta and a 1px bottom hairline; team cards use a 2px ink
+rule on the `paper` ground. A team name is 26px Archivo at 800 where the card is a primary
+destination. Status is a labelled word in caps, never a colour alone. Team cards keep one status
+line under the league context in every state — the next check, a pause with its resume time,
+checks off, or a check in progress — then what the last check did, when, and the recent tally. The
+status line reserves two lines so its sentence cannot change the card's height. A provider
+jump-out sits beside the team name; the right cluster is the toggle and pause only. A list never
+repeats a control label on every row.
 
 Notices are a 2px leading rule with caps title and 12px detail. Empty and loading states are a
 top rule with a 15px title and soft text. The live status region stays in the accessibility tree
@@ -495,10 +497,13 @@ and every state change is instant.
 
 ### Account
 
-The Account page owns appearance, data export, sign out, and erasure. Appearance offers System,
-Light, and Dark; System follows the device and listens for changes. Sign out is a quiet control on
-Account; it is not in the masthead navigation. The page title and the navigation label are both
-Account.
+The Account page owns appearance, connections, sign-in sessions, data export, sign out, and
+erasure. Appearance offers System, Light, and Dark; System follows the device and listens for
+changes. Connect another account is a normal control inside Connections, under the description and
+above the connection rows. A session row ends that session, and the current device carries the one
+Sign out this device action. Your data holds the export first, then the erase action with its warning
+and required export step. Sign out is not in the masthead navigation. The page title and the
+navigation label are both Account.
 
 ### Connections
 
@@ -522,12 +527,12 @@ or connection health.
 - Do keep controls, inputs, badges, and dialogs square.
 - Do keep the 680px measure and let tables exceed it only with a reason.
 - Do use one 3px ink rule under a section title and 1px hairlines between list rows.
-- Do set page titles, section titles, and team names in Bricolage at weight 800.
+- Do set page titles, section titles, and team names in Archivo at weight 800.
 - Do spend violet once per view on the primary action.
 - Do apply tabular numerals to comparable numbers only.
 - Do keep the wordmark lowercase in Schibsted and the mark gold.
 - Do use the 8px violet offset only on a queue panel.
-- Do reserve spot ink for urgency and the halftone for wide page titles.
+- Do reserve spot ink for urgency.
 - Do keep motion to the rare moments named under [Motion](#motion), on the theme's duration and
   easing tokens.
 - Do preserve keyboard access, visible focus, selection, zoom, and reduced motion.
@@ -540,10 +545,10 @@ or connection health.
   phone submit sheet fade, or a second accent.
 - Don't use gold outside the mark.
 - Don't use a serif or a third face.
-- Don't set body, meta, labels, controls, or the wordmark in Bricolage.
+- Don't set body, meta, labels, controls, or the wordmark in Archivo.
 - Don't use spot ink for errors, destructive actions, or general status; danger owns those.
-- Don't add a second print texture or show the halftone on phones or under reduced motion.
-- Don't box prose, lists, notices, or empty states.
+- Don't add a print texture.
+- Don't box prose, connection rows, notices, or empty states.
 - Don't add letter spacing to body text or apply tabular figures to prose.
 - Don't repeat a control label on every row of a list.
 - Don't remove a control or shift the cluster when it becomes unavailable; disable it in place.

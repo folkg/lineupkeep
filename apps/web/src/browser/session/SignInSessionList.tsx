@@ -60,7 +60,9 @@ export function SignInSessionList(props: SignInSessionListProps): JSX.Element {
                     ending={props.endingId() === session.id}
                     leaving={props.departingId() === session.id}
                     session={session}
+                    signingOut={props.signingOut}
                     onEnd={() => props.onEnd(session)}
+                    onSignOut={props.onSignOut}
                   />
                 )}
               </For>
@@ -117,6 +119,15 @@ function SessionRow(props: SessionRowProps): JSX.Element {
             <XIcon size="md" />
           </IconButton>
         </Show>
+        <Show when={props.session.current}>
+          <Button
+            state={props.signingOut ? "working" : "idle"}
+            variant="secondary"
+            onClick={props.onSignOut}
+          >
+            Sign out this device
+          </Button>
+        </Show>
       </Inline>
       <Text size="caption" tone="faint">
         Started{" "}
@@ -138,14 +149,18 @@ type SignInSessionListProps = {
   readonly departingId: Accessor<string | undefined>;
   readonly endingId: Accessor<string | undefined>;
   readonly endingOthers: Accessor<boolean>;
+  readonly signingOut: boolean;
   readonly onEnd: (session: SignInSessionView) => void;
   readonly onEndOthers: () => void;
   readonly onRefresh: () => Promise<void>;
+  readonly onSignOut: () => void;
 };
 
 type SessionRowProps = {
   readonly session: SignInSessionView;
   readonly ending: boolean;
   readonly leaving: boolean;
+  readonly signingOut: boolean;
   readonly onEnd: () => void;
+  readonly onSignOut: () => void;
 };

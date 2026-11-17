@@ -2,7 +2,6 @@ import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
 import type { Element } from "solid-js";
 
-import { HalftoneScreen } from "./HalftoneScreen";
 import { Heading } from "./Heading";
 import { Inline } from "./Inline";
 import { Text } from "./Text";
@@ -10,10 +9,9 @@ import { Text } from "./Text";
 export function Page(props: PageProps): JSX.Element {
   const variant = (): TitleVariant => props.titleVariant ?? "page";
   return (
-    <section class="relative w-full pt-[clamp(32px,4vw,48px)] pb-[max(48px,env(safe-area-inset-bottom))] max-sm:pt-8">
-      <HalftoneScreen variant="title" />
-      <Show when={props.back}>{(back) => <div class="relative mb-6">{back()}</div>}</Show>
-      <header class="relative mb-8 grid max-w-[42.5rem] gap-3">
+    <section class="w-full pt-[clamp(32px,4vw,48px)] pb-[max(48px,env(safe-area-inset-bottom))] max-sm:pt-8">
+      <Show when={props.back}>{(back) => <div class="mb-6">{back()}</div>}</Show>
+      <header class="mb-8 grid max-w-[42.5rem] gap-3">
         <Show when={props.kicker}>
           {(kicker) => (
             <div class="text-label font-semibold uppercase tracking-label text-action">
