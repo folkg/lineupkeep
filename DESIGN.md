@@ -442,8 +442,9 @@ than removed.
 
 ### Lists and status
 
-Connection rows use 15px text with 12px meta and a 1px bottom hairline; team cards use a 2px ink
-rule on the `paper` ground. A team name is 26px Archivo at 800 where the card is a primary
+Connection rows use 15px text with 12px meta and a 1px bottom hairline. Team cards and
+transaction group cards share one Card frame: a 2px ink rule on the `paper` ground with an 8px hard
+violet offset, one header rule, and one footer rule. A team name is 26px Archivo at 800 where the card is a primary
 destination. Status is a labelled word in caps, never a colour alone. Team cards keep one status
 line under the league context in every state — the next check, a pause with its resume time,
 checks off, or a check in progress — then what the last check did, when, and the recent tally. The
