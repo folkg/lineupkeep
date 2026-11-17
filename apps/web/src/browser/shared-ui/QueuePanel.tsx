@@ -38,6 +38,10 @@ export function QueuePanelNote(props: { readonly children: Element }): JSX.Eleme
   return <div class="border-t border-rule px-4 py-3">{props.children}</div>;
 }
 
+export function QueuePanelStatus(props: { readonly children: Element }): JSX.Element {
+  return <div class="grid gap-1 border-b border-rule px-4 py-3">{props.children}</div>;
+}
+
 type QueuePanelProps = {
   readonly labelledBy: string;
   readonly header: Element;

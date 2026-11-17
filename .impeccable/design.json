@@ -363,9 +363,9 @@
     {
       "name": "Square Toggle",
       "kind": "toggle",
-      "description": "A 40x22 filled track with 3px padding, a 16px knob, and a 44px hit area.",
+      "description": "A 40x22 track with a 2px inset ink edge, 3px padding, a 16px knob, and a 44px hit area.",
       "html": "<button class=\"ds-toggle\" role=\"switch\" aria-checked=\"true\" aria-label=\"Lineup checks\"><span></span></button>",
-      "css": ".ds-toggle{display:inline-flex;min-height:44px;align-items:center;padding:0;border:0;background:transparent;cursor:pointer}.ds-toggle span{display:inline-flex;width:40px;height:22px;padding:3px;background:var(--theme-rule,#cdc5b7);box-sizing:border-box}.ds-toggle span::before{content:'';width:16px;height:16px;background:var(--theme-paper,#fffdf7)}.ds-toggle[aria-checked=true] span{background:var(--theme-action,#5b21b6)}.ds-toggle[aria-checked=true] span::before{transform:translateX(18px);background:var(--theme-on-action,#fffdf7)}.ds-toggle:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#f4efe4),0 0 0 4px var(--theme-action,#5b21b6)}"
+      "css": ".ds-toggle{display:inline-flex;min-height:44px;align-items:center;padding:0;border:0;background:transparent;cursor:pointer}.ds-toggle span{display:inline-flex;width:40px;height:22px;padding:3px;background:var(--theme-paper,#fffdf7);box-shadow:inset 0 0 0 2px var(--theme-rule-strong,#141217);box-sizing:border-box}.ds-toggle span::before{content:'';width:16px;height:16px;background:var(--theme-ink,#141217)}.ds-toggle[aria-checked=true] span{background:var(--theme-action,#5b21b6)}.ds-toggle[aria-checked=true] span::before{transform:translateX(18px);background:var(--theme-on-action,#fffdf7)}.ds-toggle:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#f4efe4),0 0 0 4px var(--theme-action,#5b21b6)}"
     },
     {
       "name": "Section Title",

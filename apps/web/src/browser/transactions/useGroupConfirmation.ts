@@ -56,7 +56,11 @@ export function useGroupConfirmation(input: {
     });
   };
 
-  return { start, pending: () => confirm.isPending };
+  return {
+    start,
+    pending: () => confirm.isPending,
+    pendingMoves: () => (confirm.isPending ? (confirm.variables?.moves ?? []) : []),
+  };
 }
 
 function canConfirm(move: TransactionMoveView): boolean {
@@ -66,6 +70,7 @@ function canConfirm(move: TransactionMoveView): boolean {
 export type GroupConfirmation = {
   readonly start: (moves: ReadonlyArray<TransactionMoveView>) => void;
   readonly pending: () => boolean;
+  readonly pendingMoves: () => ReadonlyArray<string>;
 };
 
 type GroupConfirmationPage = {

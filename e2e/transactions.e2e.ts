@@ -109,7 +109,7 @@ test("proposes a move into one team queue and confirms it from the transactions 
   const earlier = page.getByRole("button", { name: "Show earlier moves" });
   await expect(earlier).toHaveAttribute("aria-expanded", "false");
   await earlier.click();
-  await expect(page.getByText("Ran now", { exact: true })).toBeVisible();
+  await expect(page.getByText("Ran when you confirmed", { exact: true })).toBeVisible();
   await expect(page.getByText("Drop Riverside Receiver", { exact: true })).toBeVisible();
   await expect(page.getByText("1 ended move", { exact: true })).toBeVisible();
 

@@ -6,17 +6,14 @@ import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Badge } from "#browser/shared-ui/Badge.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
+import { Disclosure } from "#browser/shared-ui/Disclosure.tsx";
 import { Form } from "#browser/shared-ui/Form.tsx";
-import {
-  formatCalendarDate,
-  formatClockTime,
-  formatDateTime,
-} from "#browser/shared-ui/formatTime.ts";
+import { formatCalendarDate, formatDateTime } from "#browser/shared-ui/formatTime.ts";
 import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
 import { QueueList, QueueListItem, QueueListNote } from "#browser/shared-ui/QueueList.tsx";
-import { QueuePanel, QueuePanelNote } from "#browser/shared-ui/QueuePanel.tsx";
+import { QueuePanel, QueuePanelNote, QueuePanelStatus } from "#browser/shared-ui/QueuePanel.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
@@ -42,10 +39,11 @@ import {
 import { TransactionAuthenticationFailure } from "./transactionFailure";
 import type { TransactionRemote } from "./transactionRemote";
 import {
-  formatLocalDate,
-  moveTimingLine,
-  resultRunLabel,
+  confirmationLine,
+  discardLine,
+  moveOutcomeLabel,
   scheduledRunLine,
+  waitingOnLeagueLine,
 } from "./transactionTimes";
 import { useGroupConfirmation } from "./useGroupConfirmation";
 import type { GroupConfirmation } from "./useGroupConfirmation";
@@ -159,7 +157,7 @@ function DaySection(props: DaySectionProps): JSX.Element {
       return formatCalendarDate(props.day.day);
     }
     const nextRunAt = props.page.nextRunAt();
-    return nextRunAt === undefined ? undefined : `Runs at ${formatClockTime(nextRunAt)}`;
+    return nextRunAt === undefined ? undefined : scheduledRunLine(props.day.day, nextRunAt);
   };
   const countLabel = (): string => {
     if (props.today) {
@@ -209,11 +207,13 @@ function DaySection(props: DaySectionProps): JSX.Element {
         }
         when={moves().length > 0}
       >
-        <For each={props.day?.teams ?? []}>
-          {(team) => (
-            <TeamGroups card={team} page={props.page} remote={props.remote} today={props.today} />
-          )}
-        </For>
+        <Stack gap="2xl">
+          <For each={props.day?.teams ?? []}>
+            {(team) => (
+              <TeamGroups card={team} page={props.page} remote={props.remote} today={props.today} />
+            )}
+          </For>
+        </Stack>
       </Show>
     </Stack>
   );
@@ -245,11 +245,23 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
       (move) =>
         move.result === undefined && (move.decision === "undecided" || move.decision === "saved"),
     );
-  const hasOpen = (): boolean => all().some((move) => move.result === undefined);
+  const hasOpen = (): boolean =>
+    all().some((move) => move.result === undefined && move.decision !== "discarded");
+  const opened = (): boolean =>
+    props.card.group === undefined || props.card.group.status === "ready";
   const confirmable = (): boolean =>
-    all().every((move) => move.validation.status === "current" && move.result === undefined);
-  const working = (): boolean => props.confirmation.pending();
-  const showControl = (): boolean => (props.card.today || pending()) && hasOpen();
+    all().every(
+      (move) =>
+        move.validation.status === "current" &&
+        move.result === undefined &&
+        move.decision !== "discarded",
+    );
+  const busy = (): boolean => props.confirmation.pending();
+  const working = (): boolean =>
+    busy() && all().every((move) => props.confirmation.pendingMoves().includes(move.move));
+  const state = (): GroupState => (working() ? "Running" : panelState(props.card));
+  const stopped = (): boolean => state() === "Partly ran" || state() === "Blocked";
+  const showControl = (): boolean => (props.card.today || pending()) && hasOpen() && opened();
   const controlLabel = (): string => {
     if (props.card.today) {
       return pending() ? "Confirm group and run now" : "Run group now";
@@ -258,27 +270,56 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
   };
   const workingLabel = (): string => (props.card.today && !pending() ? "Running" : "Confirming");
   const actionLabel = (): string => `${controlLabel()}: ${cardTitle(props.card)}`;
-  const explanation = (): string | undefined => {
-    const group = props.card.group;
-    return group === undefined || group.status === "ready" ? undefined : group.detail;
-  };
   const note = (): string => {
     if (props.card.today) {
-      return `Runs immediately · ${moveCount(all().length)}`;
+      return "Runs immediately.";
     }
     const runDay = props.card.lead.runDay;
     return runDay === undefined
       ? "No run date is set."
       : `${scheduledRunLine(runDay, props.page.nextRunAt())}.`;
   };
-  const showNote = (): boolean => showControl() || !props.card.today;
+  const statusLines = (): ReadonlyArray<StatusLine> => {
+    const lines: Array<StatusLine> = [];
+    const summary = groupSummary(props.card, state());
+    if (summary !== undefined) {
+      lines.push({ text: summary, tone: "muted" });
+    }
+    if (all().some((move) => move.decision !== "discarded" && move.result === "pending")) {
+      const nextRunAt = props.page.nextRunAt();
+      if (nextRunAt !== undefined) {
+        lines.push({ text: waitingOnLeagueLine(nextRunAt), tone: "muted" });
+      }
+    }
+    const confirmed = all().find((move) => move.confirmation !== undefined);
+    if (confirmed !== undefined) {
+      const line = confirmationLine(confirmed);
+      if (line !== undefined) {
+        lines.push({ text: line, tone: "muted" });
+      }
+    }
+    if ((state() === "Undecided" || state() === "Confirmed") && !props.card.today) {
+      const runDay = props.card.lead.runDay;
+      const nextRunAt = props.page.nextRunAt();
+      if (runDay !== undefined && nextRunAt !== undefined) {
+        lines.push({ text: `${scheduledRunLine(runDay, nextRunAt)}.`, tone: "muted" });
+      }
+    }
+    return lines;
+  };
+  const detail = (): string | undefined => props.card.group?.detail;
+  const facts = (): TransactionTeamFactsView | undefined =>
+    props.facts !== undefined && (state() === "Blocked" || state() === "Partly ran")
+      ? props.facts
+      : undefined;
+  const hasDetail = (): boolean => detail() !== undefined || facts() !== undefined;
   return (
     <QueuePanel
       action={
         showControl() ? (
           <Button
             variant="primary"
-            disabled={!confirmable() || working()}
+            disabled={!confirmable() || busy()}
             state={working() ? "working" : "idle"}
             aria-label={actionLabel()}
             onClick={() => props.confirmation.start(all())}
@@ -287,7 +328,7 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
           </Button>
         ) : undefined
       }
-      badge={<Badge tone={groupStateTone(panelState(props.card))}>{panelState(props.card)}</Badge>}
+      badge={<Badge tone={groupStateTone(state())}>{state()}</Badge>}
       header={
         <>
           <Heading id={headingId()} level={3} size="section">
@@ -307,20 +348,24 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
       }
       labelledBy={headingId()}
       note={
-        showNote() ? (
+        showControl() ? (
           <Text size="label" tone={props.card.today ? "spot" : "muted"}>
             {note()}
           </Text>
         ) : undefined
       }
-      support={
-        !props.card.today && !pending() ? (
-          <Text size="caption" tone="muted">
-            Waiting for its day. Nothing runs before then.
-          </Text>
-        ) : undefined
-      }
     >
+      <Show when={statusLines().length > 0}>
+        <QueuePanelStatus>
+          <For each={statusLines()}>
+            {(line) => (
+              <Text size="caption" tone={line.tone}>
+                {line.text}
+              </Text>
+            )}
+          </For>
+        </QueuePanelStatus>
+      </Show>
       <QueueList>
         <For each={props.card.moves}>
           {(move, index) => (
@@ -329,7 +374,8 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
               number={index() + 1}
               page={props.page}
               today={props.card.today}
-              working={working()}
+              waiting={stopped()}
+              working={busy()}
             />
           )}
         </For>
@@ -346,27 +392,28 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
                 number={props.card.moves.length + index() + 1}
                 page={props.page}
                 today={props.card.today}
-                working={working()}
+                waiting={stopped()}
+                working={busy()}
               />
             )}
           </For>
         </Show>
       </QueueList>
-      <Show when={props.facts}>
-        {(facts) => (
-          <QueuePanelNote>
-            <TeamPlaces facts={facts()} />
-          </QueuePanelNote>
-        )}
-      </Show>
-      <Show when={explanation()}>
-        {(detail) => (
-          <QueuePanelNote>
-            <Text size="caption" tone="muted">
-              {detail()}
-            </Text>
-          </QueuePanelNote>
-        )}
+      <Show when={hasDetail()}>
+        <QueuePanelNote>
+          <Disclosure summary="Why these moves">
+            <Stack gap="md">
+              <Show when={detail()}>
+                {(text) => (
+                  <Text size="caption" tone="muted">
+                    {text()}
+                  </Text>
+                )}
+              </Show>
+              <Show when={facts()}>{(held) => <TeamPlaces facts={held()} />}</Show>
+            </Stack>
+          </Disclosure>
+        </QueuePanelNote>
       </Show>
     </QueuePanel>
   );
@@ -375,14 +422,19 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
 function GroupMoveRow(props: GroupMoveRowProps): JSX.Element {
   const invalid = (): boolean => props.move.validation.status !== "current";
   const editing = (): boolean => props.page.editing() === props.move.move;
+  const actionable = (): boolean =>
+    props.move.result === undefined && props.move.decision !== "discarded";
   const actionsDisabled = (): boolean =>
     props.page.saving() || props.page.discarding() !== undefined || props.working;
+  const outcome = (): string | undefined =>
+    moveOutcomeLabel(props.move) ??
+    (props.waiting && props.move.decision !== "discarded" ? "Waiting" : undefined);
   return (
     <QueueListItem
       number={props.number}
       actions={
         <>
-          <Show when={!props.today && !invalid()}>
+          <Show when={!props.today && !invalid() && actionable()}>
             <Button
               variant="link"
               disabled={actionsDisabled()}
@@ -392,16 +444,18 @@ function GroupMoveRow(props: GroupMoveRowProps): JSX.Element {
               {props.move.runDay === undefined ? "Set date" : "Change date"}
             </Button>
           </Show>
-          <Button
-            variant="quiet"
-            tone="danger"
-            disabled={actionsDisabled()}
-            state={props.page.discarding() === props.move.move ? "working" : "idle"}
-            aria-label={`Discard: ${moveSummary(props.move)}`}
-            onClick={() => props.page.discardMove(props.move)}
-          >
-            {props.page.discarding() === props.move.move ? "Discarding" : "Discard"}
-          </Button>
+          <Show when={actionable()}>
+            <Button
+              variant="quiet"
+              tone="danger"
+              disabled={actionsDisabled()}
+              state={props.page.discarding() === props.move.move ? "working" : "idle"}
+              aria-label={`Discard: ${moveSummary(props.move)}`}
+              onClick={() => props.page.discardMove(props.move)}
+            >
+              {props.page.discarding() === props.move.move ? "Discarding" : "Discard"}
+            </Button>
+          </Show>
         </>
       }
       details={
@@ -456,16 +510,12 @@ function GroupMoveRow(props: GroupMoveRowProps): JSX.Element {
           </Text>
         )}
       </Show>
-      <MoveState move={props.move} page={props.page} today={props.today} />
-      <Show when={props.move.result !== undefined}>
-        <Text
-          size="caption"
-          tone={
-            props.move.result === "failed" || props.move.result === "unknown" ? "danger" : "muted"
-          }
-        >
-          {resultLabel(props.move)}
-        </Text>
+      <Show when={outcome()}>
+        {(label) => (
+          <Text size="caption" weight="semibold" tone={outcomeTone(props.move)}>
+            {label()}
+          </Text>
+        )}
       </Show>
       <Show when={!props.today && props.move.effectiveDate !== undefined}>
         <Text size="caption" tone="muted">
@@ -477,74 +527,11 @@ function GroupMoveRow(props: GroupMoveRowProps): JSX.Element {
   );
 }
 
-function MoveState(props: MoveStateProps): JSX.Element {
-  const line = (): string | undefined => {
-    const move = props.move;
-    const timing = moveTimingLine({
-      move,
-      today: props.today,
-      nextRunAt: props.page.nextRunAt(),
-    });
-    if (move.confirmation !== undefined) {
-      const confirmed = `You confirmed this on ${formatLocalDate(move.confirmation.at)}${surfaceCopy(move)}.`;
-      return timing === undefined
-        ? confirmed
-        : `${confirmed} ${timing.endsWith(".") ? timing : `${timing}.`}`;
-    }
-    if (move.decision === "discarded") {
-      return move.decidedAt === undefined
-        ? decidedByCopy(move, "discarded this")
-        : `${decidedByCopy(move, "discarded this")} on ${formatLocalDate(move.decidedAt)}.`;
-    }
-    if (timing !== undefined) {
-      return timing.endsWith(".") ? timing : `${timing}.`;
-    }
-    if (move.result !== undefined) {
-      return undefined;
-    }
-    if (isConfirmed(move)) {
-      return "Confirmed. It has not run yet.";
-    }
-    if (move.decision === "saved") {
-      return move.runDay === undefined
-        ? "It waits for your confirmation."
-        : `It waits for ${formatCalendarDate(move.runDay)}.`;
-    }
-    return undefined;
-  };
-  return (
-    <Show when={line()}>
-      {(held) => (
-        <Text size="caption" tone={props.move.decision === "discarded" ? "faint" : "muted"}>
-          {held()}
-        </Text>
-      )}
-    </Show>
-  );
-}
-
-function decidedByCopy(move: TransactionMoveView, action: string): string {
-  switch (move.decidedBy) {
-    case "agent":
-      return `An agent ${action}${surfaceCopy(move)}`;
-    case "system":
-      return `The scheduled run ${action}`;
-    case "owner":
-    case undefined:
-      return `You ${action}${surfaceCopy(move)}`;
+function outcomeTone(move: TransactionMoveView): "muted" | "faint" | "danger" {
+  if (move.decision === "discarded") {
+    return "faint";
   }
-}
-
-function surfaceCopy(move: TransactionMoveView): string {
-  switch (move.surface) {
-    case undefined:
-      return "";
-    case "transaction_plan.tick":
-    case "automation.run":
-      return "";
-    default:
-      return move.surface.startsWith("transactions.") ? " in the app" : ` over ${move.surface}`;
-  }
+  return move.result === "failed" || move.result === "unknown" ? "danger" : "muted";
 }
 
 function MoveCheck(props: { readonly move: TransactionMoveView }): JSX.Element {
@@ -632,9 +619,7 @@ function EarlierSection(props: SectionProps): JSX.Element {
             when={props.page.earlier().length > 0}
           >
             <RuleList>
-              <For each={props.page.earlier()}>
-                {(move) => <EarlierRow move={move} page={props.page} />}
-              </For>
+              <For each={props.page.earlier()}>{(move) => <EarlierRow move={move} />}</For>
             </RuleList>
             <Show when={props.page.hasMoreEarlier()}>
               <Inline gap="sm">
@@ -643,9 +628,7 @@ function EarlierSection(props: SectionProps): JSX.Element {
                   state={props.page.fetchingMoreEarlier() ? "working" : "idle"}
                   onClick={props.page.showMoreEarlier}
                 >
-                  {props.page.fetchingMoreEarlier()
-                    ? "Loading ended moves"
-                    : "Show more ended moves"}
+                  {props.page.fetchingMoreEarlier() ? "Loading ended moves" : "Load more"}
                 </Button>
               </Inline>
             </Show>
@@ -657,12 +640,14 @@ function EarlierSection(props: SectionProps): JSX.Element {
 }
 
 function EarlierRow(props: EarlierRowProps): JSX.Element {
+  const confirmed = (): string | undefined => confirmationLine(props.move);
+  const discarded = (): string | undefined => discardLine(props.move);
   return (
     <RuleListItem layout="stack" dense>
       <Stack gap="2xs">
         <Inline gap="sm" align="baseline">
-          <Badge tone={props.move.result === "failed" ? "neutral" : "accent"}>
-            {resultLabel(props.move)}
+          <Badge tone={outcomeBadgeTone(props.move)}>
+            {moveOutcomeLabel(props.move) ?? "Ended"}
           </Badge>
           <Text size="item" weight="semibold">
             {moveSummary(props.move)}
@@ -672,39 +657,203 @@ function EarlierRow(props: EarlierRowProps): JSX.Element {
           {props.move.team.name} · {leagueDisplayName(props.move.team.league)} ·{" "}
           {sportDisplayName(props.move.team.sport)}
         </Text>
-        <MoveState move={props.move} page={props.page} today={false} />
+        <Show when={confirmed()}>
+          {(line) => (
+            <Text size="caption" tone="muted">
+              {line()}
+            </Text>
+          )}
+        </Show>
+        <Show when={discarded()}>
+          {(line) => (
+            <Text size="caption" tone="faint">
+              {line()}
+            </Text>
+          )}
+        </Show>
       </Stack>
     </RuleListItem>
   );
 }
 
+function outcomeBadgeTone(move: TransactionMoveView): "accent" | "neutral" {
+  return move.decision !== "discarded" && move.result === "executed" ? "accent" : "neutral";
+}
+
 function panelState(card: RunGroupCardView): GroupState {
+  const moves = [...card.moves, ...card.fixes];
+  if (moves.length > 0 && moves.every((move) => move.decision === "discarded")) {
+    return "Discarded";
+  }
+  if (moves.length > 0 && moves.every((move) => move.result === "executed")) {
+    return "Ran";
+  }
+  if (
+    moves.length > 0 &&
+    moves.every((move) => move.result === "pending" && move.decision !== "discarded")
+  ) {
+    return "Confirmed";
+  }
+  if (moves.some((move) => move.decision !== "discarded" && move.result === "executed")) {
+    return "Partly ran";
+  }
   const group = card.group;
   if (group !== undefined) {
     switch (group.status) {
       case "done":
         return "Ran";
       case "partly_done":
-        return "Ran in part";
+        return "Partly ran";
       case "blocked":
         return "Blocked";
       case "ready":
-        return card.moves.length > 0 && card.moves.every(isConfirmed) ? "Confirmed" : "Undecided";
+        return moves.length > 0 && moves.every(isConfirmed) ? "Confirmed" : "Undecided";
     }
   }
-  if (card.moves.length > 0 && card.moves.every((move) => move.decision === "discarded")) {
-    return "Discarded";
-  }
-  if (card.moves.some((move) => move.result === "executed")) {
-    return "Ran";
-  }
-  if (card.moves.some((move) => move.result !== undefined)) {
-    return "Ran in part";
-  }
-  if (card.moves.some((move) => move.validation.status !== "current")) {
+  if (moves.some((move) => move.result !== undefined)) {
     return "Blocked";
   }
-  return card.moves.length > 0 && card.moves.every(isConfirmed) ? "Confirmed" : "Undecided";
+  if (moves.some((move) => move.validation.status !== "current")) {
+    return "Blocked";
+  }
+  return moves.length > 0 && moves.every(isConfirmed) ? "Confirmed" : "Undecided";
+}
+
+function groupSummary(card: RunGroupCardView, state: GroupState): string | undefined {
+  switch (state) {
+    case "Ran":
+      return `${moveCount(groupCount(card))} ran.`;
+    case "Partly ran":
+      return partlyRanLine(card);
+    case "Blocked":
+      return groupCount(card) === 1 ? "This move did not run." : "This group did not run.";
+    case "Discarded":
+      return groupCount(card) === 1 ? "You discarded this move." : "You discarded this group.";
+    case "Undecided":
+      return card.group === undefined
+        ? undefined
+        : cardCount(card) === 1
+          ? "This move runs when you confirm."
+          : `${moveCount(cardCount(card))} run together in this order.`;
+    case "Confirmed":
+    case "Running":
+      return undefined;
+  }
+}
+
+function partlyRanLine(card: RunGroupCardView): string {
+  const members = [...card.moves, ...card.fixes];
+  const group = card.group;
+  if (group === undefined) {
+    return `${String(executedCount(members))} of ${moveCount(members.length)} ran: ${memberOutcomes(members).join("; ")}.`;
+  }
+  const byMove = new Map(members.map((move) => [move.move, move] as const));
+  const executed = new Set(
+    group.actions.filter((action) => action.outcome === "executed").map((action) => action.move),
+  );
+  const stopped = new Set(
+    group.actions
+      .filter(
+        (action) =>
+          action.outcome === "failed" ||
+          action.outcome === "skipped" ||
+          action.outcome === "unknown",
+      )
+      .map((action) => action.move),
+  );
+  for (const move of members) {
+    if (move.decision === "discarded") {
+      continue;
+    }
+    if (move.result === "executed") {
+      executed.add(move.move);
+    } else if (move.result !== undefined) {
+      stopped.add(move.move);
+    }
+  }
+  for (const move of stopped) {
+    executed.delete(move);
+  }
+  const outcomes = group.actions.map(
+    (action) =>
+      `${groupActionLabel(action, byMove.get(action.move))} ${actionOutcome(action.outcome)}`,
+  );
+  const listed = outcomes.length > 0 ? outcomes : memberOutcomes(members);
+  return `${String(executed.size)} of ${moveCount(group.moves.length)} ran: ${listed.join("; ")}.`;
+}
+
+function memberOutcomes(moves: ReadonlyArray<TransactionMoveView>): ReadonlyArray<string> {
+  return moves.flatMap((move): ReadonlyArray<string> => {
+    if (move.decision === "discarded") {
+      return [];
+    }
+    return [`${moveSummary(move)} ${moveResultPhrase(move.result)}`];
+  });
+}
+
+function moveResultPhrase(result: TransactionMoveView["result"]): string {
+  switch (result) {
+    case "executed":
+      return "ran";
+    case "failed":
+      return "failed";
+    case "skipped":
+      return "was skipped";
+    case "unknown":
+      return "has an unknown outcome";
+    case "pending":
+      return "is waiting on the league";
+    case "withdrawn":
+    case "expired":
+    case undefined:
+      return "did not run";
+  }
+}
+
+function actionOutcome(outcome: TransactionPlanGroupView["actions"][number]["outcome"]): string {
+  switch (outcome) {
+    case "executed":
+      return "ran";
+    case "failed":
+      return "failed";
+    case "skipped":
+      return "was skipped";
+    case "unknown":
+      return "has an unknown outcome";
+    case "pending":
+      return "is waiting on the league";
+  }
+}
+
+function groupActionLabel(
+  action: TransactionPlanGroupView["actions"][number],
+  move: TransactionMoveView | undefined,
+): string {
+  if (move !== undefined) {
+    return moveSummary(move);
+  }
+  const player = action.player ?? "this player";
+  switch (action.action) {
+    case "add":
+      return `Add ${player}`;
+    case "drop":
+      return `Drop ${player}`;
+    case "reserve_move":
+    case "slot_move":
+      return action.toSlot === undefined ? `Move ${player}` : `Move ${player} to ${action.toSlot}`;
+  }
+}
+
+function executedCount(moves: ReadonlyArray<TransactionMoveView>): number {
+  return moves.filter((move) => move.decision !== "discarded" && move.result === "executed").length;
+}
+
+function groupCount(card: RunGroupCardView): number {
+  return card.group?.moves.length ?? cardCount(card);
+}
+
+function cardCount(card: RunGroupCardView): number {
+  return card.moves.length + card.fixes.length;
 }
 
 function groupStateTone(state: GroupState): "accent" | "neutral" {
@@ -713,34 +862,6 @@ function groupStateTone(state: GroupState): "accent" | "neutral" {
 
 function isConfirmed(move: TransactionMoveView): boolean {
   return move.decision === "now" || move.decision === "confirmed";
-}
-
-function resultLabel(move: TransactionMoveView): string {
-  if (move.result === "executed") {
-    return resultRunLabel(move);
-  }
-  if (move.result === "failed") {
-    return "Failed";
-  }
-  if (move.result === "skipped") {
-    return "Skipped";
-  }
-  if (move.result === "unknown") {
-    return "Unknown";
-  }
-  if (move.result === "pending") {
-    return "Waiting on the league";
-  }
-  if (move.result === "withdrawn") {
-    return "Withdrawn";
-  }
-  if (move.result === "expired") {
-    return "Expired";
-  }
-  if (move.decision === "discarded") {
-    return "Discarded";
-  }
-  return "Undecided";
 }
 
 function cardTitle(card: RunGroupCardView): string {
@@ -858,18 +979,12 @@ type GroupMoveRowProps = {
   readonly number: number;
   readonly page: TransactionsPageController;
   readonly today: boolean;
+  readonly waiting: boolean;
   readonly working: boolean;
-};
-
-type MoveStateProps = {
-  readonly move: TransactionMoveView;
-  readonly page: TransactionsPageController;
-  readonly today: boolean;
 };
 
 type EarlierRowProps = {
   readonly move: TransactionMoveView;
-  readonly page: TransactionsPageController;
 };
 
 type RunGroupCardView = {
@@ -881,4 +996,16 @@ type RunGroupCardView = {
   readonly group?: TransactionPlanGroupView;
 };
 
-type GroupState = "Undecided" | "Confirmed" | "Ran" | "Ran in part" | "Blocked" | "Discarded";
+type StatusLine = {
+  readonly text: string;
+  readonly tone: "muted" | "faint";
+};
+
+type GroupState =
+  | "Undecided"
+  | "Confirmed"
+  | "Running"
+  | "Ran"
+  | "Partly ran"
+  | "Blocked"
+  | "Discarded";

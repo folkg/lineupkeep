@@ -1793,6 +1793,72 @@ it.effect("pages the timeline by run day, team, position, and move", () =>
   ),
 );
 
+it.effect("lists earlier moves newest first and resumes with the next older page", () =>
+  Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const repository = yield* TransactionPlanRepository;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [
+        { ...drop("a1", "Roster One"), runDay: "2026-11-14" },
+        { ...drop("a2", "Roster Two"), runDay: "2026-11-15" },
+        { ...drop("a3", "Roster Three"), runDay: "2026-11-16" },
+      ],
+    });
+    for (const key of ["a1", "a2", "a3"]) {
+      yield* repository.recordResult({
+        userId: owner,
+        team,
+        move: droppedMoveId(proposed.plan, key),
+        result: "executed",
+        detail: "The league accepted the drop.",
+        externalRef: undefined,
+        at,
+      });
+    }
+
+    const first = yield* service.list(owner, { team, state: "ended", limit: 2 });
+    assert.deepStrictEqual(
+      first.moves.map(({ runDay }) => runDay),
+      ["2026-11-16", "2026-11-15"],
+    );
+    assert.isFalse(first.page.complete);
+
+    const next = first.page.next;
+    assert.notStrictEqual(next, undefined);
+    const second = yield* service.list(owner, {
+      team,
+      state: "ended",
+      ...(next === undefined ? {} : { after: next }),
+      limit: 2,
+    });
+    assert.deepStrictEqual(
+      second.moves.map(({ runDay }) => runDay),
+      ["2026-11-14"],
+    );
+    assert.isTrue(second.page.complete);
+  }).pipe(
+    Effect.provide(
+      serviceLayer([
+        league(
+          [
+            rostered("a1", "Roster One", "BN", ["RB"]),
+            rostered("a2", "Roster Two", "BN", ["RB"]),
+            rostered("a3", "Roster Three", "BN", ["RB"]),
+          ],
+          [],
+          { slots: [bench("BN", 3)], constraints: constraints(3) },
+        ),
+      ]),
+    ),
+  ),
+);
+
 it.effect("returns the stored check and its time when the league cannot be read", () => {
   const facts = new Map<TeamId, TransactionPlanTeamFacts>();
   return Effect.gen(function* () {

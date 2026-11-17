@@ -35,14 +35,14 @@ export function Switch(props: SwitchProps): JSX.Element {
       <span
         aria-hidden="true"
         class={cx(
-          "relative inline-flex h-[1.375rem] w-[2.5rem] shrink-0 items-center overflow-hidden p-[3px] transition-colors duration-quick ease-out-cubic",
-          props.checked ? "bg-action" : "bg-rule",
+          "relative inline-flex h-[1.375rem] w-[2.5rem] shrink-0 items-center overflow-hidden p-[3px] ring-2 ring-rule-strong ring-inset transition-colors duration-quick ease-out-cubic",
+          props.checked ? "bg-action" : "bg-paper",
         )}
       >
         <span
           class={cx(
             "size-4 transition-transform duration-quick ease-out-cubic",
-            props.checked ? "translate-x-[1.125rem] bg-on-action" : "translate-x-0 bg-paper",
+            props.checked ? "translate-x-[1.125rem] bg-on-action" : "translate-x-0 bg-ink",
           )}
         />
         <Show when={working()}>

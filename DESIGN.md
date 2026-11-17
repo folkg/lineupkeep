@@ -432,8 +432,9 @@ Placeholders are not labels. The caret and selection use action tokens.
 
 ### Toggle
 
-A 40×22 filled track with 3px padding and a 16px square knob. On fills the track with `action`
-and draws the knob in `on-action`; off fills the track with `rule` and draws the knob in `paper`.
+A 40×22 track with a 2px ink edge, 3px padding, and a 16px square knob. The edge is drawn
+inside the track so the outer size never changes. On fills the track with `action` and draws
+the knob in `on-action`; off fills the track with `paper` and draws the knob in `ink`.
 The track carries a 44px hit area. In a list of teams the label is hidden and the card's name
 identifies the toggle; on a single team the `LINEUP CHECKS` label is visible. The pause control
 always sits beside the toggle; when checks are off it is disabled with an explanatory title rather

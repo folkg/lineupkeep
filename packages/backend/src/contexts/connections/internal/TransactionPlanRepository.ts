@@ -8,6 +8,7 @@ import {
   gt,
   isNotNull,
   isNull,
+  lt,
   lte,
   max,
   min,
@@ -985,15 +986,27 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                   eq(transactionMoves.userId, input.userId),
                   input.team === undefined ? undefined : eq(transactionMoves.teamId, input.team),
                   readStatePredicate(input.state),
-                  input.after === undefined ? undefined : afterCursorPredicate(input.after),
+                  input.after === undefined
+                    ? undefined
+                    : afterCursorPredicate(input.after, input.state === "ended"),
                 ),
               )
               .orderBy(
-                desc(isNull(transactionMoves.runDay)),
-                asc(transactionMoves.runDay),
-                asc(transactionMoves.teamId),
-                asc(transactionMoves.position),
-                asc(transactionMoves.id),
+                ...(input.state === "ended"
+                  ? [
+                      asc(isNull(transactionMoves.runDay)),
+                      desc(transactionMoves.runDay),
+                      desc(transactionMoves.teamId),
+                      desc(transactionMoves.position),
+                      desc(transactionMoves.id),
+                    ]
+                  : [
+                      desc(isNull(transactionMoves.runDay)),
+                      asc(transactionMoves.runDay),
+                      asc(transactionMoves.teamId),
+                      asc(transactionMoves.position),
+                      asc(transactionMoves.id),
+                    ]),
               )
               .limit(input.limit);
             return yield* withClaimsAndTeams(database, rows, input);
@@ -1439,17 +1452,43 @@ function moveCountBucket(
   return decision === "saved" || decision === "confirmed" ? "saved" : "today";
 }
 
-function afterCursorPredicate(cursor: TransactionMoveCursor): SQL | undefined {
-  const withinTeam = or(
-    gt(transactionMoves.teamId, cursor.team),
-    and(
-      eq(transactionMoves.teamId, cursor.team),
-      or(
-        gt(transactionMoves.position, cursor.position),
-        and(eq(transactionMoves.position, cursor.position), gt(transactionMoves.id, cursor.move)),
-      ),
-    ),
-  );
+function afterCursorPredicate(cursor: TransactionMoveCursor, newestFirst = false): SQL | undefined {
+  const withinTeam = newestFirst
+    ? or(
+        lt(transactionMoves.teamId, cursor.team),
+        and(
+          eq(transactionMoves.teamId, cursor.team),
+          or(
+            lt(transactionMoves.position, cursor.position),
+            and(
+              eq(transactionMoves.position, cursor.position),
+              lt(transactionMoves.id, cursor.move),
+            ),
+          ),
+        ),
+      )
+    : or(
+        gt(transactionMoves.teamId, cursor.team),
+        and(
+          eq(transactionMoves.teamId, cursor.team),
+          or(
+            gt(transactionMoves.position, cursor.position),
+            and(
+              eq(transactionMoves.position, cursor.position),
+              gt(transactionMoves.id, cursor.move),
+            ),
+          ),
+        ),
+      );
+  if (newestFirst) {
+    return cursor.runDay === null
+      ? and(isNull(transactionMoves.runDay), withinTeam)
+      : or(
+          and(isNotNull(transactionMoves.runDay), lt(transactionMoves.runDay, cursor.runDay)),
+          isNull(transactionMoves.runDay),
+          and(eq(transactionMoves.runDay, cursor.runDay), withinTeam),
+        );
+  }
   return cursor.runDay === null
     ? or(and(isNull(transactionMoves.runDay), withinTeam), isNotNull(transactionMoves.runDay))
     : or(

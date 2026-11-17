@@ -901,9 +901,12 @@ No MCP tool submits, executes, spends, or confirms. Confirmation is the signed-i
 transactions page, and a saved move whose day arrives waits in Today until they confirm it. The page
 shows a group as one card that lists every move in it, with one control for the group. A today group's
 control confirms and runs it now. A later group's control stores the owner's decision, who made it,
-the surface, and the time, and names the scheduled time it runs. An executed move says `Ran now at
-<time>` when a person started it and `Ran on schedule at <time>` when the scheduled run did; a
-confirmed later move says `Runs <date> at <time>`, always in the reader's local time. Only confirmed
+the surface, and the time, and names the scheduled time it runs. An executed move says `Ran when you
+confirmed` when the confirmation started it, `Ran on schedule` when the scheduled run did, and `You
+changed this` when it changed outside a confirmation. A confirmation or discard line carries its own
+date and time in the reader's local time, apart from the run outcome, and a later move says `Runs
+<date> at <time>`. A move waiting on the league says `Waiting on the league until <time>`. A group
+that ran in part says how many of its moves ran and which ran, failed, or was skipped. Only confirmed
 moves are sent, a saved move that is not due today is left alone, and confirms for different teams
 proceed at the same time. A confirmed later move runs at its scheduled time on its day, through the same write path; a
 run skips a team another run already claims and records a failed, pending, or unknown outcome rather
@@ -913,7 +916,7 @@ Moves run in the server's stored order. A drop or slot move that another move de
 a group runs whole, and a league that accepts one write and rejects a later one leaves the group that
 ran in part, with each action's outcome recorded. A provider refusal keeps its exact wording on the
 move and on the transactions page. A move that executed, was discarded, or can no longer change is
-`ended` and appears in the earlier list. The queue keeps no expiry: a move stays until it ends, and a
+`ended` and appears in the earlier list, newest first, one page at a time. The queue keeps no expiry: a move stays until it ends, and a
 team's queue is the stored record of what was proposed and what happened.
 
 A failed call returns one coded failure rather than a bare internal error:
