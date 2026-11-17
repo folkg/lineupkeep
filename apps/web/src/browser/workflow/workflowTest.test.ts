@@ -8,7 +8,13 @@ it("explores context changes and declared self transitions", () => {
     initial: "ready",
     context: { count: 0 },
     states: {
-      ready: { on: { set: { context: { count: 1 } }, stay: "ready", finish: "done" } },
+      ready: {
+        on: {
+          set: { context: { count: 1 } },
+          stay: { target: "ready" },
+          finish: { target: "done" },
+        },
+      },
       done: {},
     },
   });
@@ -24,7 +30,7 @@ it("explores context changes and declared self transitions", () => {
 it("reports a failing state with its shortest event path", () => {
   const workflow = createFSM({
     initial: "ready",
-    states: { ready: { on: { finish: "done" } }, done: {} },
+    states: { ready: { on: { finish: { target: "done" } } }, done: {} },
   });
 
   expect(() =>
@@ -38,7 +44,7 @@ it("reports a failing state with its shortest event path", () => {
 it("rejects missing transition samples constructively", () => {
   const workflow = createFSM({
     initial: "ready",
-    states: { ready: { on: { finish: "done" } }, done: {} },
+    states: { ready: { on: { finish: { target: "done" } } }, done: {} },
   });
 
   expect(() => exploreWorkflow(workflow, { events: [], invariants: {} })).toThrow(

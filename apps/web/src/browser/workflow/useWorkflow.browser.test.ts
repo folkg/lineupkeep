@@ -55,8 +55,8 @@ const loader = setup({
 }).createFSM({
   initial: "idle",
   states: {
-    idle: { on: { load: "loading" } },
-    loading: { on: { load: "loading", loaded: "loaded" } },
+    idle: { on: { load: { target: "loading" } } },
+    loading: { on: { load: { target: "loading" }, loaded: { target: "loaded" } } },
     loaded: {},
   },
 });

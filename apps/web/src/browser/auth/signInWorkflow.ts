@@ -101,7 +101,7 @@ export const signInWorkflow = setup({
             ? { target: "verifying", context: { codeRejection: undefined, codeOutcome: undefined } }
             : { context: { showCodeProblem: true } },
         resendCode: { target: "resendingCode", context: { codeOutcome: undefined } },
-        checkSession: "checkingSession",
+        checkSession: { target: "checkingSession" },
         useDifferentEmail: { target: "email", context: { emailOutcome: undefined } },
       },
     },
@@ -126,20 +126,20 @@ export const signInWorkflow = setup({
       on: {
         rejected: ({ event }) => ({ target: "code", context: { codeRejection: event.reason } }),
         unconfirmed: { target: "code", context: { codeOutcome: { type: "unconfirmed" } } },
-        accepted: "finishing",
+        accepted: { target: "finishing" },
       },
     },
     checkingSession: {
       on: {
         unconfirmed: { target: "code", context: { codeOutcome: { type: "unconfirmed" } } },
         notSignedIn: { target: "code", context: { codeOutcome: { type: "notSignedIn" } } },
-        accepted: "finishing",
+        accepted: { target: "finishing" },
       },
     },
     finishing: {
       on: {
         unconfirmed: { target: "code", context: { codeOutcome: { type: "unconfirmed" } } },
-        signedIn: "signedIn",
+        signedIn: { target: "signedIn" },
       },
     },
     signedIn: {},
