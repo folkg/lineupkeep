@@ -132,6 +132,8 @@ function toMoveView(move: TransactionMoveRead): TransactionMoveView {
     validation: validationView(move.validation),
     check: move.check,
     ...(move.result === undefined ? {} : { result: move.result }),
+    ...(move.resultDetail === undefined ? {} : { resultDetail: move.resultDetail }),
+    ...(move.resultAt === undefined ? {} : { resultAt: DateTime.formatIso(move.resultAt) }),
   };
 }
 

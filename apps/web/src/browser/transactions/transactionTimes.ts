@@ -63,6 +63,20 @@ export function moveOutcomeLabel(move: TransactionMoveView): string | undefined 
   }
 }
 
+export function resultDetailLine(move: TransactionMoveView): string | undefined {
+  return move.resultDetail;
+}
+
+export function resultTimeLine(
+  move: TransactionMoveView,
+  reader: ClockReader = {},
+  now: Date = new Date(),
+): string | undefined {
+  return move.resultDetail === undefined || move.resultAt === undefined
+    ? undefined
+    : `${moveOutcomeLabel(move) ?? "Ended"} ${formatLocalMoment(move.resultAt, reader, now)}.`;
+}
+
 export function confirmationLine(
   move: TransactionMoveView,
   reader: ClockReader = {},

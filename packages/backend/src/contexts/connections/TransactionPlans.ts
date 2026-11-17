@@ -295,6 +295,8 @@ export const TransactionMoveRead = Schema.Struct({
   validation: TransactionMoveValidationView,
   check: TransactionMoveCheckView,
   result: Schema.optional(TransactionMoveResult),
+  resultDetail: Schema.optional(Schema.NonEmptyString),
+  resultAt: Schema.optional(Schema.DateTimeUtc),
 });
 export type TransactionMoveRead = typeof TransactionMoveRead.Type;
 

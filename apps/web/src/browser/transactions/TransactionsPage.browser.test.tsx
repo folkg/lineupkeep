@@ -35,6 +35,8 @@ import { TransactionsPage } from "./TransactionsPage.tsx";
 import {
   confirmationLine,
   discardLine,
+  resultDetailLine,
+  resultTimeLine,
   scheduledRunLine,
   waitingOnLeagueLine,
 } from "./transactionTimes.ts";
@@ -133,6 +135,47 @@ it("shows every team's moves today and keeps saved moves on per team planning sh
   await expect
     .element(page.getByText(`Takes effect ${formatCalendarDate("2026-11-13")}.`, { exact: true }))
     .toBeVisible();
+});
+
+it("names every effect an activate carries, including its funding drop", async () => {
+  await page.viewport(1280, 900);
+  const activating = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165b5",
+    team: alpha,
+    kind: "activate",
+    drops: [player("Anton Frondell")],
+    intent: { kind: "activate", player: player("Jake Neighbours") },
+  });
+  using _app = setupTransactionsPage({
+    open: listData([activating], { open: 1, today: 1, saved: 0, ended: 0 }),
+  });
+
+  await expect
+    .element(page.getByText("Activate Jake Neighbours, drop Anton Frondell", { exact: true }))
+    .toBeVisible();
+});
+
+it("keeps a failed move's reason and time on its row", async () => {
+  await page.viewport(1280, 900);
+  const failed = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165b6",
+    team: alpha,
+    kind: "drop",
+    decision: "now",
+    drops: [player("Riley Chen")],
+    result: "failed",
+    resultDetail: "Your league refused the drop.",
+    resultAt: "2026-11-11T16:05:00.000Z",
+  });
+  using _app = setupTransactionsPage({
+    open: listData([failed], { open: 1, today: 1, saved: 0, ended: 0 }),
+  });
+
+  await expect.element(page.getByText("Failed", { exact: true })).toBeVisible();
+  await expect
+    .element(page.getByText(resultDetailLine(failed) ?? "", { exact: true }))
+    .toBeVisible();
+  await expect.element(page.getByText(resultTimeLine(failed) ?? "", { exact: true })).toBeVisible();
 });
 
 it("folds the active places and each reserve list into a blocked card's explanation", async () => {

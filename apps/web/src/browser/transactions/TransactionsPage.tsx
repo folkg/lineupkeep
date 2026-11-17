@@ -42,6 +42,8 @@ import {
   confirmationLine,
   discardLine,
   moveOutcomeLabel,
+  resultDetailLine,
+  resultTimeLine,
   scheduledRunLine,
   waitingOnLeagueLine,
 } from "./transactionTimes";
@@ -517,6 +519,20 @@ function GroupMoveRow(props: GroupMoveRowProps): JSX.Element {
           </Text>
         )}
       </Show>
+      <Show when={resultDetailLine(props.move)}>
+        {(line) => (
+          <Text size="caption" tone="muted">
+            {line()}
+          </Text>
+        )}
+      </Show>
+      <Show when={resultTimeLine(props.move)}>
+        {(line) => (
+          <Text size="caption" tone="faint">
+            {line()}
+          </Text>
+        )}
+      </Show>
       <Show when={!props.today && props.move.effectiveDate !== undefined}>
         <Text size="caption" tone="muted">
           {`Takes effect ${formatCalendarDate(props.move.effectiveDate ?? "")}.`}
@@ -642,6 +658,8 @@ function EarlierSection(props: SectionProps): JSX.Element {
 function EarlierRow(props: EarlierRowProps): JSX.Element {
   const confirmed = (): string | undefined => confirmationLine(props.move);
   const discarded = (): string | undefined => discardLine(props.move);
+  const result = (): string | undefined => resultDetailLine(props.move);
+  const resultTime = (): string | undefined => resultTimeLine(props.move);
   return (
     <RuleListItem layout="stack" dense>
       <Stack gap="2xs">
@@ -665,6 +683,20 @@ function EarlierRow(props: EarlierRowProps): JSX.Element {
           )}
         </Show>
         <Show when={discarded()}>
+          {(line) => (
+            <Text size="caption" tone="faint">
+              {line()}
+            </Text>
+          )}
+        </Show>
+        <Show when={result()}>
+          {(line) => (
+            <Text size="caption" tone="muted">
+              {line()}
+            </Text>
+          )}
+        </Show>
+        <Show when={resultTime()}>
           {(line) => (
             <Text size="caption" tone="faint">
               {line()}

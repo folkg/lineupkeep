@@ -728,6 +728,13 @@ const providerFake = Effect.gen(function* () {
       if (action === "invalid") {
         return yield* ProviderResponseInvalid.make({ operation: "apply_transaction" });
       }
+      if (action === "accept" && input.faabBid === undefined) {
+        yield* Ref.update(world.state, (state) =>
+          updateRoster(state, input.providerTeamKey, (roster) =>
+            rosterAfterTransaction(roster, input, state.playerDetails),
+          ),
+        );
+      }
       return writeResult(action, current.transactionDetail, current.transactionStatus);
     }),
     proposeTrade: Effect.fn("FakeProvider.proposeTrade")(function* (input) {
@@ -831,6 +838,18 @@ const providerFake = Effect.gen(function* () {
       }));
       if (current.reserveAction === "invalid") {
         return yield* ProviderResponseInvalid.make({ operation: "apply_reserve_move" });
+      }
+      if (current.reserveAction === "accept") {
+        yield* Ref.update(world.state, (state) =>
+          updateRoster(state, input.providerTeamKey, (roster) => ({
+            ...roster,
+            players: roster.players.map((player) =>
+              player.providerPlayerKey === input.providerPlayerKey
+                ? { ...player, slot: { status: "verified" as const, slot: input.slot } }
+                : player,
+            ),
+          })),
+        );
       }
       return writeResult(current.reserveAction, current.reserveDetail);
     }),
@@ -1389,6 +1408,63 @@ function writeResult(
         ...(detail === undefined ? {} : { detail }),
       };
   }
+}
+
+function updateRoster(
+  state: FakeProviderState,
+  providerTeamKey: string,
+  change: (roster: ProviderRoster) => ProviderRoster,
+): FakeProviderState {
+  const held = state.teamRosters[providerTeamKey];
+  if (held !== undefined) {
+    return { ...state, teamRosters: { ...state.teamRosters, [providerTeamKey]: change(held) } };
+  }
+  if (state.roster === undefined || state.roster.providerTeamKey !== providerTeamKey) {
+    return state;
+  }
+  return { ...state, roster: change(state.roster) };
+}
+
+function rosterAfterTransaction(
+  roster: ProviderRoster,
+  input: {
+    readonly adds: ReadonlyArray<string>;
+    readonly drops: ReadonlyArray<string>;
+  },
+  details: ReadonlyArray<ProviderPlayerDetail>,
+): ProviderRoster {
+  const dropped = new Set(input.drops);
+  const kept = roster.players.filter((player) => !dropped.has(player.providerPlayerKey));
+  const added = input.adds.flatMap((key) => {
+    if (kept.some((player) => player.providerPlayerKey === key)) {
+      return [];
+    }
+    const detail = details.find((player) => player.providerPlayerKey === key);
+    if (detail === undefined) {
+      return [];
+    }
+    return [
+      {
+        providerPlayerKey: key,
+        name: detail.name ?? key,
+        displayPosition: detail.displayPosition ?? detail.primaryPosition ?? "",
+        primaryPosition: detail.primaryPosition ?? detail.displayPosition ?? "",
+        positionType: undefined,
+        proTeamAbbreviation: detail.proTeam,
+        eligiblePositions: detail.eligiblePositions ?? [],
+        slot: { status: "verified" as const, slot: "BN" },
+        isEditable: true,
+        injuryCode: undefined,
+        injuryDetail: undefined,
+        byeWeek: null,
+        scheduled: false,
+        startingLineup: "unconfirmed" as const,
+        undroppable: false,
+        transactionTrend: { status: "not_published" as const, reason: "Synthetic addition." },
+      },
+    ];
+  });
+  return { ...roster, players: [...kept, ...added] };
 }
 
 function applyAssignments(

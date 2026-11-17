@@ -1315,6 +1315,162 @@ it("discards one saved move and reports why a run move stays", async () => {
   expect(failure.code).toBe("move_not_found");
 });
 
+it("reads every effect of an activate and the reason a failed move ended", async () => {
+  const team = decodeTeamId("018f79ea-7d86-7c18-9b4a-8b4d0c9164b5");
+  const teamView = {
+    id: team,
+    name: "Delta",
+    league: "nhl" as const,
+    sport: "hockey" as const,
+    season: 2026,
+  };
+  const move = {
+    move: Schema.decodeSync(TransactionMoveId)("018f79ea-7d86-7c18-9b4a-8b4d0c9165b8"),
+    team: teamView,
+    kind: "activate" as const,
+    position: 0,
+    decision: "now" as const,
+    reason: "Activate the reserve forward and drop the bench winger.",
+    adds: [],
+    fallbacks: [],
+    drops: [{ name: "Anton Frondell" }],
+    picks: [],
+    intent: { kind: "activate" as const, player: { name: "Jake Neighbours" } },
+    placement: {
+      playerName: "Jake Neighbours",
+      fromSlot: "IR",
+      toSlot: "BN",
+      detail: "Jake Neighbours moves to BN.",
+    },
+    validation: { status: "current" as const, reasons: [] },
+    check: { status: "checked" as const },
+    result: "failed" as const,
+    resultDetail: "The drop reached your league, but the activate failed.",
+    resultAt: DateTime.makeUnsafe("2026-11-11T18:05:00.000Z"),
+  };
+  const planRead = {
+    team: teamView,
+    today: "2026-11-11",
+    nextRunAt: DateTime.makeUnsafe("2026-11-11T12:55:00.000Z"),
+    snapshot: {
+      status: "live" as const,
+      checkedAt: DateTime.makeUnsafe("2026-11-11T12:00:00.000Z"),
+      source: "week 1",
+    },
+    moves: [move],
+    days: [{ day: "2026-11-11", today: true, moves: [move] }],
+    groups: [],
+  };
+  const plans: TransactionPlanServiceShape = {
+    ...unavailablePlans,
+    proposeRefs: (_userId, input) =>
+      Effect.succeed({
+        plan: { team: input.team, today: "2026-11-11", moves: [], groups: [] },
+        refused: [],
+        confirmationCleared: false,
+      }),
+    plan: () => Effect.succeed(planRead),
+    list: (): Effect.Effect<TransactionMoveList> =>
+      Effect.succeed({
+        status: "ok" as const,
+        team: teamView,
+        nextRunAt: DateTime.makeUnsafe("2026-11-11T12:55:00.000Z"),
+        moves: [move],
+        days: [{ day: "2026-11-11", today: true, teams: [{ team: teamView, moves: [move] }] }],
+        teamFacts: [],
+        counts: { open: 1, today: 1, saved: 0, ended: 0 },
+        teamCount: 1,
+        groups: [],
+        page: { returned: 1, complete: true },
+      }),
+  };
+  const services = Layer.mergeAll(
+    authentication,
+    permissiveQuota,
+    Layer.succeed(Connections)(unavailableConnections),
+    Layer.succeed(FantasyQueries)(unavailableQueries),
+    Layer.succeed(TransactionOffers)(unavailableOffers),
+    Layer.succeed(TransactionPlanService)(plans),
+    Layer.succeed(LineupRuns)(unavailableLineups),
+    Layer.succeed(Teams)(unavailableTeams),
+    Layer.succeed(Feedback)(unavailableFeedback),
+  );
+  const run = (invocation: Request): Promise<Response> =>
+    handleMcpRequest(invocation, (_request, _operation, program) =>
+      Effect.runPromise(Effect.provide(program, services)),
+    );
+
+  const planResponse = await run(
+    request("tools/call", { name: "get_transaction_plan", arguments: { team } }, "fantasy"),
+  );
+  expect(planResponse.status).toBe(200);
+  expect(await json(planResponse)).toMatchObject({
+    result: {
+      isError: false,
+      structuredContent: {
+        moves: [
+          {
+            intent: { player: { name: "Jake Neighbours" } },
+            drops: [{ name: "Anton Frondell" }],
+            resultDetail: "The drop reached your league, but the activate failed.",
+            resultAt: "2026-11-11T18:05:00.000Z",
+          },
+        ],
+      },
+    },
+  });
+
+  const listResponse = await run(
+    request("tools/call", { name: "list_transaction_proposals", arguments: { team } }, "fantasy"),
+  );
+  expect(listResponse.status).toBe(200);
+  expect(await json(listResponse)).toMatchObject({
+    result: {
+      isError: false,
+      structuredContent: {
+        moves: [
+          {
+            intent: { player: { name: "Jake Neighbours" } },
+            drops: [{ name: "Anton Frondell" }],
+            resultDetail: "The drop reached your league, but the activate failed.",
+            resultAt: "2026-11-11T18:05:00.000Z",
+          },
+        ],
+      },
+    },
+  });
+
+  const proposed = await run(
+    request(
+      "tools/call",
+      {
+        name: "propose_transactions",
+        arguments: {
+          team,
+          moves: [
+            { kind: "activate", player: "r1.activated", drops: ["r1.dropped"], reason: "Test." },
+          ],
+        },
+      },
+      "review",
+    ),
+  );
+  expect(proposed.status).toBe(200);
+  expect(await json(proposed)).toMatchObject({
+    result: {
+      isError: false,
+      structuredContent: {
+        moves: [
+          {
+            intent: { player: { name: "Jake Neighbours" } },
+            drops: [{ name: "Anton Frondell" }],
+          },
+        ],
+      },
+    },
+  });
+});
+
 it("returns a coded remedy instead of a 500 when a move list cannot be read", async () => {
   const team = decodeTeamId("018f79ea-7d86-7c18-9b4a-8b4d0c9164b0");
   const plans: TransactionPlanServiceShape = {

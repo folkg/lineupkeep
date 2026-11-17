@@ -3698,6 +3698,182 @@ it.effect("names the cure when no roster fix can make an add fit", () =>
   ),
 );
 
+it.effect("runs an activate with the funding drop and leaves the roster legal", () => {
+  const facts = new Map([
+    [
+      team,
+      league(
+        [
+          rostered("a1", "Roster One", "BN", ["RB"]),
+          rostered("a2", "Roster Two", "BN", ["RB"]),
+          rostered("h1", "Healthy Reserve", "IR", ["RB"]),
+        ],
+        [],
+        {
+          slots: [bench("BN", 2), reserve("IR", ["RB"])],
+          constraints: constraints(2, { reserveEligibility: { kind: "injury_status" } }),
+        },
+      ).facts,
+    ],
+  ]);
+  const writes = writeLayer((request) => {
+    appliedWrite(facts, request);
+    return { status: "executed" };
+  });
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [
+        {
+          kind: "activate",
+          player: "h1",
+          drops: ["a1"],
+          reason: "Activate Healthy Reserve and drop Roster One.",
+        },
+      ],
+    });
+
+    assert.deepStrictEqual(proposed.refused, []);
+    assert.deepStrictEqual(
+      proposed.plan.moves.map((move) => [move.kind, move.drops[0]?.key, move.validation.status]),
+      [["activate", "a1", "current"]],
+    );
+
+    const confirmed = yield* confirmDue(service, team);
+    assert.strictEqual(confirmed.counts.executed, 1);
+    assert.deepStrictEqual(
+      writes.requests.map((request) => [request.kind, request.drops]),
+      [["activate", ["a1"]]],
+    );
+
+    const read = yield* service.plan(owner, { team });
+    assert.deepStrictEqual(read.illegal, []);
+    assert.deepStrictEqual(read.places, { used: 2, maximum: 2, free: 0 });
+    assert.strictEqual(read.moves[0]?.result, "executed");
+  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+});
+
+it.effect("accepts a drop and an activate as one group when that is the legal cure", () => {
+  const facts = new Map([
+    [
+      team,
+      league(
+        [
+          rostered("a1", "Roster One", "BN", ["RB"]),
+          rostered("a2", "Roster Two", "BN", ["RB"]),
+          rostered("h1", "Healthy Reserve", "IR", ["RB"]),
+        ],
+        [],
+        {
+          slots: [bench("BN", 2), reserve("IR", ["RB"])],
+          constraints: constraints(2, { reserveEligibility: { kind: "injury_status" } }),
+        },
+      ).facts,
+    ],
+  ]);
+  const writes = writeLayer((request) => {
+    appliedWrite(facts, request);
+    return { status: "executed" };
+  });
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const before = yield* service.plan(owner, { team });
+    assert.strictEqual(
+      before.illegal?.[0]?.cure,
+      "Activate Healthy Reserve together with a drop, or drop Healthy Reserve.",
+    );
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [activate("h1", "Healthy Reserve"), drop("a1", "Roster One")],
+    });
+
+    assert.deepStrictEqual(proposed.refused, []);
+    const activates = proposed.plan.moves.find((move) => move.kind === "activate");
+    const drops = proposed.plan.moves.find((move) => move.kind === "drop");
+    if (activates === undefined || drops === undefined || activates.group === undefined) {
+      throw new Error("The plan did not group the drop with the activate");
+    }
+    assert.strictEqual(activates.group, drops.group);
+    assert.deepStrictEqual([drops.runPosition, activates.runPosition], [0, 1]);
+    assert.deepStrictEqual(
+      [drops.validation.status, activates.validation.status],
+      ["current", "current"],
+    );
+
+    const read = yield* service.plan(owner, { team });
+    assert.strictEqual(read.groups.length, 1);
+    assert.strictEqual(read.groups[0]?.status, "ready");
+    assert.deepStrictEqual(
+      read.groups[0]?.moves.map((move) => read.moves.find((entry) => entry.move === move)?.kind),
+      ["drop", "activate"],
+    );
+
+    const confirmed = yield* confirmDue(service, team);
+    assert.strictEqual(confirmed.counts.executed, 2);
+    assert.deepStrictEqual(
+      writes.requests.map((request) => request.kind),
+      ["drop", "activate"],
+    );
+
+    const after = yield* service.plan(owner, { team });
+    assert.deepStrictEqual(after.illegal, []);
+    assert.strictEqual(after.groups[0]?.status, "done");
+  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+});
+
+it.effect("keeps a failed move's reason and time in the plan and list reads", () =>
+  Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [drop("a1", "Roster One")],
+    });
+    yield* confirmDue(service, team);
+
+    const read = yield* service.plan(owner, { team });
+    const move = read.moves[0];
+    assert.strictEqual(move?.result, "failed");
+    assert.strictEqual(move?.resultDetail, "Your league refused the drop.");
+    assert.strictEqual(
+      move?.resultAt === undefined ? undefined : DateTime.formatIso(move.resultAt),
+      DateTime.formatIso(at),
+    );
+
+    const list = yield* service.list(owner, { team });
+    assert.strictEqual(list.moves[0]?.resultDetail, "Your league refused the drop.");
+    assert.strictEqual(
+      list.moves[0]?.resultAt === undefined
+        ? undefined
+        : DateTime.formatIso(list.moves[0].resultAt),
+      DateTime.formatIso(at),
+    );
+  }).pipe(
+    Effect.provide(
+      serviceLayer(
+        [league([rostered("a1", "Roster One", "BN", ["RB"])], [], { constraints: constraints(2) })],
+        writeLayer(() => ({ status: "failed", detail: "Your league refused the drop." })).layer,
+      ),
+    ),
+  ),
+);
+
 it.effect("names the illegal blocker and its cure when no fix can cure it", () =>
   Effect.gen(function* () {
     const service = yield* TransactionPlanService;
@@ -4016,16 +4192,23 @@ function planActions(request: TransactionPlanWriteRequest): ReadonlyArray<Transa
   if (request.kind === "activate" || request.kind === "stash" || request.kind === "slot_move") {
     const playerKey = request.slotMove?.playerKey ?? request.placement?.playerKey;
     const toSlot = request.slotMove?.toSlot ?? request.placement?.toSlot;
-    return playerKey === undefined
-      ? []
-      : [
-          {
-            kind: "reserve_move",
-            playerKey,
-            ...(toSlot === undefined ? {} : { toSlot }),
-            outcome: "skipped",
-          },
-        ];
+    const drops: ReadonlyArray<TransactionPlanAction> = request.drops.map((key) => ({
+      kind: "drop",
+      playerKey: key,
+      outcome: "skipped",
+    }));
+    const reserve: ReadonlyArray<TransactionPlanAction> =
+      playerKey === undefined
+        ? []
+        : [
+            {
+              kind: "reserve_move",
+              playerKey,
+              ...(toSlot === undefined ? {} : { toSlot }),
+              outcome: "skipped",
+            },
+          ];
+    return [...drops, ...reserve];
   }
   const actions: Array<TransactionPlanAction> = [
     ...request.adds.map((playerKey): TransactionPlanAction => ({

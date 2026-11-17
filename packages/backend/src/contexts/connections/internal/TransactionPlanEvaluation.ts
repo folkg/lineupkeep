@@ -33,7 +33,8 @@ export function evaluateTransactionPlan(
   const entries = moves.map((move) => ({ move, placement: undefined, runnable: true }));
   const graph = planDependencies(entries, facts, rule);
   const sequence = topologicalSequence(entries, graph);
-  const replay = replayPlan({ facts, rule, entries, byId, graph, sequence });
+  const groupCures = groupCuredPlayers(moves);
+  const replay = replayPlan({ facts, rule, entries, byId, graph, sequence, groupCures });
   const explanations = sequence.blocked.filter(
     (entry) => reasonCount(replay.steps.get(entry.move)) === 0,
   );
@@ -129,6 +130,7 @@ function replayPlan(input: {
   readonly byId: ReadonlyMap<TransactionMoveId, TransactionPlanMove>;
   readonly graph: PlanGraph;
   readonly sequence: PlanSequence;
+  readonly groupCures: ReadonlyMap<string, ReadonlySet<string>>;
 }): {
   readonly steps: Map<TransactionMoveId, ReplayStep>;
   readonly applied: ReadonlyArray<TransactionMoveId>;
@@ -154,6 +156,7 @@ function replayPlan(input: {
       entries: input.entries,
       steps,
       blocked: blocked.has(id),
+      groupCures: input.groupCures,
     });
     steps.set(id, step);
     if (step.applied) {
@@ -265,7 +268,7 @@ function evaluateReplayMove(input: ReplayMoveInput): ReplayStep {
     }
   }
   if (reasonCount(step) === 0) {
-    const illegality = rosterIllegality(move, step.placement, rule, projection);
+    const illegality = rosterIllegality(move, step.placement, rule, projection, input.groupCures);
     appendReasons(step.stale, illegality.stale);
     appendReasons(step.illegal, illegality.illegal);
   }
@@ -381,6 +384,22 @@ function identityReasons(
   }
   if (move.kind === "activate" || move.kind === "stash") {
     const player = move.intent?.player;
+    if (move.drops.length > 1) {
+      stale(
+        reasons,
+        "intent_invalid",
+        undefined,
+        `This move drops ${String(move.drops.length)} players. An ${move.kind} drops one player to fund it.`,
+      );
+    }
+    if (player !== undefined && move.drops.some((drop) => drop.key === player.key)) {
+      stale(
+        reasons,
+        "intent_invalid",
+        player.key,
+        `This move drops the same player it moves. Name a different player to fund the ${move.kind}.`,
+      );
+    }
     if (player === undefined) {
       stale(
         reasons,
@@ -409,6 +428,22 @@ function identityReasons(
   }
   if (move.kind === "slot_move") {
     const declared = move.slotMove;
+    if (move.drops.length > 1) {
+      stale(
+        reasons,
+        "intent_invalid",
+        undefined,
+        `This move drops ${String(move.drops.length)} players. A slot move drops one player to fund it.`,
+      );
+    }
+    if (declared !== undefined && move.drops.some((drop) => drop.key === declared.playerKey)) {
+      stale(
+        reasons,
+        "intent_invalid",
+        declared.playerKey,
+        "This move drops the same player it moves. Name a different player to fund the slot move.",
+      );
+    }
     if (declared === undefined) {
       stale(
         reasons,
@@ -716,6 +751,7 @@ function rosterIllegality(
   placement: StoredMovePlacement | undefined,
   rule: RosterRule,
   projection: TeamProjection,
+  groupCures: ReadonlyMap<string, ReadonlySet<string>>,
 ): Reasons {
   const reasons = emptyReasons();
   const occupancy = rosterOccupancy({ rule, players: [...projection.roster.values()] });
@@ -723,9 +759,33 @@ function rosterIllegality(
     if (curesPlacement(move, placement, occupant.key, rule, projection)) {
       continue;
     }
+    if (move.group !== undefined && groupCures.get(move.group)?.has(occupant.key) === true) {
+      continue;
+    }
     illegal(reasons, "slot_illegal", occupant.key, occupant.detail);
   }
   return reasons;
+}
+
+function groupCuredPlayers(
+  moves: ReadonlyArray<TransactionPlanMove>,
+): ReadonlyMap<string, ReadonlySet<string>> {
+  const cured = new Map<string, Set<string>>();
+  for (const move of moves) {
+    if (move.group === undefined) {
+      continue;
+    }
+    const keys = cured.get(move.group) ?? new Set<string>();
+    for (const drop of move.drops) {
+      keys.add(drop.key);
+    }
+    const mover = moverKeyOf(move);
+    if (mover !== undefined) {
+      keys.add(mover);
+    }
+    cured.set(move.group, keys);
+  }
+  return cured;
 }
 
 function curesPlacement(
@@ -1857,7 +1917,18 @@ function moveLabel(move: TransactionPlanMove): string {
     case "free_agent_add":
     case "waiver_claim": {
       const adds = move.adds.map((add) => nameOf(add)).join(", ");
-      return drops === "" ? `Add ${adds}` : `Add ${adds} and drop ${drops}`;
+      const fallbacks = move.fallbacks.map((fallback) => nameOf(fallback)).join(", ");
+      const reserve =
+        move.intent?.to === "reserve" && move.placement !== undefined
+          ? ` to ${move.placement.toSlot}`
+          : "";
+      const fallback = fallbacks === "" ? "" : ` (fallback ${fallbacks})`;
+      const bid =
+        move.kind === "waiver_claim" && move.bid !== undefined
+          ? ` for ${String(move.bid)} FAAB`
+          : "";
+      const base = `Add ${adds}${reserve}${fallback}${bid}`;
+      return drops === "" ? base : `${base} and drop ${drops}`;
     }
     case "drop":
       return `Drop ${drops}`;
@@ -1866,7 +1937,8 @@ function moveLabel(move: TransactionPlanMove): string {
     case "activate":
     case "stash": {
       const player = move.intent?.player;
-      return `${move.kind === "activate" ? "Activate" : "Stash"} ${player === undefined ? "a player" : nameOf(player)}`;
+      const label = `${move.kind === "activate" ? "Activate" : "Stash"} ${player === undefined ? "a player" : nameOf(player)}`;
+      return drops === "" ? label : `${label}, drop ${drops}`;
     }
     case "slot_move":
       return `Move ${move.slotMove?.playerName ?? move.slotMove?.playerKey ?? "a player"} to ${move.slotMove?.toSlot ?? "a place"}`;
@@ -2000,6 +2072,7 @@ type ReplayMoveInput = {
   readonly entries: ReadonlyArray<TransactionPlanOrderMove>;
   readonly steps: ReadonlyMap<TransactionMoveId, ReplayStep>;
   readonly blocked: boolean;
+  readonly groupCures: ReadonlyMap<string, ReadonlySet<string>>;
 };
 
 type ClaimCandidate = {
@@ -2076,6 +2149,7 @@ export type TransactionPlanMove = Pick<
   | "picks"
   | "slotMove"
   | "intent"
+  | "placement"
   | "bid"
   | "runDay"
   | "result"

@@ -384,11 +384,29 @@ export const TransactionPlanServiceLive = Layer.effect(
           funded: undefined,
         };
       });
+      const cure = rosterCurePair({ facts, rule, open, entries, at });
+      const prepared =
+        cure === undefined
+          ? entries
+          : yield* newId.pipe(
+              Effect.map((id) => {
+                const group = Schema.decodeSync(TransactionMoveIdSchema)(id);
+                return entries.map((entry, index) =>
+                  index === cure[0] || index === cure[1]
+                    ? {
+                        ...entry,
+                        settleKey: group,
+                        candidate: { ...entry.candidate, group },
+                      }
+                    : entry,
+                );
+              }),
+            );
       const fixed = yield* rosterFixedEntries({
         facts,
         rule,
         open,
-        entries,
+        entries: prepared,
         at,
       });
       const settled = settleProposals({
@@ -2053,6 +2071,76 @@ export const TransactionPlanServiceLive = Layer.effect(
     };
   }),
 );
+
+function rosterCurePair(input: {
+  readonly facts: TransactionPlanTeamFacts;
+  readonly rule: RosterRule;
+  readonly open: ReadonlyArray<TransactionPlanMove>;
+  readonly entries: ReadonlyArray<ProposedEntry>;
+  readonly at: DateTime.Utc;
+}): readonly [number, number] | undefined {
+  const occupancy = rosterOccupancy({ rule: input.rule, players: input.facts.roster });
+  if (occupancy.illegal.length === 0) {
+    return undefined;
+  }
+  const group = "lineupkeep-roster-cure";
+  for (const curing of input.entries) {
+    if (curing.candidate.kind !== "activate" || curing.candidate.group !== undefined) {
+      continue;
+    }
+    if (
+      entryOf(
+        evaluatedMoves(
+          evaluateTransactionPlan({
+            facts: input.facts,
+            moves: [...input.open, curing.candidate],
+            checkedAt: input.at,
+          }),
+        ),
+        curing.candidate.id,
+      ).validation.status === "current"
+    ) {
+      continue;
+    }
+    for (const funding of input.entries) {
+      if (funding === curing || funding.candidate.group !== undefined) {
+        continue;
+      }
+      if (funding.candidate.kind !== "drop" && funding.candidate.kind !== "stash") {
+        continue;
+      }
+      const pair = [funding.candidate, curing.candidate].map((candidate) => ({
+        ...candidate,
+        group,
+      }));
+      const evaluation = evaluateTransactionPlan({
+        facts: input.facts,
+        moves: [...input.open, ...pair],
+        checkedAt: input.at,
+      });
+      const evaluated = evaluatedMoves(evaluation);
+      if (pair.some((entry) => entryOf(evaluated, entry.id).validation.status !== "current")) {
+        continue;
+      }
+      const last = evaluation.moves.reduce<TransactionPlanMoveEvaluation | undefined>(
+        (found, entry) =>
+          pair.some((move) => move.id === entry.move) &&
+          (found === undefined || (entry.runPosition ?? -1) > (found.runPosition ?? -1))
+            ? entry
+            : found,
+        undefined,
+      );
+      if (
+        last === undefined ||
+        rosterOccupancy({ rule: input.rule, players: last.projectedRoster }).illegal.length > 0
+      ) {
+        continue;
+      }
+      return [funding.index, curing.index];
+    }
+  }
+  return undefined;
+}
 
 function settleProposals(input: {
   readonly team: TeamId;

@@ -98,6 +98,8 @@ export function moveReadView(input: {
       validation: validationView(move.validation),
       check: { status: "stored" },
       ...(move.result === undefined ? {} : { result: move.result }),
+      ...(move.resultDetail === undefined ? {} : { resultDetail: move.resultDetail }),
+      ...(move.resultAt === undefined ? {} : { resultAt: move.resultAt }),
     };
   }
   const check = input.check;
@@ -113,6 +115,8 @@ export function moveReadView(input: {
       validation: validationView(move.validation),
       check: lastCheck(move),
       ...(move.result === undefined ? {} : { result: move.result }),
+      ...(move.resultDetail === undefined ? {} : { resultDetail: move.resultDetail }),
+      ...(move.resultAt === undefined ? {} : { resultAt: move.resultAt }),
     };
   }
   const evaluated = check.moves.get(move.id);
@@ -127,6 +131,8 @@ export function moveReadView(input: {
     validation: validationView(evaluated.validation),
     check: { status: "checked" },
     ...(move.result === undefined ? {} : { result: move.result }),
+    ...(move.resultDetail === undefined ? {} : { resultDetail: move.resultDetail }),
+    ...(move.resultAt === undefined ? {} : { resultAt: move.resultAt }),
   };
 }
 

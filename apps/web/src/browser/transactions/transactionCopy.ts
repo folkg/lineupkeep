@@ -11,10 +11,13 @@ export function moveSummary(move: TransactionMoveView): string {
   }
   if (move.kind === "activate" || move.kind === "stash") {
     const player = move.placement?.playerName ?? move.intent?.player?.name ?? "this player";
-    return `${move.kind === "activate" ? "Activate" : "Stash"} ${player}`;
+    const drops = playerNames(move.drops);
+    const label = `${move.kind === "activate" ? "Activate" : "Stash"} ${player}`;
+    return drops === undefined ? label : `${label}, drop ${drops}`;
   }
   const adds = playerNames(move.adds);
   const drops = playerNames(move.drops);
+  const fallbacks = playerNames(move.fallbacks);
   if (move.kind === "trade") {
     const outgoing = [
       ...(drops === undefined ? [] : [drops]),
@@ -33,11 +36,16 @@ export function moveSummary(move: TransactionMoveView): string {
     }
   }
   const verb = move.kind === "waiver_claim" ? "Claim" : "Add";
-  if (adds !== undefined && drops !== undefined) {
-    return `${verb} ${adds} and drop ${drops}`;
-  }
   if (adds !== undefined) {
-    return `${verb} ${adds}`;
+    const reserve =
+      move.intent?.to === "reserve" && move.placement !== undefined
+        ? ` to ${move.placement.toSlot}`
+        : "";
+    const fallback = fallbacks === undefined ? "" : ` (fallback ${fallbacks})`;
+    const bid =
+      move.kind === "waiver_claim" && move.bid !== undefined ? ` for ${String(move.bid)} FAAB` : "";
+    const base = `${verb} ${adds}${reserve}${fallback}${bid}`;
+    return drops === undefined ? base : `${base} and drop ${drops}`;
   }
   if (drops !== undefined) {
     return `Drop ${drops}`;

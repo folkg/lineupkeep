@@ -701,7 +701,12 @@ it("blocks only a failed waiver claim's dependents", () => {
   );
   assert.deepStrictEqual(
     evaluation.moves[1]?.validation.reasons.map((reason) => [reason.code, reason.detail]),
-    [["blocked_by_move", "Drop Runner C cannot run because Add Runner C did not pass its check."]],
+    [
+      [
+        "blocked_by_move",
+        "Drop Runner C cannot run because Add Runner C for 5 FAAB did not pass its check.",
+      ],
+    ],
   );
   assert.deepStrictEqual(
     evaluation.moves[2]?.projectedRoster.map((member) => member.key),

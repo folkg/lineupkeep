@@ -85,6 +85,8 @@ export type TransactionMoveView = {
     | "unknown"
     | "withdrawn"
     | "expired";
+  readonly resultDetail?: string;
+  readonly resultAt?: string;
 };
 
 export type TransactionMoveTeamDayView = {

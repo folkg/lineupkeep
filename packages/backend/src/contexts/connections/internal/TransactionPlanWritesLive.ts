@@ -198,26 +198,190 @@ function slotMoveOf(input: {
         actions: [],
       } satisfies TransactionPlanWriteResult;
     }
-    const actions = plannedActions(input.request);
-    const result = yield* writeResult(
-      input.queries,
-      input.context,
-      input.context.provider.applyReserveMove({
-        ...providerIdentity(input.context),
-        providerTeamKey: input.context.owned.team.providerTeamKey,
-        coverage,
-        providerPlayerKey: player,
-        slot,
-      }),
-    );
-    if (result.status === "accepted") {
-      return { status: "executed", actions: withOutcome(actions, "executed") } as const;
+    const reserveFirst = destinationIsReserve(input.league, slot);
+    let actions = slotActions(input.request, reserveFirst);
+    const writeReserve = (): Effect.Effect<ProviderWriteResult> =>
+      writeResult(
+        input.queries,
+        input.context,
+        input.context.provider.applyReserveMove({
+          ...providerIdentity(input.context),
+          providerTeamKey: input.context.owned.team.providerTeamKey,
+          coverage,
+          providerPlayerKey: player,
+          slot,
+        }),
+      );
+    const writeDrop = (): Effect.Effect<ProviderWriteResult> =>
+      writeResult(
+        input.queries,
+        input.context,
+        input.context.provider.applyTransaction({
+          ...providerIdentity(input.context),
+          providerLeagueKey: input.league.providerLeagueKey,
+          providerTeamKey: input.context.owned.team.providerTeamKey,
+          adds: [],
+          drops: input.request.drops,
+          faabBid: undefined,
+        }),
+      );
+    const decide = (
+      result: Extract<
+        ProviderWriteResult,
+        { readonly status: "rejected" | "not_sent" | "unknown" }
+      >,
+      operation: string,
+    ): DecidedWrite => {
+      const outcome = outcomeOf(result, operation);
+      return outcome.status === "retry"
+        ? { status: "retry", detail: outcome.detail }
+        : { status: outcome.status, detail: outcome.detail };
+    };
+    const partial = (
+      outcome: DecidedWrite,
+      landed: string,
+      missing: string,
+    ): TransactionPlanWriteResult => {
+      if (outcome.status === "retry") {
+        return {
+          status: "failed",
+          detail: `The ${landed} reached your league, but the ${missing} did not. Check your roster, then choose the move again or discard it.`,
+          actions,
+        };
+      }
+      return {
+        status: outcome.status,
+        detail: `The ${landed} reached your league. ${outcome.detail}`,
+        actions,
+      };
+    };
+
+    if (input.request.drops.length === 0) {
+      const result = yield* writeReserve();
+      if (result.status === "accepted") {
+        return { status: "executed", actions: withOutcome(actions, "executed") } as const;
+      }
+      const outcome = outcomeOf(result, "slot move");
+      return outcome.status === "retry"
+        ? outcome
+        : {
+            ...outcome,
+            actions: withKindOutcome(actions, "reserve_move", outcome.status, outcome.detail),
+          };
     }
-    const outcome = outcomeOf(result, "slot move");
-    return outcome.status === "retry"
-      ? outcome
-      : { ...outcome, actions: withOutcome(actions, outcome.status, outcome.detail) };
+
+    if (reserveFirst) {
+      const reserve = yield* writeReserve();
+      if (reserve.status === "accepted") {
+        actions = withKindOutcome(actions, "reserve_move", "executed");
+        const drop = yield* writeDrop();
+        if (drop.status === "accepted") {
+          return { status: "executed", actions: withKindOutcome(actions, "drop", "executed") };
+        }
+        const outcome = decide(drop, "drop");
+        actions = withKindOutcome(
+          actions,
+          "drop",
+          outcome.status === "retry" ? "skipped" : outcome.status,
+          outcome.detail,
+        );
+        return partial(outcome, "slot move", "drop");
+      }
+      const outcome = decide(reserve, "slot move");
+      actions = withKindOutcome(
+        actions,
+        "reserve_move",
+        outcome.status === "retry" ? "skipped" : outcome.status,
+        outcome.detail,
+      );
+      actions = withKindOutcome(actions, "drop", "skipped", outcome.detail);
+      if (outcome.status === "retry") {
+        return { status: "retry", detail: outcome.detail };
+      }
+      return { status: outcome.status, detail: outcome.detail, actions };
+    }
+
+    const drop = yield* writeDrop();
+    if (drop.status !== "accepted") {
+      const outcome = decide(drop, "drop");
+      actions = withKindOutcome(
+        actions,
+        "drop",
+        outcome.status === "retry" ? "skipped" : outcome.status,
+        outcome.detail,
+      );
+      actions = withKindOutcome(actions, "reserve_move", "skipped", outcome.detail);
+      if (outcome.status === "retry") {
+        return { status: "retry", detail: outcome.detail };
+      }
+      return { status: outcome.status, detail: outcome.detail, actions };
+    }
+    actions = withKindOutcome(actions, "drop", "executed");
+    const reserve = yield* writeReserve();
+    if (reserve.status === "accepted") {
+      return { status: "executed", actions: withKindOutcome(actions, "reserve_move", "executed") };
+    }
+    const outcome = decide(reserve, "slot move");
+    actions = withKindOutcome(
+      actions,
+      "reserve_move",
+      outcome.status === "retry" ? "skipped" : outcome.status,
+      outcome.detail,
+    );
+    return partial(outcome, "drop", "slot move");
   });
+}
+
+type DecidedWrite =
+  | { readonly status: "failed"; readonly detail: string }
+  | { readonly status: "unknown"; readonly detail: string }
+  | { readonly status: "retry"; readonly detail: string };
+
+function destinationIsReserve(league: ProviderLeagueSettings, slot: string): boolean {
+  return league.rosterPositions.some(
+    (position) => position.position === slot && position.kind === "reserve",
+  );
+}
+
+function slotActions(
+  request: TransactionPlanWriteRequest,
+  reserveFirst: boolean,
+): ReadonlyArray<TransactionPlanAction> {
+  const drops: ReadonlyArray<TransactionPlanAction> = request.drops.map((playerKey) => ({
+    kind: "drop",
+    playerKey,
+    outcome: "skipped",
+  }));
+  const playerKey = request.slotMove?.playerKey ?? request.placement?.playerKey;
+  const toSlot = request.slotMove?.toSlot ?? request.placement?.toSlot;
+  const reserve =
+    playerKey === undefined
+      ? []
+      : [
+          {
+            kind: "reserve_move" as const,
+            playerKey,
+            ...(request.placement?.fromSlot === undefined
+              ? {}
+              : { fromSlot: request.placement.fromSlot }),
+            ...(toSlot === undefined ? {} : { toSlot }),
+            outcome: "skipped" as const,
+          },
+        ];
+  return reserveFirst ? [...reserve, ...drops] : [...drops, ...reserve];
+}
+
+function withKindOutcome(
+  actions: ReadonlyArray<TransactionPlanAction>,
+  kind: TransactionPlanAction["kind"],
+  outcome: TransactionPlanAction["outcome"],
+  detail?: string,
+): ReadonlyArray<TransactionPlanAction> {
+  return actions.map((action) =>
+    action.kind === kind
+      ? { ...action, outcome, ...(detail === undefined ? {} : { detail }) }
+      : action,
+  );
 }
 
 function tradeOf(input: {
@@ -295,23 +459,6 @@ function plannedActions(
 ): ReadonlyArray<TransactionPlanAction> {
   if (request.kind === "trade") {
     return [];
-  }
-  if (request.kind === "activate" || request.kind === "stash" || request.kind === "slot_move") {
-    const playerKey = request.slotMove?.playerKey ?? request.placement?.playerKey;
-    const toSlot = request.slotMove?.toSlot ?? request.placement?.toSlot;
-    return playerKey === undefined
-      ? []
-      : [
-          {
-            kind: "reserve_move",
-            playerKey,
-            ...(request.placement?.fromSlot === undefined
-              ? {}
-              : { fromSlot: request.placement.fromSlot }),
-            ...(toSlot === undefined ? {} : { toSlot }),
-            outcome: "skipped",
-          },
-        ];
   }
   const actions: Array<TransactionPlanAction> = [
     ...request.adds.map((playerKey): TransactionPlanAction => ({

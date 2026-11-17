@@ -32,7 +32,7 @@ it("names a healthy player on an injury-based reserve list and requires a drop w
   assert.deepStrictEqual(
     occupancy.illegal.map((occupant) => occupant.detail),
     [
-      "Linus Ullmark is no longer injured but sits in IR+. This roster is illegal, so all adds and drops are blocked until it is cured. Activate Linus Ullmark, and at 2 of 2 places a drop is required, or drop Linus Ullmark.",
+      "Linus Ullmark is no longer injured but sits in IR+. This roster is illegal, so all adds and drops are blocked until it is cured. Activate Linus Ullmark together with a drop, or drop Linus Ullmark.",
     ],
   );
   assert.strictEqual(occupancy.occupied, 2);
@@ -70,7 +70,7 @@ it("publishes the blocker's fact and the drop that cures it", () => {
         name: "Linus Ullmark",
         slot: "IR+",
         fact: "Linus Ullmark is no longer injured but sits in IR+.",
-        cure: "Activate Linus Ullmark, and at 2 of 2 places a drop is required, or drop Linus Ullmark.",
+        cure: "Activate Linus Ullmark together with a drop, or drop Linus Ullmark.",
       },
     ],
   );

@@ -246,11 +246,15 @@ function memberLabel(move: TransactionMoveRecord): string {
     case "stash": {
       const player = move.intent?.player?.name;
       const noun = move.kind === "activate" ? "activate" : "stash";
-      return player === undefined ? noun : `${noun} of ${player}`;
+      const drops = move.drops.flatMap((drop) => (drop.name === undefined ? [] : [drop.name]));
+      const base = player === undefined ? noun : `${noun} of ${player}`;
+      return drops.length === 0 ? base : `${base} and drop of ${drops.join(", ")}`;
     }
     case "slot_move": {
       const player = move.slotMove?.playerName ?? move.slotMove?.playerKey;
-      return player === undefined ? "slot move" : `slot move of ${player}`;
+      const drops = move.drops.flatMap((drop) => (drop.name === undefined ? [] : [drop.name]));
+      const base = player === undefined ? "slot move" : `slot move of ${player}`;
+      return drops.length === 0 ? base : `${base} and drop of ${drops.join(", ")}`;
     }
   }
 }

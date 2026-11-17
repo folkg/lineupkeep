@@ -2,7 +2,7 @@ import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, beforeEach, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { eq } from "drizzle-orm";
-import { Array, Config, Effect, Layer, Option, Redacted, Schema } from "effect";
+import { Array, Config, Effect, Layer, Option, Redacted, Ref, Schema } from "effect";
 import { DateTime, Duration } from "effect";
 import { TestClock } from "effect/testing";
 
@@ -252,6 +252,115 @@ it.effect("runs a confirmed move when its date arrives on the hourly tick", () =
     assert.deepStrictEqual(
       (yield* fake.transactionRequests).map((request) => request.drops),
       [["461.p.10002"]],
+    );
+  }).pipe(Effect.provide(AutomationTestLayer)),
+);
+
+it.effect("sends the funding drop before the activate and leaves the roster legal", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-10T18:00:00Z")));
+    const plans = yield* TransactionPlanService;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha", {
+      team: teamFixture,
+      league: reserveLeague,
+      roster: reserveRoster,
+      nativeAfter: reserveRoster,
+    });
+    const proposed = yield* plans.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [
+        {
+          kind: "activate",
+          player: "461.p.10004",
+          drops: ["461.p.10002"],
+          reason: "Activate the healthy reserve and drop the bench quarterback.",
+        },
+      ],
+    });
+    const move = proposed.plan.moves[0];
+    if (move === undefined) {
+      throw new Error("The plan carried no activate move");
+    }
+
+    const confirmed = yield* plans.confirm(owner, {
+      team,
+      moves: [move.move],
+      key: "confirm-activate-drop",
+    });
+    const plan = yield* plans.plan(owner, { team });
+    const state = yield* Ref.get(fake.state);
+
+    assert.deepStrictEqual(confirmed.refusals, []);
+    assert.strictEqual(confirmed.counts.executed, 1);
+    assert.deepStrictEqual(yield* fake.writeSequence, ["transaction", "reserve_move"]);
+    assert.deepStrictEqual(plan.illegal, []);
+    assert.deepStrictEqual(
+      state.roster?.players.map((player) => [player.providerPlayerKey, player.slot]),
+      [
+        ["461.p.10003", { status: "verified", slot: "BN" }],
+        ["461.p.10004", { status: "verified", slot: "BN" }],
+      ],
+    );
+  }).pipe(Effect.provide(AutomationTestLayer)),
+);
+
+it.effect("runs a drop and an activate group so the paperwork ends legal", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-10T18:00:00Z")));
+    const plans = yield* TransactionPlanService;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha", {
+      team: teamFixture,
+      league: reserveLeague,
+      roster: reserveRoster,
+      nativeAfter: reserveRoster,
+    });
+    const proposed = yield* plans.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [
+        { kind: "activate", player: "461.p.10004", reason: "Activate the healthy reserve." },
+        { kind: "drop", drops: ["461.p.10002"], reason: "Drop the bench quarterback." },
+      ],
+    });
+    const moves = proposed.plan.moves.flatMap((move) => (move.group === undefined ? [] : [move]));
+    const groups = proposed.plan.groups;
+
+    assert.deepStrictEqual(proposed.refused, []);
+    assert.strictEqual(groups.length, 1);
+    assert.deepStrictEqual(
+      moves.map((move) => [move.kind, move.runPosition, move.validation.status]),
+      [
+        ["drop", 0, "current"],
+        ["activate", 1, "current"],
+      ],
+    );
+    const read = yield* plans.plan(owner, { team });
+    assert.deepStrictEqual(
+      read.groups[0]?.moves.map((move) => read.moves.find((entry) => entry.move === move)?.kind),
+      ["drop", "activate"],
+    );
+
+    const confirmed = yield* plans.confirm(owner, {
+      team,
+      moves: moves.map((move) => move.move),
+      key: "confirm-drop-activate-group",
+    });
+    const plan = yield* plans.plan(owner, { team });
+    const state = yield* Ref.get(fake.state);
+
+    assert.strictEqual(confirmed.counts.executed, 2);
+    assert.deepStrictEqual(yield* fake.writeSequence, ["transaction", "reserve_move"]);
+    assert.deepStrictEqual(plan.illegal, []);
+    assert.strictEqual(plan.groups[0]?.status, "done");
+    assert.deepStrictEqual(
+      state.roster?.players.map((player) => [player.providerPlayerKey, player.slot]),
+      [
+        ["461.p.10003", { status: "verified", slot: "BN" }],
+        ["461.p.10004", { status: "verified", slot: "BN" }],
+      ],
     );
   }).pipe(Effect.provide(AutomationTestLayer)),
 );
@@ -796,6 +905,47 @@ function weekStartMatchup(week: number, weekStart: string): ProviderMatchup {
     categoryWinners: [],
   };
 }
+
+const reserveLeague: ProviderLeagueSettings = {
+  ...league,
+  rosterPositions: [
+    { position: "QB", positionType: "O", count: 1, kind: "starting", eligibility: ["QB"] },
+    { position: "BN", positionType: "B", count: 2, kind: "bench", eligibility: [] },
+    { position: "IR", positionType: "R", count: 1, kind: "reserve", eligibility: ["QB"] },
+  ],
+  rosterConstraints: {
+    ...league.rosterConstraints,
+    rosterMaximum: 2,
+    reserveEligibility: { kind: "injury_status" },
+  },
+};
+
+const reserveRoster: ProviderRoster = {
+  ...roster,
+  players: [
+    {
+      ...Array.getUnsafe(roster.players, 0),
+      providerPlayerKey: "461.p.10002",
+      name: "Movable Bench",
+      slot: { status: "verified", slot: "BN" },
+      isEditable: true,
+    },
+    {
+      ...Array.getUnsafe(roster.players, 1),
+      providerPlayerKey: "461.p.10003",
+      name: "Other Bench",
+      slot: { status: "verified", slot: "BN" },
+      isEditable: true,
+    },
+    {
+      ...Array.getUnsafe(roster.players, 1),
+      providerPlayerKey: "461.p.10004",
+      name: "Healthy Reserve",
+      slot: { status: "verified", slot: "IR" },
+      isEditable: true,
+    },
+  ],
+};
 
 const nativeAfter: ProviderRoster = {
   ...roster,

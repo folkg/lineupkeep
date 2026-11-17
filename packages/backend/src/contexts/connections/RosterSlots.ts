@@ -247,7 +247,7 @@ function reserveCure(name: string, occupied: number, maximum: number): string {
     return `Drop ${name}.`;
   }
   return occupied >= maximum
-    ? `Activate ${name}, and at ${String(occupied)} of ${String(maximum)} places a drop is required, or drop ${name}.`
+    ? `Activate ${name} together with a drop, or drop ${name}.`
     : `Activate ${name}, or drop ${name}.`;
 }
 
