@@ -56,5 +56,13 @@
     "tools/**/*.ts",
     "infra/**/*.ts"
   ],
-  "exclude": ["**/node_modules", "**/dist", "**/.output", "**/.alchemy", "**/.tanstack", "**/.vite"]
+  "exclude": [
+    "**/node_modules",
+    "**/dist",
+    "**/.output",
+    "**/.alchemy",
+    "**/.tanstack",
+    "**/.vite",
+    "e2e/scratch"
+  ]
 }
