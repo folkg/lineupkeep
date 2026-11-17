@@ -14,7 +14,7 @@ import {
   makeRequestContext,
   requestContextLayer,
 } from "@lineupkeep/backend/runtime/RequestContext";
-import { Effect, Layer, Schema, DateTime, Cause, Exit } from "effect";
+import { Effect, Layer, Schema, DateTime, Duration, Cause, Exit } from "effect";
 
 import type { ConnectionMutationError } from "#contracts/connections/connectionContract.ts";
 
@@ -164,6 +164,7 @@ function authentication(
           signInMethods: { google: false },
           oauthResource: "https://example.test/mcp",
           onboardingScopes: [{ name: "connections:read", description: "Read connections." }],
+          accessTokenLifetime: Duration.minutes(5),
           resolveAccessToken: () => Effect.succeed({ status: "invalid" as const }),
           getConsentRequest: () => Effect.succeed({ status: "invalid" as const }),
           consent: () => Effect.succeed("https://client.test/callback"),

@@ -1,5 +1,5 @@
 import { Context, Schema } from "effect";
-import type { Effect } from "effect";
+import type { DateTime, Duration, Effect } from "effect";
 
 import type { AuthorizationScope } from "./AuthorizationScopes.ts";
 import type { UserId } from "./User.ts";
@@ -33,7 +33,10 @@ export type AuthenticatedAgent = {
 export type AccessTokenResolution =
   | { readonly status: "invalid" }
   | { readonly status: "insufficient_scope" }
-  | ({ readonly status: "authenticated" } & AuthenticatedAgent);
+  | ({
+      readonly status: "authenticated";
+      readonly accessTokenExpiresAt: DateTime.Utc;
+    } & AuthenticatedAgent);
 
 export type AuthenticationSession = {
   readonly session: {
@@ -68,6 +71,8 @@ export type AuthServiceShape = {
   readonly oauthResource: string;
 
   readonly onboardingScopes: ReadonlyArray<AuthorizationScope>;
+
+  readonly accessTokenLifetime: Duration.Duration;
 
   readonly resolveAccessToken: (
     token: string,

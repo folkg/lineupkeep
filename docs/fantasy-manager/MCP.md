@@ -1105,21 +1105,31 @@ access right on the resource. A test pins both lists and this single difference.
 
 Access tokens last five minutes; refresh tokens last 30 days from issue or last rotation. The
 refresh grant rotates on every use. A client must request `offline_access` on the first
-authorization and persist each returned `refresh_token`; a rotated-out token is accepted for 30
-seconds so a retried refresh can recover, then reuse is treated as replay and revokes the whole
+authorization and persist each returned `refresh_token`; a rotated-out token is accepted for five
+minutes so a retried refresh can recover, then reuse is treated as replay and revokes the whole
 grant for that client and person. A client that keeps reusing an already-rotated token therefore
 loses the connection at its next renewal and must authorize again. The full request and response
 shape, including the public-client refresh with no secret, is in the
 [client setup](../../README.md#token-lifetime-and-renewal).
 
-A deployment or restart does not invalidate an access token, rotate the signing key, or revoke a
-grant. Signing keys and grants are persisted in the service database, and access tokens are
-verified against the persisted key. The round-3 deploy on 2026-10-28 accepted a pre-deploy access
-token and then a pre-deploy refresh token, which rotated normally; the `jwks` table still held its
-single 2026-10-25 EdDSA key. A client that appears to need reauthorization after a deploy is
-discarding or replaying its rotated refresh token, not observing server-side invalidation. Persist
-the rotated token before using the new access token. Access tokens expiring after five minutes is
-by design.
+A deployment, a restart, and a signing-key rotation do not invalidate an access token or revoke a
+grant. Signing keys and grants are persisted in the service database: the signing key stays in the
+`jwks` table and a rotated key is added beside it, so a token signed before a rotation still verifies
+after it. The round-3 deploy on 2026-10-28 accepted a pre-deploy access token and then a pre-deploy
+refresh token, which rotated normally. The 2026-11-17 audit found the single 2026-10-25 EdDSA key and
+every refresh row intact across the deploys of 16 and 17 November. What does strand a client is
+renewal, not invalidation: the web service scales to zero, so the first token request after an idle
+night or a long gap lands on a cold instance and can take longer than a client's request timeout. A
+client whose refresh aborts, or that calls a tool before its refreshed token is stored, sees a 401 on
+a grant that is still alive. Persist the rotated token before using the new access token.
+
+`server/discover` reports the grant in `_meta["lineupkeep/grant"]`:
+`accessTokenLifetimeSeconds` and `refreshTokenGrantSupported`, and when the request carries a bearer
+token an `accessToken` of `{status: "active", expiresAt, expiresInSeconds}` for a token the server
+still accepts or `{status: "rejected"}` for one it refuses. A client can read that before its first
+authenticated call, refresh while it still has time, and retry a refresh that timed out. A 401 on a
+request that presented a bearer token carries `error="invalid_token"` in `WWW-Authenticate` and the
+body, which means "refresh and retry"; the 401 without an error code means "authorize".
 
 Invalid `tools/call` arguments return HTTP 400 with JSON-RPC `-32602` and name the offending field
 path, for example `Invalid tool arguments: Expected a value greater than or equal to 1 at

@@ -285,6 +285,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
         return {
           status: "authenticated",
           userId: claims.value.sub,
+          accessTokenExpiresAt: DateTime.makeUnsafe(claims.value.exp * 1000),
           ...(clientId === undefined ? {} : { clientId }),
           ...(clientName === undefined ? {} : { clientName }),
         };
@@ -396,6 +397,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
         signInMethods: { google: Option.isSome(google) },
         oauthResource,
         onboardingScopes,
+        accessTokenLifetime,
         handle,
         getSession,
         resolveAccessToken,

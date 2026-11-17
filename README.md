@@ -165,7 +165,7 @@ curl -sS -X POST https://<host>/api/auth/oauth2/token \
   --data-urlencode 'resource=https://<host>/mcp'
 ```
 
-The response carries a new `access_token`, `expires_in`, `scope`, and `refresh_token`. Access tokens are signed by a key persisted in the service database, so a deployment or restart does not invalidate a live token or grant. Reauthorization after a deploy therefore indicates that the client did not persist or replayed its rotated refresh token; it is not server-side invalidation. The 2026-10-28 deploy experiment is recorded in [the MCP contract](docs/fantasy-manager/MCP.md#discovery-documents).
+The response carries a new `access_token`, `expires_in`, `scope`, and `refresh_token`. Access tokens are signed by a key persisted in the service database, so a deployment, a restart, or a signing-key rotation does not invalidate a live token or grant. What can still stop a client is renewal: the service scales to zero, so the first token request after an idle period may wait on a cold instance for several seconds. Retry a refresh that times out or aborts before falling back to authorization; the first authenticated call after an access token expires is a plain expiry, not a lost grant. `server/discover` reports the grant in `_meta["lineupkeep/grant"]` (`accessTokenLifetimeSeconds`, `refreshTokenGrantSupported`, and, when a bearer token is presented, `accessToken` with `expiresAt`/`expiresInSeconds` or `status: "rejected"`), and a 401 that presented a token carries `error="invalid_token"`, which reads as "refresh and retry". The 2026-10-28 deploy experiment is recorded in [the MCP contract](docs/fantasy-manager/MCP.md#discovery-documents).
 
 ### After connecting
 

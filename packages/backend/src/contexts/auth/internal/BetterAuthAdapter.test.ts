@@ -17,7 +17,7 @@ import {
 } from "effect";
 import { vi } from "vitest";
 
-import type { AuthServiceShape } from "#contexts/auth/Auth.ts";
+import type { AccessTokenResolution, AuthServiceShape } from "#contexts/auth/Auth.ts";
 import { AuthorizationScopes, offlineAccess } from "#contexts/auth/AuthorizationScopes.ts";
 import { retiredScopeAliases } from "#contexts/auth/AuthorizationScopes.ts";
 import { SignInSessions } from "#contexts/auth/SignInSessions.ts";
@@ -578,8 +578,7 @@ it.effect(
       const wrongIssuer = yield* token({ iss: "https://other.example/api/auth" });
       const proofBound = yield* token({ cnf: { jkt: "proof-required" } });
 
-      assert.deepStrictEqual(yield* adapter.resolveAccessToken(valid.token, ["connections:read"]), {
-        status: "authenticated",
+      assertAuthenticated(yield* adapter.resolveAccessToken(valid.token, ["connections:read"]), {
         userId: decodeUserId("reader"),
       });
       assert.deepStrictEqual(
@@ -794,12 +793,10 @@ it.effect(
       const current = yield* token("fantasy:read");
       const manageOnly = yield* token("feedback:manage");
 
-      assert.deepStrictEqual(yield* adapter.resolveAccessToken(retired.token, ["fantasy:read"]), {
-        status: "authenticated",
+      assertAuthenticated(yield* adapter.resolveAccessToken(retired.token, ["fantasy:read"]), {
         userId: decodeUserId("reader"),
       });
-      assert.deepStrictEqual(yield* adapter.resolveAccessToken(current.token, ["fantasy:read"]), {
-        status: "authenticated",
+      assertAuthenticated(yield* adapter.resolveAccessToken(current.token, ["fantasy:read"]), {
         userId: decodeUserId("reader"),
       });
       assert.deepStrictEqual(
@@ -894,10 +891,9 @@ it.effect(
       );
 
       assert.strictEqual(credentials.scope, "connections:read offline_access");
-      assert.deepStrictEqual(
+      assertAuthenticated(
         yield* adapter.resolveAccessToken(credentials.access_token, ["fantasy:read"]),
         {
-          status: "authenticated",
           userId: decodeUserId(session.user.id),
           clientId: registered.client_id,
           clientName: "Retired scope client",
@@ -1265,7 +1261,7 @@ it.effect(
 );
 
 it.effect(
-  "keeps an issued access token and rotating refresh grant valid in a fresh auth instance",
+  "keeps an issued access token and rotating refresh grant valid in a fresh auth instance and across a signing-key rotation",
   () =>
     Effect.gen(function* () {
       const adapter = yield* BetterAuthAdapter;
@@ -1342,6 +1338,44 @@ it.effect(
       assert.deepStrictEqual(
         keysAfterRestart.map((key) => key.id),
         storedKeys.map((key) => key.id),
+      );
+
+      const resolved = yield* restarted.resolveAccessToken(credentials.access_token, [
+        "connections:read",
+      ]);
+      assertAuthenticated(resolved, { userId: refreshRow.userId });
+      assert.strictEqual(
+        resolved.status === "authenticated"
+          ? resolved.accessTokenExpiresAt.epochMilliseconds
+          : undefined,
+        payload.exp * 1000,
+      );
+
+      yield* Effect.promise(() =>
+        database
+          .update(jwks)
+          .set({ expiresAt: DateTime.toDateUtc(DateTime.makeUnsafe(0)) })
+          .where(eq(jwks.id, storedKeys[0]?.id ?? "")),
+      );
+      const rotatedKeys = yield* Effect.provide(BetterAuthAdapter, instanceLayer);
+      const renewed = yield* jsonOf(
+        yield* rotatedKeys.handle(refreshTokenRequest(refreshed.refresh_token)),
+        Schema.Struct({ access_token: Schema.String, refresh_token: Schema.String }),
+      );
+      const keysAfterRotation = yield* Effect.promise(() => database.select().from(jwks));
+
+      assert.strictEqual(keysAfterRotation.length, 2);
+      assert.notStrictEqual(
+        jwtHeader(renewed.access_token).kid,
+        jwtHeader(credentials.access_token).kid,
+      );
+      assertAuthenticated(
+        yield* rotatedKeys.resolveAccessToken(credentials.access_token, ["connections:read"]),
+        { userId: refreshRow.userId },
+      );
+      assertAuthenticated(
+        yield* rotatedKeys.resolveAccessToken(renewed.access_token, ["connections:read"]),
+        { userId: refreshRow.userId },
       );
     }).pipe(Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
   databaseTestTimeout,
@@ -1588,10 +1622,9 @@ it.effect(
       const adapter = yield* BetterAuthAdapter;
       const grant = yield* issueGrant(adapter, "no-resource@example.test", undefined);
 
-      assert.deepStrictEqual(
+      assertAuthenticated(
         yield* adapter.resolveAccessToken(grant.accessToken, ["connections:read"]),
         {
-          status: "authenticated",
           userId: grant.userId,
           clientId: grant.clientId,
           clientName: "no-resource@example.test",
@@ -1601,10 +1634,9 @@ it.effect(
         yield* adapter.handle(refreshGrantRequest(grant.refreshToken, grant.clientId, undefined)),
         IssuedCredentials,
       );
-      assert.deepStrictEqual(
+      assertAuthenticated(
         yield* adapter.resolveAccessToken(renewed.access_token, ["connections:read"]),
         {
-          status: "authenticated",
           userId: grant.userId,
           clientId: grant.clientId,
           clientName: "no-resource@example.test",
@@ -1986,6 +2018,33 @@ const IssuedCredentials = Schema.Struct({
 
 const JwtPayload = Schema.Struct({ iat: Schema.Finite, exp: Schema.Finite });
 const JwtHeader = Schema.Struct({ kid: Schema.String });
+
+function assertAuthenticated(
+  resolution: AccessTokenResolution,
+  expected: {
+    readonly userId?: string | undefined;
+    readonly clientId?: string | undefined;
+    readonly clientName?: string | undefined;
+  } = {},
+): void {
+  assert.strictEqual(resolution.status, "authenticated");
+  if (resolution.status !== "authenticated") {
+    return;
+  }
+  if (expected.userId !== undefined) {
+    assert.strictEqual(resolution.userId, expected.userId);
+  }
+  if (expected.clientId !== undefined) {
+    assert.strictEqual(resolution.clientId, expected.clientId);
+  }
+  if (expected.clientName !== undefined) {
+    assert.strictEqual(resolution.clientName, expected.clientName);
+  }
+  assert.isAbove(
+    resolution.accessTokenExpiresAt.epochMilliseconds,
+    DateTime.nowUnsafe().epochMilliseconds,
+  );
+}
 
 function jwtPayload(token: string): typeof JwtPayload.Type {
   return Schema.decodeUnknownSync(JwtPayload)(jwtSegment(token, 1));

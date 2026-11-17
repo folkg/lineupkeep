@@ -11,7 +11,7 @@ import {
   makeRequestContext,
   requestContextLayer,
 } from "@lineupkeep/backend/runtime/RequestContext";
-import { Effect, Layer, Schema } from "effect";
+import { Duration, Effect, Layer, Schema } from "effect";
 
 import { exportAccountData } from "./accountExport.ts";
 
@@ -123,6 +123,7 @@ function authenticationLayer(
       signInMethods: { google: false },
       oauthResource: "https://example.com/mcp",
       onboardingScopes: [{ name: "connections:read", description: "Read connections." }],
+      accessTokenLifetime: Duration.minutes(5),
       resolveAccessToken: () => Effect.succeed({ status: "invalid" as const }),
       getConsentRequest: () => Effect.succeed({ status: "invalid" as const }),
       consent: () => Effect.succeed("https://client.test/callback"),

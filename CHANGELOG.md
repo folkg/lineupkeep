@@ -3,6 +3,17 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
+## Unreleased — discovery reports the grant, and an expired token asks for a refresh
+
+- `server/discover` publishes `_meta["lineupkeep/grant"]` with `accessTokenLifetimeSeconds` and
+  `refreshTokenGrantSupported`. When the request carries a bearer token it adds `accessToken`:
+  `{status: "active", expiresAt, expiresInSeconds}` for a token the server still accepts, or
+  `{status: "rejected"}` for one it refuses. A client can see the grant before its first
+  authenticated call instead of learning about expiry from a failed one.
+- A 401 on a request that presented a bearer token now names `error="invalid_token"` in
+  `WWW-Authenticate` and the body, so a client refreshes its grant and retries rather than starting
+  a new authorization. A request with no bearer token keeps the token-free challenge.
+
 ## Unreleased - reserve moves, a stable bid shape, and a stated amend reset
 
 - `propose_transactions` restores `stash` and `activate` as agent kinds. Each names one rostered

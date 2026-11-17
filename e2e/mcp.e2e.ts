@@ -3,7 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
 import type { Page } from "@playwright/test";
-import { Schema } from "effect";
+import { DateTime, Schema } from "effect";
 
 import {
   beginAuthorization,
@@ -99,16 +99,27 @@ test("answers the documented token-free discovery request with the same document
     capabilities: { tools: {} },
   });
   expect(document.result["capabilities"]).toEqual({ tools: {} });
+  const tokenFree = Schema.decodeUnknownSync(DiscoveredGrant)(document);
+  expect(tokenFree.result._meta["lineupkeep/grant"]).toEqual({
+    accessTokenLifetimeSeconds: 300,
+    refreshTokenGrantSupported: true,
+  });
 
   await signUp(page);
   const { credentials } = await authorize(page, origin);
   const authenticated = await mcpClient(mcpEndpoint(origin), credentials.access_token).request(
     "server/discover",
   );
+  const presented = Schema.decodeUnknownSync(DiscoveredGrant)(await authenticated.json());
+  const grant = presented.result._meta["lineupkeep/grant"];
 
-  expect(Schema.decodeUnknownSync(DiscoveryResponse)(await authenticated.json()).result).toEqual(
-    document.result,
+  expect(grant.accessToken?.status).toBe("active");
+  expect(grant.accessToken?.expiresInSeconds).toBeGreaterThan(0);
+  expect(grant.accessToken?.expiresInSeconds).toBeLessThanOrEqual(300);
+  expect(DateTime.makeUnsafe(grant.accessToken?.expiresAt ?? "").epochMilliseconds).toBeGreaterThan(
+    DateTime.nowUnsafe().epochMilliseconds,
   );
+  expect(withoutGrant(presented)).toEqual(withoutGrant(tokenFree));
 });
 
 test("serves every tool scope after one consent for the documented scope set", async ({
@@ -1118,6 +1129,41 @@ const callbackPattern = new RegExp(`^${callback.replaceAll(".", "\\.")}\\?`);
 const DiscoveryResponse = Schema.Struct({
   result: Schema.Record(Schema.String, Schema.Unknown),
 });
+const GrantFacts = Schema.Struct({
+  accessTokenLifetimeSeconds: Schema.Finite,
+  refreshTokenGrantSupported: Schema.Boolean,
+  accessToken: Schema.optional(
+    Schema.Struct({
+      status: Schema.Literal("active"),
+      expiresAt: Schema.String,
+      expiresInSeconds: Schema.Finite,
+    }),
+  ),
+});
+const DiscoveredGrant = Schema.Struct({
+  result: Schema.Struct({
+    _meta: Schema.Struct({
+      "io.modelcontextprotocol/serverInfo": Schema.Unknown,
+      "lineupkeep/grant": GrantFacts,
+    }),
+    capabilities: Schema.Unknown,
+    resultType: Schema.Unknown,
+    supportedVersions: Schema.Unknown,
+    cacheScope: Schema.Unknown,
+    ttlMs: Schema.Unknown,
+  }),
+});
+
+function withoutGrant(document: typeof DiscoveredGrant.Type): unknown {
+  return {
+    serverInfo: document.result._meta["io.modelcontextprotocol/serverInfo"],
+    capabilities: document.result.capabilities,
+    resultType: document.result.resultType,
+    supportedVersions: document.result.supportedVersions,
+    cacheScope: document.result.cacheScope,
+    ttlMs: document.result.ttlMs,
+  };
+}
 const RefreshCredentials = Schema.Struct({
   access_token: Schema.String,
   refresh_token: Schema.String,

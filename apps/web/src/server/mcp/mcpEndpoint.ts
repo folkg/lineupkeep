@@ -1,12 +1,12 @@
 import { AuthService } from "@lineupkeep/backend/auth/Auth";
-import type { AuthenticatedAgent } from "@lineupkeep/backend/auth/Auth";
+import type { AccessTokenResolution, AuthenticatedAgent } from "@lineupkeep/backend/auth/Auth";
 import type { AuthorizationScope } from "@lineupkeep/backend/auth/AuthorizationScopes";
 import { ToolCallQuota } from "@lineupkeep/backend/toolCalls/ToolCallQuota";
 import type {
   ToolCallDecision,
   ToolCallQuotaUnavailable,
 } from "@lineupkeep/backend/toolCalls/ToolCallQuota";
-import { Context, Duration, Effect, Layer, Option, Result, Schema } from "effect";
+import { Context, DateTime, Duration, Effect, Layer, Option, Result, Schema } from "effect";
 import { McpProtocol, McpServer } from "effect/ai";
 import type { Tool, Toolkit } from "effect/ai";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -22,22 +22,29 @@ export const mcpRequest = Effect.fnUntraced(function* <Tools extends Record<stri
   const auth = yield* AuthService;
   const resource = new URL(auth.oauthResource);
   const invocation = yield* readInvocation(request, toolkit);
+  const presented = bearerToken(request.headers);
 
   if (Option.isSome(invocation.rpc) && invocation.rpc.value.method === discoveryMethod) {
-    return yield* discoveryResponse(invocation.rpc.value, application);
+    const grant =
+      presented === undefined ? undefined : yield* auth.resolveAccessToken(presented, []);
+    return yield* discoveryResponse(invocation.rpc.value, application, {
+      accessTokenLifetimeSeconds: Duration.toSeconds(auth.accessTokenLifetime),
+      refreshTokenGrantSupported: true,
+      ...(grant === undefined ? {} : { accessToken: yield* accessTokenReport(grant) }),
+    });
   }
 
   const scopes = requiredScopes(invocation.tool);
-  const bearer = bearerToken(request.headers);
   const identity =
-    bearer === undefined
+    presented === undefined
       ? { status: "invalid" as const }
-      : yield* auth.resolveAccessToken(bearer, scopes);
+      : yield* auth.resolveAccessToken(presented, scopes);
   if (identity.status !== "authenticated") {
     return yield* challengeResponse(
       resource,
       identity.status,
       challengeScope(invocation, auth.onboardingScopes),
+      presented !== undefined,
     );
   }
   yield* Effect.annotateCurrentSpan({
@@ -107,6 +114,7 @@ function bearerToken(headers: Headers): string | undefined {
 function discoveryResponse(
   rpc: RpcRequest,
   application: ApplicationIdentity,
+  grant: GrantReport,
 ): Effect.Effect<Response, never, never> {
   return Effect.gen(function* () {
     const requested = requestedProtocolVersion(rpc.params);
@@ -137,7 +145,10 @@ function discoveryResponse(
       jsonrpc: "2.0",
       id: rpc.id ?? null,
       result: {
-        _meta: { "io.modelcontextprotocol/serverInfo": application },
+        _meta: {
+          "io.modelcontextprotocol/serverInfo": application,
+          "lineupkeep/grant": grant,
+        },
         resultType: "complete",
         ttlMs: 0,
         cacheScope: "private",
@@ -161,14 +172,17 @@ function challengeResponse(
   resource: URL,
   status: "invalid" | "insufficient_scope",
   scope: string,
+  tokenPresented: boolean,
 ): Effect.Effect<Response, never, never> {
   return Effect.gen(function* () {
     const insufficient = status === "insufficient_scope";
+    const rejected = status === "invalid" && tokenPresented;
+    const error = insufficient ? "insufficient_scope" : rejected ? "invalid_token" : undefined;
     const metadata = new URL(`/.well-known/oauth-protected-resource${resource.pathname}`, resource)
       .href;
     const challenge = [
       `Bearer resource_metadata="${metadata}"`,
-      ...(insufficient ? ['error="insufficient_scope"'] : []),
+      ...(error === undefined ? [] : [`error="${error}"`]),
       `scope="${scope}"`,
     ].join(", ");
     yield* Effect.annotateCurrentSpan({
@@ -183,18 +197,45 @@ function challengeResponse(
             scope,
             error_description: `This access token does not grant the ${scope} scope. Authorize again and request ${scope} in addition to the scopes this client already holds.`,
           }
-        : {
-            error: "unauthorized",
-            scope,
-            resource_metadata: metadata,
-            error_description: `Authorize against the resource metadata, then send the access token as a bearer token. A first authorization can request ${scope}; each tool names the scope it needs in a 403 when the current grant lacks it.`,
-          },
+        : rejected
+          ? {
+              error: "invalid_token",
+              scope,
+              resource_metadata: metadata,
+              error_description: `The access token is expired or invalid. Refresh it with the grant's refresh token and retry; authorize again only when the client holds no refresh token.`,
+            }
+          : {
+              error: "unauthorized",
+              scope,
+              resource_metadata: metadata,
+              error_description: `Authorize against the resource metadata, then send the access token as a bearer token. A first authorization can request ${scope}; each tool names the scope it needs in a 403 when the current grant lacks it.`,
+            },
       {
         status: insufficient ? 403 : 401,
         headers: { "WWW-Authenticate": challenge, "Cache-Control": "no-store" },
       },
     );
   });
+}
+
+function accessTokenReport(
+  resolution: AccessTokenResolution,
+): Effect.Effect<AccessTokenReport, never, never> {
+  if (resolution.status !== "authenticated") {
+    return Effect.succeed({ status: "rejected" });
+  }
+  return DateTime.now.pipe(
+    Effect.map((now) => ({
+      status: "active" as const,
+      expiresAt: DateTime.toDateUtc(resolution.accessTokenExpiresAt).toISOString(),
+      expiresInSeconds: Math.max(
+        0,
+        Math.floor(
+          (resolution.accessTokenExpiresAt.epochMilliseconds - now.epochMilliseconds) / 1000,
+        ),
+      ),
+    })),
+  );
 }
 
 function quotaRefusal(
@@ -361,3 +402,13 @@ type Invocation = {
 };
 
 type ApplicationIdentity = { readonly name: string; readonly version: string };
+
+type GrantReport = {
+  readonly accessTokenLifetimeSeconds: number;
+  readonly refreshTokenGrantSupported: boolean;
+  readonly accessToken?: AccessTokenReport;
+};
+
+type AccessTokenReport =
+  | { readonly status: "active"; readonly expiresAt: string; readonly expiresInSeconds: number }
+  | { readonly status: "rejected" };

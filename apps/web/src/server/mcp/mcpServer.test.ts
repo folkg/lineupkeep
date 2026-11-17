@@ -1,5 +1,6 @@
 import { it as effectIt } from "@effect/vitest";
 import { AuthService } from "@lineupkeep/backend/auth/Auth";
+import type { AccessTokenResolution } from "@lineupkeep/backend/auth/Auth";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { ConnectionPersistenceFailed } from "@lineupkeep/backend/connections/Connection";
 import type { ConnectionsShape } from "@lineupkeep/backend/connections/Connections";
@@ -57,6 +58,21 @@ const DiscoveryDocument = Schema.Struct({
   }),
 });
 
+const GrantReport = Schema.Struct({
+  accessTokenLifetimeSeconds: Schema.Finite,
+  refreshTokenGrantSupported: Schema.Boolean,
+  accessToken: Schema.optional(
+    Schema.Union([
+      Schema.Struct({
+        status: Schema.Literal("active"),
+        expiresAt: Schema.String,
+        expiresInSeconds: Schema.Finite,
+      }),
+      Schema.Struct({ status: Schema.Literal("rejected") }),
+    ]),
+  ),
+});
+
 const ToolErrorResult = Schema.Struct({
   result: Schema.Struct({
     isError: Schema.Boolean,
@@ -78,12 +94,45 @@ it("identifies the product during protocol discovery", async () => {
   expect(body.result.capabilities).toEqual({ tools: {} });
 });
 
-it("answers server discovery without a token and publishes the same document", async () => {
+it("publishes the grant lifetime and the presented token's expiry during protocol discovery", async () => {
   const anonymous = await handle(request("server/discover"));
   const authenticated = await handle(request("server/discover", {}, "read"));
+  const expired = await handle(request("server/discover", {}, "expired"));
 
   expect(anonymous.status).toBe(200);
-  expect(await anonymous.json()).toEqual(await authenticated.json());
+  expect(authenticated.status).toBe(200);
+  const anonymousDocument = Schema.decodeUnknownSync(DiscoveryDocument)(await anonymous.json());
+  const authenticatedDocument = Schema.decodeUnknownSync(DiscoveryDocument)(
+    await authenticated.json(),
+  );
+  expect(anonymousDocument.result._meta["lineupkeep/grant"]).toEqual({
+    accessTokenLifetimeSeconds: 300,
+    refreshTokenGrantSupported: true,
+  });
+  const grant = Schema.decodeUnknownSync(GrantReport)(
+    authenticatedDocument.result._meta["lineupkeep/grant"],
+  );
+  expect(grant.accessTokenLifetimeSeconds).toBe(300);
+  expect(grant.refreshTokenGrantSupported).toBe(true);
+  if (grant.accessToken?.status !== "active") {
+    throw new Error("Expected discovery to report the presented access token as active");
+  }
+  expect(grant.accessToken.expiresInSeconds).toBeGreaterThan(0);
+  expect(grant.accessToken.expiresInSeconds).toBeLessThanOrEqual(120);
+  expect(DateTime.makeUnsafe(grant.accessToken.expiresAt).epochMilliseconds).toBeGreaterThan(
+    DateTime.nowUnsafe().epochMilliseconds,
+  );
+  expect(
+    Schema.decodeUnknownSync(GrantReport)(
+      Schema.decodeUnknownSync(DiscoveryDocument)(await expired.json()).result._meta[
+        "lineupkeep/grant"
+      ],
+    ).accessToken,
+  ).toEqual({ status: "rejected" });
+  expect(anonymousDocument.result.capabilities).toEqual(authenticatedDocument.result.capabilities);
+  expect(anonymousDocument.result._meta["io.modelcontextprotocol/serverInfo"]).toEqual(
+    authenticatedDocument.result._meta["io.modelcontextprotocol/serverInfo"],
+  );
 });
 
 it.each(["2025-03-26", "2025-11-25"])(
@@ -188,6 +237,22 @@ it("challenges an unauthenticated client with protected-resource discovery and a
   expect(JSON.stringify(body)).not.toContain("teams:manage");
 });
 
+it("names an expired presented token as invalid_token so a client refreshes instead of authorizing again", async () => {
+  const response = await handle(request("tools/list", {}, "expired"));
+  const body = await json(response);
+
+  expect(response.status).toBe(401);
+  expect(response.headers.get("www-authenticate")).toBe(
+    'Bearer resource_metadata="https://connections.example/.well-known/oauth-protected-resource/mcp", error="invalid_token", scope="fantasy:read offline_access"',
+  );
+  expect(body).toMatchObject({
+    error: "invalid_token",
+    scope: "fantasy:read offline_access",
+    resource_metadata: "https://connections.example/.well-known/oauth-protected-resource/mcp",
+  });
+  expect(JSON.stringify(body)).toContain("refresh token");
+});
+
 it("names only the calling tool's missing scope in a 403 body", async () => {
   const response = await handle(
     request(
@@ -260,16 +325,14 @@ it("asks the auth service only for the calling tool's scope", async () => {
               signInMethods: { google: false },
               oauthResource: "https://connections.example/mcp",
               onboardingScopes: [{ name: "example:read", description: "Read examples." }],
+              accessTokenLifetime: Duration.minutes(5),
               getConsentRequest: () => Effect.succeed({ status: "invalid" as const }),
               consent: () => Effect.succeed("https://client.test/callback"),
               handle: () => Effect.succeed(new Response()),
               getSession: () => Effect.void.pipe(Effect.as(undefined)),
               resolveAccessToken: (_token, scopes) => {
                 requested.push(scopes);
-                return Effect.succeed({
-                  status: "authenticated" as const,
-                  userId: decodeUserId("reader"),
-                });
+                return Effect.succeed(signedInGrant());
               },
             }),
             permissiveQuota,
@@ -1676,8 +1739,7 @@ it("requires notes:write and attributes an agent note to the authenticated clien
       return Effect.succeed(
         scopes.every((scope) => granted.includes(scope))
           ? {
-              status: "authenticated" as const,
-              userId: decodeUserId("reader"),
+              ...signedInGrant(),
               ...(token === "notes" ? { clientId: "client-note", clientName: "Note Agent" } : {}),
             }
           : { status: "insufficient_scope" as const },
@@ -1924,6 +1986,12 @@ const permissiveQuota = Layer.succeed(ToolCallQuota)({
   consume: () => Effect.succeed({ allowed: true as const }),
 });
 
+const signedInGrant = (): Extract<AccessTokenResolution, { status: "authenticated" }> => ({
+  status: "authenticated",
+  userId: decodeUserId("reader"),
+  accessTokenExpiresAt: DateTime.makeUnsafe(DateTime.nowUnsafe().epochMilliseconds + 120_000),
+});
+
 const authenticationService: AuthService["Service"] = {
   signInMethods: { google: false },
   oauthResource: "https://connections.example/mcp",
@@ -1931,11 +1999,15 @@ const authenticationService: AuthService["Service"] = {
     { name: "fantasy:read", description: "Read fantasy data." },
     { name: "offline_access", description: "Stay connected." },
   ],
+  accessTokenLifetime: Duration.minutes(5),
   getSession: () => Effect.void.pipe(Effect.as(undefined)),
   handle: () => Effect.succeed(new Response()),
   getConsentRequest: () => Effect.succeed({ status: "invalid" as const }),
   consent: () => Effect.succeed("https://client.test/callback"),
   resolveAccessToken: (token, scopes) => {
+    if (token === "expired") {
+      return Effect.succeed({ status: "invalid" as const });
+    }
     const granted =
       token === "read"
         ? ["fantasy:read", "example:read"]
@@ -1950,7 +2022,7 @@ const authenticationService: AuthService["Service"] = {
                 : scopes;
     return Effect.succeed(
       scopes.every((scope) => granted.includes(scope))
-        ? { status: "authenticated" as const, userId: decodeUserId("reader") }
+        ? signedInGrant()
         : { status: "insufficient_scope" as const },
     );
   },
