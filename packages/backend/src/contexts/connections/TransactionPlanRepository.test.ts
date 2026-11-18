@@ -302,6 +302,65 @@ it.effect("records a result and releases claims only when the result ends the mo
   }).pipe(Effect.provide(RepositoryTest)),
 );
 
+it.effect("reads the submitted legs of a plan for one effective date", () =>
+  Effect.gen(function* () {
+    const repository = yield* TransactionPlanRepository;
+    const database = yield* ConnectionsDatabase;
+    yield* database
+      .insert(providerTeams)
+      .values([teamRow(firstTeam, owner), teamRow(secondTeam, owner)]);
+    const submitted = yield* repository.appendMoves({
+      userId: owner,
+      team: firstTeam,
+      at,
+      moves: [
+        appendMove("nhl.p.1"),
+        appendMove("nhl.p.2", { effectiveDate: "2026-11-16" }),
+        appendMove("nhl.p.3"),
+      ],
+    });
+    const otherTeamMove = Array.getUnsafe(
+      yield* repository.appendMoves({
+        userId: owner,
+        team: secondTeam,
+        at,
+        moves: [appendMove("nhl.p.4")],
+      }),
+      0,
+    );
+    for (const move of [...submitted, otherTeamMove]) {
+      yield* repository.recordResult({
+        userId: owner,
+        team: move.team,
+        move: move.id,
+        result: "executed",
+        detail: undefined,
+        externalRef: undefined,
+        at,
+      });
+    }
+
+    const read = yield* repository.readSubmittedMoves({
+      userId: owner,
+      teams: [firstTeam],
+      dates: ["2026-11-15"],
+    });
+
+    assert.deepStrictEqual(
+      read.map((move) => move.id),
+      [Array.getUnsafe(submitted, 0).id, Array.getUnsafe(submitted, 2).id],
+    );
+    assert.deepStrictEqual(
+      (yield* repository.readSubmittedMoves({
+        userId: other,
+        teams: [firstTeam],
+        dates: ["2026-11-15"],
+      })).map((move) => move.id),
+      [],
+    );
+  }).pipe(Effect.provide(RepositoryTest)),
+);
+
 it.effect("pages one owner's moves by state and orders them by run day, team, and position", () =>
   Effect.gen(function* () {
     const repository = yield* TransactionPlanRepository;

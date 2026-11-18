@@ -54,6 +54,7 @@ import {
   resultTimeLine,
   scheduledMoment,
   submittedLine,
+  timingLine,
 } from "./transactionTimes";
 import { useGroupConfirmation } from "./useGroupConfirmation";
 import type { GroupConfirmation } from "./useGroupConfirmation";
@@ -277,9 +278,13 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
   const opened = (): boolean =>
     props.card.group === undefined || props.card.group.status === "ready";
   const showControl = (): boolean => status().kind === "needs-decision" && opened();
-  const controlLabel = (): string =>
-    props.card.today ? "Run now" : scheduleActionLabel(props.card);
-  const workingLabel = (): string => (props.card.today ? "Running now" : "Scheduling");
+  const runsLater = (): boolean => {
+    const lead = props.card.lead;
+    return lead.runsOn !== undefined && lead.runDay !== undefined && lead.runsOn > lead.runDay;
+  };
+  const runsNow = (): boolean => props.card.today && !runsLater();
+  const controlLabel = (): string => (runsNow() ? "Run now" : scheduleActionLabel(props.card));
+  const workingLabel = (): string => (runsNow() ? "Running now" : "Scheduling");
   const actionLabel = (): string => `${controlLabel()}: ${cardTitle(props.card)}`;
   const statusLabel = (): string => {
     const held = status();
@@ -516,10 +521,12 @@ function GroupMoveRow(props: GroupMoveRowProps): JSX.Element {
           </Text>
         )}
       </Show>
-      <Show when={!props.today && props.move.effectiveDate !== undefined}>
-        <Text size="caption" tone="muted">
-          {`Takes effect ${formatCalendarDate(props.move.effectiveDate ?? "")}.`}
-        </Text>
+      <Show when={timingLine(props.move)}>
+        {(line) => (
+          <Text size="caption" tone="muted">
+            {line()}
+          </Text>
+        )}
       </Show>
       <MoveCheckNote move={props.move} />
     </QueueListItem>
@@ -708,9 +715,8 @@ function statusTone(status: CardStatus): "accent" | "neutral" {
 }
 
 function scheduleActionLabel(card: GroupCard): string {
-  return card.lead.runDay === undefined
-    ? "Schedule"
-    : `Schedule for ${formatCalendarDate(card.lead.runDay)}`;
+  const day = card.lead.runsOn ?? card.lead.runDay;
+  return day === undefined ? "Schedule" : `Schedule for ${formatCalendarDate(day)}`;
 }
 
 function ranLabel(card: GroupCard): string {

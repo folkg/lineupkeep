@@ -123,6 +123,28 @@ export function describeTransactionPlanMove(move: TransactionPlanMove): string {
   return moveLabel(move);
 }
 
+export function dateHasArrived(
+  move: Pick<TransactionPlanMove, "effectiveDate">,
+  today: StoredMoveDate,
+): boolean {
+  return move.effectiveDate === undefined || move.effectiveDate <= today;
+}
+
+export function projectedLegs(input: {
+  readonly rule: RosterRule;
+  readonly roster: ReadonlyArray<TransactionPlanRosterPlayer>;
+  readonly submitted: ReadonlyArray<TransactionPlanMove>;
+  readonly dates: ReadonlyArray<StoredMoveDate>;
+}): ReadonlyArray<TransactionPlanMove> {
+  const players = new Map(input.roster.map((player) => [player.key, player] as const));
+  const dates = new Set(input.dates);
+  return input.submitted.filter(
+    (move) =>
+      (move.effectiveDate === undefined || dates.has(move.effectiveDate)) &&
+      !shownOnRoster(move, players, input.rule),
+  );
+}
+
 function replayPlan(input: {
   readonly facts: TransactionPlanTeamFacts;
   readonly rule: RosterRule;
@@ -331,6 +353,14 @@ function identityReasons(
 ): Reasons {
   const reasons = emptyReasons();
   const dueToday = runDayOf(move, facts.today) === facts.today;
+  if (needsSlotWrite(move) && facts.slotWrites.status === "not_published") {
+    stale(
+      reasons,
+      "provider_write_unavailable",
+      undefined,
+      `${moveLabel(move)} cannot run. ${facts.slotWrites.detail}`,
+    );
+  }
   for (const drop of move.drops) {
     const player = projection.roster.get(drop.key);
     if (player === undefined) {
@@ -1590,6 +1620,9 @@ function moveEvaluation(
   runPosition: number | undefined,
 ): TransactionPlanMoveEvaluation {
   const runDay = runDayOf(step.move, facts.today);
+  const effectiveDate = effectiveDateFor(step.move, runDay, facts.timing);
+  const runsOn = effectiveDate !== undefined && effectiveDate > runDay ? effectiveDate : runDay;
+  const waitsForDate = effectiveDate !== undefined && effectiveDate > facts.today;
   return {
     move: step.move.id,
     group: step.move.group,
@@ -1597,8 +1630,9 @@ function moveEvaluation(
     validation: validationOf(step, checkedAt),
     placement: step.placement,
     runDay,
-    effectiveDate: effectiveDateOf(step.move.kind, runDay, facts.timing),
-    dueToday: runDay === facts.today && isDueDecision(step.move.decision),
+    effectiveDate,
+    runsOn,
+    dueToday: runDay === facts.today && isDueDecision(step.move.decision) && !waitsForDate,
     runPosition,
     dependsOn: step.dependsOn,
     projectedRoster: step.projectedRoster,
@@ -1660,6 +1694,21 @@ function groupEvaluations(
         detail: `A group runs on one day, and these moves run on ${days.join(", ")}.`,
       };
     }
+    const dates = [
+      ...new Set(
+        movesInGroup.flatMap((move) =>
+          move.effectiveDate === undefined ? [] : [move.effectiveDate],
+        ),
+      ),
+    ];
+    if (dates.length > 1) {
+      return {
+        group,
+        moves: movesInGroup.map((move) => move.move),
+        valid: false,
+        detail: `A group applies on one date, and these moves apply on ${dates.join(", ")}.`,
+      };
+    }
     return { group, moves: movesInGroup.map((move) => move.move), valid: true };
   });
 }
@@ -1674,18 +1723,28 @@ function firstGroupPosition(
     : (positions.get(first.move) ?? Number.MAX_SAFE_INTEGER);
 }
 
-function runDayOf(move: TransactionPlanMove, today: StoredMoveDate): StoredMoveDate {
+function runDayOf(
+  move: Pick<TransactionPlanMove, "runDay">,
+  today: StoredMoveDate,
+): StoredMoveDate {
   return move.runDay !== undefined && move.runDay > today ? move.runDay : today;
 }
 
-function effectiveDateOf(
-  kind: TransactionPlanMove["kind"],
+function effectiveDateFor(
+  move: Pick<TransactionPlanMove, "kind" | "effectiveDate">,
   runDay: StoredMoveDate,
   timing: TransactionPlanTiming,
 ): StoredMoveDate | undefined {
-  if (kind === "trade") {
+  if (move.kind === "trade") {
     return undefined;
   }
+  return move.effectiveDate ?? derivedEffectiveDate(runDay, timing);
+}
+
+function derivedEffectiveDate(
+  runDay: StoredMoveDate,
+  timing: TransactionPlanTiming,
+): StoredMoveDate | undefined {
   switch (timing.rule) {
     case "same_day":
       return runDay;
@@ -1890,6 +1949,54 @@ function comparePlanMoves(left: TransactionPlanMove, right: TransactionPlanMove)
 
 function isAddKind(kind: TransactionPlanMove["kind"]): boolean {
   return kind === "free_agent_add" || kind === "waiver_claim";
+}
+
+function needsSlotWrite(move: TransactionPlanMove): boolean {
+  switch (move.kind) {
+    case "activate":
+    case "stash":
+    case "slot_move":
+      return true;
+    case "free_agent_add":
+    case "waiver_claim":
+      return move.intent?.to === "reserve";
+    case "drop":
+    case "trade":
+      return false;
+  }
+}
+
+function shownOnRoster(
+  move: TransactionPlanMove,
+  players: ReadonlyMap<string, TransactionPlanRosterPlayer>,
+  rule: RosterRule,
+): boolean {
+  if (move.kind === "trade") {
+    return true;
+  }
+  if (move.drops.some((drop) => !players.has(drop.key))) {
+    return true;
+  }
+  if ([...move.adds, ...move.fallbacks].some((add) => players.has(add.key))) {
+    return true;
+  }
+  const mover = moverKeyOf(move);
+  if (mover !== undefined) {
+    const player = players.get(mover);
+    if (player === undefined) {
+      return true;
+    }
+    const slot = player.slot === undefined ? undefined : rule.byPosition.get(player.slot);
+    const onReserve = slot?.kind === "reserve";
+    if (move.kind === "activate") {
+      return slot !== undefined && !onReserve;
+    }
+    if (move.kind === "stash") {
+      return onReserve;
+    }
+    return player.slot === move.slotMove?.toSlot;
+  }
+  return false;
 }
 
 function holdsClaimsWithoutEffect(result: TransactionPlanMove["result"]): boolean {
@@ -2101,6 +2208,10 @@ export type TransactionPlanTiming = {
   readonly periodStart: StoredMoveDate | undefined;
 };
 
+export type TransactionPlanSlotWrites =
+  | { readonly status: "published" }
+  | { readonly status: "not_published"; readonly detail: string };
+
 export type TransactionPlanSlot = {
   readonly position: string;
   readonly kind: "starting" | "bench" | "reserve";
@@ -2131,6 +2242,7 @@ export type TransactionPlanTeamFacts = {
   readonly constraints: TransactionPlanConstraints;
   readonly today: StoredMoveDate;
   readonly timing: TransactionPlanTiming;
+  readonly slotWrites: TransactionPlanSlotWrites;
   readonly budget: number | undefined;
   readonly waiverBid: TransactionWaiverBid;
   readonly rosterSource: string;
@@ -2152,6 +2264,7 @@ export type TransactionPlanMove = Pick<
   | "placement"
   | "bid"
   | "runDay"
+  | "effectiveDate"
   | "result"
   | "decision"
 >;
@@ -2170,6 +2283,7 @@ export type TransactionPlanMoveEvaluation = {
   readonly placement: StoredMovePlacement | undefined;
   readonly runDay: StoredMoveDate;
   readonly effectiveDate: StoredMoveDate | undefined;
+  readonly runsOn: StoredMoveDate;
   readonly dueToday: boolean;
   readonly runPosition: number | undefined;
   readonly dependsOn: ReadonlyArray<TransactionMoveId>;

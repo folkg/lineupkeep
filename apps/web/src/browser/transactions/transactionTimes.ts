@@ -42,6 +42,16 @@ function formatDatedMoment(
   return `${dayFormat(reader, day.year !== current.year).format(date)} at ${clockFormat(reader).format(date)}`;
 }
 
+export function timingLine(move: TransactionMoveView): string | undefined {
+  if (move.effectiveDate === undefined) {
+    return undefined;
+  }
+  if (move.runsOn !== undefined && move.runDay !== undefined && move.runsOn > move.runDay) {
+    return `Runs ${formatCalendarDate(move.runsOn)}, when it takes effect.`;
+  }
+  return `Takes effect ${formatCalendarDate(move.effectiveDate)}.`;
+}
+
 export function moveOutcomeLabel(move: TransactionMoveView): string | undefined {
   if (move.decision === "discarded") {
     return "Discarded";

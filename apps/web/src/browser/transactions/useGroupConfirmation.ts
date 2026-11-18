@@ -54,6 +54,7 @@ export function useGroupConfirmation(input: {
       moves: moves.map((move) => move.move),
       key: held,
       runDay: moves.find((move) => move.runDay !== undefined)?.runDay,
+      runsOn: moves.find((move) => move.runsOn !== undefined)?.runsOn,
       today: input.today(),
     });
   };
@@ -78,6 +79,7 @@ export type GroupConfirmation = {
 export type ConfirmationTarget = {
   readonly today: boolean;
   readonly runDay: string | undefined;
+  readonly runsOn: string | undefined;
 };
 
 type GroupConfirmationPage = {

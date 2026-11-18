@@ -13,12 +13,14 @@ import type {
 import { sessionEvidenceOf } from "#contexts/connections/Provider.ts";
 import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
 import { rosterPlayerInjured } from "#contexts/connections/RosterSlots.ts";
+import { rosterCoverageOf } from "#contexts/connections/RosterTiming.ts";
 import { TransactionPlanFactsUnavailable } from "#contexts/connections/TransactionPlans.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
 import { loadTeamContext, providerIdentity } from "./QueryContext.ts";
 import type { TeamContext } from "./QueryContext.ts";
 import { QueryRepository } from "./QueryRepository.ts";
+import type { TransactionPlanSlotWrites } from "./TransactionPlanEvaluation.ts";
 import { TransactionPlanFacts } from "./TransactionPlanService.ts";
 
 export const TransactionPlanFactsLive = Layer.effect(
@@ -102,6 +104,7 @@ export const TransactionPlanFactsLive = Layer.effect(
           currentDate: league.currentDate,
           periodStart,
         },
+        slotWrites: slotWritesOf(league),
         budget,
       };
     });
@@ -236,6 +239,16 @@ function budgetOf(input: {
           ?.remainingBudget,
     ),
   );
+}
+
+function slotWritesOf(league: ProviderLeagueSettings): TransactionPlanSlotWrites {
+  return rosterCoverageOf(league) === undefined
+    ? {
+        status: "not_published",
+        detail:
+          "Your league publishes no roster date or scoring week, so it cannot accept an activate, stash, or slot move.",
+      }
+    : { status: "published" };
 }
 
 function rosterPlayers(roster: ProviderRoster): ReadonlyArray<{

@@ -17,5 +17,6 @@ export type ConfirmGroupVariables = {
   readonly moves: ReadonlyArray<string>;
   readonly key: string;
   readonly runDay: string | undefined;
+  readonly runsOn: string | undefined;
   readonly today: boolean;
 };

@@ -78,8 +78,10 @@ import { planReserveMoves } from "./LineupPlanning.ts";
 import { QueryTokens } from "./QueryTokens.ts";
 import {
   claimTransactionPlanMoves,
+  dateHasArrived,
   describeTransactionPlanMove,
   evaluateTransactionPlan,
+  projectedLegs,
 } from "./TransactionPlanEvaluation.ts";
 import type {
   TransactionPlanClaimRefusal,
@@ -352,6 +354,7 @@ export const TransactionPlanServiceLive = Layer.effect(
       });
       const roster = new Map(facts.roster.map((player) => [player.key, player] as const));
       const rule = rosterRuleOf(facts.constraints, facts.slots);
+      const planMoves = planProjection({ facts, open, stored });
       const groupIds = new Map(
         yield* Effect.forEach(
           [
@@ -375,6 +378,7 @@ export const TransactionPlanServiceLive = Layer.effect(
             id,
             position: firstPosition + index,
             group: draft.group === undefined ? undefined : groupIds.get(draft.group),
+            effectiveDate: undefined,
             roster,
             facts,
           }),
@@ -405,12 +409,13 @@ export const TransactionPlanServiceLive = Layer.effect(
       const fixed = yield* rosterFixedEntries({
         facts,
         rule,
-        open,
+        open: planMoves,
         entries: prepared,
         at,
       });
       const settled = settleProposals({
         team: input.team,
+        projection: planMoves,
         accepted: open,
         proposals: proposedGroups(fixed.entries),
         facts,
@@ -424,7 +429,7 @@ export const TransactionPlanServiceLive = Layer.effect(
         const acceptedIds = new Set(settled.accepted.map((move) => move.id));
         const evaluation = evaluateTransactionPlan({
           facts,
-          moves: settled.accepted,
+          moves: planProjection({ facts, open: settled.accepted, stored }),
           checkedAt: at,
         });
         const evaluated = evaluatedMoves(evaluation);
@@ -750,7 +755,11 @@ export const TransactionPlanServiceLive = Layer.effect(
       }
 
       const dayChanged = input.runDay !== move.runDay;
-      const before = evaluateTransactionPlan({ facts, moves: open, checkedAt: at });
+      const before = evaluateTransactionPlan({
+        facts,
+        moves: planProjection({ facts, open, stored }),
+        checkedAt: at,
+      });
       const peers = dayChanged ? [...groupPeers(open, move), ...fixPeers(open, move)] : [];
       const confirmationCleared =
         dayChanged &&
@@ -760,7 +769,11 @@ export const TransactionPlanServiceLive = Layer.effect(
           ? movedToDay(entry, input.runDay, facts.today)
           : entry,
       );
-      const after = evaluateTransactionPlan({ facts, moves: changed, checkedAt: at });
+      const after = evaluateTransactionPlan({
+        facts,
+        moves: planProjection({ facts, open: changed, stored }),
+        checkedAt: at,
+      });
       const revalidation = revalidationRefusal({
         team: input.team,
         target: move,
@@ -887,12 +900,17 @@ export const TransactionPlanServiceLive = Layer.effect(
         id: move.id,
         position: move.position,
         group: move.group,
+        effectiveDate: runDay === move.runDay ? move.effectiveDate : undefined,
         roster,
         facts,
       });
       const unchanged = sameMoveShape(move, candidate);
       const rule = rosterRuleOf(facts.constraints, facts.slots);
-      const before = evaluateTransactionPlan({ facts, moves: open, checkedAt: at });
+      const before = evaluateTransactionPlan({
+        facts,
+        moves: planProjection({ facts, open, stored }),
+        checkedAt: at,
+      });
       const peers = runDay === move.runDay ? [] : groupPeers(open, move);
       const confirmationCleared =
         !unchanged &&
@@ -924,7 +942,11 @@ export const TransactionPlanServiceLive = Layer.effect(
         at,
       });
       const changed = [...fixed.entries.map((entry) => entry.candidate), ...withPeers];
-      const after = evaluateTransactionPlan({ facts, moves: changed, checkedAt: at });
+      const after = evaluateTransactionPlan({
+        facts,
+        moves: planProjection({ facts, open: changed, stored }),
+        checkedAt: at,
+      });
       const revalidation = revalidationRefusal({
         team: input.team,
         target: candidate,
@@ -1077,9 +1099,23 @@ export const TransactionPlanServiceLive = Layer.effect(
       readonly decision: TransactionDecision;
       readonly runId: TransactionRunId;
     }) {
+      const submitted: Array<TransactionMoveRowRecord> = [
+        ...(yield* repository.readSubmittedMoves({
+          userId: input.userId,
+          teams: [input.team],
+          dates: effectiveDatesOf(input.open),
+        })),
+      ];
+      const project = (
+        facts: TransactionPlanTeamFacts,
+        moves: ReadonlyArray<TransactionMoveRowRecord>,
+      ): ReadonlyArray<TransactionPlanMove> => [
+        ...moves,
+        ...projectionLegs({ facts, submitted, dates: effectiveDatesOf(moves) }),
+      ];
       const evaluation = evaluateTransactionPlan({
         facts: input.facts,
-        moves: input.open,
+        moves: project(input.facts, input.open),
         checkedAt: input.at,
       });
       const entries = evaluatedMoves(evaluation);
@@ -1094,7 +1130,9 @@ export const TransactionPlanServiceLive = Layer.effect(
       counts.moves = selection.selected.length;
       const outcomes = new Map<TransactionMoveId, TransactionMoveResult>();
       const deferred = new Set<TransactionMoveId>();
-      const openById = new Map(input.open.map((move) => [move.id, move] as const));
+      const openById = new Map(
+        [...input.open, ...submitted].map((move) => [move.id, move] as const),
+      );
       const selectedIds = new Set(selection.selected.map((move) => move.id));
       const settled = new Set<TransactionMoveId>();
 
@@ -1114,6 +1152,10 @@ export const TransactionPlanServiceLive = Layer.effect(
           outcomes.set(settlement.move, settlement.result);
           settled.add(settlement.move);
           countRunResult(counts, settlement.result);
+          const stored = input.open.find((move) => move.id === settlement.move);
+          if (stored !== undefined && settlement.result === "executed") {
+            submitted.push({ ...stored, result: "executed" });
+          }
         }
       });
 
@@ -1208,7 +1250,7 @@ export const TransactionPlanServiceLive = Layer.effect(
           }
           const reevaluated = evaluateTransactionPlan({
             facts: reread.success,
-            moves: remaining,
+            moves: project(reread.success, remaining),
             checkedAt: input.at,
           });
           const entries = evaluatedMoves(reevaluated);
@@ -1616,7 +1658,8 @@ export const TransactionPlanServiceLive = Layer.effect(
             (move) =>
               move.userId === plan.userId &&
               move.team === plan.team &&
-              (move.runDay === undefined || move.runDay <= facts.today),
+              (move.runDay === undefined || move.runDay <= facts.today) &&
+              dateHasArrived(move, facts.today),
           )
         );
       });
@@ -1764,6 +1807,11 @@ export const TransactionPlanServiceLive = Layer.effect(
         held.push(move);
         movesByTeam.set(move.team, held);
       }
+      const submitted = yield* repository.readSubmittedMoves({
+        userId: input.userId,
+        teams: input.teams,
+        dates: effectiveDatesOf(input.moves),
+      });
       const reads = yield* Effect.forEach(
         input.teams,
         (team) =>
@@ -1786,6 +1834,7 @@ export const TransactionPlanServiceLive = Layer.effect(
         const rule = rosterRuleOf(facts.constraints, facts.slots);
         const occupancy = rosterOccupancy({ rule, players: facts.roster });
         const freeable = planReserveMoves({ rule, players: facts.roster });
+        const teamMoves = movesByTeam.get(team) ?? [];
         return [
           {
             team,
@@ -1794,7 +1843,14 @@ export const TransactionPlanServiceLive = Layer.effect(
             freeable,
             evaluation: evaluateTransactionPlan({
               facts,
-              moves: movesByTeam.get(team) ?? [],
+              moves: [
+                ...teamMoves,
+                ...projectionLegs({
+                  facts,
+                  submitted: submitted.filter((move) => move.team === team),
+                  dates: effectiveDatesOf(teamMoves),
+                }),
+              ],
               checkedAt: input.at,
             }),
             playerKeys: [
@@ -2144,6 +2200,7 @@ function rosterCurePair(input: {
 
 function settleProposals(input: {
   readonly team: TeamId;
+  readonly projection: ReadonlyArray<TransactionPlanMove>;
   readonly accepted: ReadonlyArray<TransactionPlanMove>;
   readonly proposals: ReadonlyArray<DraftGroup>;
   readonly facts: TransactionPlanTeamFacts;
@@ -2161,12 +2218,12 @@ function settleProposals(input: {
   while (remaining.length > 0) {
     const baseline = evaluateTransactionPlan({
       facts: input.facts,
-      moves: accepted,
+      moves: input.projection,
       checkedAt: input.checkedAt,
     });
     const full = evaluateTransactionPlan({
       facts: input.facts,
-      moves: [...accepted, ...remaining.flatMap((proposal) => proposal.moves)],
+      moves: [...input.projection, ...remaining.flatMap((proposal) => proposal.moves)],
       checkedAt: input.checkedAt,
     });
     const broken = brokenExistingMove(baseline, full, accepted);
@@ -2174,6 +2231,7 @@ function settleProposals(input: {
       const culprit = remaining.find((proposal) =>
         removingGroupKeepsPlan({
           team: input.team,
+          projection: input.projection,
           accepted,
           baseline,
           remaining,
@@ -2241,6 +2299,7 @@ function brokenExistingMove(
 
 function removingGroupKeepsPlan(input: {
   readonly team: TeamId;
+  readonly projection: ReadonlyArray<TransactionPlanMove>;
   readonly accepted: ReadonlyArray<TransactionPlanMove>;
   readonly baseline: TransactionPlanEvaluation;
   readonly remaining: ReadonlyArray<DraftGroup>;
@@ -2253,7 +2312,7 @@ function removingGroupKeepsPlan(input: {
     .flatMap((proposal) => proposal.moves);
   const after = evaluateTransactionPlan({
     facts: input.facts,
-    moves: [...input.accepted, ...others],
+    moves: [...input.projection, ...others],
     checkedAt: input.checkedAt,
   });
   const before = evaluatedMoves(input.baseline);
@@ -2699,6 +2758,44 @@ function countRunResult(counts: MutableRunCounts, result: TransactionMoveResult)
   }
 }
 
+function planProjection(input: {
+  readonly facts: TransactionPlanTeamFacts;
+  readonly open: ReadonlyArray<TransactionPlanMove>;
+  readonly stored: ReadonlyArray<TransactionPlanMove>;
+}): ReadonlyArray<TransactionPlanMove> {
+  return [
+    ...input.open,
+    ...projectionLegs({
+      facts: input.facts,
+      submitted: input.stored.filter((move) => move.result === "executed"),
+      dates: effectiveDatesOf(input.open),
+    }),
+  ];
+}
+
+function effectiveDatesOf(
+  moves: ReadonlyArray<Pick<TransactionPlanMove, "effectiveDate">>,
+): ReadonlyArray<StoredMoveDate> {
+  return [
+    ...new Set(
+      moves.flatMap((move) => (move.effectiveDate === undefined ? [] : [move.effectiveDate])),
+    ),
+  ];
+}
+
+function projectionLegs(input: {
+  readonly facts: TransactionPlanTeamFacts;
+  readonly submitted: ReadonlyArray<TransactionPlanMove>;
+  readonly dates: ReadonlyArray<StoredMoveDate>;
+}): ReadonlyArray<TransactionPlanMove> {
+  return projectedLegs({
+    rule: rosterRuleOf(input.facts.constraints, input.facts.slots),
+    roster: input.facts.roster,
+    submitted: input.submitted,
+    dates: input.dates,
+  });
+}
+
 function runPositionOf(
   entry: TransactionPlanMoveEvaluation,
   move: TransactionMoveRowRecord,
@@ -2734,7 +2831,7 @@ function planViewOf(input: {
   const openIds = new Set(open.map((move) => move.id));
   const evaluation = evaluateTransactionPlan({
     facts: input.facts,
-    moves: open,
+    moves: planProjection({ facts: input.facts, open, stored: input.stored }),
     checkedAt: input.checkedAt,
   });
   const evaluated = evaluatedMoves(evaluation);
@@ -2742,7 +2839,9 @@ function planViewOf(input: {
     evaluation.order.blocked.map((entry) => [entry.move, entry.detail] as const),
   );
   const openById = new Map(open.map((move) => [move.id, move] as const));
-  const runOrder = evaluation.order.steps.map((step) => step.move);
+  const runOrder = evaluation.order.steps.flatMap((step) =>
+    openIds.has(step.move) ? [step.move] : [],
+  );
   const runOrderIds = new Set(runOrder);
   const ordered = [
     ...runOrder.map((id) => requireMove(openById, id)),
@@ -2781,6 +2880,7 @@ function moveView(
     decision: planDecision(move, today),
     runDay: entry?.runDay ?? move.runDay,
     effectiveDate: entry?.effectiveDate ?? move.effectiveDate,
+    runsOn: entry?.runsOn,
     dueToday: entry?.dueToday ?? false,
     validation: entry?.validation ?? move.validation,
     placement: entry?.placement ?? move.placement,
@@ -2802,6 +2902,7 @@ function draftCandidate(input: {
   readonly id: TransactionMoveId;
   readonly position: number;
   readonly group: string | undefined;
+  readonly effectiveDate: StoredMoveDate | undefined;
   readonly roster: ReadonlyMap<string, TransactionPlanRosterPlayer>;
   readonly facts: TransactionPlanTeamFacts;
 }): CandidateMove {
@@ -2824,6 +2925,7 @@ function draftCandidate(input: {
     bid: draft.bid,
     reason: draft.reason,
     runDay: draft.runDay,
+    effectiveDate: input.effectiveDate,
     decision: decisionFor(draft.runDay, input.facts.today),
     result: undefined,
   };
@@ -2893,6 +2995,7 @@ function fixCandidateOf(input: {
     bid: undefined,
     reason: fix.detail,
     runDay: input.funded.runDay,
+    effectiveDate: input.funded.effectiveDate,
     decision: input.funded.decision,
     result: undefined,
   };
@@ -3105,7 +3208,7 @@ function movedToDay(
   runDay: StoredMoveDate | undefined,
   today: StoredMoveDate,
 ): TransactionPlanMove {
-  return { ...move, runDay, decision: decisionFor(runDay, today) };
+  return { ...move, runDay, effectiveDate: undefined, decision: decisionFor(runDay, today) };
 }
 
 function groupMemberOf(
@@ -3182,7 +3285,7 @@ function confirmationTargets(
 }
 
 function isDueMove(move: TransactionMoveRecord, today: StoredMoveDate): boolean {
-  return move.runDay === undefined || move.runDay <= today;
+  return (move.runDay === undefined || move.runDay <= today) && dateHasArrived(move, today);
 }
 
 function groupPeers(

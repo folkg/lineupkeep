@@ -115,6 +115,7 @@ function toMoveView(move: TransactionMoveRead): TransactionMoveView {
     ...(move.bid === undefined ? {} : { bid: move.bid }),
     ...(move.runDay === undefined ? {} : { runDay: move.runDay }),
     ...(move.effectiveDate === undefined ? {} : { effectiveDate: move.effectiveDate }),
+    ...(move.runsOn === undefined ? {} : { runsOn: move.runsOn }),
     ...(move.decidedAt === undefined ? {} : { decidedAt: DateTime.formatIso(move.decidedAt) }),
     ...(move.decidedBy === undefined ? {} : { decidedBy: move.decidedBy }),
     ...(move.surface === undefined ? {} : { surface: move.surface }),

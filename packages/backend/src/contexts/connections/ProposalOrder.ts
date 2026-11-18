@@ -8,7 +8,6 @@ import {
   unusableSelection,
 } from "@lineupkeep/lineup-solver";
 import type { RosterPlayer, RosterSlot } from "@lineupkeep/lineup-solver";
-import { DateTime } from "effect";
 
 import type { ProviderRosterConstraints } from "./Provider.ts";
 import { rosterRuleOf, slotCapacity, slotPlacement } from "./RosterSlots.ts";
@@ -16,10 +15,6 @@ import type { RosterRule } from "./RosterSlots.ts";
 
 const neutralBasis = makeSelectionBasis("proposal-order");
 const neutralTier = makeAvailabilityTier("proposal-order");
-
-export function rosterChangeDate(timing: ProposalOrderTiming): string | undefined {
-  return timingOf(timing).effectiveDate ?? timing.currentDate;
-}
 
 export function placeIntentItems(input: ProposalPlacementInput): ProposalPlacementResult {
   const league = leagueOf(input.slots, input.constraints);
@@ -521,63 +516,6 @@ function leagueOf(
   };
 }
 
-type Timing = {
-  readonly rule: ProposalOrderTimingRule;
-  readonly effectiveDate: string | undefined;
-  readonly phrase: string;
-  readonly moment: string;
-};
-
-function timingOf(input: ProposalOrderTiming): Timing {
-  switch (input.rule) {
-    case "same_day": {
-      const date = input.currentDate;
-      return {
-        rule: "same_day",
-        effectiveDate: date,
-        phrase: datePhrase(date),
-        moment: date === undefined ? "then" : "on that date",
-      };
-    }
-    case "next_day": {
-      const date =
-        input.currentDate === undefined ? undefined : nextCalendarDate(input.currentDate);
-      return {
-        rule: "next_day",
-        effectiveDate: date,
-        phrase: datePhrase(date),
-        moment: date === undefined ? "then" : "on that date",
-      };
-    }
-    case "weekly_lock":
-      return {
-        rule: "weekly_lock",
-        effectiveDate: undefined,
-        phrase: "in the league's scoring week",
-        moment: "in that week",
-      };
-    case undefined:
-      return {
-        rule: "not_published",
-        effectiveDate: undefined,
-        phrase: "when the league next applies roster changes",
-        moment: "then",
-      };
-  }
-}
-
-function datePhrase(date: string | undefined): string {
-  return date === undefined ? "when the league next applies roster changes" : `on ${date}`;
-}
-
-function nextCalendarDate(date: string): string | undefined {
-  if (!/^\d{4}-\d{2}-\d{2}$/u.test(date)) {
-    return undefined;
-  }
-  const parsed = DateTime.makeUnsafe(`${date}T00:00:00.000Z`);
-  return DateTime.formatIsoDate(DateTime.add(parsed, { days: 1 }));
-}
-
 type RosterMember = Omit<ProposalOrderPlayer, "injured"> & { readonly injured: boolean };
 
 type RosterState = ReadonlyMap<string, RosterMember>;
@@ -610,13 +548,6 @@ type ProposalOrderPlayerRef = {
   readonly key: string;
   readonly name: string;
   readonly positions?: ReadonlyArray<string>;
-};
-
-type ProposalOrderTimingRule = "same_day" | "next_day" | "weekly_lock" | "not_published";
-
-export type ProposalOrderTiming = {
-  readonly rule: "same_day" | "next_day" | "weekly_lock" | undefined;
-  readonly currentDate: string | undefined;
 };
 
 type ProposalOrderRepair = {

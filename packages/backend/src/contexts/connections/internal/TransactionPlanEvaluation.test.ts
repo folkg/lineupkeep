@@ -1,10 +1,13 @@
 import { assert, it } from "@effect/vitest";
 import { DateTime, Schema } from "effect";
 
+import { rosterRuleOf } from "#contexts/connections/RosterSlots.ts";
+
 import {
   claimTransactionPlanMoves,
   evaluateTransactionPlan,
   orderTransactionPlanMoves,
+  projectedLegs,
 } from "./TransactionPlanEvaluation.ts";
 import type {
   TransactionPlanClaimInput,
@@ -25,6 +28,7 @@ import type {
   TransactionPlanPoolPlayer,
   TransactionPlanRosterPlayer,
   TransactionPlanSlot,
+  TransactionPlanSlotWrites,
   TransactionPlanTeamFacts,
   TransactionPlanTiming,
 } from "./TransactionPlanEvaluation.ts";
@@ -1054,7 +1058,7 @@ it("applies a same-day move on its run day", () => {
   );
 });
 
-it("applies a next-day move on the day after its run day", () => {
+it("waits for the next day a league applies the move, and runs then", () => {
   const evaluation = evaluate({
     facts: facts({
       slots: [bench("BN", 2)],
@@ -1075,11 +1079,162 @@ it("applies a next-day move on the day after its run day", () => {
   });
 
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) => [entry.runDay, entry.effectiveDate, entry.dueToday]),
+    evaluation.moves.map((entry) => [
+      entry.runDay,
+      entry.effectiveDate,
+      entry.runsOn,
+      entry.dueToday,
+    ]),
     [
-      ["2026-11-10", "2026-11-11", true],
-      ["2026-11-12", "2026-11-13", false],
+      ["2026-11-10", "2026-11-11", "2026-11-11", false],
+      ["2026-11-12", "2026-11-13", "2026-11-13", false],
     ],
+  );
+});
+
+it("runs a next-day move on its effective date once that date arrives", () => {
+  const evaluation = evaluate({
+    facts: facts({
+      slots: [bench("BN", 2)],
+      constraints: constraints(2),
+      roster: [rostered("p1", "Roster One", "BN")],
+      today: "2026-11-11",
+      timing: { rule: "next_day", currentDate: "2026-11-11", periodStart: undefined },
+    }),
+    moves: [
+      move("today", {
+        kind: "drop",
+        drops: [player("p1", "Roster One")],
+        decision: "confirmed",
+        runDay: "2026-11-10",
+        effectiveDate: "2026-11-11",
+      }),
+    ],
+  });
+
+  assert.deepStrictEqual(
+    evaluation.moves.map((entry) => [
+      entry.runDay,
+      entry.effectiveDate,
+      entry.runsOn,
+      entry.dueToday,
+    ]),
+    [["2026-11-11", "2026-11-11", "2026-11-11", true]],
+  );
+});
+
+it("projects the same places for a group whether its legs are open or already submitted", () => {
+  const scenario = facts({
+    slots: [bench("BN", 2), reserve("IR", ["RW"])],
+    constraints: constraints(2),
+    roster: [
+      rostered("a1", "Anton Frondell", "BN", ["RW"]),
+      rostered("a2", "Roster Two", "BN", ["RW"]),
+      rostered("n1", "Jake Neighbours", "IR", ["RW"]),
+    ],
+    today: "2026-11-15",
+    timing: { rule: "next_day", currentDate: "2026-11-15", periodStart: undefined },
+  });
+  const group = (dropped: boolean): ReadonlyArray<Omit<TransactionPlanMove, "position">> => [
+    move("drop-a1", {
+      kind: "drop",
+      drops: [player("a1", "Anton Frondell")],
+      decision: "confirmed",
+      runDay: "2026-11-14",
+      effectiveDate: "2026-11-15",
+      ...(dropped ? { result: "executed" as const } : {}),
+    }),
+    move("activate-n1", {
+      kind: "activate",
+      drops: [],
+      intent: { kind: "activate", player: player("n1", "Jake Neighbours") },
+      decision: "confirmed",
+      runDay: "2026-11-14",
+      effectiveDate: "2026-11-15",
+    }),
+  ];
+
+  const open = evaluate({ facts: scenario, moves: group(false) });
+  const submitted = evaluate({ facts: scenario, moves: group(true) });
+  for (const evaluation of [open, submitted]) {
+    const activate = evaluation.moves.find((entry) => entry.move === moveId("activate-n1"));
+    assert.strictEqual(activate?.validation.status, "current");
+    assert.deepStrictEqual(activate?.validation.reasons, []);
+    assert.strictEqual(activate?.placement?.toSlot, "BN");
+    assert.deepStrictEqual(activate?.projectedRoster.map((member) => member.key).sort(), [
+      "a2",
+      "n1",
+    ]);
+  }
+});
+
+it("counts a submitted leg the roster does not show and drops the one it shows", () => {
+  const scenario = facts({
+    slots: [bench("BN", 2), reserve("IR", ["RW"])],
+    constraints: constraints(2),
+    roster: [
+      rostered("a1", "Anton Frondell", "BN", ["RW"]),
+      rostered("a2", "Roster Two", "BN", ["RW"]),
+      rostered("n1", "Jake Neighbours", "IR", ["RW"]),
+    ],
+  });
+  const rule = rosterRuleOf(scenario.constraints, scenario.slots);
+  const drop: TransactionPlanMove = {
+    ...move("drop-a1", {
+      kind: "drop",
+      drops: [player("a1", "Anton Frondell")],
+      effectiveDate: "2026-11-15",
+      result: "executed",
+    }),
+    position: 0,
+  };
+  const activate: TransactionPlanMove = {
+    ...move("activate-n1", {
+      kind: "activate",
+      intent: { kind: "activate", player: player("n1", "Jake Neighbours") },
+      effectiveDate: "2026-11-15",
+      result: "executed",
+    }),
+    position: 1,
+  };
+
+  assert.deepStrictEqual(
+    projectedLegs({
+      rule,
+      roster: scenario.roster,
+      submitted: [drop, activate],
+      dates: ["2026-11-15"],
+    }).map((leg) => leg.id),
+    [moveId("drop-a1"), moveId("activate-n1")],
+  );
+  assert.deepStrictEqual(
+    projectedLegs({
+      rule,
+      roster: scenario.roster,
+      submitted: [drop, activate],
+      dates: ["2026-11-16"],
+    }),
+    [],
+  );
+  assert.deepStrictEqual(
+    projectedLegs({
+      rule,
+      roster: scenario.roster.filter((member) => member.key !== "a1"),
+      submitted: [drop],
+      dates: ["2026-11-15"],
+    }),
+    [],
+  );
+  assert.deepStrictEqual(
+    projectedLegs({
+      rule,
+      roster: scenario.roster.map((member) =>
+        member.key === "n1" ? { ...member, slot: "BN" } : member,
+      ),
+      submitted: [activate],
+      dates: ["2026-11-15"],
+    }),
+    [],
   );
 });
 
@@ -1540,6 +1695,7 @@ function facts(input: {
   readonly pool?: ReadonlyArray<TransactionPlanPoolPlayer>;
   readonly today?: string;
   readonly timing?: TransactionPlanTiming;
+  readonly slotWrites?: TransactionPlanSlotWrites;
   readonly budget?: number;
 }): TransactionPlanTeamFacts {
   return {
@@ -1553,6 +1709,7 @@ function facts(input: {
       currentDate: input.today ?? "2026-11-10",
       periodStart: undefined,
     },
+    slotWrites: input.slotWrites ?? { status: "published" },
     budget: input.budget,
     waiverBid:
       input.budget === undefined

@@ -845,9 +845,9 @@ the amend changed a confirmed move, which now waits for the owner to confirm it 
 the amend changed nothing and kept the confirmation.
 
 `get_transaction_plan` reads one owned team's queue in order, grouped by run day, today first. Each
-move carries its stored validation and the time it was checked, its effective date, its decision,
-the actor and surface that decided it (`decidedBy` and `surface`), its confirmation, and the check
-that carried it out once it has run. A decision reads `undecided`, `saved`, `now`, `confirmed`, or
+move carries its stored validation and the time it was checked, its effective date, the date it will
+run (`runsOn`), its decision, the actor and surface that decided it (`decidedBy` and `surface`), its
+confirmation, and the check that carried it out once it has run. A decision reads `undecided`, `saved`, `now`, `confirmed`, or
 `discarded`. `snapshot` says whether the places came from a live read, with its time and the coverage
 it names, or from the most recent recorded check when the live read failed. `waiverBid` names the
 league's bid shape: `published` with this team's remaining FAAB, or `bidless`. The read reports the
@@ -861,7 +861,8 @@ including the drop that clears it; adds and drops wait until every blocker is cu
 the exact time of the next hourly run, at the 55 minute mark, so a client never computes it. A move
 that ran carries `runAt` and the
 actor that started the run; a confirmed later move carries its confirmation and waits for
-`nextRunAt` on its day. Each group says ready, blocked, ran in part, or done, with the action that
+`nextRunAt` on its run date. A group whose effective date has not arrived is confirmed as a whole,
+waits, and runs on that date; it is never sent in part. Each group says ready, blocked, ran in part, or done, with the action that
 landed, the action that failed, the actions that did not run, and a plain cure. The read uses stored
 state and does not change the queue. A team the account does not own is reported as not found.
 

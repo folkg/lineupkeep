@@ -1,14 +1,13 @@
 import { Effect, Layer } from "effect";
 
-import { rosterChangeDate } from "#contexts/connections/ProposalOrder.ts";
 import type {
   ProviderLeagueSettings,
-  ProviderRosterCoverage,
   ProviderTradeProposalResult,
   ProviderWriteResult,
 } from "#contexts/connections/Provider.ts";
 import { sessionEvidenceOf } from "#contexts/connections/Provider.ts";
 import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
+import { rosterCoverageOf } from "#contexts/connections/RosterTiming.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
 import { loadTeamContext, providerIdentity } from "./QueryContext.ts";
@@ -131,7 +130,7 @@ function reserveAfterAdd(input: {
       actions: reserveActions({ actions: input.actions, outcome: "unknown", detail }),
     });
   }
-  const coverage = coverageOf(input.league);
+  const coverage = rosterCoverageOf(input.league);
   if (coverage === undefined) {
     const detail =
       "The add reached your league, but the league publishes no current period to place the player in reserve.";
@@ -177,7 +176,7 @@ function slotMoveOf(input: {
   readonly league: ProviderLeagueSettings;
 }): Effect.Effect<TransactionPlanWriteResult> {
   return Effect.gen(function* () {
-    const coverage = coverageOf(input.league);
+    const coverage = rosterCoverageOf(input.league);
     if (coverage === undefined) {
       return {
         status: "failed",
@@ -571,16 +570,4 @@ function recordRejection(
   return queries
     .recordSessionRejected(context.userId, context.owned, sessionEvidenceOf(failure))
     .pipe(Effect.ignore);
-}
-
-function coverageOf(league: ProviderLeagueSettings): ProviderRosterCoverage | undefined {
-  if (league.rosterCoverage === "week") {
-    const week = league.periodWindow?.current;
-    return week === undefined ? undefined : { type: "week", week };
-  }
-  const date = rosterChangeDate({
-    rule: league.rosterChange?.rule,
-    currentDate: league.currentDate,
-  });
-  return date === undefined ? undefined : { type: "date", date };
 }

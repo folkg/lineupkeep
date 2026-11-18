@@ -312,6 +312,38 @@ it("schedules a saved move for its day without running it", async () => {
   expect(confirmed[0]?.moves).toStrictEqual([saved.move]);
 });
 
+it("says when a move runs and when it takes effect", async () => {
+  await page.viewport(1280, 900);
+  const waiting = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c4",
+    team: alpha,
+    kind: "drop",
+    drops: [player("Anton Frondell")],
+    reason: "Open a bench place for the activate.",
+    runDay: today,
+    effectiveDate: "2026-11-12",
+    runsOn: "2026-11-12",
+  });
+  using _app = setupTransactionsPage({
+    open: listData([waiting], { open: 1, today: 1, saved: 0, ended: 0 }),
+  });
+
+  await expect
+    .element(
+      page.getByText(`Runs ${formatCalendarDate("2026-11-12")}, when it takes effect.`, {
+        exact: true,
+      }),
+    )
+    .toBeVisible();
+  await expect
+    .element(
+      page.getByRole("button", {
+        name: `Schedule for ${formatCalendarDate("2026-11-12")}: Drop Anton Frondell`,
+      }),
+    )
+    .toBeVisible();
+});
+
 it("says needs your decision, scheduled for a day, ran, and discarded in plain words", async () => {
   await page.viewport(1280, 900);
   const pending = move({

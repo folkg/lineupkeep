@@ -68,6 +68,7 @@ export type TransactionMoveView = {
   readonly bid?: number;
   readonly runDay?: string;
   readonly effectiveDate?: string;
+  readonly runsOn?: string;
   readonly decidedAt?: string;
   readonly decidedBy?: "owner" | "agent" | "system";
   readonly surface?: string;

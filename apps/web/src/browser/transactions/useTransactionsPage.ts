@@ -341,11 +341,12 @@ function confirmationMessage(
     return outcome.refusals.map((entry) => entry.detail).join(" ");
   }
   const parts: Array<string> = [];
+  const runsOn = target.runsOn ?? target.runDay;
   if (outcome.counts.moves === 0) {
     parts.push(
-      target.today || target.runDay === undefined
+      (target.today && runsOn === target.runDay) || runsOn === undefined
         ? `Submitted ${moveCount(outcome.confirmed.length)}.`
-        : `Scheduled ${moveCount(outcome.confirmed.length)} for ${scheduledMoment(target.runDay, nextRunAt)}.`,
+        : `Scheduled ${moveCount(outcome.confirmed.length)} for ${scheduledMoment(runsOn, nextRunAt)}.`,
     );
   } else {
     parts.push(`Ran ${moveCount(outcome.counts.moves)}.`);

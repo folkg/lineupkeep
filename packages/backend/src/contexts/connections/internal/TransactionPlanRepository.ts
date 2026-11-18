@@ -1041,6 +1041,44 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
         },
       );
 
+      const readSubmittedMoves = Effect.fn("TransactionPlanRepository.readSubmittedMoves")(
+        function* (input: {
+          readonly userId: UserId;
+          readonly teams: ReadonlyArray<TeamId>;
+          readonly dates: ReadonlyArray<StoredMoveDate>;
+        }) {
+          return yield* Effect.gen(function* () {
+            const teams = [...new Set(input.teams)];
+            const dates = [...new Set(input.dates)];
+            if (!Array.isArrayNonEmpty(teams)) {
+              return [];
+            }
+            const rows = yield* database
+              .select()
+              .from(transactionMoves)
+              .where(
+                and(
+                  eq(transactionMoves.userId, input.userId),
+                  anyOf(transactionMoves.teamId, teams),
+                  eq(transactionMoves.result, "executed"),
+                  or(
+                    isNull(transactionMoves.effectiveDate),
+                    Array.isArrayNonEmpty(dates)
+                      ? anyOf(transactionMoves.effectiveDate, dates)
+                      : undefined,
+                  ),
+                ),
+              )
+              .orderBy(
+                asc(transactionMoves.teamId),
+                asc(transactionMoves.position),
+                asc(transactionMoves.id),
+              );
+            return yield* Effect.forEach(rows, decodeMove);
+          }).pipe(Effect.mapError(persistenceFailure));
+        },
+      );
+
       const readTeam = Effect.fn("TransactionPlanRepository.readTeam")(function* (input: {
         readonly userId: UserId;
         readonly team: TeamId;
@@ -1156,6 +1194,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
         readOpenMovesForPlans,
         readOwnerMoves,
         readOpenMovesForTeams,
+        readSubmittedMoves,
         readTeam,
         readTeamProviderKeys,
         countOwnerMoves,

@@ -127,6 +127,7 @@ export function moveReadView(input: {
     ...content,
     runDay: evaluated.runDay,
     ...(evaluated.effectiveDate === undefined ? {} : { effectiveDate: evaluated.effectiveDate }),
+    runsOn: evaluated.runsOn,
     ...(evaluated.placement === undefined ? {} : { placement: placementView(evaluated.placement) }),
     validation: validationView(evaluated.validation),
     check: { status: "checked" },

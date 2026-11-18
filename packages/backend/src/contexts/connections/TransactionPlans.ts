@@ -271,6 +271,7 @@ export const TransactionMoveRead = Schema.Struct({
   bid: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   runDay: Schema.optional(StoredMoveDate),
   effectiveDate: Schema.optional(StoredMoveDate),
+  runsOn: Schema.optional(StoredMoveDate),
   decidedAt: Schema.optional(Schema.DateTimeUtc),
   confirmation: Schema.optional(TransactionMoveConfirmation),
   runAt: Schema.optional(Schema.DateTimeUtc),
@@ -704,6 +705,7 @@ export type TransactionPlanMoveView = {
   readonly decision: TransactionPlanDecision;
   readonly runDay: StoredMoveDate | undefined;
   readonly effectiveDate: StoredMoveDate | undefined;
+  readonly runsOn: StoredMoveDate | undefined;
   readonly dueToday: boolean;
   readonly validation: StoredMoveValidation;
   readonly placement: StoredMovePlacement | undefined;

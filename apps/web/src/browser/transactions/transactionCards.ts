@@ -86,8 +86,9 @@ export function cardStatus(card: GroupCard): CardStatus {
     return { kind: "blocked" };
   }
   if (members.every(isSubmitted)) {
-    return members.every((move) => move.decision === "confirmed") && card.lead.runDay !== undefined
-      ? { kind: "scheduled", runDay: card.lead.runDay }
+    const runsOn = card.lead.runsOn ?? card.lead.runDay;
+    return members.every((move) => move.decision === "confirmed") && runsOn !== undefined
+      ? { kind: "scheduled", runDay: runsOn }
       : { kind: "running" };
   }
   return { kind: "needs-decision" };
