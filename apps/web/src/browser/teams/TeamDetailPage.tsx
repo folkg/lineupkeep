@@ -94,7 +94,7 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
     <Stack gap="lg">
       <Stack gap="md">
         <Stack gap="xs">
-          <Text size="caption" tone="muted">
+          <Text type="meta" tone="muted">
             {teamContextLabel(props.team.team, props.team.connectionCount)}
           </Text>
           <TeamAttention team={props.team} />

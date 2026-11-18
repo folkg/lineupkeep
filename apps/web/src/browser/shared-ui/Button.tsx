@@ -70,14 +70,12 @@ const buttonBase =
 
 const confirmedShape = "ps-9 pe-9";
 
-const filledShape =
-  "min-h-button px-5 text-control font-semibold uppercase tracking-label leading-none";
+const filledShape = "min-h-button px-5 text-label uppercase";
 
-const quietShape =
-  "min-h-tap-target px-2 text-control font-semibold uppercase tracking-label leading-none";
+const quietShape = "min-h-tap-target px-2 text-label uppercase";
 
 const linkShape =
-  "min-h-tap-target p-0 text-body font-semibold normal-case tracking-normal leading-tight underline decoration-2 underline-offset-4";
+  "min-h-tap-target p-0 text-body-strong normal-case underline decoration-2 underline-offset-4";
 
 const quietNeutral = "text-ink-soft hover:text-action";
 

@@ -68,7 +68,7 @@ export function RunDetailPage(props: RunDetailPageProps): JSX.Element {
           >
             <Show
               fallback={
-                <Text size="body" tone="muted">
+                <Text type="body" tone="muted">
                   {page.failure() === undefined || page.failure() === null
                     ? "This run is not available to the current account."
                     : describeRunFailure(page.failure())}
@@ -111,14 +111,14 @@ function RunDetail(props: {
       <Stack gap="sm">
         <SectionTitle>{props.teamName}</SectionTitle>
         <Inline gap="sm">
-          <Text size="caption">
+          <Text type="meta">
             {runStatusLabel(props.run.status)} · {targetLabel(props.run.target)}
           </Text>
-          <Text size="caption" tone="faint">
+          <Text type="meta" tone="faint">
             {triggerLabel(props.run)}
           </Text>
         </Inline>
-        <Text size="body">{runExplanation(props.run)}</Text>
+        <Text type="body">{runExplanation(props.run)}</Text>
       </Stack>
 
       <DefinitionList>
@@ -142,18 +142,18 @@ function RunDetail(props: {
             <SectionTitle>What the run found</SectionTitle>
             <Show when={outcome().provenance}>
               {(provenance) => (
-                <Text size="caption" tone="muted">
+                <Text type="meta" tone="muted">
                   {provenanceExplanation(provenance())}
                 </Text>
               )}
             </Show>
-            <Text size="caption" tone="muted">
+            <Text type="meta" tone="muted">
               {outcome().verified ? confirmedLine(props.providerName) : "Not yet confirmed."}
               {outcome().reconciled ? " Checked again after an unconfirmed write." : ""}
             </Text>
             <Show
               fallback={
-                <Text size="caption" tone="muted">
+                <Text type="meta" tone="muted">
                   No player changes were needed.
                 </Text>
               }
@@ -163,10 +163,8 @@ function RunDetail(props: {
                 <For each={outcome().changes}>
                   {(change) => (
                     <RuleListItem>
-                      <Text size="caption" weight="semibold">
-                        {change.name}
-                      </Text>
-                      <Text size="caption" tone="muted">
+                      <Text type="body-strong">{change.name}</Text>
+                      <Text type="meta" tone="muted">
                         {change.from} → {change.to}
                       </Text>
                     </RuleListItem>
@@ -183,14 +181,12 @@ function RunDetail(props: {
                       {(player) => (
                         <RuleListItem>
                           <Inline gap="sm" align="baseline">
-                            <Text size="caption" weight="semibold">
-                              {player.name}
-                            </Text>
-                            <Text size="caption" tone="faint">
+                            <Text type="body-strong">{player.name}</Text>
+                            <Text type="meta" tone="faint">
                               {player.slot}
                             </Text>
                           </Inline>
-                          <Text size="body" tone="muted">
+                          <Text type="body" tone="muted">
                             {player.reason}
                           </Text>
                         </RuleListItem>
@@ -200,7 +196,7 @@ function RunDetail(props: {
                 </Stack>
               )}
             </Show>
-            <Text size="caption" tone="faint">
+            <Text type="meta" tone="faint">
               {outcome().lockedPlayers} locked · {outcome().editablePlayers} editable players
             </Text>
           </Stack>

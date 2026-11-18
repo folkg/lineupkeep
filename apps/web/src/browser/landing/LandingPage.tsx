@@ -38,13 +38,13 @@ export function LandingPage(): JSX.Element {
         start={
           <Stack gap="xl">
             <Stack gap="lg">
-              <Text as="span" size="label" tone="muted">
+              <Text as="span" type="label" tone="muted">
                 Your lineup. Looked after.
               </Text>
-              <Heading level={1} size="display">
+              <Heading level={1} type="display">
                 Lineupgrade sets your fantasy lineup.
               </Heading>
-              <Text size="body" tone="muted">
+              <Text type="body" tone="muted">
                 It keeps your lineup current, and your agent can help with the rest.
               </Text>
             </Stack>
@@ -61,7 +61,7 @@ export function LandingPage(): JSX.Element {
               {(section) => (
                 <Stack as="section" gap="md" labelledBy={section.id}>
                   <SectionTitle id={section.id}>{section.title}</SectionTitle>
-                  <Text size="body" tone="muted">
+                  <Text type="body" tone="muted">
                     {section.body}
                   </Text>
                 </Stack>

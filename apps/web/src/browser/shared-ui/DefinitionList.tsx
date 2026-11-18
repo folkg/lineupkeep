@@ -13,12 +13,12 @@ export function Definition(props: { readonly term: string; readonly value: strin
   return (
     <div class="grid gap-1">
       <dt>
-        <Text size="caption" tone="faint">
+        <Text type="meta" tone="faint">
           {props.term}
         </Text>
       </dt>
       <dd>
-        <Text numeric size="body">
+        <Text numeric type="body">
           {props.value}
         </Text>
       </dd>

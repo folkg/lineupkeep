@@ -90,7 +90,7 @@ export function SignInSessionList(props: SignInSessionListProps): JSX.Element {
           </Show>
         </Show>
       </Show>
-      <Text size="caption" tone="faint">
+      <Text type="meta" tone="faint">
         Sessions renew as they are used. Each time shown can lag by up to five minutes.
       </Text>
       <ActionFeedback feedback={props.feedback()} />
@@ -103,7 +103,7 @@ function SessionRow(props: SessionRowProps): JSX.Element {
     <RuleListItem leaving={props.leaving}>
       <Inline gap="sm" justify="between">
         <Inline gap="sm">
-          <Text as="span" weight="semibold">
+          <Text as="span" type="body-strong">
             {props.session.device}
           </Text>
           <Show when={props.session.current}>
@@ -129,7 +129,7 @@ function SessionRow(props: SessionRowProps): JSX.Element {
           </Button>
         </Show>
       </Inline>
-      <Text size="caption" tone="faint">
+      <Text type="meta" tone="faint">
         Started{" "}
         <Time datetime={props.session.startedAt}>{formatReaderTime(props.session.startedAt)}</Time>{" "}
         · Last used{" "}

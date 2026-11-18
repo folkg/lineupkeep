@@ -3,6 +3,8 @@ import { dynamic } from "@solidjs/web";
 import type { Element } from "solid-js";
 
 import { cx } from "./cx";
+import { typeClass } from "./type";
+import type { TextType } from "./type";
 
 export function Text(props: TextProps): JSX.Element {
   const Tag = dynamic(() => props.as ?? "p");
@@ -12,9 +14,10 @@ export function Text(props: TextProps): JSX.Element {
       role={props.role}
       aria-live={props.live}
       class={cx(
-        sizeClass[props.size ?? "body"],
+        "max-w-[42.5rem] text-pretty",
+        typeClass[props.type ?? "body"],
+        props.type === "label" && "uppercase",
         toneClass[props.tone ?? "default"],
-        props.weight === "semibold" && "font-semibold",
         props.numeric === true && "tabular-nums",
         props.wrap === "words" && "break-words",
         props.wrap === "preserve" && "break-words whitespace-pre-wrap",
@@ -27,14 +30,6 @@ export function Text(props: TextProps): JSX.Element {
   );
 }
 
-const sizeClass = {
-  lede: "max-w-[42.5rem] text-pretty text-lede",
-  body: "max-w-[42.5rem] text-pretty text-body",
-  item: "max-w-[42.5rem] text-pretty text-item",
-  caption: "max-w-[42.5rem] text-caption",
-  label: "max-w-[42.5rem] text-label font-semibold uppercase tracking-label",
-};
-
 const toneClass: Record<TextTone, string> = {
   default: "",
   muted: "text-ink-soft",
@@ -46,7 +41,7 @@ const toneClass: Record<TextTone, string> = {
 type TextTone = "default" | "muted" | "faint" | "danger" | "spot";
 
 type TextProps = {
-  readonly size?: keyof typeof sizeClass;
+  readonly type?: Extract<TextType, "body" | "body-strong" | "meta" | "label">;
   readonly id?: string;
   readonly role?: "status";
   readonly live?: "polite";
@@ -56,7 +51,6 @@ type TextProps = {
   readonly reserve?: "two-lines";
   readonly srOnly?: boolean;
   readonly as?: "p" | "span";
-  readonly weight?: "normal" | "semibold";
   readonly numeric?: boolean;
   readonly children: Element;
 };

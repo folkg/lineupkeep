@@ -39,7 +39,7 @@ export function FeedbackForm(props: FeedbackFormProps): JSX.Element {
         onInput={(event) => props.onBody(event.currentTarget.value)}
         value={props.draft.body}
       />
-      <Text size="caption" tone="faint">
+      <Text type="meta" tone="faint">
         Never include passwords, sign-in cookies, or account identifiers. Reports are stored as
         plain text and read back only by this account.
       </Text>

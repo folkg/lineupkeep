@@ -10,7 +10,7 @@ export function SectionTitle(props: SectionTitleProps): JSX.Element {
         <Heading
           id={props.id}
           level={props.level ?? 2}
-          size="section"
+          type="section-title"
           focusable={props.focusable === true}
         >
           {props.children}

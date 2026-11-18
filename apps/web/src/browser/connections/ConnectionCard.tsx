@@ -5,8 +5,6 @@ import { Badge } from "#browser/shared-ui/Badge.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import { Heading } from "#browser/shared-ui/Heading.tsx";
-import { IconButton } from "#browser/shared-ui/IconButton.tsx";
-import { XIcon } from "#browser/shared-ui/icons.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
@@ -20,7 +18,7 @@ export function ConnectionCard(props: ConnectionCardProps): JSX.Element {
     <RuleListItem dense layout="columns" leaving={props.leaving}>
       <Stack gap="sm">
         <Inline gap="sm">
-          <Heading level={3} size="item">
+          <Heading level={3} type="body-strong">
             {providerDisplayName(props.connection.provider)} connection
           </Heading>
           <Badge tone={props.connection.status === "ready" ? "neutral" : "accent"}>
@@ -28,19 +26,19 @@ export function ConnectionCard(props: ConnectionCardProps): JSX.Element {
           </Badge>
         </Inline>
         <ConnectionIdentity connection={props.connection} />
-        <Text size="body" tone="muted">
+        <Text type="body" tone="muted">
           {capabilityLabel(props.connection.status)}
         </Text>
         <Show when={props.connection.linkingExpiresAt}>
           {(expiresAt) => (
-            <Text size="caption" tone="faint">
+            <Text type="meta" tone="faint">
               This sign-in request expires{" "}
               <Time datetime={expiresAt()}>{formatReaderTime(expiresAt())}</Time>.
             </Text>
           )}
         </Show>
       </Stack>
-      <Inline gap="sm" justify="end" fullWidthOnSmall>
+      <Stack gap="md">
         <Show when={props.connection.status === "reconnect-required"}>
           <Button state={props.reconnecting ? "working" : "idle"} onClick={props.onReconnect}>
             Reconnect
@@ -51,15 +49,17 @@ export function ConnectionCard(props: ConnectionCardProps): JSX.Element {
             props.connection.status === "ready" || props.connection.status === "reconnect-required"
           }
         >
-          <IconButton
-            label={`Disconnect the ${providerDisplayName(props.connection.provider)} connection`}
+          <Button
+            aria-label={`Remove the ${providerDisplayName(props.connection.provider)} connection`}
             state={props.disconnecting ? "working" : "idle"}
+            tone="danger"
+            variant="quiet"
             onClick={props.onDisconnect}
           >
-            <XIcon size="md" />
-          </IconButton>
+            Remove
+          </Button>
         </Show>
-      </Inline>
+      </Stack>
     </RuleListItem>
   );
 }
@@ -69,7 +69,7 @@ function ConnectionIdentity(props: { readonly connection: ConnectionView }): JSX
   const label = (): string => (props.connection.approvedAt === undefined ? "Started" : "Connected");
 
   return (
-    <Text numeric size="caption">
+    <Text numeric type="meta">
       {teamCountLabel(props.connection.teamCount)} · {label()}{" "}
       <Time datetime={timestamp()}>{formatReaderTime(timestamp())}</Time>
     </Text>

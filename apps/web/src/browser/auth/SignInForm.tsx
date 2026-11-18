@@ -55,7 +55,7 @@ export function SignInForm(props: SignInFormProps): JSX.Element {
                       <GoogleGIcon />
                       Continue with Google
                     </Button>
-                    <Text size="caption" tone="faint">
+                    <Text type="meta" tone="faint">
                       Or get a code by email.
                     </Text>
                   </Stack>

@@ -7,7 +7,7 @@ export function FormMessage(props: FormMessageProps): JSX.Element {
     <p
       role="status"
       class={cx(
-        "text-feedback",
+        "text-meta",
         props.children === undefined ? "sr-only" : "mt-3 min-h-[18px]",
         props.tone === "danger" ? "text-danger" : "text-ink-soft",
       )}

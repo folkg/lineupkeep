@@ -16,7 +16,7 @@ export function TeamAttention(props: TeamAttentionProps): JSX.Element {
       <Stack gap="xs">
         <Show when={props.team.connectionStatus === "reconnect-required"}>
           <Inline gap="sm">
-            <Text as="span" size="caption">
+            <Text as="span" type="meta">
               {provider()} needs a new sign-in before lineup checks can run.
             </Text>
             <TextLink to="/account">Reconnect {provider()}</TextLink>
@@ -24,14 +24,14 @@ export function TeamAttention(props: TeamAttentionProps): JSX.Element {
         </Show>
         <Show when={props.team.connectionStatus === "disconnected"}>
           <Inline gap="sm">
-            <Text as="span" size="caption">
+            <Text as="span" type="meta">
               {provider()} is disconnected, so lineup checks cannot run.
             </Text>
             <TextLink to="/account">Reconnect {provider()}</TextLink>
           </Inline>
         </Show>
         <Show when={props.team.connectionStatus === "linking"}>
-          <Text size="caption">{provider()} sign-in is in progress.</Text>
+          <Text type="meta">{provider()} sign-in is in progress.</Text>
         </Show>
       </Stack>
     </Show>

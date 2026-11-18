@@ -26,7 +26,7 @@ export function Switch(props: SwitchProps): JSX.Element {
       aria-busy={working() ? "true" : undefined}
       aria-disabled={props.disabled === true ? "true" : undefined}
       aria-label={props.name}
-      class="group inline-flex min-h-tap-target items-center gap-2.5 text-control leading-none font-semibold uppercase tracking-label text-ink focus-visible:outline-none focus-visible:shadow-focus disabled:cursor-not-allowed disabled:opacity-70"
+      class="group inline-flex min-h-tap-target items-center gap-2.5 text-label uppercase text-ink focus-visible:outline-none focus-visible:shadow-focus disabled:cursor-not-allowed disabled:opacity-70"
       data-state={state()}
       disabled={blocked()}
       onClick={handleClick}

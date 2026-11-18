@@ -44,10 +44,10 @@ export function ConsentPage(props: {
                 )}
               </Show>
               <Stack gap="sm">
-                <Text size="label" tone="faint">
+                <Text type="label" tone="faint">
                   Client identifier
                 </Text>
-                <Text size="body" wrap="words">
+                <Text type="body" wrap="words">
                   {request().client.id}
                 </Text>
               </Stack>
@@ -57,7 +57,7 @@ export function ConsentPage(props: {
                   <For each={request().scopes}>
                     {(scope) => (
                       <RuleListItem dense>
-                        <Text size="body">{scope.description}</Text>
+                        <Text type="body">{scope.description}</Text>
                       </RuleListItem>
                     )}
                   </For>

@@ -5,6 +5,7 @@ import type { Element } from "solid-js";
 import { Heading } from "./Heading";
 import { Inline } from "./Inline";
 import { Text } from "./Text";
+import { typeClass } from "./type";
 
 export function Page(props: PageProps): JSX.Element {
   const variant = (): TitleVariant => props.titleVariant ?? "page";
@@ -13,11 +14,7 @@ export function Page(props: PageProps): JSX.Element {
       <Show when={props.back}>{(back) => <div class="mb-6">{back()}</div>}</Show>
       <header class="mb-8 grid max-w-[42.5rem] gap-3">
         <Show when={props.kicker}>
-          {(kicker) => (
-            <div class="text-label font-semibold uppercase tracking-label text-action">
-              {kicker()}
-            </div>
-          )}
+          {(kicker) => <div class={`${typeClass.label} uppercase text-action`}>{kicker()}</div>}
         </Show>
         <Show
           when={props.titleAside}
@@ -32,7 +29,7 @@ export function Page(props: PageProps): JSX.Element {
         </Show>
         <Show when={props.lede}>
           {(lede) => (
-            <Text size="body" tone="muted">
+            <Text type="body" tone="muted">
               {lede()}
             </Text>
           )}
@@ -45,7 +42,7 @@ export function Page(props: PageProps): JSX.Element {
 
 function PageTitle(props: PageTitleProps): JSX.Element {
   return (
-    <Heading level={1} size={props.variant === "name" ? "name" : "page"}>
+    <Heading level={1} type={props.variant === "name" ? "card-title" : "page-title"}>
       {props.children}
     </Heading>
   );

@@ -39,12 +39,6 @@ colors:
   dark-danger-soft: "#492b27"
   dark-scrim: "rgb(0 0 0 / 0.65)"
 typography:
-  wordmark:
-    fontFamily: "Schibsted Grotesk Variable, sans-serif"
-    fontSize: "0.6875rem"
-    fontWeight: 600
-    lineHeight: 1.2
-    letterSpacing: "0.16em"
   display:
     fontFamily: "Archivo Variable, sans-serif"
     fontSize: "clamp(2.75rem, 5vw, 4.25rem)"
@@ -58,29 +52,28 @@ typography:
     lineHeight: 0.95
     letterSpacing: "-0.035em"
     textTransform: "uppercase"
-  statement:
-    fontFamily: "Archivo Variable, sans-serif"
-    fontSize: "1.75rem"
-    fontWeight: 800
-    lineHeight: 1.15
-    letterSpacing: "-0.02em"
   section-title:
     fontFamily: "Archivo Variable, sans-serif"
-    fontSize: "1.375rem"
+    fontSize: "1.5rem"
     fontWeight: 800
     lineHeight: 1.2
     letterSpacing: "-0.02em"
-  team-name:
+  card-title:
     fontFamily: "Archivo Variable, sans-serif"
-    fontSize: "1.625rem"
+    fontSize: "1.25rem"
     fontWeight: 800
-    lineHeight: 1.05
+    lineHeight: 1.15
     letterSpacing: "-0.02em"
   body:
     fontFamily: "Schibsted Grotesk Variable, sans-serif"
     fontSize: "0.9375rem"
     fontWeight: 400
     lineHeight: 1.55
+  body-strong:
+    fontFamily: "Schibsted Grotesk Variable, sans-serif"
+    fontSize: "0.9375rem"
+    fontWeight: 600
+    lineHeight: 1.45
   meta:
     fontFamily: "Schibsted Grotesk Variable, sans-serif"
     fontSize: "0.75rem"
@@ -91,6 +84,12 @@ typography:
     fontSize: "0.6875rem"
     fontWeight: 600
     lineHeight: 1.2
+    letterSpacing: "0.16em"
+  badge:
+    fontFamily: "Schibsted Grotesk Variable, sans-serif"
+    fontSize: "0.6875rem"
+    fontWeight: 600
+    lineHeight: 1
     letterSpacing: "0.16em"
 rounded:
   badge: "0px"
@@ -172,8 +171,8 @@ honest state. Light is warm newsprint; dark is a tinted violet sheet. Both are c
 
 **Key Characteristics:**
 
-- Archivo Variable for page titles, section titles, and team names at weight 800;
-  Schibsted Grotesk Variable for body, meta, labels, controls, and the wordmark
+- Archivo Variable for the display, page title, section title, and card title types at weight 800;
+  Schibsted Grotesk Variable for body, body strong, meta, label, and badge
 - Square everywhere; 3px ink section rules, 1px row hairlines, and a 2px ink rule around each team
   card
 - One 680px measure and one solid action per view
@@ -262,30 +261,39 @@ errors and destructive actions.
 
 **Two faces with separate jobs.** Display type is Archivo Variable, self-hosted through
 Fontsource (`@fontsource-variable/archivo`). Work type is Schibsted Grotesk Variable,
-self-hosted through Fontsource. Archivo carries page titles, section titles, team names, the
-landing statement, and the display scale at weight 800. Schibsted carries body, meta, labels,
-controls, and the wordmark. No serif, no third face. Google's branded button keeps Google's
-prescribed G and type.
+self-hosted through Fontsource. Archivo carries the display scale: display, page title, section
+title, and card title at weight 800. Schibsted carries the work scale: body, body strong, meta,
+label, and badge. No serif, no third face. Google's branded button keeps Google's prescribed G and
+type.
+
+**One named set.** Every text element picks a type; no call site picks a raw size. Each type owns
+one size, weight, line height, and tracking.
 
 The display scale:
 
-- **Page title** — `clamp(44px, 5.4vw, 70px)`, weight 800, line height 0.95, `-0.035em` tracking,
-  uppercase. A team name used as a page title takes the team-name size and keeps its case.
-- **Display** — `clamp(44px, 5vw, 68px)`, weight 800, line height 0.98, `-0.035em`. The
-  landing statement only.
-- **Statement** — 28px, weight 800, line height 1.15, `-0.02em`. Auth and quiet statements.
-- **Section title** — 22px, weight 800, line height 1.2, `-0.02em`.
-- **Team name** — 26px, weight 800, line height 1.05, `-0.02em`.
+- **Display** — `clamp(44px, 5vw, 68px)`, weight 800, line height 0.98, `-0.035em`. The landing
+  statement only.
+- **Page title** — `clamp(44px, 5.4vw, 70px)`, weight 800, line height 0.95, `-0.035em`,
+  uppercase. One per page. A team name used as a page title takes the card-title type and keeps
+  its case.
+- **Section title** — 24px, weight 800, line height 1.2, `-0.02em`. Section headings and the
+  transaction day headings.
+- **Card title** — 20px, weight 800, line height 1.15, `-0.02em`. Team names, group cards, and
+  dialog titles.
 
 The work scale:
 
-- **11px label** — uppercase, weight 600, `0.16em` tracking. Masthead, nav, control labels, field
-  labels, status words, section counts.
-- **12px meta** — weight 400, line height 1.5. League context, timestamps, helper copy, feedback.
-- **15px body** — weight 400, line height 1.55. Prose, rows, links, field values.
+- **Body** — 15px, weight 400, line height 1.55. Prose, rows, links, field values.
+- **Body strong** — 15px, weight 600, line height 1.45. Move titles, connection-row titles, and
+  emphasized prose.
+- **Meta** — 12px, weight 400, line height 1.5. League context, timestamps, helper copy, feedback.
+- **Label** — 11px, weight 600, line height 1.2, `0.16em` tracking. Masthead, nav, control labels,
+  field labels, status words, section counts. Use caps when the label is a control or status.
+- **Badge** — 11px, weight 600, line height 1, `0.16em` tracking. The status word in a badge.
 
-Tracking belongs to display type and labels. Body and meta use normal tracking; display and team
-names use `-0.02em` to `-0.035em`. Never add letter spacing to body text.
+Tracking belongs to display type and labels. Body and meta use normal tracking; display, page
+titles, section titles, and card titles use `-0.02em` to `-0.035em`. Never add letter spacing to
+body text.
 
 **Numerals.** Use `font-variant-numeric: tabular-nums` on anything compared to anything else:
 `time`, counts in a row, attempts, ratios, and record tallies. Apply it to the numeric element or
@@ -293,8 +301,8 @@ line, never to prose: in Schibsted Grotesk tabular figures widen punctuation and
 before commas and full stops.
 
 **The Wordmark Rule.** The wordmark stays continuous lowercase `lineupgrade` in Schibsted Grotesk at
-the 11px label weight and tracking, beside the square mark. Archivo never sets the wordmark. Use
-Lineupgrade in prose. Do not uppercase, split, outline, or colour the syllables.
+the label type's size, weight, and tracking, beside the square mark. Archivo never sets the
+wordmark. Use Lineupgrade in prose. Do not uppercase, split, outline, or colour the syllables.
 
 **The Mark.** A 20px gold square with ink `lu` strokes: a lowercase l with a short foot so it
 cannot read as an I, and a square u with a rounded inner corner, 6 units of stroke in a 64 unit
@@ -310,12 +318,12 @@ rules, and controls share the column's left and right edges.
 **The masthead** is one row inside the measure on wide screens: the brand mark and lowercase
 wordmark at the left, the primary navigation at the right. Below 560px the navigation wraps under
 the brand. There is no theme control or sign-out utility in the masthead. One 3px `rule-strong`
-rule closes it. Navigation labels are 11px caps; the active item carries a 2px ink rule that spans
-exactly the item, not a short bar or an overhanging block. The links wrap as whole items, with no
-utility action left on a line of its own.
+rule closes it. Navigation labels use the label type in caps; the active item carries a 2px ink
+rule that spans exactly the item, not a short bar or an overhanging block. The links wrap as whole
+items, with no utility action left on a line of its own.
 
 **Rows and cards** use two columns from 560px: text at the left, one control cluster at the right. A team
-card puts its provider jump-out beside the 26px team name in the text column; the right cluster
+card puts its provider jump-out beside the card-title team name in the text column; the right cluster
 carries the checks toggle and the pause control, so every card has the same control shape. The
 pause is a 28px square icon frame showing Pause or Play, so changing state never shifts the
 cluster; its accessible name stays the full pause or resume sentence, and it stays in place and
@@ -331,8 +339,8 @@ metadata line.
 
 **Team cards.** The team list puts each team in its own card, sorted by sport then name; the
 sport is already in the card's meta line, so there are no league headings or counts. A card has
-a 2px ink rule and the normal `paper` ground. Team names are 26px
-Archivo; the meta and status lines stay 12px Schibsted.
+a 2px ink rule and the normal `paper` ground. Team names use the card-title type;
+the meta and status lines use the meta type.
 
 **Activity ranges** omit a repeated date: `Nov 1, 11:44 AM to 1:12 PM`. When the group is a
 single instant, say `at Nov 1, 11:44 AM`; when it crosses the reader's midnight, show both full
@@ -420,7 +428,7 @@ ring with 2px separation; it is visible on every ground and does not rely on col
 
 ### Fields
 
-Labels are 11px caps. Inputs are 44px, 15px body, square, with a 2px `rule-strong` border and
+Labels use the label type. Inputs are 44px, 15px body, square, with a 2px `rule-strong` border and
 `paper` ground. Descriptions and errors are 12px; errors are danger and sit beside the field.
 Placeholders are not labels. The caret and selection use action tokens.
 
@@ -436,9 +444,9 @@ than removed.
 
 ### Lists and status
 
-Connection rows use 15px text with 12px meta and a 1px bottom hairline. Team cards and
+Connection rows use body text with meta lines and a 1px bottom hairline. Team cards and
 transaction group cards share one Card frame: a 2px ink rule on the `paper` ground, one header rule,
-and one footer rule, with at least 24px between cards. A team name is 26px Archivo at 800 where the
+and one footer rule, with at least 24px between cards. A team name uses the card-title type where the
 card is a primary destination. Status is a labelled word in caps, never a colour alone. Team cards keep one status
 line under the league context in every state — the next check, a pause with its resume time,
 checks off, or a check in progress — then what the last check did, when, and the recent tally. The
@@ -506,7 +514,8 @@ navigation label are both Account.
 The connection surface links through the hosted browser only; the web UI has no password field.
 Each connection row names the provider, the teams it covers, when it was connected, and what its
 current status can do. A connection that needs a new sign-in reopens the same hosted browser
-session in place.
+session in place. The row's action column gives Reconnect the primary action when it is needed and
+keeps Remove quiet on its own line. Below 560px the actions stack full width in that order.
 
 ### Content and states
 
@@ -523,7 +532,8 @@ or connection health.
 - Do keep controls, inputs, badges, and dialogs square.
 - Do keep the 680px measure and let tables exceed it only with a reason.
 - Do use one 3px ink rule under a section title and 1px hairlines between list rows.
-- Do set page titles, section titles, and team names in Archivo at weight 800.
+- Do set display, page titles, section titles, and card titles in Archivo at weight 800.
+- Do choose a named text type and let it own its size, weight, line height, and tracking.
 - Do spend violet once per view on the primary action.
 - Do apply tabular numerals to comparable numbers only.
 - Do keep the wordmark lowercase in Schibsted and the mark gold.
@@ -541,7 +551,8 @@ or connection health.
   submit sheet fade, or a second accent.
 - Don't use gold outside the mark.
 - Don't use a serif or a third face.
-- Don't set body, meta, labels, controls, or the wordmark in Archivo.
+- Don't set body, body strong, meta, label, badge, or the wordmark in Archivo.
+- Don't pick a raw text size or weight at a call site.
 - Don't use spot ink for errors, destructive actions, or general status; danger owns those.
 - Don't add a print texture.
 - Don't box prose, connection rows, notices, or empty states.

@@ -20,7 +20,7 @@ export function Disclosure(props: DisclosureProps): JSX.Element {
 }
 
 const disclosureSummaryClass = cx(
-  "flex cursor-pointer list-none items-start gap-2 text-body font-semibold text-ink",
+  "flex cursor-pointer list-none items-start gap-2 text-body-strong text-ink",
   "underline decoration-2 underline-offset-4",
   "[&::-webkit-details-marker]:hidden",
   "focus-visible:outline-none focus-visible:shadow-focus",

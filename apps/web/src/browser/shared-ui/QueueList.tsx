@@ -10,7 +10,7 @@ export function QueueListItem(props: QueueListItemProps): JSX.Element {
   return (
     <li class="border-b border-rule last:border-b-0">
       <div class="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-x-2 py-3">
-        <span aria-hidden="true" class="text-caption font-semibold tabular-nums text-action">
+        <span aria-hidden="true" class="text-meta tabular-nums text-action">
           {String(props.number)}
         </span>
         <div class="grid min-w-0 gap-2">

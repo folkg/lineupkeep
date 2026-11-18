@@ -94,14 +94,14 @@ function RunLine(props: { readonly run: LineupRunView }): JSX.Element {
   return (
     <>
       <Inline gap="sm" justify="between">
-        <Text numeric size="body">
+        <Text numeric type="body">
           {runStatusLabel(props.run.status)} · {targetLabel(props.run.target)}
         </Text>
-        <Text size="caption" tone="faint">
+        <Text type="meta" tone="faint">
           <Time datetime={props.run.updatedAt}>{formatReaderTime(props.run.updatedAt)}</Time>
         </Text>
       </Inline>
-      <Text size="body" numeric tone="muted">
+      <Text type="body" numeric tone="muted">
         {runExplanation(props.run)}
       </Text>
     </>

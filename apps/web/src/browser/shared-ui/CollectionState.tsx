@@ -4,7 +4,7 @@ import type { Element } from "solid-js";
 export function EmptyState(props: EmptyStateProps): JSX.Element {
   return (
     <div class={stateClass}>
-      <strong class="font-semibold text-body text-ink">{props.title}</strong>
+      <strong class="text-body-strong text-ink">{props.title}</strong>
       <span>{props.children}</span>
     </div>
   );

@@ -38,7 +38,7 @@ export function FeedbackPage(props: FeedbackPageProps): JSX.Element {
         <Stack gap="xl">
           <Stack as="section" gap="md" labelledBy="feedback-form-title">
             <SectionTitle id="feedback-form-title">Send a report</SectionTitle>
-            <Show when={about()}>{(summary) => <Text size="body">{summary()}</Text>}</Show>
+            <Show when={about()}>{(summary) => <Text type="body">{summary()}</Text>}</Show>
             <FeedbackForm
               draft={page.draft()}
               errors={page.errors()}

@@ -13,12 +13,7 @@ export function Notice(props: NoticeProps): JSX.Element {
         props.tone === "danger" ? "border-danger" : "border-rule-strong",
       )}
     >
-      <p
-        class={cx(
-          "text-label font-semibold uppercase tracking-label",
-          props.tone === "danger" ? "text-danger" : "text-ink",
-        )}
-      >
+      <p class={cx("text-label uppercase", props.tone === "danger" ? "text-danger" : "text-ink")}>
         {props.title}
       </p>
       <Show when={props.items}>
@@ -27,10 +22,7 @@ export function Notice(props: NoticeProps): JSX.Element {
             <For each={items()}>
               {(item) => (
                 <li
-                  class={cx(
-                    "text-caption",
-                    props.tone === "danger" ? "text-danger" : "text-ink-soft",
-                  )}
+                  class={cx("text-meta", props.tone === "danger" ? "text-danger" : "text-ink-soft")}
                 >
                   {item}
                 </li>

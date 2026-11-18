@@ -125,7 +125,7 @@ export function BrowserFrame(props: BrowserFrameProps): JSX.Element {
   return (
     <div class="overflow-hidden border border-rule-strong bg-paper focus-within:shadow-focus">
       <div class="flex items-center gap-3 border-b border-rule px-3 py-2">
-        <Text size="caption" tone="muted">
+        <Text type="meta" tone="muted">
           Private to this session. Closes when you finish or cancel.
         </Text>
         <span class="ml-auto shrink-0">
@@ -157,7 +157,7 @@ export function BrowserFrame(props: BrowserFrameProps): JSX.Element {
         </Show>
         <Show when={props.frameUrl === undefined}>
           <span class="pointer-events-none absolute inset-0 grid place-items-center">
-            <Text live="polite" role="status" size="caption" tone="muted">
+            <Text live="polite" role="status" type="meta" tone="muted">
               {props.statusLabel}
             </Text>
           </span>
@@ -174,7 +174,7 @@ export function BrowserFrame(props: BrowserFrameProps): JSX.Element {
           autocorrect="off"
           readonly={props.frameUrl === undefined}
           spellcheck={false}
-          class="absolute inset-0 h-full w-full cursor-text touch-auto appearance-none border-0 bg-transparent p-0 text-base text-transparent caret-transparent outline-none"
+          class="absolute inset-0 h-full w-full cursor-text touch-auto appearance-none border-0 bg-transparent p-0 text-body text-transparent caret-transparent outline-none"
           onBeforeInput={handleBeforeInput}
           onCompositionStart={handleCompositionStart}
           onCompositionEnd={handleCompositionEnd}

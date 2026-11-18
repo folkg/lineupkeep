@@ -39,8 +39,8 @@ export function Field(props: FieldProps): JSX.Element {
       }
       when={props.label !== undefined}
     >
-      <div class="grid gap-2 text-label text-ink">
-        <label class="font-semibold uppercase tracking-label" for={id}>
+      <div class="grid gap-2 text-ink">
+        <label class="text-label uppercase" for={id}>
           {props.label}
         </label>
         {control}
@@ -69,12 +69,12 @@ function FieldMessages(props: FieldMessageProps): JSX.Element {
   return (
     <>
       <Show when={props.description !== undefined}>
-        <span id={props.descriptionId} class="text-caption font-normal text-ink-faint">
+        <span id={props.descriptionId} class="text-meta text-ink-faint">
           {props.description}
         </span>
       </Show>
       <Show when={props.error !== undefined}>
-        <span id={props.errorId} role="alert" class="text-feedback font-normal text-danger">
+        <span id={props.errorId} role="alert" class="text-meta text-danger">
           {props.error}
         </span>
       </Show>

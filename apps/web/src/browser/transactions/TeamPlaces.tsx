@@ -15,12 +15,12 @@ export function TeamPlaces(props: TeamPlacesProps): JSX.Element {
     <Show when={props.facts}>
       {(facts) => (
         <Stack gap="2xs">
-          <Text size="caption" tone="muted">
+          <Text type="meta" tone="muted">
             {placesCopy(facts().places)}
           </Text>
           <For each={facts().reserve}>
             {(list) => (
-              <Text size="caption" tone="muted">
+              <Text type="meta" tone="muted">
                 {reserveCopy(list)}
               </Text>
             )}

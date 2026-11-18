@@ -132,10 +132,10 @@ function SummaryKicker(props: SectionProps): JSX.Element {
       .flatMap(cardMembers).length;
   return (
     <Inline gap="sm">
-      <Text as="span" numeric size="label">
+      <Text as="span" numeric type="label">
         {openMoveCount(props.page.counts().open)}
       </Text>
-      <Text as="span" numeric size="label">
+      <Text as="span" numeric type="label">
         {`· ${String(todayMoves())} today · ${String(props.page.counts().saved)} later · ${teamCount(props.page.teamCount())}`}
       </Text>
     </Inline>
@@ -198,14 +198,14 @@ function DaySection(props: DaySectionProps): JSX.Element {
       <SectionTitle
         id={titleId()}
         action={
-          <Text as="span" numeric size="label" tone="faint">
+          <Text as="span" numeric type="label" tone="faint">
             {countLabel()}
           </Text>
         }
         aside={
           <Show when={aside()}>
             {(held) => (
-              <Text as="span" numeric size="label" tone="muted">
+              <Text as="span" numeric type="label" tone="muted">
                 {held()}
               </Text>
             )}
@@ -216,10 +216,10 @@ function DaySection(props: DaySectionProps): JSX.Element {
       </SectionTitle>
       <Show when={decisionMoves().length > 0}>
         <Stack gap="2xs">
-          <Text size="caption" tone="muted">
+          <Text type="meta" tone="muted">
             {`${moveCount(decisionMoves().length)} still ${decisionMoves().length === 1 ? "needs" : "need"} your decision.`}
           </Text>
-          <Text size="caption" tone="muted">
+          <Text type="meta" tone="muted">
             Nothing runs until you decide.
           </Text>
         </Stack>
@@ -444,19 +444,19 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
       badge={<Badge tone={statusTone(status())}>{working() ? "Running" : statusLabel()}</Badge>}
       footer={footer()}
       header={
-        <Heading id={headingId()} level={3} size="section">
+        <Heading id={headingId()} level={3} type="card-title">
           {team().name}
         </Heading>
       }
       labelledBy={headingId()}
       meta={
         <>
-          <Text as="span" size="caption" tone="muted">
+          <Text as="span" type="meta" tone="muted">
             {leagueDisplayName(team().league)} · {sportDisplayName(team().sport)}
           </Text>
           <Show when={props.card.group?.label}>
             {(label) => (
-              <Text as="span" size="caption" tone="faint">
+              <Text as="span" type="meta" tone="faint">
                 {label()}
               </Text>
             )}
@@ -466,14 +466,14 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
     >
       <Show when={nextAction()}>
         {(line) => (
-          <Text size="caption" tone={line().tone}>
+          <Text type="meta" tone={line().tone}>
             {line().text}
           </Text>
         )}
       </Show>
       <Show when={submitted()}>
         {(line) => (
-          <Text size="caption" tone="muted">
+          <Text type="meta" tone="muted">
             {line()}
           </Text>
         )}
@@ -492,7 +492,7 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
         </For>
         <Show when={props.card.fixes.length > 0}>
           <QueueListNote>
-            <Text size="caption" tone="muted">
+            <Text type="meta" tone="muted">
               Added by the server so the add fits. You can edit or discard it.
             </Text>
           </QueueListNote>
@@ -522,14 +522,14 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
                 <Stack gap="md">
                   <For each={reasons()}>
                     {(line) => (
-                      <Text size="caption" tone="muted">
+                      <Text type="meta" tone="muted">
                         {line}
                       </Text>
                     )}
                   </For>
                   <Show when={explanation()}>
                     {(text) => (
-                      <Text size="caption" tone="muted">
+                      <Text type="meta" tone="muted">
                         {text()}
                       </Text>
                     )}
@@ -544,7 +544,7 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
                   <Stack gap="md">
                     <For each={fallbackPlanDetail(move)}>
                       {(line) => (
-                        <Text size="caption" tone="muted">
+                        <Text type="meta" tone="muted">
                           {line}
                         </Text>
                       )}
@@ -606,12 +606,12 @@ function GroupMoveRow(props: GroupMoveRowProps): JSX.Element {
                 value={props.page.editingDate()}
                 onInput={(event) => props.page.setEditingDate(event.currentTarget.value)}
               />
-              <Text size="caption" tone="muted">
+              <Text type="meta" tone="muted">
                 Saving changes the day this move runs and clears your decision.
               </Text>
               <Show when={props.page.editingError()}>
                 {(error) => (
-                  <Text size="caption" tone="danger">
+                  <Text type="meta" tone="danger">
                     {error()}
                   </Text>
                 )}
@@ -633,19 +633,17 @@ function GroupMoveRow(props: GroupMoveRowProps): JSX.Element {
         </Show>
       }
     >
-      <Text size="item" weight="semibold">
-        {moveSummary(props.move)}
-      </Text>
+      <Text type="body-strong">{moveSummary(props.move)}</Text>
       <Show when={props.move.placement}>
         {(placement) => (
-          <Text size="caption" tone="muted">
+          <Text type="meta" tone="muted">
             {placement().detail}
           </Text>
         )}
       </Show>
       <Show when={timingLine(props.move)}>
         {(line) => (
-          <Text size="caption" tone="muted">
+          <Text type="meta" tone="muted">
             {line()}
           </Text>
         )}
@@ -667,7 +665,7 @@ function MoveCheckNote(props: { readonly move: TransactionMoveView }): JSX.Eleme
   return (
     <Show when={note() ?? checked()}>
       {(held) => (
-        <Text size="caption" tone="faint">
+        <Text type="meta" tone="faint">
           {held()}
         </Text>
       )}
@@ -703,7 +701,7 @@ function EarlierSection(props: RemoteSectionProps): JSX.Element {
         Earlier
       </SectionTitle>
       <Show when={count() > 0}>
-        <Text size="caption" tone="muted">
+        <Text type="meta" tone="muted">
           {moveCount(count())}
         </Text>
       </Show>
@@ -795,45 +793,43 @@ function EarlierRow(props: EarlierRowProps): JSX.Element {
           <Badge tone={outcomeBadgeTone(props.move)}>
             {moveOutcomeLabel(props.move) ?? "Ended"}
           </Badge>
-          <Text size="item" weight="semibold">
-            {moveSummary(props.move)}
-          </Text>
+          <Text type="body-strong">{moveSummary(props.move)}</Text>
         </Inline>
-        <Text size="caption" tone="muted">
+        <Text type="meta" tone="muted">
           {props.move.team.name} · {leagueDisplayName(props.move.team.league)} ·{" "}
           {sportDisplayName(props.move.team.sport)}
         </Text>
         <Show when={submitted()}>
           {(line) => (
-            <Text size="caption" tone="muted">
+            <Text type="meta" tone="muted">
               {line()}
             </Text>
           )}
         </Show>
         <Show when={waiver()}>
           {(line) => (
-            <Text size="caption" tone="muted">
+            <Text type="meta" tone="muted">
               {line()}
             </Text>
           )}
         </Show>
         <Show when={discarded()}>
           {(line) => (
-            <Text size="caption" tone="faint">
+            <Text type="meta" tone="faint">
               {line()}
             </Text>
           )}
         </Show>
         <Show when={result()}>
           {(line) => (
-            <Text size="caption" tone="muted">
+            <Text type="meta" tone="muted">
               {line()}
             </Text>
           )}
         </Show>
         <Show when={resultTime()}>
           {(line) => (
-            <Text size="caption" tone="faint">
+            <Text type="meta" tone="faint">
               {line()}
             </Text>
           )}
@@ -844,7 +840,7 @@ function EarlierRow(props: EarlierRowProps): JSX.Element {
               <Stack gap="md">
                 <For each={fallbackPlanDetail(props.move)}>
                   {(line) => (
-                    <Text size="caption" tone="muted">
+                    <Text type="meta" tone="muted">
                       {line}
                     </Text>
                   )}

@@ -20,12 +20,12 @@ export function AuthPage(props: AuthPageProps): JSX.Element {
           <IntroPanel
             cue="For football and hockey fantasy leagues."
             title={
-              <Heading level={1} size="statement">
+              <Heading level={1} type="section-title">
                 Sign in to Lineupgrade.
               </Heading>
             }
           >
-            <Text size="lede" tone="muted">
+            <Text type="body" tone="muted">
               We will email you a six-digit code. There is no password to remember.
             </Text>
           </IntroPanel>

@@ -110,7 +110,7 @@ it("shows the hairline, disables the control, and leaves the row after the serve
   using _section = setupConnectionsSection([connected], {
     disconnect: () => answer.promise,
   });
-  const button = page.getByRole("button", { name: "Disconnect the Yahoo connection" });
+  const button = page.getByRole("button", { name: "Remove the Yahoo connection" });
   await expect.element(button).toBeVisible();
   const idle = button.element().getBoundingClientRect();
 

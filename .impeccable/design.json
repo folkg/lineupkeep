@@ -186,10 +186,6 @@
       }
     },
     "typographyMeta": {
-      "wordmark": {
-        "displayName": "Continuous Wordmark",
-        "purpose": "Home identity beside the square mark; lowercase Schibsted at label weight."
-      },
       "display": {
         "displayName": "Display",
         "purpose": "Archivo at 800 for the landing statement."
@@ -200,23 +196,31 @@
       },
       "section-title": {
         "displayName": "Section Title",
-        "purpose": "Section headings and auth form headings; Archivo at 800."
+        "purpose": "Section headings and day headings; 24px Archivo at 800."
       },
-      "team-name": {
-        "displayName": "Team Name",
-        "purpose": "26px Archivo at 800 for a team that leads a card or a page."
+      "card-title": {
+        "displayName": "Card Title",
+        "purpose": "Team names, group cards, and dialog titles; 20px Archivo at 800."
       },
       "body": {
         "displayName": "Body",
-        "purpose": "Readable product content and prose."
+        "purpose": "Readable product content and prose; 15px at 400."
+      },
+      "body-strong": {
+        "displayName": "Body Strong",
+        "purpose": "Move and row titles, and emphasized prose; 15px at 600."
       },
       "meta": {
         "displayName": "Meta",
-        "purpose": "Timestamps, league context, helper copy."
+        "purpose": "Timestamps, league context, helper copy; 12px at 400."
       },
       "label": {
         "displayName": "Label",
-        "purpose": "Caps labels, controls, nav, and status words."
+        "purpose": "Caps labels, controls, nav, and status words; 11px at 600 with .16em tracking."
+      },
+      "badge": {
+        "displayName": "Badge",
+        "purpose": "The status word inside a badge; 11px at 600 with .16em tracking."
       }
     },
     "shadows": [
@@ -355,9 +359,9 @@
     {
       "name": "Section Title",
       "kind": "heading",
-      "description": "A 22px Archivo heading with one 3px ink rule under it.",
+      "description": "A 24px Archivo heading with one 3px ink rule under it.",
       "html": "<div class=\"ds-section\"><h2>Recent activity</h2></div>",
-      "css": ".ds-section{padding-bottom:12px;border-bottom:3px solid var(--theme-rule-strong,#141217)}.ds-section h2{margin:0;font:800 22px/1.2 \"Archivo Variable\",sans-serif;letter-spacing:-.02em;color:var(--theme-ink,#141217)}"
+      "css": ".ds-section{padding-bottom:12px;border-bottom:3px solid var(--theme-rule-strong,#141217)}.ds-section h2{margin:0;font:800 24px/1.2 \"Archivo Variable\",sans-serif;letter-spacing:-.02em;color:var(--theme-ink,#141217)}"
     },
     {
       "name": "Page Title",
@@ -367,11 +371,11 @@
       "css": ".ds-page-title{margin:0;font:800 clamp(44px,5.4vw,70px)/.95 \"Archivo Variable\",sans-serif;letter-spacing:-.035em;text-transform:uppercase;color:var(--theme-ink,#141217)}"
     },
     {
-      "name": "Team Name Link",
+      "name": "Card Title Link",
       "kind": "link",
-      "description": "A 26px Archivo team name that leads a card.",
-      "html": "<a class=\"ds-team\" href=\"#example\">$G-Money$</a>",
-      "css": ".ds-team{font:800 26px/1.05 \"Archivo Variable\",sans-serif;letter-spacing:-.02em;color:var(--theme-ink,#141217);text-decoration:none}.ds-team:hover{color:var(--theme-action,#5b21b6)}.ds-team:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#f4efe4),0 0 0 4px var(--theme-action,#5b21b6)}"
+      "description": "A 20px Archivo card title that leads a card.",
+      "html": "<a class=\"ds-card-title\" href=\"#example\">$G-Money$</a>",
+      "css": ".ds-card-title{font:800 20px/1.15 \"Archivo Variable\",sans-serif;letter-spacing:-.02em;color:var(--theme-ink,#141217);text-decoration:none}.ds-card-title:hover{color:var(--theme-action,#5b21b6)}.ds-card-title:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#f4efe4),0 0 0 4px var(--theme-action,#5b21b6)}"
     },
     {
       "name": "Inline Link",
@@ -406,7 +410,7 @@
     "northStar": "Ink and paper",
     "overview": "Lineupgrade reads as a printed sports sheet: warm newsprint, near-black ink, a display face for the page and the teams, and Schibsted for the work in between. Section rules are 3px ink; row hairlines stay 1px. Team cards and queue groups are the same plain 2px-ruled box on paper, set at least 24px apart. Royal violet is spent on interaction, gold exists only in the mark, and one spot ink marks urgency. The product is calm enough to check in the morning and precise enough to trust with a lineup.\n\nThis is an Operate product: information before spectacle, familiar controls, direct labels, and honest state. Light is warm newsprint; dark is a tinted violet sheet. Both are complete palettes.",
     "keyCharacteristics": [
-      "Archivo Variable for page titles, section titles, and team names at 800; Schibsted Grotesk Variable for body, meta, labels, controls, and the wordmark",
+      "Archivo Variable for the display, page title, section title, and card title types at 800; Schibsted Grotesk Variable for body, body strong, meta, label, and badge",
       "Square everywhere; 3px ink section rules, 1px row hairlines, and a 2px ink rule around each team card",
       "One 680px measure and one solid action per view",
       "One 2px ink frame for every card, and no shadow beyond the focus ring",
@@ -451,7 +455,8 @@
       "Do keep controls, inputs, badges, and dialogs square.",
       "Do keep the 680px measure and let tables exceed it only with a reason.",
       "Do use one 3px ink rule under a section title and 1px hairlines between list rows.",
-      "Do set page titles, section titles, and team names in Archivo at weight 800.",
+      "Do set display, page titles, section titles, and card titles in Archivo at weight 800.",
+      "Do choose a named text type and let it own its size, weight, line height, and tracking.",
       "Do spend violet once per view on the primary action.",
       "Do apply tabular numerals to comparable numbers only.",
       "Do keep the wordmark lowercase in Schibsted and the mark gold.",
@@ -463,7 +468,8 @@
       "Don't add border radii, a shadow beyond the focus ring, a colour gradient beyond the phone submit sheet fade, or a second accent.",
       "Don't use gold outside the mark.",
       "Don't use a serif or a third face.",
-      "Don't set body, meta, labels, controls, or the wordmark in Archivo.",
+      "Don't set body, body strong, meta, label, badge, or the wordmark in Archivo.",
+      "Don't pick a raw text size or weight at a call site.",
       "Don't use spot ink for errors, destructive actions, or general status; danger owns those.",
       "Don't add a print texture.",
       "Don't box prose, connection rows, notices, or empty states.",

@@ -31,7 +31,7 @@ export function ConnectionsSection(props: ConnectionsSectionProps): JSX.Element 
   return (
     <Stack as="section" gap="md" labelledBy="connections-title">
       <SectionTitle id="connections-title">Connections</SectionTitle>
-      <Text size="caption" tone="muted">
+      <Text type="meta" tone="muted">
         Lineupgrade keeps the encrypted sign-in session, not your password.
       </Text>
       <Show when={hasConnection() && hosted.session() === undefined}>

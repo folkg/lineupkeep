@@ -42,67 +42,45 @@
   --font-google: "Google Sans", Roboto, Arial, sans-serif;
   --font-sans: var(--theme-font-sans);
 
-  --text-wordmark: var(--theme-text-wordmark);
-  --text-wordmark--line-height: var(--theme-text-wordmark-line-height);
-  --text-wordmark--letter-spacing: var(--theme-text-wordmark-letter-spacing);
-
   --text-display: var(--theme-text-display);
   --text-display--line-height: var(--theme-text-display-line-height);
   --text-display--letter-spacing: var(--theme-text-display-letter-spacing);
+  --text-display--font-weight: 800;
 
   --text-page-title: var(--theme-text-page-title);
   --text-page-title--line-height: var(--theme-text-page-title-line-height);
   --text-page-title--letter-spacing: var(--theme-text-page-title-letter-spacing);
+  --text-page-title--font-weight: 800;
 
-  --text-team-name: var(--theme-text-team-name);
-  --text-team-name--line-height: var(--theme-text-team-name-line-height);
-  --text-team-name--letter-spacing: var(--theme-text-team-name-letter-spacing);
-
-  --text-statement: var(--theme-text-title);
-  --text-statement--line-height: var(--theme-text-title-line-height);
-  --text-statement--letter-spacing: var(--theme-tracking-tight);
-  --text-headline: var(--theme-text-title);
-  --text-headline--line-height: var(--theme-text-title-line-height);
-  --text-headline--letter-spacing: var(--theme-tracking-tight);
-  --text-title: var(--theme-text-title);
-  --text-title--line-height: var(--theme-text-title-line-height);
-  --text-title--letter-spacing: var(--theme-tracking-tight);
-  --text-subtitle: var(--theme-text-section-title);
-  --text-subtitle--line-height: var(--theme-text-section-title-line-height);
-  --text-subtitle--letter-spacing: var(--theme-tracking-tight);
   --text-section-title: var(--theme-text-section-title);
   --text-section-title--line-height: var(--theme-text-section-title-line-height);
   --text-section-title--letter-spacing: var(--theme-tracking-tight);
-  --text-item: var(--theme-text-body);
-  --text-item--line-height: 1.4;
-  --text-lede: var(--theme-text-body);
-  --text-lede--line-height: var(--theme-text-body-line-height);
+  --text-section-title--font-weight: 800;
+
+  --text-card-title: var(--theme-text-card-title);
+  --text-card-title--line-height: var(--theme-text-card-title-line-height);
+  --text-card-title--letter-spacing: var(--theme-tracking-tight);
+  --text-card-title--font-weight: 800;
+
   --text-body: var(--theme-text-body);
   --text-body--line-height: var(--theme-text-body-line-height);
-  --text-base: var(--theme-text-body);
-  --text-base--line-height: var(--theme-text-body-line-height);
-  --text-supporting: var(--theme-text-body);
-  --text-supporting--line-height: var(--theme-text-body-line-height);
-  --text-glyph: var(--theme-size-glyph);
-  --text-glyph--line-height: 1;
-  --text-control: var(--theme-text-label);
-  --text-control--line-height: var(--theme-text-label-line-height);
-  --text-control--letter-spacing: var(--theme-tracking-label);
+  --text-body--font-weight: 400;
+  --text-body-strong: var(--theme-text-body);
+  --text-body-strong--line-height: var(--theme-text-body-strong-line-height);
+  --text-body-strong--font-weight: 600;
+  --text-meta: var(--theme-text-meta);
+  --text-meta--line-height: var(--theme-text-meta-line-height);
+  --text-meta--font-weight: 400;
   --text-label: var(--theme-text-label);
   --text-label--line-height: var(--theme-text-label-line-height);
   --text-label--letter-spacing: var(--theme-tracking-label);
-  --text-caption: var(--theme-text-meta);
-  --text-caption--line-height: var(--theme-text-meta-line-height);
-  --text-feedback: var(--theme-text-meta);
-  --text-feedback--line-height: var(--theme-text-meta-line-height);
-  --text-metadata: var(--theme-text-meta);
-  --text-metadata--line-height: var(--theme-text-meta-line-height);
+  --text-label--font-weight: 600;
+  --text-badge: var(--theme-text-label);
+  --text-badge--line-height: var(--theme-text-badge-line-height);
+  --text-badge--letter-spacing: var(--theme-tracking-label);
+  --text-badge--font-weight: 600;
   --text-google: 0.875rem;
   --text-google--line-height: 1.25rem;
-
-  --tracking-tight: var(--theme-tracking-tight);
-  --tracking-display: var(--theme-tracking-display);
-  --tracking-label: var(--theme-tracking-label);
 
   --spacing-tap-target: var(--theme-size-tap-target);
   --spacing-button: var(--theme-size-button);
@@ -311,12 +289,5 @@
 
   .animate-pulse {
     animation: none;
-  }
-}
-
-@media (max-width: 560px) {
-  :root {
-    --theme-text-team-name: 1.375rem;
-    --theme-text-team-name-line-height: 1.1;
   }
 }

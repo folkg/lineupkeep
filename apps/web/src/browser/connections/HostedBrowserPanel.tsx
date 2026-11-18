@@ -28,10 +28,10 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
               notice={
                 props.controller.status() === "identifier-refused" ? (
                   <Stack gap="xs">
-                    <Text size="caption" weight="semibold">
+                    <Text type="body-strong">
                       {provider} refuses Gmail addresses in this browser.
                     </Text>
-                    <Text size="caption" tone="muted">
+                    <Text type="meta" tone="muted">
                       If the account has a phone number, sign in with that number instead. If it
                       does not, add one in {provider}'s account settings. {provider} decides which
                       sign-in options it offers.
@@ -54,19 +54,19 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
                 props.controller.frameUrl() !== undefined
               }
             >
-              <Text live="polite" role="status" size="caption" tone="muted">
+              <Text live="polite" role="status" type="meta" tone="muted">
                 {props.controller.ready()
                   ? "Connected. Opening your teams…"
                   : statusMessage(props.controller.status())}
               </Text>
             </Show>
             <Show when={props.controller.frameUrl() !== undefined}>
-              <Text size="caption" tone="muted">
+              <Text type="meta" tone="muted">
                 Tap the page and type. Keystrokes go to {provider}'s page through the private
                 browser. Lineupgrade does not store or log them.
               </Text>
             </Show>
-            <Text size="caption" tone="muted">
+            <Text type="meta" tone="muted">
               This sign-in expires{" "}
               <Time datetime={session().session.expiresAt}>
                 {formatReaderTime(session().session.expiresAt)}
@@ -90,7 +90,7 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
         </Inline>
       </Show>
       <Show when={props.controller.session() === undefined && !props.connected}>
-        <Text size="body" tone="muted">
+        <Text type="body" tone="muted">
           Sign in as you normally would, in a browser that belongs to this sign-in only.
         </Text>
         <Inline gap="sm">

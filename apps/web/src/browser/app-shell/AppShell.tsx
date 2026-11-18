@@ -54,7 +54,7 @@ function PrimaryNavigation(): JSX.Element {
 
 function FeedbackFooter(): JSX.Element {
   return (
-    <TextLink size="caption" tone="quiet" to="/feedback">
+    <TextLink type="meta" tone="quiet" to="/feedback">
       Feedback
     </TextLink>
   );

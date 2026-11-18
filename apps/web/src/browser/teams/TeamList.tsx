@@ -59,7 +59,7 @@ export function TeamList(props: TeamListProps): JSX.Element {
         when={!props.isLoading() && props.loadFailure() === null && allTeamsIdle(props.teams())}
       >
         <Notice tone="neutral" title="No teams are being checked.">
-          <Text size="caption">Turn on Lineup checks for the teams you want managed.</Text>
+          <Text type="meta">Turn on Lineup checks for the teams you want managed.</Text>
         </Notice>
       </Show>
       <Show
@@ -135,7 +135,7 @@ function TeamCard(props: TeamCardProps): JSX.Element {
           <TextLink
             id={nameId()}
             params={{ teamId: props.team.team.id }}
-            size="team"
+            type="card-title"
             to="/teams/$teamId"
           >
             {props.team.team.name}
@@ -145,32 +145,32 @@ function TeamCard(props: TeamCardProps): JSX.Element {
       }
       labelledBy={nameId()}
       meta={
-        <Text size="caption" tone="muted">
+        <Text type="meta" tone="muted">
           {teamContextLabel(props.team.team, props.team.connectionCount)}
         </Text>
       }
     >
       <Stack gap="xs">
-        <Text reserve="two-lines" size="caption" tone="muted">
+        <Text reserve="two-lines" type="meta" tone="muted">
           {teamStatusLine(props.team, props.now())}
         </Text>
         <Show
           fallback={
-            <Text numeric size="caption" tone="muted">
+            <Text numeric type="meta" tone="muted">
               No lineup checks have run yet.
             </Text>
           }
           when={teamLastRun(props.team)}
         >
           {(run) => (
-            <Text numeric size="caption" tone="muted">
+            <Text numeric type="meta" tone="muted">
               {lastCheckLine(run())}
             </Text>
           )}
         </Show>
         <Show when={checkTallyLabel(props.team.recentRuns)}>
           {(tally) => (
-            <Text numeric size="caption" tone="faint">
+            <Text numeric type="meta" tone="faint">
               {tally()}
             </Text>
           )}

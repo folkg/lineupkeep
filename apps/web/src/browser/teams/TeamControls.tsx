@@ -65,7 +65,7 @@ export function TeamControls(props: TeamControlsProps): JSX.Element {
       </Inline>
       <Show when={props.showPauseNote !== false && pauseResumeLabel(controls.automation())}>
         {(note) => (
-          <Text size="caption" tone="muted">
+          <Text type="meta" tone="muted">
             {note()}
           </Text>
         )}

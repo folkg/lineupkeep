@@ -104,7 +104,7 @@ function AccountContent(props: AccountPageProps): JSX.Element {
           </Show>
           <Show when={account.exportStatus()}>
             {(status) => (
-              <Text size="caption" tone="faint">
+              <Text type="meta" tone="faint">
                 An export counts for {freshnessWindow(status().freshForMinutes)} after you take it.
               </Text>
             )}
@@ -115,7 +115,7 @@ function AccountContent(props: AccountPageProps): JSX.Element {
           </Text>
           <Show
             fallback={
-              <Text size="caption" tone="faint">
+              <Text type="meta" tone="faint">
                 Checking your export…
               </Text>
             }
@@ -181,7 +181,7 @@ function ExportDetails(props: { readonly latest: LatestExport }): JSX.Element {
         <Definition term="Contains" value={contentsLabel(props.latest)} />
       </DefinitionList>
       <Show when={props.latest.areas.length > 0}>
-        <Text size="caption" tone="faint">
+        <Text type="meta" tone="faint">
           {areasLabel(props.latest.areas)}
         </Text>
       </Show>
@@ -194,7 +194,7 @@ function EraseWithoutExport(props: { readonly latest: LatestExport | undefined }
     <Show
       fallback={
         <Notice tone="neutral" title="Take an export before erasing">
-          <Text size="caption" tone="muted">
+          <Text type="meta" tone="muted">
             Erasing needs an export you already hold. Download one first; after the delete there is
             nothing left to give you.
           </Text>
@@ -205,7 +205,7 @@ function EraseWithoutExport(props: { readonly latest: LatestExport | undefined }
     >
       {(latest) => (
         <Notice tone="neutral" title="That export no longer counts">
-          <Text size="caption" tone="muted">
+          <Text type="meta" tone="muted">
             The export you took {formatReaderTime(latest().takenAt)} is past its window. Download a
             new one before erasing; after the delete there is nothing left to give you.
           </Text>

@@ -15,7 +15,7 @@ export function TeamNote(props: { readonly note: TeamNoteController }): JSX.Elem
   return (
     <Stack as="section" gap="sm" labelledBy="team-note-title">
       <SectionTitle id="team-note-title">Owner note</SectionTitle>
-      <Text size="body" tone="muted">
+      <Text type="body" tone="muted">
         Only this account sees this note; it is never sent to your league.
       </Text>
       <Form gap="md" onSubmit={props.note.submit}>
@@ -30,7 +30,7 @@ export function TeamNote(props: { readonly note: TeamNoteController }): JSX.Elem
           <Button confirmed state={props.note.saveState()} type="submit">
             Save note
           </Button>
-          <Text size="caption" tone="faint">
+          <Text type="meta" tone="faint">
             {props.note.count()} of {props.note.limit()} characters
           </Text>
         </Inline>

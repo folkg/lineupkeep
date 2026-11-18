@@ -99,9 +99,7 @@ export function ConfirmDialog(props: ConfirmDialogProps): JSX.Element {
             trigger?.focus({ preventScroll: true });
           }}
         >
-          <AlertDialog.Title class="font-display text-subtitle font-extrabold text-ink">
-            {props.title}
-          </AlertDialog.Title>
+          <AlertDialog.Title class="text-card-title text-ink">{props.title}</AlertDialog.Title>
           <AlertDialog.Description class="mt-2 text-body text-ink-soft">
             {props.description}
           </AlertDialog.Description>
