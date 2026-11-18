@@ -4534,6 +4534,202 @@ it.effect("discards a move's Roster fixes with it", () =>
   ),
 );
 
+it.effect("adds the Roster fixes that make a stored add fit", () => {
+  const facts = new Map<TeamId, TransactionPlanTeamFacts>();
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+    facts.set(
+      team,
+      league(
+        [
+          { ...rostered("a1", "Roster One", "BN", ["RB"]), injured: true },
+          rostered("a2", "Roster Two", "BN", ["WR"]),
+        ],
+        [freeAgent("fa1", "Free Agent One", ["WR"])],
+        {
+          slots: [bench("BN", 3), reserve("IR", ["RB"])],
+          constraints: constraints(3),
+        },
+      ).facts,
+    );
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [add("fa1", "Free Agent One")],
+    });
+    assert.deepStrictEqual(proposed.refused, []);
+    const funded = proposed.plan.moves.find((move) => move.kind === "free_agent_add");
+    assert.isDefined(funded);
+
+    const current = facts.get(team);
+    if (current === undefined) {
+      return;
+    }
+    facts.set(team, { ...current, constraints: constraints(2) });
+    const blocked = yield* service.plan(owner, { team });
+    assert.notStrictEqual(
+      blocked.moves.find((move) => move.move === requireMoveId(funded))?.validation.status,
+      "current",
+    );
+
+    const fixed = yield* service.fix(owner, { team, move: requireMoveId(funded) });
+    assert.deepStrictEqual(fixed.refused, []);
+
+    const read = yield* service.plan(owner, { team });
+    const group = read.groups[0];
+    assert.strictEqual(group?.label, "Roster fixes");
+    assert.strictEqual(group?.fixesFor, requireMoveId(funded));
+    assert.strictEqual(
+      read.moves.find((move) => move.move === requireMoveId(funded))?.validation.status,
+      "current",
+    );
+    assert.strictEqual(read.moves.filter((move) => move.kind === "stash").length, 1);
+  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+});
+
+it.effect("refuses roster fixes for a move that already fits", () =>
+  Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [drop("a1", "Roster One")],
+    });
+    const move = requireMoveId(proposed.plan.moves[0]);
+
+    const fitting = yield* service.fix(owner, { team, move });
+    assert.strictEqual(fitting.refused[0]?.code, "move_not_blocked");
+  }).pipe(
+    Effect.provide(
+      serviceLayer([
+        league([rostered("a1", "Roster One", "BN", ["RB"])], [], { constraints: constraints(2) }),
+      ]),
+    ),
+  ),
+);
+
+it.effect("retries a failed group when nothing reached the league", () => {
+  const writes = writeLayer((_request, attempt) =>
+    attempt === 1
+      ? { status: "failed", detail: "Your league refused the drop." }
+      : { status: "executed" },
+  );
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [drop("a1", "Roster One")],
+    });
+    const move = requireMoveId(proposed.plan.moves[0]);
+    yield* confirmDue(service, team);
+    const failed = yield* service.plan(owner, { team });
+    assert.strictEqual(failed.moves[0]?.result, "failed");
+
+    const retried = yield* service.retry(owner, { team, move, key: "retry-1" });
+    assert.deepStrictEqual(retried.refusals, []);
+    assert.strictEqual(retried.counts.executed, 1);
+    const written = yield* service.plan(owner, { team });
+    assert.strictEqual(written.moves[0]?.result, "executed");
+
+    const again = yield* service.retry(owner, { team, move, key: "retry-2" });
+    assert.strictEqual(again.refusals[0]?.code, "group_ran_in_part");
+    assert.strictEqual(writes.requests.length, 2);
+  }).pipe(
+    Effect.provide(
+      serviceLayer(
+        [league([rostered("a1", "Roster One", "BN", ["RB"])], [], { constraints: constraints(2) })],
+        writes.layer,
+      ),
+    ),
+  );
+});
+
+it.effect("refuses to retry a group that ran in part and discards what is left", () => {
+  const writes = writeLayer((request) =>
+    request.drops.includes("a1")
+      ? { status: "executed" }
+      : { status: "failed", detail: "Your league refused the drop." },
+  );
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const repository = yield* TransactionPlanRepository;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [
+        { ...drop("a1", "Roster One"), group: "Weekend moves" },
+        { ...drop("a2", "Roster Two"), group: "Weekend moves" },
+      ],
+    });
+    assert.deepStrictEqual(proposed.refused, []);
+    const remaining = proposed.plan.moves.find((move) => move.drops[0]?.key === "a2");
+    assert.isDefined(remaining);
+    yield* confirmDue(service, team);
+
+    const partly = yield* service.plan(owner, { team });
+    assert.strictEqual(partly.groups[0]?.status, "partly_done");
+    assert.strictEqual(
+      partly.moves.find((move) => move.move === requireMoveId(remaining))?.result,
+      "failed",
+    );
+
+    const refused = yield* service.retry(owner, {
+      team,
+      move: requireMoveId(remaining),
+      key: "retry-partly",
+    });
+    assert.strictEqual(refused.refusals[0]?.code, "group_ran_in_part");
+    assert.strictEqual(writes.requests.length, 2);
+
+    const discarded = yield* service.discardGroup(owner, {
+      team,
+      move: requireMoveId(remaining),
+    });
+    assert.deepStrictEqual(discarded.refused, []);
+    const stored = yield* repository.readPlanMoves({ userId: owner, team });
+    assert.strictEqual(
+      stored.find((move) => move.id === requireMoveId(remaining))?.decision,
+      "discarded",
+    );
+    assert.strictEqual(stored.find((move) => move.drops[0]?.key === "a1")?.result, "executed");
+    const read = yield* service.plan(owner, { team });
+    assert.strictEqual(read.moves.filter((move) => move.decision !== "discarded").length, 1);
+  }).pipe(
+    Effect.provide(
+      serviceLayer(
+        [
+          league(
+            [
+              rostered("a1", "Roster One", "BN", ["RB"]),
+              rostered("a2", "Roster Two", "BN", ["WR"]),
+            ],
+            [],
+            { constraints: constraints(2) },
+          ),
+        ],
+        writes.layer,
+      ),
+    ),
+  );
+});
+
 function confirmDue(
   service: Pick<TransactionPlanServiceShape, "plan" | "confirm">,
   teamId: TeamId,

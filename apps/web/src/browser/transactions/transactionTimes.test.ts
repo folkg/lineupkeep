@@ -8,6 +8,7 @@ import {
   moveOutcomeLabel,
   scheduledMoment,
   submittedLine,
+  timingLine,
 } from "./transactionTimes.ts";
 
 const reader = { locale: "en-US", timeZone: "America/New_York" } as const;
@@ -82,6 +83,56 @@ it("dates a later day's claim without the hourly run time", () => {
   expect(
     moveOutcomeLabel(executed({ kind: "waiver_claim", phase: "lost", result: "failed" })),
   ).toBe("All choices failed");
+});
+
+it("dates a claim only once the league awards it", () => {
+  expect(
+    timingLine(
+      executed({
+        kind: "waiver_claim",
+        phase: "with_league",
+        decision: "now",
+        result: "pending",
+        runDay: "2026-11-17",
+        effectiveDate: "2026-11-18",
+      }),
+    ),
+  ).toBeUndefined();
+  expect(
+    timingLine(
+      executed({
+        kind: "waiver_claim",
+        phase: "lost",
+        decision: "now",
+        result: "failed",
+        runDay: "2026-11-17",
+        effectiveDate: "2026-11-18",
+      }),
+    ),
+  ).toBeUndefined();
+  expect(
+    timingLine(
+      executed({
+        kind: "waiver_claim",
+        phase: "won",
+        decision: "now",
+        result: "executed",
+        runDay: "2026-11-17",
+        effectiveDate: "2026-11-18",
+      }),
+    ),
+  ).toBe(`Takes effect ${formatCalendarDate("2026-11-18")}.`);
+  expect(
+    timingLine(
+      executed({
+        kind: "free_agent_add",
+        decision: "confirmed",
+        result: undefined,
+        runDay: "2026-11-14",
+        effectiveDate: "2026-11-15",
+      }),
+    ),
+  ).toBe(`Takes effect ${formatCalendarDate("2026-11-15")}.`);
 });
 
 it("keeps one submission line apart from the run outcome", () => {

@@ -6,6 +6,7 @@ import type {
   TransactionPlanDay,
   TransactionPlanGroupRead,
   TransactionPlanRead,
+  TransactionPlanRetry,
   TransactionPlanServiceError,
 } from "@lineupkeep/backend/connections/TransactionPlans";
 import { DateTime, Schema } from "effect";
@@ -15,6 +16,7 @@ import type {
   TransactionMoveConfirmationData,
   TransactionMoveDayView,
   TransactionMoveListData,
+  TransactionMoveRetryData,
   TransactionMoveTeamDayView,
   TransactionMoveView,
   TransactionPlanData,
@@ -244,7 +246,7 @@ export function confirmationOf(input: {
 
 export function actionOf(
   move: string,
-  status: "saved" | "discarded",
+  status: "saved" | "discarded" | "fixed",
   refused: ReadonlyArray<{ readonly code: string; readonly detail: string }>,
   confirmationCleared = false,
 ): TransactionMoveActionData {
@@ -255,4 +257,26 @@ export function actionOf(
     };
   }
   return status === "saved" ? { status, move, confirmationCleared } : { status, move };
+}
+
+export function retryOf(result: TransactionPlanRetry): TransactionMoveRetryData {
+  if (result.refusals.length > 0) {
+    return {
+      status: "refused",
+      refusals: result.refusals.map((entry) => ({ code: entry.code, detail: entry.detail })),
+    };
+  }
+  return {
+    status: "retried",
+    retried: result.retried,
+    counts: {
+      moves: result.counts.moves,
+      executed: result.counts.executed,
+      pending: result.counts.pending,
+      failed: result.counts.failed,
+      skipped: result.counts.skipped,
+      unknown: result.counts.unknown,
+    },
+    refusals: [],
+  };
 }

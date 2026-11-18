@@ -30,16 +30,19 @@ import type {
 
 import { TeamPlaces } from "./TeamPlaces";
 import {
+  cardAction,
   cardIsSettled,
   cardMembers,
   cardNeedsDecision,
   cardNextAction,
   cardStatus,
   cardTitle,
-  groupCards,
+  dayTeamCards,
 } from "./transactionCards";
-import type { CardStatus, GroupCard } from "./transactionCards";
+import type { CardAction, CardStatus, GroupCard } from "./transactionCards";
 import {
+  fallbackPlanDetail,
+  fallbackPlanLine,
   moveCount,
   moveSummary,
   openMoveCount,
@@ -120,9 +123,9 @@ export function TransactionsPage(props: TransactionsPageProps): JSX.Element {
 
 function SummaryKicker(props: SectionProps): JSX.Element {
   const todayMoves = (): number =>
-    dayTeams(
-      props.page,
+    dayTeamCards(
       props.page.days().find((day) => day.today),
+      props.page.groups(),
     )
       .flatMap((entry) => entry.cards)
       .filter(cardNeedsDecision)
@@ -163,7 +166,7 @@ function DaySection(props: DaySectionProps): JSX.Element {
   const titleId = (): string =>
     `transactions-day-${props.today ? "today" : (props.day?.day ?? "none")}`;
   const teams = (): ReadonlyArray<TeamCardsView> =>
-    dayTeams(props.page, props.day)
+    dayTeamCards(props.day, props.page.groups())
       .map((entry) => ({
         team: entry.team,
         cards: props.today ? entry.cards.filter((card) => !cardIsSettled(card)) : entry.cards,
@@ -268,9 +271,11 @@ function TeamCards(props: TeamCardsProps): JSX.Element {
 }
 
 function GroupPanel(props: GroupPanelProps): JSX.Element {
+  let explanationElement: HTMLDetailsElement | undefined;
   const team = (): TransactionMoveView["team"] => props.card.lead.team;
   const members = (): ReadonlyArray<TransactionMoveView> => cardMembers(props.card);
   const status = (): CardStatus => cardStatus(props.card);
+  const action = (): CardAction => cardAction(props.card);
   const headingId = (): string => `transactions-panel-${props.card.lead.team.id}-${props.card.key}`;
   const working = (): boolean =>
     props.confirmation.pending() &&
@@ -279,7 +284,6 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
     members().every((move) => move.validation.status === "current" && move.result === undefined);
   const opened = (): boolean =>
     props.card.group === undefined || props.card.group.status === "ready";
-  const showControl = (): boolean => status().kind === "needs-decision" && opened();
   const runsLater = (): boolean => {
     const lead = props.card.lead;
     return lead.runsOn !== undefined && lead.runDay !== undefined && lead.runsOn > lead.runDay;
@@ -319,13 +323,19 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
     return member === undefined ? undefined : submittedLine(member, props.page.nextRunAt());
   };
   const explanation = (): string | undefined => {
-    const detail = props.card.group?.detail;
+    const group = props.card.group;
+    const detail = group?.detail;
     if (detail === undefined || status().kind === "waiting" || detail === nextAction()?.text) {
       return undefined;
+    }
+    if (action().kind === "none" && group?.cure !== undefined && detail.endsWith(group.cure)) {
+      return detail.slice(0, -group.cure.length).trimEnd();
     }
     return detail;
   };
   const reasons = (): ReadonlyArray<string> => reasonLines(props.card);
+  const fallbackMoves = (): ReadonlyArray<TransactionMoveView> =>
+    members().filter((move) => move.fallbacks.length > 0);
   const facts = (): TransactionTeamFactsView | undefined => {
     const kind = status().kind;
     return props.facts !== undefined &&
@@ -334,12 +344,18 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
       : undefined;
   };
   const hasDetail = (): boolean =>
-    reasons().length > 0 || explanation() !== undefined || facts() !== undefined;
-  return (
-    <Card
-      badge={<Badge tone={statusTone(status())}>{working() ? "Running" : statusLabel()}</Badge>}
-      footer={
-        showControl() ? (
+    reasons().length > 0 ||
+    explanation() !== undefined ||
+    facts() !== undefined ||
+    fallbackMoves().length > 0;
+  const footer = (): JSX.Element | undefined => {
+    const held = action();
+    switch (held.kind) {
+      case "decide":
+        if (!opened()) {
+          return undefined;
+        }
+        return (
           <Button
             variant="primary"
             disabled={!confirmable() || props.confirmation.pending()}
@@ -349,8 +365,84 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
           >
             {working() ? workingLabel() : controlLabel()}
           </Button>
-        ) : undefined
-      }
+        );
+      case "cure":
+        return (
+          <Button
+            variant="primary"
+            disabled={props.page.addingFixes() !== undefined}
+            state={props.page.addingFixes() === props.card.lead.move ? "working" : "idle"}
+            aria-label={`Add roster fixes: ${cardTitle(props.card)}`}
+            onClick={() => props.page.addFixes(props.card.lead)}
+          >
+            {props.page.addingFixes() === props.card.lead.move ? "Adding" : "Add roster fixes"}
+          </Button>
+        );
+      case "retry":
+        return (
+          <Button
+            variant="primary"
+            disabled={props.page.retryingMove() !== undefined}
+            state={props.page.retryingMove() === props.card.lead.move ? "working" : "idle"}
+            aria-label={`Retry: ${cardTitle(props.card)}`}
+            onClick={() => props.page.retryMove(props.card.lead)}
+          >
+            {props.page.retryingMove() === props.card.lead.move ? "Retrying" : "Retry"}
+          </Button>
+        );
+      case "discard":
+        return held.moves.length > 1 ||
+          status().kind !== "blocked" ||
+          held.moves.some((move) => move.result !== undefined) ? (
+          <Button
+            variant="secondary"
+            disabled={props.page.discardingGroup() !== undefined}
+            state={props.page.discardingGroup() === props.card.lead.move ? "working" : "idle"}
+            aria-label={`Discard remaining: ${cardTitle(props.card)}`}
+            onClick={() => props.page.discardGroup(props.card.lead)}
+          >
+            {props.page.discardingGroup() === props.card.lead.move
+              ? "Discarding"
+              : "Discard remaining"}
+          </Button>
+        ) : undefined;
+      case "dependency":
+        return (
+          <Inline gap="sm">
+            <Button
+              variant="link"
+              aria-label={`Open: ${cardTitle(props.card)}`}
+              onClick={() => {
+                if (explanationElement !== undefined) {
+                  explanationElement.open = true;
+                }
+              }}
+            >
+              Open
+            </Button>
+            <Show when={held.moves.length > 0}>
+              <Button
+                variant="secondary"
+                disabled={props.page.discardingGroup() !== undefined}
+                state={props.page.discardingGroup() === props.card.lead.move ? "working" : "idle"}
+                aria-label={`Discard group: ${cardTitle(props.card)}`}
+                onClick={() => props.page.discardGroup(props.card.lead)}
+              >
+                {props.page.discardingGroup() === props.card.lead.move
+                  ? "Discarding"
+                  : "Discard group"}
+              </Button>
+            </Show>
+          </Inline>
+        );
+      case "none":
+        return undefined;
+    }
+  };
+  return (
+    <Card
+      badge={<Badge tone={statusTone(status())}>{working() ? "Running" : statusLabel()}</Badge>}
+      footer={footer()}
       header={
         <Heading id={headingId()} level={3} size="section">
           {team().name}
@@ -419,25 +511,49 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
       </QueueList>
       <Show when={hasDetail()}>
         <CardNote>
-          <Disclosure summary="Why these moves">
-            <Stack gap="md">
-              <For each={reasons()}>
-                {(line) => (
-                  <Text size="caption" tone="muted">
-                    {line}
-                  </Text>
-                )}
-              </For>
-              <Show when={explanation()}>
-                {(text) => (
-                  <Text size="caption" tone="muted">
-                    {text()}
-                  </Text>
-                )}
-              </Show>
-              <Show when={facts()}>{(held) => <TeamPlaces facts={held()} />}</Show>
-            </Stack>
-          </Disclosure>
+          <Stack gap="md">
+            <Show
+              when={reasons().length > 0 || explanation() !== undefined || facts() !== undefined}
+            >
+              <Disclosure
+                ref={(element) => (explanationElement = element)}
+                summary="Why these moves"
+              >
+                <Stack gap="md">
+                  <For each={reasons()}>
+                    {(line) => (
+                      <Text size="caption" tone="muted">
+                        {line}
+                      </Text>
+                    )}
+                  </For>
+                  <Show when={explanation()}>
+                    {(text) => (
+                      <Text size="caption" tone="muted">
+                        {text()}
+                      </Text>
+                    )}
+                  </Show>
+                  <Show when={facts()}>{(held) => <TeamPlaces facts={held()} />}</Show>
+                </Stack>
+              </Disclosure>
+            </Show>
+            <For each={fallbackMoves()}>
+              {(move) => (
+                <Disclosure summary={fallbackPlanLine(move) ?? "Fallbacks"}>
+                  <Stack gap="md">
+                    <For each={fallbackPlanDetail(move)}>
+                      {(line) => (
+                        <Text size="caption" tone="muted">
+                          {line}
+                        </Text>
+                      )}
+                    </For>
+                  </Stack>
+                </Disclosure>
+              )}
+            </For>
+          </Stack>
         </CardNote>
       </Show>
     </Card>
@@ -562,7 +678,7 @@ function MoveCheckNote(props: { readonly move: TransactionMoveView }): JSX.Eleme
 function EarlierSection(props: RemoteSectionProps): JSX.Element {
   const settled = (): ReadonlyArray<TeamCardsView> => {
     const today = props.page.days().find((day) => day.today);
-    return dayTeams(props.page, today)
+    return dayTeamCards(today, props.page.groups())
       .map((entry) => ({ team: entry.team, cards: entry.cards.filter(cardIsSettled) }))
       .filter((entry) => entry.cards.length > 0);
   };
@@ -722,6 +838,21 @@ function EarlierRow(props: EarlierRowProps): JSX.Element {
             </Text>
           )}
         </Show>
+        <Show when={fallbackPlanLine(props.move)}>
+          {(summary) => (
+            <Disclosure summary={summary()}>
+              <Stack gap="md">
+                <For each={fallbackPlanDetail(props.move)}>
+                  {(line) => (
+                    <Text size="caption" tone="muted">
+                      {line}
+                    </Text>
+                  )}
+                </For>
+              </Stack>
+            </Disclosure>
+          )}
+        </Show>
       </Stack>
     </RuleListItem>
   );
@@ -754,17 +885,6 @@ function reasonLines(card: GroupCard): ReadonlyArray<string> {
     }
     return [members.length === 1 ? reason : `${moveSummary(move)}: ${reason}`];
   });
-}
-
-function dayTeams(
-  page: TransactionsPageController,
-  day: TransactionMoveDayView | undefined,
-): ReadonlyArray<TeamCardsView> {
-  const today = day?.today === true;
-  return (day?.teams ?? []).map((team) => ({
-    team: team.team,
-    cards: groupCards({ moves: team.moves, groups: page.groups(), today }),
-  }));
 }
 
 type TransactionsPageProps = {

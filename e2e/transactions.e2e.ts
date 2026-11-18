@@ -111,9 +111,8 @@ test("proposes a move into one team queue and runs it from the transactions page
   await captureCheckpoint(page, info, "transactions-ran");
   await expect(page.getByText("Nothing for today", { exact: true }).first()).toBeVisible();
 
-  const earlier = page.getByRole("button", { name: "Show earlier moves" });
-  await expect(earlier).toHaveAttribute("aria-expanded", "false");
-  await earlier.click();
+  const earlier = page.getByRole("button", { name: "Hide earlier moves" });
+  await expect(earlier).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByText("Ran after you submitted", { exact: true })).toBeVisible();
   await expect(page.getByText("Drop Riverside Receiver", { exact: true })).toBeVisible();
   await expect(page.getByText("1 move", { exact: true })).toBeVisible();
@@ -173,10 +172,14 @@ test("discards a move today and shows it under earlier moves", async ({ page, se
 
   await page.getByRole("button", { name: /Discard: Drop Riverside Receiver/u }).click();
   await expect(page.getByText("Discarded 1 move.", { exact: true })).toBeVisible();
-  await expect(move).toHaveCount(0);
+  await expect(
+    page
+      .getByRole("region", { name: "Today" })
+      .getByText("Drop Riverside Receiver", { exact: true }),
+  ).toHaveCount(0);
 
-  const earlier = page.getByRole("button", { name: "Show earlier moves" });
-  await earlier.click();
+  const earlier = page.getByRole("button", { name: "Hide earlier moves" });
+  await expect(earlier).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByText("Discarded", { exact: true })).toBeVisible();
   await expect(page.getByText("Drop Riverside Receiver", { exact: true })).toBeVisible();
 });

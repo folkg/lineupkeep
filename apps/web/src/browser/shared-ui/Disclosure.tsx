@@ -6,7 +6,7 @@ import { ChevronRightIcon } from "./icons";
 
 export function Disclosure(props: DisclosureProps): JSX.Element {
   return (
-    <details class="group">
+    <details class="group" ref={props.ref}>
       <summary class={disclosureSummaryClass}>
         <ChevronRightIcon
           class="mt-0.5 shrink-0 transition-transform group-open:rotate-90"
@@ -29,5 +29,6 @@ const disclosureSummaryClass = cx(
 type DisclosureProps = {
   readonly summary: Element;
   readonly bordered?: boolean;
+  readonly ref?: (element: HTMLDetailsElement) => void;
   readonly children: Element;
 };

@@ -245,6 +245,23 @@ export type TransactionMoveActionData =
       readonly confirmationCleared: boolean;
     }
   | { readonly status: "discarded"; readonly move: string }
+  | { readonly status: "fixed"; readonly move: string }
+  | { readonly status: "refused"; readonly refusals: ReadonlyArray<TransactionRefusalView> };
+
+export type TransactionMoveRetryData =
+  | {
+      readonly status: "retried";
+      readonly retried: ReadonlyArray<string>;
+      readonly counts: {
+        readonly moves: number;
+        readonly executed: number;
+        readonly pending: number;
+        readonly failed: number;
+        readonly skipped: number;
+        readonly unknown: number;
+      };
+      readonly refusals: ReadonlyArray<TransactionRefusalView>;
+    }
   | { readonly status: "refused"; readonly refusals: ReadonlyArray<TransactionRefusalView> };
 
 export type TransactionMoveConfirmationData =
@@ -293,6 +310,22 @@ export type TransactionSaveMoveRequest = {
 export type TransactionDiscardMoveRequest = {
   readonly team: string;
   readonly move: string;
+};
+
+export type TransactionDiscardGroupRequest = {
+  readonly team: string;
+  readonly move: string;
+};
+
+export type TransactionFixMoveRequest = {
+  readonly team: string;
+  readonly move: string;
+};
+
+export type TransactionRetryMoveRequest = {
+  readonly team: string;
+  readonly move: string;
+  readonly key: string;
 };
 
 export type TransactionConfirmRequest = {

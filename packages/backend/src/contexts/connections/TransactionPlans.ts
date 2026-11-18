@@ -671,6 +671,25 @@ export type TransactionPlanDiscardInput = {
   readonly decision?: TransactionDecision;
 };
 
+export type TransactionPlanDiscardGroupInput = {
+  readonly team: TeamId;
+  readonly move: TransactionMoveId;
+  readonly decision?: TransactionDecision;
+};
+
+export type TransactionPlanFixInput = {
+  readonly team: TeamId;
+  readonly move: TransactionMoveId;
+  readonly decision?: TransactionDecision;
+};
+
+export type TransactionPlanRetryInput = {
+  readonly team: TeamId;
+  readonly move: TransactionMoveId;
+  readonly key: string;
+  readonly decision?: TransactionDecision;
+};
+
 export type TransactionPlanSubmitInput = {
   readonly team: TeamId;
   readonly key: string;
@@ -719,6 +738,14 @@ export type TransactionPlanSubmission = {
 export type TransactionPlanConfirmation = {
   readonly status: "confirmed";
   readonly confirmed: ReadonlyArray<TransactionMoveId>;
+  readonly counts: TransactionPlanRunCounts;
+  readonly refusals: ReadonlyArray<TransactionPlanRunRefusal>;
+  readonly plan: TransactionPlanRead;
+};
+
+export type TransactionPlanRetry = {
+  readonly team: TeamId;
+  readonly retried: ReadonlyArray<TransactionMoveId>;
   readonly counts: TransactionPlanRunCounts;
   readonly refusals: ReadonlyArray<TransactionPlanRunRefusal>;
   readonly plan: TransactionPlanRead;
@@ -807,7 +834,7 @@ export type TransactionPlanRefusal = {
   readonly moves: ReadonlyArray<number>;
 };
 
-type TransactionPlanResult = {
+export type TransactionPlanResult = {
   readonly plan: TransactionPlanView;
   readonly refused: ReadonlyArray<TransactionPlanRefusal>;
 };
@@ -891,6 +918,21 @@ export type TransactionPlanServiceShape = {
     userId: UserId,
     input: TransactionPlanDiscardInput,
   ) => Effect.Effect<TransactionPlanResult, TransactionPlanServiceError>;
+
+  readonly discardGroup: (
+    userId: UserId,
+    input: TransactionPlanDiscardGroupInput,
+  ) => Effect.Effect<TransactionPlanResult, TransactionPlanServiceError>;
+
+  readonly fix: (
+    userId: UserId,
+    input: TransactionPlanFixInput,
+  ) => Effect.Effect<TransactionPlanResult, TransactionPlanServiceError>;
+
+  readonly retry: (
+    userId: UserId,
+    input: TransactionPlanRetryInput,
+  ) => Effect.Effect<TransactionPlanRetry, TransactionPlanServiceError>;
 
   readonly confirm: (
     userId: UserId,

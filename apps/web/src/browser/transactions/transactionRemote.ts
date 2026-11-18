@@ -1,21 +1,28 @@
 import type {
   TransactionConfirmRequest,
+  TransactionDiscardGroupRequest,
   TransactionDiscardMoveRequest,
+  TransactionFixMoveRequest,
   TransactionListRequest,
   TransactionMoveActionData,
   TransactionMoveConfirmationData,
   TransactionMoveListData,
+  TransactionMoveRetryData,
   TransactionPlanData,
   TransactionPlanRequest,
+  TransactionRetryMoveRequest,
   TransactionSaveMoveRequest,
   TransactionTimelineRequest,
 } from "#contracts/connections/transactionContract.ts";
 import {
   confirmTransactionMovesServerFn,
+  discardTransactionGroupServerFn,
   discardTransactionMoveServerFn,
+  fixTransactionMoveServerFn,
   listTransactionMovesServerFn,
   readTransactionPlanServerFn,
   readTransactionTimelineServerFn,
+  retryTransactionMoveServerFn,
   saveTransactionMoveServerFn,
 } from "#server-functions/connections/transactionServerFunctions.ts";
 
@@ -40,6 +47,18 @@ export const transactionRemote: TransactionRemote = {
     ),
   discard: (input, options) =>
     discardTransactionMoveServerFn({ data: input, signal: options?.signal }).then((result) =>
+      requireTransactionSuccess(result),
+    ),
+  discardGroup: (input, options) =>
+    discardTransactionGroupServerFn({ data: input, signal: options?.signal }).then((result) =>
+      requireTransactionSuccess(result),
+    ),
+  fix: (input, options) =>
+    fixTransactionMoveServerFn({ data: input, signal: options?.signal }).then((result) =>
+      requireTransactionSuccess(result),
+    ),
+  retry: (input, options) =>
+    retryTransactionMoveServerFn({ data: input, signal: options?.signal }).then((result) =>
       requireTransactionSuccess(result),
     ),
   confirm: (input, options) =>
@@ -69,6 +88,18 @@ export type TransactionRemote = {
     input: TransactionDiscardMoveRequest,
     options?: { readonly signal?: AbortSignal },
   ) => Promise<TransactionMoveActionData>;
+  readonly discardGroup: (
+    input: TransactionDiscardGroupRequest,
+    options?: { readonly signal?: AbortSignal },
+  ) => Promise<TransactionMoveActionData>;
+  readonly fix: (
+    input: TransactionFixMoveRequest,
+    options?: { readonly signal?: AbortSignal },
+  ) => Promise<TransactionMoveActionData>;
+  readonly retry: (
+    input: TransactionRetryMoveRequest,
+    options?: { readonly signal?: AbortSignal },
+  ) => Promise<TransactionMoveRetryData>;
   readonly confirm: (
     input: TransactionConfirmRequest,
     options?: { readonly signal?: AbortSignal },

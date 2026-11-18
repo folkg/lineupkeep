@@ -93,6 +93,7 @@ it("shows every team's moves today and keeps saved moves on per team planning sh
     kind: "free_agent_add",
     decision: "saved",
     runDay: "2026-11-14",
+    effectiveDate: "2026-11-15",
     adds: [player("Tank Bigsby")],
     drops: [player("Tyler Boyd")],
     reason: "Cover the bench for a bye.",
@@ -131,8 +132,11 @@ it("shows every team's moves today and keeps saved moves on per team planning sh
     )
     .toBeVisible();
   await expect
-    .element(page.getByText(`Takes effect ${formatCalendarDate("2026-11-13")}.`, { exact: true }))
+    .element(page.getByText(`Takes effect ${formatCalendarDate("2026-11-15")}.`, { exact: true }))
     .toBeVisible();
+  expect(
+    page.getByText(`Takes effect ${formatCalendarDate("2026-11-13")}.`, { exact: true }).elements(),
+  ).toHaveLength(0);
 });
 
 it("names every effect an activate carries, including its funding drop", async () => {
@@ -431,7 +435,7 @@ it("names an agent's discard and the surface it happened on", async () => {
     ended: listData([discarded], { open: 0, today: 0, saved: 0, ended: 1 }),
   });
 
-  await page.getByRole("button", { name: "Show earlier moves" }).click();
+  await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
   await expect.element(page.getByText(discardLine(discarded) ?? "", { exact: true })).toBeVisible();
 });
 
@@ -850,6 +854,7 @@ it("leaves a partly run group without a run action and folds its explanation", a
   };
   const sentence =
     "This group ran in part. The drop of Riley Chen reached your league. The move of Amon-Ra St. Brown to IR failed: The player was already there. Check your roster, then choose the move again or discard it.";
+  const discarded: Array<Parameters<TransactionRemote["discardGroup"]>[0]> = [];
   using _app = setupTransactionsPage({
     open: listData(
       [drop, stash],
@@ -872,6 +877,10 @@ it("leaves a partly run group without a run action and folds its explanation", a
         },
       ],
     ),
+    discardGroup: (input) => {
+      discarded.push(input);
+      return Promise.resolve({ status: "discarded", move: input.move });
+    },
   });
 
   await expect.element(page.getByText("Partly ran", { exact: true })).toBeVisible();
@@ -884,8 +893,15 @@ it("leaves a partly run group without a run action and folds its explanation", a
     .toBeVisible();
   expect(page.getByRole("button", { name: /Discard:/u }).elements()).toHaveLength(0);
   expect(page.getByRole("button", { name: /Run now/u }).elements()).toHaveLength(0);
+  expect(page.getByRole("button", { name: /Retry:/u }).elements()).toHaveLength(0);
   expect(page.getByText("Partly ran", { exact: true }).elements()).toHaveLength(1);
   await expect.element(page.getByText(sentence, { exact: true })).not.toBeVisible();
+
+  await page.getByRole("button", { name: "Discard remaining: Group of 2 moves" }).click();
+  await expect
+    .element(page.getByText("Discarded what was left of this group.", { exact: true }))
+    .toBeVisible();
+  expect(discarded).toStrictEqual([{ team: alpha.id, move: drop.move }]);
 
   await page.getByText("Why these moves", { exact: true }).click();
   await expect.element(page.getByText(sentence, { exact: true })).toBeVisible();
@@ -907,7 +923,7 @@ it("reads a discarded move as discarded, not failed", async () => {
     ended: listData([discarded], { open: 0, today: 0, saved: 0, ended: 1 }),
   });
 
-  await page.getByRole("button", { name: "Show earlier moves" }).click();
+  await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
   await expect.element(page.getByText("Discarded", { exact: true })).toBeVisible();
   expect(page.getByText("Failed", { exact: true }).elements()).toHaveLength(0);
   await expect.element(page.getByText(discardLine(discarded) ?? "", { exact: true })).toBeVisible();
@@ -931,7 +947,7 @@ it("labels a move that ran after you submitted as ran after you submitted", asyn
     ended: listData([ran], { open: 0, today: 0, saved: 0, ended: 1 }),
   });
 
-  await page.getByRole("button", { name: "Show earlier moves" }).click();
+  await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
   await expect.element(page.getByText("Ran after you submitted", { exact: true })).toBeVisible();
   expect(page.getByText("Ran now", { exact: true }).elements()).toHaveLength(0);
 });
@@ -954,7 +970,7 @@ it("renders a submission timestamp in the reader's local date and time", async (
     ended: listData([ran], { open: 0, today: 0, saved: 0, ended: 1 }),
   });
 
-  await page.getByRole("button", { name: "Show earlier moves" }).click();
+  await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
   const line = submittedLine(ran, nextRunAt) ?? "";
   await expect.element(page.getByText(line, { exact: true })).toBeVisible();
   expect(line).toMatch(/^You submitted this on .+ at .+\.$/u);
@@ -978,7 +994,7 @@ it("keeps the submission line apart from the run time", async () => {
     ended: listData([ran], { open: 0, today: 0, saved: 0, ended: 1 }),
   });
 
-  await page.getByRole("button", { name: "Show earlier moves" }).click();
+  await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
   const submission = page.getByText(submittedLine(ran, nextRunAt) ?? "", { exact: true });
   await expect.element(submission).toBeVisible();
   await expect.element(page.getByText("Ran after you submitted", { exact: true })).toBeVisible();
@@ -1039,10 +1055,15 @@ it("moves a submitted group with a pending waiver into earlier, not today", asyn
     .element(page.getByText("· 0 today · 0 later · 1 team", { exact: true }))
     .toBeVisible();
   await expect.element(page.getByText("Nothing for today", { exact: true }).first()).toBeVisible();
-  expect(page.getByText("Waiting for the league", { exact: true }).elements()).toHaveLength(0);
+  expect(
+    page
+      .getByRole("region", { name: "Today" })
+      .getByText("Waiting for the league", { exact: true })
+      .elements(),
+  ).toHaveLength(0);
   await expect.element(page.getByText("2 moves", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Show earlier moves" }).click();
+  await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
   await expect.element(page.getByText("Waiting for the league", { exact: true })).toBeVisible();
   expect(page.getByText("Waiting for the league", { exact: true }).elements()).toHaveLength(1);
   await expect.element(page.getByText("Weekend moves", { exact: true })).toBeVisible();
@@ -1090,7 +1111,7 @@ it("keeps a submitted claim with the league and shows no hourly run time", async
   });
 
   await expect.element(page.getByText("0 open moves", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Show earlier moves" }).click();
+  await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
   await expect.element(page.getByText("With the league", { exact: true })).toBeVisible();
   await expect
     .element(page.getByText("Your league's waiver rule: gametime.", { exact: true }))
@@ -1244,7 +1265,7 @@ it("shows earlier moves newest first and loads the next older page", async () =>
   });
 
   await expect.element(page.getByText("3 moves", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Show earlier moves" }).click();
+  await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
 
   const newestRow = page.getByText("Drop Riley Chen", { exact: true });
   const olderRow = page.getByText("Drop Jordan Lee", { exact: true });
@@ -1350,6 +1371,379 @@ it("keeps today's count and decision on a phone line", async () => {
   }
 });
 
+it("offers the server's roster fixes on a card a roster fact blocks", async () => {
+  await page.viewport(1280, 900);
+  const add = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165f1",
+    team: alpha,
+    kind: "free_agent_add",
+    adds: [player("Jordan Lee")],
+    drops: [],
+    validation: {
+      status: "illegal",
+      checkedAt: now,
+      reasons: [
+        {
+          code: "roster_full",
+          detail:
+            "Add Jordan Lee needs a roster place, and this plan does not free one. Add a drop or a reserve move that frees a place, or remove this move.",
+        },
+      ],
+    },
+  });
+  const fixed: Array<Parameters<TransactionRemote["fix"]>[0]> = [];
+  using _app = setupTransactionsPage({
+    open: listData([add], { open: 1, today: 1, saved: 0, ended: 0 }),
+    fix: (input) => {
+      fixed.push(input);
+      return Promise.resolve({ status: "fixed", move: input.move });
+    },
+  });
+
+  await expect.element(page.getByText("Blocked", { exact: true })).toBeVisible();
+  await expect
+    .element(
+      page.getByText(
+        "Add Jordan Lee needs a roster place, and this plan does not free one. Add a drop or a reserve move that frees a place, or remove this move.",
+        { exact: true },
+      ),
+    )
+    .toBeVisible();
+
+  await page.getByRole("button", { name: "Add roster fixes: Add Jordan Lee" }).click();
+
+  await expect
+    .element(
+      page.getByText("Added the roster fixes that make room for Add Jordan Lee.", { exact: true }),
+    )
+    .toBeVisible();
+  expect(fixed).toStrictEqual([{ team: alpha.id, move: add.move }]);
+});
+
+it("names the move a blocked card waits on and opens or discards its group", async () => {
+  await page.viewport(1280, 900);
+  const group = "018f79ea-7d86-7c18-9b4a-8b4d0c9165f2";
+  const dependency = "Drop Runner C waits on The trade, which is waiting on the league's answer.";
+  const drop = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165f3",
+    team: alpha,
+    group,
+    kind: "drop",
+    decision: "now",
+    drops: [player("Runner C")],
+    validation: {
+      status: "stale",
+      checkedAt: now,
+      reasons: [{ code: "pending_outcome", detail: dependency }],
+    },
+  });
+  const detail = `This group does not run. ${dependency}`;
+  const discarded: Array<Parameters<TransactionRemote["discardGroup"]>[0]> = [];
+  using _app = setupTransactionsPage({
+    open: listData(
+      [drop],
+      { open: 1, today: 1, saved: 0, ended: 0 },
+      [],
+      [
+        {
+          group,
+          team: alpha.id,
+          label: "Weekend moves",
+          status: "blocked",
+          moves: [drop.move],
+          actions: [],
+          notRun: [],
+          detail,
+        },
+      ],
+    ),
+    discardGroup: (input) => {
+      discarded.push(input);
+      return Promise.resolve({ status: "discarded", move: input.move });
+    },
+  });
+
+  await expect.element(page.getByText(dependency, { exact: true })).toBeVisible();
+  await expect.element(page.getByText(detail, { exact: true })).not.toBeVisible();
+
+  await page.getByRole("button", { name: "Open: Weekend moves" }).click();
+  await expect.element(page.getByText(detail, { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Discard group: Weekend moves" }).click();
+  await expect
+    .element(page.getByText("Discarded what was left of this group.", { exact: true }))
+    .toBeVisible();
+  expect(discarded).toStrictEqual([{ team: alpha.id, move: drop.move }]);
+});
+
+it("retries a failed card whose check still passes", async () => {
+  await page.viewport(1280, 900);
+  const failed = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165f4",
+    team: alpha,
+    kind: "drop",
+    decision: "now",
+    drops: [player("Riley Chen")],
+    result: "failed",
+    resultDetail: "Your league refused the drop.",
+    resultAt: now,
+  });
+  const retried: Array<Parameters<TransactionRemote["retry"]>[0]> = [];
+  using _app = setupTransactionsPage({
+    open: listData([failed], { open: 1, today: 1, saved: 0, ended: 0 }),
+    retry: (input) => {
+      retried.push(input);
+      return Promise.resolve({
+        status: "retried",
+        retried: [input.move],
+        counts: { moves: 1, executed: 1, pending: 0, failed: 0, skipped: 0, unknown: 0 },
+        refusals: [],
+      });
+    },
+  });
+
+  await expect.element(page.getByText("Failed", { exact: true })).toBeVisible();
+  await expect
+    .element(page.getByText("Your league refused the drop.", { exact: true }))
+    .toBeVisible();
+
+  await page.getByRole("button", { name: "Retry: Drop Riley Chen" }).click();
+
+  await expect
+    .element(page.getByText("Retried 1 move. 1 move ran.", { exact: true }))
+    .toBeVisible();
+  expect(retried).toHaveLength(1);
+  expect(retried[0]?.team).toBe(alpha.id);
+  expect(retried[0]?.move).toBe(failed.move);
+  expect(retried[0]?.key.length ?? 0).toBeGreaterThan(0);
+});
+
+it("moves a card with nothing left to do into Earlier without a control", async () => {
+  await page.viewport(1280, 900);
+  const group = "018f79ea-7d86-7c18-9b4a-8b4d0c9165f5";
+  const drop = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165f6",
+    team: alpha,
+    group,
+    kind: "drop",
+    decision: "now",
+    drops: [player("Riley Chen")],
+    result: "executed",
+  });
+  const claim = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165f7",
+    team: alpha,
+    group,
+    position: 1,
+    kind: "waiver_claim",
+    decision: "now",
+    phase: "with_league",
+    adds: [player("Amon-Ra St. Brown")],
+    drops: [],
+    result: "pending",
+  });
+  const cure = "Check your roster, then choose the move again or discard it.";
+  const account =
+    "This group ran in part. The drop of Riley Chen reached your league. The claim of Amon-Ra St. Brown waits on the league's answer.";
+  using _app = setupTransactionsPage({
+    open: listData(
+      [drop, claim],
+      { open: 2, today: 2, saved: 0, ended: 0 },
+      [],
+      [
+        {
+          group,
+          team: alpha.id,
+          status: "partly_done",
+          moves: [drop.move, claim.move],
+          actions: [
+            { move: drop.move, action: "drop", player: "Riley Chen", outcome: "executed" },
+            {
+              move: claim.move,
+              action: "add",
+              player: "Amon-Ra St. Brown",
+              outcome: "pending",
+            },
+          ],
+          notRun: [],
+          detail: `${account} ${cure}`,
+          cure,
+        },
+      ],
+    ),
+  });
+
+  await expect.element(page.getByText("Nothing for today", { exact: true }).first()).toBeVisible();
+  await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
+  await expect.element(page.getByText("Partly ran", { exact: true })).toBeVisible();
+  await expect
+    .element(page.getByText("Nothing is waiting for you.", { exact: true }))
+    .toBeVisible();
+  expect(page.getByRole("button", { name: /Retry:/u }).elements()).toHaveLength(0);
+  expect(page.getByRole("button", { name: /Discard remaining:/u }).elements()).toHaveLength(0);
+  expect(page.getByRole("button", { name: /Run now/u }).elements()).toHaveLength(0);
+  expect(page.getByRole("button", { name: /Discard:/u }).elements()).toHaveLength(0);
+
+  await page.getByText("Why these moves", { exact: true }).click();
+  await expect.element(page.getByText(account, { exact: true })).toBeVisible();
+  expect(page.getByText(`${account} ${cure}`, { exact: true }).elements()).toHaveLength(0);
+});
+
+it("shows the stored fallback chain before it is needed", async () => {
+  await page.viewport(1280, 900);
+  const claim = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165f8",
+    team: alpha,
+    kind: "waiver_claim",
+    adds: [player("Amon-Ra St. Brown")],
+    drops: [player("Romeo Doubs")],
+    fallbacks: [player("Tank Bigsby"), player("Tyler Boyd")],
+  });
+  using _app = setupTransactionsPage({
+    open: listData([claim], { open: 1, today: 1, saved: 0, ended: 0 }),
+  });
+
+  await expect
+    .element(page.getByText("Claim Amon-Ra St. Brown and drop Romeo Doubs", { exact: true }))
+    .toBeVisible();
+  await expect
+    .element(page.getByText("If the claim fails: Tank Bigsby, then Tyler Boyd", { exact: true }))
+    .toBeVisible();
+  const body =
+    "Each is stored with this move, and the server tries them in that order if the first fails.";
+  await expect.element(page.getByText(body, { exact: true })).not.toBeVisible();
+
+  await page.getByText("If the claim fails: Tank Bigsby, then Tyler Boyd", { exact: true }).click();
+  await expect.element(page.getByText(body, { exact: true })).toBeVisible();
+  expect(document.body.textContent.toLowerCase()).not.toContain("suggestion");
+});
+
+it("records which fallback ran, which failed, and that none are left", async () => {
+  await page.viewport(1280, 900);
+  const claim = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165f9",
+    team: alpha,
+    kind: "waiver_claim",
+    decision: "now",
+    phase: "lost",
+    adds: [player("Amon-Ra St. Brown")],
+    drops: [player("Romeo Doubs")],
+    fallbacks: [player("Tank Bigsby"), player("Tyler Boyd")],
+    result: "failed",
+    resultDetail: "All choices failed. Nothing is waiting.",
+    runDay: today,
+    attempts: [
+      {
+        kind: "claim",
+        player: player("Amon-Ra St. Brown"),
+        outcome: "lost",
+        reason: "Your league awarded the claim to another team.",
+        at: now,
+      },
+      {
+        kind: "fallback",
+        player: player("Tank Bigsby"),
+        outcome: "failed",
+        reason: "That player is already taken.",
+        at: now,
+      },
+      {
+        kind: "fallback",
+        player: player("Tyler Boyd"),
+        outcome: "unavailable",
+        reason: "Tyler Boyd is no longer available.",
+        at: now,
+      },
+    ],
+  });
+  using _app = setupTransactionsPage({
+    open: listData([], { open: 0, today: 0, saved: 0, ended: 1 }),
+    ended: listData([claim], { open: 0, today: 0, saved: 0, ended: 1 }),
+  });
+
+  await expect.element(page.getByText("All choices failed", { exact: true })).toBeVisible();
+  expect(
+    page.getByText(`Takes effect ${formatCalendarDate("2026-11-18")}.`, { exact: true }).elements(),
+  ).toHaveLength(0);
+  const summary = page.getByText("If the claim fails: Tank Bigsby, then Tyler Boyd", {
+    exact: true,
+  });
+  await expect.element(summary).toBeVisible();
+  await summary.click();
+
+  await expect
+    .element(
+      page.getByText("The claim failed: Your league awarded the claim to another team.", {
+        exact: true,
+      }),
+    )
+    .toBeVisible();
+  await expect
+    .element(page.getByText("Tank Bigsby failed: That player is already taken.", { exact: true }))
+    .toBeVisible();
+  await expect
+    .element(
+      page.getByText("Tyler Boyd was not available: Tyler Boyd is no longer available.", {
+        exact: true,
+      }),
+    )
+    .toBeVisible();
+  await expect.element(page.getByText("No choices are left.", { exact: true })).toBeVisible();
+});
+
+it("starts Earlier open when it is the only content and keeps the person's toggle", async () => {
+  await page.viewport(1280, 900);
+  const ran = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165fa",
+    team: alpha,
+    decision: "now",
+    drops: [player("Riley Chen")],
+    result: "executed",
+    runDecidedBy: "system",
+  });
+  using _app = setupTransactionsPage({
+    open: listData([], { open: 0, today: 0, saved: 0, ended: 1 }),
+    ended: listData([ran], { open: 0, today: 0, saved: 0, ended: 1 }),
+  });
+
+  await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
+  await expect.element(page.getByText("Ran on schedule", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Hide earlier moves" }).click();
+  await expect.element(page.getByRole("button", { name: "Show earlier moves" })).toBeVisible();
+  expect(page.getByText("Ran on schedule", { exact: true }).elements()).toHaveLength(0);
+});
+
+it("keeps Earlier collapsed while a card needs a decision", async () => {
+  await page.viewport(1280, 900);
+  const openMove = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165fb",
+    team: alpha,
+    kind: "drop",
+    drops: [player("Riley Chen")],
+  });
+  const ran = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165fc",
+    team: alpha,
+    decision: "now",
+    drops: [player("Jordan Lee")],
+    result: "executed",
+    runDecidedBy: "system",
+  });
+  using _app = setupTransactionsPage({
+    open: listData([openMove], { open: 1, today: 1, saved: 0, ended: 1 }),
+    ended: listData([ran], { open: 0, today: 0, saved: 0, ended: 1 }),
+  });
+
+  await expect.element(page.getByRole("button", { name: "Show earlier moves" })).toBeVisible();
+  expect(page.getByText("Ran on schedule", { exact: true }).elements()).toHaveLength(0);
+
+  await page.getByRole("button", { name: "Show earlier moves" }).click();
+  await expect.element(page.getByText("Ran on schedule", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Hide earlier moves" }).click();
+  expect(page.getByText("Ran on schedule", { exact: true }).elements()).toHaveLength(0);
+});
+
 function setupTransactionsPage(options: {
   readonly open: TransactionMoveListData;
   readonly teamCount?: number;
@@ -1357,6 +1751,9 @@ function setupTransactionsPage(options: {
   readonly confirm?: TransactionRemote["confirm"];
   readonly save?: TransactionRemote["save"];
   readonly discard?: TransactionRemote["discard"];
+  readonly discardGroup?: TransactionRemote["discardGroup"];
+  readonly fix?: TransactionRemote["fix"];
+  readonly retry?: TransactionRemote["retry"];
   readonly ended?: TransactionMoveListData;
   readonly endedPages?: ReadonlyArray<TransactionMoveListData>;
 }): { [Symbol.dispose](): void } {
@@ -1393,6 +1790,10 @@ function setupTransactionsPage(options: {
       }),
     save: options.save ?? (() => Promise.reject(new Error("Unexpected save"))),
     discard: options.discard ?? (() => Promise.reject(new Error("Unexpected discard"))),
+    discardGroup:
+      options.discardGroup ?? (() => Promise.reject(new Error("Unexpected group discard"))),
+    fix: options.fix ?? (() => Promise.reject(new Error("Unexpected roster fixes"))),
+    retry: options.retry ?? (() => Promise.reject(new Error("Unexpected retry"))),
     confirm: options.confirm ?? (() => Promise.reject(new Error("Unexpected confirmation"))),
   };
   if (options.failure === undefined) {

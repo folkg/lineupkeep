@@ -46,6 +46,9 @@ function formatDatedMoment(
 }
 
 export function timingLine(move: TransactionMoveView): string | undefined {
+  if (move.kind === "waiver_claim" && move.phase !== "won") {
+    return undefined;
+  }
   if (move.effectiveDate === undefined) {
     return undefined;
   }

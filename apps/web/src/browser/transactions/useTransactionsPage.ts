@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useMutation } from "@tanstack/solid-query";
 import type { MutationFunctionContext } from "@tanstack/solid-query";
-import { createMemo, createSignal } from "solid-js";
+import { createEffect, createMemo, createSignal } from "solid-js";
 import type { Accessor } from "solid-js";
 
 import { useSignInRecovery } from "#browser/session/signInRecovery.ts";
@@ -10,13 +10,15 @@ import type {
   TransactionMoveActionData,
   TransactionMoveConfirmationData,
   TransactionMoveDayView,
+  TransactionMoveRetryData,
   TransactionMoveTeamDayView,
   TransactionMoveView,
   TransactionPlanGroupView,
   TransactionTeamFactsView,
 } from "#contracts/connections/transactionContract.ts";
 
-import { moveCount } from "./transactionCopy";
+import { cardHasAction, cardIsSettled, dayTeamCards } from "./transactionCards";
+import { moveCount, moveSummary } from "./transactionCopy";
 import { describeTransactionActionFailure } from "./transactionFailure";
 import { transactionQueries } from "./transactionQueries";
 import type { TransactionRemote } from "./transactionRemote";
@@ -26,7 +28,9 @@ import type { ConfirmationTarget } from "./useGroupConfirmation";
 export function useTransactionsPage(props: TransactionsPageOptions): TransactionsPageController {
   const signIn = useSignInRecovery();
   const open = useInfiniteQuery(() => transactionQueries.timeline(props.remote()));
-  const [earlierEnabled, setEarlierEnabled] = createSignal(false);
+  const [earlierChoice, setEarlierChoice] = createSignal<boolean>();
+  const [earlierDefault, setEarlierDefault] = createSignal(false);
+  const earlierEnabled = (): boolean => earlierChoice() ?? earlierDefault();
   const earlier = useInfiniteQuery(() => ({
     ...transactionQueries.list(props.remote(), { state: "ended" }),
     enabled: earlierEnabled(),
@@ -76,6 +80,31 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     }
     return [...held.values()].map(moveDayView).sort(compareMoveDays);
   });
+  const hasActionableCards = (): boolean =>
+    days().some((day) =>
+      dayTeamCards(day, groups()).some((entry) => entry.cards.some(cardHasAction)),
+    );
+  const earlierHasRows = (): boolean => {
+    if (counts().ended > 0) {
+      return true;
+    }
+    return dayTeamCards(
+      days().find((day) => day.today),
+      groups(),
+    ).some((entry) => entry.cards.some(cardIsSettled));
+  };
+  createEffect(
+    () => ({
+      choice: earlierChoice(),
+      actionable: hasActionableCards(),
+      rows: earlierHasRows(),
+    }),
+    (held) => {
+      if (held.choice === undefined) {
+        setEarlierDefault(!held.actionable && held.rows);
+      }
+    },
+  );
   const nextRunAt = (): string | undefined =>
     open.isSuccess ? open.data.pages[0]?.nextRunAt : undefined;
 
@@ -138,6 +167,90 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
         });
       } else {
         setFeedback({ type: "success", message: `Discarded ${moveCount(1)}.` });
+      }
+      void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
+      refresh();
+    },
+    onError: (error: Error, _move, _onMutateResult, context: MutationFunctionContext) => {
+      void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
+      const failure = describeTransactionActionFailure(error);
+      setFeedback({
+        type: "attention",
+        message: failure.message,
+        ...(failure.kind === "authentication" ? { recovery: signIn } : {}),
+      });
+      refresh();
+    },
+  }));
+
+  const fix = useMutation(() => ({
+    mutationKey: ["transactions", "fix"],
+    mutationFn: (move: TransactionMoveView) =>
+      props.remote().fix({ team: move.team.id, move: move.move }),
+    onSuccess: (data: TransactionMoveActionData, move, _onMutateResult, context) => {
+      if (data.status === "refused") {
+        setFeedback({
+          type: "attention",
+          message: data.refusals.map((entry) => entry.detail).join(" "),
+        });
+      } else {
+        setFeedback({
+          type: "success",
+          message: `Added the roster fixes that make room for ${moveSummary(move)}.`,
+        });
+      }
+      void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
+      refresh();
+    },
+    onError: (error: Error, _move, _onMutateResult, context: MutationFunctionContext) => {
+      void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
+      const failure = describeTransactionActionFailure(error);
+      setFeedback({
+        type: "attention",
+        message: failure.message,
+        ...(failure.kind === "authentication" ? { recovery: signIn } : {}),
+      });
+      refresh();
+    },
+  }));
+
+  const retry = useMutation(() => ({
+    mutationKey: ["transactions", "retry"],
+    mutationFn: (move: TransactionMoveView) =>
+      props.remote().retry({
+        team: move.team.id,
+        move: move.move,
+        key: crypto.randomUUID(),
+      }),
+    onSuccess: (data: TransactionMoveRetryData, _move, _onMutateResult, context) => {
+      setFeedback(retryFeedback(data));
+      void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
+      refresh();
+    },
+    onError: (error: Error, _move, _onMutateResult, context: MutationFunctionContext) => {
+      void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
+      const failure = describeTransactionActionFailure(error);
+      setFeedback({
+        type: "attention",
+        message: failure.message,
+        ...(failure.kind === "authentication" ? { recovery: signIn } : {}),
+      });
+      refresh();
+    },
+  }));
+
+  const discardGroup = useMutation(() => ({
+    mutationKey: ["transactions", "discardGroup"],
+    mutationFn: (move: TransactionMoveView) =>
+      props.remote().discardGroup({ team: move.team.id, move: move.move }),
+    onSuccess: (data: TransactionMoveActionData, _move, _onMutateResult, context) => {
+      if (data.status === "refused") {
+        setFeedback({
+          type: "attention",
+          message: data.refusals.map((entry) => entry.detail).join(" "),
+        });
+      } else {
+        setFeedback({ type: "success", message: "Discarded what was left of this group." });
       }
       void context.client.invalidateQueries({ queryKey: transactionQueries.openCountKey });
       refresh();
@@ -228,6 +341,27 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     confirmationSettled,
     discardMove,
     discarding: () => (discard.isPending ? discard.variables?.move : undefined),
+    addFixes: (move: TransactionMoveView): void => {
+      if (!fix.isPending) {
+        setFeedback(undefined);
+        void fix.mutate(move);
+      }
+    },
+    addingFixes: () => (fix.isPending ? fix.variables?.move : undefined),
+    retryMove: (move: TransactionMoveView): void => {
+      if (!retry.isPending) {
+        setFeedback(undefined);
+        void retry.mutate(move);
+      }
+    },
+    retryingMove: () => (retry.isPending ? retry.variables?.move : undefined),
+    discardGroup: (move: TransactionMoveView): void => {
+      if (!discardGroup.isPending) {
+        setFeedback(undefined);
+        void discardGroup.mutate(move);
+      }
+    },
+    discardingGroup: () => (discardGroup.isPending ? discardGroup.variables?.move : undefined),
     startEdit,
     cancelEdit,
     saveEdit,
@@ -251,7 +385,7 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     earlier: () => (earlier.isSuccess ? earlier.data.pages.flatMap((page) => page.moves) : []),
     earlierCount: () => counts().ended,
     earlierEnabled,
-    toggleEarlier: () => setEarlierEnabled((current) => !current),
+    toggleEarlier: () => setEarlierChoice(!earlierEnabled()),
     earlierLoading: () => earlier.isPending,
     earlierFailure: () => earlier.error,
     retryEarlier: () => earlier.refetch().then(() => undefined),
@@ -262,6 +396,29 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
         void earlier.fetchNextPage();
       }
     },
+  };
+}
+
+function retryFeedback(data: TransactionMoveRetryData): ActionFeedbackState {
+  if (data.status === "refused") {
+    return { type: "attention", message: data.refusals.map((entry) => entry.detail).join(" ") };
+  }
+  const parts: Array<string> = [`Retried ${moveCount(data.counts.moves)}.`];
+  if (data.counts.executed > 0) {
+    parts.push(`${moveCount(data.counts.executed)} ran.`);
+  }
+  if (data.counts.pending > 0) {
+    parts.push(`${moveCount(data.counts.pending)} with the league.`);
+  }
+  if (data.counts.failed > 0) {
+    parts.push(`${moveCount(data.counts.failed)} failed.`);
+  }
+  if (data.counts.unknown > 0) {
+    parts.push(`${moveCount(data.counts.unknown)} has an unknown outcome.`);
+  }
+  return {
+    type: data.counts.failed > 0 || data.counts.unknown > 0 ? "attention" : "success",
+    message: parts.join(" "),
   };
 }
 
@@ -394,6 +551,12 @@ export type TransactionsPageController = {
   readonly confirmationSettled: () => void;
   readonly discardMove: (move: TransactionMoveView) => void;
   readonly discarding: () => string | undefined;
+  readonly addFixes: (move: TransactionMoveView) => void;
+  readonly addingFixes: () => string | undefined;
+  readonly retryMove: (move: TransactionMoveView) => void;
+  readonly retryingMove: () => string | undefined;
+  readonly discardGroup: (move: TransactionMoveView) => void;
+  readonly discardingGroup: () => string | undefined;
   readonly startEdit: (move: TransactionMoveView) => void;
   readonly cancelEdit: () => void;
   readonly saveEdit: (move: TransactionMoveView) => void;

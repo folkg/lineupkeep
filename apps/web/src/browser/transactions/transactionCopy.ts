@@ -17,7 +17,6 @@ export function moveSummary(move: TransactionMoveView): string {
   }
   const adds = playerNames(move.adds);
   const drops = playerNames(move.drops);
-  const fallbacks = playerNames(move.fallbacks);
   if (move.kind === "trade") {
     const outgoing = [
       ...(drops === undefined ? [] : [drops]),
@@ -41,16 +40,90 @@ export function moveSummary(move: TransactionMoveView): string {
       move.intent?.to === "reserve" && move.placement !== undefined
         ? ` to ${move.placement.toSlot}`
         : "";
-    const fallback = fallbacks === undefined ? "" : ` (fallback ${fallbacks})`;
     const bid =
       move.kind === "waiver_claim" && move.bid !== undefined ? ` for ${String(move.bid)} FAAB` : "";
-    const base = `${verb} ${adds}${reserve}${fallback}${bid}`;
+    const base = `${verb} ${adds}${reserve}${bid}`;
     return drops === undefined ? base : `${base} and drop ${drops}`;
   }
   if (drops !== undefined) {
     return `Drop ${drops}`;
   }
   return "This move";
+}
+
+export function fallbackPlanLine(move: TransactionMoveView): string | undefined {
+  const names = fallbackSequence(move);
+  if (names === undefined) {
+    return undefined;
+  }
+  return `If the ${move.kind === "waiver_claim" ? "claim" : "add"} fails: ${names}`;
+}
+
+export function fallbackPlanDetail(move: TransactionMoveView): ReadonlyArray<string> {
+  const record = fallbackRecord(move);
+  if (record.length > 0) {
+    return record;
+  }
+  const names = fallbackSequence(move);
+  return names === undefined
+    ? []
+    : [
+        `Each is stored with this move, and the server tries them in that order if the first fails.`,
+      ];
+}
+
+function fallbackSequence(move: TransactionMoveView): string | undefined {
+  const names = move.fallbacks.flatMap((player) =>
+    player.name === undefined ? [] : [player.name],
+  );
+  return names.length === 0 ? undefined : names.join(", then ");
+}
+
+function fallbackRecord(move: TransactionMoveView): ReadonlyArray<string> {
+  const lines = move.attempts.flatMap((attempt) => {
+    if (attempt.kind === "claim") {
+      switch (attempt.outcome) {
+        case "lost":
+          return [`The claim failed: ${attempt.reason}`];
+        case "won":
+          return [`The claim was awarded: ${attempt.reason}`];
+        case "pending":
+          return [`The claim is with the league: ${attempt.reason}`];
+        case "executed":
+        case "failed":
+        case "retry":
+        case "unavailable":
+        case "unknown":
+          return [];
+      }
+    }
+    const name = attempt.player.name ?? "This fallback";
+    switch (attempt.outcome) {
+      case "executed":
+        return [`${name} ran.`];
+      case "failed":
+        return [`${name} failed: ${attempt.reason}`];
+      case "unavailable":
+        return [`${name} was not available: ${attempt.reason}`];
+      case "unknown":
+        return [`${name} has an unknown outcome: ${attempt.reason}`];
+      case "retry":
+        return [`${name} could not be sent: ${attempt.reason}`];
+      case "pending":
+        return [`${name} is waiting: ${attempt.reason}`];
+      case "lost":
+      case "won":
+        return [];
+    }
+  });
+  if (lines.length === 0) {
+    return [];
+  }
+  const left = remainingFallbacks(move);
+  return [
+    ...lines,
+    left.length > 0 ? `Still to try: ${left.join(", then ")}.` : "No choices are left.",
+  ];
 }
 
 export function moveCount(count: number): string {
@@ -67,6 +140,17 @@ export function readableReason(reason: string): string {
 
 export function teamCount(count: number): string {
   return `${String(count)} ${count === 1 ? "team" : "teams"}`;
+}
+
+function remainingFallbacks(move: TransactionMoveView): ReadonlyArray<string> {
+  const tried = new Set(
+    move.attempts.flatMap((attempt) =>
+      attempt.kind === "fallback" && attempt.player.name !== undefined ? [attempt.player.name] : [],
+    ),
+  );
+  return move.fallbacks.flatMap((player) =>
+    player.name === undefined || tried.has(player.name) ? [] : [player.name],
+  );
 }
 
 function playerNames(players: ReadonlyArray<TransactionMovePlayerView>): string | undefined {

@@ -52,16 +52,21 @@ import type {
   TransactionPlanConfirmation,
   TransactionPlanConfirmInput,
   TransactionPlanCountsInput,
+  TransactionPlanDiscardGroupInput,
   TransactionPlanDiscardInput,
   TransactionPlanEditInput,
+  TransactionPlanFixInput,
   TransactionPlanMoveDraft,
   TransactionPlanMoveView,
   TransactionPlanProposeInput,
   TransactionPlanRead,
   TransactionPlanReadInput,
   TransactionPlanRefMoveDraft,
+  TransactionPlanResult,
   TransactionPlanRefProposeInput,
   TransactionPlanRefusal,
+  TransactionPlanRetry,
+  TransactionPlanRetryInput,
   TransactionPlanRunCounts,
   TransactionPlanRunRefusal,
   TransactionPlanSnapshot,
@@ -1093,13 +1098,187 @@ export const TransactionPlanServiceLive = Layer.effect(
       return { plan: yield* readView({ userId, team: input.team, facts, at }), refused: [] };
     });
 
+    const discardGroup = Effect.fn("TransactionPlanService.discardGroup")(function* (
+      userId: UserId,
+      input: TransactionPlanDiscardGroupInput,
+    ) {
+      const at = yield* DateTime.now;
+      const decision = input.decision ?? ownerDecision("transactions.discard_group");
+      const stored = yield* repository.readPlanMoves({ userId, team: input.team });
+      const facts = yield* factsPort.read({
+        userId,
+        team: input.team,
+        at,
+        players: [],
+        needsBudget: needsBudget(stored.filter(isOpenMove)),
+      });
+      const move = stored.find((entry) => entry.id === input.move);
+      if (move === undefined) {
+        return yield* TransactionPlanMoveNotFound.make({ team: input.team, move: input.move });
+      }
+      const refused = moveChangeRefusal({ team: input.team, move });
+      if (refused !== undefined) {
+        return {
+          plan: planViewOf({ stored, facts, checkedAt: at, team: input.team }),
+          refused: [refused],
+        };
+      }
+
+      const targets = confirmationTargets(stored.filter(isOpenMove), [move]).filter(
+        (entry) => entry.decision !== "discarded",
+      );
+      const blocked = targets.flatMap((target) => {
+        const refusal = moveChangeRefusal({ team: input.team, move: target });
+        return refusal === undefined ? [] : [refusal];
+      });
+      if (blocked.length > 0) {
+        return {
+          plan: planViewOf({ stored, facts, checkedAt: at, team: input.team }),
+          refused: blocked,
+        };
+      }
+
+      yield* repository.discardMoves({
+        userId,
+        team: input.team,
+        moves: nonEmpty(
+          targets.map((target) => target.id),
+          "A discarded group named no move to discard",
+        ),
+        decision,
+        at,
+      });
+
+      return { plan: yield* readView({ userId, team: input.team, facts, at }), refused: [] };
+    });
+
+    const fix = Effect.fn("TransactionPlanService.fix")(function* (
+      userId: UserId,
+      input: TransactionPlanFixInput,
+    ) {
+      const at = yield* DateTime.now;
+      const decision = input.decision ?? ownerDecision("transactions.fix");
+      const stored = yield* repository.readPlanMoves({ userId, team: input.team });
+      const open = stored.filter(isOpenMove);
+      const facts = yield* factsPort.read({
+        userId,
+        team: input.team,
+        at,
+        players: namedPlayers(open),
+        needsBudget: needsBudget(open),
+      });
+      const move = stored.find((entry) => entry.id === input.move);
+      if (move === undefined) {
+        return yield* TransactionPlanMoveNotFound.make({ team: input.team, move: input.move });
+      }
+      const changeRefusal = moveChangeRefusal({ team: input.team, move });
+      if (changeRefusal !== undefined) {
+        return {
+          plan: planViewOf({ stored, facts, checkedAt: at, team: input.team }),
+          refused: [changeRefusal],
+        };
+      }
+
+      const refusal = (code: string, detail: string): TransactionPlanResult => ({
+        plan: planViewOf({ stored, facts, checkedAt: at, team: input.team }),
+        refused: [{ code, team: input.team, detail, moves: [0] }],
+      });
+      const existing = fixPeers(open, move).filter((entry) => entry.decision !== "discarded");
+      if (existing.length > 0) {
+        return refusal(
+          "roster_fixes_present",
+          "This move already carries a Roster fixes group. Discard it before adding another.",
+        );
+      }
+      const rule = rosterRuleOf(facts.constraints, facts.slots);
+      const roster = new Map(facts.roster.map((player) => [player.key, player] as const));
+      const projection = planProjection({ facts, open, stored });
+      const evaluation = evaluateTransactionPlan({ facts, moves: projection, checkedAt: at });
+      const entry = entryOf(evaluatedMoves(evaluation), move.id);
+      if (entry.validation.status === "current") {
+        return refusal("move_not_blocked", "This move already fits, so it needs no roster fixes.");
+      }
+      const search = searchRosterFixes({
+        facts,
+        rule,
+        funded: move,
+        reasons: entry.validation.reasons,
+      });
+      if (search.fixes.length === 0) {
+        return refusal(
+          "no_roster_fix",
+          search.detail ?? "No roster change can make room for this move.",
+        );
+      }
+
+      const ids = yield* Effect.forEach(search.fixes, () =>
+        newId.pipe(Effect.map((id) => Schema.decodeSync(TransactionMoveIdSchema)(id))),
+      );
+      const candidates = search.fixes.map((fix, index) =>
+        fixCandidateOf({
+          fix,
+          id: requireId(ids, index),
+          group: rosterFixGroupOf(move.id),
+          funded: move,
+        }),
+      );
+      const after = evaluateTransactionPlan({
+        facts,
+        moves: [...projection, ...candidates],
+        checkedAt: at,
+      });
+      const evaluatedAfter = evaluatedMoves(after);
+      if (entryOf(evaluatedAfter, move.id).validation.status !== "current") {
+        const reason = entryOf(evaluatedAfter, move.id).validation.reasons[0]?.detail;
+        return refusal(
+          "no_roster_fix",
+          reason ?? "These roster fixes do not make room for this move.",
+        );
+      }
+      const planClaims = claimPlan({
+        moves: [...open, ...candidates],
+        after,
+        roster,
+        placeClaims: (place) => exclusivePlace(rule, place),
+      });
+      const collision = planClaims.refused[0];
+      if (collision !== undefined) {
+        return {
+          plan: planViewOf({ stored, facts, checkedAt: at, team: input.team }),
+          refused: [claimRefusalOf(input.team, collision, [0])],
+        };
+      }
+
+      yield* repository.appendMoves({
+        userId,
+        team: input.team,
+        at,
+        moves: nonEmpty(
+          candidates.map((candidate) =>
+            appendOf(
+              candidate,
+              entryOf(evaluatedAfter, candidate.id),
+              planClaims.claims.get(candidate.id) ?? [],
+              move.proposedBy,
+              decision,
+              at,
+            ),
+          ),
+          "A roster fix produced no move to append",
+        ),
+      });
+
+      return { plan: yield* readView({ userId, team: input.team, facts, at }), refused: [] };
+    });
+
     const runMoves = Effect.fn("TransactionPlanService.runMoves")(function* (input: {
       readonly userId: UserId;
       readonly team: TeamId;
       readonly at: DateTime.Utc;
       readonly facts: TransactionPlanTeamFacts;
       readonly open: ReadonlyArray<TransactionMoveRowRecord>;
-      readonly mode: "submit" | "due";
+      readonly mode: RunMode;
+      readonly only?: ReadonlySet<TransactionMoveId>;
       readonly decision: TransactionDecision;
       readonly runId: TransactionRunId;
     }) {
@@ -1129,6 +1308,7 @@ export const TransactionPlanServiceLive = Layer.effect(
         facts: input.facts,
         open: input.open,
         entries,
+        ...(input.only === undefined ? {} : { only: input.only }),
       });
       const counts = emptyRunCounts();
       counts.moves = selection.selected.length;
@@ -1445,62 +1625,71 @@ export const TransactionPlanServiceLive = Layer.effect(
       } satisfies TransactionPlanSubmission;
     });
 
-    const submit = Effect.fn("TransactionPlanService.submit")(function* (
-      userId: UserId,
-      input: TransactionPlanSubmitInput,
-    ) {
-      const at = yield* DateTime.now;
-      const decision = input.decision ?? ownerDecision("transactions.submit");
+    const ownerRun = Effect.fn("TransactionPlanService.ownerRun")(function* (input: {
+      readonly userId: UserId;
+      readonly team: TeamId;
+      readonly at: DateTime.Utc;
+      readonly decision: TransactionDecision;
+      readonly key: string;
+      readonly mode: RunMode;
+      readonly only?: ReadonlySet<TransactionMoveId>;
+    }) {
       const recorded = yield* repository.readRunByKey({
-        userId,
+        userId: input.userId,
         team: input.team,
         key: input.key,
       });
       if (Option.isSome(recorded)) {
-        return yield* recordedSubmission(userId, input.team, recorded.value, at);
+        return yield* recordedSubmission(input.userId, input.team, recorded.value, input.at);
       }
       const runClaim = yield* newClaim;
       yield* claimRunWithWait({
-        userId,
+        userId: input.userId,
         team: input.team,
         runClaim,
-        at,
+        at: input.at,
         attempt: 0,
       });
       const runId = yield* newRunId;
       const started = yield* repository.beginRun({
-        userId,
+        userId: input.userId,
         team: input.team,
         run: runId,
         trigger: "submit",
-        decision,
+        decision: input.decision,
         key: input.key,
         counts: emptyRunCounts(),
         refusals: [],
-        at,
+        at: input.at,
       });
       if (started.status === "recorded") {
-        yield* repository.releaseRun({ userId, team: input.team, runClaim, at });
-        return yield* recordedSubmission(userId, input.team, started.run, at);
+        yield* repository.releaseRun({
+          userId: input.userId,
+          team: input.team,
+          runClaim,
+          at: input.at,
+        });
+        return yield* recordedSubmission(input.userId, input.team, started.run, input.at);
       }
       return yield* Effect.gen(function* () {
-        const stored = yield* repository.readPlanMoves({ userId, team: input.team });
+        const stored = yield* repository.readPlanMoves({ userId: input.userId, team: input.team });
         const open = stored.filter(isOpenMove);
         const facts = yield* factsPort.read({
-          userId,
+          userId: input.userId,
           team: input.team,
-          at,
+          at: input.at,
           players: namedPlayers(open),
           needsBudget: needsBudget(open),
         });
         const run = yield* runMoves({
-          userId,
+          userId: input.userId,
           team: input.team,
-          at,
+          at: input.at,
           facts,
           open,
-          mode: "submit",
-          decision,
+          mode: input.mode,
+          ...(input.only === undefined ? {} : { only: input.only }),
+          decision: input.decision,
           runId,
         });
         const counts = { ...run.counts, plans: 1, claimed: 1 };
@@ -1508,7 +1697,7 @@ export const TransactionPlanServiceLive = Layer.effect(
           run: runId,
           counts,
           refusals: run.refusals,
-          at,
+          at: input.at,
         });
         return {
           team: input.team,
@@ -1516,17 +1705,75 @@ export const TransactionPlanServiceLive = Layer.effect(
           counts,
           refusals: run.refusals,
           plan: planViewOf({
-            stored: yield* repository.readPlanMoves({ userId, team: input.team }),
+            stored: yield* repository.readPlanMoves({ userId: input.userId, team: input.team }),
             facts,
-            checkedAt: at,
+            checkedAt: input.at,
             team: input.team,
           }),
         } satisfies TransactionPlanSubmission;
       }).pipe(
         Effect.ensuring(
-          repository.releaseRun({ userId, team: input.team, runClaim, at }).pipe(Effect.ignore),
+          repository
+            .releaseRun({ userId: input.userId, team: input.team, runClaim, at: input.at })
+            .pipe(Effect.ignore),
         ),
       );
+    });
+
+    const submit = Effect.fn("TransactionPlanService.submit")(function* (
+      userId: UserId,
+      input: TransactionPlanSubmitInput,
+    ) {
+      const at = yield* DateTime.now;
+      return yield* ownerRun({
+        userId,
+        team: input.team,
+        at,
+        decision: input.decision ?? ownerDecision("transactions.submit"),
+        key: input.key,
+        mode: "submit",
+      });
+    });
+
+    const retry = Effect.fn("TransactionPlanService.retry")(function* (
+      userId: UserId,
+      input: TransactionPlanRetryInput,
+    ) {
+      const at = yield* DateTime.now;
+      const decision = input.decision ?? ownerDecision("transactions.retry");
+      const stored = yield* repository.readPlanMoves({ userId, team: input.team });
+      const move = stored.find((entry) => entry.id === input.move);
+      if (move === undefined) {
+        return yield* TransactionPlanMoveNotFound.make({ team: input.team, move: input.move });
+      }
+      const members = cardMoves(stored, move);
+      const refused = retryRefusal({ team: input.team, members });
+      if (refused !== undefined) {
+        return {
+          team: input.team,
+          retried: [],
+          counts: emptyRunCounts(),
+          refusals: [refused],
+          plan: yield* plan(userId, { team: input.team }),
+        } satisfies TransactionPlanRetry;
+      }
+      const targets = members.filter(isOpenMove);
+      const run = yield* ownerRun({
+        userId,
+        team: input.team,
+        at,
+        decision,
+        key: input.key,
+        mode: "retry",
+        only: new Set(targets.map((target) => target.id)),
+      });
+      return {
+        team: input.team,
+        retried: targets.map((target) => target.id),
+        counts: run.counts,
+        refusals: run.refusals,
+        plan: yield* plan(userId, { team: input.team }),
+      } satisfies TransactionPlanRetry;
     });
 
     const confirm = Effect.fn("TransactionPlanService.confirm")(function* (
@@ -2311,6 +2558,9 @@ export const TransactionPlanServiceLive = Layer.effect(
       save,
       edit,
       discard,
+      discardGroup,
+      fix,
+      retry,
       confirm,
       submit,
       runDue,
@@ -2703,12 +2953,17 @@ function moveChangeRefusal(input: {
 
 function selectRunGroups(input: {
   readonly team: TeamId;
-  readonly mode: "submit" | "due";
+  readonly mode: RunMode;
   readonly facts: TransactionPlanTeamFacts;
   readonly open: ReadonlyArray<TransactionMoveRowRecord>;
   readonly entries: ReadonlyMap<TransactionMoveId, TransactionPlanMoveEvaluation>;
+  readonly only?: ReadonlySet<TransactionMoveId>;
 }): RunSelection {
-  const due = input.open.filter((move) =>
+  const considered =
+    input.only === undefined
+      ? input.open
+      : input.open.filter((move) => input.only?.has(move.id) === true);
+  const due = considered.filter((move) =>
     runCandidate({
       move,
       entry: entryOf(input.entries, move.id),
@@ -2724,7 +2979,7 @@ function selectRunGroups(input: {
     }
     peers.set(
       key,
-      input.open.filter((open) => (open.group ?? open.id) === key),
+      considered.filter((open) => (open.group ?? open.id) === key),
     );
   }
   const groups: Array<RunGroup> = [];
@@ -2738,7 +2993,9 @@ function selectRunGroups(input: {
         detail:
           input.mode === "submit"
             ? "A group runs whole, so every move in it must be confirmed for today."
-            : "A group runs whole, so every move in it must be confirmed and due on the same league day.",
+            : input.mode === "retry"
+              ? "A group runs whole, so every move in it must be retried together."
+              : "A group runs whole, so every move in it must be confirmed and due on the same league day.",
         moves: members.map((move) => move.id),
       });
       continue;
@@ -2764,9 +3021,15 @@ function selectRunGroups(input: {
 function runCandidate(input: {
   readonly move: TransactionMoveRowRecord;
   readonly entry: TransactionPlanMoveEvaluation;
-  readonly mode: "submit" | "due";
+  readonly mode: RunMode;
 }): boolean {
-  if (!isOpenMove(input.move) || input.move.result !== undefined) {
+  if (!isOpenMove(input.move)) {
+    return false;
+  }
+  if (input.mode === "retry") {
+    return input.move.result === "failed" || input.move.result === "skipped";
+  }
+  if (input.move.result !== undefined) {
     return false;
   }
   if (input.mode === "submit") {
@@ -3844,6 +4107,95 @@ function nonEmpty<A>(values: ReadonlyArray<A>, detail: string): readonly [A, ...
   return [first, ...rest];
 }
 
+function cardMoves(
+  stored: ReadonlyArray<TransactionMoveRecord>,
+  move: TransactionMoveRecord,
+): ReadonlyArray<TransactionMoveRecord> {
+  const selected = new Set<TransactionMoveId>();
+  const include = (held: TransactionMoveRecord): void => {
+    selected.add(held.id);
+    for (const peer of stored) {
+      if (peer.group !== undefined && peer.group === held.group) {
+        selected.add(peer.id);
+      }
+    }
+    for (const fix of fixPeers(stored, held)) {
+      selected.add(fix.id);
+    }
+  };
+  include(move);
+  const funded = stored.find((entry) => rosterFixGroupOf(entry.id) === move.group);
+  if (funded !== undefined) {
+    include(funded);
+  }
+  return stored.filter((entry) => selected.has(entry.id));
+}
+
+function retryRefusal(input: {
+  readonly team: TeamId;
+  readonly members: ReadonlyArray<TransactionMoveRecord>;
+}): TransactionPlanRunRefusal | undefined {
+  const refusal = (code: string, detail: string): TransactionPlanRunRefusal => ({
+    code,
+    team: input.team,
+    detail,
+    moves: input.members.map((member) => member.id),
+  });
+  const executed = input.members.find((member) => member.result === "executed");
+  if (executed !== undefined) {
+    return refusal(
+      "group_ran_in_part",
+      `${describeTransactionPlanMove(executed)} already reached your league, so this group cannot be retried whole. Discard what is left instead.`,
+    );
+  }
+  const discarded = input.members.find((member) => member.decision === "discarded");
+  if (discarded !== undefined) {
+    return refusal(
+      "group_not_whole",
+      `Part of this group was discarded, so the rest cannot be retried. Discard what is left, or form the move again.`,
+    );
+  }
+  const claimed = input.members.find((member) => member.phase !== undefined);
+  if (claimed !== undefined) {
+    return refusal(
+      "move_already_claimed",
+      `${describeTransactionPlanMove(claimed)} already went to your league as a claim, so it cannot be retried. Discard what is left.`,
+    );
+  }
+  const waiting = input.members.find((member) => member.result === "pending");
+  if (waiting !== undefined) {
+    return refusal(
+      "move_waiting",
+      `${describeTransactionPlanMove(waiting)} waits on the league's answer, so it cannot be retried.`,
+    );
+  }
+  const unknown = input.members.find((member) => member.result === "unknown");
+  if (unknown !== undefined) {
+    return refusal(
+      "move_unknown",
+      `${describeTransactionPlanMove(unknown)} has an unknown outcome. Check your league, then discard it or form the move again.`,
+    );
+  }
+  const notFailed = input.members.find(
+    (member) => member.result !== "failed" && member.result !== "skipped",
+  );
+  if (notFailed !== undefined) {
+    return refusal(
+      "move_not_failed",
+      `Nothing in this group failed, so there is nothing to retry.`,
+    );
+  }
+  const invalid = input.members.find((member) => member.validation.status !== "current");
+  if (invalid !== undefined) {
+    return refusal(
+      "move_check_stale",
+      invalid.validation.reasons[0]?.detail ??
+        `${describeTransactionPlanMove(invalid)} did not pass its latest check, so it cannot be retried.`,
+    );
+  }
+  return undefined;
+}
+
 function confirmationTargets(
   open: ReadonlyArray<TransactionMoveRecord>,
   requested: ReadonlyArray<TransactionMoveRecord>,
@@ -4018,6 +4370,8 @@ type RunState = {
 };
 
 type RunStop = "settled" | "retry";
+
+type RunMode = "submit" | "due" | "retry";
 
 type CandidateMove = TransactionPlanMove & {
   readonly reason: string;

@@ -1,9 +1,11 @@
+import { TeamId } from "@lineupkeep/backend/connections/FantasyTeam";
 import {
   ConfirmTransactionMovesInput,
   DiscardTransactionMoveInput,
   ListTransactionMovesInput,
   SaveTransactionMoveInput,
   TransactionMoveCursor,
+  TransactionMoveId,
   TransactionMovePageLimit,
   TransactionPlanInput,
   TransactionPlanService,
@@ -13,8 +15,10 @@ import { getRequest } from "@tanstack/solid-start/server";
 import { Effect, Schema } from "effect";
 
 import type {
+  TransactionMoveActionData,
   TransactionMoveConfirmationData,
   TransactionMoveListData,
+  TransactionMoveRetryData,
   TransactionPlanData,
 } from "#contracts/connections/transactionContract.ts";
 import { runUseCase } from "#server/backendEntry.ts";
@@ -23,6 +27,7 @@ import {
   actionOf,
   confirmationOf,
   mapTransactionError,
+  retryOf,
   toTransactionMoveListView,
   toTransactionPlanData,
 } from "#server/connections/transactionPresentation.ts";
@@ -159,6 +164,100 @@ export const discardTransactionMoveServerFn = createServerFn({ method: "POST" })
             decision: { decidedBy: "owner", surface: "transactions.discard" },
           });
           return actionOf(input.move, "discarded", result.refused);
+        }),
+      (error) =>
+        error._tag === "TransactionInputInvalid"
+          ? { type: "transactions.input_invalid", outcome: "rejected" }
+          : mapTransactionError(error),
+    );
+  });
+
+export const discardTransactionGroupServerFn = createServerFn({ method: "POST" })
+  .validator((raw: { readonly team: string; readonly move: string }) =>
+    Schema.decodeResult(Schema.Struct({ team: TeamId, move: TransactionMoveId }))(raw),
+  )
+  .handler(({ data }) => {
+    const request = getRequest();
+    return runUseCase(
+      request,
+      "transactions.discard_group",
+      (userId) =>
+        Effect.gen(function* () {
+          const input = yield* Effect.fromResult(data).pipe(
+            Effect.mapError(() => TransactionInputInvalid.make({})),
+          );
+          const plans = yield* TransactionPlanService;
+          const result = yield* plans.discardGroup(userId, {
+            ...input,
+            decision: { decidedBy: "owner", surface: "transactions.discard_group" },
+          });
+          return actionOf(
+            input.move,
+            "discarded",
+            result.refused,
+          ) satisfies TransactionMoveActionData;
+        }),
+      (error) =>
+        error._tag === "TransactionInputInvalid"
+          ? { type: "transactions.input_invalid", outcome: "rejected" }
+          : mapTransactionError(error),
+    );
+  });
+
+export const fixTransactionMoveServerFn = createServerFn({ method: "POST" })
+  .validator((raw: { readonly team: string; readonly move: string }) =>
+    Schema.decodeResult(Schema.Struct({ team: TeamId, move: TransactionMoveId }))(raw),
+  )
+  .handler(({ data }) => {
+    const request = getRequest();
+    return runUseCase(
+      request,
+      "transactions.fix",
+      (userId) =>
+        Effect.gen(function* () {
+          const input = yield* Effect.fromResult(data).pipe(
+            Effect.mapError(() => TransactionInputInvalid.make({})),
+          );
+          const plans = yield* TransactionPlanService;
+          const result = yield* plans.fix(userId, {
+            ...input,
+            decision: { decidedBy: "owner", surface: "transactions.fix" },
+          });
+          return actionOf(input.move, "fixed", result.refused) satisfies TransactionMoveActionData;
+        }),
+      (error) =>
+        error._tag === "TransactionInputInvalid"
+          ? { type: "transactions.input_invalid", outcome: "rejected" }
+          : mapTransactionError(error),
+    );
+  });
+
+export const retryTransactionMoveServerFn = createServerFn({ method: "POST" })
+  .validator((raw: { readonly team: string; readonly move: string; readonly key: string }) =>
+    Schema.decodeResult(
+      Schema.Struct({
+        team: TeamId,
+        move: TransactionMoveId,
+        key: Schema.NonEmptyString.pipe(Schema.check(Schema.isMaxLength(80))),
+      }),
+    )(raw),
+  )
+  .handler(({ data }) => {
+    const request = getRequest();
+    return runUseCase(
+      request,
+      "transactions.retry",
+      (userId) =>
+        Effect.gen(function* () {
+          const input = yield* Effect.fromResult(data).pipe(
+            Effect.mapError(() => TransactionInputInvalid.make({})),
+          );
+          const plans = yield* TransactionPlanService;
+          const result = yield* plans.retry(userId, {
+            ...input,
+            decision: { decidedBy: "owner", surface: "transactions.retry" },
+          });
+          return retryOf(result) satisfies TransactionMoveRetryData;
         }),
       (error) =>
         error._tag === "TransactionInputInvalid"

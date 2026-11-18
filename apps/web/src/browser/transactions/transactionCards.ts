@@ -1,11 +1,12 @@
 import type {
+  TransactionMoveDayView,
   TransactionMoveView,
   TransactionPlanGroupView,
 } from "#contracts/connections/transactionContract.ts";
 
 import { moveCount, moveSummary } from "./transactionCopy";
 
-export function groupCards(input: GroupCardsInput): ReadonlyArray<GroupCard> {
+function groupCards(input: GroupCardsInput): ReadonlyArray<GroupCard> {
   const byGroup = new Map(input.groups.map((group) => [group.group, group] as const));
   const fixesByFunded = new Map<string, Array<TransactionMoveView>>();
   const leads = new Map<string, Array<TransactionMoveView>>();
@@ -62,6 +63,16 @@ export function groupCards(input: GroupCardsInput): ReadonlyArray<GroupCard> {
   );
 }
 
+export function dayTeamCards(
+  day: TransactionMoveDayView | undefined,
+  groups: ReadonlyArray<TransactionPlanGroupView>,
+): ReadonlyArray<DayTeamCards> {
+  return (day?.teams ?? []).map((team) => ({
+    team: team.team,
+    cards: groupCards({ moves: team.moves, groups, today: day?.today === true }),
+  }));
+}
+
 export function cardMembers(card: GroupCard): ReadonlyArray<TransactionMoveView> {
   return [...card.moves, ...card.fixes].filter((move) => move.decision !== "discarded");
 }
@@ -103,35 +114,53 @@ export function cardNeedsDecision(card: GroupCard): boolean {
 
 export function cardIsSettled(card: GroupCard): boolean {
   const kind = cardStatus(card).kind;
-  return kind === "waiting" || kind === "with-league" || kind === "scheduled";
+  if (kind === "needs-decision" || kind === "running") {
+    return false;
+  }
+  return cardAction(card).kind === "none";
+}
+
+export function cardHasAction(card: GroupCard): boolean {
+  return cardAction(card).kind !== "none";
+}
+
+export function cardAction(card: GroupCard): CardAction {
+  switch (cardStatus(card).kind) {
+    case "needs-decision":
+      return { kind: "decide" };
+    case "blocked":
+      return blockedAction(card);
+    case "failed":
+    case "partly-ran":
+      return runAction(card);
+    case "scheduled":
+    case "waiting":
+    case "with-league":
+    case "running":
+    case "ran":
+      return { kind: "none" };
+  }
 }
 
 export function cardNextAction(card: GroupCard): CardNextAction | undefined {
-  const status = cardStatus(card);
-  if (status.kind !== "blocked" && status.kind !== "failed" && status.kind !== "partly-ran") {
+  const kind = cardStatus(card).kind;
+  if (kind !== "blocked" && kind !== "failed" && kind !== "partly-ran") {
     return undefined;
   }
-  const cure = card.group?.cure;
-  if (cure !== undefined) {
-    return { text: cure, tone: "muted" };
+  const action = cardAction(card);
+  switch (action.kind) {
+    case "cure":
+      return { text: action.text, tone: "danger" };
+    case "dependency":
+      return { text: action.text, tone: "muted" };
+    case "retry":
+    case "discard":
+      return { text: action.text ?? card.group?.detail ?? "Check this move.", tone: "danger" };
+    case "none":
+      return { text: "Nothing is waiting for you.", tone: "muted" };
+    case "decide":
+      return undefined;
   }
-  const members = cardMembers(card);
-  const refused = members.find(
-    (move) => move.result === "failed" || move.result === "unknown" || move.result === "skipped",
-  );
-  if (refused?.resultDetail !== undefined) {
-    return { text: refused.resultDetail, tone: "danger" };
-  }
-  const invalid = members.find((move) => move.validation.status !== "current");
-  const reason = invalid?.validation.reasons[0]?.detail;
-  if (invalid !== undefined && reason !== undefined) {
-    return {
-      text: members.length === 1 ? reason : `${moveSummary(invalid)}: ${reason}`,
-      tone: "danger",
-    };
-  }
-  const detail = card.group?.detail;
-  return detail === undefined ? undefined : { text: detail, tone: "muted" };
 }
 
 export function cardTitle(card: GroupCard): string {
@@ -145,6 +174,127 @@ export function cardTitle(card: GroupCard): string {
   return `Group of ${moveCount(card.moves.length)}`;
 }
 
+function blockedAction(card: GroupCard): CardAction {
+  const members = cardMembers(card);
+  const remaining = discardableMoves(card);
+  const roster = members.find((move) => rosterReason(move) !== undefined);
+  if (roster !== undefined && card.fixes.length === 0) {
+    return { kind: "cure", text: reasonText(members, roster) };
+  }
+  const dependency = members.find((move) => dependencyReason(move) !== undefined);
+  if (dependency !== undefined) {
+    return { kind: "dependency", text: reasonText(members, dependency), moves: remaining };
+  }
+  return remaining.length === 0
+    ? { kind: "none" }
+    : {
+        kind: "discard",
+        moves: remaining,
+        text:
+          firstResultDetail(members) ??
+          invalidReasonText(members) ??
+          card.group?.cure ??
+          card.group?.detail,
+      };
+}
+
+function runAction(card: GroupCard): CardAction {
+  if (retriable(card)) {
+    return { kind: "retry", text: firstResultDetail(cardMembers(card)) };
+  }
+  const members = cardMembers(card);
+  const remaining = discardableMoves(card);
+  return remaining.length === 0
+    ? { kind: "none" }
+    : {
+        kind: "discard",
+        moves: remaining,
+        text:
+          firstResultDetail(members) ??
+          invalidReasonText(members) ??
+          card.group?.cure ??
+          card.group?.detail,
+      };
+}
+
+function retriable(card: GroupCard): boolean {
+  if (cardStatus(card).kind !== "failed") {
+    return false;
+  }
+  const members = cardMembers(card);
+  if (members.length === 0) {
+    return false;
+  }
+  if (members.some((move) => move.phase !== undefined)) {
+    return false;
+  }
+  if (members.some((move) => move.validation.status !== "current")) {
+    return false;
+  }
+  if (!members.every((move) => move.result === "failed" || move.result === "skipped")) {
+    return false;
+  }
+  return (card.group?.actions ?? []).every((action) => action.outcome !== "executed");
+}
+
+function moveIsDiscardable(move: TransactionMoveView): boolean {
+  return (
+    move.decision !== "discarded" &&
+    move.phase === undefined &&
+    (move.result === undefined ||
+      move.result === "failed" ||
+      move.result === "skipped" ||
+      move.result === "unknown")
+  );
+}
+
+function discardableMoves(card: GroupCard): ReadonlyArray<TransactionMoveView> {
+  return cardMembers(card).filter(moveIsDiscardable);
+}
+
+function rosterReason(
+  move: TransactionMoveView,
+): TransactionMoveView["validation"]["reasons"][number] | undefined {
+  return move.validation.reasons.find(
+    (reason) => reason.code === "roster_full" || reason.code === "slot_illegal",
+  );
+}
+
+function dependencyReason(
+  move: TransactionMoveView,
+): TransactionMoveView["validation"]["reasons"][number] | undefined {
+  return move.validation.reasons.find(
+    (reason) => reason.code === "pending_outcome" || reason.code === "blocked_by_move",
+  );
+}
+
+function reasonText(
+  members: ReadonlyArray<TransactionMoveView>,
+  move: TransactionMoveView,
+): string {
+  const reason = rosterReason(move) ?? dependencyReason(move);
+  const detail = reason?.detail ?? move.validation.reasons[0]?.detail ?? "This move is blocked.";
+  return members.length === 1 ? detail : `${moveSummary(move)}: ${detail}`;
+}
+
+function invalidReasonText(members: ReadonlyArray<TransactionMoveView>): string | undefined {
+  const invalid = members.find((move) => move.validation.status !== "current");
+  const reason = invalid?.validation.reasons[0];
+  if (invalid === undefined || reason === undefined) {
+    return undefined;
+  }
+  return members.length === 1 ? reason.detail : `${moveSummary(invalid)}: ${reason.detail}`;
+}
+
+function firstResultDetail(members: ReadonlyArray<TransactionMoveView>): string | undefined {
+  const refused = members.find(
+    (move) =>
+      move.resultDetail !== undefined &&
+      (move.result === "failed" || move.result === "unknown" || move.result === "skipped"),
+  );
+  return refused?.resultDetail;
+}
+
 function isSubmitted(move: TransactionMoveView): boolean {
   return move.decision === "now" || move.decision === "confirmed";
 }
@@ -155,6 +305,11 @@ function cardPosition(card: GroupCard): number {
     ...card.fixes.map((move) => move.position),
   );
 }
+
+export type DayTeamCards = {
+  readonly team: TransactionMoveDayView["teams"][number]["team"];
+  readonly cards: ReadonlyArray<GroupCard>;
+};
 
 export type GroupCard = {
   readonly key: string;
@@ -176,12 +331,28 @@ export type CardStatus =
   | { readonly kind: "failed" }
   | { readonly kind: "ran" };
 
+export type CardAction =
+  | { readonly kind: "decide" }
+  | { readonly kind: "cure"; readonly text: string }
+  | { readonly kind: "retry"; readonly text?: string }
+  | {
+      readonly kind: "discard";
+      readonly moves: ReadonlyArray<TransactionMoveView>;
+      readonly text?: string;
+    }
+  | {
+      readonly kind: "dependency";
+      readonly text: string;
+      readonly moves: ReadonlyArray<TransactionMoveView>;
+    }
+  | { readonly kind: "none" };
+
 export type CardNextAction = {
   readonly text: string;
   readonly tone: "danger" | "muted";
 };
 
-export type GroupCardsInput = {
+type GroupCardsInput = {
   readonly moves: ReadonlyArray<TransactionMoveView>;
   readonly groups: ReadonlyArray<TransactionPlanGroupView>;
   readonly today: boolean;
