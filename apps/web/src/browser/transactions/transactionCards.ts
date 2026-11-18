@@ -68,6 +68,9 @@ export function cardMembers(card: GroupCard): ReadonlyArray<TransactionMoveView>
 
 export function cardStatus(card: GroupCard): CardStatus {
   const members = cardMembers(card);
+  if (members.every((move) => move.phase === "with_league")) {
+    return { kind: "with-league" };
+  }
   if (members.every((move) => move.result === "pending")) {
     return { kind: "waiting" };
   }
@@ -100,7 +103,7 @@ export function cardNeedsDecision(card: GroupCard): boolean {
 
 export function cardIsSettled(card: GroupCard): boolean {
   const kind = cardStatus(card).kind;
-  return kind === "waiting" || kind === "scheduled";
+  return kind === "waiting" || kind === "with-league" || kind === "scheduled";
 }
 
 export function cardNextAction(card: GroupCard): CardNextAction | undefined {
@@ -166,6 +169,7 @@ export type CardStatus =
   | { readonly kind: "needs-decision" }
   | { readonly kind: "scheduled"; readonly runDay: string }
   | { readonly kind: "waiting" }
+  | { readonly kind: "with-league" }
   | { readonly kind: "running" }
   | { readonly kind: "partly-ran" }
   | { readonly kind: "blocked" }

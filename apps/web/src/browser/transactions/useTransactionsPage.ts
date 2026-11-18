@@ -51,6 +51,11 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
         held.set(facts.team, facts);
       }
     }
+    for (const data of earlier.isSuccess ? earlier.data.pages : []) {
+      for (const facts of data.teamFacts) {
+        held.set(facts.team, facts);
+      }
+    }
     return held;
   });
   const groups = createMemo(() => {
@@ -346,13 +351,15 @@ function confirmationMessage(
     parts.push(
       (target.today && runsOn === target.runDay) || runsOn === undefined
         ? `Submitted ${moveCount(outcome.confirmed.length)}.`
-        : `Scheduled ${moveCount(outcome.confirmed.length)} for ${scheduledMoment(runsOn, nextRunAt)}.`,
+        : target.claim
+          ? `Scheduled ${moveCount(outcome.confirmed.length)} for ${formatCalendarDate(runsOn)}.`
+          : `Scheduled ${moveCount(outcome.confirmed.length)} for ${scheduledMoment(runsOn, nextRunAt)}.`,
     );
   } else {
     parts.push(`Ran ${moveCount(outcome.counts.moves)}.`);
   }
   if (outcome.counts.pending > 0) {
-    parts.push(`${moveCount(outcome.counts.pending)} waiting for the league.`);
+    parts.push(`${moveCount(outcome.counts.pending)} with the league.`);
   }
   if (outcome.counts.failed > 0) {
     parts.push(`${moveCount(outcome.counts.failed)} failed.`);

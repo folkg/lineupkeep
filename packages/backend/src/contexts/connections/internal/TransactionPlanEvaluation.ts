@@ -2235,9 +2235,19 @@ export type TransactionPlanPoolPlayer = {
   readonly availability: "free_agent" | "waiver";
 };
 
+type TransactionPlanWaiver = {
+  readonly rule: string | undefined;
+  readonly type: string | undefined;
+  readonly days: number | undefined;
+};
+
+type TransactionPlanPoolStatus = "rostered" | "free_agent" | "waiver" | "unknown";
+
 export type TransactionPlanTeamFacts = {
   readonly roster: ReadonlyArray<TransactionPlanRosterPlayer>;
   readonly pool: ReadonlyMap<string, TransactionPlanPoolPlayer>;
+  readonly poolStatus: ReadonlyMap<string, TransactionPlanPoolStatus>;
+  readonly waiver: TransactionPlanWaiver;
   readonly slots: ReadonlyArray<TransactionPlanSlot>;
   readonly constraints: TransactionPlanConstraints;
   readonly today: StoredMoveDate;
@@ -2265,6 +2275,7 @@ export type TransactionPlanMove = Pick<
   | "bid"
   | "runDay"
   | "effectiveDate"
+  | "phase"
   | "result"
   | "decision"
 >;

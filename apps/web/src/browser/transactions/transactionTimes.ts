@@ -1,6 +1,9 @@
 import { formatCalendarDate } from "#browser/shared-ui/formatTime.ts";
 import type { ClockReader } from "#browser/shared-ui/formatTime.ts";
-import type { TransactionMoveView } from "#contracts/connections/transactionContract.ts";
+import type {
+  TransactionMoveView,
+  TransactionWaiverRuleView,
+} from "#contracts/connections/transactionContract.ts";
 
 const clockFormats = new Map<string, Intl.DateTimeFormat>();
 const dayFormats = new Map<string, Intl.DateTimeFormat>();
@@ -56,6 +59,20 @@ export function moveOutcomeLabel(move: TransactionMoveView): string | undefined 
   if (move.decision === "discarded") {
     return "Discarded";
   }
+  switch (move.phase) {
+    case "with_league":
+      return "With the league";
+    case "won":
+      return "Claim won";
+    case "lost":
+      return move.result === "executed"
+        ? "Claim lost, fallback ran"
+        : move.result === "failed"
+          ? "All choices failed"
+          : "Claim lost";
+    case undefined:
+      break;
+  }
   switch (move.result) {
     case "executed":
       return executedLabel(move);
@@ -100,9 +117,25 @@ export function submittedLine(
     return undefined;
   }
   const at = formatDatedMoment(move.confirmation.at, reader, now);
-  return move.decision === "confirmed" && move.runDay !== undefined
-    ? `Scheduled on ${at} for ${scheduledMoment(move.runDay, nextRunAt, reader)}.`
-    : `You submitted this on ${at}.`;
+  if (move.decision !== "confirmed" || move.runDay === undefined) {
+    return `You submitted this on ${at}.`;
+  }
+  return move.kind === "waiver_claim" || move.phase !== undefined
+    ? `Scheduled on ${at} for ${formatCalendarDate(move.runDay)}.`
+    : `Scheduled on ${at} for ${scheduledMoment(move.runDay, nextRunAt, reader)}.`;
+}
+
+export function waiverTimingLine(waiver: TransactionWaiverRuleView | undefined): string {
+  if (waiver?.rule !== undefined) {
+    return `Your league's waiver rule: ${waiver.rule}.`;
+  }
+  if (waiver?.days !== undefined) {
+    return `Your league processes waivers after ${String(waiver.days)} ${waiver.days === 1 ? "day" : "days"}.`;
+  }
+  if (waiver?.type !== undefined) {
+    return `Your league's waiver type: ${waiver.type}.`;
+  }
+  return "It settles before the next check.";
 }
 
 export function discardLine(

@@ -1701,6 +1701,10 @@ function facts(input: {
   return {
     roster: input.roster,
     pool: new Map((input.pool ?? []).map((player) => [player.key, player] as const)),
+    poolStatus: new Map(
+      (input.pool ?? []).map((player) => [player.key, player.availability] as const),
+    ),
+    waiver: { rule: undefined, type: undefined, days: undefined },
     slots: input.slots,
     constraints: input.constraints,
     today: input.today ?? "2026-11-10",

@@ -71,6 +71,7 @@ export function toTransactionPlanData(plan: TransactionPlanRead): TransactionPla
             }
           : { status: "unavailable", note: plan.snapshot.note },
     ...(plan.waiverBid === undefined ? {} : { waiverBid: plan.waiverBid }),
+    ...(plan.waiver === undefined ? {} : { waiver: plan.waiver }),
     ...(plan.places === undefined ? {} : { places: plan.places }),
     ...(plan.reserve === undefined ? {} : { reserve: plan.reserve }),
     ...(plan.addsPossible === undefined ? {} : { addsPossible: plan.addsPossible }),
@@ -104,6 +105,22 @@ function toMoveView(move: TransactionMoveRead): TransactionMoveView {
     kind: move.kind,
     position: move.position,
     decision: move.decision,
+    ...(move.phase === undefined ? {} : { phase: move.phase }),
+    attempts: move.attempts.map((attempt) => ({
+      kind: attempt.kind,
+      player: {
+        ...(attempt.player.name === undefined ? {} : { name: attempt.player.name }),
+        ...(attempt.player.position === undefined ? {} : { position: attempt.player.position }),
+        ...(attempt.player.proTeam === undefined ? {} : { proTeam: attempt.player.proTeam }),
+        ...(attempt.player.availability === undefined
+          ? {}
+          : { availability: attempt.player.availability }),
+      },
+      outcome: attempt.outcome,
+      reason: attempt.reason,
+      at: DateTime.formatIso(attempt.at),
+      ...(attempt.effectiveDate === undefined ? {} : { effectiveDate: attempt.effectiveDate }),
+    })),
     reason: move.reason,
     adds: move.adds,
     fallbacks: move.fallbacks,

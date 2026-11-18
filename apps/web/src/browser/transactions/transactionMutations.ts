@@ -19,4 +19,5 @@ export type ConfirmGroupVariables = {
   readonly runDay: string | undefined;
   readonly runsOn: string | undefined;
   readonly today: boolean;
+  readonly claim: boolean;
 };

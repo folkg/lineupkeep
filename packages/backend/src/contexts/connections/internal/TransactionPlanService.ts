@@ -31,6 +31,7 @@ import {
 } from "#contexts/connections/TransactionPlans.ts";
 import type {
   StoredMoveClaim,
+  StoredMoveAttempt,
   StoredMoveIntent,
   StoredMovePick,
   StoredMovePlacement,
@@ -44,6 +45,7 @@ import type {
   TransactionMoveList,
   TransactionMoveListInput,
   TransactionMovePageLimit,
+  TransactionMovePhase,
   TransactionMoveProvenance,
   TransactionMoveReadState,
   TransactionMoveResult,
@@ -109,6 +111,7 @@ import {
   TransactionMoveId as TransactionMoveIdSchema,
 } from "./TransactionPlanRecord.ts";
 import type {
+  StoredMoveStep,
   TransactionMoveRecord,
   TransactionMoveRowRecord,
   TransactionPlanRecord,
@@ -125,6 +128,7 @@ import type {
   TransactionPlanAction,
   TransactionPlanWriteRequest,
   TransactionPlanWriteResult,
+  TransactionPlanWritesShape,
 } from "./TransactionPlanWrites.ts";
 
 export {
@@ -1197,6 +1201,7 @@ export const TransactionPlanServiceLive = Layer.effect(
             counts.retry += 1;
             return "retry";
           }
+          const submittedClaim = decided.result === "pending" && move.kind === "waiver_claim";
           yield* settle([
             settlementOf({
               move,
@@ -1207,6 +1212,16 @@ export const TransactionPlanServiceLive = Layer.effect(
               at: input.at,
               attempted: true,
               actions: decided.actions,
+              ...(submittedClaim
+                ? {
+                    phase: "with_league" as const,
+                    attempts: claimSubmittedAttempts(
+                      move,
+                      decided.detail ?? "Submitted to the league.",
+                      input.at,
+                    ),
+                  }
+                : {}),
               run: {
                 id: input.runId,
                 at: input.at,
@@ -1604,14 +1619,191 @@ export const TransactionPlanServiceLive = Layer.effect(
       } satisfies TransactionPlanConfirmation;
     });
 
+    const reconcileClaims = Effect.fn("TransactionPlanService.reconcileClaims")(function* (input: {
+      readonly at: DateTime.Utc;
+      readonly limit: number;
+    }) {
+      const counts = emptyRunCounts();
+      const plans = yield* repository.readClaimPlans({ limit: input.limit });
+      counts.plans = plans.length;
+      if (plans.length === 0) {
+        return { at: input.at, counts };
+      }
+
+      const claimNext = (
+        index: number,
+        claimed: ReadonlyArray<{ readonly plan: TransactionPlanRef; readonly runClaim: string }>,
+      ): Effect.Effect<
+        ReadonlyArray<{ readonly plan: TransactionPlanRef; readonly runClaim: string }>,
+        TransactionPlanPersistenceFailed
+      > =>
+        Effect.gen(function* () {
+          const plan = plans[index];
+          if (plan === undefined) {
+            return claimed;
+          }
+          const runClaim = yield* newClaim;
+          const claim = yield* repository.claimRun({
+            userId: plan.userId,
+            team: plan.team,
+            runClaim,
+            at: input.at,
+          });
+          if (claim.status === "held") {
+            counts.busy += 1;
+            return yield* claimNext(index + 1, claimed);
+          }
+          counts.claimed += 1;
+          return yield* claimNext(index + 1, [...claimed, { plan, runClaim }]);
+        });
+      const claimed = yield* claimNext(0, []);
+      if (claimed.length === 0) {
+        return { at: input.at, counts };
+      }
+
+      const claimMoves = yield* repository.readClaimMovesForPlans({
+        plans: claimed.map((entry) => entry.plan),
+      });
+      const openMoves = yield* repository.readOpenMovesForPlans({
+        plans: claimed.map((entry) => entry.plan),
+      });
+
+      const reconcileNext = (index: number): Effect.Effect<void, TransactionPlanServiceError> =>
+        Effect.gen(function* () {
+          const entry = claimed[index];
+          if (entry === undefined) {
+            return;
+          }
+          const owned = claimMoves.filter(
+            (move) => move.userId === entry.plan.userId && move.team === entry.plan.team,
+          );
+          const open = openMoves.filter(
+            (move) => move.userId === entry.plan.userId && move.team === entry.plan.team,
+          );
+          const runClaim = entry.runClaim;
+          yield* Effect.gen(function* () {
+            const players = [
+              ...new Set([
+                ...owned.flatMap((move) => [
+                  ...move.adds.map((player) => player.key),
+                  ...move.fallbacks.map((player) => player.key),
+                ]),
+                ...namedPlayers(open),
+              ]),
+            ];
+            const facts = yield* Effect.result(
+              factsPort.read({
+                userId: entry.plan.userId,
+                team: entry.plan.team,
+                at: input.at,
+                players,
+                needsBudget: needsBudget(open),
+              }),
+            );
+            if (facts._tag === "Failure") {
+              counts.unavailable += 1;
+              return;
+            }
+
+            const runId = yield* newRunId;
+            const local = emptyRunCounts();
+            const settlements: Array<TransactionMoveSettlement> = [];
+            for (const move of owned) {
+              const decided = yield* reconcileClaim({
+                move,
+                facts: facts.success,
+                open,
+                userId: entry.plan.userId,
+                team: entry.plan.team,
+                at: input.at,
+                runId,
+                writes,
+              });
+              if (decided === undefined) {
+                continue;
+              }
+              local.moves += 1;
+              countRunResult(local, decided.result);
+              if (decided.settlement.attempts.at(-1)?.outcome === "retry") {
+                local.retry += 1;
+              }
+              settlements.push(decided.settlement);
+            }
+            if (settlements.length === 0) {
+              return;
+            }
+            yield* repository.beginRun({
+              userId: entry.plan.userId,
+              team: entry.plan.team,
+              run: runId,
+              trigger: "tick",
+              decision: transactionPlanTickDecision,
+              key: undefined,
+              counts: emptyRunCounts(),
+              refusals: [],
+              at: input.at,
+            });
+            yield* repository.settleMoves({
+              userId: entry.plan.userId,
+              team: entry.plan.team,
+              at: input.at,
+              settlements: nonEmpty(settlements, "A reconciled claim produced no settlement"),
+            });
+            yield* repository.finishRun({
+              run: runId,
+              counts: local,
+              refusals: [],
+              at: input.at,
+            });
+            counts.moves += local.moves;
+            counts.executed += local.executed;
+            counts.pending += local.pending;
+            counts.failed += local.failed;
+            counts.skipped += local.skipped;
+            counts.unknown += local.unknown;
+            counts.retry += local.retry;
+          }).pipe(
+            Effect.ensuring(
+              repository
+                .releaseRun({
+                  userId: entry.plan.userId,
+                  team: entry.plan.team,
+                  runClaim,
+                  at: input.at,
+                })
+                .pipe(Effect.ignore),
+            ),
+          );
+          return yield* reconcileNext(index + 1);
+        });
+      yield* reconcileNext(0);
+
+      return { at: input.at, counts };
+    });
+
     const runDue = Effect.fn("TransactionPlanService.runDue")(function* (
       limit: number,
       at: DateTime.Utc,
     ) {
       const before = DateTime.formatIsoDateUtc(DateTime.add(at, { days: 1 }));
+      const reconciled = yield* reconcileClaims({ at, limit });
       const recovered = yield* repository.releaseStaleRuns({ before: staleClaimBefore(at) });
       const candidates = yield* repository.readDuePlans({ before, limit });
-      const counts = { ...emptyRunCounts(), plans: candidates.length, recovered };
+      const counts = {
+        ...emptyRunCounts(),
+        plans: candidates.length + reconciled.counts.plans,
+        claimed: reconciled.counts.claimed,
+        busy: reconciled.counts.busy,
+        recovered,
+        unavailable: reconciled.counts.unavailable,
+        moves: reconciled.counts.moves,
+        executed: reconciled.counts.executed,
+        pending: reconciled.counts.pending,
+        failed: reconciled.counts.failed,
+        skipped: reconciled.counts.skipped,
+        unknown: reconciled.counts.unknown,
+        retry: reconciled.counts.retry,
+      };
       if (candidates.length === 0) {
         return { at, counts };
       }
@@ -1916,6 +2108,7 @@ export const TransactionPlanServiceLive = Layer.effect(
                 cure: blocker.cure,
               })),
               waiverBid: entry.facts.waiverBid,
+              waiver: entry.facts.waiver,
               moves: new Map(entry.evaluation.moves.map((held) => [held.move, held] as const)),
               blocked: new Map(
                 entry.evaluation.order.blocked.map((held) => [held.move, held.detail] as const),
@@ -1989,7 +2182,7 @@ export const TransactionPlanServiceLive = Layer.effect(
       const moves = moveReadViews({ moves: page, checks });
       const teamFacts = [...checks].flatMap(([teamId, check]) =>
         check.status === "checked"
-          ? [{ team: teamId, places: check.places, reserve: check.reserve }]
+          ? [{ team: teamId, places: check.places, reserve: check.reserve, waiver: check.waiver }]
           : [],
       );
       const todayOf = new Map(
@@ -2093,6 +2286,7 @@ export const TransactionPlanServiceLive = Layer.effect(
               canFree: check.canFree,
               illegal: check.illegal,
               waiverBid: check.waiverBid,
+              waiver: check.waiver,
             }
           : {}),
         moves,
@@ -2694,6 +2888,9 @@ function settlementOf(input: {
   readonly at: DateTime.Utc;
   readonly attempted: boolean;
   readonly actions: ReadonlyArray<TransactionPlanAction>;
+  readonly phase?: TransactionMovePhase | undefined;
+  readonly attempts?: ReadonlyArray<StoredMoveAttempt>;
+  readonly content?: TransactionMoveSettlement["content"];
   readonly run:
     | {
         readonly id: TransactionRunId;
@@ -2711,11 +2908,391 @@ function settlementOf(input: {
     runDay: input.entry.runDay,
     effectiveDate: input.entry.effectiveDate,
     runPosition: input.entry.runPosition,
+    phase: input.phase ?? input.move.phase,
+    attempts: input.attempts ?? input.move.attempts,
+    content: input.content,
     run: input.run,
     steps: input.attempted
       ? input.actions.map((action) => ({ ...action, decidedAt: input.at }))
       : [],
   };
+}
+
+function reconcileClaim(input: {
+  readonly move: TransactionMoveRowRecord;
+  readonly facts: TransactionPlanTeamFacts;
+  readonly open: ReadonlyArray<TransactionMoveRowRecord>;
+  readonly userId: UserId;
+  readonly team: TeamId;
+  readonly at: DateTime.Utc;
+  readonly runId: TransactionRunId;
+  readonly writes: TransactionPlanWritesShape;
+}): Effect.Effect<
+  | { readonly result: TransactionMoveResult; readonly settlement: TransactionMoveSettlement }
+  | undefined
+> {
+  const outcome = claimOutcomeOf(input.move, input.facts);
+  if (outcome.status === "with_league") {
+    return Effect.succeed(undefined);
+  }
+  const base = claimAttemptsOf(input.move, input.at);
+  const claim = input.move.adds[0];
+  if (claim === undefined) {
+    return Effect.die(new Error("A submitted claim named no player"));
+  }
+  if (outcome.status === "won") {
+    const attempts = withAttempt(base, {
+      kind: "claim",
+      player: claim,
+      outcome: "won",
+      reason: outcome.reason,
+      at: input.at,
+    });
+    return Effect.succeed({
+      result: "executed",
+      settlement: claimSettlement({
+        move: input.move,
+        facts: input.facts,
+        at: input.at,
+        runId: input.runId,
+        result: "executed",
+        detail: outcome.reason,
+        phase: "won",
+        attempts,
+        runDay: input.facts.today,
+        effectiveDate: input.facts.today,
+        content: undefined,
+        steps: [
+          {
+            kind: "add",
+            playerKey: claim.key,
+            outcome: "executed",
+            detail: outcome.reason,
+            decidedAt: input.at,
+          },
+        ],
+      }),
+    });
+  }
+  return Effect.gen(function* () {
+    let attempts = withAttempt(base, {
+      kind: "claim",
+      player: claim,
+      outcome: "lost",
+      reason: outcome.reason,
+      at: input.at,
+    });
+    const fallbacks = fallbacksToTry(input.move);
+    for (const fallback of fallbacks) {
+      const candidate = fallbackClaimMove(input.move, fallback, input.facts.today);
+      const evaluation = evaluateTransactionPlan({
+        facts: input.facts,
+        moves: [...input.open.filter((move) => move.id !== input.move.id), candidate],
+        checkedAt: input.at,
+      });
+      const entry = evaluation.moves.find((held) => held.move === input.move.id);
+      if (entry === undefined || entry.validation.status !== "current") {
+        attempts = withAttempt(attempts, {
+          kind: "fallback",
+          player: fallback,
+          outcome: "unavailable",
+          reason:
+            entry?.validation.reasons[0]?.detail ??
+            "This fallback is no longer available in your league.",
+          at: input.at,
+        });
+        continue;
+      }
+      const write = yield* input.writes.apply(
+        writeRequestOf({
+          userId: input.userId,
+          team: input.team,
+          move: candidate,
+          entry,
+        }),
+      );
+      const decided = writeResultOf(write);
+      if (decided.status === "retry") {
+        attempts = withAttempt(attempts, {
+          kind: "fallback",
+          player: fallback,
+          outcome: "retry",
+          reason: write.status === "retry" ? write.detail : "The league could not be read.",
+          at: input.at,
+        });
+        return {
+          result: "pending",
+          settlement: claimSettlement({
+            move: input.move,
+            facts: input.facts,
+            at: input.at,
+            runId: input.runId,
+            result: "pending",
+            detail: `The claim was lost. ${fallbackLabel(fallback)} could not be sent; the next check tries it again.`,
+            phase: "lost",
+            attempts,
+            runDay: input.move.runDay ?? input.facts.today,
+            effectiveDate: undefined,
+            content: undefined,
+            steps: [],
+          }),
+        };
+      }
+      if (decided.result === "failed") {
+        attempts = withAttempt(attempts, {
+          kind: "fallback",
+          player: fallback,
+          outcome: "failed",
+          reason: decided.detail ?? "Your league refused this fallback.",
+          at: input.at,
+        });
+        continue;
+      }
+      if (decided.result === "unknown") {
+        attempts = withAttempt(attempts, {
+          kind: "fallback",
+          player: fallback,
+          outcome: "unknown",
+          reason: decided.detail ?? "Your league did not confirm this fallback.",
+          at: input.at,
+        });
+        return {
+          result: "unknown",
+          settlement: claimSettlement({
+            move: input.move,
+            facts: input.facts,
+            at: input.at,
+            runId: input.runId,
+            result: "unknown",
+            detail: decided.detail ?? "Your league did not confirm this fallback.",
+            phase: "lost",
+            attempts,
+            runDay: entry.runDay,
+            effectiveDate: entry.effectiveDate,
+            content: fallbackContent(fallback),
+            steps: decided.actions.map((action) => ({ ...action, decidedAt: input.at })),
+          }),
+        };
+      }
+      attempts = withAttempt(attempts, {
+        kind: "fallback",
+        player: fallback,
+        outcome: "executed",
+        reason: "Added after the league did not award the claim.",
+        at: input.at,
+        ...(entry.effectiveDate === undefined ? {} : { effectiveDate: entry.effectiveDate }),
+      });
+      return {
+        result: "executed",
+        settlement: claimSettlement({
+          move: input.move,
+          facts: input.facts,
+          at: input.at,
+          runId: input.runId,
+          result: "executed",
+          detail: `The claim was lost. ${fallbackLabel(fallback)} was added instead.`,
+          phase: "lost",
+          attempts,
+          runDay: entry.runDay,
+          effectiveDate: entry.effectiveDate,
+          content: fallbackContent(fallback),
+          steps: decided.actions.map((action) => ({ ...action, decidedAt: input.at })),
+        }),
+      };
+    }
+    return {
+      result: "failed",
+      settlement: claimSettlement({
+        move: input.move,
+        facts: input.facts,
+        at: input.at,
+        runId: input.runId,
+        result: "failed",
+        detail: allChoicesFailed(attempts),
+        phase: "lost",
+        attempts,
+        runDay: input.move.runDay ?? input.facts.today,
+        effectiveDate: undefined,
+        content: undefined,
+        steps: [],
+      }),
+    };
+  });
+}
+
+function claimOutcomeOf(
+  move: TransactionMoveRowRecord,
+  facts: TransactionPlanTeamFacts,
+):
+  | { readonly status: "with_league"; readonly reason: string }
+  | { readonly status: "won"; readonly reason: string }
+  | { readonly status: "lost"; readonly reason: string } {
+  const claim = move.adds[0];
+  if (claim === undefined) {
+    return { status: "lost", reason: "The claim named no player, so there was nothing to award." };
+  }
+  const name = claim.name ?? claim.key;
+  if (facts.roster.some((player) => player.key === claim.key)) {
+    return { status: "won", reason: `The league added ${name} to your roster.` };
+  }
+  switch (facts.poolStatus.get(claim.key)) {
+    case "waiver":
+      return { status: "with_league", reason: `Your league has not processed ${name} yet.` };
+    case "free_agent":
+      return {
+        status: "lost",
+        reason: `The league did not award ${name}; they are a free agent.`,
+      };
+    case "rostered":
+      return {
+        status: "lost",
+        reason: `The league awarded ${name} to another team.`,
+      };
+    case "unknown":
+    case undefined:
+      return {
+        status: "with_league",
+        reason: `Your league has not published ${name}'s outcome yet.`,
+      };
+  }
+}
+
+function claimSettlement(input: {
+  readonly move: TransactionMoveRowRecord;
+  readonly facts: TransactionPlanTeamFacts;
+  readonly at: DateTime.Utc;
+  readonly runId: TransactionRunId;
+  readonly result: TransactionMoveResult;
+  readonly detail: string;
+  readonly phase: TransactionMovePhase;
+  readonly attempts: ReadonlyArray<StoredMoveAttempt>;
+  readonly runDay: StoredMoveDate;
+  readonly effectiveDate: StoredMoveDate | undefined;
+  readonly content: TransactionMoveSettlement["content"];
+  readonly steps: ReadonlyArray<StoredMoveStep>;
+}): TransactionMoveSettlement {
+  return {
+    move: input.move.id,
+    result: input.result,
+    detail: input.detail,
+    validation: { status: "current", checkedAt: input.at, reasons: [] },
+    runDay: input.runDay,
+    effectiveDate: input.effectiveDate,
+    runPosition: input.move.runPosition,
+    phase: input.phase,
+    attempts: input.attempts,
+    content: input.content,
+    run: {
+      id: input.runId,
+      at: input.at,
+      decidedBy: "system",
+      surface: "automation.run",
+    },
+    steps: input.steps,
+  };
+}
+
+function claimAttemptsOf(
+  move: TransactionMoveRowRecord,
+  at: DateTime.Utc,
+): ReadonlyArray<StoredMoveAttempt> {
+  if (move.attempts.length > 0) {
+    return move.attempts;
+  }
+  const claim = move.adds[0];
+  if (claim === undefined) {
+    return [];
+  }
+  return [
+    {
+      kind: "claim",
+      player: claim,
+      outcome: "pending",
+      reason: "Submitted to the league.",
+      at: move.resultAt ?? at,
+    },
+  ];
+}
+
+function claimSubmittedAttempts(
+  move: TransactionMoveRowRecord,
+  detail: string,
+  at: DateTime.Utc,
+): ReadonlyArray<StoredMoveAttempt> {
+  const claim = move.adds[0];
+  if (claim === undefined) {
+    return move.attempts;
+  }
+  return withAttempt(claimAttemptsOf(move, at), {
+    kind: "claim",
+    player: claim,
+    outcome: "pending",
+    reason: detail,
+    at,
+  });
+}
+
+function withAttempt(
+  attempts: ReadonlyArray<StoredMoveAttempt>,
+  attempt: StoredMoveAttempt,
+): ReadonlyArray<StoredMoveAttempt> {
+  const index = attempts.findIndex(
+    (held) => held.kind === attempt.kind && held.player.key === attempt.player.key,
+  );
+  if (index === -1) {
+    return [...attempts, attempt];
+  }
+  return attempts.map((held, position) => (position === index ? attempt : held));
+}
+
+function fallbacksToTry(move: TransactionMoveRowRecord): ReadonlyArray<StoredMovePlayer> {
+  const tried = new Map(
+    move.attempts
+      .filter((attempt) => attempt.kind === "fallback")
+      .map((attempt) => [attempt.player.key, attempt.outcome] as const),
+  );
+  return move.fallbacks.filter((fallback) => {
+    const outcome = tried.get(fallback.key);
+    return outcome === undefined || outcome === "retry";
+  });
+}
+
+function fallbackClaimMove(
+  move: TransactionMoveRowRecord,
+  fallback: StoredMovePlayer,
+  today: StoredMoveDate,
+): TransactionMoveRowRecord {
+  return {
+    ...move,
+    kind: "free_agent_add",
+    adds: [fallback],
+    picks: [],
+    slotMove: undefined,
+    intent: { kind: "add", to: move.intent?.to ?? "active" },
+    placement: undefined,
+    bid: undefined,
+    runDay: today,
+    effectiveDate: undefined,
+    decision: "now",
+    result: undefined,
+    phase: "lost",
+  };
+}
+
+function fallbackContent(fallback: StoredMovePlayer): TransactionMoveSettlement["content"] {
+  return { kind: "free_agent_add", adds: [fallback], fallbacks: [], bid: undefined };
+}
+
+function fallbackLabel(fallback: StoredMovePlayer): string {
+  return `Your fallback ${fallback.name ?? fallback.key}`;
+}
+
+function allChoicesFailed(attempts: ReadonlyArray<StoredMoveAttempt>): string {
+  const tried = attempts.map(
+    (attempt) =>
+      `${attempt.kind === "claim" ? "Claim" : "Fallback"} ${attempt.player.name ?? attempt.player.key}: ${attempt.reason}`,
+  );
+  return [...tried, "All choices failed. Nothing is waiting."].join(" ");
 }
 
 function emptyRunCounts(): MutableRunCounts {
@@ -2882,6 +3459,8 @@ function moveView(
     effectiveDate: entry?.effectiveDate ?? move.effectiveDate,
     runsOn: entry?.runsOn,
     dueToday: entry?.dueToday ?? false,
+    phase: move.phase,
+    attempts: move.attempts,
     validation: entry?.validation ?? move.validation,
     placement: entry?.placement ?? move.placement,
     claims: entry?.claims ?? move.claims,
@@ -3052,6 +3631,8 @@ function appendOf(
       reason: candidate.reason,
       runDay: candidate.runDay,
       effectiveDate: entry.effectiveDate,
+      phase: undefined,
+      attempts: [],
       decision: candidate.decision,
       decidedAt: candidate.decision === "saved" ? at : undefined,
       decidedBy: decision.decidedBy,
@@ -3087,6 +3668,8 @@ function contentOfMove(
     reason: move.reason,
     runDay,
     effectiveDate: entry.effectiveDate,
+    phase: move.phase,
+    attempts: move.attempts,
     decision: decisionFor(runDay, today),
     decidedAt: decisionFor(runDay, today) === "saved" ? at : undefined,
     decidedBy: decision.decidedBy,
@@ -3119,6 +3702,8 @@ function contentOfCandidate(
     reason: candidate.reason,
     runDay: candidate.runDay,
     effectiveDate: entry.effectiveDate,
+    phase: undefined,
+    attempts: [],
     decision: decisionFor(candidate.runDay, today),
     decidedAt: decisionFor(candidate.runDay, today) === "saved" ? at : undefined,
     decidedBy: decision.decidedBy,

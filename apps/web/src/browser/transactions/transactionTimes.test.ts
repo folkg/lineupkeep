@@ -61,6 +61,29 @@ it("dates a later day's submission and the day it runs", () => {
   ).toBe(`Scheduled on Nov 16 at 8:55 AM for ${formatCalendarDate("2026-11-17")} at 4:55 PM.`);
 });
 
+it("dates a later day's claim without the hourly run time", () => {
+  const claim = executed({
+    kind: "waiver_claim",
+    phase: "with_league",
+    decision: "confirmed",
+    runDay: "2026-11-17",
+    confirmation: { by: "owner", at: "2026-11-16T13:55:00.000Z" },
+  });
+  expect(submittedLine(claim, nextRunAt, reader, new Date("2026-11-17T12:00:00.000Z"))).toBe(
+    `Scheduled on Nov 16 at 8:55 AM for ${formatCalendarDate("2026-11-17")}.`,
+  );
+  expect(moveOutcomeLabel(claim)).toBe("With the league");
+  expect(
+    moveOutcomeLabel(executed({ kind: "waiver_claim", phase: "won", result: "executed" })),
+  ).toBe("Claim won");
+  expect(
+    moveOutcomeLabel(executed({ kind: "free_agent_add", phase: "lost", result: "executed" })),
+  ).toBe("Claim lost, fallback ran");
+  expect(
+    moveOutcomeLabel(executed({ kind: "waiver_claim", phase: "lost", result: "failed" })),
+  ).toBe("All choices failed");
+});
+
 it("keeps one submission line apart from the run outcome", () => {
   const move = executed({
     confirmation: { by: "owner", at: "2026-11-11T17:35:00.000Z" },
@@ -110,6 +133,7 @@ function executed(overrides: Partial<TransactionMoveView>): TransactionMoveView 
     position: 0,
     decision: "now",
     reason: "Make the roster change.",
+    attempts: [],
     adds: [],
     fallbacks: [],
     drops: [{ name: "Riley Chen" }],

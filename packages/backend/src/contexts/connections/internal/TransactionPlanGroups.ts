@@ -84,6 +84,9 @@ function statusOf(
   members: ReadonlyArray<TransactionPlanGroupMember>,
   actions: ReadonlyArray<TransactionPlanGroupAction>,
 ): TransactionPlanGroupStatus {
+  if (members.some((member) => member.move.phase === "lost" && isFailed(member))) {
+    return "failed";
+  }
   const executed = members.filter((member) => member.move.result === "executed").length;
   if (executed === members.length) {
     return "done";
@@ -120,6 +123,8 @@ function detailOf(input: {
       );
     case "blocked":
       return blockedDetail(input);
+    case "failed":
+      return failedDetail(input.members);
     case "ready":
       return sentence(
         "This group is ready to run whole, in this order:",
@@ -162,6 +167,29 @@ function blockedDetail(input: {
     );
   }
   return "This group does not run.";
+}
+
+function failedDetail(members: ReadonlyArray<TransactionPlanGroupMember>): string {
+  const attempted = members.flatMap((member) =>
+    member.move.attempts.map(
+      (attempt) =>
+        `${attempt.kind === "claim" ? "Claim" : "Fallback"} ${attempt.player.name ?? attempt.player.key}: ${attempt.reason}`,
+    ),
+  );
+  return sentence(
+    "This group ended failed.",
+    "All choices failed.",
+    ...attempted,
+    "Nothing is waiting.",
+  );
+}
+
+function isFailed(member: TransactionPlanGroupMember): boolean {
+  return (
+    member.move.result === "failed" ||
+    member.move.result === "unknown" ||
+    member.move.result === "skipped"
+  );
 }
 
 function actedSentences(

@@ -242,6 +242,8 @@ function teamFacts(input: {
         { key: "fa1", name: "Free Agent", positions: [], availability: "free_agent" as const },
       ],
     ]),
+    poolStatus: new Map([["fa1", "free_agent" as const]]),
+    waiver: { rule: undefined, type: undefined, days: undefined },
     slots: input.slots,
     constraints: {
       rosterMaximum: input.maximum,

@@ -13,6 +13,8 @@ import type {
   StoredMovePlayer,
   StoredMoveSlot,
   StoredMoveValidation,
+  StoredMoveAttempt,
+  TransactionMoveAttemptView,
   TransactionMoveCheckView,
   TransactionMoveCursor,
   TransactionMoveDay,
@@ -26,6 +28,7 @@ import type {
   TransactionPlanDay,
   TransactionPlanSnapshot,
   TransactionWaiverBid,
+  TransactionWaiverRule,
 } from "#contexts/connections/TransactionPlans.ts";
 import { isOpenMove } from "#contexts/connections/TransactionPlans.ts";
 
@@ -59,6 +62,8 @@ export function moveReadView(input: {
     kind: move.kind,
     position: move.position,
     decision: displayedDecision(move, today),
+    ...(move.phase === undefined ? {} : { phase: move.phase }),
+    attempts: move.attempts.map(attemptView),
     reason: move.reason,
     adds: move.adds.map(playerView),
     fallbacks: move.fallbacks.map(playerView),
@@ -244,6 +249,17 @@ function playerView(player: StoredMovePlayer): TransactionMovePlayerView {
   };
 }
 
+function attemptView(attempt: StoredMoveAttempt): TransactionMoveAttemptView {
+  return {
+    kind: attempt.kind,
+    player: playerView(attempt.player),
+    outcome: attempt.outcome,
+    reason: attempt.reason,
+    at: attempt.at,
+    ...(attempt.effectiveDate === undefined ? {} : { effectiveDate: attempt.effectiveDate }),
+  };
+}
+
 function slotView(slot: StoredMoveSlot): {
   readonly playerName?: string;
   readonly toSlot: string;
@@ -321,6 +337,7 @@ export type TransactionTeamCheck =
       readonly canFree: ReadonlyArray<RosterFreeablePlace>;
       readonly illegal: ReadonlyArray<RosterBlocker>;
       readonly waiverBid: TransactionWaiverBid;
+      readonly waiver: TransactionWaiverRule;
       readonly moves: ReadonlyMap<TransactionMoveRecord["id"], TransactionPlanMoveEvaluation>;
       readonly blocked: ReadonlyMap<TransactionMoveRecord["id"], string>;
     }

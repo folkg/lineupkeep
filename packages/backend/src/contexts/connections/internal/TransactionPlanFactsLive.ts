@@ -86,6 +86,12 @@ export const TransactionPlanFactsLive = Layer.effect(
         roster: rosterPlayers(roster),
         rosterSource: rosterSourceOf(roster.coverage),
         leagueKey: context.owned.team.providerLeagueKey,
+        waiver: {
+          rule: league.waiverRule,
+          type: league.waiverType,
+          days: league.waiverDays,
+        },
+        poolStatus: poolStatuses(details),
         waiverBid:
           league.usesFaab === true && budget !== undefined
             ? { kind: "published" as const, balance: budget }
@@ -307,6 +313,12 @@ function poolPlayers(details: ReadonlyArray<ProviderPlayerDetail>): ReadonlyMap<
     });
   }
   return pool;
+}
+
+function poolStatuses(
+  details: ReadonlyArray<ProviderPlayerDetail>,
+): ReadonlyMap<string, ProviderPlayerDetail["rosterStatus"]> {
+  return new Map(details.map((detail) => [detail.providerPlayerKey, detail.rosterStatus]));
 }
 
 function publishedPeriodStart(input: {

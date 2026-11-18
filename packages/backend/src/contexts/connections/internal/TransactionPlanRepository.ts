@@ -34,6 +34,7 @@ import {
   StoredMovePlacement,
   StoredMovePlayer,
   StoredMoveSlot,
+  StoredMoveAttempt,
   StoredMoveValidation,
   TransactionDecision,
   TransactionDecisionActor,
@@ -42,6 +43,7 @@ import {
   TransactionMoveId,
   TransactionMoveKind,
   TransactionMovePageLimit,
+  TransactionMovePhase,
   TransactionMoveProvenance,
   TransactionMoveReadState,
   TransactionMoveRecord,
@@ -86,6 +88,8 @@ export type TransactionMoveContent = {
   readonly reason: string;
   readonly runDay: StoredMoveDate | undefined;
   readonly effectiveDate: StoredMoveDate | undefined;
+  readonly phase: TransactionMovePhase | undefined;
+  readonly attempts: ReadonlyArray<StoredMoveAttempt>;
   readonly decision: TransactionMoveDecision;
   readonly decidedAt: DateTime.Utc | undefined;
   readonly decidedBy: TransactionDecisionActor | undefined;
@@ -110,6 +114,9 @@ export type TransactionMoveSettlement = {
   readonly runDay: StoredMoveDate;
   readonly effectiveDate: StoredMoveDate | undefined;
   readonly runPosition: number | undefined;
+  readonly phase: TransactionMovePhase | undefined;
+  readonly attempts: ReadonlyArray<StoredMoveAttempt>;
+  readonly content: TransactionMoveSettlementContent | undefined;
   readonly run:
     | {
         readonly id: TransactionRunId;
@@ -119,6 +126,13 @@ export type TransactionMoveSettlement = {
       }
     | undefined;
   readonly steps: ReadonlyArray<StoredMoveStep>;
+};
+
+type TransactionMoveSettlementContent = {
+  readonly kind: TransactionMoveKind;
+  readonly adds: ReadonlyArray<StoredMovePlayer>;
+  readonly fallbacks: ReadonlyArray<StoredMovePlayer>;
+  readonly bid: number | undefined;
 };
 
 export type TransactionPlanRef = {
@@ -735,11 +749,21 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                 yield* tx
                   .update(transactionMoves)
                   .set({
+                    ...(settlement.content === undefined
+                      ? {}
+                      : {
+                          kind: settlement.content.kind,
+                          adds: settlement.content.adds,
+                          fallbacks: settlement.content.fallbacks,
+                          bid: settlement.content.bid ?? null,
+                        }),
                     result: settlement.result,
                     resultDetail: settlement.detail ?? null,
                     resultAt: at,
                     runDay: settlement.runDay,
                     effectiveDate: settlement.effectiveDate ?? null,
+                    phase: settlement.phase ?? null,
+                    attempts: settlement.attempts,
                     validation: settlement.validation.status,
                     checkedAt:
                       settlement.validation.checkedAt === undefined
@@ -801,6 +825,59 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
             .returning({ teamId: transactionPlans.teamId })
             .pipe(Effect.mapError(persistenceFailure));
           return released.length;
+        },
+      );
+
+      const readClaimPlans = Effect.fn("TransactionPlanRepository.readClaimPlans")(
+        function* (input: { readonly limit: number }) {
+          return yield* Effect.gen(function* () {
+            const rows = yield* database
+              .select({ userId: transactionMoves.userId, teamId: transactionMoves.teamId })
+              .from(transactionMoves)
+              .where(
+                and(
+                  eq(transactionMoves.result, "pending"),
+                  anyOf(transactionMoves.phase, ["with_league", "lost"]),
+                ),
+              )
+              .groupBy(transactionMoves.userId, transactionMoves.teamId)
+              .orderBy(asc(transactionMoves.teamId), asc(transactionMoves.userId))
+              .limit(input.limit);
+            return yield* Effect.forEach(rows, (row) =>
+              Effect.all({
+                userId: Schema.decodeEffect(UserId)(row.userId),
+                team: Schema.decodeEffect(TeamId)(row.teamId),
+              }),
+            );
+          }).pipe(Effect.mapError(persistenceFailure));
+        },
+      );
+
+      const readClaimMovesForPlans = Effect.fn("TransactionPlanRepository.readClaimMovesForPlans")(
+        function* (input: { readonly plans: ReadonlyArray<TransactionPlanRef> }) {
+          return yield* Effect.gen(function* () {
+            const scope = planScope(input.plans);
+            if (scope === undefined) {
+              return [];
+            }
+            const rows = yield* database
+              .select()
+              .from(transactionMoves)
+              .where(
+                and(
+                  scope,
+                  eq(transactionMoves.result, "pending"),
+                  anyOf(transactionMoves.phase, ["with_league", "lost"]),
+                ),
+              )
+              .orderBy(
+                asc(transactionMoves.userId),
+                asc(transactionMoves.teamId),
+                asc(transactionMoves.position),
+                asc(transactionMoves.id),
+              );
+            return yield* Effect.forEach(rows, decodeMove);
+          }).pipe(Effect.mapError(persistenceFailure));
         },
       );
 
@@ -1104,6 +1181,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                 team: transactionMoves.teamId,
                 decision: transactionMoves.decision,
                 result: transactionMoves.result,
+                phase: transactionMoves.phase,
                 total: count(),
               })
               .from(transactionMoves)
@@ -1113,13 +1191,18 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                   input.team === undefined ? undefined : eq(transactionMoves.teamId, input.team),
                 ),
               )
-              .groupBy(transactionMoves.teamId, transactionMoves.decision, transactionMoves.result)
+              .groupBy(
+                transactionMoves.teamId,
+                transactionMoves.decision,
+                transactionMoves.result,
+                transactionMoves.phase,
+              )
               .orderBy(asc(transactionMoves.teamId));
             const byTeam = new Map<TeamId, MutableMoveCounts>();
             for (const row of rows) {
               const team = yield* Schema.decodeEffect(TeamId)(row.team);
               const held = byTeam.get(team) ?? { open: 0, today: 0, saved: 0, ended: 0 };
-              const bucket = moveCountBucket(row.decision, row.result);
+              const bucket = moveCountBucket(row.decision, row.result, row.phase ?? undefined);
               held[bucket] += row.total;
               if (bucket !== "ended") {
                 held.open += row.total;
@@ -1197,6 +1280,8 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
         readSubmittedMoves,
         readTeam,
         readTeamProviderKeys,
+        readClaimPlans,
+        readClaimMovesForPlans,
         countOwnerMoves,
         countOwnerTeams,
       };
@@ -1387,6 +1472,8 @@ function moveValues(
   readonly reason: string;
   readonly runDay: string | null;
   readonly effectiveDate: string | null;
+  readonly phase: TransactionMovePhase | null;
+  readonly attempts: ReadonlyArray<StoredMoveAttempt>;
   readonly decision: TransactionMoveDecision;
   readonly decidedAt: Date | null;
   readonly decidedBy: TransactionDecisionActor | null;
@@ -1413,6 +1500,8 @@ function moveValues(
     reason: content.reason,
     runDay: content.runDay ?? null,
     effectiveDate: content.effectiveDate ?? null,
+    phase: content.phase ?? null,
+    attempts: content.attempts,
     decision: content.decision,
     decidedAt: content.decidedAt === undefined ? null : DateTime.toDateUtc(content.decidedAt),
     decidedBy: content.decidedBy ?? null,
@@ -1484,8 +1573,15 @@ function readStatePredicate(state: TransactionMoveReadState): SQL | undefined {
 function moveCountBucket(
   decision: TransactionMoveDecision,
   result: TransactionMoveResult | null,
+  phase: TransactionMovePhase | undefined,
 ): "today" | "saved" | "ended" {
-  if (!isOpenMove({ decision, ...(result === null ? {} : { result }) })) {
+  if (
+    !isOpenMove({
+      decision,
+      ...(result === null ? {} : { result }),
+      ...(phase === undefined ? {} : { phase }),
+    })
+  ) {
     return "ended";
   }
   return decision === "saved" || decision === "confirmed" ? "saved" : "today";

@@ -304,7 +304,7 @@ it("schedules a saved move for its day without running it", async () => {
 
   await expect
     .element(
-      page.getByText(`Scheduled 1 move for ${scheduledMoment("2026-11-13", nextRunAt)}.`, {
+      page.getByText(`Scheduled 1 move for ${formatCalendarDate("2026-11-13")}.`, {
         exact: true,
       }),
     )
@@ -356,7 +356,7 @@ it("says needs your decision, scheduled for a day, ran, and discarded in plain w
   const confirmed = move({
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c5",
     team: alpha,
-    kind: "waiver_claim",
+    kind: "free_agent_add",
     decision: "confirmed",
     runDay: "2026-11-13",
     adds: [player("Amon-Ra St. Brown")],
@@ -1055,6 +1055,52 @@ it("moves a submitted group with a pending waiver into earlier, not today", asyn
   expect(page.getByText("This group does not run.", { exact: true }).elements()).toHaveLength(0);
 });
 
+it("keeps a submitted claim with the league and shows no hourly run time", async () => {
+  await page.viewport(1280, 900);
+  const claim = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165dc",
+    team: alpha,
+    kind: "waiver_claim",
+    decision: "now",
+    phase: "with_league",
+    adds: [player("Amon-Ra St. Brown")],
+    drops: [player("Romeo Doubs")],
+    confirmation: { by: "owner", at: "2026-11-11T17:35:00.000Z" },
+    result: "pending",
+    attempts: [
+      {
+        kind: "claim",
+        player: player("Amon-Ra St. Brown"),
+        outcome: "pending",
+        reason: "The league will process this claim.",
+        at: now,
+      },
+    ],
+  });
+  using _app = setupTransactionsPage({
+    open: listData([], { open: 0, today: 0, saved: 0, ended: 1 }),
+    ended: listData([claim], { open: 0, today: 0, saved: 0, ended: 1 }, [
+      {
+        team: alpha.id,
+        places: { used: 1, maximum: 4, free: 3 },
+        reserve: [],
+        waiver: { rule: "gametime" },
+      },
+    ]),
+  });
+
+  await expect.element(page.getByText("0 open moves", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Show earlier moves" }).click();
+  await expect.element(page.getByText("With the league", { exact: true })).toBeVisible();
+  await expect
+    .element(page.getByText("Your league's waiver rule: gametime.", { exact: true }))
+    .toBeVisible();
+  expect(page.getByText("Waiting for the league", { exact: true }).elements()).toHaveLength(0);
+  expect(
+    page.getByText(scheduledMoment(today, nextRunAt), { exact: false }).elements(),
+  ).toHaveLength(0);
+});
+
 it("shows one status on a blocked card and the action that clears it", async () => {
   await page.viewport(1280, 900);
   const group = "018f79ea-7d86-7c18-9b4a-8b4d0c9165e8";
@@ -1479,6 +1525,7 @@ function move(
     position: 0,
     decision: "undecided",
     reason: "Make the roster change.",
+    attempts: [],
     adds: [],
     fallbacks: [],
     drops: [player("Riley Chen")],

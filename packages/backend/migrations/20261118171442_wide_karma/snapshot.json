@@ -1,0 +1,115 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "137c953a-b5b5-47e6-b791-4870b39bf731",
+  "prevIds": ["7539b0fc-4ff4-43d3-8e43-fa8024ee06cf"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_moves", "phase"],
+      "writes": [
+        "s|col|public.transaction_moves.phase",
+        "n|col|public.transaction_moves.phase",
+        "e|col|public.transaction_moves.phase"
+      ],
+      "reads": ["n|tbl|public.transaction_moves", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_moves", "attempts"],
+      "writes": [
+        "s|col|public.transaction_moves.attempts",
+        "n|col|public.transaction_moves.attempts",
+        "e|col|public.transaction_moves.attempts"
+      ],
+      "reads": ["n|tbl|public.transaction_moves", "n|sch|public"]
+    },
+    {
+      "statementType": "recreate_index",
+      "statementTarget": ["index", "public", "transaction_moves", "transaction_moves_timeline_idx"],
+      "writes": [
+        "s|idx|public.transaction_moves_timeline_idx",
+        "n|idx|public.transaction_moves_timeline_idx",
+        "e|idx|public.transaction_moves_timeline_idx",
+        "n|rel|public.transaction_moves_timeline_idx"
+      ],
+      "reads": [
+        "n|tbl|public.transaction_moves",
+        "n|sch|public",
+        "n|col|public.transaction_moves.user_id",
+        "n|col|public.transaction_moves.run_day",
+        "n|col|public.transaction_moves.team_id",
+        "n|col|public.transaction_moves.position"
+      ],
+      "sharedWrites": [],
+      "sqlHash": "60ae263829e150b7"
+    },
+    {
+      "statementType": "recreate_index",
+      "statementTarget": ["index", "public", "transaction_moves", "transaction_moves_due_idx"],
+      "writes": [
+        "s|idx|public.transaction_moves_due_idx",
+        "n|idx|public.transaction_moves_due_idx",
+        "e|idx|public.transaction_moves_due_idx",
+        "n|rel|public.transaction_moves_due_idx"
+      ],
+      "reads": [
+        "n|tbl|public.transaction_moves",
+        "n|sch|public",
+        "n|col|public.transaction_moves.run_day",
+        "n|col|public.transaction_moves.decision"
+      ],
+      "sharedWrites": [],
+      "sqlHash": "411eef0c27769e1c"
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_moves",
+        "name": "phase",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_moves",
+        "name": "attempts",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'[]'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "indexes\u0000[\"public\",\"transaction_moves_timeline_idx\"]",
+      "set": {
+        "where": "((\"decision\" <> 'discarded') and ((\"phase\" is null)) and ((((\"result\" is null)) or (((\"result\" <> 'executed') and (\"result\" <> 'withdrawn') and (\"result\" <> 'expired'))))))"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "indexes\u0000[\"public\",\"transaction_moves_due_idx\"]",
+      "set": {
+        "where": "((\"decision\" <> 'discarded') and ((\"phase\" is null)) and ((((\"result\" is null)) or (((\"result\" <> 'executed') and (\"result\" <> 'withdrawn') and (\"result\" <> 'expired'))))))"
+      }
+    }
+  ]
+}

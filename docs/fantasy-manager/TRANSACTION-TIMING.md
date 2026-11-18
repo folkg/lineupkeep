@@ -78,7 +78,40 @@ confirmed. Only a date still in the future makes a group wait.
 The card states both dates: when the move takes effect and when it will run. For a waiting group they
 are the same date, because the group runs on the day the league applies it.
 
-## 4. Group atomicity across legs and time
+## 4. The three phases of a submitted claim
+
+A waiver claim is not a move that waits on a clock. It has three separate facts.
+
+**Submission is ours.** A claim was sent to the league, and its stored phase is `with_league`. It has no
+hourly run, no invented processing clock, and no projected processing time. It is not an open move,
+it does not appear in Today, and it does not count towards the nav badge. Confirming a future claim
+schedules the date it is sent; it never borrows the hourly check's time.
+
+**League processing is the league's.** The next hourly check reconciles each submitted claim to `won`
+or `lost` from the provider's own facts. A claim is `won` when the team's roster now shows the claimed
+player. It is `lost` when the provider reports the player as a free agent or rostered by another
+team. It stays `with_league` while the provider still lists the player on waivers, or publishes no
+outcome. The check time is never evidence of a processing time; a claim card names the league's own
+waiver rule, or says it settles before the next check.
+
+**Roster effect is the provider's.** A move's effective date is the date the league applies the roster
+change, stored separately from the claim's phase. A `won` phase records what the league decided; the
+effective date records when the acquired player reached the roster.
+
+**A lost claim tries its fallbacks.** The first stored fallback becomes a real straight add and runs
+through the same dated projection and provider write path as any other add. Each attempt and the
+league's reason are stored on the move. A fallback that fails or is already taken tries the next
+stored fallback. When none are left, the group ends `failed` with a plain account of what was tried,
+what the league did, and that nothing is waiting. A won claim is `done`, and no fallback runs.
+
+**One reconciliation per claim.** The hourly check settles a claim once; the stored phase leaves
+`with_league` as it settles, so a later check neither retries the claim nor repeats its fallback.
+
+**Counts and labels.** The count of open moves and the nav badge include only moves that need the
+person's decision. A submitted claim lives in Earlier as `With the league` until it reconciles, then as
+`Claim won`, `Claim lost, fallback ran`, or `All choices failed`.
+
+## 5. Group atomicity across legs and time
 
 Ordering protects the legs from each other; the effective date protects them across time. Both are
 required.
@@ -100,7 +133,7 @@ The `this plan does not free one` refusal is computed only against the projectio
 on: the roster read plus the same date's submitted and open legs. A revalidation against a different
 roster is the defect this model removes.
 
-## 5. Where authority sits
+## 6. Where authority sits
 
 | Decision                                  | Authority                                                |
 | ----------------------------------------- | -------------------------------------------------------- |
@@ -115,7 +148,7 @@ Lineupgrade does not invent a second placement rule and does not invent a second
 not predict that a league will accept a write; it asks. When the provider publishes no roster date or
 scoring week for a slot move, the fact is carried as a fact, and a group that needs one is refused.
 
-## 6. The dependency graph
+## 7. The dependency graph
 
 A group is a set of legs with one run day and one effective date.
 
@@ -135,7 +168,7 @@ A group is a set of legs with one run day and one effective date.
   record that they were skipped because of it. A refusal at propose records the refusal and stores
   nothing.
 
-## 7. Every place that derives roster state or timing
+## 8. Every place that derives roster state or timing
 
 | Place                                               | What it derives                                                        | Date it uses                                                |
 | --------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------- |
@@ -147,6 +180,7 @@ A group is a set of legs with one run day and one effective date.
 | `TransactionPlanService.runMoves`                   | rechecks a group, orders legs, and settles each write                  | the group's stored effective date, with submitted legs      |
 | `TransactionPlanService.runDue`                     | selects plans with a confirmed leg that is due                         | run day and stored effective date                           |
 | `TransactionPlanService.checkTeams`                 | the live check behind the list and plan reads                          | each open move's effective date, with submitted legs        |
+| `TransactionPlanService.reconcileClaims`            | whether a submitted claim is `won`, `lost`, or still `with_league`     | the provider's roster and player status, never the check    |
 | `TransactionPlanService.planViewOf`                 | the plan view at propose, save, edit, and submit                       | the same, from the plan's stored moves                      |
 | `TransactionPlanRead.moveReadView` / `moveDays`     | the day a move runs and the day it applies                             | the evaluated run day, effective date, and run date         |
 | `TransactionPlanWrites.apply`                       | the roster coverage a write is sent for                                | the league's own date or week for that write                |

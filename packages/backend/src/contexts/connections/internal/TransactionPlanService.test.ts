@@ -3123,6 +3123,281 @@ it.effect("records a pending waiver claim and does not retry it", () => {
   );
 });
 
+it.effect(
+  "keeps a submitted claim with the league, out of Today, and out of the open count",
+  () => {
+    const writes = writeLayer(() => ({
+      status: "pending",
+      detail: "The league will process this claim.",
+    }));
+    return Effect.gen(function* () {
+      const service = yield* TransactionPlanService;
+      const repository = yield* TransactionPlanRepository;
+      const database = yield* ConnectionsDatabase;
+      yield* TestClock.setTime(DateTime.toEpochMillis(at));
+      yield* seedTeam(database, owner, team);
+
+      yield* service.propose(owner, {
+        team,
+        proposedBy: proposer,
+        moves: [
+          {
+            kind: "waiver_claim",
+            adds: ["w1"],
+            fallbacks: ["fa1"],
+            reason: "Claim a running back.",
+          },
+        ],
+      });
+      yield* confirmDue(service, team);
+
+      const stored = yield* repository.readPlanMoves({ userId: owner, team });
+      assert.strictEqual(stored[0]?.phase, "with_league");
+      assert.deepStrictEqual(
+        stored[0]?.attempts.map((attempt) => [attempt.kind, attempt.outcome]),
+        [["claim", "pending"]],
+      );
+
+      const read = yield* service.plan(owner, { team });
+      assert.strictEqual(read.moves[0]?.phase, "with_league");
+      assert.strictEqual(read.moves[0]?.attempts.length, 1);
+      assert.deepStrictEqual(read.waiver, { rule: "gametime", type: "FWR", days: 2 });
+
+      const today = yield* service.list(owner, { team, state: "today" });
+      assert.deepStrictEqual(today.moves, []);
+      assert.deepStrictEqual(today.counts, { open: 0, today: 0, saved: 0, ended: 1 });
+      const open = yield* service.counts(owner, { team });
+      assert.strictEqual(open.totals.open, 0);
+    }).pipe(
+      Effect.provide(
+        serviceLayer(
+          [
+            league(
+              [],
+              [waived("w1", "Waiver One", ["RB"]), freeAgent("fa1", "Free Agent One", ["RB"])],
+              {
+                waiver: { rule: "gametime", type: "FWR", days: 2 },
+              },
+            ),
+          ],
+          writes.layer,
+        ),
+      ),
+    );
+  },
+);
+
+it.effect("reconciles a won claim to done and runs no fallback", () => {
+  const facts = new Map<TeamId, TransactionPlanTeamFacts>();
+  const writes = writeLayer((request) =>
+    request.kind === "waiver_claim"
+      ? { status: "pending", detail: "The league will process this claim." }
+      : { status: "executed" },
+  );
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const repository = yield* TransactionPlanRepository;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+    facts.set(
+      team,
+      league([], [waived("w1", "Waiver One", ["RB"]), freeAgent("fa1", "Free Agent One", ["RB"])])
+        .facts,
+    );
+
+    yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [
+        {
+          group: "claim-one",
+          kind: "waiver_claim",
+          adds: ["w1"],
+          fallbacks: ["fa1"],
+          reason: "Claim a running back.",
+        },
+      ],
+    });
+    yield* confirmDue(service, team);
+    facts.set(team, league([rostered("w1", "Waiver One", "BN", ["RB"])], []).facts);
+
+    const run = yield* service.runDue(10, at);
+    assert.strictEqual(run.counts.executed, 1);
+    assert.strictEqual(writes.requests.length, 1);
+    const stored = yield* repository.readPlanMoves({ userId: owner, team });
+    assert.strictEqual(stored[0]?.phase, "won");
+    assert.strictEqual(stored[0]?.result, "executed");
+    assert.deepStrictEqual(
+      stored[0]?.attempts.map((attempt) => [attempt.kind, attempt.outcome]),
+      [["claim", "won"]],
+    );
+    const read = yield* service.plan(owner, { team });
+    assert.strictEqual(read.groups[0]?.status, "done");
+
+    const again = yield* service.runDue(10, at);
+    assert.strictEqual(again.counts.moves, 0);
+    assert.strictEqual(writes.requests.length, 1);
+  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+});
+
+it.effect("runs the first fallback when a claim is lost and never repeats it", () => {
+  const facts = new Map<TeamId, TransactionPlanTeamFacts>();
+  const writes = writeLayer((request) =>
+    request.kind === "waiver_claim"
+      ? { status: "pending", detail: "The league will process this claim." }
+      : { status: "executed" },
+  );
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const repository = yield* TransactionPlanRepository;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+    facts.set(
+      team,
+      league([], [waived("w1", "Waiver One", ["RB"]), freeAgent("fa1", "Free Agent One", ["RB"])])
+        .facts,
+    );
+    yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [
+        {
+          group: "claim-one",
+          kind: "waiver_claim",
+          adds: ["w1"],
+          fallbacks: ["fa1"],
+          reason: "Claim a running back.",
+        },
+      ],
+    });
+    yield* confirmDue(service, team);
+    facts.set(
+      team,
+      league([], [freeAgent("fa1", "Free Agent One", ["RB"])], {
+        poolStatus: new Map([
+          ["w1", "rostered"],
+          ["fa1", "free_agent"],
+        ]),
+      }).facts,
+    );
+
+    const run = yield* service.runDue(10, at);
+    assert.strictEqual(run.counts.executed, 1);
+    assert.deepStrictEqual(
+      writes.requests.map((request) => [request.kind, request.adds[0]]),
+      [
+        ["waiver_claim", "w1"],
+        ["free_agent_add", "fa1"],
+      ],
+    );
+    const stored = yield* repository.readPlanMoves({ userId: owner, team });
+    assert.strictEqual(stored[0]?.kind, "free_agent_add");
+    assert.strictEqual(stored[0]?.adds[0]?.key, "fa1");
+    assert.strictEqual(stored[0]?.phase, "lost");
+    assert.strictEqual(stored[0]?.result, "executed");
+    assert.include(stored[0]?.resultDetail ?? "", "The claim was lost");
+    assert.deepStrictEqual(
+      stored[0]?.attempts.map((attempt) => [attempt.kind, attempt.outcome]),
+      [
+        ["claim", "lost"],
+        ["fallback", "executed"],
+      ],
+    );
+
+    const again = yield* service.runDue(10, at);
+    assert.strictEqual(again.counts.moves, 0);
+    assert.strictEqual(writes.requests.length, 2);
+  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+});
+
+it.effect("tries each fallback in turn and ends failed when all choices fail", () => {
+  const facts = new Map<TeamId, TransactionPlanTeamFacts>();
+  const writes = writeLayer((request) =>
+    request.kind === "waiver_claim"
+      ? { status: "pending", detail: "The league will process this claim." }
+      : { status: "failed", detail: "That player is already taken." },
+  );
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const repository = yield* TransactionPlanRepository;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+    facts.set(
+      team,
+      league(
+        [],
+        [
+          waived("w1", "Waiver One", ["RB"]),
+          freeAgent("fa1", "Free Agent One", ["RB"]),
+          freeAgent("fa2", "Free Agent Two", ["RB"]),
+        ],
+      ).facts,
+    );
+    yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [
+        {
+          group: "claim-one",
+          kind: "waiver_claim",
+          adds: ["w1"],
+          fallbacks: ["fa1", "fa2"],
+          reason: "Claim a running back.",
+        },
+      ],
+    });
+    yield* confirmDue(service, team);
+    facts.set(
+      team,
+      league(
+        [],
+        [freeAgent("fa1", "Free Agent One", ["RB"]), freeAgent("fa2", "Free Agent Two", ["RB"])],
+        {
+          poolStatus: new Map([
+            ["w1", "free_agent"],
+            ["fa1", "free_agent"],
+            ["fa2", "free_agent"],
+          ]),
+        },
+      ).facts,
+    );
+
+    const run = yield* service.runDue(10, at);
+    assert.strictEqual(run.counts.failed, 1);
+    assert.deepStrictEqual(
+      writes.requests.map((request) => [request.kind, request.adds[0]]),
+      [
+        ["waiver_claim", "w1"],
+        ["free_agent_add", "fa1"],
+        ["free_agent_add", "fa2"],
+      ],
+    );
+    const stored = yield* repository.readPlanMoves({ userId: owner, team });
+    assert.strictEqual(stored[0]?.phase, "lost");
+    assert.strictEqual(stored[0]?.result, "failed");
+    assert.include(stored[0]?.resultDetail ?? "", "All choices failed. Nothing is waiting.");
+    assert.deepStrictEqual(
+      stored[0]?.attempts.map((attempt) => [attempt.kind, attempt.outcome]),
+      [
+        ["claim", "lost"],
+        ["fallback", "failed"],
+        ["fallback", "failed"],
+      ],
+    );
+    const read = yield* service.plan(owner, { team });
+    assert.strictEqual(read.groups[0]?.status, "failed");
+    assert.include(read.groups[0]?.detail ?? "", "All choices failed.");
+    assert.include(read.groups[0]?.detail ?? "", "Nothing is waiting.");
+
+    const again = yield* service.runDue(10, at);
+    assert.strictEqual(again.counts.moves, 0);
+    assert.strictEqual(writes.requests.length, 3);
+  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+});
+
 for (const timing of [
   {
     rule: "same_day" as const,
@@ -4580,6 +4855,8 @@ function storedDrop(key: string, name: string): TransactionMoveAppend {
       reason: `Drop ${name}.`,
       runDay: today,
       effectiveDate: "2026-11-15",
+      phase: undefined,
+      attempts: [],
       decision: "undecided",
       decidedAt: undefined,
       decidedBy: "agent",
@@ -4652,6 +4929,8 @@ function league(
     readonly constraints?: TransactionPlanConstraints;
     readonly timing?: TransactionPlanTiming;
     readonly budget?: number;
+    readonly poolStatus?: ReadonlyMap<string, "rostered" | "free_agent" | "waiver" | "unknown">;
+    readonly waiver?: TransactionPlanTeamFacts["waiver"];
   } = {},
 ): League {
   return leagueFor(team, roster, pool, overrides);
@@ -4668,6 +4947,8 @@ function leagueFor(
     readonly slotWrites?: TransactionPlanSlotWrites;
     readonly budget?: number;
     readonly waiverBid?: TransactionPlanTeamFacts["waiverBid"];
+    readonly poolStatus?: ReadonlyMap<string, "rostered" | "free_agent" | "waiver" | "unknown">;
+    readonly waiver?: TransactionPlanTeamFacts["waiver"];
   } = {},
 ): League {
   return {
@@ -4675,6 +4956,10 @@ function leagueFor(
     facts: {
       roster,
       pool: new Map(pool.map((player) => [player.key, player] as const)),
+      poolStatus:
+        overrides.poolStatus ??
+        new Map(pool.map((player) => [player.key, player.availability] as const)),
+      waiver: overrides.waiver ?? { rule: undefined, type: undefined, days: undefined },
       slots: overrides.slots ?? [bench("BN", 4)],
       constraints: overrides.constraints ?? constraints(4),
       today,

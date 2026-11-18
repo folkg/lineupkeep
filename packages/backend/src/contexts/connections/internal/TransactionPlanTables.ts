@@ -26,6 +26,7 @@ import {
   StoredMovePlacement,
   StoredMovePlayer,
   StoredMoveSlot,
+  StoredMoveAttempt,
   StoredMoveStep,
   StoredMoveStepKind,
   StoredMoveStepOutcome,
@@ -35,6 +36,7 @@ import {
   TransactionMoveDecision,
   TransactionMoveId,
   TransactionMoveKind,
+  TransactionMovePhase,
   TransactionMoveProvenance,
   TransactionMoveResult,
   TransactionMoveRowRecord,
@@ -87,6 +89,8 @@ export const transactionMoves = pgTable(
     reason: text("reason").notNull(),
     runDay: text("run_day"),
     effectiveDate: text("effective_date"),
+    phase: text("phase", { enum: ["with_league", "won", "lost"] }),
+    attempts: jsonb("attempts").notNull().default([]),
     decision: text("decision", {
       enum: ["undecided", "saved", "now", "confirmed", "discarded"],
     }).notNull(),
@@ -245,9 +249,11 @@ export const StoredMoveStepRow = StoredMoveStepFacts.pipe(
 export function openMovePredicate(table: {
   readonly decision: PgColumn;
   readonly result: PgColumn;
+  readonly phase: PgColumn;
 }): SQL {
   const predicate = and(
     ne(table.decision, "discarded"),
+    isNull(table.phase),
     or(
       isNull(table.result),
       and(ne(table.result, "executed"), ne(table.result, "withdrawn"), ne(table.result, "expired")),
@@ -313,6 +319,8 @@ const TransactionMoveSelect = createSelectSchema(transactionMoves, {
   reason: Schema.NonEmptyString,
   runDay: Schema.NullOr(StoredMoveDate),
   effectiveDate: Schema.NullOr(StoredMoveDate),
+  phase: Schema.NullOr(TransactionMovePhase),
+  attempts: Schema.Unknown,
   decision: TransactionMoveDecision,
   decidedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
   decidedBy: Schema.NullOr(TransactionDecisionActor),
@@ -367,6 +375,9 @@ export const TransactionMoveRow = TransactionMoveSelect.pipe(
           const reasons = yield* SchemaParser.decodeUnknownEffect(
             Schema.Array(StoredMoveValidationReason),
           )(row.validationReasons);
+          const attempts = yield* SchemaParser.decodeUnknownEffect(Schema.Array(StoredMoveAttempt))(
+            row.attempts,
+          );
           const proposedBy = yield* SchemaParser.decodeUnknownEffect(TransactionMoveProvenance)(
             row.proposedBy,
           );
@@ -391,6 +402,8 @@ export const TransactionMoveRow = TransactionMoveSelect.pipe(
             reason: row.reason,
             ...(row.runDay === null ? {} : { runDay: row.runDay }),
             ...(row.effectiveDate === null ? {} : { effectiveDate: row.effectiveDate }),
+            ...(row.phase === null ? {} : { phase: row.phase }),
+            attempts,
             decision: row.decision,
             ...(row.decidedAt === null ? {} : { decidedAt: row.decidedAt }),
             ...(row.decidedBy === null ? {} : { decidedBy: row.decidedBy }),
@@ -431,6 +444,9 @@ export const TransactionMoveRow = TransactionMoveSelect.pipe(
           const reasons = yield* SchemaParser.encodeEffect(
             Schema.Array(StoredMoveValidationReason),
           )(record.validation.reasons);
+          const attempts = yield* SchemaParser.encodeEffect(Schema.Array(StoredMoveAttempt))(
+            record.attempts,
+          );
           return {
             id: record.id,
             userId: record.userId,
@@ -452,6 +468,8 @@ export const TransactionMoveRow = TransactionMoveSelect.pipe(
             reason: record.reason,
             runDay: record.runDay ?? null,
             effectiveDate: record.effectiveDate ?? null,
+            phase: record.phase ?? null,
+            attempts,
             decision: record.decision,
             decidedAt: record.decidedAt ?? null,
             decidedBy: record.decidedBy ?? null,

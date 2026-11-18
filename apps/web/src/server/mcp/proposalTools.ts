@@ -126,7 +126,7 @@ const DiscardedTransactionPlan = Schema.Struct({
 export const proposalTools = Toolkit.make(
   Tool.make("propose_transactions", {
     description:
-      "Add or amend moves in one team's queue: an add, a claim, a drop, a stash, or an activate. A stash or activate names one player in `player`; the server chooses the place. Name no slot. Nothing is submitted or spent. A saved move waits in Today for the owner to confirm it; no tool confirms a move. `discard_transaction_move` removes a move; a refused move returns its reason.",
+      "Add or amend one team's queue: add, claim, drop, stash, or activate. A stash or activate names one player in `player`; the server chooses the place. Name no slot. Nothing is submitted or spent. A saved move waits in Today for the owner to confirm it; no tool confirms a move. A claim's `fallbacks` are tried if the league does not award it. `discard_transaction_move` removes a move.",
     parameters: ProposeAgentTransactionsInput,
     success: Schema.toCodecJson(ProposedTransactions),
     failure: ToolFailure,
@@ -152,7 +152,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("list_transaction_proposals", {
     description:
-      "List open moves across the account's teams, today first, grouped by run day and team. Filter by one team and by state: `today`, `saved`, or `ended`. Each move carries its stored check, time, decision, confirmation, and run, with the open, today, saved, and ended totals.",
+      "List open moves across owned teams, grouped by run day and team. Filter by team and state `today`, `saved`, or `ended`. Each move carries its check, decision, confirmation, run, and totals. A submitted claim is `ended` while its `phase` is `with_league`, `won`, or `lost`, and never open.",
     parameters: ListTransactionMovesInput,
     success: Schema.toCodecJson(TransactionMoveList),
     failure: ToolFailure,
@@ -165,7 +165,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_transaction_plan", {
     description:
-      "Read one team's queue in run order by day: each move's check, decision, actor, confirmation, and next run time. `addsPossible`, `addsWithFixes`, `canFree`, and `illegal` say what fits, what a reserve move frees, and what blocks it. A group carries its status, actions, and a plain sentence.",
+      "Read one team's queue by day: each move's check, decision, and next run time. A submitted claim carries `phase` and `attempts`, and names the league's waiver rule, not a run time. `addsPossible`, `canFree`, and `illegal` say what fits and blocks it. A group carries its status.",
     parameters: TransactionPlanInput,
     success: Schema.toCodecJson(TransactionPlanRead),
     failure: ToolFailure,

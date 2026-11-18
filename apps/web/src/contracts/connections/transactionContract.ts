@@ -19,6 +19,23 @@ export type TransactionMovePlayerView = {
   readonly availability?: string;
 };
 
+type TransactionMoveAttemptView = {
+  readonly kind: "claim" | "fallback";
+  readonly player: TransactionMovePlayerView;
+  readonly outcome:
+    | "pending"
+    | "won"
+    | "lost"
+    | "executed"
+    | "failed"
+    | "unavailable"
+    | "unknown"
+    | "retry";
+  readonly reason: string;
+  readonly at: string;
+  readonly effectiveDate?: string;
+};
+
 type TransactionMovePickView = {
   readonly round: number;
   readonly sourceName: string;
@@ -48,6 +65,8 @@ export type TransactionMoveView = {
   readonly kind: TransactionMoveKind;
   readonly position: number;
   readonly decision: "undecided" | "saved" | "now" | "confirmed" | "discarded";
+  readonly phase?: "with_league" | "won" | "lost";
+  readonly attempts: ReadonlyArray<TransactionMoveAttemptView>;
   readonly reason: string;
   readonly adds: ReadonlyArray<TransactionMovePlayerView>;
   readonly fallbacks: ReadonlyArray<TransactionMovePlayerView>;
@@ -124,6 +143,13 @@ export type TransactionTeamFactsView = {
   readonly team: string;
   readonly places: RosterPlacesView;
   readonly reserve: ReadonlyArray<ReserveListView>;
+  readonly waiver?: TransactionWaiverRuleView;
+};
+
+export type TransactionWaiverRuleView = {
+  readonly rule?: string;
+  readonly type?: string;
+  readonly days?: number;
 };
 
 export type TransactionPlanDayView = {
@@ -146,7 +172,7 @@ export type TransactionPlanGroupView = {
   readonly group: string;
   readonly team: string;
   readonly label?: string;
-  readonly status: "ready" | "blocked" | "partly_done" | "done";
+  readonly status: "ready" | "blocked" | "partly_done" | "done" | "failed";
   readonly moves: ReadonlyArray<string>;
   readonly fixesFor?: string;
   readonly actions: ReadonlyArray<TransactionPlanGroupActionView>;
@@ -198,6 +224,7 @@ export type TransactionPlanData = {
   readonly nextRunAt: string;
   readonly snapshot: TransactionPlanSnapshotView;
   readonly waiverBid?: WaiverBidView;
+  readonly waiver?: TransactionWaiverRuleView;
   readonly places?: RosterPlacesView;
   readonly reserve?: ReadonlyArray<ReserveListView>;
   readonly addsPossible?: number;

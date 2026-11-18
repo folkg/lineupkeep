@@ -25,6 +25,7 @@ import type {
   TransactionMoveTeamDayView,
   TransactionMoveView,
   TransactionTeamFactsView,
+  TransactionWaiverRuleView,
 } from "#contracts/connections/transactionContract.ts";
 
 import { TeamPlaces } from "./TeamPlaces";
@@ -55,6 +56,7 @@ import {
   scheduledMoment,
   submittedLine,
   timingLine,
+  waiverTimingLine,
 } from "./transactionTimes";
 import { useGroupConfirmation } from "./useGroupConfirmation";
 import type { GroupConfirmation } from "./useGroupConfirmation";
@@ -292,9 +294,13 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
       case "needs-decision":
         return "Needs your decision";
       case "scheduled":
-        return `Scheduled for ${scheduledMoment(held.runDay, props.page.nextRunAt())}`;
+        return props.card.lead.kind === "waiver_claim"
+          ? `Scheduled for ${formatCalendarDate(held.runDay)}`
+          : `Scheduled for ${scheduledMoment(held.runDay, props.page.nextRunAt())}`;
       case "waiting":
         return "Waiting for the league";
+      case "with-league":
+        return "With the league";
       case "running":
         return "Running";
       case "partly-ran":
@@ -632,7 +638,13 @@ function EarlierSection(props: RemoteSectionProps): JSX.Element {
           >
             <RuleList>
               <For each={props.page.earlier()}>
-                {(move) => <EarlierRow move={move} nextRunAt={props.page.nextRunAt()} />}
+                {(move) => (
+                  <EarlierRow
+                    move={move}
+                    nextRunAt={props.page.nextRunAt()}
+                    waiver={props.page.teamFacts().get(move.team.id)?.waiver}
+                  />
+                )}
               </For>
             </RuleList>
             <Show when={props.page.hasMoreEarlier()}>
@@ -658,6 +670,8 @@ function EarlierRow(props: EarlierRowProps): JSX.Element {
   const discarded = (): string | undefined => discardLine(props.move);
   const result = (): string | undefined => resultDetailLine(props.move);
   const resultTime = (): string | undefined => resultTimeLine(props.move);
+  const waiver = (): string | undefined =>
+    props.move.phase === "with_league" ? waiverTimingLine(props.waiver) : undefined;
   return (
     <RuleListItem layout="stack" dense>
       <Stack gap="2xs">
@@ -674,6 +688,13 @@ function EarlierRow(props: EarlierRowProps): JSX.Element {
           {sportDisplayName(props.move.team.sport)}
         </Text>
         <Show when={submitted()}>
+          {(line) => (
+            <Text size="caption" tone="muted">
+              {line()}
+            </Text>
+          )}
+        </Show>
+        <Show when={waiver()}>
           {(line) => (
             <Text size="caption" tone="muted">
               {line()}
@@ -794,4 +815,5 @@ type GroupMoveRowProps = {
 type EarlierRowProps = {
   readonly move: TransactionMoveView;
   readonly nextRunAt: string | undefined;
+  readonly waiver: TransactionWaiverRuleView | undefined;
 };

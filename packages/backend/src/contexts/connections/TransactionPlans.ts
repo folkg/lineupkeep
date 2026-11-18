@@ -86,6 +86,21 @@ export const TransactionMoveResult = Schema.Literals([
 ]);
 export type TransactionMoveResult = typeof TransactionMoveResult.Type;
 
+export const TransactionMovePhase = Schema.Literals(["with_league", "won", "lost"]);
+export type TransactionMovePhase = typeof TransactionMovePhase.Type;
+
+const TransactionMoveAttemptOutcome = Schema.Literals([
+  "pending",
+  "won",
+  "lost",
+  "executed",
+  "failed",
+  "unavailable",
+  "unknown",
+  "retry",
+]);
+type TransactionMoveAttemptOutcome = typeof TransactionMoveAttemptOutcome.Type;
+
 const TransactionMoveClaimKind = Schema.Literals(["player", "place", "draft_pick"]);
 
 export const TransactionMoveReadState = Schema.Literals(["open", "today", "saved", "ended"]);
@@ -160,6 +175,16 @@ export const StoredMoveValidation = Schema.Struct({
 });
 export type StoredMoveValidation = typeof StoredMoveValidation.Type;
 
+export const StoredMoveAttempt = Schema.Struct({
+  kind: Schema.Literals(["claim", "fallback"]),
+  player: StoredMovePlayer,
+  outcome: TransactionMoveAttemptOutcome,
+  reason: Schema.NonEmptyString,
+  at: Schema.DateTimeUtcFromString,
+  effectiveDate: Schema.optional(StoredMoveDate),
+});
+export type StoredMoveAttempt = typeof StoredMoveAttempt.Type;
+
 export const StoredMoveClaim = Schema.Struct({
   kind: TransactionMoveClaimKind,
   key: Schema.NonEmptyString,
@@ -191,9 +216,13 @@ export type TransactionMovePageLimit = typeof TransactionMovePageLimit.Type;
 export function isOpenMove(move: {
   readonly decision: TransactionMoveDecision;
   readonly result?: TransactionMoveResult;
+  readonly phase?: TransactionMovePhase;
 }): boolean {
   return (
     move.decision !== "discarded" &&
+    move.phase !== "with_league" &&
+    move.phase !== "won" &&
+    move.phase !== "lost" &&
     move.result !== "executed" &&
     move.result !== "withdrawn" &&
     move.result !== "expired"
@@ -214,6 +243,16 @@ export const TransactionMovePickView = Schema.Struct({
   destinationName: Schema.NonEmptyString,
 });
 export type TransactionMovePickView = typeof TransactionMovePickView.Type;
+
+export const TransactionMoveAttemptView = Schema.Struct({
+  kind: Schema.Literals(["claim", "fallback"]),
+  player: TransactionMovePlayerView,
+  outcome: TransactionMoveAttemptOutcome,
+  reason: Schema.NonEmptyString,
+  at: Schema.DateTimeUtc,
+  effectiveDate: Schema.optional(StoredMoveDate),
+});
+export type TransactionMoveAttemptView = typeof TransactionMoveAttemptView.Type;
 
 export const TransactionMoveValidationView = Schema.Struct({
   status: TransactionMoveValidationStatus,
@@ -260,6 +299,16 @@ export const TransactionMoveRead = Schema.Struct({
   kind: TransactionMoveKind,
   position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   decision: TransactionMoveDecision,
+  phase: Schema.optional(TransactionMovePhase).pipe(
+    Schema.annotate({
+      description: "The claim's league phase.",
+    }),
+  ),
+  attempts: Schema.Array(TransactionMoveAttemptView).pipe(
+    Schema.annotate({
+      description: "Each claim or fallback tried.",
+    }),
+  ),
   reason: Schema.NonEmptyString,
   adds: Schema.Array(TransactionMovePlayerView),
   fallbacks: Schema.Array(TransactionMovePlayerView),
@@ -336,6 +385,7 @@ export const TransactionPlanGroupStatus = Schema.Literals([
   "blocked",
   "partly_done",
   "done",
+  "failed",
 ]);
 export type TransactionPlanGroupStatus = typeof TransactionPlanGroupStatus.Type;
 
@@ -354,10 +404,18 @@ export const TransactionPlanGroupRead = Schema.Struct({
 });
 export type TransactionPlanGroupRead = typeof TransactionPlanGroupRead.Type;
 
+export const TransactionWaiverRule = Schema.Struct({
+  rule: Schema.optional(Schema.NonEmptyString),
+  type: Schema.optional(Schema.NonEmptyString),
+  days: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+});
+export type TransactionWaiverRule = typeof TransactionWaiverRule.Type;
+
 const TransactionTeamFacts = Schema.Struct({
   team: TeamId,
   places: RosterPlaces,
   reserve: Schema.Array(ReserveList),
+  waiver: Schema.optional(TransactionWaiverRule),
 });
 
 export const TransactionWaiverBid = WaiverBid;
@@ -397,7 +455,7 @@ export const TransactionPlanRead = Schema.Struct({
   today: Schema.optional(StoredMoveDate),
   nextRunAt: Schema.DateTimeUtc.pipe(
     Schema.annotate({
-      description: "The exact time of the next hourly run, at the 55 minute mark.",
+      description: "The next hourly run at the 55 minute mark; a claim never shows it.",
     }),
   ),
   snapshot: TransactionPlanSnapshot.pipe(
@@ -410,6 +468,11 @@ export const TransactionPlanRead = Schema.Struct({
     Schema.annotate({
       description:
         "The league's waiver bid shape: `published` with this team's remaining FAAB, or `bidless`. Absent when the league and roster could not be read.",
+    }),
+  ),
+  waiver: Schema.optional(TransactionWaiverRule).pipe(
+    Schema.annotate({
+      description: "The league's own waiver rule, type, and days.",
     }),
   ),
   places: Schema.optional(RosterPlaces).pipe(
@@ -488,7 +551,8 @@ export const TransactionMoveList = Schema.Struct({
   team: Schema.optional(TransactionMoveTeam),
   nextRunAt: Schema.DateTimeUtc.pipe(
     Schema.annotate({
-      description: "The exact time of the next hourly run, at the 55 minute mark.",
+      description:
+        "The next hourly run at the 55 minute mark; confirmed non-claim moves wait for it, a claim never shows it.",
     }),
   ),
   moves: Schema.Array(TransactionMoveRead),
@@ -707,6 +771,8 @@ export type TransactionPlanMoveView = {
   readonly effectiveDate: StoredMoveDate | undefined;
   readonly runsOn: StoredMoveDate | undefined;
   readonly dueToday: boolean;
+  readonly phase: TransactionMovePhase | undefined;
+  readonly attempts: ReadonlyArray<StoredMoveAttempt>;
   readonly validation: StoredMoveValidation;
   readonly placement: StoredMovePlacement | undefined;
   readonly claims: ReadonlyArray<StoredMoveClaim>;

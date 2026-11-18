@@ -603,6 +603,8 @@ function moveContent(content: Partial<TransactionMoveContent> = {}): Transaction
     reason: "Cover the light night at center.",
     runDay: "2026-11-14",
     effectiveDate: "2026-11-15",
+    phase: undefined,
+    attempts: [],
     decision: "undecided",
     decidedAt: undefined,
     decidedBy: "agent",
