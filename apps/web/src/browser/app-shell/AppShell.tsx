@@ -5,6 +5,7 @@ import type { Element } from "solid-js";
 
 import { BrandLink } from "#browser/brand-ui/BrandLink.tsx";
 import { Nav } from "#browser/shared-ui/Nav.tsx";
+import { NavigationProgress } from "#browser/shared-ui/NavigationProgress.tsx";
 import { NavLink } from "#browser/shared-ui/NavLink.tsx";
 import { PageShell } from "#browser/shared-ui/PageShell.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
@@ -21,6 +22,7 @@ export function AppShell(props: AppShellProps): JSX.Element {
 
   return (
     <ThemeProvider>
+      <NavigationProgress />
       <PageShell
         brand={
           <BrandLink aria-label={`${productName} home`} to="/">
