@@ -78,22 +78,22 @@
 .dark {
   color-scheme: dark;
 
-  --theme-canvas: #17122a;
-  --theme-paper: #1e1836;
-  --theme-ink: #efeafc;
-  --theme-ink-soft: #b3a4d8;
-  --theme-ink-faint: #9b8cc4;
-  --theme-rule: #34285c;
-  --theme-rule-strong: #b9a6e8;
-  --theme-action: #c4b5fd;
-  --theme-action-hover: #d8c6ff;
-  --theme-action-soft: #2a2150;
-  --theme-on-action: #17122a;
+  --theme-canvas: #12100d;
+  --theme-paper: #1a1713;
+  --theme-ink: #f4ede0;
+  --theme-ink-soft: #b8ab99;
+  --theme-ink-faint: #a89b89;
+  --theme-rule: #3b332a;
+  --theme-rule-strong: #b6a78f;
+  --theme-action: #bda7ff;
+  --theme-action-hover: #d3c2ff;
+  --theme-action-soft: #2b2340;
+  --theme-on-action: #171018;
   --theme-accent: #e0b64a;
   --theme-on-accent: #101014;
-  --theme-spot: #ff9e7a;
-  --theme-danger: #ffb9b0;
-  --theme-danger-hover: #ffd1c9;
-  --theme-danger-soft: #492b27;
-  --theme-scrim: rgb(0 0 0 / 0.65);
+  --theme-spot: #ff9a76;
+  --theme-danger: #ffb4a8;
+  --theme-danger-hover: #ffd0c7;
+  --theme-danger-soft: #452823;
+  --theme-scrim: rgb(0 0 0 / 0.7);
 }

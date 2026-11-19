@@ -97,57 +97,57 @@
       "dark-canvas": {
         "role": "neutral",
         "displayName": "Dark Canvas",
-        "canonical": "#17122a"
+        "canonical": "#12100d"
       },
       "dark-paper": {
         "role": "neutral",
         "displayName": "Dark Paper",
-        "canonical": "#1e1836"
+        "canonical": "#1a1713"
       },
       "dark-ink": {
         "role": "neutral",
         "displayName": "Dark Ink",
-        "canonical": "#efeafc"
+        "canonical": "#f4ede0"
       },
       "dark-ink-soft": {
         "role": "neutral",
         "displayName": "Dark Ink Soft",
-        "canonical": "#b3a4d8"
+        "canonical": "#b8ab99"
       },
       "dark-ink-faint": {
         "role": "neutral",
         "displayName": "Dark Ink Faint",
-        "canonical": "#9b8cc4"
+        "canonical": "#a89b89"
       },
       "dark-rule": {
         "role": "neutral",
         "displayName": "Dark Rule",
-        "canonical": "#34285c"
+        "canonical": "#3b332a"
       },
       "dark-rule-strong": {
         "role": "neutral",
         "displayName": "Dark Rule Strong",
-        "canonical": "#b9a6e8"
+        "canonical": "#b6a78f"
       },
       "dark-action": {
         "role": "primary",
         "displayName": "Royal Violet · Dark",
-        "canonical": "#c4b5fd"
+        "canonical": "#bda7ff"
       },
       "dark-action-hover": {
         "role": "primary",
         "displayName": "Dark Action Hover",
-        "canonical": "#d8c6ff"
+        "canonical": "#d3c2ff"
       },
       "dark-action-soft": {
         "role": "primary",
         "displayName": "Dark Action Soft",
-        "canonical": "#2a2150"
+        "canonical": "#2b2340"
       },
       "dark-on-action": {
         "role": "primary",
         "displayName": "Dark On Action",
-        "canonical": "#17122a"
+        "canonical": "#171018"
       },
       "dark-accent": {
         "role": "secondary",
@@ -162,27 +162,27 @@
       "dark-spot": {
         "role": "tertiary",
         "displayName": "Spot Ink · Dark",
-        "canonical": "#ff9e7a"
+        "canonical": "#ff9a76"
       },
       "dark-danger": {
         "role": "tertiary",
         "displayName": "Dark Danger",
-        "canonical": "#ffb9b0"
+        "canonical": "#ffb4a8"
       },
       "dark-danger-hover": {
         "role": "tertiary",
         "displayName": "Dark Danger Hover",
-        "canonical": "#ffd1c9"
+        "canonical": "#ffd0c7"
       },
       "dark-danger-soft": {
         "role": "tertiary",
         "displayName": "Dark Danger Soft",
-        "canonical": "#492b27"
+        "canonical": "#452823"
       },
       "dark-scrim": {
         "role": "neutral",
         "displayName": "Dark Scrim",
-        "canonical": "rgb(0 0 0 / 0.65)"
+        "canonical": "rgb(0 0 0 / 0.7)"
       }
     },
     "typographyMeta": {

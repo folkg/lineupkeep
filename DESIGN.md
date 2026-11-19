@@ -20,24 +20,24 @@ colors:
   danger-hover: "#802421"
   danger-soft: "#faece9"
   scrim: "rgb(16 16 20 / 0.55)"
-  dark-canvas: "#17122a"
-  dark-paper: "#1e1836"
-  dark-ink: "#efeafc"
-  dark-ink-soft: "#b3a4d8"
-  dark-ink-faint: "#9b8cc4"
-  dark-rule: "#34285c"
-  dark-rule-strong: "#b9a6e8"
-  dark-action: "#c4b5fd"
-  dark-action-hover: "#d8c6ff"
-  dark-action-soft: "#2a2150"
-  dark-on-action: "#17122a"
+  dark-canvas: "#12100d"
+  dark-paper: "#1a1713"
+  dark-ink: "#f4ede0"
+  dark-ink-soft: "#b8ab99"
+  dark-ink-faint: "#a89b89"
+  dark-rule: "#3b332a"
+  dark-rule-strong: "#b6a78f"
+  dark-action: "#bda7ff"
+  dark-action-hover: "#d3c2ff"
+  dark-action-soft: "#2b2340"
+  dark-on-action: "#171018"
   dark-accent: "#e0b64a"
   dark-on-accent: "#101014"
-  dark-spot: "#ff9e7a"
-  dark-danger: "#ffb9b0"
-  dark-danger-hover: "#ffd1c9"
-  dark-danger-soft: "#492b27"
-  dark-scrim: "rgb(0 0 0 / 0.65)"
+  dark-spot: "#ff9a76"
+  dark-danger: "#ffb4a8"
+  dark-danger-hover: "#ffd0c7"
+  dark-danger-soft: "#452823"
+  dark-scrim: "rgb(0 0 0 / 0.7)"
 typography:
   display:
     fontFamily: "Archivo Variable, sans-serif"
@@ -167,7 +167,7 @@ is spent on interaction, gold exists only in the mark, and one spot ink marks ur
 is calm enough to check in the morning and precise enough to trust with a lineup.
 
 This is an Operate product: information before spectacle, familiar controls, direct labels, and
-honest state. Light is warm newsprint; dark is a tinted violet sheet. Both are complete palettes.
+honest state. Light is warm newsprint; dark is the same paper after dark, with violet kept for interaction. Both are complete palettes.
 
 **Key Characteristics:**
 
@@ -215,36 +215,36 @@ remains the error and destructive colour.
 | `danger-soft`  | `#faece9`              | Danger hover ground                                       |
 | `scrim`        | `rgb(16 16 20 / 0.55)` | Modal scrim                                               |
 
-### Tinted dark
+### Newsprint dark
 
-| Token          | Value               | Role                                                     |
-| -------------- | ------------------- | -------------------------------------------------------- |
-| `canvas`       | `#17122a`           | Page field                                               |
-| `paper`        | `#1e1836`           | Inputs and queue panels, one step above the field        |
-| `ink`          | `#efeafc`           | Primary text, headings                                   |
-| `ink-soft`     | `#b3a4d8`           | Secondary text, quiet links, quiet controls              |
-| `ink-faint`    | `#9b8cc4`           | Metadata, labels, placeholders                           |
-| `rule`         | `#34285c`           | 1px hairlines between rows                               |
-| `rule-strong`  | `#b9a6e8`           | 3px section rules, 2px control borders, active nav rule  |
-| `action`       | `#c4b5fd`           | The one solid action, action links, live controls, focus |
-| `action-hover` | `#d8c6ff`           | Action hover                                             |
-| `action-soft`  | `#2a2150`           | Selection and quiet interactive ground                   |
-| `on-action`    | `#17122a`           | Text on a solid action                                   |
-| `accent`       | `#e0b64a`           | Brand mark fill only                                     |
-| `on-accent`    | `#101014`           | Mark strokes only                                        |
-| `spot`         | `#ff9e7a`           | Urgency only: runs immediately, illegal roster, stamp    |
-| `danger`       | `#ffb9b0`           | Errors, destructive actions, attention text              |
-| `danger-hover` | `#ffd1c9`           | Danger hover                                             |
-| `danger-soft`  | `#492b27`           | Danger hover ground                                      |
-| `scrim`        | `rgb(0 0 0 / 0.65)` | Modal scrim                                              |
+| Token          | Value              | Role                                                     |
+| -------------- | ------------------ | -------------------------------------------------------- |
+| `canvas`       | `#12100d`          | Warm charcoal page field                                 |
+| `paper`        | `#1a1713`          | Inputs and queue panels, one step above the field        |
+| `ink`          | `#f4ede0`          | Primary text, headings                                   |
+| `ink-soft`     | `#b8ab99`          | Secondary text, quiet links, quiet controls              |
+| `ink-faint`    | `#a89b89`          | Metadata, labels, placeholders                           |
+| `rule`         | `#3b332a`          | 1px hairlines between rows                               |
+| `rule-strong`  | `#b6a78f`          | 3px section rules, 2px control borders, active nav rule  |
+| `action`       | `#bda7ff`          | The one solid action, action links, live controls, focus |
+| `action-hover` | `#d3c2ff`          | Action hover                                             |
+| `action-soft`  | `#2b2340`          | Selection and quiet interactive ground                   |
+| `on-action`    | `#171018`          | Text on a solid action                                   |
+| `accent`       | `#e0b64a`          | Brand mark fill only                                     |
+| `on-accent`    | `#101014`          | Mark strokes only                                        |
+| `spot`         | `#ff9a76`          | Urgency only: runs immediately, illegal roster, stamp    |
+| `danger`       | `#ffb4a8`          | Errors, destructive actions, attention text              |
+| `danger-hover` | `#ffd0c7`          | Danger hover                                             |
+| `danger-soft`  | `#452823`          | Danger hover ground                                      |
+| `scrim`        | `rgb(0 0 0 / 0.7)` | Modal scrim                                              |
 
-**Measured pairs.** Body and interface text pairs clear WCAG AA: ink 16.2:1 (light) and 15.4:1
-(dark); ink-soft 5.0:1 and 8.0:1; ink-faint 4.7:1 and 6.0:1; action 7.8:1 on canvas and 9.8:1 on
-the dark field; on-action on action 8.8:1 and 9.8:1; action on action-soft 7.9:1 in both; danger
-5.9:1 and 11.1:1; danger on danger-soft 5.9:1 and 7.7:1; on-accent on accent 9.9:1 in both.
+**Measured pairs.** Body and interface text pairs clear WCAG AA: ink 16.2:1 (light) and 15.3:1
+(dark); ink-soft 5.0:1 and 7.9:1; ink-faint 4.7:1 and 6.6:1; action 7.8:1 on canvas and 9.2:1 on
+the dark field; on-action on action 8.8:1 and 9.0:1; action on action-soft 7.9:1 and 7.2:1; danger
+5.9:1 and 10.5:1; danger on danger-soft 5.9:1 and 7.8:1; on-accent on accent 9.9:1 in both.
 Hairlines are non-text. The mark's strokes are a graphic and clear 9.9:1. Gold never carries text
-on the page. Spot ink is 3.7:1 on canvas and 4.2:1 on paper in light, and 9.0:1 in dark; it is
-reserved for short, bold urgency marks and the square, never for body copy.
+on the page. Spot ink is 3.7:1 on canvas and 4.2:1 on paper in light, and 8.6:1 or better in dark;
+it is reserved for short, bold urgency marks and the square, never for body copy.
 
 **The One Violet Rule.** Per view, one solid violet element: the primary action. Links and live
 controls carry violet as text, underline, or border. Everything else is ink, soft ink, and rule.
