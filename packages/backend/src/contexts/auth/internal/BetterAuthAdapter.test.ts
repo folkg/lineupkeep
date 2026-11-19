@@ -587,9 +587,15 @@ it.effect(
           status: "insufficient_scope",
         },
       );
+      assert.deepStrictEqual(
+        yield* adapter.resolveAccessToken(expired.token, ["connections:read"]),
+        {
+          status: "invalid",
+          reason: "expired",
+        },
+      );
       for (const invalid of [
         wrongAudience.token,
-        expired.token,
         wrongIssuer.token,
         proofBound.token,
         "not.a.token",

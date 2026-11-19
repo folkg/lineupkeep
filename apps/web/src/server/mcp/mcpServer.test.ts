@@ -247,6 +247,7 @@ it("names an expired presented token as invalid_token so a client refreshes inst
   );
   expect(body).toMatchObject({
     error: "invalid_token",
+    error_code: "token_expired",
     scope: "fantasy:read offline_access",
     resource_metadata: "https://connections.example/.well-known/oauth-protected-resource/mcp",
   });
@@ -2009,7 +2010,7 @@ const authenticationService: AuthService["Service"] = {
   consent: () => Effect.succeed("https://client.test/callback"),
   resolveAccessToken: (token, scopes) => {
     if (token === "expired") {
-      return Effect.succeed({ status: "invalid" as const });
+      return Effect.succeed({ status: "invalid" as const, reason: "expired" as const });
     }
     const granted =
       token === "read"

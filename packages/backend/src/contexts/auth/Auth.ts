@@ -31,7 +31,7 @@ export type AuthenticatedAgent = {
 };
 
 export type AccessTokenResolution =
-  | { readonly status: "invalid" }
+  | { readonly status: "invalid"; readonly reason?: "expired" }
   | { readonly status: "insufficient_scope" }
   | ({
       readonly status: "authenticated";

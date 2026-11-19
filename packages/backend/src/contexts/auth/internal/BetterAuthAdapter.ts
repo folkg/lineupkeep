@@ -240,18 +240,28 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
         expectedClientId?: string,
       ): Effect.fn.Return<AccessTokenResolution, AuthenticationUnavailable> {
         const auth = yield* loadAuth;
-        const { payload } = yield* Effect.tryPromise({
+        const verification = yield* Effect.tryPromise({
           try: () =>
             auth.api.verifyJWT({ body: { token, issuer: new URL("/api/auth", baseUrl).href } }),
           catch: (cause) => AuthenticationUnavailable.make({ cause }),
-        });
-        const claims = Schema.decodeUnknownOption(AccessTokenClaims)(payload);
+        }).pipe(Effect.map(Option.fromNullishOr));
+        if (Option.isNone(verification)) {
+          return {
+            status: "invalid",
+            ...(accessTokenIsExpired(token) ? { reason: "expired" as const } : {}),
+          };
+        }
+        const claims = Schema.decodeUnknownOption(AccessTokenClaims)(verification.value.payload);
         if (
           Option.isNone(claims) ||
           claims.value.cnf !== undefined ||
           (expectedClientId !== undefined && claims.value.client_id !== expectedClientId)
         ) {
-          return { status: "invalid" };
+          const expired = accessTokenIsExpired(token);
+          return {
+            status: "invalid",
+            ...(expired ? { reason: "expired" as const } : {}),
+          };
         }
         const storedUser = yield* Effect.tryPromise({
           try: () =>
@@ -610,6 +620,30 @@ function providerRefreshTokenHash(
     Effect.orDie,
     Effect.map((bytes) => Base64Url.encode(bytes)),
   );
+}
+
+function accessTokenIsExpired(token: string): boolean {
+  const payload = token.split(".")[1];
+  if (payload === undefined || !/^[A-Za-z0-9_-]+$/u.test(payload)) {
+    return false;
+  }
+  const padding = payload.length % 4 === 0 ? "" : "=".repeat(4 - (payload.length % 4));
+  try {
+    const decoded = Schema.decodeOption(EncodedAccessTokenExpiryJson)(
+      new TextDecoder().decode(
+        Uint8Array.from(
+          atob(payload.replaceAll("-", "+").replaceAll("_", "/") + padding),
+          (character) => character.charCodeAt(0),
+        ),
+      ),
+    );
+    return (
+      Option.isSome(decoded) &&
+      decoded.value.exp * 1000 <= DateTime.toEpochMillis(DateTime.nowUnsafe())
+    );
+  } catch {
+    return false;
+  }
 }
 
 function isFormPost(request: Request, path: string): boolean {
@@ -982,6 +1016,10 @@ const ConsentDecision = Schema.fromJsonString(
 const ConsentRedirect = Schema.Struct({
   url: Schema.String.pipe(Schema.check(Schema.isMinLength(1))),
 });
+
+const EncodedAccessTokenExpiry = Schema.Struct({ exp: Schema.Finite });
+
+const EncodedAccessTokenExpiryJson = Schema.fromJsonString(EncodedAccessTokenExpiry);
 
 const AccessTokenClaims = Schema.Struct({
   sub: UserId,

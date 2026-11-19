@@ -43,6 +43,7 @@ export const mcpRequest = Effect.fnUntraced(function* <Tools extends Record<stri
     return yield* challengeResponse(
       resource,
       identity.status,
+      identity.status === "invalid" ? identity.reason : undefined,
       challengeScope(invocation, auth.onboardingScopes),
       presented !== undefined,
     );
@@ -171,6 +172,7 @@ function requestedProtocolVersion(params: unknown): string | undefined {
 function challengeResponse(
   resource: URL,
   status: "invalid" | "insufficient_scope",
+  reason: "expired" | undefined,
   scope: string,
   tokenPresented: boolean,
 ): Effect.Effect<Response, never, never> {
@@ -200,6 +202,7 @@ function challengeResponse(
         : rejected
           ? {
               error: "invalid_token",
+              ...(reason === "expired" ? { error_code: "token_expired" } : {}),
               scope,
               resource_metadata: metadata,
               error_description: `The access token is expired or invalid. Refresh it with the grant's refresh token and retry; authorize again only when the client holds no refresh token.`,
