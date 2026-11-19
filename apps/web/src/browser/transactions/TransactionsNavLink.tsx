@@ -11,7 +11,7 @@ export function TransactionsNavLink(props: TransactionsNavLinkProps): JSX.Elemen
   const open = useTransactionsNav(() => props.remote);
 
   return (
-    <NavLink preload="render" to="/transactions">
+    <NavLink to="/transactions">
       Transactions
       <Show when={open.count() > 0}>
         <Text as="span" type="meta" tone="faint" numeric>

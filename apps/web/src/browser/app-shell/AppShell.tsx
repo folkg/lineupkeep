@@ -11,6 +11,7 @@ import { TextLink } from "#browser/shared-ui/TextLink.tsx";
 
 import { ThemeProvider } from "./ThemeProvider";
 import { useTransactionsNav } from "./transactionsNav";
+import { usePrimaryRoutePrefetch } from "./usePrimaryRoutePrefetch";
 import { useSessionActions } from "./useSessionActions";
 
 export function AppShell(props: AppShellProps): JSX.Element {
@@ -38,6 +39,7 @@ export function AppShell(props: AppShellProps): JSX.Element {
 function PrimaryNavigation(): JSX.Element {
   const session = useSessionActions();
   const transactions = useTransactionsNav();
+  usePrimaryRoutePrefetch();
 
   return (
     <Show when={session.isSignedIn()}>
