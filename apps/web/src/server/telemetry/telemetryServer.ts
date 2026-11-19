@@ -261,7 +261,7 @@ export function makeReportBudget(options: ReportBudgetOptions): Effect.Effect<Re
 }
 
 type ServerErrorSite = {
-  readonly kind: "render" | "server-function";
+  readonly kind: "render" | "request" | "server-function";
   readonly handling: string;
   readonly ownerPath?: string;
   readonly boundaryPath?: string;

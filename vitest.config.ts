@@ -110,7 +110,6 @@ export default defineConfig({
         plugins: [
           solidPlugin({
             dev: false,
-            hot: false,
             observe: true,
             solid: { moduleName: "@solidjs/web" },
           }),

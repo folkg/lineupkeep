@@ -42,11 +42,15 @@ function PrimaryNavigation(): JSX.Element {
   return (
     <Show when={session.isSignedIn()}>
       <Nav label="Primary navigation">
-        <NavLink to="/teams">Teams</NavLink>
+        <NavLink preload="render" to="/teams">
+          Teams
+        </NavLink>
         <Show fallback={<NavLink to="/transactions">Transactions</NavLink>} when={transactions}>
           {(nav) => nav().render()}
         </Show>
-        <NavLink to="/account">Account</NavLink>
+        <NavLink preload="render" to="/account">
+          Account
+        </NavLink>
       </Nav>
     </Show>
   );

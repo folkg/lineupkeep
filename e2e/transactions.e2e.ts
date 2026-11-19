@@ -260,3 +260,34 @@ test("opens the timeline on the first visit from the team page", async ({ page, 
 
   await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
 });
+
+test("renders the transactions surface before client scripts and hydrates its queries", async ({
+  page,
+}) => {
+  await signUp(page);
+  const hydrationWarnings: string[] = [];
+  page.on("console", (message) => {
+    if (/hydration|unclaimed/i.test(message.text())) {
+      hydrationWarnings.push(message.text());
+    }
+  });
+  const scripts = Promise.withResolvers<void>();
+  await page.route("**/*.js", async (route) => {
+    await scripts.promise;
+    await route.continue();
+  });
+
+  try {
+    await page.goto("/transactions", { waitUntil: "commit" });
+    await expect(page.getByRole("heading", { name: "Transactions", exact: true })).toBeVisible();
+    await expect(page.getByText("Nothing needs you today", { exact: true })).toBeVisible();
+  } finally {
+    scripts.resolve();
+    await page.unrouteAll({ behavior: "wait" });
+  }
+
+  await expect(page.getByRole("link", { name: "Transactions", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Teams", exact: true }).click();
+  await expect(page).toHaveURL("/teams");
+  expect(hydrationWarnings).toEqual([]);
+});

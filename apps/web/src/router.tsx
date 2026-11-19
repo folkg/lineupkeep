@@ -14,8 +14,8 @@ function createAppRouter(): ReturnType<typeof createRouter<typeof routeTree>> {
 
   const router = createRouter({
     context: { queryClient, sessionRemote },
-    defaultPreload: "intent",
-    defaultPreloadStaleTime: 0,
+    defaultPreload: "viewport",
+    defaultPreloadStaleTime: 30_000,
     routeTree,
     scrollRestoration: true,
   });

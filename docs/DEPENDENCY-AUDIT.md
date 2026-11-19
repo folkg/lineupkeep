@@ -319,11 +319,9 @@ install cannot drift back or sideways without a visible manifest change. `bun.lo
 three resolutions, their now-deduplicated nested copies, and one stale workspace devDependency entry that
 `bun install` recomputed. No Solid or TanStack version changed:
 
-- `solid-js`, `@solidjs/web`, `@solidjs/signals`, `@solidjs/compiler`, `@solidjs/babel-plugin` — 2.0.0-rc.13
-- `@tanstack/solid-start` 2.0.0-rc.8, `@tanstack/solid-router` 2.0.0-rc.8, `router-core` 1.171.22,
-  `start-server-core` 1.169.26, `start-client-core` 1.170.22
-
-The three existing framework patches in `patchedDependencies` still apply and were not touched.
+Those framework versions were current when this audit was written. The 2026-11-19 migration moved them
+to Solid 2.0.3 and the TanStack 2.0.0-rc.10 line; see [release readiness](release-readiness.md) for
+the current closure and the three retained core patches.
 
 ## Verification
 

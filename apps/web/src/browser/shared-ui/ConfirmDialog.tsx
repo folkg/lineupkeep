@@ -1,6 +1,6 @@
 import * as AlertDialog from "@kobalte/core/alert-dialog";
 import type { JSX } from "@solidjs/web";
-import { Show, createEffect, createOptimistic, createSignal, merge } from "solid-js";
+import { Show, createEffect, createSignal, merge } from "solid-js";
 
 import { Button, buttonClass } from "./Button";
 
@@ -9,7 +9,7 @@ const dialogContentClass =
 
 export function ConfirmDialog(props: ConfirmDialogProps): JSX.Element {
   const [open, setOpen] = createSignal(false);
-  const [closing, setClosing] = createOptimistic(false);
+  const [closing, setClosing] = createSignal(false);
   const visibleOpen = (): boolean => (props.open ?? open()) && !closing();
   let dialogElement: HTMLDivElement | undefined;
   let triggerElement: HTMLElement | undefined;
@@ -21,8 +21,9 @@ export function ConfirmDialog(props: ConfirmDialogProps): JSX.Element {
   const confirm = (): void => {
     setClosing(true);
     close();
-    props.onConfirm();
     restoreFocus();
+    const onConfirm = props.onConfirm;
+    queueMicrotask(onConfirm);
   };
 
   const cancel = (): void => {

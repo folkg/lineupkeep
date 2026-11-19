@@ -740,38 +740,9 @@ transaction feed agreeing. `M` — **live acceptance outstanding**: no disposabl
 so the adapter is verified against the fake provider and the recorded request shapes, not a real
 transaction feed. The end-to-end suite exercises the web submit path against that fake.
 
-## I. Foldkit migration
+## I. Foldkit migration (deferred)
 
-The preview is already merged into the rush-hour starter, so the shape is proven. The final release is
-expected shortly; adopt it when it lands. This removes the TanStack advisory entirely, which is the
-current publication blocker.
-
-### I1 — Adopt in the sample app and evaluate
-
-- [ ] Bring the rush-hour sample onto the released version and record what is better and worse in practice.
-- [ ] Code splitting: what the bundle looks like without it, and whether it can be recovered.
-- [ ] Rendering: virtual DOM against signals, measured on a list-heavy screen rather than argued.
-
-**Verify**: a running sample with feature parity, plus numbers on both concerns and a recommendation.
-`M`, blocked on the final release.
-
-### I2 — Migrate Lineupgrade
-
-- [ ] Migrate in slices, keeping the product working throughout.
-- [ ] Preserve the provider boundary, the MCP surface and every acceptance test.
-
-**Verify**: full end-to-end parity plus the measured bundle and interaction numbers from I1. `XL`, split
-before delegating.
-
-### I3 — Close the publication gate
-
-- [ ] Remove the temporary backport once the framework no longer carries the vulnerable transport.
-- [ ] Update [release-readiness.md](release-readiness.md) and the README gate.
-
-**Verify**: the built-app regression test that reproduces the advisory no longer applies, and no vulnerable
-`start-server-core` remains installed. `S`, depends on I2.
-
----
+Foldkit is being absorbed into Effect, so it is off the current timeline. Revisit it only after that work lands; the published TanStack line remains the framework until then. The publication security gate is tracked separately in [release-readiness.md](release-readiness.md).
 
 ## J. Security and privacy audit
 
@@ -1180,7 +1151,7 @@ why anything is declined. Currently zero open.
 | D12 | ~~Roster spots on an offer; per-player ranking on a run~~ settled: neither publishes; neither changes a decision           | —      |
 
 Ruled already, recorded so they are not reopened: the transactions review is one group and comes before the
-framework migration, which is waiting on a release; Foldkit before any redesign; the rename before the
+framework migration, which is deferred while Foldkit is absorbed into Effect; the rename before the
 redesign; the visual redesign is exploration rather than committed work; "phase 2 with the solver" is
 complete and is not roadmap work.
 

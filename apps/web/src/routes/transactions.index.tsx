@@ -8,7 +8,7 @@ import { transactionRemote } from "#browser/transactions/transactionRemote.ts";
 import { TransactionsPage } from "#browser/transactions/TransactionsPage.tsx";
 
 export const Route = createFileRoute("/transactions/")({
-  ssr: false,
+  ssr: true,
   beforeLoad: ({ context, location }) =>
     requireAuthenticatedSession(
       () => context.queryClient.ensureQueryData(sessionQueries.current(context.sessionRemote)),

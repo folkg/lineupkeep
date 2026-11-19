@@ -85,13 +85,13 @@
     "vitest": "catalog:"
   },
   "overrides": {
-    "@solidjs/babel-plugin": "2.0.0-rc.13",
-    "@solidjs/compiler": "2.0.0-rc.13",
-    "@solidjs/signals": "2.0.0-rc.13",
-    "@solidjs/web": "2.0.0-rc.13",
+    "@solidjs/babel-plugin": "2.0.2",
+    "@solidjs/compiler": "2.0.2",
+    "@solidjs/signals": "2.0.3",
+    "@solidjs/web": "2.0.3",
     "seroval": "1.6.12",
     "seroval-plugins": "1.6.12",
-    "solid-js": "2.0.0-rc.13",
+    "solid-js": "2.0.3",
     "zod": "4.6.7"
   },
   "engines": {
@@ -112,14 +112,14 @@
     "@better-auth/cimd": "1.7.12",
     "@better-auth/oauth-provider": "1.7.12",
     "@electric-sql/pglite": "0.5.11",
-    "@solidjs/diagnostics": "2.0.0-rc.13",
-    "@solidjs/web": "2.0.0-rc.13",
+    "@solidjs/diagnostics": "2.0.3",
+    "@solidjs/web": "2.0.3",
     "@tailwindcss/vite": "4.3.3",
     "@xstate/effect": "1.0.0-beta.2",
-    "@tanstack/solid-query": "6.0.0-rc.5",
-    "@tanstack/solid-router": "2.0.0-rc.8",
-    "@tanstack/solid-router-ssr-query": "2.0.0-rc.6",
-    "@tanstack/solid-start": "2.0.0-rc.8",
+    "@tanstack/solid-query": "6.0.0-rc.6",
+    "@tanstack/solid-router": "2.0.0-rc.10",
+    "@tanstack/solid-router-ssr-query": "2.0.0-rc.9",
+    "@tanstack/solid-start": "2.0.0-rc.10",
     "@vitest/browser-playwright": "5.0.5",
     "better-auth": "1.7.12",
     "drizzle-kit": "1.0.0-rc.5",
@@ -127,12 +127,12 @@
     "effect": "4.1.4",
     "playwright": "1.64.1",
     "postgres": "3.4.9",
-    "solid-js": "2.0.0-rc.13",
+    "solid-js": "2.0.3",
     "tailwindcss": "4.3.3",
     "typescript": "7.0.2",
     "@playwright/test": "1.64.1",
     "vite": "8.3.5",
-    "@solidjs/vite-plugin": "3.0.0-next.47",
+    "@solidjs/vite-plugin": "3.0.1",
     "vitest": "5.0.5",
     "xstate": "6.0.0-beta.3",
     "nitro": "3.0.260903-beta",
@@ -150,11 +150,10 @@
     "@types/ws": "8.18.2"
   },
   "patchedDependencies": {
-    "@tanstack/solid-start@2.0.0-rc.8": "patches/@tanstack%2Fsolid-start@2.0.0-rc.8.patch",
     "@better-auth/oauth-provider@1.7.12": "patches/@better-auth%2Foauth-provider@1.7.12.patch",
+    "@better-auth/cimd@1.7.12": "patches/@better-auth%2Fcimd@1.7.12.patch",
     "@tanstack/router-core@1.171.22": "patches/@tanstack%2Frouter-core@1.171.22.patch",
     "@tanstack/start-server-core@1.169.26": "patches/@tanstack%2Fstart-server-core@1.169.26.patch",
-    "@tanstack/start-client-core@1.170.22": "patches/@tanstack%2Fstart-client-core@1.170.22.patch",
-    "@better-auth/cimd@1.7.12": "patches/@better-auth%2Fcimd@1.7.12.patch"
+    "@tanstack/start-client-core@1.170.22": "patches/@tanstack%2Fstart-client-core@1.170.22.patch"
   }
 }

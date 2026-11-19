@@ -1,7 +1,7 @@
 # Client data flow
 
 Router decides page needs; Query owns server state; Solid boundaries present waiting/failure. Router caching stays off.
-These are pinned TanStack Solid Start/Router/Query mechanics; inspect installed source and [patch](../../../../patches/@tanstack%2Fsolid-start@2.0.0-rc.8.patch) before changing them.
+These are pinned TanStack Solid Start/Router/Query mechanics; inspect installed source and [patched core packages](../../../../patches/README.md) before changing them.
 
 ## Ownership
 
