@@ -1302,7 +1302,7 @@ it.effect(
       );
 
       const payload = jwtPayload(credentials.access_token);
-      assert.strictEqual(payload.exp - payload.iat, 300);
+      assert.strictEqual(payload.exp - payload.iat, 3660);
       const database = yield* AuthDatabase;
       const [refreshRow] = yield* Effect.promise(() => database.select().from(oauthRefreshToken));
       assert.isDefined(refreshRow);

@@ -101,7 +101,7 @@ test("answers the documented token-free discovery request with the same document
   expect(document.result["capabilities"]).toEqual({ tools: {} });
   const tokenFree = Schema.decodeUnknownSync(DiscoveredGrant)(document);
   expect(tokenFree.result._meta["lineupkeep/grant"]).toEqual({
-    accessTokenLifetimeSeconds: 300,
+    accessTokenLifetimeSeconds: 3600,
     refreshTokenGrantSupported: true,
   });
 
@@ -115,7 +115,7 @@ test("answers the documented token-free discovery request with the same document
 
   expect(grant.accessToken?.status).toBe("active");
   expect(grant.accessToken?.expiresInSeconds).toBeGreaterThan(0);
-  expect(grant.accessToken?.expiresInSeconds).toBeLessThanOrEqual(300);
+  expect(grant.accessToken?.expiresInSeconds).toBeLessThanOrEqual(3660);
   expect(DateTime.makeUnsafe(grant.accessToken?.expiresAt ?? "").epochMilliseconds).toBeGreaterThan(
     DateTime.nowUnsafe().epochMilliseconds,
   );
@@ -915,7 +915,7 @@ test("rotates refresh credentials over HTTP and replays the previous token", asy
   );
   const initial = Schema.decodeUnknownSync(IssuedCredentials)(credentials);
 
-  expect(initial.expires_in).toBe(300);
+  expect(initial.expires_in).toBe(3660);
   expect(await advertisedKeyIds(origin)).toContain(jwtHeader(initial.access_token).kid);
   const response = await exchangeRefreshToken(authorization, initial.refresh_token);
   expect(response.status).toBe(200);

@@ -732,7 +732,8 @@ function createAuth(options: AuthFactoryOptions): ApplicationAuth {
         allowDynamicClientRegistration: true,
         allowUnauthenticatedClientRegistration: true,
         allowPublicClientPrelogin: true,
-        accessTokenExpiresIn: Duration.toSeconds(accessTokenLifetime),
+        accessTokenExpiresIn:
+          Duration.toSeconds(accessTokenLifetime) + Duration.toSeconds(accessTokenExpiryGrace),
         refreshTokenExpiresIn: Duration.toSeconds(refreshTokenLifetime),
         refreshTokenReuseInterval: Duration.toSeconds(refreshTokenReuseWindow),
       }),
@@ -867,7 +868,9 @@ function toAuthenticationSession(session: BetterAuthSessionValue): Authenticatio
 
 const signInCodeLifetime = Duration.minutes(10);
 
-const accessTokenLifetime = Duration.minutes(5);
+const accessTokenLifetime = Duration.hours(1);
+
+const accessTokenExpiryGrace = Duration.seconds(60);
 
 const sessionRefreshWindow = Duration.minutes(5);
 
