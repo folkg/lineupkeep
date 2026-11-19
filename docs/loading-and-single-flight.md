@@ -4,7 +4,7 @@
 
 Router chooses what a page needs. Query fetches and caches that data. Solid shows the page and handles loading and error states.
 
-Wait for sign-in checks and the data that makes the page useful. During navigation, keep the previous content visible until the destination is ready rather than replace the whole page with a spinner. On a fresh visit, waiting means the server can send useful content before browser scripts run.
+Wait for sign-in checks on the server, then start the page's primary query in the loader. On the server the loader waits, so the first response contains useful content. On client navigation the loader starts the query and returns immediately; the destination renders with a shape-matched skeleton while the query fills, rather than leaving the old page in place. A route skeleton reserves the card and page dimensions so the switch does not move the layout.
 
 Less important sections can load separately, with their own loading indicators. Keep usable controls visible if a refresh fails.
 
@@ -22,7 +22,7 @@ Browser updates the page, then confirms success
 
 Start enables this automatically for browser writes through server functions. Loaders decide what to read; the framework does not infer it from the change. This saves a network trip, not database work, so keep loaders focused.
 
-With the current integration, await the main data fetch in the loader so it finishes before the response copies the cache. Waiting does not enable single-flight; it ensures the response includes fresh data.
+The loader awaits the primary query while a mutation is pending, so the response still carries fresh data. With no mutation pending it only starts the query, and the destination's skeleton covers the wait. Preloaded data stays fresh for thirty seconds.
 
 ## Framework updates
 

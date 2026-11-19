@@ -1,12 +1,15 @@
 import { useMutation, useQuery } from "@tanstack/solid-query";
-import { createOptimisticStore, createSignal } from "solid-js";
+import { createEffect, createOptimisticStore, createSignal, onSettled, untrack } from "solid-js";
 import type { Accessor } from "solid-js";
 
+import { readCachedTeamHeaders, storeCachedTeamHeaders } from "#browser/query/teamHeaderCache.ts";
+import type { CachedTeamHeader } from "#browser/query/teamHeaderCache.ts";
 import { useSignInRecovery } from "#browser/session/signInRecovery.ts";
 import type { ActionFeedbackState } from "#browser/shared-ui/ActionFeedback.tsx";
 import { actionState } from "#browser/shared-ui/actionState.ts";
 import type { ActionState } from "#browser/shared-ui/actionState.ts";
 import type { TeamControlData, TeamSummaryView } from "#contracts/connections/teamContract.ts";
+import { sportDisplayName } from "#contracts/connections/teamVocabulary.ts";
 
 import { describeTeamFailure } from "./teamFailure";
 import { storeRefreshedTeamList, teamMutations } from "./teamMutations";
@@ -16,6 +19,11 @@ import type { TeamRemote } from "./teamRemote";
 
 export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
   const query = useQuery(() => props.teamsQuery());
+  const viewerId = untrack(() => props.viewerId?.());
+  const [cachedHeaders, setCachedHeaders] = createSignal<ReadonlyArray<CachedTeamHeader>>([]);
+  onSettled(() => {
+    setCachedHeaders(viewerId === undefined ? [] : readCachedTeamHeaders(viewerId));
+  });
   const signIn = useSignInRecovery();
   const [feedback, setFeedback] = createSignal<ActionFeedbackState>();
   const [refreshFinished, setRefreshFinished] = createSignal(false);
@@ -23,6 +31,16 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
     () => (query.isSuccess ? [...query.data] : []),
     [],
     { key: null },
+  );
+
+  createEffect(
+    () => (query.isSuccess ? query.data : undefined),
+    (teams) => {
+      if (viewerId === undefined || teams === undefined) {
+        return;
+      }
+      storeCachedTeamHeaders(viewerId, teams.map(teamHeader));
+    },
   );
 
   const refreshing = (): boolean => teamList.some((team) => team.pending?.action === "refresh");
@@ -54,6 +72,7 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
 
   return {
     teams: () => teamList,
+    cachedHeaders,
     isLoading: () => query.isPending,
     loadFailure: () => query.error,
     dataUpdatedAt: () => query.dataUpdatedAt,
@@ -82,6 +101,7 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
 
 export type TeamsPageController = {
   readonly teams: Accessor<ReadonlyArray<TeamSummaryView>>;
+  readonly cachedHeaders: Accessor<ReadonlyArray<CachedTeamHeader>>;
   readonly isLoading: Accessor<boolean>;
   readonly loadFailure: Accessor<Error | null>;
   readonly dataUpdatedAt: Accessor<number>;
@@ -94,8 +114,18 @@ export type TeamsPageController = {
 
 type TeamsPageOptions = {
   readonly teamsQuery: () => TeamListQueryOptions;
+  readonly viewerId?: () => string | undefined;
   readonly remote: () => TeamRemote;
   readonly onRefresh: () => Promise<void>;
 };
 
 type TeamData = { -readonly [K in keyof TeamSummaryView]: TeamSummaryView[K] };
+
+function teamHeader(team: TeamSummaryView): CachedTeamHeader {
+  return {
+    id: team.team.id,
+    name: team.team.name,
+    sportLabel: sportDisplayName(team.team.sport),
+    ...(team.team.leagueName === undefined ? {} : { leagueName: team.team.leagueName }),
+  };
+}

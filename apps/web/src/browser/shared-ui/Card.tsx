@@ -49,7 +49,7 @@ export function CardNote(props: { readonly children: Element }): JSX.Element {
 
 type CardProps = {
   readonly as?: "section" | "li";
-  readonly labelledBy: string;
+  readonly labelledBy?: string;
   readonly header: Element;
   readonly meta?: Element;
   readonly badge: Element;

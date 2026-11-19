@@ -16,6 +16,7 @@ import { Page } from "#browser/shared-ui/Page.tsx";
 import { QueueList, QueueListItem, QueueListNote } from "#browser/shared-ui/QueueList.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
+import { TransactionsSkeleton } from "#browser/shared-ui/Skeleton.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextField } from "#browser/shared-ui/TextField.tsx";
@@ -76,10 +77,7 @@ export function TransactionsPage(props: TransactionsPageProps): JSX.Element {
         lede="Run a group now, or schedule it for a later day."
         title="Transactions"
       >
-        <Show
-          fallback={<LoadingState label="Loading moves">Loading your open moves…</LoadingState>}
-          when={!page.isLoading()}
-        >
+        <Show fallback={<TransactionsSkeleton />} when={!page.isLoading()}>
           <Show
             fallback={
               <ActionFeedback

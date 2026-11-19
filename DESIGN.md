@@ -379,7 +379,9 @@ continuous motion in the product is the hairline a working control draws.
 
 **The Rare Moment Rule.** A moment earns motion when it is occasional or first-time and its purpose
 is to prevent a jarring change or to make a state legible. If it repeats many times a day, or it only
-looks nice, it stays still.
+looks nice, it stays still. A pending navigation is the one frequent exception: one hairline progress
+bar appears as feedback while the destination loads. Loading shapes use a quiet opacity pulse, and
+stop when the person asks for reduced motion.
 
 - An arrival settles in once: `opacity` from 0 with a 4px rise, on `--theme-duration-reveal` with
   `--theme-ease-out`. It plays when content becomes populated while the page is open; a page load or
@@ -454,9 +456,11 @@ status line reserves two lines so its sentence cannot change the card's height. 
 jump-out sits beside the team name; the right cluster is the toggle and pause only. A list never
 repeats a control label on every row.
 
-Notices are a 2px leading rule with caps title and 12px detail. Empty and loading states are a
-top rule with a 15px title and soft text. The live status region stays in the accessibility tree
-when empty (visually hidden) and becomes visible when a message arrives.
+Notices are a 2px leading rule with caps title and 12px detail. Empty states are a top rule with a
+15px title and soft text. Loading uses the same card frame at its settled size: known team names and
+league context stay in the header, while the badge, body, and footer reserve their space as quiet
+rule-coloured shapes. The live status region stays in the accessibility tree when empty (visually
+hidden) and becomes visible when a message arrives.
 
 ### Browser and dialogs
 

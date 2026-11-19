@@ -2,11 +2,12 @@ import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 import type { Accessor } from "solid-js";
 
+import type { CachedTeamHeader } from "#browser/query/teamHeaderCache.ts";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import type { ActionState } from "#browser/shared-ui/actionState.ts";
 import { Badge } from "#browser/shared-ui/Badge.tsx";
 import { Card } from "#browser/shared-ui/Card.tsx";
-import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
+import { EmptyState } from "#browser/shared-ui/CollectionState.tsx";
 import { IconButton } from "#browser/shared-ui/IconButton.tsx";
 import { RefreshIcon } from "#browser/shared-ui/icons.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
@@ -14,6 +15,7 @@ import { Notice } from "#browser/shared-ui/Notice.tsx";
 import { RuleList } from "#browser/shared-ui/RuleList.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { createSettle } from "#browser/shared-ui/settle.ts";
+import { CardSkeletonList } from "#browser/shared-ui/Skeleton.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
@@ -33,6 +35,16 @@ import type { TeamStatusBadge } from "./teamStatus";
 export function TeamList(props: TeamListProps): JSX.Element {
   const clock = createMinuteClock(() => props.dataUpdatedAt());
   const settling = createSettle(() => !props.isLoading() && props.teams().length > 0);
+  const skeletonCards = (): ReadonlyArray<SkeletonCard> | undefined =>
+    props.cachedHeaders.length === 0
+      ? undefined
+      : props.cachedHeaders.map((header) => ({
+          title: header.name,
+          meta:
+            header.leagueName === undefined
+              ? header.sportLabel
+              : `${header.sportLabel} · ${header.leagueName}`,
+        }));
 
   return (
     <Stack as="section" gap="md" labelledBy="teams-list-title">
@@ -62,10 +74,7 @@ export function TeamList(props: TeamListProps): JSX.Element {
           <Text type="meta">Turn on Lineup checks for the teams you want managed.</Text>
         </Notice>
       </Show>
-      <Show
-        fallback={<LoadingState label="Loading teams">Loading your teams…</LoadingState>}
-        when={!props.isLoading()}
-      >
+      <Show fallback={<CardSkeletonList cards={skeletonCards()} />} when={!props.isLoading()}>
         <Show
           fallback={
             <ActionFeedback
@@ -187,6 +196,7 @@ type TeamListProps = {
   readonly loadFailure: Accessor<Error | null>;
   readonly refreshState: Accessor<ActionState>;
   readonly dataUpdatedAt: Accessor<number>;
+  readonly cachedHeaders: ReadonlyArray<CachedTeamHeader>;
   readonly onOptimistic: (input: TeamControlData) => void;
   readonly onRefresh: () => Promise<void>;
   readonly onRefreshTeams: () => void;
@@ -220,3 +230,5 @@ function allTeamsIdle(teams: ReadonlyArray<TeamSummaryView>): boolean {
     )
   );
 }
+
+type SkeletonCard = { readonly title: string; readonly meta: string };

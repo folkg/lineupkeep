@@ -1,5 +1,7 @@
 import { mutationOptions } from "@tanstack/solid-query";
 
+import { clearCachedTeamHeaders } from "#browser/query/teamHeaderCache.ts";
+
 import { sessionQueries } from "./sessionQueries";
 import type { SessionRemote } from "./sessionRemote";
 
@@ -10,6 +12,7 @@ export const sessionMutations = {
       mutationFn: () => remote.signOut(),
 
       onSuccess: (_data, _variables, _onMutateResult, context) => {
+        clearCachedTeamHeaders();
         context.client.removeQueries({
           predicate: (query) => query.queryKey[0] !== sessionQueries.currentKey[0],
         });

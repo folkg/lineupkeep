@@ -808,7 +808,7 @@ it("shows a recoverable failure instead of an empty team list", async () => {
 it("shows a loading state while the team list is pending", async () => {
   const pending = Promise.withResolvers<ReadonlyArray<TeamSummaryView>>();
   using _app = setupTeamsPage([], { list: () => pending.promise });
-  await expect.element(page.getByText("Loading your teams…")).toBeVisible();
+  await expect.element(page.getByLabelText("Loading teams")).toBeVisible();
   pending.resolve([]);
   await expect.element(page.getByText("No teams yet.")).toBeVisible();
 });
