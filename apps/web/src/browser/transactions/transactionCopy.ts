@@ -52,7 +52,7 @@ export function moveSummary(move: TransactionMoveView): string {
 }
 
 export function originalClaimLine(move: TransactionMoveView): string | undefined {
-  if (move.phase !== "lost" || move.result !== "executed") {
+  if (move.status !== "claim_lost_fallback_ran") {
     return undefined;
   }
   const name = move.attempts.find((attempt) => attempt.kind === "claim")?.player.name;

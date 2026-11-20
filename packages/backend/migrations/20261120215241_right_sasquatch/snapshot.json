@@ -1,0 +1,63 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "8607cf80-31e9-4fdf-96f5-e4c178edb01f",
+  "prevIds": ["137c953a-b5b5-47e6-b791-4870b39bf731"],
+  "footprints": [
+    {
+      "statementType": "recreate_index",
+      "statementTarget": ["index", "public", "transaction_moves", "transaction_moves_timeline_idx"],
+      "writes": [
+        "s|idx|public.transaction_moves_timeline_idx",
+        "n|idx|public.transaction_moves_timeline_idx",
+        "e|idx|public.transaction_moves_timeline_idx",
+        "n|rel|public.transaction_moves_timeline_idx"
+      ],
+      "reads": [
+        "n|tbl|public.transaction_moves",
+        "n|sch|public",
+        "n|col|public.transaction_moves.user_id",
+        "n|col|public.transaction_moves.run_day",
+        "n|col|public.transaction_moves.team_id",
+        "n|col|public.transaction_moves.position"
+      ],
+      "sharedWrites": [],
+      "sqlHash": "f583a9370eb02f5f"
+    },
+    {
+      "statementType": "recreate_index",
+      "statementTarget": ["index", "public", "transaction_moves", "transaction_moves_due_idx"],
+      "writes": [
+        "s|idx|public.transaction_moves_due_idx",
+        "n|idx|public.transaction_moves_due_idx",
+        "e|idx|public.transaction_moves_due_idx",
+        "n|rel|public.transaction_moves_due_idx"
+      ],
+      "reads": [
+        "n|tbl|public.transaction_moves",
+        "n|sch|public",
+        "n|col|public.transaction_moves.run_day",
+        "n|col|public.transaction_moves.decision"
+      ],
+      "sharedWrites": [],
+      "sqlHash": "f69f795b0bb19129"
+    }
+  ],
+  "deltas": [
+    {
+      "op": "alter",
+      "key": "indexes\u0000[\"public\",\"transaction_moves_timeline_idx\"]",
+      "set": {
+        "where": "((\"decision\" <> 'discarded') and ((\"phase\" is null)) and ((((\"result\" is null)) or (\"result\" <> 'executed'))))"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "indexes\u0000[\"public\",\"transaction_moves_due_idx\"]",
+      "set": {
+        "where": "((\"decision\" <> 'discarded') and ((\"phase\" is null)) and ((((\"result\" is null)) or (\"result\" <> 'executed'))))"
+      }
+    }
+  ]
+}

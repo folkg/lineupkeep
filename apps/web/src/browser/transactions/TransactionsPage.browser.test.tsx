@@ -1031,6 +1031,7 @@ it("moves a submitted group with a pending waiver into earlier, not today", asyn
     group,
     kind: "waiver_claim",
     decision: "now",
+    phase: "with_league",
     adds: [player("Amon-Ra St. Brown")],
     drops: [player("Romeo Doubs")],
     confirmation: { by: "owner", at: "2026-11-11T17:35:00.000Z" },
@@ -1041,9 +1042,10 @@ it("moves a submitted group with a pending waiver into earlier, not today", asyn
     team: alpha,
     group,
     position: 1,
-    kind: "stash",
+    kind: "waiver_claim",
+    phase: "with_league",
+    adds: [player("Tank Bigsby")],
     drops: [],
-    intent: { kind: "stash", player: player("Amon-Ra St. Brown") },
     decision: "now",
     confirmation: { by: "owner", at: "2026-11-11T17:35:00.000Z" },
     result: "pending",
@@ -1073,14 +1075,14 @@ it("moves a submitted group with a pending waiver into earlier, not today", asyn
   expect(
     page
       .getByRole("region", { name: "Today" })
-      .getByText("Waiting for the league", { exact: true })
+      .getByText("With the league", { exact: true })
       .elements(),
   ).toHaveLength(0);
   await expect.element(page.getByText("2 moves", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Show earlier moves" }).click();
-  await expect.element(page.getByText("Waiting for the league", { exact: true })).toBeVisible();
-  expect(page.getByText("Waiting for the league", { exact: true }).elements()).toHaveLength(1);
+  await expect.element(page.getByText("With the league", { exact: true })).toBeVisible();
+  expect(page.getByText("With the league", { exact: true }).elements()).toHaveLength(1);
   await expect.element(page.getByText("Weekend moves", { exact: true })).toBeVisible();
   await expect.element(page.getByText(submittedLine(claim) ?? "", { exact: true })).toBeVisible();
   expect(page.getByText("Waiting on the league until", { exact: false }).elements()).toHaveLength(
@@ -2049,10 +2051,65 @@ function uniqueTeams(moves: ReadonlyArray<TransactionMoveView>): number {
   return new Set(moves.map((move) => move.team.id)).size;
 }
 
+function fixtureStatus(move: Omit<TransactionMoveView, "status">): TransactionMoveView["status"] {
+  if (move.decision === "discarded") {
+    return "discarded";
+  }
+  switch (move.phase) {
+    case "with_league":
+      return "claim_waiting";
+    case "won":
+      return "claim_won";
+    case "lost":
+      switch (move.result) {
+        case "executed":
+          return "claim_lost_fallback_ran";
+        case "pending":
+          return "claim_lost_retrying";
+        case "unknown":
+          return "fallback_unknown";
+        case "failed":
+          return move.attempts.some((attempt) => attempt.kind === "fallback")
+            ? "all_choices_failed"
+            : "claim_lost";
+        case "skipped":
+          return "skipped";
+        case undefined:
+          return "claim_lost";
+      }
+      break;
+    case undefined:
+      break;
+  }
+  switch (move.result) {
+    case "executed":
+      return move.runDecidedBy === "system" ? "ran_on_schedule" : "ran_immediately";
+    case "pending":
+      return move.kind === "trade" ? "offer_sent" : "open_now";
+    case "failed":
+      return "failed";
+    case "skipped":
+      return "skipped";
+    case "unknown":
+      return "unknown";
+    case undefined:
+      switch (move.decision) {
+        case "undecided":
+          return "open_undecided";
+        case "saved":
+          return "open_saved";
+        case "now":
+          return "open_now";
+        case "confirmed":
+          return "open_confirmed";
+      }
+  }
+}
+
 function move(
   overrides: Partial<TransactionMoveView> & { readonly team: TransactionMoveTeamView },
 ): TransactionMoveView {
-  return {
+  const base: Omit<TransactionMoveView, "status"> = {
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165a9",
     kind: "drop",
     position: 0,
@@ -2065,8 +2122,12 @@ function move(
     picks: [],
     validation: { status: "current", checkedAt: now, reasons: [] },
     check: { status: "checked" },
-    ...overrides,
     team: overrides.team,
+  };
+  const merged = { ...base, ...overrides };
+  return {
+    ...merged,
+    status: overrides.status ?? fixtureStatus(merged),
   };
 }
 

@@ -80,6 +80,24 @@ it("dates a later day's claim without the hourly run time", () => {
   ).toBe("Claim lost, fallback ran");
   expect(
     moveOutcomeLabel(executed({ kind: "waiver_claim", phase: "lost", result: "failed" })),
+  ).toBe("Claim lost");
+  expect(
+    moveOutcomeLabel(
+      executed({
+        kind: "waiver_claim",
+        phase: "lost",
+        result: "failed",
+        attempts: [
+          {
+            kind: "fallback",
+            player: { name: "Amon-Ra St. Brown" },
+            outcome: "failed",
+            reason: "The league refused the fallback.",
+            at: "2026-11-18T12:00:00.000Z",
+          },
+        ],
+      }),
+    ),
   ).toBe("All choices failed");
 });
 
@@ -161,13 +179,13 @@ it("names the run outcome without inventing a time", () => {
   expect(moveOutcomeLabel(executed({ runDecidedBy: "system" }))).toBe("Ran on schedule");
   expect(moveOutcomeLabel(executed({}))).toBe("Ran immediately");
   expect(moveOutcomeLabel(executed({ runDecidedBy: "owner" }))).toBe("Ran immediately");
-  expect(moveOutcomeLabel(executed({ result: "pending" }))).toBe("Waiting for the league");
+  expect(moveOutcomeLabel(executed({ kind: "trade", result: "pending" }))).toBe("Offer sent");
   expect(moveOutcomeLabel(executed({ result: "failed" }))).toBe("Failed");
 });
 
 it("gives every recorded outcome an icon and a tooltip", () => {
   const cases: ReadonlyArray<{
-    readonly overrides: Partial<TransactionMoveView>;
+    readonly status: TransactionMoveView["status"];
     readonly label: string;
     readonly icon: ReturnType<typeof moveOutcome> extends infer Outcome
       ? Outcome extends { readonly icon: infer Icon }
@@ -175,45 +193,39 @@ it("gives every recorded outcome an icon and a tooltip", () => {
         : never
       : never;
   }> = [
-    { overrides: {}, label: "Ran immediately", icon: "check" },
-    { overrides: { runDecidedBy: "system" }, label: "Ran on schedule", icon: "clock-check" },
+    { status: "ran_immediately", label: "Ran immediately", icon: "check" },
+    { status: "ran_on_schedule", label: "Ran on schedule", icon: "clock-check" },
+    { status: "claim_waiting", label: "With the league", icon: "hourglass" },
+    { status: "claim_won", label: "Claim won", icon: "badge-check" },
+    { status: "claim_lost", label: "Claim lost", icon: "circle-slash" },
     {
-      overrides: { kind: "waiver_claim", phase: "with_league" },
-      label: "With the league",
-      icon: "hourglass",
-    },
-    { overrides: { kind: "waiver_claim", phase: "won" }, label: "Claim won", icon: "badge-check" },
-    {
-      overrides: { kind: "waiver_claim", phase: "lost", result: "executed" },
+      status: "claim_lost_fallback_ran",
       label: "Claim lost, fallback ran",
       icon: "iteration-ccw",
     },
     {
-      overrides: { kind: "waiver_claim", phase: "lost", result: "failed" },
-      label: "All choices failed",
-      icon: "x",
+      status: "claim_lost_retrying",
+      label: "Claim lost, retrying",
+      icon: "rotate-cw",
     },
-    {
-      overrides: { kind: "waiver_claim", phase: "lost", result: undefined },
-      label: "Claim lost",
-      icon: "circle-slash",
-    },
-    { overrides: { result: "pending" }, label: "Waiting for the league", icon: "hourglass" },
-    { overrides: { result: "failed" }, label: "Failed", icon: "x" },
-    { overrides: { result: "skipped" }, label: "Skipped", icon: "skip-forward" },
-    { overrides: { result: "unknown" }, label: "Unknown outcome", icon: "circle-question-mark" },
-    { overrides: { result: "withdrawn" }, label: "Withdrawn", icon: "undo-2" },
-    { overrides: { result: "expired" }, label: "Expired", icon: "timer-off" },
-    { overrides: { decision: "discarded" }, label: "Discarded", icon: "ban" },
+    { status: "all_choices_failed", label: "All choices failed", icon: "x" },
+    { status: "fallback_unknown", label: "Unknown outcome", icon: "circle-question-mark" },
+    { status: "offer_sent", label: "Offer sent", icon: "send-horizontal" },
+    { status: "failed", label: "Failed", icon: "x" },
+    { status: "skipped", label: "Skipped", icon: "skip-forward" },
+    { status: "unknown", label: "Unknown outcome", icon: "circle-question-mark" },
+    { status: "discarded", label: "Discarded", icon: "ban" },
   ];
 
   for (const entry of cases) {
-    expect(moveOutcome(executed(entry.overrides))).toMatchObject({
+    expect(moveOutcome(executed({ status: entry.status }))).toMatchObject({
       label: entry.label,
       icon: entry.icon,
     });
   }
-  expect(moveOutcome(executed({ result: undefined }))).toBeUndefined();
+  for (const status of ["open_undecided", "open_saved", "open_now", "open_confirmed"] as const) {
+    expect(moveOutcome(executed({ status }))).toBeUndefined();
+  }
 });
 
 it("lets a discard win over every recorded result", () => {
@@ -232,8 +244,63 @@ it("lets a discard win over every recorded result", () => {
   ).toBe("You discarded this on Nov 10 at 10:10 AM.");
 });
 
+function fixtureStatus(move: Omit<TransactionMoveView, "status">): TransactionMoveView["status"] {
+  if (move.decision === "discarded") {
+    return "discarded";
+  }
+  switch (move.phase) {
+    case "with_league":
+      return "claim_waiting";
+    case "won":
+      return "claim_won";
+    case "lost":
+      switch (move.result) {
+        case "executed":
+          return "claim_lost_fallback_ran";
+        case "pending":
+          return "claim_lost_retrying";
+        case "unknown":
+          return "fallback_unknown";
+        case "failed":
+          return move.attempts.some((attempt) => attempt.kind === "fallback")
+            ? "all_choices_failed"
+            : "claim_lost";
+        case "skipped":
+          return "skipped";
+        case undefined:
+          return "claim_lost";
+      }
+      break;
+    case undefined:
+      break;
+  }
+  switch (move.result) {
+    case "executed":
+      return move.runDecidedBy === "system" ? "ran_on_schedule" : "ran_immediately";
+    case "pending":
+      return move.kind === "trade" ? "offer_sent" : "open_now";
+    case "failed":
+      return "failed";
+    case "skipped":
+      return "skipped";
+    case "unknown":
+      return "unknown";
+    case undefined:
+      switch (move.decision) {
+        case "undecided":
+          return "open_undecided";
+        case "saved":
+          return "open_saved";
+        case "now":
+          return "open_now";
+        case "confirmed":
+          return "open_confirmed";
+      }
+  }
+}
+
 function executed(overrides: Partial<TransactionMoveView>): TransactionMoveView {
-  return {
+  const base: Omit<TransactionMoveView, "status"> = {
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165b1",
     team: {
       id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165a1",
@@ -255,6 +322,10 @@ function executed(overrides: Partial<TransactionMoveView>): TransactionMoveView 
     check: { status: "checked" },
     result: "executed",
     runDecidedBy: "owner",
-    ...overrides,
+  };
+  const merged = { ...base, ...overrides };
+  return {
+    ...merged,
+    status: overrides.status ?? fixtureStatus(merged),
   };
 }

@@ -107,6 +107,7 @@ function toMoveView(move: TransactionMoveRead): TransactionMoveView {
     kind: move.kind,
     position: move.position,
     decision: move.decision,
+    status: move.status,
     ...(move.phase === undefined ? {} : { phase: move.phase }),
     attempts: move.attempts.map((attempt) => ({
       kind: attempt.kind,

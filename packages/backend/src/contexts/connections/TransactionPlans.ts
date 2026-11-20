@@ -81,10 +81,32 @@ export const TransactionMoveResult = Schema.Literals([
   "failed",
   "skipped",
   "unknown",
-  "withdrawn",
-  "expired",
 ]);
 export type TransactionMoveResult = typeof TransactionMoveResult.Type;
+
+const TransactionMoveStatuses = [
+  "open_undecided",
+  "open_saved",
+  "open_now",
+  "open_confirmed",
+  "discarded",
+  "ran_immediately",
+  "ran_on_schedule",
+  "claim_waiting",
+  "claim_won",
+  "claim_lost",
+  "claim_lost_fallback_ran",
+  "claim_lost_retrying",
+  "all_choices_failed",
+  "fallback_unknown",
+  "offer_sent",
+  "failed",
+  "skipped",
+  "unknown",
+] as const;
+
+export const TransactionMoveStatus = Schema.Literals(TransactionMoveStatuses);
+export type TransactionMoveStatus = typeof TransactionMoveStatus.Type;
 
 export const TransactionMovePhase = Schema.Literals(["with_league", "won", "lost"]);
 export type TransactionMovePhase = typeof TransactionMovePhase.Type;
@@ -218,15 +240,72 @@ export function isOpenMove(move: {
   readonly result?: TransactionMoveResult;
   readonly phase?: TransactionMovePhase;
 }): boolean {
-  return (
-    move.decision !== "discarded" &&
-    move.phase !== "with_league" &&
-    move.phase !== "won" &&
-    move.phase !== "lost" &&
-    move.result !== "executed" &&
-    move.result !== "withdrawn" &&
-    move.result !== "expired"
-  );
+  return move.decision !== "discarded" && move.phase === undefined && move.result !== "executed";
+}
+
+export function transactionMoveStatus(move: {
+  readonly decision: TransactionMoveDecision;
+  readonly kind: TransactionMoveKind;
+  readonly phase?: TransactionMovePhase;
+  readonly result?: TransactionMoveResult;
+  readonly runDecidedBy?: TransactionDecisionActor;
+  readonly attempts: ReadonlyArray<{ readonly kind: "claim" | "fallback" }>;
+}): TransactionMoveStatus {
+  if (move.decision === "discarded") {
+    return "discarded";
+  }
+  switch (move.phase) {
+    case "with_league":
+      return "claim_waiting";
+    case "won":
+      return "claim_won";
+    case "lost":
+      switch (move.result) {
+        case "executed":
+          return "claim_lost_fallback_ran";
+        case "pending":
+          return "claim_lost_retrying";
+        case "unknown":
+          return "fallback_unknown";
+        case "failed":
+          return move.attempts.some((attempt) => attempt.kind === "fallback")
+            ? "all_choices_failed"
+            : "claim_lost";
+        case "skipped":
+          return "skipped";
+        case undefined:
+          return "claim_lost";
+      }
+      break;
+    case undefined:
+      break;
+  }
+  switch (move.result) {
+    case "executed":
+      return move.runDecidedBy === "system" ? "ran_on_schedule" : "ran_immediately";
+    case "pending":
+      if (move.kind === "trade") {
+        return "offer_sent";
+      }
+      throw new Error("Only a waiver claim or a trade offer can wait without a claim phase");
+    case "failed":
+      return "failed";
+    case "skipped":
+      return "skipped";
+    case "unknown":
+      return "unknown";
+    case undefined:
+      switch (move.decision) {
+        case "undecided":
+          return "open_undecided";
+        case "saved":
+          return "open_saved";
+        case "now":
+          return "open_now";
+        case "confirmed":
+          return "open_confirmed";
+      }
+  }
 }
 
 export const TransactionMovePlayerView = Schema.Struct({
@@ -299,14 +378,19 @@ export const TransactionMoveRead = Schema.Struct({
   kind: TransactionMoveKind,
   position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   decision: TransactionMoveDecision,
+  status: TransactionMoveStatus.pipe(
+    Schema.annotate({
+      description: "The move's lifecycle state.",
+    }),
+  ),
   phase: Schema.optional(TransactionMovePhase).pipe(
     Schema.annotate({
-      description: "The claim's league phase.",
+      description: "The claim phase.",
     }),
   ),
   attempts: Schema.Array(TransactionMoveAttemptView).pipe(
     Schema.annotate({
-      description: "Each claim or fallback tried.",
+      description: "Claims and fallbacks tried.",
     }),
   ),
   reason: Schema.NonEmptyString,
@@ -320,17 +404,17 @@ export const TransactionMoveRead = Schema.Struct({
   bid: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   runDay: Schema.optional(StoredMoveDate).pipe(
     Schema.annotate({
-      description: "The league day Lineupgrade sends the move; not when the league applies it.",
+      description: "The day it is sent, not applied.",
     }),
   ),
   effectiveDate: Schema.optional(StoredMoveDate).pipe(
     Schema.annotate({
-      description: "The league day the change applies, derived from runDay.",
+      description: "The day the league applies it.",
     }),
   ),
   sendsAt: Schema.optional(Schema.DateTimeUtc).pipe(
     Schema.annotate({
-      description: "The exact check that sends a future runDay move.",
+      description: "The check that sends a future move.",
     }),
   ),
   decidedAt: Schema.optional(Schema.DateTimeUtc),
@@ -338,21 +422,21 @@ export const TransactionMoveRead = Schema.Struct({
   runAt: Schema.optional(Schema.DateTimeUtc),
   runDecidedBy: Schema.optional(TransactionDecisionActor).pipe(
     Schema.annotate({
-      description: "Who started the run that settled this move: owner, agent, or system.",
+      description: "Who started the satisfying run.",
     }),
   ),
   runSurface: Schema.optional(TransactionDecisionSurface).pipe(
     Schema.annotate({
-      description: "The route or tool that started the run that settled this move.",
+      description: "What started the satisfying run.",
     }),
   ),
   decidedBy: Schema.optional(TransactionDecisionActor).pipe(
     Schema.annotate({
-      description: "Who made this move's current decision: owner, agent, or system.",
+      description: "Who made the current decision.",
     }),
   ),
   surface: Schema.optional(TransactionDecisionSurface).pipe(
-    Schema.annotate({ description: "The route or tool that made this move's current decision." }),
+    Schema.annotate({ description: "What made the current decision." }),
   ),
   validation: TransactionMoveValidationView,
   check: TransactionMoveCheckView,
@@ -366,7 +450,7 @@ export const TransactionMoveDay = Schema.Struct({
   day: Schema.optional(StoredMoveDate),
   groupedBy: Schema.Literal("runDay").pipe(
     Schema.annotate({
-      description: "Buckets group by runDay, not effectiveDate.",
+      description: "Groups use the run day.",
     }),
   ),
   today: Schema.Boolean,
@@ -383,7 +467,7 @@ export const TransactionPlanDay = Schema.Struct({
   day: Schema.optional(StoredMoveDate),
   groupedBy: Schema.Literal("runDay").pipe(
     Schema.annotate({
-      description: "Buckets group by runDay, not effectiveDate.",
+      description: "Groups use the run day.",
     }),
   ),
   today: Schema.Boolean,

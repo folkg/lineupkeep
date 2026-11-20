@@ -83,6 +83,7 @@ import type {
 import { nextCheckAt } from "./CheckSchedule.ts";
 import { planReserveMoves } from "./LineupPlanning.ts";
 import { QueryTokens } from "./QueryTokens.ts";
+import { verifySettlement } from "./TransactionMoveWorkflow.ts";
 import {
   claimTransactionPlanMoves,
   describeTransactionPlanMove,
@@ -1325,6 +1326,18 @@ export const TransactionPlanServiceLive = Layer.effect(
         if (!EffectArray.isReadonlyArrayNonEmpty(settlements)) {
           return;
         }
+        const movesById = new Map(
+          [...input.open, ...submitted].map((move) => [move.id, move] as const),
+        );
+        for (const settlement of settlements) {
+          const move = movesById.get(settlement.move);
+          if (move === undefined) {
+            return yield* Effect.die(
+              new Error("A settlement named a move that is not part of the run"),
+            );
+          }
+          yield* verifySettlement({ move, settlement });
+        }
         yield* repository.settleMoves({
           userId: input.userId,
           team: input.team,
@@ -1977,6 +1990,16 @@ export const TransactionPlanServiceLive = Layer.effect(
             }
             if (settlements.length === 0) {
               return;
+            }
+            const ownedById = new Map(owned.map((move) => [move.id, move] as const));
+            for (const settlement of settlements) {
+              const move = ownedById.get(settlement.move);
+              if (move === undefined) {
+                return yield* Effect.die(
+                  new Error("A claim settlement named a move that was not claimed"),
+                );
+              }
+              yield* verifySettlement({ move, settlement });
             }
             yield* repository.beginRun({
               userId: entry.plan.userId,
@@ -3095,8 +3118,6 @@ function describeDependency(
     case "skipped":
       return `${label} did not pass its check`;
     case "executed":
-    case "withdrawn":
-    case "expired":
       return `${label} has ended`;
     case undefined:
       return `${label} is not part of this run`;
@@ -3589,9 +3610,6 @@ function countRunResult(counts: MutableRunCounts, result: TransactionMoveResult)
       return;
     case "unknown":
       counts.unknown += 1;
-      return;
-    case "withdrawn":
-    case "expired":
       return;
   }
 }

@@ -30,7 +30,7 @@ import type {
   TransactionWaiverBid,
   TransactionWaiverRule,
 } from "#contexts/connections/TransactionPlans.ts";
-import { isOpenMove } from "#contexts/connections/TransactionPlans.ts";
+import { isOpenMove, transactionMoveStatus } from "#contexts/connections/TransactionPlans.ts";
 
 import type { TransactionPlanMoveEvaluation } from "./TransactionPlanEvaluation.ts";
 import type { TransactionMoveRecord } from "./TransactionPlanRecord.ts";
@@ -55,13 +55,15 @@ export function moveReadView(input: {
   const move = input.move;
   const team = input.team;
   const today = input.check?.status === "checked" ? input.check.today : undefined;
+  const decision = displayedDecision(move, today);
   const content = {
     move: move.id,
     team,
     ...(move.group === undefined ? {} : { group: move.group }),
     kind: move.kind,
     position: move.position,
-    decision: displayedDecision(move, today),
+    decision,
+    status: transactionMoveStatus({ ...move, decision }),
     ...(move.phase === undefined ? {} : { phase: move.phase }),
     attempts: move.attempts.map(attemptView),
     reason: move.reason,

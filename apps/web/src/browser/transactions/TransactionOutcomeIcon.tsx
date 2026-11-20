@@ -9,9 +9,9 @@ import {
   ClockCheckIcon,
   HourglassIcon,
   IterationCcwIcon,
+  RotateCwIcon,
+  SendHorizontalIcon,
   SkipForwardIcon,
-  TimerOffIcon,
-  Undo2Icon,
   XIcon,
 } from "#browser/shared-ui/icons.tsx";
 import { StatusIcon } from "#browser/shared-ui/StatusIcon.tsx";
@@ -48,12 +48,12 @@ function glyph(icon: MoveOutcomeIcon): JSX.Element {
       return <HourglassIcon size="lg" />;
     case "iteration-ccw":
       return <IterationCcwIcon size="lg" />;
+    case "rotate-cw":
+      return <RotateCwIcon size="lg" />;
+    case "send-horizontal":
+      return <SendHorizontalIcon size="lg" />;
     case "skip-forward":
       return <SkipForwardIcon size="lg" />;
-    case "timer-off":
-      return <TimerOffIcon size="lg" />;
-    case "undo-2":
-      return <Undo2Icon size="lg" />;
     case "x":
       return <XIcon size="lg" />;
   }

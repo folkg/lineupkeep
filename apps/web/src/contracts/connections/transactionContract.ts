@@ -1,5 +1,8 @@
 import type { FantasyLeague, FantasySport } from "@lineupkeep/backend/connections/FantasyTeam";
-import type { TransactionMoveKind } from "@lineupkeep/backend/connections/TransactionPlans";
+import type {
+  TransactionMoveKind,
+  TransactionMoveStatus,
+} from "@lineupkeep/backend/connections/TransactionPlans";
 
 import type { AuthenticationFailure } from "#contracts/auth/authContract.ts";
 import type { UseCaseResult } from "#contracts/useCaseContract.ts";
@@ -65,6 +68,7 @@ export type TransactionMoveView = {
   readonly kind: TransactionMoveKind;
   readonly position: number;
   readonly decision: "undecided" | "saved" | "now" | "confirmed" | "discarded";
+  readonly status: TransactionMoveStatus;
   readonly phase?: "with_league" | "won" | "lost";
   readonly attempts: ReadonlyArray<TransactionMoveAttemptView>;
   readonly reason: string;
@@ -97,14 +101,7 @@ export type TransactionMoveView = {
   readonly runSurface?: string;
   readonly validation: TransactionMoveValidationView;
   readonly check: TransactionMoveCheckView;
-  readonly result?:
-    | "executed"
-    | "pending"
-    | "failed"
-    | "skipped"
-    | "unknown"
-    | "withdrawn"
-    | "expired";
+  readonly result?: "executed" | "pending" | "failed" | "skipped" | "unknown";
   readonly resultDetail?: string;
   readonly resultAt?: string;
 };

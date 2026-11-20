@@ -1539,7 +1539,7 @@ function decodeTeam(row: unknown): Effect.Effect<TransactionMoveTeam, Schema.Sch
 }
 
 function endsMove(result: TransactionMoveResult): boolean {
-  return result === "executed" || result === "withdrawn" || result === "expired";
+  return result === "executed";
 }
 
 function planScope(plans: ReadonlyArray<TransactionPlanRef>): SQL | undefined {

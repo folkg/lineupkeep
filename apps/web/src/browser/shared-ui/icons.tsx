@@ -14,9 +14,9 @@ import Hourglass from "~icons/lucide/hourglass";
 import IterationCcw from "~icons/lucide/iteration-ccw";
 import LoaderCircle from "~icons/lucide/loader-circle";
 import RefreshCw from "~icons/lucide/refresh-cw";
+import RotateCw from "~icons/lucide/rotate-cw";
+import SendHorizontal from "~icons/lucide/send-horizontal";
 import SkipForward from "~icons/lucide/skip-forward";
-import TimerOff from "~icons/lucide/timer-off";
-import Undo2 from "~icons/lucide/undo-2";
 import X from "~icons/lucide/x";
 
 import googleG from "./brand/google-g.svg";
@@ -39,9 +39,9 @@ export const LoaderCircleIcon = icon(LoaderCircle);
 export const PauseIcon = icon(PauseGlyph);
 export const PlayIcon = icon(PlayGlyph);
 export const RefreshIcon = icon(RefreshCw);
+export const RotateCwIcon = icon(RotateCw);
+export const SendHorizontalIcon = icon(SendHorizontal);
 export const SkipForwardIcon = icon(SkipForward);
-export const TimerOffIcon = icon(TimerOff);
-export const Undo2Icon = icon(Undo2);
 export const XIcon = icon(X);
 
 function PauseGlyph(props: JSX.SvgSVGAttributes<SVGSVGElement>): JSX.Element {

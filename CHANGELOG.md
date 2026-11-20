@@ -22,7 +22,14 @@ revisions that carried each change.
   from the day the fallback is sent, not from the lost claim's old date. Fallback planning is hidden
   once a move has run, and a failed move shows its attempt history as `What was tried`.
 - Earlier leaves discarded moves out. `list_transaction_proposals` with state `ended` and its counts
-  omit them too, so a withdrawn move no longer appears as history.
+  omit them too, so a discarded move no longer appears as history.
+- Every move read publishes `status`, one lifecycle state from the transaction state machine:
+  `open_undecided`, `open_saved`, `open_now`, `open_confirmed`, `discarded`, `ran_immediately`,
+  `ran_on_schedule`, `claim_waiting`, `claim_won`, `claim_lost`, `claim_lost_fallback_ran`,
+  `claim_lost_retrying`, `all_choices_failed`, `fallback_unknown`, `offer_sent`, `failed`,
+  `skipped`, or `unknown`. `withdrawn` and `expired` are removed, a trade offer is `offer_sent`,
+  a lost claim with a retrying fallback is `claim_lost_retrying`, and an unconfirmed fallback is
+  `fallback_unknown`.
 
 ## Unreleased — discovery reports the grant, and an expired token asks for a refresh
 

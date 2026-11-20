@@ -48,17 +48,34 @@ export function timingLine(
   reader: ClockReader = {},
   now: Date = new Date(),
 ): string | undefined {
-  if (move.kind === "waiver_claim" && move.phase !== "won") {
+  if (move.kind === "waiver_claim" && move.status !== "claim_won") {
     return undefined;
   }
   if (move.effectiveDate === undefined) {
     return undefined;
   }
-  if (move.result === "failed" || move.result === "skipped" || move.result === "unknown") {
-    return undefined;
-  }
-  if (move.result === "executed") {
-    return `Took effect ${formatCalendarDate(move.effectiveDate)}.`;
+  switch (move.status) {
+    case "ran_immediately":
+    case "ran_on_schedule":
+    case "claim_won":
+    case "claim_lost_fallback_ran":
+      return `Took effect ${formatCalendarDate(move.effectiveDate)}.`;
+    case "failed":
+    case "skipped":
+    case "unknown":
+    case "claim_lost":
+    case "claim_lost_retrying":
+    case "all_choices_failed":
+    case "fallback_unknown":
+    case "offer_sent":
+    case "claim_waiting":
+    case "discarded":
+      return undefined;
+    case "open_undecided":
+    case "open_saved":
+    case "open_now":
+    case "open_confirmed":
+      break;
   }
   if (move.sendsAt !== undefined) {
     const run = plannedMoment(move.sendsAt, reader, now);
@@ -74,41 +91,39 @@ export function moveOutcomeLabel(move: TransactionMoveView): string | undefined 
 }
 
 export function moveOutcome(move: TransactionMoveView): MoveOutcome | undefined {
-  if (move.decision === "discarded") {
-    return { label: "Discarded", icon: "ban", tone: "muted" };
-  }
-  switch (move.phase) {
-    case "with_league":
+  switch (move.status) {
+    case "discarded":
+      return { label: "Discarded", icon: "ban", tone: "muted" };
+    case "ran_immediately":
+      return { label: "Ran immediately", icon: "check", tone: "action" };
+    case "ran_on_schedule":
+      return { label: "Ran on schedule", icon: "clock-check", tone: "action" };
+    case "claim_waiting":
       return { label: "With the league", icon: "hourglass", tone: "muted" };
-    case "won":
+    case "claim_won":
       return { label: "Claim won", icon: "badge-check", tone: "action" };
-    case "lost":
-      return move.result === "executed"
-        ? { label: "Claim lost, fallback ran", icon: "iteration-ccw", tone: "action" }
-        : move.result === "failed"
-          ? { label: "All choices failed", icon: "x", tone: "danger" }
-          : { label: "Claim lost", icon: "circle-slash", tone: "muted" };
-    case undefined:
-      break;
-  }
-  switch (move.result) {
-    case "executed":
-      return move.runDecidedBy === "system"
-        ? { label: "Ran on schedule", icon: "clock-check", tone: "action" }
-        : { label: "Ran immediately", icon: "check", tone: "action" };
-    case "pending":
-      return { label: "Waiting for the league", icon: "hourglass", tone: "muted" };
+    case "claim_lost":
+      return { label: "Claim lost", icon: "circle-slash", tone: "muted" };
+    case "claim_lost_fallback_ran":
+      return { label: "Claim lost, fallback ran", icon: "iteration-ccw", tone: "action" };
+    case "claim_lost_retrying":
+      return { label: "Claim lost, retrying", icon: "rotate-cw", tone: "muted" };
+    case "all_choices_failed":
+      return { label: "All choices failed", icon: "x", tone: "danger" };
+    case "fallback_unknown":
+      return { label: "Unknown outcome", icon: "circle-question-mark", tone: "muted" };
+    case "offer_sent":
+      return { label: "Offer sent", icon: "send-horizontal", tone: "muted" };
     case "failed":
       return { label: "Failed", icon: "x", tone: "danger" };
     case "skipped":
       return { label: "Skipped", icon: "skip-forward", tone: "muted" };
     case "unknown":
       return { label: "Unknown outcome", icon: "circle-question-mark", tone: "muted" };
-    case "withdrawn":
-      return { label: "Withdrawn", icon: "undo-2", tone: "muted" };
-    case "expired":
-      return { label: "Expired", icon: "timer-off", tone: "muted" };
-    case undefined:
+    case "open_undecided":
+    case "open_saved":
+    case "open_now":
+    case "open_confirmed":
       return undefined;
   }
 }
@@ -263,9 +278,9 @@ export type MoveOutcomeIcon =
   | "clock-check"
   | "hourglass"
   | "iteration-ccw"
+  | "rotate-cw"
+  | "send-horizontal"
   | "skip-forward"
-  | "timer-off"
-  | "undo-2"
   | "x";
 
 export type MoveOutcome = {

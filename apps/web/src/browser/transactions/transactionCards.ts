@@ -79,35 +79,75 @@ export function cardMembers(card: GroupCard): ReadonlyArray<TransactionMoveView>
 
 export function cardStatus(card: GroupCard): CardStatus {
   const members = cardMembers(card);
-  if (members.every((move) => move.phase === "with_league")) {
-    return { kind: "with-league" };
+  const statuses = members.map((move) => move.status);
+  if (statuses.every((status) => status === "claim_waiting")) {
+    return { kind: "waiting", label: "With the league" };
   }
-  if (members.every((move) => move.result === "pending")) {
-    return { kind: "waiting" };
+  if (statuses.every((status) => status === "offer_sent")) {
+    return { kind: "waiting", label: "Offer sent" };
   }
-  if (members.some((move) => move.result === "executed")) {
-    return members.every((move) => move.result === "executed")
+  if (statuses.every((status) => status === "claim_lost_retrying")) {
+    return { kind: "waiting", label: "Claim lost, retrying" };
+  }
+  if (
+    statuses.every(
+      (status) =>
+        status === "claim_waiting" || status === "claim_lost_retrying" || status === "offer_sent",
+    )
+  ) {
+    return { kind: "waiting", label: "Waiting" };
+  }
+  if (statuses.some((status) => status === "ran_immediately" || status === "ran_on_schedule")) {
+    return statuses.every((status) => status === "ran_immediately" || status === "ran_on_schedule")
       ? { kind: "ran" }
       : { kind: "partly-ran" };
   }
-  if (members.some((move) => move.result === "failed" || move.result === "unknown")) {
-    return { kind: "failed" };
+  if (
+    statuses.some(
+      (status) =>
+        status === "failed" ||
+        status === "unknown" ||
+        status === "claim_lost" ||
+        status === "all_choices_failed" ||
+        status === "fallback_unknown",
+    )
+  ) {
+    return { kind: "failed", label: failedLabel(statuses) };
   }
   if (
     card.group?.status === "blocked" ||
-    members.some((move) => move.validation.status !== "current" || move.result === "skipped")
+    statuses.some((status) => status === "skipped") ||
+    members.some((move) => move.validation.status !== "current")
   ) {
     return { kind: "blocked" };
   }
-  if (members.every(isSubmitted)) {
-    return members.every((move) => move.decision === "confirmed")
-      ? {
-          kind: "scheduled",
-          ...(card.lead.sendsAt === undefined ? {} : { sendsAt: card.lead.sendsAt }),
-        }
-      : { kind: "running" };
+  if (statuses.every((status) => status === "open_now")) {
+    return { kind: "running" };
+  }
+  if (statuses.every((status) => status === "open_confirmed" || status === "open_now")) {
+    return {
+      kind: "scheduled",
+      ...(card.lead.sendsAt === undefined ? {} : { sendsAt: card.lead.sendsAt }),
+    };
   }
   return { kind: "needs-decision" };
+}
+
+function failedLabel(statuses: ReadonlyArray<TransactionMoveView["status"]>): string {
+  const first = statuses[0];
+  if (first === undefined || statuses.some((status) => status !== first)) {
+    return "Failed";
+  }
+  if (first === "claim_lost") {
+    return "Claim lost";
+  }
+  if (first === "all_choices_failed") {
+    return "All choices failed";
+  }
+  if (first === "fallback_unknown" || first === "unknown") {
+    return "Unknown outcome";
+  }
+  return "Failed";
 }
 
 export function cardNeedsDecision(card: GroupCard): boolean {
@@ -133,7 +173,6 @@ export function cardAction(card: GroupCard): CardAction {
       return runAction(card);
     case "scheduled":
     case "waiting":
-    case "with-league":
     case "running":
     case "ran":
       return { kind: "none" };
@@ -293,10 +332,6 @@ function firstResultDetail(members: ReadonlyArray<TransactionMoveView>): string 
   return refused?.resultDetail;
 }
 
-function isSubmitted(move: TransactionMoveView): boolean {
-  return move.decision === "now" || move.decision === "confirmed";
-}
-
 function cardPosition(card: GroupCard): number {
   return Math.min(
     ...card.moves.map((move) => move.position),
@@ -321,12 +356,11 @@ export type GroupCard = {
 export type CardStatus =
   | { readonly kind: "needs-decision" }
   | { readonly kind: "scheduled"; readonly sendsAt?: string }
-  | { readonly kind: "waiting" }
-  | { readonly kind: "with-league" }
+  | { readonly kind: "waiting"; readonly label: string }
   | { readonly kind: "running" }
   | { readonly kind: "partly-ran" }
   | { readonly kind: "blocked" }
-  | { readonly kind: "failed" }
+  | { readonly kind: "failed"; readonly label: string }
   | { readonly kind: "ran" };
 
 export type CardAction =

@@ -867,7 +867,8 @@ the lists have room for. `addsWithFixes` is `addsPossible` plus those freeable m
 names each blocker that makes the roster illegal, the fact that blocks it, and the plain cure,
 including the drop that clears it; adds and drops wait until every blocker is cured. `nextCheckAt` is
 the exact time of the next hourly check, at the 55 minute mark, so a client never computes it. A move
-that ran carries `runAt` and the actor that started the run. A confirmed later move carries its
+that ran carries `runAt` and the actor that started the run. Every move carries `status`, the one
+lifecycle state its card and Earlier row both read. A confirmed later move carries its
 confirmation and `sendsAt`, the exact check on its send day, and waits for that moment. A submitted claim instead carries `phase`: `with_league` while the
 league decides, then `won` or `lost`. Its `attempts` list each claim and fallback tried, with the
 outcome and the plain reason. `waiver` reports the league's own rule, type, and waiver days, so a

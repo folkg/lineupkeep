@@ -109,7 +109,7 @@ export const transactionMoves = pgTable(
     checkedAt: timestamp("checked_at", { withTimezone: true }),
     validationReasons: jsonb("validation_reasons").notNull(),
     result: text("result", {
-      enum: ["executed", "pending", "failed", "skipped", "unknown", "withdrawn", "expired"],
+      enum: ["executed", "pending", "failed", "skipped", "unknown"],
     }),
     resultDetail: text("result_detail"),
     resultAt: timestamp("result_at", { withTimezone: true }),
@@ -254,10 +254,7 @@ export function openMovePredicate(table: {
   const predicate = and(
     ne(table.decision, "discarded"),
     isNull(table.phase),
-    or(
-      isNull(table.result),
-      and(ne(table.result, "executed"), ne(table.result, "withdrawn"), ne(table.result, "expired")),
-    ),
+    or(isNull(table.result), ne(table.result, "executed")),
   );
   if (predicate === undefined) {
     throw new Error("An open-move predicate over fixed columns is always defined");

@@ -3,6 +3,7 @@ import type {
   TransactionPlanGroupRead,
   TransactionPlanGroupStatus,
 } from "#contexts/connections/TransactionPlans.ts";
+import { transactionMoveStatus } from "#contexts/connections/TransactionPlans.ts";
 
 import { isRosterFixGroup, rosterFixFundedMove, rosterFixLabel } from "./TransactionPlanFixes.ts";
 import type {
@@ -84,10 +85,10 @@ function statusOf(
   members: ReadonlyArray<TransactionPlanGroupMember>,
   actions: ReadonlyArray<TransactionPlanGroupAction>,
 ): TransactionPlanGroupStatus {
-  if (members.some((member) => member.move.phase === "lost" && isFailed(member))) {
+  if (members.some((member) => isFailed(member))) {
     return "failed";
   }
-  const executed = members.filter((member) => member.move.result === "executed").length;
+  const executed = members.filter((member) => ran(member.move)).length;
   if (executed === members.length) {
     return "done";
   }
@@ -185,10 +186,37 @@ function failedDetail(members: ReadonlyArray<TransactionPlanGroupMember>): strin
 }
 
 function isFailed(member: TransactionPlanGroupMember): boolean {
+  switch (transactionMoveStatus(member.move)) {
+    case "claim_lost":
+    case "all_choices_failed":
+    case "fallback_unknown":
+      return true;
+    case "open_undecided":
+    case "open_saved":
+    case "open_now":
+    case "open_confirmed":
+    case "discarded":
+    case "ran_immediately":
+    case "ran_on_schedule":
+    case "claim_waiting":
+    case "claim_won":
+    case "claim_lost_fallback_ran":
+    case "claim_lost_retrying":
+    case "offer_sent":
+    case "failed":
+    case "skipped":
+    case "unknown":
+      return false;
+  }
+}
+
+function ran(move: TransactionMoveRecord): boolean {
+  const status = transactionMoveStatus(move);
   return (
-    member.move.result === "failed" ||
-    member.move.result === "unknown" ||
-    member.move.result === "skipped"
+    status === "ran_immediately" ||
+    status === "ran_on_schedule" ||
+    status === "claim_won" ||
+    status === "claim_lost_fallback_ran"
   );
 }
 
@@ -307,15 +335,28 @@ function playerNameOf(move: TransactionMoveRecord, playerKey: string): string | 
 }
 
 function didNotRun(member: TransactionPlanGroupMember): boolean {
-  const result = member.move.result;
-  return (
-    isDiscarded(member.move) ||
-    result === "failed" ||
-    result === "skipped" ||
-    result === "unknown" ||
-    result === "withdrawn" ||
-    result === "expired"
-  );
+  switch (transactionMoveStatus(member.move)) {
+    case "discarded":
+    case "failed":
+    case "skipped":
+    case "unknown":
+    case "all_choices_failed":
+    case "fallback_unknown":
+      return true;
+    case "open_undecided":
+    case "open_saved":
+    case "open_now":
+    case "open_confirmed":
+    case "ran_immediately":
+    case "ran_on_schedule":
+    case "claim_waiting":
+    case "claim_won":
+    case "claim_lost":
+    case "claim_lost_fallback_ran":
+    case "claim_lost_retrying":
+    case "offer_sent":
+      return false;
+  }
 }
 
 function sortMembers(

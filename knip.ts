@@ -103,6 +103,10 @@ const productionTestSeams: Record<string, Array<"exports" | "types">> = {
     "exports",
     "types",
   ],
+  "packages/backend/src/contexts/connections/internal/TransactionMoveWorkflow.ts": [
+    "exports",
+    "types",
+  ],
   "packages/backend/src/contexts/connections/internal/TransactionPlanTables.ts": ["exports"],
   "packages/backend/src/contexts/privacy/internal/AccountDataTables.ts": ["exports"],
   "packages/backend/src/contexts/privacy/internal/OwnedAccountSeedRepository.ts": ["exports"],

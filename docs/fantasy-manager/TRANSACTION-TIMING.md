@@ -118,8 +118,12 @@ fallback runs.
 `with_league` as it settles, so a later check neither retries the claim nor repeats its fallback.
 
 **Counts and labels.** The count of open moves and the nav badge include only moves that need the
-person's decision. A submitted claim lives in Earlier as `With the league` until it reconciles, then as
-`Claim won`, `Claim lost, fallback ran`, or `All choices failed`.
+person's decision. Every move read carries one `status`; the card and the Earlier row both read it.
+A submitted claim lives in Earlier as `With the league` until it reconciles, then as `Claim won`,
+`Claim lost, fallback ran`, or `All choices failed`. A lost claim whose fallback is still waiting
+is `Claim lost, retrying`; a fallback with no provider answer is `fallback_unknown`. A trade offer
+is `Offer sent`, not a second kind of league wait. `withdrawn` and `expired` are not states: no
+code path ever wrote them, and they are removed from the read model.
 
 ## 5. Group atomicity across legs and time
 

@@ -29,7 +29,7 @@ const terminalOutcomeStatuses = [
   "superseded",
 ] as const satisfies ReadonlyArray<LineupRunStatus>;
 const terminalHostedLinkingStatuses = ["completed", "cancelled", "expired", "failed"] as const;
-const endedMoveResults = ["executed", "withdrawn", "expired"] as const;
+const endedMoveResults = ["executed"] as const;
 
 export const RetentionSweepLive = Layer.effect(
   RetentionSweep,

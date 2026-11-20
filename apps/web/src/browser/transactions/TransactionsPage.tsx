@@ -290,9 +290,7 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
           ? "Scheduled"
           : `Scheduled to run ${plannedMoment(held.sendsAt)}`;
       case "waiting":
-        return "Waiting for the league";
-      case "with-league":
-        return "With the league";
+        return held.label;
       case "running":
         return "Running";
       case "partly-ran":
@@ -300,7 +298,7 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
       case "blocked":
         return "Blocked";
       case "failed":
-        return "Failed";
+        return held.label;
       case "ran":
         return ranLabel(props.card);
     }
@@ -789,20 +787,19 @@ function EarlierRow(props: EarlierRowProps): JSX.Element {
   const submitted = (): string | undefined => submittedLine(props.move);
   const timing = (): string | undefined => timingLine(props.move);
   const discarded = (): string | undefined => discardLine(props.move);
-  const result = (): string | undefined =>
-    props.move.result === "executed" ? undefined : resultDetailLine(props.move);
+  const settled = (): boolean => settledStatus(props.move.status);
+  const result = (): string | undefined => (settled() ? undefined : resultDetailLine(props.move));
   const resultTime = (): string | undefined =>
-    props.move.result === "executed" || props.move.decision === "discarded"
-      ? undefined
-      : resultTimeLine(props.move);
+    props.move.decision === "discarded" || settled() ? undefined : resultTimeLine(props.move);
   const fallback = (): string | undefined =>
-    props.move.phase === "with_league" ||
-    props.move.result === "pending" ||
-    props.move.result === "failed"
+    props.move.status === "claim_waiting" ||
+    props.move.status === "claim_lost_retrying" ||
+    props.move.status === "all_choices_failed" ||
+    props.move.status === "failed"
       ? fallbackSummary(props.move)
       : undefined;
   const waiver = (): string | undefined =>
-    props.move.phase === "with_league" ? waiverTimingLine(props.waiver) : undefined;
+    props.move.status === "claim_waiting" ? waiverTimingLine(props.waiver) : undefined;
   const originalClaim = (): string | undefined => originalClaimLine(props.move);
   return (
     <RuleListItem layout="stack" dense>
@@ -885,9 +882,35 @@ function EarlierRow(props: EarlierRowProps): JSX.Element {
 }
 
 function fallbackSummary(move: TransactionMoveView): string | undefined {
-  return move.result === "failed" && move.attempts.length > 0
+  return (move.status === "failed" || move.status === "all_choices_failed") &&
+    move.attempts.length > 0
     ? "What was tried"
     : fallbackPlanLine(move);
+}
+
+function settledStatus(status: TransactionMoveView["status"]): boolean {
+  switch (status) {
+    case "ran_immediately":
+    case "ran_on_schedule":
+    case "claim_won":
+    case "claim_lost_fallback_ran":
+      return true;
+    case "open_undecided":
+    case "open_saved":
+    case "open_now":
+    case "open_confirmed":
+    case "discarded":
+    case "claim_waiting":
+    case "claim_lost":
+    case "claim_lost_retrying":
+    case "all_choices_failed":
+    case "fallback_unknown":
+    case "offer_sent":
+    case "failed":
+    case "skipped":
+    case "unknown":
+      return false;
+  }
 }
 
 function statusTone(status: CardStatus): "accent" | "neutral" {
