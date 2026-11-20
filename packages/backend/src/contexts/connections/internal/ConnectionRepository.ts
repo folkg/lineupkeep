@@ -33,7 +33,7 @@ import { decodeTeamId } from "#contexts/connections/FantasyTeam.ts";
 import type { ProviderTeam } from "#contexts/connections/Provider.ts";
 import { anyOf, excludedValues, maxInsertRows, mutateRows } from "#database/dbUtilities.ts";
 import { chunked } from "#utilities/collections.ts";
-import { planBatch, type Snapshot, snapshotOf } from "#utilities/machine.ts";
+import { plan, planBatch, type Snapshot, snapshotOf } from "#utilities/machine.ts";
 
 import {
   ConnectionLifecycleEvents,
@@ -43,6 +43,10 @@ import type {
   ConnectionLifecycleRequest,
   ConnectionLifecycleState,
 } from "./ConnectionLifecycleWorkflow.ts";
+import {
+  ConnectionNotificationWorkflow,
+  initialConnectionNotificationState,
+} from "./ConnectionNotificationWorkflow.ts";
 import { ConnectionsDatabase } from "./ConnectionsDatabase.ts";
 import {
   ConnectionRow,
@@ -51,7 +55,7 @@ import {
   providerCredentials,
   providerTeams,
 } from "./ConnectionTables.ts";
-import { connectionIncidents, notifications } from "./IncidentTables.ts";
+import { connectionIncidents, notifications, NotificationsRow } from "./IncidentTables.ts";
 import { TeamAutomationState } from "./TeamAutomationWorkflow.ts";
 
 type Transaction = Parameters<Parameters<ConnectionsDatabase["Service"]["transaction"]>[0]>[0];
@@ -735,6 +739,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                           ),
                         );
                       if (Array.isArrayNonEmpty(open)) {
+                        const initial = initialConnectionNotificationState(at);
                         const pending = yield* Effect.forEach(open, (incident) =>
                           Effect.map(
                             newNotificationId,
@@ -743,12 +748,12 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                               userId: incident.userId,
                               incidentId: incident.id,
                               kind: "connection_reconnect_required",
-                              status: "pending",
-                              attempts: 0,
-                              nextAttemptAt: DateTime.toDateUtc(at),
-                              lastError: null,
+                              status: initial._tag,
+                              attempts: initial.attempts,
+                              nextAttemptAt: DateTime.toDateUtc(initial.nextAttemptAt),
+                              lastError: initial.lastError,
                               createdAt: DateTime.toDateUtc(at),
-                              updatedAt: DateTime.toDateUtc(at),
+                              updatedAt: DateTime.toDateUtc(initial.updatedAt),
                               sentAt: null,
                             }),
                           ),
@@ -1007,12 +1012,32 @@ function resolveIncidents(
     if (!Array.isArrayNonEmpty(incidentIds)) {
       return;
     }
-    yield* tx
-      .update(notifications)
-      .set({ status: "cancelled", updatedAt: DateTime.toDateUtc(at) })
+    const pending = yield* tx
+      .select({ id: notifications.id })
+      .from(notifications)
       .where(
         and(eq(notifications.status, "pending"), anyOf(notifications.incidentId, incidentIds)),
       );
+    const notificationIds = pending.map((row) => row.id);
+    if (Array.isArrayNonEmpty(notificationIds)) {
+      yield* mutateRows(tx, notifications, {
+        where: and(
+          eq(notifications.status, "pending"),
+          anyOf(notifications.incidentId, incidentIds),
+        ),
+        ids: notificationIds,
+        codec: NotificationsRow,
+        plan: (locked) =>
+          Effect.forEach([...locked.values()], (row) =>
+            Effect.map(
+              Effect.flatMap(snapshotOf(ConnectionNotificationWorkflow, row.state), (snapshot) =>
+                plan(ConnectionNotificationWorkflow, snapshot, { _tag: "Cancelled", at }),
+              ),
+              (state) => ({ ...row, state }),
+            ),
+          ),
+      });
+    }
   }).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
 }
 

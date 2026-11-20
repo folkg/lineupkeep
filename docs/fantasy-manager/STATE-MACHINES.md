@@ -79,7 +79,7 @@ Phase 0, the pattern:
 Then one domain machine per change:
 
 1. Lineup delivery — implemented; see [lineup delivery states](LINEUP-DELIVERY-STATES.md).
-2. Connection email notification.
+2. Connection email notification — implemented; see [connection notification states](CONNECTION-NOTIFICATION-STATES.md).
 3. Lineup write intents, folded into `LineupRunWorkflow`.
 4. Connection incidents.
 5. Feedback, only if its status changes stay in this codebase.

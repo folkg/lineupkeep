@@ -1,17 +1,22 @@
 import { and, eq, lte } from "drizzle-orm";
-import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
+import type { SQL } from "drizzle-orm";
 import { Array, DateTime, Effect, Layer, Schema } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
 import { UserDirectory } from "#contexts/auth/UserDirectory.ts";
 import { Notifications, NotificationsFailed } from "#contexts/connections/Notifications.ts";
-import { anyOf } from "#database/dbUtilities.ts";
+import { mutateRows } from "#database/dbUtilities.ts";
 import { EmailDelivery } from "#email/EmailDelivery.ts";
 import type { EmailMessage } from "#email/EmailDelivery.ts";
+import { plan, snapshotOf } from "#utilities/machine.ts";
 
+import {
+  ConnectionNotificationWorkflow,
+  type ConnectionNotificationEvent,
+} from "./ConnectionNotificationWorkflow.ts";
 import { ConnectionsDatabase } from "./ConnectionsDatabase.ts";
 import { providerConnections } from "./ConnectionTables.ts";
-import { connectionIncidents, notifications } from "./IncidentTables.ts";
+import { connectionIncidents, notifications, NotificationsRow } from "./IncidentTables.ts";
 
 const staleSendingMillis = 10 * 60 * 1000;
 const retryDelaysMillis = [
@@ -29,36 +34,56 @@ export const NotificationsLive = Layer.effect(
     const directory = yield* UserDirectory;
     const email = yield* EmailDelivery;
 
-    const updateNotifications = (
-      ids: ReadonlyArray<string>,
-      values: NotificationUpdate,
-    ): Effect.Effect<void, EffectDrizzleQueryError> => {
-      const first = ids[0];
-      if (first === undefined) {
-        return Effect.void;
+    const applyEvents = (
+      events: ReadonlyMap<string, ConnectionNotificationEvent>,
+      where?: SQL,
+    ): Effect.Effect<ReadonlyArray<typeof NotificationsRow.Type>, NotificationsFailed> => {
+      const ids = [...events.keys()];
+      if (!Array.isArrayNonEmpty(ids)) {
+        return Effect.succeed([]);
       }
-      const targetIds: [string, ...string[]] = [first, ...ids.slice(1)];
       return database
-        .update(notifications)
-        .set(values)
-        .where(anyOf(notifications.id, targetIds))
-        .pipe(Effect.asVoid);
+        .transaction((tx) =>
+          mutateRows(tx, notifications, {
+            where,
+            ids,
+            codec: NotificationsRow,
+            plan: (locked) =>
+              Effect.forEach([...locked.values()], (row) => {
+                const event = events.get(row.id);
+                if (event === undefined) {
+                  throw new Error("A locked notification has no event");
+                }
+                return Effect.map(
+                  Effect.flatMap(
+                    snapshotOf(ConnectionNotificationWorkflow, row.state),
+                    (snapshot) => plan(ConnectionNotificationWorkflow, snapshot, event),
+                  ),
+                  (state) => ({ ...row, state }),
+                );
+              }),
+          }),
+        )
+        .pipe(Effect.mapError((cause) => NotificationsFailed.make({ cause })));
     };
 
     const run = Effect.fn("Notifications.run")(function* (limit: number, at: DateTime.Utc) {
       const now = DateTime.toDateUtc(at);
-      yield* database
-        .update(notifications)
-        .set({ status: "pending", nextAttemptAt: now, updatedAt: now })
-        .where(
-          and(
-            eq(notifications.status, "sending"),
-            lte(
-              notifications.updatedAt,
-              DateTime.toDateUtc(DateTime.subtractDuration(at, staleSendingMillis)),
-            ),
-          ),
-        );
+      const stalePredicate = and(
+        eq(notifications.status, "sending"),
+        lte(
+          notifications.updatedAt,
+          DateTime.toDateUtc(DateTime.subtractDuration(at, staleSendingMillis)),
+        ),
+      );
+      const stale = yield* database
+        .select({ id: notifications.id })
+        .from(notifications)
+        .where(stalePredicate);
+      yield* applyEvents(
+        new Map(stale.map((row) => [row.id, { _tag: "Reclaimed", at } as const])),
+        stalePredicate,
+      );
 
       const rows = yield* database
         .select({
@@ -95,11 +120,22 @@ export const NotificationsLive = Layer.effect(
       if (!Array.isArrayNonEmpty(notificationIds)) {
         return { sent: 0, retried: 0, cancelled: 0, failed: 0 };
       }
-      const claimed = yield* database
-        .update(notifications)
-        .set({ status: "sending", updatedAt: now })
-        .where(and(anyOf(notifications.id, notificationIds), eq(notifications.status, "pending")))
-        .returning({ id: notifications.id });
+      const claimed = yield* database.transaction((tx) =>
+        mutateRows(tx, notifications, {
+          where: eq(notifications.status, "pending"),
+          ids: notificationIds,
+          codec: NotificationsRow,
+          plan: (locked) =>
+            Effect.forEach([...locked.values()], (row) =>
+              Effect.map(
+                Effect.flatMap(snapshotOf(ConnectionNotificationWorkflow, row.state), (snapshot) =>
+                  plan(ConnectionNotificationWorkflow, snapshot, { _tag: "Claimed", at }),
+                ),
+                (state) => ({ ...row, state }),
+              ),
+            ),
+        }),
+      );
       const claimedIds = new Set(claimed.map((row) => row.id));
       const claimedRows = rows.filter((row) => claimedIds.has(row.notificationId));
 
@@ -126,68 +162,52 @@ export const NotificationsLive = Layer.effect(
       }
 
       const results = yield* email.sendMany(messages);
-      const sentByAttempts = new Map<number, string[]>();
-      const rejectedByAttempts = new Map<number, string[]>();
-      const retryByAttempts = new Map<number, string[]>();
+      const events = new Map<string, ConnectionNotificationEvent>();
+      for (const id of cancelledIds) {
+        events.set(id, { _tag: "Cancelled", at });
+      }
+      for (const id of missingEmailIds) {
+        events.set(id, {
+          _tag: "Undeliverable",
+          at,
+          error: "No verified email address for the account",
+        });
+      }
+      let sent = 0;
+      let retried = 0;
+      let rejected = 0;
       for (const [index, result] of results.entries()) {
         const row = messageRows[index];
         if (row === undefined) {
           continue;
         }
         if (result._tag === "sent") {
-          addToBucket(sentByAttempts, row.attempts, row.notificationId);
+          events.set(row.notificationId, { _tag: "Sent", at });
+          sent++;
         } else if (result.reason === "rejected") {
-          addToBucket(rejectedByAttempts, row.attempts, row.notificationId);
+          events.set(row.notificationId, {
+            _tag: "Rejected",
+            at,
+            error: "The email provider rejected the message",
+          });
+          rejected++;
         } else {
-          addToBucket(retryByAttempts, row.attempts, row.notificationId);
+          events.set(row.notificationId, {
+            _tag: "Retried",
+            at,
+            nextAttemptAt: nextAttemptAt(at, row.attempts + 1),
+            error: "The email provider was unavailable",
+          });
+          retried++;
         }
       }
-
-      if (cancelledIds.length > 0) {
-        yield* updateNotifications(cancelledIds, {
-          status: "cancelled",
-          updatedAt: now,
-        });
-      }
-      if (missingEmailIds.length > 0) {
-        yield* updateNotifications(missingEmailIds, {
-          status: "failed",
-          lastError: "No verified email address for the account",
-          updatedAt: now,
-        });
-      }
-      for (const [attempts, ids] of sentByAttempts) {
-        yield* updateNotifications(ids, {
-          status: "sent",
-          attempts: attempts + 1,
-          sentAt: now,
-          updatedAt: now,
-          lastError: null,
-        });
-      }
-      for (const [attempts, ids] of rejectedByAttempts) {
-        yield* updateNotifications(ids, {
-          status: "failed",
-          attempts: attempts + 1,
-          lastError: "The email provider rejected the message",
-          updatedAt: now,
-        });
-      }
-      for (const [attempts, ids] of retryByAttempts) {
-        yield* updateNotifications(ids, {
-          status: "pending",
-          attempts: attempts + 1,
-          nextAttemptAt: nextAttemptAt(at, attempts + 1),
-          lastError: "The email provider was unavailable",
-          updatedAt: now,
-        });
-      }
+      yield* applyEvents(events);
 
       const summary = {
-        sent: countBucket(sentByAttempts),
-        retried: countBucket(retryByAttempts),
+        sent,
+        retried,
         cancelled: cancelledIds.length,
-        failed: missingEmailIds.length + countBucket(rejectedByAttempts),
+        failed: missingEmailIds.length + rejected,
       };
       yield* Effect.annotateCurrentSpan({
         "notifications.sent": summary.sent,
@@ -205,27 +225,6 @@ export const NotificationsLive = Layer.effect(
   }),
 );
 
-type NotificationUpdate = Partial<
-  Pick<
-    typeof notifications.$inferInsert,
-    "status" | "attempts" | "nextAttemptAt" | "lastError" | "sentAt" | "updatedAt"
-  >
->;
-
-function addToBucket(buckets: Map<number, string[]>, attempts: number, id: string): void {
-  const bucket = buckets.get(attempts) ?? [];
-  bucket.push(id);
-  buckets.set(attempts, bucket);
-}
-
-function countBucket(buckets: ReadonlyMap<number, ReadonlyArray<string>>): number {
-  let total = 0;
-  for (const ids of buckets.values()) {
-    total += ids.length;
-  }
-  return total;
-}
-
 function reconnectEmail(incidentId: string, to: string): EmailMessage {
   return {
     to,
@@ -242,7 +241,7 @@ function reconnectEmail(incidentId: string, to: string): EmailMessage {
   };
 }
 
-function nextAttemptAt(at: DateTime.Utc, attempts: number): Date {
+function nextAttemptAt(at: DateTime.Utc, attempts: number): DateTime.Utc {
   const index = Math.min(Math.max(attempts - 1, 0), retryDelaysMillis.length - 1);
-  return DateTime.toDateUtc(DateTime.addDuration(at, retryDelaysMillis[index] ?? 6 * 60 * 60_000));
+  return DateTime.addDuration(at, retryDelaysMillis[index] ?? 6 * 60 * 60_000);
 }

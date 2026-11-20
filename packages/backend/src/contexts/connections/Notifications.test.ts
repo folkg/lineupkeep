@@ -61,7 +61,7 @@ it.effect("opens one incident and sends one email for a connection expiration", 
   Effect.gen(function* () {
     const connections = yield* Connections;
     const repository = yield* ConnectionRepository;
-    const notifications = yield* Notifications;
+    const notificationRunner = yield* Notifications;
     const outbox = yield* EmailOutbox;
     const ready = yield* connect(connections);
 
@@ -69,8 +69,8 @@ it.effect("opens one incident and sends one email for a connection expiration", 
       { id: ready.id, expectedGeneration: credentialGeneration(ready) },
     ]);
     const now = yield* DateTime.now;
-    const first = yield* notifications.run(10, now);
-    const repeated = yield* notifications.run(10, now);
+    const first = yield* notificationRunner.run(10, now);
+    const repeated = yield* notificationRunner.run(10, now);
     const messages = yield* outbox.messages;
 
     assert.strictEqual(first.sent, 1);
@@ -84,6 +84,12 @@ it.effect("opens one incident and sends one email for a connection expiration", 
     assert.match(message.subject, /reconnect/i);
     assert.isDefined(message.idempotencyKey);
     assert.notInclude(message.text, "A1=test-session-cookie");
+    const database = yield* ConnectionsDatabase;
+    const rows = yield* database.select().from(notifications);
+    assert.strictEqual(rows[0]?.status, "sent");
+    assert.strictEqual(rows[0]?.attempts, 1);
+    assert.isNotNull(rows[0]?.sentAt);
+    assert.isNull(rows[0]?.lastError);
   }).pipe(Effect.provide(TestLayer)),
 );
 
@@ -112,6 +118,8 @@ it.effect("cancels the notification when the connection is reconnected", () =>
     assert.strictEqual(incidents[0]?.resolution, "reconnected");
     const rows = yield* database.select().from(notifications);
     assert.strictEqual(rows[0]?.status, "cancelled");
+    assert.strictEqual(rows[0]?.attempts, 0);
+    assert.isNull(rows[0]?.sentAt);
   }).pipe(Effect.provide(TestLayer)),
 );
 
@@ -119,21 +127,49 @@ it.effect("retries an unavailable email without creating a second notification",
   Effect.gen(function* () {
     const connections = yield* Connections;
     const repository = yield* ConnectionRepository;
-    const notifications = yield* Notifications;
+    const notificationRunner = yield* Notifications;
     const ready = yield* connect(connections);
     yield* repository.markReconnectRequired(owner, [
       { id: ready.id, expectedGeneration: credentialGeneration(ready) },
     ]);
 
     const now = yield* DateTime.now;
-    const first = yield* notifications.run(10, now);
-    const tooSoon = yield* notifications.run(10, DateTime.addDuration(now, 30_000));
-    const retried = yield* notifications.run(10, DateTime.addDuration(now, 61_000));
+    const first = yield* notificationRunner.run(10, now);
+    const tooSoon = yield* notificationRunner.run(10, DateTime.addDuration(now, 30_000));
+    const retried = yield* notificationRunner.run(10, DateTime.addDuration(now, 61_000));
 
     assert.strictEqual(first.retried, 1);
     assert.strictEqual(tooSoon.retried, 0);
     assert.strictEqual(retried.sent, 1);
+    const database = yield* ConnectionsDatabase;
+    const rows = yield* database.select().from(notifications);
+    assert.strictEqual(rows.length, 1);
+    assert.strictEqual(rows[0]?.status, "sent");
+    assert.strictEqual(rows[0]?.attempts, 2);
+    assert.isNull(rows[0]?.lastError);
   }).pipe(Effect.provide(FlakyTestLayer)),
+);
+
+it.effect("fails without a verified recipient without counting a delivery attempt", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const repository = yield* ConnectionRepository;
+    const runner = yield* Notifications;
+    const database = yield* ConnectionsDatabase;
+    const ready = yield* connect(connections);
+    yield* repository.markReconnectRequired(owner, [
+      { id: ready.id, expectedGeneration: credentialGeneration(ready) },
+    ]);
+
+    const summary = yield* runner.run(10, yield* DateTime.now);
+    assert.strictEqual(summary.failed, 1);
+    assert.strictEqual(summary.sent, 0);
+    const rows = yield* database.select().from(notifications);
+    assert.strictEqual(rows[0]?.status, "failed");
+    assert.strictEqual(rows[0]?.attempts, 0);
+    assert.strictEqual(rows[0]?.lastError, "No verified email address for the account");
+    assert.isNull(rows[0]?.sentAt);
+  }).pipe(Effect.provide(MissingEmailTestLayer)),
 );
 
 function credentialGeneration(connection: {
@@ -188,5 +224,19 @@ const FlakyNotificationsLayer = NotificationsLive.pipe(
 const FlakyTestLayer = Layer.mergeAll(
   ConnectionsLayer,
   FlakyNotificationsLayer,
+  RepositoryLayer,
+).pipe(Layer.provideMerge(DatabaseLayer), Layer.provide(NodeCrypto.layer), Layer.orDie);
+
+const MissingEmailDirectory = Layer.succeed(UserDirectory)({
+  emailsFor: () => Effect.succeed([]),
+});
+const MissingEmailNotificationsLayer = NotificationsLive.pipe(
+  Layer.provide(DatabaseLayer),
+  Layer.provide(MissingEmailDirectory),
+  Layer.provide(EmailDeliveryTest),
+);
+const MissingEmailTestLayer = Layer.mergeAll(
+  ConnectionsLayer,
+  MissingEmailNotificationsLayer,
   RepositoryLayer,
 ).pipe(Layer.provideMerge(DatabaseLayer), Layer.provide(NodeCrypto.layer), Layer.orDie);
