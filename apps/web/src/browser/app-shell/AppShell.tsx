@@ -18,7 +18,9 @@ import { useSessionActions } from "./useSessionActions";
 export function AppShell(props: AppShellProps): JSX.Element {
   const session = useSessionActions();
   const footer = (): Element | undefined =>
-    props.footer === false || !session.isSignedIn() ? undefined : <FeedbackFooter />;
+    props.footer === false
+      ? undefined
+      : (props.footer ?? (session.isSignedIn() ? <FeedbackFooter /> : undefined));
 
   return (
     <ThemeProvider>
@@ -69,6 +71,6 @@ function FeedbackFooter(): JSX.Element {
 }
 
 type AppShellProps = {
-  readonly footer?: boolean;
+  readonly footer?: Element | false;
   readonly children: Element;
 };

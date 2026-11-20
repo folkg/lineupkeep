@@ -3,6 +3,8 @@ import { For } from "solid-js";
 
 import { Card } from "./Card";
 import { cx } from "./cx";
+import { SectionTitle } from "./SectionTitle";
+import { Stack } from "./Stack";
 
 function Skeleton(props: { readonly class?: string }): JSX.Element {
   return (
@@ -31,25 +33,27 @@ function CardSkeleton(props: SkeletonCard): JSX.Element {
   return (
     <Card
       as="li"
-      badge={<Skeleton class="h-5 w-16" />}
-      footer={<Skeleton class="h-8 w-28" />}
+      footer={<Skeleton class="h-11 w-28" />}
       header={
         props.title === undefined ? (
-          <Skeleton class="h-5 w-40" />
+          <Skeleton class="h-[21.75px] w-40" />
         ) : (
           <span class="text-card-title text-ink">{props.title}</span>
         )
       }
       meta={
         props.meta === undefined ? (
-          <Skeleton class="h-3 w-52" />
+          <Skeleton class="h-[1.125rem] w-52" />
         ) : (
           <span class="text-meta text-ink-muted">{props.meta}</span>
         )
       }
     >
-      <Skeleton class="h-3 w-full" />
-      <Skeleton class="h-3 w-4/5" />
+      <Stack gap="xs">
+        <Skeleton class="h-[2.25rem] w-full" />
+        <Skeleton class="h-[1.125rem] w-4/5" />
+        <Skeleton class="h-[1.125rem] w-3/5" />
+      </Stack>
     </Card>
   );
 }
@@ -57,14 +61,17 @@ function CardSkeleton(props: SkeletonCard): JSX.Element {
 export function TransactionsSkeleton(): JSX.Element {
   return (
     <div aria-label="Loading moves" role="status" class="grid gap-8">
-      <div class="grid gap-5">
-        <Skeleton class="h-6 w-24" />
-        <CardSkeletonList count={2} label="Loading moves" />
-      </div>
-      <div class="grid gap-5">
-        <Skeleton class="h-6 w-32" />
-        <CardSkeletonList count={1} label="Loading moves" />
-      </div>
+      <section class="grid gap-4">
+        <SectionTitle action={<Skeleton class="h-3 w-28" />}>Today</SectionTitle>
+        <div class="grid min-h-[96px] content-center justify-items-start gap-1.5 border-t border-rule py-5">
+          <Skeleton class="h-[1.125rem] w-40" />
+          <Skeleton class="h-3 w-64 max-w-full" />
+        </div>
+      </section>
+      <section class="grid gap-4">
+        <SectionTitle action={<Skeleton class="h-6 w-8" />}>Earlier</SectionTitle>
+        <Skeleton class="h-3 w-16" />
+      </section>
     </div>
   );
 }

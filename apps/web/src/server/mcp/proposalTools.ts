@@ -153,7 +153,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("list_transaction_proposals", {
     description:
-      "List open moves across owned teams, grouped by run day and team. Filter by team and state `today`, `saved`, or `ended`. Each move carries its check, decision, confirmation, run, and totals. A submitted claim is `ended` while its `phase` is `with_league`, `won`, or `lost`, and never open.",
+      "List open moves across owned teams, grouped by run day and team. Filter by team and state `today`, `saved`, or `ended`. Each move carries its check and run. A submitted claim is `ended` while its `phase` is `with_league`, `won`, or `lost`, and never open. Discarded moves are omitted.",
     parameters: ListTransactionMovesInput,
     success: Schema.toCodecJson(TransactionMoveList),
     failure: ToolFailure,

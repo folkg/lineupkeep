@@ -21,6 +21,8 @@ revisions that carried each change.
   and the effect line, and drops the duplicate outcome lines. A fallback's effect date is derived
   from the day the fallback is sent, not from the lost claim's old date. Fallback planning is hidden
   once a move has run, and a failed move shows its attempt history as `What was tried`.
+- Earlier leaves discarded moves out. `list_transaction_proposals` with state `ended` and its counts
+  omit them too, so a withdrawn move no longer appears as history.
 
 ## Unreleased — discovery reports the grant, and an expired token asks for a refresh
 

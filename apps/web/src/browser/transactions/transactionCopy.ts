@@ -51,6 +51,14 @@ export function moveSummary(move: TransactionMoveView): string {
   return "This move";
 }
 
+export function originalClaimLine(move: TransactionMoveView): string | undefined {
+  if (move.phase !== "lost" || move.result !== "executed") {
+    return undefined;
+  }
+  const name = move.attempts.find((attempt) => attempt.kind === "claim")?.player.name;
+  return name === undefined ? undefined : `The claim for ${name} did not run.`;
+}
+
 export function fallbackPlanLine(move: TransactionMoveView): string | undefined {
   const names = fallbackSequence(move);
   if (names === undefined) {
@@ -136,10 +144,6 @@ export function openMoveCount(count: number): string {
 
 export function readableReason(reason: string): string {
   return reason.replace(/^\s*\d{1,2}[A-Z]\s*[:.)\-–—]\s*/u, "").trim();
-}
-
-export function teamCount(count: number): string {
-  return `${String(count)} ${count === 1 ? "team" : "teams"}`;
 }
 
 function remainingFallbacks(move: TransactionMoveView): ReadonlyArray<string> {

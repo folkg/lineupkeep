@@ -26,7 +26,7 @@ export function FeedbackReportList(props: FeedbackReportListProps): JSX.Element 
       <SectionTitle
         id="feedback-reports-title"
         action={
-          <Button variant="link" onClick={() => void props.onRefresh()}>
+          <Button variant="quiet" onClick={() => void props.onRefresh()}>
             Refresh
           </Button>
         }

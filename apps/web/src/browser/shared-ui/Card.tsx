@@ -25,9 +25,13 @@ export function Card(props: CardProps): JSX.Element {
             )}
           </Show>
         </div>
-        <span class="ms-auto max-[559px]:ms-0" data-card-badge>
-          {props.badge}
-        </span>
+        <Show when={props.badge}>
+          {(badge) => (
+            <span class="ms-auto max-[559px]:ms-0" data-card-badge>
+              {badge()}
+            </span>
+          )}
+        </Show>
       </header>
       <div class={bodyClass} data-card-body>
         {props.children}
@@ -52,7 +56,7 @@ type CardProps = {
   readonly labelledBy?: string;
   readonly header: Element;
   readonly meta?: Element;
-  readonly badge: Element;
+  readonly badge?: Element;
   readonly footer?: Element;
   readonly children: Element;
 };

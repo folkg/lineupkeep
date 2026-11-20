@@ -349,7 +349,7 @@ it("pauses an enabled team for the rest of the fantasy day", async () => {
   expect(changes).toEqual([{ team: teamId, action: "pause-today" }]);
 });
 
-it("pauses the icon, the status word, and the check line together before the server answers", async () => {
+it("pauses the icon and the check line together before the server answers", async () => {
   const answer = Promise.withResolvers<TeamChangeView>();
   using _app = setupTeamsPage([enabledTeam], { control: () => answer.promise });
 
@@ -361,7 +361,6 @@ it("pauses the icon, the status word, and the check line together before the ser
     .click();
 
   await expect.element(row.getByRole("button", { name: "Resume lineup checks" })).toBeVisible();
-  await expect.element(row.getByText("Paused", { exact: true })).toBeVisible();
   await expect
     .element(row.getByText("Paused for the rest of the fantasy day.", { exact: true }))
     .toBeVisible();
@@ -374,7 +373,7 @@ it("pauses the icon, the status word, and the check line together before the ser
     .toBeVisible();
 });
 
-it("restores the icon, the status word, and the check line when a pause fails", async () => {
+it("restores the icon and the check line when a pause fails", async () => {
   const answer = Promise.withResolvers<TeamChangeView>();
   using _app = setupTeamsPage([enabledTeam], { control: () => answer.promise });
 
@@ -383,7 +382,6 @@ it("restores the icon, the status word, and the check line when a pause fails", 
     .getByRole("button", { name: "Pause lineup checks for the rest of the fantasy day" })
     .click();
   await expect.element(row.getByRole("button", { name: "Resume lineup checks" })).toBeVisible();
-  await expect.element(row.getByText("Paused", { exact: true })).toBeVisible();
   await expect
     .element(row.getByText("Paused for the rest of the fantasy day.", { exact: true }))
     .toBeVisible();
@@ -395,9 +393,7 @@ it("restores the icon, the status word, and the check line when a pause fails", 
       row.getByRole("button", { name: "Pause lineup checks for the rest of the fantasy day" }),
     )
     .toBeVisible();
-  await expect.element(row.getByText("Checks on", { exact: true })).toBeVisible();
   await expect.element(row.getByText(/^Next check at /u)).toBeVisible();
-  await expect.element(row.getByText("Paused", { exact: true })).not.toBeInTheDocument();
   await expect
     .element(
       page.getByText(
@@ -523,7 +519,6 @@ it("keeps quiet rows to league context and the last check", async () => {
   const context = page.getByText("Football · NFL 2026");
   await expect.element(context).toBeVisible();
   expect(context.element().textContent).toBe("Football · NFL 2026");
-  await expect.element(page.getByText("Checks on", { exact: true })).toBeVisible();
   await expect.element(page.getByText(/^ ·/u)).not.toBeInTheDocument();
   await expect
     .element(page.getByText(`Last check changed nothing · ${formatReaderTime(twoHoursAgo)}`))
@@ -554,7 +549,7 @@ it("frames a team card with the shared card structure", async () => {
   for (const part of ["header", "meta", "body", "footer"]) {
     expect(card.querySelector(`[data-card-${part}]`), `the ${part} slot`).not.toBeNull();
   }
-  expect(card.querySelector("[data-card-header] [data-card-badge]")?.textContent).toBe("Checks on");
+  expect(card.querySelector("[data-card-badge]")).toBeNull();
 });
 
 it("shows the fantasy league name and a provider jump out for the team", async () => {
@@ -720,7 +715,6 @@ it("says the next check, the pause, checks off, or a check in flight", async () 
   const mounted = setupTeamsPage([enabledTeam]);
   try {
     await expect.element(page.getByText(/^Next check at \d{1,2}:\d{2}( [ap]m)?$/u)).toBeVisible();
-    await expect.element(page.getByText("Checks on", { exact: true })).toBeVisible();
   } finally {
     mounted[Symbol.dispose]();
   }
@@ -736,7 +730,6 @@ it("says the next check, the pause, checks off, or a check in flight", async () 
         ),
       )
       .toBeVisible();
-    await expect.element(page.getByText("Paused", { exact: true })).toBeVisible();
   } finally {
     paused[Symbol.dispose]();
   }
@@ -750,7 +743,6 @@ it("says the next check, the pause, checks off, or a check in flight", async () 
         }),
       )
       .toBeVisible();
-    await expect.element(page.getByText("Checks off", { exact: true })).toBeVisible();
   } finally {
     off[Symbol.dispose]();
   }
@@ -762,7 +754,6 @@ it("says the next check, the pause, checks off, or a check in flight", async () 
     await expect
       .element(page.getByText("Checking now. This usually takes under a minute.", { exact: true }))
       .toBeVisible();
-    await expect.element(page.getByText("Checking", { exact: true })).toBeVisible();
   } finally {
     inFlight[Symbol.dispose]();
   }
@@ -772,7 +763,6 @@ it("says the next check, the pause, checks off, or a check in flight", async () 
     await expect
       .element(page.getByText("A check is waiting to start.", { exact: true }))
       .toBeVisible();
-    await expect.element(page.getByText("Waiting", { exact: true })).toBeVisible();
   } finally {
     waiting[Symbol.dispose]();
   }
@@ -811,6 +801,26 @@ it("shows a loading state while the team list is pending", async () => {
   await expect.element(page.getByLabelText("Loading teams")).toBeVisible();
   pending.resolve([]);
   await expect.element(page.getByText("No teams yet.")).toBeVisible();
+});
+
+it("keeps the loading card the same height as the team card it becomes", async () => {
+  const pending = Promise.withResolvers<ReadonlyArray<TeamSummaryView>>();
+  using _app = setupTeamsPage([], { list: () => pending.promise });
+
+  const skeleton = page.getByLabelText("Loading teams").getByRole("listitem").first();
+  await expect.element(skeleton).toBeVisible();
+  const skeletonElement = skeleton.element();
+  const skeletonHeight = skeletonElement.getBoundingClientRect().height;
+  pending.resolve([
+    { ...enabledTeam, lastRun: changedRun, recentRuns: [changedRun, noOpRun, noOpRun] },
+  ]);
+  const name = page.getByRole("link", { name: "Alpha", exact: true });
+  await expect.element(name).toBeVisible();
+  const card = name.element().closest<HTMLElement>("[data-card]");
+  expect(card).not.toBeNull();
+  const cardHeight = card?.getBoundingClientRect().height ?? 0;
+
+  expect(Math.abs(skeletonHeight - cardHeight)).toBeLessThanOrEqual(1);
 });
 
 it("keeps refresh an icon button with a tooltip and no text label", async () => {

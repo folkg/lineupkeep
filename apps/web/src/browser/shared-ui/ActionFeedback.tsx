@@ -28,7 +28,7 @@ export function ActionFeedback(props: ActionFeedbackProps): JSX.Element {
           <Button
             disabled={props.recoveryDisabled}
             state={pending() ? "working" : "idle"}
-            variant="link"
+            variant="quiet"
             onClick={() => void recover(action())}
           >
             {action().label}

@@ -459,10 +459,10 @@ it.effect("pages one owner's moves by state and orders them by run day, team, an
       after: undefined,
       limit: 50,
     });
-    assert.deepStrictEqual(ended.map(({ move }) => move.result ?? move.decision).sort(), [
-      "discarded",
-      "executed",
-    ]);
+    assert.deepStrictEqual(
+      ended.map(({ move }) => move.result ?? move.decision),
+      ["executed"],
+    );
 
     const firstPage = yield* repository.readOwnerMoves({
       userId: owner,

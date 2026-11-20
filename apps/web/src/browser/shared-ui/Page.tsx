@@ -42,13 +42,22 @@ export function Page(props: PageProps): JSX.Element {
 
 function PageTitle(props: PageTitleProps): JSX.Element {
   return (
-    <Heading level={1} type={props.variant === "name" ? "card-title" : "page-title"}>
+    <Heading
+      level={1}
+      type={
+        props.variant === "name"
+          ? "card-title"
+          : props.variant === "display"
+            ? "display"
+            : "page-title"
+      }
+    >
       {props.children}
     </Heading>
   );
 }
 
-type TitleVariant = "page" | "name";
+type TitleVariant = "page" | "name" | "display";
 
 type PageProps = {
   readonly back?: Element;

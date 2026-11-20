@@ -5,6 +5,7 @@ import type { TransactionMoveView } from "#contracts/connections/transactionCont
 
 import {
   discardLine,
+  moveOutcome,
   moveOutcomeLabel,
   plannedMoment,
   submittedLine,
@@ -162,6 +163,57 @@ it("names the run outcome without inventing a time", () => {
   expect(moveOutcomeLabel(executed({ runDecidedBy: "owner" }))).toBe("Ran immediately");
   expect(moveOutcomeLabel(executed({ result: "pending" }))).toBe("Waiting for the league");
   expect(moveOutcomeLabel(executed({ result: "failed" }))).toBe("Failed");
+});
+
+it("gives every recorded outcome an icon and a tooltip", () => {
+  const cases: ReadonlyArray<{
+    readonly overrides: Partial<TransactionMoveView>;
+    readonly label: string;
+    readonly icon: ReturnType<typeof moveOutcome> extends infer Outcome
+      ? Outcome extends { readonly icon: infer Icon }
+        ? Icon
+        : never
+      : never;
+  }> = [
+    { overrides: {}, label: "Ran immediately", icon: "check" },
+    { overrides: { runDecidedBy: "system" }, label: "Ran on schedule", icon: "clock-check" },
+    {
+      overrides: { kind: "waiver_claim", phase: "with_league" },
+      label: "With the league",
+      icon: "hourglass",
+    },
+    { overrides: { kind: "waiver_claim", phase: "won" }, label: "Claim won", icon: "badge-check" },
+    {
+      overrides: { kind: "waiver_claim", phase: "lost", result: "executed" },
+      label: "Claim lost, fallback ran",
+      icon: "iteration-ccw",
+    },
+    {
+      overrides: { kind: "waiver_claim", phase: "lost", result: "failed" },
+      label: "All choices failed",
+      icon: "x",
+    },
+    {
+      overrides: { kind: "waiver_claim", phase: "lost", result: undefined },
+      label: "Claim lost",
+      icon: "circle-slash",
+    },
+    { overrides: { result: "pending" }, label: "Waiting for the league", icon: "hourglass" },
+    { overrides: { result: "failed" }, label: "Failed", icon: "x" },
+    { overrides: { result: "skipped" }, label: "Skipped", icon: "skip-forward" },
+    { overrides: { result: "unknown" }, label: "Unknown outcome", icon: "circle-question-mark" },
+    { overrides: { result: "withdrawn" }, label: "Withdrawn", icon: "undo-2" },
+    { overrides: { result: "expired" }, label: "Expired", icon: "timer-off" },
+    { overrides: { decision: "discarded" }, label: "Discarded", icon: "ban" },
+  ];
+
+  for (const entry of cases) {
+    expect(moveOutcome(executed(entry.overrides))).toMatchObject({
+      label: entry.label,
+      icon: entry.icon,
+    });
+  }
+  expect(moveOutcome(executed({ result: undefined }))).toBeUndefined();
 });
 
 it("lets a discard win over every recorded result", () => {

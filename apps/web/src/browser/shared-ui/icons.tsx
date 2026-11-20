@@ -1,19 +1,47 @@
 import type { JSX } from "@solidjs/web";
+import ArrowLeft from "~icons/lucide/arrow-left";
 import ArrowUpRight from "~icons/lucide/arrow-up-right";
+import BadgeCheck from "~icons/lucide/badge-check";
+import Ban from "~icons/lucide/ban";
+import Check from "~icons/lucide/check";
+import ChevronDown from "~icons/lucide/chevron-down";
 import ChevronRight from "~icons/lucide/chevron-right";
+import ChevronUp from "~icons/lucide/chevron-up";
+import CircleQuestionMark from "~icons/lucide/circle-question-mark";
+import CircleSlash from "~icons/lucide/circle-slash";
+import ClockCheck from "~icons/lucide/clock-check";
+import Hourglass from "~icons/lucide/hourglass";
+import IterationCcw from "~icons/lucide/iteration-ccw";
 import LoaderCircle from "~icons/lucide/loader-circle";
 import RefreshCw from "~icons/lucide/refresh-cw";
+import SkipForward from "~icons/lucide/skip-forward";
+import TimerOff from "~icons/lucide/timer-off";
+import Undo2 from "~icons/lucide/undo-2";
 import X from "~icons/lucide/x";
 
 import googleG from "./brand/google-g.svg";
 import { cx } from "./cx";
 
+export const ArrowLeftIcon = icon(ArrowLeft);
 export const ArrowUpRightIcon = icon(ArrowUpRight);
+export const BanIcon = icon(Ban);
+export const BadgeCheckIcon = icon(BadgeCheck);
+export const CheckIcon = icon(Check);
+export const ChevronDownIcon = icon(ChevronDown);
 export const ChevronRightIcon = icon(ChevronRight);
+export const ChevronUpIcon = icon(ChevronUp);
+export const CircleQuestionMarkIcon = icon(CircleQuestionMark);
+export const CircleSlashIcon = icon(CircleSlash);
+export const ClockCheckIcon = icon(ClockCheck);
+export const HourglassIcon = icon(Hourglass);
+export const IterationCcwIcon = icon(IterationCcw);
 export const LoaderCircleIcon = icon(LoaderCircle);
 export const PauseIcon = icon(PauseGlyph);
 export const PlayIcon = icon(PlayGlyph);
 export const RefreshIcon = icon(RefreshCw);
+export const SkipForwardIcon = icon(SkipForward);
+export const TimerOffIcon = icon(TimerOff);
+export const Undo2Icon = icon(Undo2);
 export const XIcon = icon(X);
 
 function PauseGlyph(props: JSX.SvgSVGAttributes<SVGSVGElement>): JSX.Element {
@@ -65,7 +93,7 @@ function icon(
   );
 }
 
-const iconSize = { sm: 15, md: 17 };
+const iconSize = { sm: 15, md: 17, lg: 20 };
 
 type IconProps = {
   readonly class?: string;

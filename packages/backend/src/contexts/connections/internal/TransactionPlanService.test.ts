@@ -1109,7 +1109,7 @@ it.effect("discards a failed move and a stale move out of the open list", () => 
     assert.deepStrictEqual(open.moves, []);
     const counts = yield* service.counts(owner, { team });
     assert.strictEqual(counts.totals.open, 0);
-    assert.strictEqual(counts.totals.ended, 2);
+    assert.strictEqual(counts.totals.ended, 0);
   }).pipe(Effect.provide(mutableFactsLayer(facts)));
 });
 
@@ -1712,17 +1712,17 @@ it.effect("counts open, today, saved, and ended moves, overall and per team", ()
     const all = yield* service.counts(owner, {});
 
     assert.strictEqual(all.teamCount, 2);
-    assert.deepStrictEqual(all.totals, { open: 3, today: 2, saved: 1, ended: 2 });
+    assert.deepStrictEqual(all.totals, { open: 3, today: 2, saved: 1, ended: 1 });
     assert.deepStrictEqual(all.teams, [
-      { team, open: 2, today: 1, saved: 1, ended: 2 },
+      { team, open: 2, today: 1, saved: 1, ended: 1 },
       { team: secondTeam, open: 1, today: 1, saved: 0, ended: 0 },
     ]);
 
     const one = yield* service.counts(owner, { team });
 
     assert.deepStrictEqual(one, {
-      totals: { open: 2, today: 1, saved: 1, ended: 2 },
-      teams: [{ team, open: 2, today: 1, saved: 1, ended: 2 }],
+      totals: { open: 2, today: 1, saved: 1, ended: 1 },
+      teams: [{ team, open: 2, today: 1, saved: 1, ended: 1 }],
       teamCount: 1,
     });
   }).pipe(Effect.provide(mutableFactsLayer(facts)));
@@ -1982,10 +1982,10 @@ it.effect("lists one team's moves by today, saved, and ended", () => {
     );
 
     const ended = yield* service.list(owner, { team, state: "ended" });
-    assert.deepStrictEqual(ended.moves.map(({ result, decision }) => result ?? decision).sort(), [
-      "discarded",
-      "executed",
-    ]);
+    assert.deepStrictEqual(
+      ended.moves.map(({ result, decision }) => result ?? decision),
+      ["executed"],
+    );
     assert.isTrue(ended.moves.every(({ check }) => check.status === "stored"));
 
     const everyTeam = yield* service.list(owner, { state: "today" });

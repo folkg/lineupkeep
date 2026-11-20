@@ -5,7 +5,6 @@ import type { Accessor } from "solid-js";
 import type { CachedTeamHeader } from "#browser/query/teamHeaderCache.ts";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import type { ActionState } from "#browser/shared-ui/actionState.ts";
-import { Badge } from "#browser/shared-ui/Badge.tsx";
 import { Card } from "#browser/shared-ui/Card.tsx";
 import { EmptyState } from "#browser/shared-ui/CollectionState.tsx";
 import { IconButton } from "#browser/shared-ui/IconButton.tsx";
@@ -29,8 +28,7 @@ import { checkTallyLabel, lastCheckLine, teamContextLabel } from "./teamLabels";
 import { teamAutomation, teamLastRun } from "./teamPending";
 import { TeamProviderLink } from "./TeamProviderLink";
 import type { TeamRemote } from "./teamRemote";
-import { teamStatusBadge, teamStatusLine } from "./teamStatus";
-import type { TeamStatusBadge } from "./teamStatus";
+import { teamStatusLine } from "./teamStatus";
 
 export function TeamList(props: TeamListProps): JSX.Element {
   const clock = createMinuteClock(() => props.dataUpdatedAt());
@@ -124,12 +122,10 @@ export function TeamList(props: TeamListProps): JSX.Element {
 
 function TeamCard(props: TeamCardProps): JSX.Element {
   const nameId = (): string => `team-card-${props.team.team.id}`;
-  const statusBadge = (): TeamStatusBadge => teamStatusBadge(props.team);
 
   return (
     <Card
       as="li"
-      badge={<Badge tone={statusBadge().tone}>{statusBadge().label}</Badge>}
       footer={
         <TeamControls
           compact

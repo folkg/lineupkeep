@@ -70,38 +70,44 @@ export function timingLine(
 }
 
 export function moveOutcomeLabel(move: TransactionMoveView): string | undefined {
+  return moveOutcome(move)?.label;
+}
+
+export function moveOutcome(move: TransactionMoveView): MoveOutcome | undefined {
   if (move.decision === "discarded") {
-    return "Discarded";
+    return { label: "Discarded", icon: "ban", tone: "muted" };
   }
   switch (move.phase) {
     case "with_league":
-      return "With the league";
+      return { label: "With the league", icon: "hourglass", tone: "muted" };
     case "won":
-      return "Claim won";
+      return { label: "Claim won", icon: "badge-check", tone: "action" };
     case "lost":
       return move.result === "executed"
-        ? "Claim lost, fallback ran"
+        ? { label: "Claim lost, fallback ran", icon: "iteration-ccw", tone: "action" }
         : move.result === "failed"
-          ? "All choices failed"
-          : "Claim lost";
+          ? { label: "All choices failed", icon: "x", tone: "danger" }
+          : { label: "Claim lost", icon: "circle-slash", tone: "muted" };
     case undefined:
       break;
   }
   switch (move.result) {
     case "executed":
-      return executedLabel(move);
+      return move.runDecidedBy === "system"
+        ? { label: "Ran on schedule", icon: "clock-check", tone: "action" }
+        : { label: "Ran immediately", icon: "check", tone: "action" };
     case "pending":
-      return "Waiting for the league";
+      return { label: "Waiting for the league", icon: "hourglass", tone: "muted" };
     case "failed":
-      return "Failed";
+      return { label: "Failed", icon: "x", tone: "danger" };
     case "skipped":
-      return "Skipped";
+      return { label: "Skipped", icon: "skip-forward", tone: "muted" };
     case "unknown":
-      return "Unknown outcome";
+      return { label: "Unknown outcome", icon: "circle-question-mark", tone: "muted" };
     case "withdrawn":
-      return "Withdrawn";
+      return { label: "Withdrawn", icon: "undo-2", tone: "muted" };
     case "expired":
-      return "Expired";
+      return { label: "Expired", icon: "timer-off", tone: "muted" };
     case undefined:
       return undefined;
   }
@@ -168,10 +174,6 @@ export function discardLine(
   return move.decidedAt === undefined
     ? `${actor} discarded this${surface}.`
     : `${actor} discarded this${surface} on ${formatLocalMoment(move.decidedAt, reader, now)}.`;
-}
-
-function executedLabel(move: TransactionMoveView): string {
-  return move.runDecidedBy === "system" ? "Ran on schedule" : "Ran immediately";
 }
 
 function withPeriod(text: string): string {
@@ -251,3 +253,23 @@ function keyOf(reader: ClockReader): string {
 function toDate(value: string | Date): Date {
   return value instanceof Date ? value : new Date(value);
 }
+
+export type MoveOutcomeIcon =
+  | "badge-check"
+  | "ban"
+  | "check"
+  | "circle-question-mark"
+  | "circle-slash"
+  | "clock-check"
+  | "hourglass"
+  | "iteration-ccw"
+  | "skip-forward"
+  | "timer-off"
+  | "undo-2"
+  | "x";
+
+export type MoveOutcome = {
+  readonly label: string;
+  readonly icon: MoveOutcomeIcon;
+  readonly tone: "action" | "danger" | "muted";
+};

@@ -6,6 +6,8 @@ import { AppShell } from "#browser/app-shell/AppShell.tsx";
 import { LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { Definition, DefinitionList } from "#browser/shared-ui/DefinitionList.tsx";
 import { formatDateTime, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
+import { IconNavLink } from "#browser/shared-ui/IconNavLink.tsx";
+import { ArrowLeftIcon } from "#browser/shared-ui/icons.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
@@ -46,16 +48,20 @@ export function RunDetailPage(props: RunDetailPageProps): JSX.Element {
         back={
           <Show
             fallback={
-              <TextLink tone="quiet" to="/teams">
-                Back to teams
-              </TextLink>
+              <IconNavLink label="Back to teams" to="/teams">
+                <ArrowLeftIcon size="md" />
+              </IconNavLink>
             }
             when={page.team()}
           >
             {(team) => (
-              <TextLink params={{ teamId: team().team.id }} tone="quiet" to="/teams/$teamId">
-                Back to {team().team.name}
-              </TextLink>
+              <IconNavLink
+                label={`Back to ${team().team.name}`}
+                params={{ teamId: team().team.id }}
+                to="/teams/$teamId"
+              >
+                <ArrowLeftIcon size="md" />
+              </IconNavLink>
             )}
           </Show>
         }
@@ -85,7 +91,6 @@ export function RunDetailPage(props: RunDetailPageProps): JSX.Element {
               )}
             </Show>
           </Show>
-          <TextLink to="/teams">All teams</TextLink>
           <Show when={page.run()}>
             {(run) => (
               <Inline gap="sm">

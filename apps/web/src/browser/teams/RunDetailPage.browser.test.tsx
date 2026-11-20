@@ -133,14 +133,11 @@ it("puts the report action last, after everything the run found", async () => {
   using _app = setupRunDetailPage(run);
 
   const found = page.getByRole("heading", { name: "What the run found" });
-  const allTeams = page.getByRole("link", { name: "All teams" });
   const report = page.getByRole("link", { name: "Report a problem with this run" });
   await expect.element(report).toBeVisible();
+  expect(page.getByRole("link", { name: "All teams" }).elements()).toHaveLength(0);
   expect(
     found.element().compareDocumentPosition(report.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
-  expect(
-    allTeams.element().compareDocumentPosition(report.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
 });
 

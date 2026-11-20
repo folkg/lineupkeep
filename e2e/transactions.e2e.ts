@@ -111,9 +111,14 @@ test("proposes a move into one team queue and runs it from the transactions page
   await captureCheckpoint(page, info, "transactions-ran");
   await expect(page.getByText("Nothing for today", { exact: true }).first()).toBeVisible();
 
-  const earlier = page.getByRole("button", { name: "Hide earlier moves" });
-  await expect(earlier).toHaveAttribute("aria-expanded", "true");
-  await expect(page.getByText("Ran immediately", { exact: true })).toBeVisible();
+  const earlier = page.getByRole("button", { name: "Show earlier moves" });
+  await expect(earlier).toHaveAttribute("aria-expanded", "false");
+  await earlier.click();
+  await expect(page.getByRole("button", { name: "Hide earlier moves" })).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  await expect(page.getByRole("img", { name: "Ran immediately" })).toBeVisible();
   await expect(page.getByText("Drop Riverside Receiver", { exact: true })).toBeVisible();
   await expect(page.getByText("1 move", { exact: true })).toBeVisible();
 
@@ -125,7 +130,7 @@ test("proposes a move into one team queue and runs it from the transactions page
   await expect(page.getByRole("button", { name: /Submit today/u })).toHaveCount(0);
 });
 
-test("discards a move today and shows it under earlier moves", async ({ page, services, mcp }) => {
+test("discards a move today and keeps it out of earlier", async ({ page, services, mcp }) => {
   await signUp(page);
   const discovered = Schema.decodeUnknownSync(
     Schema.Array(
@@ -178,10 +183,12 @@ test("discards a move today and shows it under earlier moves", async ({ page, se
       .getByText("Drop Riverside Receiver", { exact: true }),
   ).toHaveCount(0);
 
-  const earlier = page.getByRole("button", { name: "Hide earlier moves" });
-  await expect(earlier).toHaveAttribute("aria-expanded", "true");
-  await expect(page.getByText("Discarded", { exact: true })).toBeVisible();
-  await expect(page.getByText("Drop Riverside Receiver", { exact: true })).toBeVisible();
+  const earlier = page.getByRole("button", { name: "Show earlier moves" });
+  await expect(earlier).toHaveAttribute("aria-expanded", "false");
+  await earlier.click();
+  await expect(page.getByText("No earlier moves", { exact: true })).toBeVisible();
+  await expect(page.getByRole("img", { name: "Discarded" })).toHaveCount(0);
+  await expect(page.getByText("Drop Riverside Receiver", { exact: true })).toHaveCount(0);
 });
 
 test("names a refused move without storing it or returning an identifier", async ({
@@ -226,7 +233,10 @@ test("names a refused move without storing it or returning an identifier", async
   await expect(page.getByText("0 open moves", { exact: true })).toBeVisible();
 });
 
-test("opens the timeline on the first visit from the team page", async ({ page, services }) => {
+test("opens the timeline on the first visit from the primary navigation", async ({
+  page,
+  services,
+}) => {
   await signUp(page);
   await services.exercise(
     page,
@@ -245,7 +255,10 @@ test("opens the timeline on the first visit from the team page", async ({ page, 
     await route.continue();
   });
 
-  await page.locator("main").getByRole("link", { name: "Transactions" }).click();
+  await page
+    .getByRole("navigation", { name: "Primary navigation" })
+    .getByRole("link", { name: /Transactions/u })
+    .click();
   await page.waitForURL("**/transactions");
   await page.waitForTimeout(250);
   await expect(

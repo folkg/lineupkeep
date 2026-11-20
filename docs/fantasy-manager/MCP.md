@@ -889,8 +889,9 @@ owner or team is refused as `move_not_found`.
 `list_transaction_proposals` is the rolling move list across all owned teams. It accepts an optional
 `team`, an optional `state` (`today`, `saved`, or `ended`), a `cursor`, and a `limit` from 1 to 50
 (default 20). `today` includes moves due today or earlier, `saved` includes moves with a future run
-day, and `ended` includes moves that ran, failed, were skipped, were discarded, or are `with_league`.
-A submitted claim is never `today` and never counts as open. The result is
+day, and `ended` includes moves that ran, failed, were skipped, or are `with_league`. Discarded
+moves are left out of the list and its counts. A submitted claim is never `today` and never counts as
+open. The result is
 grouped by day and team, with each move's decision, phase, attempts, confirmation, and run
 provenance, `counts` for open, today, saved, and ended moves, and `teamCount` for the teams
 represented. A page with more

@@ -12,6 +12,7 @@ import {
   lte,
   max,
   min,
+  ne,
   not,
   or,
 } from "drizzle-orm";
@@ -1200,6 +1201,9 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
               .orderBy(asc(transactionMoves.teamId));
             const byTeam = new Map<TeamId, MutableMoveCounts>();
             for (const row of rows) {
+              if (row.decision === "discarded") {
+                continue;
+              }
               const team = yield* Schema.decodeEffect(TeamId)(row.team);
               const held = byTeam.get(team) ?? { open: 0, today: 0, saved: 0, ended: 0 };
               const bucket = moveCountBucket(row.decision, row.result, row.phase ?? undefined);
@@ -1566,7 +1570,7 @@ function readStatePredicate(state: TransactionMoveReadState): SQL | undefined {
         or(eq(transactionMoves.decision, "saved"), eq(transactionMoves.decision, "confirmed")),
       );
     case "ended":
-      return not(open);
+      return and(not(open), ne(transactionMoves.decision, "discarded"));
   }
 }
 

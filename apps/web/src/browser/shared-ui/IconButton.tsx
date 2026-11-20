@@ -24,6 +24,9 @@ export function IconButton(props: IconButtonProps): JSX.Element {
       <button
         aria-busy={working() ? "true" : undefined}
         aria-disabled={disabled() ? "true" : undefined}
+        aria-expanded={
+          props.expanded === true ? "true" : props.expanded === false ? "false" : undefined
+        }
         aria-label={props.label}
         class={iconButtonClass}
         data-confirmation={props.confirmed === true ? "tick" : undefined}
@@ -58,4 +61,5 @@ type IconButtonProps = {
   readonly state?: ActionState;
   readonly confirmed?: boolean;
   readonly disabled?: boolean;
+  readonly expanded?: boolean;
 };

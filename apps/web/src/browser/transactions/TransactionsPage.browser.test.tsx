@@ -101,9 +101,7 @@ it("shows every team's moves today and keeps saved moves on per team planning sh
 
   await expect.element(page.getByRole("heading", { name: "Transactions" })).toBeVisible();
   await expect.element(page.getByText("4 open moves", { exact: true })).toBeVisible();
-  await expect
-    .element(page.getByText("· 2 today · 2 later · 2 teams", { exact: true }))
-    .toBeVisible();
+  await expect.element(page.getByText("· 2 today · 2 later", { exact: true })).toBeVisible();
   await expect.element(page.getByRole("heading", { name: "Today" })).toBeVisible();
   await expect.element(page.getByText("2 moves for today", { exact: true })).toBeVisible();
   await expect.element(page.getByText("Drop Riley Chen", { exact: true })).toBeVisible();
@@ -348,7 +346,7 @@ it("runs a next-day move now and says when it takes effect", async () => {
     .toBeVisible();
 });
 
-it("says needs your decision, scheduled for a day, ran, and discarded in plain words", async () => {
+it("says needs your decision, scheduled for a day, and ran in plain words", async () => {
   await page.viewport(1280, 900);
   const pending = move({
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c4",
@@ -393,8 +391,8 @@ it("says needs your decision, scheduled for a day, ran, and discarded in plain w
     drops: [player("Tyler Boyd")],
   });
   using _app = setupTransactionsPage({
-    open: listData([pending, confirmed], { open: 2, today: 1, saved: 1, ended: 2 }),
-    ended: listData([discarded, ran], { open: 0, today: 0, saved: 0, ended: 2 }),
+    open: listData([pending, confirmed], { open: 2, today: 1, saved: 1, ended: 1 }),
+    ended: listData([discarded, ran], { open: 0, today: 0, saved: 0, ended: 1 }),
   });
 
   await expect
@@ -408,15 +406,15 @@ it("says needs your decision, scheduled for a day, ran, and discarded in plain w
     .toBeVisible();
 
   await page.getByRole("button", { name: "Show earlier moves" }).click();
-  await expect.element(page.getByText("Ran on schedule", { exact: true })).toBeVisible();
+  await expect.element(page.getByRole("img", { name: "Ran on schedule" })).toBeVisible();
   await expect
     .element(page.getByText(submittedLine(ran) ?? "", { exact: true }).first())
     .toBeVisible();
-  await expect.element(page.getByText("Discarded", { exact: true })).toBeVisible();
-  await expect.element(page.getByText(discardLine(discarded) ?? "", { exact: true })).toBeVisible();
+  expect(page.getByRole("img", { name: "Discarded" }).elements()).toHaveLength(0);
+  expect(page.getByText(discardLine(discarded) ?? "", { exact: true }).elements()).toHaveLength(0);
 });
 
-it("names an agent's discard and the surface it happened on", async () => {
+it("keeps a discarded move out of earlier", async () => {
   await page.viewport(1280, 900);
   const discarded = move({
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d1",
@@ -429,12 +427,13 @@ it("names an agent's discard and the surface it happened on", async () => {
     drops: [player("Tyler Boyd")],
   });
   using _app = setupTransactionsPage({
-    open: listData([], { open: 0, today: 0, saved: 0, ended: 1 }),
-    ended: listData([discarded], { open: 0, today: 0, saved: 0, ended: 1 }),
+    open: listData([], { open: 0, today: 0, saved: 0, ended: 0 }),
+    ended: listData([discarded], { open: 0, today: 0, saved: 0, ended: 0 }),
   });
 
-  await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
-  await expect.element(page.getByText(discardLine(discarded) ?? "", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Show earlier moves" }).click();
+  await expect.element(page.getByText("No earlier moves", { exact: true })).toBeVisible();
+  expect(page.getByText(discardLine(discarded) ?? "", { exact: true }).elements()).toHaveLength(0);
 });
 
 it("edits and discards one saved move at a time", async () => {
@@ -576,6 +575,23 @@ it("blocks a move that cannot run and leaves its reason beside the discard actio
   await expect
     .element(page.getByRole("button", { name: /Discard: Add Jordan Lee/u }))
     .toBeEnabled();
+});
+
+it("loads with section lines instead of placeholder cards", async () => {
+  const pending = Promise.withResolvers<TransactionMoveListData>();
+  using _app = setupTransactionsPage({
+    open: listData([], { open: 0, today: 0, saved: 0, ended: 0 }),
+    timeline: () => pending.promise,
+  });
+
+  const loading = page.getByLabelText("Loading moves");
+  await expect.element(loading).toBeVisible();
+  await expect.element(page.getByRole("heading", { name: "Today", exact: true })).toBeVisible();
+  await expect.element(page.getByRole("heading", { name: "Earlier", exact: true })).toBeVisible();
+  expect(loading.getByRole("listitem").elements()).toHaveLength(0);
+
+  pending.resolve(listData([], { open: 0, today: 0, saved: 0, ended: 0 }));
+  await expect.element(page.getByText("Nothing needs you today", { exact: true })).toBeVisible();
 });
 
 it("shows clear teams when nothing is open", async () => {
@@ -906,7 +922,7 @@ it("leaves a partly run group without a run action and folds its explanation", a
   await expect.element(page.getByText(sentence, { exact: true })).toBeVisible();
 });
 
-it("reads a discarded move as discarded, not failed", async () => {
+it("keeps a discarded move out of earlier even when it failed", async () => {
   await page.viewport(1280, 900);
   const discarded = move({
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d4",
@@ -918,14 +934,14 @@ it("reads a discarded move as discarded, not failed", async () => {
     result: "failed",
   });
   using _app = setupTransactionsPage({
-    open: listData([], { open: 0, today: 0, saved: 0, ended: 1 }),
-    ended: listData([discarded], { open: 0, today: 0, saved: 0, ended: 1 }),
+    open: listData([], { open: 0, today: 0, saved: 0, ended: 0 }),
+    ended: listData([discarded], { open: 0, today: 0, saved: 0, ended: 0 }),
   });
 
-  await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
-  await expect.element(page.getByText("Discarded", { exact: true })).toBeVisible();
-  expect(page.getByText("Failed", { exact: true }).elements()).toHaveLength(0);
-  await expect.element(page.getByText(discardLine(discarded) ?? "", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Show earlier moves" }).click();
+  await expect.element(page.getByText("No earlier moves", { exact: true })).toBeVisible();
+  expect(page.getByRole("img", { name: "Failed" }).elements()).toHaveLength(0);
+  expect(page.getByText(discardLine(discarded) ?? "", { exact: true }).elements()).toHaveLength(0);
 });
 
 it("labels a move that ran after you submitted as ran after you submitted", async () => {
@@ -947,8 +963,8 @@ it("labels a move that ran after you submitted as ran after you submitted", asyn
     ended: listData([ran], { open: 0, today: 0, saved: 0, ended: 1 }),
   });
 
-  await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
-  await expect.element(page.getByText("Ran immediately", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Show earlier moves" }).click();
+  await expect.element(page.getByRole("img", { name: "Ran immediately" })).toBeVisible();
   await expect.element(page.getByText("Took effect November 12.", { exact: true })).toBeVisible();
   expect(page.getByText("Ran now", { exact: true }).elements()).toHaveLength(0);
 });
@@ -971,7 +987,7 @@ it("renders a submission timestamp in the reader's local date and time", async (
     ended: listData([ran], { open: 0, today: 0, saved: 0, ended: 1 }),
   });
 
-  await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
+  await page.getByRole("button", { name: "Show earlier moves" }).click();
   const line = submittedLine(ran) ?? "";
   await expect.element(page.getByText(line, { exact: true })).toBeVisible();
   expect(line).toMatch(/^You submitted this on .+ at .+\.$/u);
@@ -995,10 +1011,10 @@ it("keeps the submission line apart from the run time", async () => {
     ended: listData([ran], { open: 0, today: 0, saved: 0, ended: 1 }),
   });
 
-  await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
+  await page.getByRole("button", { name: "Show earlier moves" }).click();
   const submission = page.getByText(submittedLine(ran) ?? "", { exact: true });
   await expect.element(submission).toBeVisible();
-  await expect.element(page.getByText("Ran immediately", { exact: true })).toBeVisible();
+  await expect.element(page.getByRole("img", { name: "Ran immediately" })).toBeVisible();
   const runClock = new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
     minute: "2-digit",
@@ -1052,9 +1068,7 @@ it("moves a submitted group with a pending waiver into earlier, not today", asyn
     ),
   });
 
-  await expect
-    .element(page.getByText("· 0 today · 0 later · 1 team", { exact: true }))
-    .toBeVisible();
+  await expect.element(page.getByText("· 0 today · 0 later", { exact: true })).toBeVisible();
   await expect.element(page.getByText("Nothing for today", { exact: true }).first()).toBeVisible();
   expect(
     page
@@ -1064,7 +1078,7 @@ it("moves a submitted group with a pending waiver into earlier, not today", asyn
   ).toHaveLength(0);
   await expect.element(page.getByText("2 moves", { exact: true })).toBeVisible();
 
-  await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
+  await page.getByRole("button", { name: "Show earlier moves" }).click();
   await expect.element(page.getByText("Waiting for the league", { exact: true })).toBeVisible();
   expect(page.getByText("Waiting for the league", { exact: true }).elements()).toHaveLength(1);
   await expect.element(page.getByText("Weekend moves", { exact: true })).toBeVisible();
@@ -1110,12 +1124,12 @@ it("keeps a submitted claim with the league and shows no hourly run time", async
   });
 
   await expect.element(page.getByText("0 open moves", { exact: true })).toBeVisible();
-  await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
-  await expect.element(page.getByText("With the league", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Show earlier moves" }).click();
+  await expect.element(page.getByRole("img", { name: "With the league" })).toBeVisible();
   await expect
     .element(page.getByText("Your league's waiver rule: gametime.", { exact: true }))
     .toBeVisible();
-  expect(page.getByText("Waiting for the league", { exact: true }).elements()).toHaveLength(0);
+  expect(page.getByRole("img", { name: "Waiting for the league" }).elements()).toHaveLength(0);
   expect(page.getByText("Scheduled to run", { exact: false }).elements()).toHaveLength(0);
 });
 
@@ -1262,7 +1276,7 @@ it("shows earlier moves newest first and loads the next older page", async () =>
   });
 
   await expect.element(page.getByText("3 moves", { exact: true })).toBeVisible();
-  await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
+  await page.getByRole("button", { name: "Show earlier moves" }).click();
 
   const newestRow = page.getByText("Drop Riley Chen", { exact: true });
   const olderRow = page.getByText("Drop Jordan Lee", { exact: true });
@@ -1625,7 +1639,7 @@ it("moves a card with nothing left to do into Earlier without a control", async 
   });
 
   await expect.element(page.getByText("Nothing for today", { exact: true }).first()).toBeVisible();
-  await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
+  await page.getByRole("button", { name: "Show earlier moves" }).click();
   await expect.element(page.getByText("Partly ran", { exact: true })).toBeVisible();
   await expect
     .element(page.getByText("Nothing is waiting for you.", { exact: true }))
@@ -1712,7 +1726,8 @@ it("records which fallback ran, which failed, and that none are left", async () 
     ended: listData([claim], { open: 0, today: 0, saved: 0, ended: 1 }),
   });
 
-  await expect.element(page.getByText("All choices failed", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Show earlier moves" }).click();
+  await expect.element(page.getByRole("img", { name: "All choices failed" })).toBeVisible();
   expect(
     page.getByText(`Takes effect ${formatCalendarDate("2026-11-18")}.`, { exact: true }).elements(),
   ).toHaveLength(0);
@@ -1781,7 +1796,11 @@ it("leaves one submission line and one effect line after a lost claim's fallback
     ended: listData([claim], { open: 0, today: 0, saved: 0, ended: 1 }),
   });
 
-  await expect.element(page.getByText("Claim lost, fallback ran", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Show earlier moves" }).click();
+  await expect.element(page.getByRole("img", { name: "Claim lost, fallback ran" })).toBeVisible();
+  await expect
+    .element(page.getByText("The claim for Dalton Schultz did not run.", { exact: true }))
+    .toBeVisible();
   await expect.element(page.getByText(/^You submitted this on /u)).toBeVisible();
   await expect.element(page.getByText("Took effect November 19.", { exact: true })).toBeVisible();
   expect(
@@ -1797,7 +1816,7 @@ it("leaves one submission line and one effect line after a lost claim's fallback
   ).toHaveLength(0);
 });
 
-it("starts Earlier open when it is the only content and keeps the person's toggle", async () => {
+it("keeps Earlier collapsed until the person opens it", async () => {
   await page.viewport(1280, 900);
   const ran = move({
     move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165fa",
@@ -1812,12 +1831,15 @@ it("starts Earlier open when it is the only content and keeps the person's toggl
     ended: listData([ran], { open: 0, today: 0, saved: 0, ended: 1 }),
   });
 
-  await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
-  await expect.element(page.getByText("Ran on schedule", { exact: true })).toBeVisible();
+  await expect.element(page.getByRole("button", { name: "Show earlier moves" })).toBeVisible();
+  expect(page.getByRole("img", { name: "Ran on schedule" }).elements()).toHaveLength(0);
+
+  await page.getByRole("button", { name: "Show earlier moves" }).click();
+  await expect.element(page.getByRole("img", { name: "Ran on schedule" })).toBeVisible();
 
   await page.getByRole("button", { name: "Hide earlier moves" }).click();
   await expect.element(page.getByRole("button", { name: "Show earlier moves" })).toBeVisible();
-  expect(page.getByText("Ran on schedule", { exact: true }).elements()).toHaveLength(0);
+  expect(page.getByRole("img", { name: "Ran on schedule" }).elements()).toHaveLength(0);
 });
 
 it("keeps Earlier collapsed while a card needs a decision", async () => {
@@ -1842,12 +1864,12 @@ it("keeps Earlier collapsed while a card needs a decision", async () => {
   });
 
   await expect.element(page.getByRole("button", { name: "Show earlier moves" })).toBeVisible();
-  expect(page.getByText("Ran on schedule", { exact: true }).elements()).toHaveLength(0);
+  expect(page.getByRole("img", { name: "Ran on schedule" }).elements()).toHaveLength(0);
 
   await page.getByRole("button", { name: "Show earlier moves" }).click();
-  await expect.element(page.getByText("Ran on schedule", { exact: true })).toBeVisible();
+  await expect.element(page.getByRole("img", { name: "Ran on schedule" })).toBeVisible();
   await page.getByRole("button", { name: "Hide earlier moves" }).click();
-  expect(page.getByText("Ran on schedule", { exact: true }).elements()).toHaveLength(0);
+  expect(page.getByRole("img", { name: "Ran on schedule" }).elements()).toHaveLength(0);
 });
 
 function setupTransactionsPage(options: {
@@ -1862,6 +1884,7 @@ function setupTransactionsPage(options: {
   readonly retry?: TransactionRemote["retry"];
   readonly ended?: TransactionMoveListData;
   readonly endedPages?: ReadonlyArray<TransactionMoveListData>;
+  readonly timeline?: TransactionRemote["timeline"];
 }): { [Symbol.dispose](): void } {
   const queryClient = createQueryClient();
   queryClient.setDefaultOptions({ queries: { retry: false } });
@@ -1872,8 +1895,10 @@ function setupTransactionsPage(options: {
   const emptyEnded = listData([], { open: 0, today: 0, saved: 0, ended: 0 });
   const endedPages = options.endedPages ?? [options.ended ?? emptyEnded];
   const remote: TransactionRemote = {
-    timeline: () =>
-      options.failure === undefined ? Promise.resolve(open) : Promise.reject(options.failure),
+    timeline:
+      options.timeline ??
+      (() =>
+        options.failure === undefined ? Promise.resolve(open) : Promise.reject(options.failure)),
     list: (input) => {
       if (input.state !== "ended") {
         return Promise.resolve(open);
@@ -1902,7 +1927,7 @@ function setupTransactionsPage(options: {
     retry: options.retry ?? (() => Promise.reject(new Error("Unexpected retry"))),
     confirm: options.confirm ?? (() => Promise.reject(new Error("Unexpected confirmation"))),
   };
-  if (options.failure === undefined) {
+  if (options.failure === undefined && options.timeline === undefined) {
     queryClient.setQueryData(transactionQueries.timeline(remote).queryKey, {
       pages: [open],
       pageParams: [undefined],

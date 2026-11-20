@@ -74,9 +74,6 @@ const filledShape = "min-h-button px-5 text-label uppercase";
 
 const quietShape = "min-h-tap-target px-2 text-label uppercase";
 
-const linkShape =
-  "min-h-tap-target p-0 text-body-strong normal-case underline decoration-2 underline-offset-4";
-
 const quietNeutral = "text-ink-soft hover:text-action";
 
 export const iconButtonClass = cx(
@@ -91,16 +88,6 @@ export const iconButtonFrameClass =
 const buttonStyles: Record<ButtonStyleKey, string> = {
   "google:neutral": cx(
     "relative inline-flex min-h-button items-center justify-center gap-2.5 overflow-hidden border border-google-stroke bg-google-fill px-3 font-google text-google font-medium text-google-ink no-underline transition-transform duration-quick ease-out-cubic focus-visible:outline-none focus-visible:shadow-focus disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50",
-  ),
-  "link:danger": cx(
-    buttonBase,
-    linkShape,
-    "bg-transparent text-danger hover:bg-transparent hover:text-danger-hover",
-  ),
-  "link:neutral": cx(
-    buttonBase,
-    linkShape,
-    "bg-transparent text-action hover:bg-transparent hover:text-action-hover",
   ),
   "primary:danger": cx(
     buttonBase,
@@ -130,7 +117,7 @@ const buttonStyles: Record<ButtonStyleKey, string> = {
   ),
 };
 
-type ButtonVariant = "primary" | "secondary" | "quiet" | "google" | "link";
+type ButtonVariant = "primary" | "secondary" | "quiet" | "google";
 
 type ButtonVariantWithTone = Exclude<ButtonVariant, "google">;
 

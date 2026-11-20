@@ -119,14 +119,14 @@ export function SignInForm(props: SignInFormProps): JSX.Element {
             <Stack align="start" gap="none">
               <ActionFeedback feedback={form.codeFeedback()} recoveryDisabled={form.isBusy()} />
               <Button
-                variant="link"
+                variant="quiet"
                 disabled={form.isBusy() || !form.canResend()}
                 state={form.isResendingCode() ? "working" : "idle"}
                 onClick={() => focusCodeOnceSent(form.resendCode())}
               >
                 {form.resendLabel()}
               </Button>
-              <Button variant="link" disabled={form.isBusy()} onClick={useDifferentEmail}>
+              <Button variant="quiet" disabled={form.isBusy()} onClick={useDifferentEmail}>
                 Use a different email
               </Button>
             </Stack>

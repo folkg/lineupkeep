@@ -154,20 +154,19 @@ const team: TeamSummaryView = {
 it("offers a way back to the teams list and shows the run time in the reader's zone", async () => {
   using _app = setupTeamDetailPage(team);
 
-  await expect
-    .element(page.getByRole("link", { name: "Back to teams" }))
-    .toHaveAttribute("href", "/teams");
+  const back = page.getByRole("link", { name: "Back to teams" });
+  await expect.element(back).toHaveAttribute("href", "/teams");
+  expect(back.element().textContent).toBe("");
+  expect(back.element().getAttribute("title")).toBe("Back to teams");
   const time = document.querySelector<HTMLTimeElement>(`time[datetime="${threeDaysAgo}"]`);
   expect(time?.textContent).toBe(formatReaderTime(threeDaysAgo));
   await expect.element(page.getByText(formatReaderTime(threeDaysAgo))).toBeVisible();
 });
 
-it("links to the open moves beside its other actions", async () => {
+it("leaves a generic transactions shortcut out of the team header", () => {
   using _app = setupTeamDetailPage(team);
 
-  await expect
-    .element(page.getByRole("link", { name: "Transactions" }))
-    .toHaveAttribute("href", "/transactions");
+  expect(page.getByRole("link", { name: "Transactions", exact: true }).elements()).toHaveLength(0);
 });
 
 it("names the league context and keeps quiet states off the page", async () => {
@@ -257,6 +256,7 @@ it("puts recent activity above the owner note and leaves the roster off the page
   ).toBeTruthy();
 
   const report = page.getByRole("link", { name: "Report a problem with this team" });
+  expect(report.element().closest("footer")).not.toBeNull();
   expect(
     note.element().compareDocumentPosition(report.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
@@ -487,6 +487,7 @@ it("links a team report to the feedback form with the team reference", async () 
 
   const report = page.getByRole("link", { name: "Report a problem with this team" });
   await expect.element(report).toBeVisible();
+  expect(report.element().closest("footer")).not.toBeNull();
   const href = report.element().getAttribute("href");
   const url = new URL(href ?? "", window.location.origin);
 

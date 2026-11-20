@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useMutation } from "@tanstack/solid-query";
 import type { MutationFunctionContext } from "@tanstack/solid-query";
-import { createEffect, createMemo, createSignal } from "solid-js";
+import { createMemo, createSignal } from "solid-js";
 import type { Accessor } from "solid-js";
 
 import { useSignInRecovery } from "#browser/session/signInRecovery.ts";
@@ -17,7 +17,6 @@ import type {
   TransactionTeamFactsView,
 } from "#contracts/connections/transactionContract.ts";
 
-import { cardHasAction, cardIsSettled, dayTeamCards } from "./transactionCards";
 import { moveCount, moveSummary } from "./transactionCopy";
 import { describeTransactionActionFailure } from "./transactionFailure";
 import { transactionQueries } from "./transactionQueries";
@@ -29,8 +28,7 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
   const signIn = useSignInRecovery();
   const open = useInfiniteQuery(() => transactionQueries.timeline(props.remote()));
   const [earlierChoice, setEarlierChoice] = createSignal<boolean>();
-  const [earlierDefault, setEarlierDefault] = createSignal(false);
-  const earlierEnabled = (): boolean => earlierChoice() ?? earlierDefault();
+  const earlierEnabled = (): boolean => earlierChoice() ?? false;
   const earlier = useInfiniteQuery(() => ({
     ...transactionQueries.list(props.remote(), { state: "ended" }),
     enabled: earlierEnabled(),
@@ -43,10 +41,6 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
   const counts = createMemo(() => {
     const first = open.isSuccess ? open.data.pages[0] : undefined;
     return first?.counts ?? { open: 0, today: 0, saved: 0, ended: 0 };
-  });
-  const teamCount = createMemo(() => {
-    const first = open.isSuccess ? open.data.pages[0] : undefined;
-    return first?.teamCount ?? 0;
   });
   const teamFacts = createMemo(() => {
     const held = new Map<string, TransactionTeamFactsView>();
@@ -80,31 +74,6 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     }
     return [...held.values()].map(moveDayView).sort(compareMoveDays);
   });
-  const hasActionableCards = (): boolean =>
-    days().some((day) =>
-      dayTeamCards(day, groups()).some((entry) => entry.cards.some(cardHasAction)),
-    );
-  const earlierHasRows = (): boolean => {
-    if (counts().ended > 0) {
-      return true;
-    }
-    return dayTeamCards(
-      days().find((day) => day.today),
-      groups(),
-    ).some((entry) => entry.cards.some(cardIsSettled));
-  };
-  createEffect(
-    () => ({
-      choice: earlierChoice(),
-      actionable: hasActionableCards(),
-      rows: earlierHasRows(),
-    }),
-    (held) => {
-      if (held.choice === undefined) {
-        setEarlierDefault(!held.actionable && held.rows);
-      }
-    },
-  );
   const refresh = (): void => {
     void open.refetch();
     if (earlier.isFetched) {
@@ -328,7 +297,6 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
   return {
     days,
     counts,
-    teamCount,
     teamFacts,
     groups,
     canConfirm,
@@ -378,7 +346,12 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
         void open.fetchNextPage();
       }
     },
-    earlier: () => (earlier.isSuccess ? earlier.data.pages.flatMap((page) => page.moves) : []),
+    earlier: () =>
+      earlier.isSuccess
+        ? earlier.data.pages
+            .flatMap((page) => page.moves)
+            .filter((move) => move.decision !== "discarded")
+        : [],
     earlierCount: () => counts().ended,
     earlierEnabled,
     toggleEarlier: () => setEarlierChoice(!earlierEnabled()),
@@ -554,7 +527,6 @@ export type TransactionsPageController = {
     readonly saved: number;
     readonly ended: number;
   }>;
-  readonly teamCount: Accessor<number>;
   readonly teamFacts: Accessor<ReadonlyMap<string, TransactionTeamFactsView>>;
   readonly groups: Accessor<ReadonlyArray<TransactionPlanGroupView>>;
   readonly canConfirm: (move: TransactionMoveView) => boolean;

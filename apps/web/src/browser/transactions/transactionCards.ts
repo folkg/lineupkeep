@@ -122,10 +122,6 @@ export function cardIsSettled(card: GroupCard): boolean {
   return cardAction(card).kind === "none";
 }
 
-export function cardHasAction(card: GroupCard): boolean {
-  return cardAction(card).kind !== "none";
-}
-
 export function cardAction(card: GroupCard): CardAction {
   switch (cardStatus(card).kind) {
     case "needs-decision":

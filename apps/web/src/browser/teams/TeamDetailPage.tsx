@@ -10,7 +10,8 @@ import {
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
-import { Inline } from "#browser/shared-ui/Inline.tsx";
+import { IconNavLink } from "#browser/shared-ui/IconNavLink.tsx";
+import { ArrowLeftIcon } from "#browser/shared-ui/icons.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
@@ -45,16 +46,16 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
   };
 
   return (
-    <AppShell>
+    <AppShell footer={<TeamReportFooter team={team} />}>
       <Page
         back={
-          <TextLink tone="quiet" to="/teams">
-            Back to teams
-          </TextLink>
+          <IconNavLink label="Back to teams" to="/teams">
+            <ArrowLeftIcon size="md" />
+          </IconNavLink>
         }
         title={team()?.team.name ?? "Team"}
         titleAside={titleAside()}
-        titleVariant="name"
+        titleVariant="display"
       >
         <UnsavedChangesScope>
           <Stack gap="lg">
@@ -91,7 +92,7 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
 function TeamDetail(props: TeamDetailProps): JSX.Element {
   const note = useTeamNote({ team: () => props.team, remote: () => props.remote });
   return (
-    <Stack gap="lg">
+    <Stack gap="2xl">
       <Stack gap="md">
         <Stack gap="xs">
           <Text type="meta" tone="muted">
@@ -100,11 +101,6 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
           <TeamAttention team={props.team} />
         </Stack>
         <TeamControls team={props.team} remote={props.remote} onOptimistic={props.onOptimistic} />
-        <Inline gap="sm">
-          <TextLink tone="quiet" to="/transactions">
-            Transactions
-          </TextLink>
-        </Inline>
       </Stack>
 
       <Stack as="section" gap="sm" labelledBy="team-activity-title">
@@ -118,21 +114,32 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
       </Stack>
 
       <TeamNote note={note} />
+    </Stack>
+  );
+}
 
-      <Inline gap="sm">
+function TeamReportFooter(props: {
+  readonly team: Accessor<TeamSummaryView | undefined>;
+}): JSX.Element {
+  return (
+    <Show
+      fallback={
+        <TextLink tone="quiet" to="/feedback">
+          Feedback
+        </TextLink>
+      }
+      when={props.team()}
+    >
+      {(team) => (
         <TextLink
-          search={{
-            surface: "team",
-            team: props.team.team.id,
-            teamName: props.team.team.name,
-          }}
+          search={{ surface: "team", team: team().team.id, teamName: team().team.name }}
           tone="quiet"
           to="/feedback"
         >
           Report a problem with this team
         </TextLink>
-      </Inline>
-    </Stack>
+      )}
+    </Show>
   );
 }
 

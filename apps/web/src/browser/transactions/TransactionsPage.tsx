@@ -11,6 +11,8 @@ import { Disclosure } from "#browser/shared-ui/Disclosure.tsx";
 import { Form } from "#browser/shared-ui/Form.tsx";
 import { formatCalendarDate, formatDateTime } from "#browser/shared-ui/formatTime.ts";
 import { Heading } from "#browser/shared-ui/Heading.tsx";
+import { IconButton } from "#browser/shared-ui/IconButton.tsx";
+import { ChevronDownIcon, ChevronUpIcon } from "#browser/shared-ui/icons.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
 import { QueueList, QueueListItem, QueueListNote } from "#browser/shared-ui/QueueList.tsx";
@@ -47,10 +49,11 @@ import {
   moveCount,
   moveSummary,
   openMoveCount,
+  originalClaimLine,
   readableReason,
-  teamCount,
 } from "./transactionCopy";
 import { TransactionAuthenticationFailure } from "./transactionFailure";
+import { TransactionOutcomeIcon } from "./TransactionOutcomeIcon";
 import type { TransactionRemote } from "./transactionRemote";
 import {
   discardLine,
@@ -71,11 +74,7 @@ export function TransactionsPage(props: TransactionsPageProps): JSX.Element {
 
   return (
     <AppShell>
-      <Page
-        kicker={<SummaryKicker page={page} />}
-        lede="Run a group now, or schedule it for a later day."
-        title="Transactions"
-      >
+      <Page kicker={<SummaryKicker page={page} />} title="Transactions">
         <Show fallback={<TransactionsSkeleton />} when={!page.isLoading()}>
           <Show
             fallback={
@@ -133,7 +132,7 @@ function SummaryKicker(props: SectionProps): JSX.Element {
         {openMoveCount(props.page.counts().open)}
       </Text>
       <Text as="span" numeric type="label">
-        {`· ${String(todayMoves())} today · ${String(props.page.counts().saved)} later · ${teamCount(props.page.teamCount())}`}
+        {`· ${String(todayMoves())} today · ${String(props.page.counts().saved)} later`}
       </Text>
     </Inline>
   );
@@ -357,7 +356,7 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
             </Button>
             <Show when={props.card.today}>
               <Button
-                variant="link"
+                variant="quiet"
                 disabled={!confirmable() || confirmation.pending()}
                 aria-label={`Schedule instead: ${cardTitle(props.card)}`}
                 onClick={() => props.page.startEdit(props.card.lead)}
@@ -411,7 +410,7 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
         return (
           <Inline gap="sm">
             <Button
-              variant="link"
+              variant="quiet"
               aria-label={`Open: ${cardTitle(props.card)}`}
               onClick={() => {
                 if (explanationElement !== undefined) {
@@ -575,7 +574,7 @@ function GroupMoveRow(props: GroupMoveRowProps): JSX.Element {
         <>
           <Show when={!props.today && !invalid() && actionable()}>
             <Button
-              variant="link"
+              variant="quiet"
               disabled={actionsDisabled()}
               aria-label={`Change date: ${moveSummary(props.move)}`}
               onClick={() => props.page.startEdit(props.move)}
@@ -626,7 +625,7 @@ function GroupMoveRow(props: GroupMoveRowProps): JSX.Element {
                 >
                   {props.page.saving() ? "Saving" : "Save changes"}
                 </Button>
-                <Button variant="link" onClick={props.page.cancelEdit}>
+                <Button variant="quiet" onClick={props.page.cancelEdit}>
                   Cancel
                 </Button>
               </Inline>
@@ -679,7 +678,12 @@ function EarlierSection(props: RemoteSectionProps): JSX.Element {
   const settled = (): ReadonlyArray<TeamCardsView> => {
     const today = props.page.days().find((day) => day.today);
     return dayTeamCards(today, props.page.groups())
-      .map((entry) => ({ team: entry.team, cards: entry.cards.filter(cardIsSettled) }))
+      .map((entry) => ({
+        team: entry.team,
+        cards: entry.cards
+          .filter(cardIsSettled)
+          .filter((card) => cardMembers(card).some((move) => move.decision !== "discarded")),
+      }))
       .filter((entry) => entry.cards.length > 0);
   };
   const count = (): number =>
@@ -690,14 +694,15 @@ function EarlierSection(props: RemoteSectionProps): JSX.Element {
       <SectionTitle
         id="earlier-title"
         action={
-          <Button
-            aria-expanded={props.page.earlierEnabled() ? "true" : "false"}
-            aria-label={props.page.earlierEnabled() ? "Hide earlier moves" : "Show earlier moves"}
-            variant="link"
+          <IconButton
+            expanded={props.page.earlierEnabled()}
+            label={props.page.earlierEnabled() ? "Hide earlier moves" : "Show earlier moves"}
             onClick={props.page.toggleEarlier}
           >
-            {props.page.earlierEnabled() ? "Hide" : "Show"}
-          </Button>
+            <Show fallback={<ChevronDownIcon size="md" />} when={props.page.earlierEnabled()}>
+              <ChevronUpIcon size="md" />
+            </Show>
+          </IconButton>
         }
       >
         Earlier
@@ -746,7 +751,7 @@ function EarlierSection(props: RemoteSectionProps): JSX.Element {
             fallback={
               <Show when={settled().length === 0}>
                 <EmptyState title="No earlier moves">
-                  Moves that ran, failed, were discarded, or wait for the league appear here.
+                  Moves that ran, failed, or wait for the league appear here.
                 </EmptyState>
               </Show>
             }
@@ -798,19 +803,25 @@ function EarlierRow(props: EarlierRowProps): JSX.Element {
       : undefined;
   const waiver = (): string | undefined =>
     props.move.phase === "with_league" ? waiverTimingLine(props.waiver) : undefined;
+  const originalClaim = (): string | undefined => originalClaimLine(props.move);
   return (
     <RuleListItem layout="stack" dense>
       <Stack gap="2xs">
-        <Inline gap="sm" align="baseline">
-          <Badge tone={outcomeBadgeTone(props.move)}>
-            {moveOutcomeLabel(props.move) ?? "Ended"}
-          </Badge>
+        <Inline gap="sm">
+          <TransactionOutcomeIcon move={props.move} />
           <Text type="body-strong">{moveSummary(props.move)}</Text>
         </Inline>
         <Text type="meta" tone="muted">
           {props.move.team.name} · {leagueDisplayName(props.move.team.league)} ·{" "}
           {sportDisplayName(props.move.team.sport)}
         </Text>
+        <Show when={originalClaim()}>
+          {(line) => (
+            <Text type="meta" tone="muted">
+              {line()}
+            </Text>
+          )}
+        </Show>
         <Show when={submitted()}>
           {(line) => (
             <Text type="meta" tone="muted">
@@ -877,10 +888,6 @@ function fallbackSummary(move: TransactionMoveView): string | undefined {
   return move.result === "failed" && move.attempts.length > 0
     ? "What was tried"
     : fallbackPlanLine(move);
-}
-
-function outcomeBadgeTone(move: TransactionMoveView): "accent" | "neutral" {
-  return move.decision !== "discarded" && move.result === "executed" ? "accent" : "neutral";
 }
 
 function statusTone(status: CardStatus): "accent" | "neutral" {
