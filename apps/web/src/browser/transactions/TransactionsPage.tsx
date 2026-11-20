@@ -782,6 +782,7 @@ function EarlierSection(props: RemoteSectionProps): JSX.Element {
 
 function EarlierRow(props: EarlierRowProps): JSX.Element {
   const submitted = (): string | undefined => submittedLine(props.move);
+  const timing = (): string | undefined => timingLine(props.move);
   const discarded = (): string | undefined => discardLine(props.move);
   const result = (): string | undefined => resultDetailLine(props.move);
   const resultTime = (): string | undefined => resultTimeLine(props.move);
@@ -801,6 +802,13 @@ function EarlierRow(props: EarlierRowProps): JSX.Element {
           {sportDisplayName(props.move.team.sport)}
         </Text>
         <Show when={submitted()}>
+          {(line) => (
+            <Text type="meta" tone="muted">
+              {line()}
+            </Text>
+          )}
+        </Show>
+        <Show when={timing()}>
           {(line) => (
             <Text type="meta" tone="muted">
               {line()}

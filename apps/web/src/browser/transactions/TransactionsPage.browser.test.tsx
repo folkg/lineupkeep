@@ -939,6 +939,7 @@ it("labels a move that ran after you submitted as ran after you submitted", asyn
     confirmation: { by: "owner", at: "2026-11-11T17:35:00.000Z" },
     runAt: "2026-11-11T18:05:00.000Z",
     runDecidedBy: "owner",
+    effectiveDate: "2026-11-12",
     result: "executed",
   });
   using _app = setupTransactionsPage({
@@ -948,6 +949,7 @@ it("labels a move that ran after you submitted as ran after you submitted", asyn
 
   await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
   await expect.element(page.getByText("Ran after you submitted", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Took effect November 12.", { exact: true })).toBeVisible();
   expect(page.getByText("Ran now", { exact: true }).elements()).toHaveLength(0);
 });
 
