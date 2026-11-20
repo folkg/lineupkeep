@@ -12,7 +12,7 @@ export function migrate(
     const migration = yield* Command.Exec("Migrate", {
       cwd: new URL("../", import.meta.url).pathname,
       command:
-        "node node_modules/drizzle-kit/bin.cjs migrate --config=packages/backend/drizzle.config.ts",
+        "node node_modules/drizzle-kit/bin.js migrate --config=packages/backend/drizzle.config.ts",
       env: { DATABASE_URL: database.directUrl },
       memo: false,
       timeout: "5 minutes",

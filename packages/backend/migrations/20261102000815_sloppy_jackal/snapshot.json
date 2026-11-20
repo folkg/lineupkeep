@@ -1,6 +1,6 @@
 {
   "type": "diff",
-  "version": "9",
+  "version": "10",
   "dialect": "postgres",
   "id": "89536084-3081-4430-98b2-99674f30ad8e",
   "prevIds": ["cf0f63d6-3451-4c65-8a2c-163117f9a6fe"],
@@ -66,7 +66,6 @@
         "where": null,
         "with": "",
         "method": "btree",
-        "concurrently": false,
         "entityType": "indexes"
       }
     },

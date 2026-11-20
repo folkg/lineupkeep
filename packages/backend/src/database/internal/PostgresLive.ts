@@ -1,12 +1,12 @@
-import { PgClient } from "@effect/sql-pg";
+import * as PostgresDrizzle from "drizzle-orm/postgres/effect";
 import { Effect } from "effect";
 
 import { DatabaseConnection } from "#database/DatabaseConnection.ts";
 
-export const PostgresLive = PgClient.layerFrom(
+export const PostgresLive = PostgresDrizzle.DrizzlePostgresClient.layerFrom(
   Effect.gen(function* () {
     const connection = yield* DatabaseConnection;
-    return yield* PgClient.make({
+    return yield* PostgresDrizzle.DrizzlePostgresClient.make({
       url: connection.url,
       prepare: connection.prepareStatements,
       idleTimeout: connection.idleTimeout,

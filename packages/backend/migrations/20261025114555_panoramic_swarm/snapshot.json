@@ -1,6 +1,6 @@
 {
   "type": "diff",
-  "version": "9",
+  "version": "10",
   "dialect": "postgres",
   "id": "45d6450e-23cb-4791-8ce8-6aded578c62e",
   "prevIds": ["1c0ebc6e-0d77-40ed-86bf-a12d687c1d3d"],
@@ -249,7 +249,6 @@
         "where": null,
         "with": "",
         "method": "btree",
-        "concurrently": false,
         "entityType": "indexes"
       }
     },
@@ -273,7 +272,6 @@
         "where": null,
         "with": "",
         "method": "btree",
-        "concurrently": false,
         "entityType": "indexes"
       }
     },
@@ -297,7 +295,6 @@
         "where": "\"trigger\" = 'scheduled' and \"status\" in ('queued', 'reading', 'planning', 'validating', 'applying', 'verifying', 'retry-wait', 'uncertain')",
         "with": "",
         "method": "btree",
-        "concurrently": false,
         "entityType": "indexes"
       }
     },

@@ -1,4 +1,4 @@
-import * as PgliteDrizzle from "drizzle-orm/effect-pglite";
+import * as PgDrizzle from "drizzle-orm/postgres/effect";
 import { Layer } from "effect";
 
 import { DatabaseTest } from "#database/internal/DatabaseTest.ts";
@@ -7,5 +7,5 @@ import { ToolCallQuotaDatabase, toolCallQuotaRelations } from "./ToolCallQuotaDa
 
 export const ToolCallQuotaDatabaseTest = Layer.effect(
   ToolCallQuotaDatabase,
-  PgliteDrizzle.makeWithDefaults({ relations: toolCallQuotaRelations }),
+  PgDrizzle.makeWithDefaults({ relations: toolCallQuotaRelations }),
 ).pipe(Layer.provide(DatabaseTest));

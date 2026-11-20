@@ -3,10 +3,10 @@ import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { PgliteClient } from "@effect/sql-pglite";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
+import * as PgliteDrizzle from "drizzle-orm/postgres/client/effect/pglite";
 import { Effect, Layer } from "effect";
 
 const migrationsFolderPath = fileURLToPath(new URL("../../../migrations", import.meta.url));
@@ -18,7 +18,14 @@ export const migratedDatabaseImage = loadOrBuildDatabaseImage();
 
 export const DatabaseTest = Layer.unwrap(
   Effect.promise(() => migratedDatabaseImage).pipe(
-    Effect.map((loadDataDir) => PgliteClient.layer({ loadDataDir })),
+    Effect.map((loadDataDir) =>
+      PgliteDrizzle.DrizzlePostgresClient.layerFrom(
+        Effect.acquireRelease(
+          Effect.sync(() => new PGlite({ loadDataDir })),
+          (database) => Effect.promise(() => database.close()),
+        ).pipe(Effect.flatMap((database) => PgliteDrizzle.DrizzlePostgresClient.make(database))),
+      ),
+    ),
   ),
 );
 

@@ -1,6 +1,6 @@
 {
   "type": "diff",
-  "version": "9",
+  "version": "10",
   "dialect": "postgres",
   "id": "a7e7be59-873e-494d-8992-60391f11ca97",
   "prevIds": ["1f2bf910-2cfb-488e-b0e7-a428072d1a3e"],
@@ -1181,7 +1181,6 @@
         "where": null,
         "with": "",
         "method": "btree",
-        "concurrently": false,
         "entityType": "indexes"
       }
     },
@@ -1205,7 +1204,6 @@
         "where": null,
         "with": "",
         "method": "btree",
-        "concurrently": false,
         "entityType": "indexes"
       }
     },
@@ -1236,7 +1234,6 @@
         "where": null,
         "with": "",
         "method": "btree",
-        "concurrently": false,
         "entityType": "indexes"
       }
     },
@@ -1274,7 +1271,6 @@
         "where": null,
         "with": "",
         "method": "btree",
-        "concurrently": false,
         "entityType": "indexes"
       }
     },
@@ -1319,7 +1315,6 @@
         "where": "((\"decision\" <> 'discarded') and ((((\"result\" is null)) or (((\"result\" <> 'executed') and (\"result\" <> 'withdrawn') and (\"result\" <> 'expired'))))))",
         "with": "",
         "method": "btree",
-        "concurrently": false,
         "entityType": "indexes"
       }
     },
@@ -1350,7 +1345,6 @@
         "where": "((\"decision\" <> 'discarded') and ((((\"result\" is null)) or (((\"result\" <> 'executed') and (\"result\" <> 'withdrawn') and (\"result\" <> 'expired'))))))",
         "with": "",
         "method": "btree",
-        "concurrently": false,
         "entityType": "indexes"
       }
     },

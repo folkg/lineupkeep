@@ -162,7 +162,7 @@ function developmentStack(
           const studio = yield* Command.Dev("Studio", {
             cwd: new URL("../../", import.meta.url).pathname,
             command:
-              "node node_modules/drizzle-kit/bin.cjs studio --config=packages/backend/drizzle.config.ts",
+              "node node_modules/drizzle-kit/bin.js studio --config=packages/backend/drizzle.config.ts",
             env: { DATABASE_URL: migrated.runtimeUrl },
           });
           return { url: studio.url };

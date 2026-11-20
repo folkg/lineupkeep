@@ -1,6 +1,6 @@
 {
   "type": "diff",
-  "version": "9",
+  "version": "10",
   "dialect": "postgres",
   "id": "aad4c0ee-1c4a-4afb-9dfe-c044274ff979",
   "prevIds": ["204d8002-f4e2-445f-bc56-7fce99bde1ef"],
@@ -71,7 +71,6 @@
         "where": "\"status\" in ('reading', 'planning', 'validating', 'applying', 'verifying')",
         "with": "",
         "method": "btree",
-        "concurrently": false,
         "entityType": "indexes"
       }
     },
@@ -102,7 +101,6 @@
         "where": "\"status\" = 'queued'",
         "with": "",
         "method": "btree",
-        "concurrently": false,
         "entityType": "indexes"
       }
     },

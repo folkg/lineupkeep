@@ -1,9 +1,11 @@
 import type { SQL } from "drizzle-orm";
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core/errors";
-import * as PgDrizzle from "drizzle-orm/effect-postgres";
-import type { EffectPgQueryEffectHKT } from "drizzle-orm/effect-postgres";
 import type { PgEffectDatabase } from "drizzle-orm/pg-core/effect/db";
-import type { PgQueryResultHKT } from "drizzle-orm/pg-core/session";
+import * as PgDrizzle from "drizzle-orm/postgres/effect";
+import type {
+  EffectPostgresQueryEffectHKT,
+  EffectPostgresQueryResultHKT,
+} from "drizzle-orm/postgres/effect";
 import { Context, Effect, Layer, Schema } from "effect";
 
 type PrivacyQueryResult = {
@@ -44,7 +46,7 @@ export function privacyDatabaseOf(database: DriverDatabase): PrivacyDatabaseShap
   };
 }
 
-type DriverDatabase = PgEffectDatabase<EffectPgQueryEffectHKT, PgQueryResultHKT>;
+type DriverDatabase = PgEffectDatabase<EffectPostgresQueryEffectHKT, EffectPostgresQueryResultHKT>;
 
 function privacyQueryResult(result: unknown): PrivacyQueryResult {
   if (typeof result !== "object" || result === null || !("rows" in result)) {

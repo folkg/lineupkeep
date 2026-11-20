@@ -1,4 +1,4 @@
-import * as PgliteDrizzle from "drizzle-orm/effect-pglite";
+import * as PgDrizzle from "drizzle-orm/postgres/effect";
 import { Layer } from "effect";
 
 import { DatabaseTest } from "#database/internal/DatabaseTest.ts";
@@ -7,5 +7,5 @@ import { ConnectionsDatabase, connectionsRelations } from "./ConnectionsDatabase
 
 export const ConnectionsDatabaseTest = Layer.effect(
   ConnectionsDatabase,
-  PgliteDrizzle.makeWithDefaults({ relations: connectionsRelations }),
+  PgDrizzle.makeWithDefaults({ relations: connectionsRelations }),
 ).pipe(Layer.provide(DatabaseTest));
