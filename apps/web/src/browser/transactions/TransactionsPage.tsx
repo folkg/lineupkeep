@@ -541,7 +541,7 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
             </Show>
             <For each={fallbackMoves()}>
               {(move) => (
-                <Disclosure summary={fallbackPlanLine(move) ?? "Fallbacks"}>
+                <Disclosure summary={fallbackSummary(move) ?? "Fallbacks"}>
                   <Stack gap="md">
                     <For each={fallbackPlanDetail(move)}>
                       {(line) => (
@@ -790,14 +790,12 @@ function EarlierRow(props: EarlierRowProps): JSX.Element {
     props.move.result === "executed" || props.move.decision === "discarded"
       ? undefined
       : resultTimeLine(props.move);
-  const fallback = (): string | undefined => {
-    if (props.move.phase === "with_league" || props.move.result === "pending") {
-      return fallbackPlanLine(props.move);
-    }
-    return props.move.result === "failed" && props.move.attempts.length > 0
-      ? "What was tried"
+  const fallback = (): string | undefined =>
+    props.move.phase === "with_league" ||
+    props.move.result === "pending" ||
+    props.move.result === "failed"
+      ? fallbackSummary(props.move)
       : undefined;
-  };
   const waiver = (): string | undefined =>
     props.move.phase === "with_league" ? waiverTimingLine(props.waiver) : undefined;
   return (
@@ -873,6 +871,12 @@ function EarlierRow(props: EarlierRowProps): JSX.Element {
       </Stack>
     </RuleListItem>
   );
+}
+
+function fallbackSummary(move: TransactionMoveView): string | undefined {
+  return move.result === "failed" && move.attempts.length > 0
+    ? "What was tried"
+    : fallbackPlanLine(move);
 }
 
 function outcomeBadgeTone(move: TransactionMoveView): "accent" | "neutral" {
