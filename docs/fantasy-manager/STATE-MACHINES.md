@@ -80,7 +80,7 @@ Then one domain machine per change:
 
 1. Lineup delivery — implemented; see [lineup delivery states](LINEUP-DELIVERY-STATES.md).
 2. Connection email notification — implemented; see [connection notification states](CONNECTION-NOTIFICATION-STATES.md).
-3. Lineup write intents, folded into `LineupRunWorkflow`.
+3. Lineup write intents, folded into `LineupRunWorkflow` — implemented; see [lineup write intent states](LINEUP-WRITE-INTENT-STATES.md). The unused `sent` status was removed.
 4. Connection incidents.
 5. Feedback, only if its status changes stay in this codebase.
 

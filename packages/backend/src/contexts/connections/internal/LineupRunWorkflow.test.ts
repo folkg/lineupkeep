@@ -15,8 +15,45 @@ const invariants = [
     "only write-capable states own a write intent",
     ({ snapshot }) =>
       !("writeIntent" in snapshot.state.value) ||
-      ["Applying", "Verifying", "RetryWait", "Uncertain"].includes(snapshot.state.path),
+      [
+        "Applying",
+        "Verifying",
+        "RetryWait",
+        "Uncertain",
+        "Completed",
+        "Failed",
+        "Blocked",
+        "Skipped",
+        "Superseded",
+      ].includes(snapshot.state.path),
   ),
+  define.state("write intent statuses belong to their run states", ({ snapshot }) => {
+    const state = snapshot.state.value;
+    if (!("writeIntent" in state) || state.writeIntent === undefined) {
+      return true;
+    }
+    const status = state.writeIntent.status;
+    switch (snapshot.state.path) {
+      case "Applying":
+        return status === "intended";
+      case "Verifying":
+        return status === "accepted" || status === "unknown";
+      case "RetryWait":
+        return status === "not_sent" || status === "unknown";
+      case "Uncertain":
+        return status === "intended" || status === "accepted" || status === "unknown";
+      case "Completed":
+        return status === "verified_changed" || status === "verified_no_op";
+      case "Failed":
+        return status === "rejected" || status === "verified_mismatch";
+      case "Blocked":
+      case "Skipped":
+      case "Superseded":
+        return ["intended", "accepted", "unknown", "not_sent"].includes(status);
+      default:
+        return false;
+    }
+  }),
   define.state(
     "only Verifying owns a provider response",
     ({ snapshot }) =>
@@ -66,6 +103,59 @@ it.effect("resumes a retry wait stored before the machine changed library", () =
   }),
 );
 
+it.effect("resumes verification from a not-sent retry as unknown", () =>
+  Effect.gen(function* () {
+    const retryState = yield* Schema.decodeEffect(Schema.toCodecJson(LineupRunState))({
+      ...storedRetryWait,
+      writeIntent: { ...storedRetryWait.writeIntent, status: "not_sent" },
+    });
+    const next = yield* planTransition(
+      LineupRunWorkflow,
+      yield* snapshotOf(LineupRunWorkflow, retryState),
+      { ...retryClaimed, _tag: "VerificationClaimed" },
+    );
+
+    assert.strictEqual(next._tag, "Verifying");
+    if (next._tag !== "Verifying") {
+      return;
+    }
+    assert.strictEqual(next.writeIntent.status, "unknown");
+    assert.strictEqual(next.writeIntent.attempt, storedRetryWait.writeIntent.attempt);
+    assert.strictEqual(next.providerResponse, "unknown");
+  }),
+);
+
+it.effect("retains the write intent when a retry wait is blocked or skipped", () =>
+  Effect.gen(function* () {
+    for (const tag of ["Blocked", "Skipped"] as const) {
+      const intent = { ...writeIntent, status: "not_sent" as const };
+      const trace = yield* MachineTest.run(LineupRunWorkflow, {
+        input,
+        events: [
+          claimed,
+          observation,
+          plan,
+          applyStarted,
+          { ...retry, writeIntent: intent },
+          {
+            _tag: tag,
+            at,
+            outcome: { ...outcome, kind: tag === "Blocked" ? "blocked" : "skipped" },
+          },
+        ],
+      });
+      yield* MachineTest.verify(LineupRunWorkflow, trace);
+      yield* MachineTest.checkInvariants(LineupRunWorkflow, trace, invariants);
+      assert.strictEqual(trace.final.state.path, tag);
+      const state = trace.final.state.value;
+      assert.isTrue(state._tag === "Blocked" || state._tag === "Skipped");
+      if (state._tag === "Blocked" || state._tag === "Skipped") {
+        assert.deepStrictEqual(state.writeIntent, intent);
+      }
+    }
+  }),
+);
+
 it.effect("reaches completed without replaying a write after a lost response", () =>
   Effect.gen(function* () {
     const trace = yield* MachineTest.run(LineupRunWorkflow, {
@@ -82,6 +172,90 @@ it.effect("reaches completed without replaying a write after a lost response", (
     });
 
     yield* MachineTest.verify(LineupRunWorkflow, trace);
+  }),
+);
+
+it.effect("covers provider answers and terminal write statuses", () =>
+  Effect.gen(function* () {
+    for (const response of ["accepted", "unknown"] as const) {
+      for (const kind of ["changed", "no_op"] as const) {
+        const trace = yield* MachineTest.run(LineupRunWorkflow, {
+          input,
+          events: [
+            claimed,
+            observation,
+            plan,
+            applyStarted,
+            { ...applyRespondedUnknown, providerResponse: response },
+            {
+              ...verified,
+              outcome: { ...outcome, kind },
+              writeIntent: {
+                ...writeIntent,
+                status: kind === "changed" ? "verified_changed" : "verified_no_op",
+              },
+            },
+          ],
+        });
+        yield* MachineTest.verify(LineupRunWorkflow, trace);
+        yield* MachineTest.checkInvariants(LineupRunWorkflow, trace, invariants);
+      }
+    }
+    for (const status of ["rejected", "verified_mismatch"] as const) {
+      const trace = yield* MachineTest.run(LineupRunWorkflow, {
+        input,
+        events: [
+          claimed,
+          observation,
+          plan,
+          applyStarted,
+          applyRespondedUnknown,
+          {
+            _tag: "Failed",
+            at,
+            outcome: { ...outcome, kind: "failed" },
+            writeIntent: { ...writeIntent, status },
+          },
+        ],
+      });
+      yield* MachineTest.verify(LineupRunWorkflow, trace);
+      yield* MachineTest.checkInvariants(LineupRunWorkflow, trace, invariants);
+    }
+    const retryTrace = yield* MachineTest.run(LineupRunWorkflow, {
+      input,
+      events: [
+        claimed,
+        observation,
+        plan,
+        applyStarted,
+        {
+          ...retry,
+          writeIntent: { ...writeIntent, status: "not_sent" as const },
+        },
+      ],
+    });
+    yield* MachineTest.verify(LineupRunWorkflow, retryTrace);
+    yield* MachineTest.checkInvariants(LineupRunWorkflow, retryTrace, invariants);
+  }),
+);
+
+it.effect("rehydrates and round-trips active and terminal intent states", () =>
+  Effect.gen(function* () {
+    const trace = yield* MachineTest.run(LineupRunWorkflow, {
+      input,
+      events: [claimed, observation, plan, applyStarted, applyRespondedUnknown, verified],
+    });
+    const active = trace.steps.find((step) => step.after.state.path === "Verifying")?.after;
+    const terminal = trace.final;
+    assert.isDefined(active);
+    assert.isDefined(terminal);
+    for (const value of [active.state.value, terminal.state.value]) {
+      const codec = Schema.toCodecJson(LineupRunState);
+      const decoded = yield* Schema.decodeEffect(codec)(yield* Schema.encodeEffect(codec)(value));
+      assert.deepStrictEqual(decoded, value);
+      const restored = yield* snapshotOf(LineupRunWorkflow, decoded);
+      assert.deepStrictEqual(restored.state, value);
+    }
   }),
 );
 
@@ -220,6 +394,7 @@ const lease = {
 const writeIntent = {
   id: Schema.decodeSync(LineupId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b2"),
   attempt: 1,
+  status: "intended" as const,
 };
 const observation = {
   _tag: "ObservationRecorded" as const,
@@ -286,7 +461,12 @@ const outcome = {
   lockedPlayers: 1,
   editablePlayers: 1,
 };
-const verified = { _tag: "Verified" as const, at, outcome };
+const verified = {
+  _tag: "Verified" as const,
+  at,
+  outcome,
+  writeIntent: { ...writeIntent, status: "verified_changed" as const },
+};
 const retryLease = {
   token: Schema.decodeSync(LineupId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b3"),
   generation: 2,
@@ -312,6 +492,7 @@ const storedRetryWait = {
   writeIntent: {
     id: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b2",
     attempt: 1,
+    status: "unknown",
   },
 };
 const retry = {
@@ -321,7 +502,7 @@ const retry = {
   reason: "provider_unavailable",
   detail: "The provider was unavailable.",
   retryAt,
-  writeIntent,
+  writeIntent: { ...writeIntent, status: "unknown" as const },
 };
 const events = eventKinds.map(eventFor);
 const input = {

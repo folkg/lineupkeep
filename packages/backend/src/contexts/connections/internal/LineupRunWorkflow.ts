@@ -77,9 +77,22 @@ export const LineupPlan = Schema.TaggedUnion({
 });
 export type LineupPlan = typeof LineupPlan.Type;
 
+export const LineupWriteIntentStatus = Schema.Literals([
+  "intended",
+  "accepted",
+  "unknown",
+  "rejected",
+  "not_sent",
+  "verified_changed",
+  "verified_no_op",
+  "verified_mismatch",
+]);
+export type LineupWriteIntentStatus = typeof LineupWriteIntentStatus.Type;
+
 export const LineupWriteIntentRef = Schema.Struct({
   id: LineupId,
   attempt: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  status: LineupWriteIntentStatus,
 });
 export type LineupWriteIntentRef = typeof LineupWriteIntentRef.Type;
 
@@ -99,6 +112,27 @@ const LeaseContent = {
   lease: LineupLeaseRef,
   attempt: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
 };
+
+const ActiveWriteIntent = Schema.Struct({
+  ...LineupWriteIntentRef.fields,
+  status: Schema.Literals(["intended", "accepted", "unknown"]),
+});
+const RetryWriteIntent = Schema.Struct({
+  ...LineupWriteIntentRef.fields,
+  status: Schema.Literals(["not_sent", "unknown"]),
+});
+const CompletedWriteIntent = Schema.Struct({
+  ...LineupWriteIntentRef.fields,
+  status: Schema.Literals(["verified_changed", "verified_no_op"]),
+});
+const FailedWriteIntent = Schema.Struct({
+  ...LineupWriteIntentRef.fields,
+  status: Schema.Literals(["rejected", "verified_mismatch"]),
+});
+const PriorWriteIntent = Schema.Struct({
+  ...LineupWriteIntentRef.fields,
+  status: Schema.Literals(["intended", "accepted", "unknown", "not_sent"]),
+});
 
 const TerminalContent = {
   ...RunContent,
@@ -129,31 +163,37 @@ export const LineupRunState = Schema.TaggedUnion({
   Applying: {
     ...RunContent,
     ...LeaseContent,
-    writeIntent: LineupWriteIntentRef,
+    writeIntent: Schema.Struct({
+      ...LineupWriteIntentRef.fields,
+      status: Schema.Literal("intended"),
+    }),
   },
   Verifying: {
     ...RunContent,
     ...LeaseContent,
-    writeIntent: LineupWriteIntentRef,
+    writeIntent: Schema.Struct({
+      ...LineupWriteIntentRef.fields,
+      status: LineupProviderResponse,
+    }),
     providerResponse: LineupProviderResponse,
   },
-  Completed: TerminalContent,
-  Skipped: TerminalContent,
-  Blocked: TerminalContent,
+  Completed: { ...TerminalContent, writeIntent: Schema.optional(CompletedWriteIntent) },
+  Skipped: { ...TerminalContent, writeIntent: Schema.optional(PriorWriteIntent) },
+  Blocked: { ...TerminalContent, writeIntent: Schema.optional(PriorWriteIntent) },
   RetryWait: {
     ...RunContent,
     attempt: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     reason: Schema.NonEmptyString,
     detail: Schema.String,
     retryAt: Schema.DateTimeUtc,
-    writeIntent: Schema.optional(LineupWriteIntentRef),
+    writeIntent: Schema.optional(RetryWriteIntent),
   },
-  Failed: TerminalContent,
+  Failed: { ...TerminalContent, writeIntent: Schema.optional(FailedWriteIntent) },
   Uncertain: {
     ...TerminalContent,
-    writeIntent: Schema.optional(LineupWriteIntentRef),
+    writeIntent: Schema.optional(ActiveWriteIntent),
   },
-  Superseded: TerminalContent,
+  Superseded: { ...TerminalContent, writeIntent: Schema.optional(PriorWriteIntent) },
 });
 export type LineupRunState = typeof LineupRunState.Type;
 
@@ -182,7 +222,10 @@ const LineupRunEvents = Schema.TaggedUnion({
   PlanPrepared: { at: Schema.DateTimeUtc, plan: LineupPlan },
   ApplyStarted: {
     at: Schema.DateTimeUtc,
-    writeIntent: LineupWriteIntentRef,
+    writeIntent: Schema.Struct({
+      ...LineupWriteIntentRef.fields,
+      status: Schema.Literal("intended"),
+    }),
   },
   ApplyResponded: {
     at: Schema.DateTimeUtc,
@@ -190,15 +233,23 @@ const LineupRunEvents = Schema.TaggedUnion({
   },
   VerificationResumed: { at: Schema.DateTimeUtc, ...LeaseContent },
   ReconciliationStarted: { at: Schema.DateTimeUtc, ...LeaseContent },
-  Verified: { at: Schema.DateTimeUtc, outcome: LineupRunOutcome },
+  Verified: {
+    at: Schema.DateTimeUtc,
+    outcome: LineupRunOutcome,
+    writeIntent: CompletedWriteIntent,
+  },
   Blocked: { at: Schema.DateTimeUtc, outcome: LineupRunOutcome },
   Skipped: { at: Schema.DateTimeUtc, outcome: LineupRunOutcome },
-  Failed: { at: Schema.DateTimeUtc, outcome: LineupRunOutcome },
+  Failed: {
+    at: Schema.DateTimeUtc,
+    outcome: LineupRunOutcome,
+    writeIntent: Schema.optional(FailedWriteIntent),
+  },
   Superseded: { at: Schema.DateTimeUtc, outcome: LineupRunOutcome },
   Uncertain: {
     at: Schema.DateTimeUtc,
     outcome: LineupRunOutcome,
-    writeIntent: Schema.optional(LineupWriteIntentRef),
+    writeIntent: Schema.optional(ActiveWriteIntent),
   },
   RetryScheduled: {
     at: Schema.DateTimeUtc,
@@ -206,7 +257,7 @@ const LineupRunEvents = Schema.TaggedUnion({
     reason: Schema.NonEmptyString,
     detail: Schema.String,
     retryAt: Schema.DateTimeUtc,
-    writeIntent: Schema.optional(LineupWriteIntentRef),
+    writeIntent: Schema.optional(RetryWriteIntent),
   },
 });
 export type LineupRunEvent = typeof LineupRunEvents.Type;
@@ -276,7 +327,7 @@ export const LineupRunWorkflow = defineMachine<LineupRunState, LineupRunEvent>({
         RetryScheduled: retryWait,
         Skipped: terminal("Skipped"),
         Blocked: terminal("Blocked"),
-        Failed: terminal("Failed"),
+        Failed: failed(),
       },
     },
     Planning: {
@@ -304,7 +355,7 @@ export const LineupRunWorkflow = defineMachine<LineupRunState, LineupRunEvent>({
         },
         RetryScheduled: retryWait,
         Blocked: terminal("Blocked"),
-        Failed: terminal("Failed"),
+        Failed: failed(),
       },
     },
     Validating: {
@@ -331,7 +382,7 @@ export const LineupRunWorkflow = defineMachine<LineupRunState, LineupRunEvent>({
         },
         RetryScheduled: retryWait,
         Blocked: terminal("Blocked"),
-        Failed: terminal("Failed"),
+        Failed: failed(),
       },
     },
     Applying: {
@@ -342,7 +393,7 @@ export const LineupRunWorkflow = defineMachine<LineupRunState, LineupRunEvent>({
             ...content(state),
             lease: state.lease,
             attempt: state.attempt,
-            writeIntent: state.writeIntent,
+            writeIntent: { ...state.writeIntent, status: event.providerResponse },
             providerResponse: event.providerResponse,
             updatedAt: event.at,
           }),
@@ -352,6 +403,7 @@ export const LineupRunWorkflow = defineMachine<LineupRunState, LineupRunEvent>({
           data: ({ state, event }) => ({
             ...content(state),
             outcome: event.outcome,
+            writeIntent: event.writeIntent,
             updatedAt: event.at,
           }),
         },
@@ -361,13 +413,13 @@ export const LineupRunWorkflow = defineMachine<LineupRunState, LineupRunEvent>({
             ...content(state),
             lease: event.lease,
             attempt: event.attempt,
-            writeIntent: state.writeIntent,
+            writeIntent: { ...state.writeIntent, status: "unknown" },
             providerResponse: "unknown",
             updatedAt: event.at,
           }),
         },
         RetryScheduled: retryWait,
-        Failed: terminal("Failed"),
+        Failed: failed(),
       },
     },
     Verifying: {
@@ -377,6 +429,7 @@ export const LineupRunWorkflow = defineMachine<LineupRunState, LineupRunEvent>({
           data: ({ state, event }) => ({
             ...content(state),
             outcome: event.outcome,
+            writeIntent: event.writeIntent,
             updatedAt: event.at,
           }),
         },
@@ -401,7 +454,7 @@ export const LineupRunWorkflow = defineMachine<LineupRunState, LineupRunEvent>({
           }),
         },
         RetryScheduled: retryWait,
-        Failed: terminal("Failed"),
+        Failed: failed(),
       },
     },
     RetryWait: {
@@ -423,7 +476,7 @@ export const LineupRunWorkflow = defineMachine<LineupRunState, LineupRunEvent>({
             ...content(state),
             lease: event.lease,
             attempt: event.attempt,
-            writeIntent: retryWriteIntent(state),
+            writeIntent: { ...retryWriteIntent(state), status: "unknown" },
             providerResponse: "unknown",
             updatedAt: event.at,
           }),
@@ -442,7 +495,10 @@ export const LineupRunWorkflow = defineMachine<LineupRunState, LineupRunEvent>({
             ...content(state),
             lease: event.lease,
             attempt: event.attempt,
-            writeIntent: uncertainWriteIntent(state),
+            writeIntent: {
+              ...uncertainWriteIntent(state),
+              status: state.writeIntent?.status === "accepted" ? "accepted" : "unknown",
+            },
             providerResponse: "unknown",
             updatedAt: event.at,
           }),
@@ -511,28 +567,72 @@ function content(state: {
   };
 }
 
-function terminal<Target extends TerminalTarget>(
+function terminal<Target extends "Blocked" | "Skipped" | "Superseded">(
   target: Target,
 ): {
   readonly target: Target;
   readonly data: (input: {
-    readonly state: RunState;
+    readonly state: LineupRunState;
     readonly event: TerminalEvent;
-  }) => StateData<typeof LineupRunState.cases.Completed.Type>;
+  }) => StateData<typeof LineupRunState.cases.Blocked.Type>;
 } {
   return {
     target,
     data: ({ state, event }) => ({
       ...content(state),
       outcome: event.outcome,
+      ...(priorWriteIntent(state) === undefined ? {} : { writeIntent: priorWriteIntent(state) }),
       updatedAt: event.at,
     }),
   };
 }
 
+function failed(): {
+  readonly target: "Failed";
+  readonly data: (input: {
+    readonly state: LineupRunState;
+    readonly event: TerminalEvent;
+  }) => StateData<typeof LineupRunState.cases.Failed.Type>;
+} {
+  return {
+    target: "Failed",
+    data: ({ state, event }) => {
+      const intent =
+        event._tag === "Failed" && event.writeIntent !== undefined
+          ? event.writeIntent
+          : priorWriteIntent(state);
+      return {
+        ...content(state),
+        outcome: event.outcome,
+        ...(intent === undefined
+          ? {}
+          : {
+              writeIntent: {
+                ...intent,
+                status:
+                  event._tag === "Failed" && event.writeIntent !== undefined
+                    ? event.writeIntent.status
+                    : ("rejected" as const),
+              },
+            }),
+        updatedAt: event.at,
+      };
+    },
+  };
+}
+
+function priorWriteIntent(state: LineupRunState): typeof PriorWriteIntent.Type | undefined {
+  return state._tag === "Applying" ||
+    state._tag === "Verifying" ||
+    state._tag === "RetryWait" ||
+    state._tag === "Uncertain"
+    ? state.writeIntent
+    : undefined;
+}
+
 function retryWriteIntent(
   state: Extract<LineupRunState, { readonly _tag: "RetryWait" }>,
-): LineupWriteIntentRef {
+): typeof RetryWriteIntent.Type {
   if (state.writeIntent === undefined) {
     throw new Error("Verification cannot resume without a write intent");
   }
@@ -541,14 +641,13 @@ function retryWriteIntent(
 
 function uncertainWriteIntent(
   state: Extract<LineupRunState, { readonly _tag: "Uncertain" }>,
-): LineupWriteIntentRef {
+): typeof ActiveWriteIntent.Type {
   if (state.writeIntent === undefined) {
     throw new Error("Uncertain reconciliation requires a write intent");
   }
   return state.writeIntent;
 }
 
-type TerminalTarget = "Completed" | "Skipped" | "Blocked" | "Failed" | "Superseded";
 type StateData<State> = Omit<State, "_tag">;
 
 type RunState = {

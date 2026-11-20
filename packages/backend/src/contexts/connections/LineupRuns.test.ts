@@ -26,6 +26,7 @@ import { LineupRunRepository } from "./internal/LineupRunRepository.ts";
 import { LineupRunsLive } from "./internal/LineupRunsLive.ts";
 import {
   lineupRunDiagnostics,
+  lineupRunAttempts,
   lineupRuns,
   lineupTeamLeases,
   lineupWriteIntents,
@@ -669,7 +670,7 @@ it.effect("uses the recorded acceptance when verification resumes", () =>
       updatedAt: completed.state.updatedAt,
       lease: { token: "018f79ea-7d86-4c18-9b4a-ffffffffffff", generation: 1 },
       attempt: completed.attempts,
-      writeIntent: { id: intent.id, attempt: intent.attempt },
+      writeIntent: { id: intent.id, attempt: intent.attempt, status: "accepted" },
       providerResponse: "accepted",
     });
     yield* database
@@ -696,6 +697,12 @@ it.effect("uses the recorded acceptance when verification resumes", () =>
     }
     assert.strictEqual(resumed.state.outcome.verified, true);
     assert.strictEqual(resumed.state.outcome.differences?.length, 2);
+    assert.strictEqual(resumed.state.writeIntent?.status, "verified_mismatch");
+    const [updatedIntent] = yield* database
+      .select({ status: lineupWriteIntents.status })
+      .from(lineupWriteIntents)
+      .where(eq(lineupWriteIntents.id, intent.id));
+    assert.strictEqual(updatedIntent?.status, resumed.state.writeIntent?.status);
     assert.strictEqual(yield* fake.explicitCallCount, 1);
   }).pipe(Effect.provide(LineupTestLayer)),
 );
@@ -949,7 +956,7 @@ it.effect(
         reason: "provider_outcome_unknown",
         detail: "Your league response was lost before the native action was verified.",
         retryAt: DateTime.makeUnsafe("1969-12-31T23:59:00Z"),
-        writeIntent: { id: intent.id, attempt: intent.attempt },
+        writeIntent: { id: intent.id, attempt: intent.attempt, status: "unknown" },
       });
       yield* database
         .update(lineupRuns)
@@ -965,6 +972,10 @@ it.effect(
         .set({ expiresAt: DateTime.toDateUtc(DateTime.makeUnsafe("1969-12-31T23:59:00Z")) })
         .where(eq(lineupTeamLeases.runId, runId));
 
+      yield* database
+        .update(lineupWriteIntents)
+        .set({ status: "unknown" })
+        .where(eq(lineupWriteIntents.id, intent.id));
       yield* worker.deliver([runId]);
 
       const reconciled = yield* loadRun(repository, runId);
@@ -976,6 +987,19 @@ it.effect(
       }
       assert.strictEqual(reconciled.state.outcome.implementation, "provider_native");
       assert.strictEqual(reconciled.state.outcome.reconciled, true);
+      assert.strictEqual(reconciled.state.writeIntent?.status, "verified_changed");
+      assert.strictEqual(reconciled.state.writeIntent?.attempt, intent.attempt);
+      assert.isAbove(reconciled.attempts, intent.attempt);
+      const [updatedIntent] = yield* database
+        .select({ status: lineupWriteIntents.status, leaseToken: lineupWriteIntents.leaseToken })
+        .from(lineupWriteIntents)
+        .where(eq(lineupWriteIntents.id, intent.id));
+      assert.strictEqual(updatedIntent?.status, reconciled.state.writeIntent?.status);
+      const attempts = yield* database
+        .select({ leaseToken: lineupRunAttempts.leaseToken })
+        .from(lineupRunAttempts)
+        .where(eq(lineupRunAttempts.runId, runId));
+      assert.isTrue(attempts.some((attempt) => attempt.leaseToken !== updatedIntent?.leaseToken));
       assert.strictEqual(yield* fake.nativeCallCount, 1);
       assert.strictEqual(yield* fake.explicitCallCount, 0);
     }).pipe(Effect.provide(LineupTestLayer)),

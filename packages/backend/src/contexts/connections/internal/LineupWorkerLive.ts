@@ -655,7 +655,7 @@ export const LineupWorkerLive = Layer.effect(
         run,
         provider,
         intent,
-        intent.status === "accepted" ? "accepted" : "unknown",
+        state.writeIntent.status === "accepted" ? "accepted" : "unknown",
       );
     });
 

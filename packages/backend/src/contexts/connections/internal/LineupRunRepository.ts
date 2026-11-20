@@ -63,7 +63,11 @@ import {
   lineupRunStatus,
 } from "./LineupRunWorkflow.ts";
 import { LineupObservation } from "./LineupRunWorkflow.ts";
-import type { LineupLeaseRef, LineupRunEvent } from "./LineupRunWorkflow.ts";
+import type {
+  LineupLeaseRef,
+  LineupRunEvent,
+  LineupWriteIntentStatus,
+} from "./LineupRunWorkflow.ts";
 import { TeamAutomationState } from "./TeamAutomationWorkflow.ts";
 
 const lineupLeaseDurationMillis = 10 * 60_000;
@@ -116,17 +120,6 @@ export type RunQuery = {
   readonly team?: TeamId;
   readonly limit: number;
 };
-
-type IntentStatus =
-  | "intended"
-  | "sent"
-  | "accepted"
-  | "rejected"
-  | "unknown"
-  | "not_sent"
-  | "verified_changed"
-  | "verified_no_op"
-  | "verified_mismatch";
 
 type Transaction = Parameters<Parameters<ConnectionsDatabase["Service"]["transaction"]>[0]>[0];
 
@@ -701,7 +694,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
               and(
                 eq(lineupWriteIntents.userId, userId),
                 eq(lineupWriteIntents.teamId, teamId),
-                anyOf(lineupWriteIntents.status, ["intended", "sent", "accepted", "unknown"]),
+                anyOf(lineupWriteIntents.status, ["intended", "accepted", "unknown"]),
                 ne(lineupWriteIntents.runId, excludingRun),
               ),
             )
@@ -787,7 +780,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                   and(
                     eq(lineupWriteIntents.userId, record.userId),
                     eq(lineupWriteIntents.teamId, record.teamId),
-                    anyOf(lineupWriteIntents.status, ["intended", "sent", "accepted", "unknown"]),
+                    anyOf(lineupWriteIntents.status, ["intended", "accepted", "unknown"]),
                     ne(lineupWriteIntents.runId, input.runId),
                   ),
                 )
@@ -829,7 +822,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
               const next = yield* planState(record.state, {
                 _tag: "ApplyStarted",
                 at: input.at,
-                writeIntent: { id: intent.id, attempt: intent.attempt },
+                writeIntent: { id: intent.id, attempt: intent.attempt, status: "intended" },
               });
               yield* updateRunState(tx, record, next, input.at, record.attempts);
               return { status: "started" as const, intent };
@@ -904,7 +897,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
         }) {
           yield* mutateClaimed(input.runId, input.lease, (record, tx) =>
             Effect.gen(function* () {
-              yield* updateIntentStatus(tx, input.intentId, input.lease, input.response, input.at);
+              yield* requireRunIntent(record.state, input.intentId);
               yield* transition(
                 tx,
                 record,
@@ -925,17 +918,23 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
       }) {
         yield* mutateClaimed(input.runId, input.lease, (record, tx) =>
           Effect.gen(function* () {
-            yield* updateIntentStatus(
-              tx,
-              input.intentId,
-              input.lease,
-              input.outcome.kind === "changed" ? "verified_changed" : "verified_no_op",
-              input.at,
-            );
+            yield* requireRunIntent(record.state, input.intentId);
             yield* transition(
               tx,
               record,
-              { _tag: "Verified", at: input.at, outcome: input.outcome },
+              {
+                _tag: "Verified",
+                at: input.at,
+                outcome: input.outcome,
+                writeIntent: {
+                  id: input.intentId,
+                  attempt:
+                    "writeIntent" in record.state && record.state.writeIntent !== undefined
+                      ? record.state.writeIntent.attempt
+                      : record.attempts,
+                  status: input.outcome.kind === "changed" ? "verified_changed" : "verified_no_op",
+                },
+              },
               input.at,
             );
           }),
@@ -951,6 +950,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
       }) {
         yield* mutateClaimed(input.runId, input.lease, (record, tx) =>
           Effect.gen(function* () {
+            yield* requireRunIntent(record.state, input.intentId);
             const writeIntent =
               record.state._tag === "Verifying" || record.state._tag === "Applying"
                 ? record.state.writeIntent
@@ -990,10 +990,13 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
         yield* mutateClaimed(input.runId, input.lease, (record, tx) =>
           Effect.gen(function* () {
             if (input.intent !== undefined) {
+              yield* requireRunIntent(record.state, input.intent.id);
+            }
+            if (input.intent !== undefined && !input.intent.resumeVerification) {
               yield* updateIntentStatus(
                 tx,
+                record.id,
                 input.intent.id,
-                input.lease,
                 input.intent.status,
                 input.at,
               );
@@ -1009,7 +1012,16 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                 detail: input.detail,
                 retryAt: input.retryAt,
                 ...(input.intent?.resumeVerification === true
-                  ? { writeIntent: { id: input.intent.id, attempt: record.attempts } }
+                  ? {
+                      writeIntent: {
+                        id: input.intent.id,
+                        attempt:
+                          "writeIntent" in record.state && record.state.writeIntent !== undefined
+                            ? record.state.writeIntent.attempt
+                            : record.attempts,
+                        status: input.intent.status,
+                      },
+                    }
                   : {}),
               },
               input.at,
@@ -1364,20 +1376,25 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
           mutateClaimed(input.runId, input.lease, (record, tx) =>
             Effect.gen(function* () {
               if (input.intent !== undefined) {
-                yield* updateIntentStatus(
-                  tx,
-                  input.intent.id,
-                  input.lease,
-                  input.intent.status,
-                  input.at,
-                );
+                yield* requireRunIntent(record.state, input.intent.id);
               }
-              yield* transition(
-                tx,
-                record,
-                { _tag: tag, at: input.at, outcome: input.outcome },
-                input.at,
-              );
+              const event: LineupRunEvent =
+                tag === "Failed" && input.intent !== undefined
+                  ? {
+                      _tag: "Failed",
+                      at: input.at,
+                      outcome: input.outcome,
+                      writeIntent: {
+                        id: input.intent.id,
+                        attempt:
+                          "writeIntent" in record.state && record.state.writeIntent !== undefined
+                            ? record.state.writeIntent.attempt
+                            : record.attempts,
+                        status: input.intent.status,
+                      },
+                    }
+                  : { _tag: tag, at: input.at, outcome: input.outcome };
+              yield* transition(tx, record, event, input.at);
               yield* tx
                 .update(lineupRunAttempts)
                 .set({ finishedAt: DateTime.toDateUtc(input.at), outcome: tag })
@@ -1632,6 +1649,9 @@ function updateRunState(
   };
   return Effect.gen(function* () {
     const row = yield* Schema.encodeEffect(LineupRunRow)(next);
+    if ("writeIntent" in state && state.writeIntent !== undefined) {
+      yield* updateIntentStatus(tx, record.id, state.writeIntent.id, state.writeIntent.status, at);
+    }
     yield* tx.update(lineupRuns).set(row).where(eq(lineupRuns.id, record.id));
   }).pipe(Effect.mapError(mapPersistenceFailure));
 }
@@ -1667,24 +1687,38 @@ function lockClaimedRun(
   );
 }
 
+function requireRunIntent(
+  state: LineupRunState,
+  intentId: string,
+): Effect.Effect<void, LineupPersistenceFailed> {
+  return "writeIntent" in state && state.writeIntent?.id === intentId
+    ? Effect.void
+    : Effect.fail(
+        LineupPersistenceFailed.make({
+          cause: new Error("The run does not own this write intent"),
+        }),
+      );
+}
+
 function updateIntentStatus(
   tx: Transaction,
+  runId: LineupRunId,
   intentId: string,
-  lease: LineupLeaseRef,
-  status: IntentStatus,
+  status: LineupWriteIntentStatus,
   at: DateTime.Utc,
-): Effect.Effect<unknown, LineupPersistenceFailed> {
-  return tx
-    .update(lineupWriteIntents)
-    .set({ status, updatedAt: DateTime.toDateUtc(at) })
-    .where(
-      and(
-        eq(lineupWriteIntents.id, intentId),
-        eq(lineupWriteIntents.leaseToken, lease.token),
-        eq(lineupWriteIntents.leaseGeneration, lease.generation),
-      ),
-    )
-    .pipe(Effect.mapError(mapPersistenceFailure));
+): Effect.Effect<void, LineupPersistenceFailed> {
+  return Effect.gen(function* () {
+    const updated = yield* tx
+      .update(lineupWriteIntents)
+      .set({ status, updatedAt: DateTime.toDateUtc(at) })
+      .where(and(eq(lineupWriteIntents.id, intentId), eq(lineupWriteIntents.runId, runId)))
+      .returning({ id: lineupWriteIntents.id });
+    if (updated.length !== 1) {
+      return yield* LineupPersistenceFailed.make({
+        cause: new Error("The run's write intent could not be updated"),
+      });
+    }
+  }).pipe(Effect.mapError(mapPersistenceFailure));
 }
 
 function loadRequestRuns(
@@ -1723,7 +1757,7 @@ type TerminalInput = {
   readonly lease: LineupLeaseRef;
   readonly outcome: LineupRunOutcome;
   readonly at: DateTime.Utc;
-  readonly intent?: { readonly id: string; readonly status: IntentStatus };
+  readonly intent?: { readonly id: string; readonly status: "rejected" | "verified_mismatch" };
 };
 
 function mapPersistenceFailure(cause: unknown): LineupPersistenceFailed {

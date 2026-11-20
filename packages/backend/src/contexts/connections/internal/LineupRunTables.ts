@@ -30,6 +30,7 @@ import {
   LineupObservedPlayer,
   LineupPlan,
   LineupRunState,
+  LineupWriteIntentStatus,
   lineupRunStatus,
 } from "./LineupRunWorkflow.ts";
 
@@ -188,7 +189,6 @@ export const lineupWriteIntents = pgTable(
     status: text("status", {
       enum: [
         "intended",
-        "sent",
         "accepted",
         "rejected",
         "unknown",
@@ -371,17 +371,7 @@ const LineupWriteIntentRecordSchema = Schema.Struct({
   target: LineupTargetPeriod,
   before: Schema.Array(LineupObservedPlayer),
   plan: Schema.optional(LineupPlan),
-  status: Schema.Literals([
-    "intended",
-    "sent",
-    "accepted",
-    "rejected",
-    "unknown",
-    "not_sent",
-    "verified_changed",
-    "verified_no_op",
-    "verified_mismatch",
-  ]),
+  status: LineupWriteIntentStatus,
   createdAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,
 }).pipe(Schema.toType);
@@ -401,17 +391,7 @@ const LineupWriteIntentSelect = createSelectSchema(lineupWriteIntents, {
   target: Schema.Unknown,
   before: Schema.Unknown,
   plan: Schema.NullOr(Schema.Unknown),
-  status: Schema.Literals([
-    "intended",
-    "sent",
-    "accepted",
-    "rejected",
-    "unknown",
-    "not_sent",
-    "verified_changed",
-    "verified_no_op",
-    "verified_mismatch",
-  ]),
+  status: LineupWriteIntentStatus,
   createdAt: Schema.DateTimeUtcFromDate,
   updatedAt: Schema.DateTimeUtcFromDate,
 });

@@ -12,6 +12,7 @@ Planning workspace for Lineupgrade, the independent provider-neutral rewrite. Th
 - [Testing plan](TESTING.md): proposed seams, independent oracles, generated/model-based tests, and crash recovery.
 - [State machines and workflows](STATE-MACHINES.md): naming, the shared test helper, the required test pattern, and the rollout order.
 - [Lineup delivery states](LINEUP-DELIVERY-STATES.md): delivery transitions and persisted row projection.
+- [Lineup write intent states](LINEUP-WRITE-INTENT-STATES.md): write status transitions and durable audit projection.
 - [Connection notification states](CONNECTION-NOTIFICATION-STATES.md): email transitions and persisted row projection.
 - [MCP contracts](MCP.md): generic tool families, budgets, paging, and client acceptance.
 - [Minimal UX brief](UX-BRIEF.md): functional surfaces and later design work.
