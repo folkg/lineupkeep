@@ -10,6 +10,7 @@ Planning workspace for Lineupgrade, the independent provider-neutral rewrite. Th
 - [Architecture](ARCHITECTURE.md): modules, solver, machines, durable execution, linking, and security.
 - [Lineup selection policy](POLICY.md): the objective, the provider's scoring schemes, availability, and the live evidence behind them.
 - [Testing plan](TESTING.md): proposed seams, independent oracles, generated/model-based tests, and crash recovery.
+- [State machines and workflows](STATE-MACHINES.md): naming, the shared test helper, the required test pattern, and the rollout order.
 - [MCP contracts](MCP.md): generic tool families, budgets, paging, and client acceptance.
 - [Minimal UX brief](UX-BRIEF.md): functional surfaces and later design work.
 - [Grilling decisions](DECISIONS.md): all recorded rounds and corrections, including hosted browser linking.
