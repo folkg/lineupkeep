@@ -25,6 +25,7 @@ import {
 } from "#contexts/connections/LineupRun.ts";
 import { queuedRunPredicate, runningRunPredicate } from "#database/dbUtilities.ts";
 
+import { lineupDeliveryState } from "./LineupDeliveryWorkflow.ts";
 import {
   LineupObservedPlayer,
   LineupPlan,
@@ -342,10 +343,13 @@ export const LineupDeliveryRow = LineupDeliverySelect.pipe(
           const runIds = yield* SchemaParser.decodeUnknownEffect(Schema.Array(LineupRunId))(
             row.runIds,
           );
-          return { ...row, runIds };
+          const record = { ...row, runIds };
+          lineupDeliveryState(record);
+          return record;
         }),
       encode: (row) =>
         Effect.gen(function* () {
+          lineupDeliveryState(row);
           const runIds = yield* SchemaParser.encodeEffect(Schema.Array(LineupRunId))(row.runIds);
           return { ...row, runIds };
         }),

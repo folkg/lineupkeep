@@ -575,6 +575,59 @@ it.effect("recovers a queued run whose delivery was dispatched but never claimed
   }).pipe(Effect.provide(AutomationTestLayer)),
 );
 
+it.effect("rejects illegal delivery finishes without changing the stored delivery", () =>
+  Effect.gen(function* () {
+    const repository = yield* LineupRunRepository;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
+    const teams = yield* Teams;
+    const at = yield* DateTime.now;
+    const requestId = yield* Schema.decodeEffect(LineupRequestId)(
+      "018f79ea-7d86-7c18-9b4a-8b4d0c9164fd",
+    );
+    yield* repository.createRequest({
+      userId: owner,
+      requestId,
+      intent: '{"trigger":"manual"}',
+      runs: [
+        {
+          team,
+          connectionId: (yield* teams.get(owner, team)).team.connectionId,
+          target: { coverage: "current" },
+          trigger: "manual",
+        },
+      ],
+    });
+    const pending = yield* repository.loadDelivery(owner, requestId);
+    assert.isDefined(pending);
+    const result = yield* Effect.result(
+      repository.finishDeliveries([{ deliveryId: pending.id, at, outcome: "dispatched" }]),
+    );
+    assert.strictEqual(result._tag, "Failure");
+    if (result._tag === "Failure") {
+      assert.strictEqual(result.failure._tag, "lineup.persistence_failed");
+    }
+    const unchanged = yield* repository.loadDelivery(owner, requestId);
+    assert.strictEqual(unchanged?.status, "pending");
+    assert.strictEqual(unchanged?.attempts, 0);
+
+    const [claimed] = yield* repository.claimDeliveries(at, 10);
+    assert.strictEqual(claimed?.attempts, 1);
+    yield* repository.finishDeliveries([{ deliveryId: pending.id, at, outcome: "dispatched" }]);
+    const finished = yield* repository.loadDelivery(owner, requestId);
+    assert.strictEqual(finished?.status, "dispatched");
+    assert.isNotNull(finished?.dispatchedAt);
+    const repeated = yield* Effect.result(
+      repository.finishDeliveries([{ deliveryId: pending.id, at, outcome: "pending" }]),
+    );
+    assert.strictEqual(repeated._tag, "Failure");
+    if (repeated._tag === "Failure") {
+      assert.strictEqual(repeated.failure._tag, "lineup.persistence_failed");
+    }
+    assert.strictEqual((yield* repository.loadDelivery(owner, requestId))?.status, "dispatched");
+  }).pipe(Effect.provide(AutomationTestLayer)),
+);
+
 it.effect("treats a team with an in-flight manual run as busy for scheduling", () =>
   Effect.gen(function* () {
     const repository = yield* LineupRunRepository;

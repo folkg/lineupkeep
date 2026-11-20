@@ -30,6 +30,13 @@ import { plan, snapshotOf } from "#utilities/machine.ts";
 import { ConnectionsDatabase } from "./ConnectionsDatabase.ts";
 import { providerConnections, providerCredentials, providerTeams } from "./ConnectionTables.ts";
 import {
+  initialLineupDeliveryState,
+  lineupDeliveryState,
+  lineupDeliveryStatus,
+  LineupDeliveryWorkflow,
+} from "./LineupDeliveryWorkflow.ts";
+import type { LineupDeliveryEvent, LineupDeliveryState } from "./LineupDeliveryWorkflow.ts";
+import {
   LineupDeliveryRow,
   LineupRunRow,
   LineupWriteIntentRow,
@@ -252,17 +259,14 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                 }
               }
               if (created.length > 0) {
+                const state = initialLineupDeliveryState(now);
                 yield* tx.insert(lineupDeliveries).values({
                   id: deliveryId,
                   userId: input.userId,
                   requestId: input.requestId,
-                  status: "pending",
-                  attempts: 0,
+                  ...deliveryRowProjection(state),
                   runIds: created.map((record) => record.id),
-                  lastError: null,
                   createdAt: at,
-                  updatedAt: at,
-                  dispatchedAt: null,
                 });
               }
               const settled = input.runs.flatMap((run) => {
@@ -370,13 +374,9 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                   id: deliveryId,
                   userId: input.userId,
                   requestId,
-                  status: "pending",
-                  attempts: 0,
+                  ...deliveryRowProjection(initialLineupDeliveryState(input.at)),
                   runIds: created.map((record) => record.id),
-                  lastError: null,
                   createdAt: at,
-                  updatedAt: at,
-                  dispatchedAt: null,
                 });
                 return { created: true, runs: created };
               }),
@@ -1084,18 +1084,17 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                 ids,
                 codec: LineupDeliveryRow,
                 plan: (locked) =>
-                  Effect.succeed(
-                    ids.map((id) => {
+                  Effect.forEach(ids, (id) =>
+                    Effect.gen(function* () {
                       const record = locked.get(id);
                       if (record === undefined) {
                         throw new Error("A locked delivery is missing");
                       }
-                      return {
-                        ...record,
-                        status: "dispatching" as const,
-                        attempts: record.attempts + 1,
-                        updatedAt: now,
-                      };
+                      const next = yield* planDeliveryState(lineupDeliveryState(record), {
+                        _tag: "Claimed",
+                        at: now,
+                      });
+                      return { ...record, ...deliveryProjection(next) };
                     }),
                   ),
               });
@@ -1133,27 +1132,24 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
         return database
           .transaction((tx) =>
             mutateRows(tx, lineupDeliveries, {
-              where: eq(lineupDeliveries.status, "dispatching"),
+              where: undefined,
               ids,
               codec: LineupDeliveryRow,
               plan: (locked) =>
-                Effect.succeed(
-                  [...byId].flatMap(([id, input]) => {
+                Effect.forEach([...byId], ([id, input]) =>
+                  Effect.gen(function* () {
                     const record = locked.get(id);
                     if (record === undefined) {
                       return [];
                     }
-                    return [
-                      {
-                        ...record,
-                        status: input.outcome,
-                        lastError: input.error ?? null,
-                        updatedAt: input.at,
-                        ...(input.outcome === "dispatched" ? { dispatchedAt: input.at } : {}),
-                      },
-                    ];
+                    const event: LineupDeliveryEvent =
+                      input.outcome === "dispatched"
+                        ? { _tag: "Dispatched", at: input.at }
+                        : { _tag: "Released", at: input.at, error: input.error };
+                    const next = yield* planDeliveryState(lineupDeliveryState(record), event);
+                    return [{ ...record, ...deliveryProjection(next) }];
                   }),
-                ),
+                ).pipe(Effect.map((rows) => rows.flat())),
             }),
           )
           .pipe(
@@ -1571,6 +1567,52 @@ function planState(
       ),
     );
   });
+}
+
+function planDeliveryState(
+  state: LineupDeliveryState,
+  event: LineupDeliveryEvent,
+): Effect.Effect<LineupDeliveryState, LineupPersistenceFailed> {
+  return Effect.gen(function* () {
+    const snapshot = yield* snapshotOf(LineupDeliveryWorkflow, state).pipe(
+      Effect.mapError(mapPersistenceFailure),
+    );
+    return yield* plan(LineupDeliveryWorkflow, snapshot, event).pipe(
+      Effect.mapError((cause) =>
+        cause._tag === "TransitionRejected"
+          ? LineupPersistenceFailed.make({
+              cause: new Error(`Lineup delivery rejected ${event._tag} from ${state._tag}`),
+            })
+          : mapPersistenceFailure(cause),
+      ),
+    );
+  });
+}
+
+function deliveryProjection(
+  state: LineupDeliveryState,
+): Pick<LineupDeliveryRecord, "status" | "attempts" | "lastError" | "dispatchedAt" | "updatedAt"> {
+  return {
+    status: lineupDeliveryStatus(state),
+    attempts: state.attempts,
+    lastError: state.lastError,
+    dispatchedAt: state.dispatchedAt,
+    updatedAt: state.updatedAt,
+  };
+}
+
+function deliveryRowProjection(state: LineupDeliveryState): Pick<
+  LineupDeliveryRecord,
+  "status" | "attempts" | "lastError"
+> & {
+  readonly updatedAt: Date;
+  readonly dispatchedAt: Date | null;
+} {
+  return {
+    ...deliveryProjection(state),
+    updatedAt: DateTime.toDateUtc(state.updatedAt),
+    dispatchedAt: state.dispatchedAt === null ? null : DateTime.toDateUtc(state.dispatchedAt),
+  };
 }
 
 function updateRunState(

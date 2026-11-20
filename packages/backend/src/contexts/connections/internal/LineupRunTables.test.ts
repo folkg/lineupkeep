@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest";
-import { DateTime, Effect, Schema } from "effect";
+import { DateTime, Effect, Exit, Schema } from "effect";
 
 import { decodeUserId } from "#contexts/auth/User.ts";
 import { decodeConnectionId } from "#contexts/connections/Connection.ts";
@@ -75,6 +75,23 @@ it.effect("round-trips delivery and write-intent rows", () =>
     const deliveryRow = yield* Schema.encodeEffect(LineupDeliveryRow)(delivery);
     const deliveryDecoded = yield* Schema.decodeEffect(LineupDeliveryRow)(deliveryRow);
     assert.isTrue(Schema.toEquivalence(LineupDeliveryRow)(deliveryDecoded, delivery));
+    assert.isTrue(
+      Exit.isFailure(
+        yield* Effect.exit(
+          Schema.decodeEffect(LineupDeliveryRow)({
+            ...deliveryRow,
+            dispatchedAt: DateTime.toDateUtc(at),
+          }),
+        ),
+      ),
+    );
+    assert.isTrue(
+      Exit.isFailure(
+        yield* Effect.exit(
+          Schema.decodeEffect(LineupDeliveryRow)({ ...deliveryRow, status: "dispatched" }),
+        ),
+      ),
+    );
 
     const intent: LineupWriteIntentRecord = {
       id: yield* Schema.decodeEffect(LineupId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a7"),
