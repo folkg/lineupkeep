@@ -153,13 +153,13 @@ it("keeps one submission line apart from the run outcome", () => {
   expect(submittedLine(move, reader, new Date("2026-11-17T12:00:00.000Z"))).toBe(
     "You submitted this on Nov 11 at 12:35 PM.",
   );
-  expect(moveOutcomeLabel(move)).toBe("Ran after you submitted");
+  expect(moveOutcomeLabel(move)).toBe("Ran immediately");
 });
 
 it("names the run outcome without inventing a time", () => {
   expect(moveOutcomeLabel(executed({ runDecidedBy: "system" }))).toBe("Ran on schedule");
-  expect(moveOutcomeLabel(executed({}))).toBe("Ran after you submitted");
-  expect(moveOutcomeLabel(executed({ runDecidedBy: "owner" }))).toBe("Ran after you submitted");
+  expect(moveOutcomeLabel(executed({}))).toBe("Ran immediately");
+  expect(moveOutcomeLabel(executed({ runDecidedBy: "owner" }))).toBe("Ran immediately");
   expect(moveOutcomeLabel(executed({ result: "pending" }))).toBe("Waiting for the league");
   expect(moveOutcomeLabel(executed({ result: "failed" }))).toBe("Failed");
 });

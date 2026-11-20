@@ -920,7 +920,7 @@ shows a group as one card that lists every move in it, with one control for the 
 control is `Run now`, with `Schedule` beside it to choose a later send day. A later group's control is
 `Schedule for <date>` and stores the owner's decision, who made it, the surface, and the time. One card
 carries one status in its header: `Needs your decision`, `Scheduled to run <date> at <time>`, `With
-the league`, `Ran on schedule`, `Ran after you submitted`, `Partly ran`, `Blocked`, or `Failed`, and a
+the league`, `Ran on schedule`, `Ran immediately`, `Partly ran`, `Blocked`, or `Failed`, and a
 blocked or failed card also says what the person can do next. Every open card also states when it will
 run and when it will take effect; both times are rendered in the reader's local zone. A submitted move
 carries one provenance line, either `You submitted this on <date> at <time>` or `Scheduled on <date>

@@ -113,7 +113,7 @@ test("proposes a move into one team queue and runs it from the transactions page
 
   const earlier = page.getByRole("button", { name: "Hide earlier moves" });
   await expect(earlier).toHaveAttribute("aria-expanded", "true");
-  await expect(page.getByText("Ran after you submitted", { exact: true })).toBeVisible();
+  await expect(page.getByText("Ran immediately", { exact: true })).toBeVisible();
   await expect(page.getByText("Drop Riverside Receiver", { exact: true })).toBeVisible();
   await expect(page.getByText("1 move", { exact: true })).toBeVisible();
 

@@ -17,6 +17,10 @@ revisions that carried each change.
 - `get_players` accepts group `schedule` and a `gamesWindow`, returning `gameDays` or `gameWeeks` for
   rostered and pool players. `search_players` already accepted `gamesWindow`; its tool description
   now names it.
+- An earlier move reports `Ran immediately` or `Ran on schedule`. Its card keeps the submission line
+  and the effect line, and drops the duplicate outcome lines. A fallback's effect date is derived
+  from the day the fallback is sent, not from the lost claim's old date. Fallback planning is hidden
+  once a move has run, and a failed move shows its attempt history as `What was tried`.
 
 ## Unreleased — discovery reports the grant, and an expired token asks for a refresh
 

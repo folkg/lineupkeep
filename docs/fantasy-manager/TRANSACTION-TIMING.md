@@ -107,10 +107,12 @@ change, stored separately from the claim's phase. A `won` phase records what the
 effective date records when the acquired player reached the roster.
 
 **A lost claim tries its fallbacks.** The first stored fallback becomes a real straight add and runs
-through the same dated projection and provider write path as any other add. Each attempt and the
-league's reason are stored on the move. A fallback that fails or is already taken tries the next
-stored fallback. When none are left, the group ends `failed` with a plain account of what was tried,
-what the league did, and that nothing is waiting. A won claim is `done`, and no fallback runs.
+through the same dated projection and provider write path as any other add. Its effective date is
+derived from the day the fallback is sent, not from the date the lost claim would have applied. Each
+attempt and the league's reason are stored on the move. A fallback that fails or is already taken
+tries the next stored fallback. When none are left, the group ends `failed` with a plain account of
+what was tried, what the league did, and that nothing is waiting. A won claim is `done`, and no
+fallback runs.
 
 **One reconciliation per claim.** The hourly check settles a claim once; the stored phase leaves
 `with_league` as it settles, so a later check neither retries the claim nor repeats its fallback.

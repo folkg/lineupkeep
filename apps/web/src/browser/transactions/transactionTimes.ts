@@ -171,7 +171,7 @@ export function discardLine(
 }
 
 function executedLabel(move: TransactionMoveView): string {
-  return move.runDecidedBy === "system" ? "Ran on schedule" : "Ran after you submitted";
+  return move.runDecidedBy === "system" ? "Ran on schedule" : "Ran immediately";
 }
 
 function withPeriod(text: string): string {

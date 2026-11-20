@@ -784,8 +784,20 @@ function EarlierRow(props: EarlierRowProps): JSX.Element {
   const submitted = (): string | undefined => submittedLine(props.move);
   const timing = (): string | undefined => timingLine(props.move);
   const discarded = (): string | undefined => discardLine(props.move);
-  const result = (): string | undefined => resultDetailLine(props.move);
-  const resultTime = (): string | undefined => resultTimeLine(props.move);
+  const result = (): string | undefined =>
+    props.move.result === "executed" ? undefined : resultDetailLine(props.move);
+  const resultTime = (): string | undefined =>
+    props.move.result === "executed" || props.move.decision === "discarded"
+      ? undefined
+      : resultTimeLine(props.move);
+  const fallback = (): string | undefined => {
+    if (props.move.phase === "with_league" || props.move.result === "pending") {
+      return fallbackPlanLine(props.move);
+    }
+    return props.move.result === "failed" && props.move.attempts.length > 0
+      ? "What was tried"
+      : undefined;
+  };
   const waiver = (): string | undefined =>
     props.move.phase === "with_league" ? waiverTimingLine(props.waiver) : undefined;
   return (
@@ -843,7 +855,7 @@ function EarlierRow(props: EarlierRowProps): JSX.Element {
             </Text>
           )}
         </Show>
-        <Show when={fallbackPlanLine(props.move)}>
+        <Show when={fallback()}>
           {(summary) => (
             <Disclosure summary={summary()}>
               <Stack gap="md">

@@ -948,7 +948,7 @@ it("labels a move that ran after you submitted as ran after you submitted", asyn
   });
 
   await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
-  await expect.element(page.getByText("Ran after you submitted", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Ran immediately", { exact: true })).toBeVisible();
   await expect.element(page.getByText("Took effect November 12.", { exact: true })).toBeVisible();
   expect(page.getByText("Ran now", { exact: true }).elements()).toHaveLength(0);
 });
@@ -998,7 +998,7 @@ it("keeps the submission line apart from the run time", async () => {
   await expect.element(page.getByRole("button", { name: "Hide earlier moves" })).toBeVisible();
   const submission = page.getByText(submittedLine(ran) ?? "", { exact: true });
   await expect.element(submission).toBeVisible();
-  await expect.element(page.getByText("Ran after you submitted", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Ran immediately", { exact: true })).toBeVisible();
   const runClock = new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
     minute: "2-digit",
@@ -1716,9 +1716,7 @@ it("records which fallback ran, which failed, and that none are left", async () 
   expect(
     page.getByText(`Takes effect ${formatCalendarDate("2026-11-18")}.`, { exact: true }).elements(),
   ).toHaveLength(0);
-  const summary = page.getByText("If the claim fails: Tank Bigsby, then Tyler Boyd", {
-    exact: true,
-  });
+  const summary = page.getByText("What was tried", { exact: true });
   await expect.element(summary).toBeVisible();
   await summary.click();
 
@@ -1740,6 +1738,63 @@ it("records which fallback ran, which failed, and that none are left", async () 
     )
     .toBeVisible();
   await expect.element(page.getByText("No choices are left.", { exact: true })).toBeVisible();
+});
+
+it("leaves one submission line and one effect line after a lost claim's fallback runs", async () => {
+  await page.viewport(1280, 900);
+  const claim = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165fa",
+    team: alpha,
+    kind: "free_agent_add",
+    decision: "now",
+    phase: "lost",
+    adds: [player("Pat Freiermuth")],
+    drops: [player("TreVeyon Henderson")],
+    fallbacks: [player("Pat Freiermuth")],
+    confirmation: { by: "owner", at: "2026-11-16T15:58:00.000Z" },
+    runAt: "2026-11-18T22:25:00.000Z",
+    runDecidedBy: "system",
+    effectiveDate: "2026-11-19",
+    result: "executed",
+    resultDetail: "The claim was lost. Your fallback Pat Freiermuth was added instead.",
+    resultAt: "2026-11-18T22:25:00.000Z",
+    attempts: [
+      {
+        kind: "claim",
+        player: player("Dalton Schultz"),
+        outcome: "lost",
+        reason: "Your league awarded the claim to another team.",
+        at: "2026-11-18T22:25:00.000Z",
+      },
+      {
+        kind: "fallback",
+        player: player("Pat Freiermuth"),
+        outcome: "executed",
+        reason: "Added after the league did not award the claim.",
+        at: "2026-11-18T22:25:00.000Z",
+        effectiveDate: "2026-11-19",
+      },
+    ],
+  });
+  using _app = setupTransactionsPage({
+    open: listData([], { open: 0, today: 0, saved: 0, ended: 1 }),
+    ended: listData([claim], { open: 0, today: 0, saved: 0, ended: 1 }),
+  });
+
+  await expect.element(page.getByText("Claim lost, fallback ran", { exact: true })).toBeVisible();
+  await expect.element(page.getByText(/^You submitted this on /u)).toBeVisible();
+  await expect.element(page.getByText("Took effect November 19.", { exact: true })).toBeVisible();
+  expect(
+    page
+      .getByText("The claim was lost. Your fallback Pat Freiermuth was added instead.", {
+        exact: true,
+      })
+      .elements(),
+  ).toHaveLength(0);
+  expect(page.getByText(/Claim lost, fallback ran .+ at /u).elements()).toHaveLength(0);
+  expect(
+    page.getByText("If the claim fails: Pat Freiermuth", { exact: true }).elements(),
+  ).toHaveLength(0);
 });
 
 it("starts Earlier open when it is the only content and keeps the person's toggle", async () => {

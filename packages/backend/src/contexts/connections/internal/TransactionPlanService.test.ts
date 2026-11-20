@@ -3328,6 +3328,64 @@ it.effect("runs the first fallback when a claim is lost and never repeats it", (
   }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
+it.effect("dates a lost claim's fallback from the day the fallback is sent", () => {
+  const facts = new Map<TeamId, TransactionPlanTeamFacts>();
+  const writes = writeLayer((request) =>
+    request.kind === "waiver_claim"
+      ? { status: "pending", detail: "The league will process this claim." }
+      : { status: "executed" },
+  );
+  return Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const repository = yield* TransactionPlanRepository;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+    facts.set(
+      team,
+      league([], [waived("w1", "Waiver One", ["RB"]), freeAgent("fa1", "Free Agent One", ["RB"])])
+        .facts,
+    );
+    yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [
+        {
+          group: "claim-one",
+          kind: "waiver_claim",
+          adds: ["w1"],
+          fallbacks: ["fa1"],
+          reason: "Claim a running back.",
+        },
+      ],
+    });
+    yield* confirmDue(service, team);
+    yield* service.runDue(10, at);
+    const later = "2026-11-18";
+    const held = facts.get(team);
+    assert(held !== undefined);
+    facts.set(team, {
+      ...held,
+      today: later,
+      timing: { ...held.timing, currentDate: later },
+      poolStatus: new Map([
+        ["w1", "free_agent"],
+        ["fa1", "free_agent"],
+      ]),
+    });
+
+    const run = yield* service.runDue(10, DateTime.makeUnsafe("2026-11-18T18:55:00.000Z"));
+    assert.strictEqual(run.counts.executed, 1);
+    const stored = yield* repository.readPlanMoves({ userId: owner, team });
+    assert.strictEqual(stored[0]?.runDay, later);
+    assert.strictEqual(stored[0]?.effectiveDate, later);
+    assert.strictEqual(
+      stored[0]?.attempts.find((attempt) => attempt.kind === "fallback")?.effectiveDate,
+      later,
+    );
+  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+});
+
 it.effect("tries each fallback in turn and ends failed when all choices fail", () => {
   const facts = new Map<TeamId, TransactionPlanTeamFacts>();
   const writes = writeLayer((request) =>
