@@ -50,6 +50,7 @@
   },
   "devDependencies": {
     "@alchemy.run/cloudflare-runtime": "catalog:",
+    "@lineupkeep/machine-test": "workspace:*",
     "@solidjs/diagnostics": "catalog:",
     "@types/ws": "catalog:",
     "crossws": "0.4.15",

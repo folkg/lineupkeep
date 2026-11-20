@@ -24,7 +24,8 @@ it("explores context changes and declared self transitions", () => {
     invariants: { bounded: (state) => expect(state.context.count).toBeLessThanOrEqual(1) },
   });
 
-  expect(paths).toHaveLength(4);
+  expect(paths.nodes).toHaveLength(4);
+  expect(paths.nodes.map(({ snapshot }) => snapshot.state.path)).toContain("done");
 });
 
 it("reports a failing state with its shortest event path", () => {
@@ -64,4 +65,22 @@ it("does not count disabled function transitions as taken", () => {
       invariants: {},
     }),
   ).toThrow(/ready.blocked/su);
+});
+
+it("rejects an accepted event from a declared final state", () => {
+  const workflow = createFSM({
+    initial: "ready",
+    states: {
+      ready: { on: { finish: { target: "done" } } },
+      done: { on: { again: { target: "ready" } } },
+    },
+  });
+
+  expect(() =>
+    exploreWorkflow(workflow, {
+      events: [{ type: "finish" }, { type: "again" }],
+      invariants: {},
+      final: (state) => state.value === "done",
+    }),
+  ).toThrow(/Final state done accepted again/u);
 });

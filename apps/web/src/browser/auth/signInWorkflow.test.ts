@@ -130,7 +130,12 @@ const invariants = {
 };
 
 it("explores every sign-in transition with session recovery invariants", () => {
-  exploreWorkflow(signInWorkflow, { events, invariants });
+  const explored = exploreWorkflow(signInWorkflow, {
+    events,
+    invariants,
+    final: (state) => state.value === "signedIn",
+  });
+  expect(explored.nodes.map(({ snapshot }) => snapshot.state.path)).toContain("signedIn");
 });
 
 it.each(Object.entries(invariants))(

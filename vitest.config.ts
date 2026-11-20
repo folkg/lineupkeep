@@ -86,6 +86,8 @@ export default defineConfig({
           exclude: [
             "infra/local/*.safety.test.ts",
             "infra/local/*.container-safety.test.ts",
+            "apps/web/src/browser/workflow/workflowTest.test.ts",
+            "apps/web/src/browser/auth/signInWorkflow.test.ts",
             "node_modules/**",
             "**/node_modules/**",
             "**/dist/**",
@@ -143,6 +145,8 @@ export default defineConfig({
             instances: [{ browser: "chromium" }],
           },
           include: [
+            "apps/web/src/browser/workflow/workflowTest.test.ts",
+            "apps/web/src/browser/auth/signInWorkflow.test.ts",
             "apps/**/*.browser.test.ts",
             "apps/**/*.browser.test.tsx",
             "packages/**/*.browser.test.ts",

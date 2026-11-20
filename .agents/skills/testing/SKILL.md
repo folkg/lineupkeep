@@ -34,6 +34,7 @@ Every workflow or codec module has its own test file; lint rules check those tes
 
 Order each workflow test file: exploration, property tests, then optional stories. One test proves one behavior. Tests live beside the module that owns the behavior; codec tests belong with the codec, not the machine.
 Clients use `browser/workflow/workflowTest.ts` (`exploreWorkflow` and `play`) with fast-check. Backend machines use `MachineTest.explore` and `MachineTest.scenarios` with `effect/Arbitrary`. Derive coverage from the machine definition, not a hand-written transition list.
+Both `*Workflow.test.ts` adapters must use the single `@lineupkeep/machine-test` runner for graph exploration, transition coverage, invariant and trace checks, and terminal rejection. Backend generated traces call `MachineTest.verify` and `MachineTest.checkInvariants`; browser exploration declares final states with the `final` option and keeps fast-check property coverage.
 
 ## External HTTP boundaries
 

@@ -74,6 +74,7 @@
       },
       "devDependencies": {
         "@alchemy.run/cloudflare-runtime": "catalog:",
+        "@lineupkeep/machine-test": "workspace:*",
         "@solidjs/diagnostics": "catalog:",
         "@types/ws": "catalog:",
         "crossws": "0.4.15",
@@ -128,6 +129,9 @@
         "postgres": "catalog:",
         "xstate": "catalog:",
       },
+      "devDependencies": {
+        "@lineupkeep/machine-test": "workspace:*",
+      },
     },
     "packages/brand": {
       "name": "@lineupkeep/brand",
@@ -146,6 +150,9 @@
       "devDependencies": {
         "fast-check": "4.10.2",
       },
+    },
+    "packages/machine-test": {
+      "name": "@lineupkeep/machine-test",
     },
     "packages/yahoo-sdk": {
       "name": "@lineupkeep/yahoo-sdk",
@@ -578,6 +585,8 @@
     "@lineupkeep/infra": ["@lineupkeep/infra@workspace:infra"],
 
     "@lineupkeep/lineup-solver": ["@lineupkeep/lineup-solver@workspace:packages/lineup-solver"],
+
+    "@lineupkeep/machine-test": ["@lineupkeep/machine-test@workspace:packages/machine-test"],
 
     "@lineupkeep/tools": ["@lineupkeep/tools@workspace:tools"],
 

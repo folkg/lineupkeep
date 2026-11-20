@@ -1,52 +1,12 @@
-import { Arbitrary, Data, Effect, Option, Schema } from "effect";
+import * as Shared from "@lineupkeep/machine-test";
+import { Arbitrary, Data, Effect, Result, Schema } from "effect";
 
-import {
-  type DefinedMachine,
-  plan,
-  type Snapshot,
-  snapshotOf,
-  type Tagged,
-} from "#utilities/machine.ts";
+import { type DefinedMachine, plan, snapshotOf, type Tagged } from "#utilities/machine.ts";
 
-export type TestSnapshot<State extends Tagged> = {
-  readonly state: { readonly path: string; readonly value: State };
-};
-
-export type Invariant<State extends Tagged, Event extends Tagged> =
-  | {
-      readonly _tag: "StateInvariant";
-      readonly name: string;
-      readonly check: (args: { readonly snapshot: TestSnapshot<State> }) => boolean;
-    }
-  | {
-      readonly _tag: "StepInvariant";
-      readonly name: string;
-      readonly check: (args: {
-        readonly before: TestSnapshot<State>;
-        readonly after: TestSnapshot<State>;
-        readonly event: Event;
-      }) => boolean;
-    };
-
-export type Trace<State extends Tagged, Event extends Tagged> = {
-  readonly input: TestSnapshot<State>;
-  readonly steps: ReadonlyArray<{
-    readonly before: TestSnapshot<State>;
-    readonly after: TestSnapshot<State>;
-    readonly event: Event;
-    readonly accepted: boolean;
-  }>;
-  readonly final: TestSnapshot<State>;
-};
-
-export type Exploration<State extends Tagged> = {
-  readonly completeness: { readonly _tag: "Complete" };
-  readonly nodes: ReadonlyArray<{ readonly snapshot: TestSnapshot<State> }>;
-  readonly transitionCoverage: {
-    readonly definitions: { readonly missing: number };
-    readonly branches: { readonly missing: number };
-  };
-};
+export type TestSnapshot<State extends Tagged> = Shared.TestSnapshot<State>;
+export type Invariant<State extends Tagged, Event extends Tagged> = Shared.Invariant<State, Event>;
+export type Trace<State extends Tagged, Event extends Tagged> = Shared.Trace<State, Event>;
+export type Exploration<State extends Tagged> = Shared.Exploration<State>;
 
 export class MachineTestFailure extends Data.TaggedError("MachineTestFailure")<{
   readonly detail: string;
@@ -54,49 +14,30 @@ export class MachineTestFailure extends Data.TaggedError("MachineTestFailure")<{
 
 export function invariants<State extends Tagged, Event extends Tagged>(
   _machine: DefinedMachine<State, Event>,
-): {
-  readonly state: (
-    name: string,
-    check: (args: { readonly snapshot: TestSnapshot<NoInfer<State>> }) => boolean,
-  ) => Invariant<State, Event>;
-  readonly step: (
-    name: string,
-    check: (args: {
-      readonly before: TestSnapshot<NoInfer<State>>;
-      readonly after: TestSnapshot<NoInfer<State>>;
-      readonly event: NoInfer<Event>;
-    }) => boolean,
-  ) => Invariant<State, Event>;
-} {
-  return {
-    state: (name, check) => ({ _tag: "StateInvariant", name, check }),
-    step: (name, check) => ({ _tag: "StepInvariant", name, check }),
-  };
+): ReturnType<typeof Shared.invariants<State, Event>> {
+  return Shared.invariants<State, Event>();
 }
 
 export function run<State extends Tagged, Event extends Tagged>(
   machine: DefinedMachine<State, Event>,
-  scenario: {
-    readonly input: NoInfer<State>;
-    readonly events: ReadonlyArray<NoInfer<Event>>;
-  },
+  scenario: { readonly input: NoInfer<State>; readonly events: ReadonlyArray<NoInfer<Event>> },
 ): Effect.Effect<Trace<State, Event>, Schema.SchemaError> {
-  return Effect.gen(function* () {
-    const steps: Array<Trace<State, Event>["steps"][number]> = [];
-    let current = scenario.input;
-    for (const event of scenario.events) {
-      const snapshot = yield* snapshotOf(machine, current);
-      const next = yield* attempt(machine, snapshot, event);
-      const accepted = Option.isSome(next);
-      steps.push({
-        before: view(current),
-        after: view(accepted ? next.value : current),
-        event,
-        accepted,
-      });
-      current = accepted ? next.value : current;
-    }
-    return { input: view(scenario.input), steps, final: view(current) };
+  return Effect.try({
+    try: () =>
+      Shared.run(
+        adapter(
+          machine,
+          () => "",
+          () => [],
+        ),
+        scenario,
+      ),
+    catch: (cause) => {
+      if (cause instanceof Schema.SchemaError) {
+        return cause;
+      }
+      throw cause;
+    },
   });
 }
 
@@ -104,44 +45,34 @@ export function verify<State extends Tagged, Event extends Tagged>(
   machine: DefinedMachine<State, Event>,
   trace: Trace<NoInfer<State>, NoInfer<Event>>,
 ): Effect.Effect<void, MachineTestFailure> {
-  return Effect.gen(function* () {
-    for (const step of trace.steps) {
-      if (!step.accepted) {
-        continue;
-      }
-      const candidate = firstPassingCandidate(machine, step.before.state.value, step.event);
-      if (candidate === undefined || candidate.target !== step.after.state.path) {
-        return yield* new MachineTestFailure({
-          detail: `The trace accepted ${step.event._tag} from ${step.before.state.path} into ${step.after.state.path}, but the machine does not declare that transition`,
-        });
-      }
-    }
-  });
+  return failureEffect(() =>
+    Shared.verify(
+      adapter(
+        machine,
+        () => "",
+        () => [],
+      ),
+      trace,
+    ),
+  );
 }
 
 export function checkInvariants<State extends Tagged, Event extends Tagged>(
-  _machine: DefinedMachine<State, Event>,
+  machine: DefinedMachine<State, Event>,
   trace: Trace<NoInfer<State>, NoInfer<Event>>,
   invariants: ReadonlyArray<Invariant<NoInfer<State>, NoInfer<Event>>>,
 ): Effect.Effect<void, MachineTestFailure> {
-  return Effect.gen(function* () {
-    for (const invariant of invariants) {
-      if (invariant._tag === "StateInvariant") {
-        yield* checkState(invariant, trace.input);
-        for (const step of trace.steps) {
-          yield* checkState(invariant, step.after);
-        }
-        continue;
-      }
-      for (const step of trace.steps) {
-        if (!invariant.check({ before: step.before, after: step.after, event: step.event })) {
-          return yield* new MachineTestFailure({
-            detail: `Machine invariant "${invariant.name}" failed after ${step.event._tag} from ${step.before.state.path}`,
-          });
-        }
-      }
-    }
-  });
+  return failureEffect(() =>
+    Shared.checkInvariants(
+      adapter(
+        machine,
+        () => "",
+        () => [],
+      ),
+      trace,
+      invariants,
+    ),
+  );
 }
 
 export function explore<State extends Tagged, Event extends Tagged>(
@@ -155,50 +86,18 @@ export function explore<State extends Tagged, Event extends Tagged>(
     readonly invariants?: ReadonlyArray<Invariant<NoInfer<State>, NoInfer<Event>>>;
   },
 ): Effect.Effect<Exploration<State>, MachineTestFailure | Schema.SchemaError> {
-  return Effect.gen(function* () {
-    const queue: Array<State> = [options.input];
-    const nodes: Array<{ readonly snapshot: TestSnapshot<State> }> = [
-      { snapshot: view(options.input) },
-    ];
-    const seen = new Set([options.stateKey({ snapshot: view(options.input) })]);
-    const taken = new Set<string>();
-    for (let cursor = 0; cursor < queue.length; cursor++) {
-      const current = queue[cursor];
-      if (current === undefined) {
-        continue;
-      }
-      const snapshot = yield* snapshotOf(machine, current);
-      for (const event of options.events({ snapshot: view(current) })) {
-        const next = yield* attempt(machine, snapshot, event);
-        const accepted = Option.isSome(next);
-        yield* checkStep(options, current, accepted ? next.value : current, event);
-        if (!accepted) {
-          continue;
-        }
-        const candidate = firstPassingCandidate(machine, current, event);
-        if (candidate === undefined) {
-          return yield* new MachineTestFailure({
-            detail: `The machine accepted ${event._tag} from ${current._tag} without a declaration`,
-          });
-        }
-        taken.add(candidate.id);
-        const key = options.stateKey({ snapshot: view(next.value) });
-        if (!seen.has(key)) {
-          seen.add(key);
-          queue.push(next.value);
-          nodes.push({ snapshot: view(next.value) });
-        }
-      }
-    }
-    const missing = declaredCandidates(machine).filter(
-      (candidate) => !taken.has(candidate.id),
-    ).length;
-    return {
-      completeness: { _tag: "Complete" },
-      nodes,
-      transitionCoverage: { definitions: { missing }, branches: { missing } },
-    };
-  });
+  return failureEffect(
+    () =>
+      Shared.explore(
+        adapter(
+          machine,
+          (state) => options.stateKey({ snapshot: { state: { path: state._tag, value: state } } }),
+          (state) => options.events({ snapshot: { state: { path: state._tag, value: state } } }),
+        ),
+        options,
+      ),
+    true,
+  );
 }
 
 export function scenarios<State extends Tagged, Event extends Tagged, Input>(
@@ -220,85 +119,86 @@ export function scenarios<State extends Tagged, Event extends Tagged, Input>(
   };
 }
 
-function view<State extends Tagged>(state: State): TestSnapshot<State> {
-  return { state: { path: state._tag, value: state } };
-}
-
-function attempt<State extends Tagged, Event extends Tagged>(
+function adapter<State extends Tagged, Event extends Tagged>(
   machine: DefinedMachine<State, Event>,
-  snapshot: Snapshot<State>,
-  event: Event,
-): Effect.Effect<Option.Option<State>, Schema.SchemaError> {
-  return plan(machine, snapshot, event).pipe(
-    Effect.map(Option.some),
-    Effect.catchTag("TransitionRejected", () => Effect.succeed(Option.none())),
+  stateKey: (state: State) => string,
+  events: (state: State) => ReadonlyArray<Event>,
+): Shared.MachineAdapter<State, Event> {
+  const declarations = Object.keys(machine.definition.states).flatMap((from) =>
+    Object.entries(machine.transitionsOf(from)).flatMap(([event, specification]) =>
+      listOf(specification).map((_candidate, index) => ({
+        id: `${from}.${event}.${index}`,
+        from,
+        event,
+      })),
+    ),
   );
-}
-
-function checkState<State extends Tagged, Event extends Tagged>(
-  invariant: Invariant<State, Event>,
-  snapshot: TestSnapshot<State>,
-): Effect.Effect<void, MachineTestFailure> {
-  if (invariant._tag !== "StateInvariant") {
-    return Effect.void;
-  }
-  return invariant.check({ snapshot })
-    ? Effect.void
-    : Effect.fail(
-        new MachineTestFailure({
-          detail: `Machine invariant "${invariant.name}" failed in ${snapshot.state.path}`,
-        }),
+  const candidate = (
+    state: State,
+    event: Event,
+  ): { readonly id: string; readonly target: string } | undefined => {
+    const candidates = listOf(machine.transitionsOf(state._tag)[event._tag]);
+    const index = candidates.findIndex(
+      (entry) => entry.guard === undefined || entry.guard({ state, event }),
+    );
+    const entry = candidates[index];
+    return entry === undefined
+      ? undefined
+      : { id: `${state._tag}.${event._tag}.${index}`, target: entry.target };
+  };
+  return {
+    statePath: (state) => state._tag,
+    stateKey,
+    events,
+    eventName: (event) => event._tag,
+    isFinal: (state) => {
+      const entry = machine.definition.root[state._tag];
+      if (entry === undefined) {
+        throw new Error(`The machine has no state named ${state._tag}`);
+      }
+      return "final" in entry;
+    },
+    declarations,
+    transitionId: (state, event) => candidate(state, event)?.id,
+    expectedTarget: (state, event) => candidate(state, event)?.target,
+    transition: (state, event) => {
+      const result = Effect.runSync(
+        Effect.result(
+          Effect.flatMap(snapshotOf(machine, state), (snapshot) => plan(machine, snapshot, event)),
+        ),
       );
+      if (Result.isSuccess(result)) {
+        return result.success;
+      }
+      if (result.failure._tag === "TransitionRejected") {
+        return undefined;
+      }
+      throw result.failure;
+    },
+  };
 }
 
-function checkStep<State extends Tagged, Event extends Tagged>(
-  options: { readonly invariants?: ReadonlyArray<Invariant<State, Event>> },
-  before: State,
-  after: State,
-  event: Event,
-): Effect.Effect<void, MachineTestFailure> {
-  return Effect.gen(function* () {
-    for (const invariant of options.invariants ?? []) {
-      if (invariant._tag === "StateInvariant") {
-        yield* checkState(invariant, view(after));
-        continue;
+function failureEffect<A>(run: () => A): Effect.Effect<A, MachineTestFailure>;
+function failureEffect<A>(
+  run: () => A,
+  schema: true,
+): Effect.Effect<A, MachineTestFailure | Schema.SchemaError>;
+function failureEffect<A>(
+  run: () => A,
+  schema?: true,
+): Effect.Effect<A, MachineTestFailure | Schema.SchemaError> {
+  return Effect.try({
+    try: run,
+    catch: (cause) => {
+      if (cause instanceof Shared.MachineTestFailure) {
+        return new MachineTestFailure({ detail: cause.detail });
       }
-      if (!invariant.check({ before: view(before), after: view(after), event })) {
-        return yield* new MachineTestFailure({
-          detail: `Machine invariant "${invariant.name}" failed after ${event._tag} from ${before._tag}`,
-        });
+      if (schema === true && cause instanceof Schema.SchemaError) {
+        return cause;
       }
-    }
+      throw cause;
+    },
   });
-}
-
-function declaredCandidates<State extends Tagged, Event extends Tagged>(
-  machine: DefinedMachine<State, Event>,
-): ReadonlyArray<{ readonly id: string }> {
-  const ids: Array<{ readonly id: string }> = [];
-  for (const from of Object.keys(machine.definition.states)) {
-    for (const [on, specification] of Object.entries(machine.transitionsOf(from))) {
-      const candidates = listOf(specification);
-      candidates.forEach((_candidate, index) => ids.push({ id: `${from}.${on}.${index}` }));
-    }
-  }
-  return ids;
-}
-
-function firstPassingCandidate<State extends Tagged, Event extends Tagged>(
-  machine: DefinedMachine<State, Event>,
-  state: State,
-  event: Event,
-): { readonly id: string; readonly target: string } | undefined {
-  const specification = machine.transitionsOf(state._tag)[event._tag];
-  const candidates = listOf(specification);
-  const index = candidates.findIndex(
-    (candidate) => candidate.guard === undefined || candidate.guard({ state, event }),
-  );
-  const candidate = index === -1 ? undefined : candidates[index];
-  return candidate === undefined
-    ? undefined
-    : { id: `${state._tag}.${event._tag}.${index}`, target: candidate.target };
 }
 
 function listOf<Value>(value: Value | ReadonlyArray<Value> | undefined): ReadonlyArray<Value> {

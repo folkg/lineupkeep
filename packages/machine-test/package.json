@@ -1,0 +1,9 @@
+{
+  "name": "@lineupkeep/machine-test",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

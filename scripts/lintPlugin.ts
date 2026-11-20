@@ -13,22 +13,41 @@ const plugin = {
             return;
           }
           const facts = testingFacts(context.filename, context.sourceCode.text);
-          if (!facts.calls.has("exploreWorkflow") && !facts.calls.has("MachineTest.explore")) {
+          const browser = context.filename.includes("apps/web/");
+          const backend = context.filename.includes("packages/backend/");
+          const browserExploration = facts.calls.has("exploreWorkflow");
+          const backendExploration = facts.calls.has("MachineTest.explore");
+          if (!((!backend && browserExploration) || (!browser && backendExploration))) {
             sourceReport(
               context,
               0,
               "add exploration with invariants and complete transition coverage; use exploreWorkflow for clients or MachineTest.explore for backend machines.",
             );
           }
-          if (
-            !(facts.calls.has("fc.assert") && facts.calls.has("fc.property")) &&
-            !facts.calls.has("MachineTest.scenarios")
-          ) {
+          const browserProperty = facts.calls.has("fc.assert") && facts.calls.has("fc.property");
+          const backendProperty = facts.calls.has("MachineTest.scenarios");
+          if (!((!backend && browserProperty) || (!browser && backendProperty))) {
             sourceReport(
               context,
               0,
               "add property test coverage for generated event data; use fc.assert(fc.property(...)) for clients or MachineTest.scenarios with effect/Arbitrary for backend machines.",
             );
+          }
+          if (backend) {
+            if (!facts.calls.has("MachineTest.verify")) {
+              sourceReport(
+                context,
+                0,
+                "add MachineTest.verify to check declared trace transitions.",
+              );
+            }
+            if (!facts.calls.has("MachineTest.checkInvariants")) {
+              sourceReport(
+                context,
+                0,
+                "add MachineTest.checkInvariants to check generated traces.",
+              );
+            }
           }
         },
       }),

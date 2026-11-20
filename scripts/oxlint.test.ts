@@ -5,7 +5,7 @@ import { checkLint } from "./architectureFixture.ts";
 const workflowTestDeclarations = `
   export declare const exploreWorkflow: (workflow: number, options: unknown) => void;
   export declare const fc: { assert: (property: unknown) => void; property: (events: unknown, check: unknown) => unknown };
-  export declare const MachineTest: { explore: (workflow: number, options: unknown) => void; scenarios: (workflow: number) => void };
+  export declare const MachineTest: { explore: (workflow: number, options: unknown) => void; scenarios: (workflow: number) => void; verify: (workflow: number, trace: unknown) => void; checkInvariants: (workflow: number, trace: unknown, invariants: unknown[]) => void };
   export const options = {};
   export const events: unknown[] = [];
   export const check = (): boolean => true;
@@ -46,6 +46,48 @@ it.concurrent.each([
   const result = await checkLint({
     "scripts/calendarWorkflow.ts": "export const workflow = 1;",
     "scripts/calendarWorkflow.test.ts": `import { workflow } from "./calendarWorkflow.ts"; export { workflow }; ${workflowTestDeclarations} ${test}`,
+  });
+
+  expect(result.status, result.output).toBe(0);
+});
+
+it.concurrent.each([
+  ["verify", "MachineTest.checkInvariants(1, {}, []);"],
+  ["checkInvariants", "MachineTest.verify(1, {});"],
+])("requires backend workflow %s", async (missing, present) => {
+  const result = await checkLint({
+    "packages/backend/src/contexts/calendar/CalendarWorkflow.test.ts": `${workflowTestDeclarations} MachineTest.explore(1, options); MachineTest.scenarios(1); ${present}`,
+  });
+
+  expect(result.status).toBeGreaterThan(0);
+  expect(result.output).toContain(`add MachineTest.${missing}`);
+  expect(result.output).toContain("repository(workflow-tests)");
+});
+
+it.concurrent("accepts complete backend workflow coverage", async () => {
+  const result = await checkLint({
+    "packages/backend/src/contexts/calendar/CalendarWorkflow.test.ts": `${workflowTestDeclarations} MachineTest.explore(1, options); MachineTest.scenarios(1); MachineTest.verify(1, {}); MachineTest.checkInvariants(1, {}, []);`,
+  });
+
+  expect(result.status, result.output).toBe(0);
+});
+
+it.concurrent.each([
+  ["exploration", "MachineTest.explore(1, options); fc.assert(fc.property(events, check));"],
+  ["property test", "exploreWorkflow(1, options); MachineTest.scenarios(1);"],
+])("requires browser workflow %s even with backend calls", async (missing, source) => {
+  const result = await checkLint({
+    "apps/web/src/browser/calendar/CalendarWorkflow.test.ts": `${workflowTestDeclarations} ${source}`,
+  });
+
+  expect(result.status).toBeGreaterThan(0);
+  expect(result.output.replaceAll(/\s+/g, " ")).toContain(`add ${missing}`);
+  expect(result.output).toContain("repository(workflow-tests)");
+});
+
+it.concurrent("accepts browser workflow coverage", async () => {
+  const result = await checkLint({
+    "apps/web/src/browser/calendar/CalendarWorkflow.test.ts": `${workflowTestDeclarations} exploreWorkflow(1, options); fc.assert(fc.property(events, check));`,
   });
 
   expect(result.status, result.output).toBe(0);

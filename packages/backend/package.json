@@ -41,5 +41,8 @@
     "pg": "8.23.1",
     "postgres": "catalog:",
     "xstate": "catalog:"
+  },
+  "devDependencies": {
+    "@lineupkeep/machine-test": "workspace:*"
   }
 }

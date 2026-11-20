@@ -17,17 +17,23 @@ linking, and transaction moves. The browser sign-in machine is `signInWorkflow.t
 ## One test helper
 
 The graph walk, transition coverage, invariant checks, and terminal-state checks are runtime-neutral.
-They belong in one shared helper. The runtime-specific parts are small adapters:
+They belong in `@lineupkeep/machine-test` (`packages/machine-test/src/index.ts`). Its generic
+`MachineAdapter<State, Event>` supplies state paths and keys, sample events, transitions,
+declarations, expected targets, and final-state detection to `explore`, `run`, `verify`, and
+`checkInvariants`. The runtime-specific parts are small adapters:
 
-- The backend adapter decodes Effect Schema state and events and calls `plan` and `snapshotOf`.
-- The browser adapter uses the XState FSM transition and fast-check generators.
+- `packages/backend/src/utilities/machineTest.ts` decodes Effect Schema state and calls `plan`
+  and `snapshotOf`; it retains Effect `Arbitrary` scenarios and Effect results.
+- `apps/web/src/browser/workflow/workflowTest.ts` uses the XState FSM state configuration and
+  transition; the browser tests retain fast-check generators. `exploreWorkflow` accepts an optional
+  `final` predicate (for example, `state.value === "signedIn"`) to enforce terminal rejection.
 - The shared core imports neither Effect nor Node. Both adapters call it.
 
 The Effect-specific work is schema decoding and `Arbitrary` generation. It is not the graph
 algorithm. The shared core owns the graph algorithm, coverage, invariants, and the final-state rule.
 
-The public test files should have one shape. After the migration, the backend and browser adapters
-both expose the same operations: explore, run, verify, check invariants, and generate scenarios.
+The core is the only graph walker. The backend exposes the shared operations through Effect;
+the browser exposes `exploreWorkflow` and `play` through the same runner.
 
 ## Required test pattern
 
@@ -53,8 +59,8 @@ The `repository/workflow-tests` rule in `scripts/lintPlugin.ts` already requires
 - `exploreWorkflow` or `MachineTest.explore` in every `*Workflow.test.ts`.
 - `fc.assert` with `fc.property` or `MachineTest.scenarios`.
 
-It does not yet require `verify`, `checkInvariants`, a rehydration test, or a codec round trip. The
-pattern above extends the rule where a call can be checked. The write guard and the state table are
+Backend workflow tests also require `MachineTest.verify` and `MachineTest.checkInvariants`.
+The rule does not require rehydration or a codec round trip. The write guard and the state table are
 reviewed through the shared helper and the workflow module itself, not through a syntax-only rule.
 
 ## Rollout

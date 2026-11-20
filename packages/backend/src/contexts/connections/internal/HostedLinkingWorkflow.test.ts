@@ -14,12 +14,65 @@ import * as MachineTest from "#utilities/machineTest.ts";
 import { HostedLinkingRow } from "./HostedLinkingTables.ts";
 import { HostedLinkingEvents, HostedLinkingWorkflow } from "./HostedLinkingWorkflow.ts";
 
+const define = MachineTest.invariants(HostedLinkingWorkflow);
+const invariants = [
+  define.state(
+    "only Completed owns completedAt",
+    ({ snapshot }) =>
+      "completedAt" in snapshot.state.value === (snapshot.state.path === "Completed"),
+  ),
+  define.state("Completed owns connectionId and other terminal states do not", ({ snapshot }) => {
+    const state = snapshot.state.value;
+    return state._tag === "Completed"
+      ? "connectionId" in state
+      : state._tag === "Active" || state._tag === "Completing" || !("connectionId" in state);
+  }),
+  define.state(
+    "only Cancelled owns cancelledAt",
+    ({ snapshot }) =>
+      "cancelledAt" in snapshot.state.value === (snapshot.state.path === "Cancelled"),
+  ),
+  define.state(
+    "only Expired owns expiredAt",
+    ({ snapshot }) => "expiredAt" in snapshot.state.value === (snapshot.state.path === "Expired"),
+  ),
+  define.state(
+    "only Failed owns failedAt and reason",
+    ({ snapshot }) =>
+      "failedAt" in snapshot.state.value === (snapshot.state.path === "Failed") &&
+      "reason" in snapshot.state.value === (snapshot.state.path === "Failed"),
+  ),
+  define.state("terminal states own exactly their outcome fields", ({ snapshot }) => {
+    const fields = [
+      "completedAt",
+      "connectionId",
+      "cancelledAt",
+      "expiredAt",
+      "failedAt",
+      "reason",
+    ].filter((field) => field in snapshot.state.value);
+    switch (snapshot.state.path) {
+      case "Completed":
+        return fields.join(",") === "completedAt,connectionId";
+      case "Cancelled":
+        return fields.join(",") === "cancelledAt";
+      case "Expired":
+        return fields.join(",") === "expiredAt";
+      case "Failed":
+        return fields.join(",") === "failedAt,reason";
+      default:
+        return true;
+    }
+  }),
+];
+
 it.effect("round-trips every hosted linking lifecycle state through its row codec", () =>
   Effect.gen(function* () {
     const explored = yield* MachineTest.explore(HostedLinkingWorkflow, {
       input,
       events: () => events,
       stateKey: ({ snapshot }) => JSON.stringify(snapshot),
+      invariants,
     });
     assert.strictEqual(explored.completeness._tag, "Complete");
     assert.strictEqual(explored.transitionCoverage.definitions.missing, 0);
@@ -133,6 +186,7 @@ it.effect("checks generated event sequences against the hosted linking machine",
         Effect.gen(function* () {
           const trace = yield* MachineTest.run(HostedLinkingWorkflow, scenario);
           yield* MachineTest.verify(HostedLinkingWorkflow, trace);
+          yield* MachineTest.checkInvariants(HostedLinkingWorkflow, trace, invariants);
           return true;
         }),
       { seed: 20261025, runs: 100 },
