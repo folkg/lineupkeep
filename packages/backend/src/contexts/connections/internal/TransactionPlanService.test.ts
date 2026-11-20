@@ -1241,7 +1241,7 @@ it.effect("publishes places and each reserve list on the plan read", () => {
       },
     ]);
     assert.strictEqual(read.addsPossible, 1);
-    assert.strictEqual(DateTime.formatIso(read.nextRunAt), DateTime.formatIso(nextCheckAt(at)));
+    assert.strictEqual(DateTime.formatIso(read.nextCheckAt), DateTime.formatIso(nextCheckAt(at)));
   }).pipe(Effect.provide(mutableFactsLayer(facts)));
 });
 
@@ -2195,7 +2195,16 @@ it.effect("runs a confirmed future move on the check after its day, recording bo
     const database = yield* ConnectionsDatabase;
     yield* TestClock.setTime(DateTime.toEpochMillis(at));
     yield* seedTeam(database, owner, team);
-    facts.set(team, league([rostered("a1", "Roster One", "BN", ["RB"])], []).facts);
+    const base = league([rostered("a1", "Roster One", "BN", ["RB"])], []).facts;
+    facts.set(team, {
+      ...base,
+      timing: {
+        rule: "next_day",
+        currentDate: today,
+        periodStart: undefined,
+        timeZone: "America/Los_Angeles",
+      },
+    });
 
     const proposed = yield* service.propose(owner, {
       team,
@@ -2222,6 +2231,13 @@ it.effect("runs a confirmed future move on the check after its day, recording bo
     assert.strictEqual(confirmedMove?.decidedBy, "owner");
     assert.strictEqual(confirmedMove?.surface, "transactions.confirm");
     assert.strictEqual(providerReads, 0);
+
+    const afterConfirm = yield* service.plan(owner, { team });
+    assert.strictEqual(afterConfirm.moves[0]?.effectiveDate, "2026-11-16");
+    assert.strictEqual(
+      DateTime.formatIso(Option.getOrThrow(Option.fromNullishOr(afterConfirm.moves[0]?.sendsAt))),
+      "2026-11-15T08:55:00.000Z",
+    );
 
     const early = yield* service.runDue(10, at);
     assert.strictEqual(early.counts.moves, 0);
@@ -3401,27 +3417,24 @@ it.effect("tries each fallback in turn and ends failed when all choices fail", (
 for (const timing of [
   {
     rule: "same_day" as const,
-    currentDate: "2026-11-14",
+    currentDate: "2026-11-15",
     periodStart: undefined,
     effectiveDate: "2026-11-15",
-    runsOn: "2026-11-15",
   },
   {
     rule: "next_day" as const,
-    currentDate: "2026-11-14",
+    currentDate: "2026-11-15",
     periodStart: undefined,
     effectiveDate: "2026-11-16",
-    runsOn: "2026-11-16",
   },
   {
     rule: "weekly_lock" as const,
     currentDate: "2026-11-15",
     periodStart: "2026-11-09",
     effectiveDate: "2026-11-09",
-    runsOn: "2026-11-15",
   },
 ]) {
-  it.effect(`runs a saved move on the day it applies under ${timing.rule}`, () => {
+  it.effect(`runs a saved move on its submission day under ${timing.rule}`, () => {
     const facts = new Map<TeamId, TransactionPlanTeamFacts>();
     const writes = writeLayer(() => ({ status: "executed" }));
     const leagueAt = DateTime.makeUnsafe("2026-11-15T03:00:00.000Z");
@@ -3448,20 +3461,11 @@ for (const timing of [
         ).facts,
       );
 
-      const proposed = yield* service.propose(owner, {
+      yield* service.propose(owner, {
         team,
         proposedBy: proposer,
-        moves: [
-          { ...drop("a1", "Roster One"), runDay: "2026-11-15" },
-          { ...drop("a2", "Roster Two"), runDay: "2026-11-16" },
-        ],
+        moves: [{ ...drop("a1", "Roster One"), runDay: "2026-11-15" }],
       });
-      yield* service.confirm(owner, {
-        team,
-        moves: proposed.plan.moves.map((move) => move.move),
-        key: `confirm-timing-${timing.rule}`,
-      });
-
       const early = yield* service.runDue(10, leagueAt);
       assert.strictEqual(early.counts.moves, 0);
       assert.strictEqual(writes.requests.length, 0);
@@ -3474,24 +3478,18 @@ for (const timing of [
         facts.set(team, { ...current, today: day });
       };
       setDay("2026-11-15");
-      const onRunDay = yield* service.runDue(10, leagueAt);
-      if (timing.runsOn === "2026-11-15") {
-        assert.strictEqual(onRunDay.counts.executed, 1);
-      } else {
-        assert.strictEqual(onRunDay.counts.moves, 0);
-        assert.strictEqual(writes.requests.length, 0);
-        setDay(timing.runsOn);
-        const onEffectiveDate = yield* service.runDue(10, leagueAt);
-        assert.strictEqual(onEffectiveDate.counts.executed, 1);
-      }
+      yield* service.confirm(owner, {
+        team,
+        moves: (yield* service.plan(owner, { team })).moves.map((move) => move.move),
+        key: `confirm-timing-${timing.rule}`,
+      });
 
       assert.strictEqual(writes.requests.length, 1);
       const stored = yield* repository.readPlanMoves({ userId: owner, team });
       const run = stored.find((move) => move.drops[0]?.key === "a1");
       assert.strictEqual(run?.result, "executed");
-      assert.strictEqual(run?.runDay, timing.runsOn);
+      assert.strictEqual(run?.runDay, "2026-11-15");
       assert.strictEqual(run?.effectiveDate, timing.effectiveDate);
-      assert.strictEqual(stored.find((move) => move.drops[0]?.key === "a2")?.result, undefined);
     }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
   });
 }
@@ -4123,7 +4121,7 @@ it.effect("accepts a drop and an activate as one group when that is the legal cu
   }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
-it.effect("waits out a next-day group and runs it whole with its own drop projected", () => {
+it.effect("runs a next-day group on its submission day and records tomorrow's effect", () => {
   const facts = nextDaySwapFacts();
   const writes = writeLayer(() => ({ status: "executed" }));
   return Effect.gen(function* () {
@@ -4145,12 +4143,11 @@ it.effect("waits out a next-day group and runs it whole with its own drop projec
         move.decision,
         move.runDay,
         move.effectiveDate,
-        move.runsOn,
         move.validation.status,
       ]),
       [
-        ["drop", "undecided", today, "2026-11-15", "2026-11-15", "current"],
-        ["activate", "undecided", today, "2026-11-15", "2026-11-15", "current"],
+        ["drop", "undecided", today, "2026-11-15", "current"],
+        ["activate", "undecided", today, "2026-11-15", "current"],
       ],
     );
     const activation = proposed.plan.moves.find((move) => move.kind === "activate");
@@ -4163,30 +4160,20 @@ it.effect("waits out a next-day group and runs it whole with its own drop projec
       confirmed.confirmed,
       proposed.plan.moves.map((move) => move.move),
     );
-    assert.strictEqual(confirmed.counts.moves, 0);
-    assert.deepStrictEqual(writes.requests, []);
-
-    const waiting = yield* service.runDue(10, at);
-    assert.strictEqual(waiting.counts.moves, 0);
-    assert.deepStrictEqual(writes.requests, []);
-    const held = yield* service.plan(owner, { team });
-    assert.deepStrictEqual(
-      held.moves.map((move) => [move.decision, move.runsOn]),
-      [
-        ["confirmed", "2026-11-15"],
-        ["confirmed", "2026-11-15"],
-      ],
-    );
-
-    moveLeagueDay(facts, "2026-11-15");
-    const arrived = yield* service.runDue(10, at);
-
-    assert.strictEqual(arrived.counts.executed, 2);
+    assert.strictEqual(confirmed.counts.executed, 2);
     assert.deepStrictEqual(
       writes.requests.map((request) => request.kind),
       ["drop", "activate"],
     );
     assert.deepStrictEqual(writes.requests[1]?.placement, activation.placement);
+    const held = yield* service.plan(owner, { team });
+    assert.deepStrictEqual(
+      held.moves.map((move) => [move.decision, move.runDay, move.effectiveDate, move.result]),
+      [
+        ["now", today, "2026-11-15", "executed"],
+        ["now", today, "2026-11-15", "executed"],
+      ],
+    );
 
     const read = yield* service.plan(owner, { team });
     assert.deepStrictEqual(
@@ -4232,11 +4219,8 @@ it.effect("runs a same-day group as soon as the owner confirms it", () => {
     });
 
     assert.deepStrictEqual(
-      proposed.plan.moves.map((move) => [move.effectiveDate, move.runsOn]),
-      [
-        [today, today],
-        [today, today],
-      ],
+      proposed.plan.moves.map((move) => move.effectiveDate),
+      [today, today],
     );
 
     const result = yield* confirmDue(service, team);
@@ -4328,8 +4312,6 @@ it.effect("keeps a refused dependent leg valid after its group's drop landed for
 
     yield* service.propose(owner, { team, proposedBy: proposer, moves: swapGroup() });
     yield* confirmDue(service, team);
-    moveLeagueDay(facts, "2026-11-15");
-    yield* service.runDue(10, at);
 
     assert.deepStrictEqual(
       writes.requests.map((request) => request.kind),
@@ -5100,14 +5082,6 @@ function nextDaySwapFacts(
       ).facts,
     ],
   ]);
-}
-
-function moveLeagueDay(facts: Map<TeamId, TransactionPlanTeamFacts>, day: string): void {
-  const current = facts.get(team);
-  if (current === undefined) {
-    throw new Error("The league facts were not seeded");
-  }
-  facts.set(team, { ...current, today: day });
 }
 
 function swapGroup(): ReadonlyArray<TransactionPlanMoveDraft> {

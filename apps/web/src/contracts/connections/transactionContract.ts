@@ -87,7 +87,7 @@ export type TransactionMoveView = {
   readonly bid?: number;
   readonly runDay?: string;
   readonly effectiveDate?: string;
-  readonly runsOn?: string;
+  readonly sendsAt?: string;
   readonly decidedAt?: string;
   readonly decidedBy?: "owner" | "agent" | "system";
   readonly surface?: string;
@@ -116,6 +116,7 @@ export type TransactionMoveTeamDayView = {
 
 export type TransactionMoveDayView = {
   readonly day?: string;
+  readonly groupedBy: "runDay";
   readonly today: boolean;
   readonly teams: ReadonlyArray<TransactionMoveTeamDayView>;
 };
@@ -154,6 +155,7 @@ export type TransactionWaiverRuleView = {
 
 export type TransactionPlanDayView = {
   readonly day?: string;
+  readonly groupedBy: "runDay";
   readonly today: boolean;
   readonly moves: ReadonlyArray<TransactionMoveView>;
 };
@@ -185,7 +187,7 @@ export type TransactionPlanGroupView = {
 export type TransactionMoveListData = {
   readonly status: "ok";
   readonly team?: TransactionMoveTeamView;
-  readonly nextRunAt: string;
+  readonly nextCheckAt: string;
   readonly moves: ReadonlyArray<TransactionMoveView>;
   readonly days: ReadonlyArray<TransactionMoveDayView>;
   readonly teamFacts: ReadonlyArray<TransactionTeamFactsView>;
@@ -221,7 +223,7 @@ type TransactionPlanSnapshotView =
 export type TransactionPlanData = {
   readonly team: TransactionMoveTeamView;
   readonly today?: string;
-  readonly nextRunAt: string;
+  readonly nextCheckAt: string;
   readonly snapshot: TransactionPlanSnapshotView;
   readonly waiverBid?: WaiverBidView;
   readonly waiver?: TransactionWaiverRuleView;

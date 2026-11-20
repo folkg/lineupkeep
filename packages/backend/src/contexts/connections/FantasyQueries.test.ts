@@ -2703,6 +2703,56 @@ it.effect(
           proTeamKey: "nhl.t.13",
         }),
       ]);
+      yield* fake.setPlayerDetails([
+        {
+          providerPlayerKey: "465.p.1",
+          name: "Keyed Skater",
+          primaryPosition: "C",
+          displayPosition: "C",
+          proTeam: "TOR",
+          availabilityDetail: undefined,
+          eligiblePositions: ["C"],
+          rosterStatus: "free_agent",
+          actual: undefined,
+          projected: undefined,
+        },
+        {
+          providerPlayerKey: "465.p.2",
+          name: "Pair Skater",
+          primaryPosition: "C",
+          displayPosition: "C",
+          proTeam: "BOS",
+          availabilityDetail: undefined,
+          eligiblePositions: ["C"],
+          rosterStatus: "free_agent",
+          actual: undefined,
+          projected: undefined,
+        },
+        {
+          providerPlayerKey: "465.p.3",
+          name: "Unmapped Skater",
+          primaryPosition: "C",
+          displayPosition: "C",
+          proTeam: "ZZZ",
+          availabilityDetail: undefined,
+          eligiblePositions: ["C"],
+          rosterStatus: "free_agent",
+          actual: undefined,
+          projected: undefined,
+        },
+        {
+          providerPlayerKey: "465.p.4",
+          name: "Keyed Unresolved Skater",
+          primaryPosition: "C",
+          displayPosition: "C",
+          proTeam: "ZZZ",
+          availabilityDetail: undefined,
+          eligiblePositions: ["C"],
+          rosterStatus: "free_agent",
+          actual: undefined,
+          projected: undefined,
+        },
+      ]);
       yield* games.setGames([
         calendarGame("g1", "2026-10-19", "TOR", "BOS"),
         calendarGame("g2", "2026-10-21", "TOR", "LA"),
@@ -2758,6 +2808,31 @@ it.effect(
           ],
         ],
       );
+
+      const hydrated = yield* queries.getPlayers(owner, {
+        team: teamId,
+        players: search.players.map((player) => player.player),
+        groups: ["schedule"],
+        gamesWindow: { kind: "current" },
+      });
+      assert.strictEqual(hydrated.status, "ok");
+      if (hydrated.status !== "ok") {
+        return;
+      }
+      assert.deepStrictEqual(hydrated.gamesWindow, search.gamesWindow);
+      assert.deepStrictEqual(hydrated.players[0]?.gameDays, {
+        status: "available",
+        dates: ["2026-10-19", "2026-10-21"],
+      });
+      assert.deepStrictEqual(hydrated.players[2]?.gameDays, {
+        status: "available",
+        dates: ["2026-10-19", "2026-10-22"],
+      });
+      assert.deepStrictEqual(hydrated.players[1]?.gameDays, {
+        status: "unavailable",
+        detail:
+          "This row's professional team could not be resolved to a key, so its game days cannot be joined without guessing from an abbreviation.",
+      });
     }).pipe(Effect.provide(queriesTestLayerWithGames(6))),
 );
 

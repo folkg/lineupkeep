@@ -132,7 +132,7 @@ export function moveReadView(input: {
     ...content,
     runDay: evaluated.runDay,
     ...(evaluated.effectiveDate === undefined ? {} : { effectiveDate: evaluated.effectiveDate }),
-    runsOn: evaluated.runsOn,
+    ...(evaluated.sendsAt === undefined ? {} : { sendsAt: evaluated.sendsAt }),
     ...(evaluated.placement === undefined ? {} : { placement: placementView(evaluated.placement) }),
     validation: validationView(evaluated.validation),
     check: { status: "checked" },
@@ -185,6 +185,7 @@ export function moveDays(input: {
   }
   return [...days.values()].sort(compareMoveDays).map((grouped) => ({
     ...(grouped.day === undefined ? {} : { day: grouped.day }),
+    groupedBy: "runDay" as const,
     today: grouped.today,
     teams: [...grouped.teams.values()].sort(compareMoveTeams),
   }));
@@ -212,6 +213,7 @@ export function planDays(input: {
   }
   return ordered.map((day) => ({
     ...(day.day === undefined ? {} : { day: day.day }),
+    groupedBy: "runDay" as const,
     today: day.today,
     moves: day.moves,
   }));

@@ -29,7 +29,7 @@ export function toTransactionMoveListView(list: TransactionMoveList): Transactio
   return {
     status: "ok",
     ...(list.team === undefined ? {} : { team: list.team }),
-    nextRunAt: DateTime.formatIso(list.nextRunAt),
+    nextCheckAt: DateTime.formatIso(list.nextCheckAt),
     moves: list.moves.map(toMoveView),
     days: list.days.map(toMoveDayView),
     groups: list.groups.map(toGroupView),
@@ -57,7 +57,7 @@ export function toTransactionPlanData(plan: TransactionPlanRead): TransactionPla
   return {
     team: plan.team,
     ...(plan.today === undefined ? {} : { today: plan.today }),
-    nextRunAt: DateTime.formatIso(plan.nextRunAt),
+    nextCheckAt: DateTime.formatIso(plan.nextCheckAt),
     snapshot:
       plan.snapshot.status === "live"
         ? {
@@ -134,7 +134,7 @@ function toMoveView(move: TransactionMoveRead): TransactionMoveView {
     ...(move.bid === undefined ? {} : { bid: move.bid }),
     ...(move.runDay === undefined ? {} : { runDay: move.runDay }),
     ...(move.effectiveDate === undefined ? {} : { effectiveDate: move.effectiveDate }),
-    ...(move.runsOn === undefined ? {} : { runsOn: move.runsOn }),
+    ...(move.sendsAt === undefined ? {} : { sendsAt: DateTime.formatIso(move.sendsAt) }),
     ...(move.decidedAt === undefined ? {} : { decidedAt: DateTime.formatIso(move.decidedAt) }),
     ...(move.decidedBy === undefined ? {} : { decidedBy: move.decidedBy }),
     ...(move.surface === undefined ? {} : { surface: move.surface }),
@@ -174,6 +174,7 @@ function validationView(validation: TransactionMoveValidationView): {
 function toMoveDayView(day: TransactionMoveDay): TransactionMoveDayView {
   return {
     ...(day.day === undefined ? {} : { day: day.day }),
+    groupedBy: day.groupedBy,
     today: day.today,
     teams: day.teams.map((entry): TransactionMoveTeamDayView => ({
       team: entry.team,
@@ -185,6 +186,7 @@ function toMoveDayView(day: TransactionMoveDay): TransactionMoveDayView {
 function toPlanDayView(day: TransactionPlanDay): TransactionPlanDayView {
   return {
     ...(day.day === undefined ? {} : { day: day.day }),
+    groupedBy: day.groupedBy,
     today: day.today,
     moves: day.moves.map(toMoveView),
   };

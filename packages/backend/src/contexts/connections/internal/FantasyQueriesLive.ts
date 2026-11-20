@@ -1986,12 +1986,14 @@ export const FantasyQueriesLive = Layer.effect(
         failures.push(failure);
       }
       let league: ProviderLeagueSettings | undefined;
+      let leagueOutcome: ReadOutcome<ProviderLeagueSettings> | undefined;
       if (
         groups.includes("scoring_context") ||
         groups.includes("actual_stats") ||
-        groups.includes("projections")
+        groups.includes("projections") ||
+        groups.includes("schedule")
       ) {
-        const leagueOutcome = yield* readLeague(context);
+        leagueOutcome = yield* readLeague(context);
         if (leagueOutcome._tag === "ok") {
           league = leagueOutcome.value;
           coverageEntries.push(coverage("scoring", "league_settings", fetchedAt));
@@ -2048,7 +2050,7 @@ export const FantasyQueriesLive = Layer.effect(
       const validKeys = playerKeysOf(valid);
       const detailKeys = includesActualStats
         ? validKeys
-        : groups.includes("availability")
+        : groups.includes("availability") || groups.includes("schedule")
           ? validKeys.filter((key) => !rosterByKey.has(key))
           : [];
       const readDetails = (
@@ -2150,6 +2152,64 @@ export const FantasyQueriesLive = Layer.effect(
         }
       }
       const detailsByKey = new Map(details.map((player) => [player.providerPlayerKey, player]));
+      const currentWeek =
+        league?.rosterCoverage === "week" ? currentPeriod(league.periodWindow) : undefined;
+      const scheduleWeekFacts = new Map<string, ProviderPlayerWeekFact>();
+      let scheduleWeekFactsWeek: number | undefined;
+      if (groups.includes("schedule") && currentWeek !== undefined) {
+        const weekOutcome = yield* readOutcome(
+          context,
+          "player_weeks",
+          context.provider.readPlayerWeeks({
+            ...providerIdentity(context),
+            providerLeagueKey: leagueKey,
+            providerPlayerKeys: validKeys,
+            week: currentWeek,
+          }),
+        );
+        if (weekOutcome._tag === "ok") {
+          scheduleWeekFactsWeek = currentWeek.week;
+          for (const fact of weekOutcome.value) {
+            scheduleWeekFacts.set(fact.providerPlayerKey, fact);
+          }
+        } else if (weekOutcome._tag === "failed") {
+          failures.push(weekOutcome.failure);
+        }
+      }
+      const poolGames =
+        groups.includes("schedule") && leagueOutcome !== undefined
+          ? yield* readPoolGamesForWindow(
+              context,
+              input.gamesWindow ?? { kind: "current" },
+              leagueOutcome,
+              validKeys,
+              scheduleWeekFacts,
+              scheduleWeekFactsWeek,
+            )
+          : undefined;
+      const missingProTeamKeys = validKeys.flatMap((key) => {
+        const rosterPlayer = rosterByKey.get(key);
+        const abbreviation = rosterPlayer?.proTeamAbbreviation ?? detailsByKey.get(key)?.proTeam;
+        return rosterPlayer?.proTeamKey === undefined && abbreviation !== undefined
+          ? [abbreviation]
+          : [];
+      });
+      const proTeamIdentities =
+        missingProTeamKeys.length === 0
+          ? []
+          : yield* scheduleObservations.readProviderTeamIdentities({
+              sport: context.owned.team.sport,
+              identifiers: missingProTeamKeys,
+            });
+      const proTeamKeyByAbbreviation = uniqueProviderTeamKeys(proTeamIdentities);
+      const proTeamKeyOf = (key: string): string | undefined => {
+        const rosterPlayer = rosterByKey.get(key);
+        const abbreviation = rosterPlayer?.proTeamAbbreviation ?? detailsByKey.get(key)?.proTeam;
+        return (
+          rosterPlayer?.proTeamKey ??
+          (abbreviation === undefined ? undefined : proTeamKeyByAbbreviation.get(abbreviation))
+        );
+      };
       const transactionIdentities = yield* transactionIdentityIndex(
         context,
         fetchedAt,
@@ -2367,6 +2427,11 @@ export const FantasyQueriesLive = Layer.effect(
               ...(actualStats === undefined ? {} : { actualStats }),
               ...(projections === undefined ? {} : { projections }),
               ...(scoringContext === undefined ? {} : { scoringContext }),
+              ...(poolGames?.status !== "available"
+                ? {}
+                : poolGames.basis === "date"
+                  ? { gameDays: poolGameDays(poolGames, proTeamKeyOf(row.providerPlayerKey)) }
+                  : { gameWeeks: poolGameWeeks(poolGames, row.providerPlayerKey) }),
             };
           }),
         { concurrency: 1 },
@@ -2377,12 +2442,14 @@ export const FantasyQueriesLive = Layer.effect(
           statRefFor(statId).pipe(Effect.map((ref) => dictionaryEntry(statId, ref, league))),
         { concurrency: 1 },
       );
-      const hasData = playerRows.some(
-        (row) =>
-          row.identity !== undefined ||
-          row.actualStats?.status === "available" ||
-          row.scoringContext?.status === "available",
-      );
+      const hasData =
+        (poolGames?.status === "available" && valid.length > 0) ||
+        playerRows.some(
+          (row) =>
+            row.identity !== undefined ||
+            row.actualStats?.status === "available" ||
+            row.scoringContext?.status === "available",
+        );
       if (unverifiedPlayers.size > 0 && !hasData) {
         return yield* QuerySelectionInvalid.make({
           detail:
@@ -2396,18 +2463,52 @@ export const FantasyQueriesLive = Layer.effect(
           `team=${input.team}`,
           `period=${statWindowKey(requestedPeriod)}`,
           `groups=${[...groups].sort().join(",")}`,
+          `gamesWindow=${gamesWindowKey(input.gamesWindow)}`,
           `players=${input.players.join(",")}`,
           "order=request",
         ].join("|"),
       );
       const now = yield* DateTime.now;
       const offset = yield* openOffset(userId, fingerprintValue, input.cursor, now);
+      if (poolGames?.status === "available") {
+        coverageEntries.push(
+          coverage(
+            "players",
+            poolGames.basis === "date" ? "professional_games" : "provider_opponent",
+            poolGames.observedAt,
+            undefined,
+            poolGames.basis === "date"
+              ? "Game days in the requested window, from the league's professional games."
+              : "Game weeks in the requested window, from the league's own opponent facts.",
+          ),
+        );
+      }
       const base: Omit<PlayersData, "players" | "page"> = {
         status,
         team,
         period: requestedPeriod,
         periodSupport: periodSupportOf(context, context.owned.team.sport),
         dictionary: definitions,
+        ...(poolGames === undefined
+          ? {}
+          : {
+              gamesWindow:
+                poolGames.status !== "available"
+                  ? { status: "unsupported" as const, detail: poolGames.detail }
+                  : poolGames.basis === "date"
+                    ? {
+                        status: "available" as const,
+                        basis: "date" as const,
+                        window: poolGames.window,
+                        observedAt: poolGames.observedAt,
+                      }
+                    : {
+                        status: "available" as const,
+                        basis: "week" as const,
+                        weeks: poolGames.weeks,
+                        observedAt: poolGames.observedAt,
+                      },
+            }),
         coverage: coverageEntries,
         failures,
         budget: queryBudget,

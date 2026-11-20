@@ -9,14 +9,12 @@ const clockFormats = new Map<string, Intl.DateTimeFormat>();
 const dayFormats = new Map<string, Intl.DateTimeFormat>();
 const dayKeyFormats = new Map<string, Intl.DateTimeFormat>();
 
-export function scheduledMoment(
-  runDay: string,
-  nextRunAt: string | Date | undefined,
+export function plannedMoment(
+  value: string | Date,
   reader: ClockReader = {},
+  now: Date = new Date(),
 ): string {
-  return nextRunAt === undefined
-    ? formatCalendarDate(runDay)
-    : `${formatCalendarDate(runDay)} at ${clockFormat(reader).format(toDate(nextRunAt))}`;
+  return formatDatedMoment(value, reader, now);
 }
 
 function formatLocalMoment(
@@ -45,17 +43,30 @@ function formatDatedMoment(
   return `${dayFormat(reader, day.year !== current.year).format(date)} at ${clockFormat(reader).format(date)}`;
 }
 
-export function timingLine(move: TransactionMoveView): string | undefined {
+export function timingLine(
+  move: TransactionMoveView,
+  reader: ClockReader = {},
+  now: Date = new Date(),
+): string | undefined {
   if (move.kind === "waiver_claim" && move.phase !== "won") {
     return undefined;
   }
   if (move.effectiveDate === undefined) {
     return undefined;
   }
-  if (move.runsOn !== undefined && move.runDay !== undefined && move.runsOn > move.runDay) {
-    return `Runs ${formatCalendarDate(move.runsOn)}, when it takes effect.`;
+  if (move.result === "failed" || move.result === "skipped" || move.result === "unknown") {
+    return undefined;
   }
-  return `Takes effect ${formatCalendarDate(move.effectiveDate)}.`;
+  if (move.result === "executed") {
+    return `Took effect ${formatCalendarDate(move.effectiveDate)}.`;
+  }
+  if (move.sendsAt !== undefined) {
+    const run = plannedMoment(move.sendsAt, reader, now);
+    return move.decision === "confirmed"
+      ? `Runs ${withPeriod(run)} Takes effect ${formatCalendarDate(move.effectiveDate)}.`
+      : `Runs ${run} if you confirm. Takes effect ${formatCalendarDate(move.effectiveDate)}.`;
+  }
+  return `Runs when you confirm. Takes effect ${formatCalendarDate(move.effectiveDate)}.`;
 }
 
 export function moveOutcomeLabel(move: TransactionMoveView): string | undefined {
@@ -112,7 +123,6 @@ export function resultTimeLine(
 
 export function submittedLine(
   move: TransactionMoveView,
-  nextRunAt: string | Date | undefined,
   reader: ClockReader = {},
   now: Date = new Date(),
 ): string | undefined {
@@ -120,12 +130,10 @@ export function submittedLine(
     return undefined;
   }
   const at = formatDatedMoment(move.confirmation.at, reader, now);
-  if (move.decision !== "confirmed" || move.runDay === undefined) {
-    return `You submitted this on ${at}.`;
+  if (move.decision === "confirmed" && move.sendsAt !== undefined) {
+    return `Scheduled on ${at} to run ${withPeriod(plannedMoment(move.sendsAt, reader, now))}`;
   }
-  return move.kind === "waiver_claim" || move.phase !== undefined
-    ? `Scheduled on ${at} for ${formatCalendarDate(move.runDay)}.`
-    : `Scheduled on ${at} for ${scheduledMoment(move.runDay, nextRunAt, reader)}.`;
+  return `You submitted this on ${at}.`;
 }
 
 export function waiverTimingLine(waiver: TransactionWaiverRuleView | undefined): string {
@@ -164,6 +172,10 @@ export function discardLine(
 
 function executedLabel(move: TransactionMoveView): string {
   return move.runDecidedBy === "system" ? "Ran on schedule" : "Ran after you submitted";
+}
+
+function withPeriod(text: string): string {
+  return text.endsWith(".") ? text : `${text}.`;
 }
 
 function clockFormat(reader: ClockReader): Intl.DateTimeFormat {

@@ -37,12 +37,16 @@ No surface re-derives roster state. No surface uses "today" as a stand-in for a 
 date is later. Placement, `rosterMaximum`, reserve list capacity, and eligibility come from the solver
 and the roster read, never from a second local rule.
 
-## 3. The effective date
+## 3. The send day and the effective date
 
-The effective date is the calendar date the league applies a move's roster change. It is not the run
-day.
+A move has two dates, and they answer different questions.
 
-| League rule   | Effective date of a move that runs on day D                              |
+- The **send day** (`runDay`) is the league day Lineupgrade sends the move to the provider. It is the
+  only day that gates execution. A move with no send day is due today.
+- The **effective date** is the league day the provider applies the roster change. It is derived once
+  from the send day and the league's published rule, stored on the move, and never gates sending.
+
+| League rule   | Effective date of a move sent on day D                                   |
 | ------------- | ------------------------------------------------------------------------ |
 | `same_day`    | D                                                                        |
 | `next_day`    | the calendar day after D                                                 |
@@ -50,33 +54,37 @@ day.
 | not published | unknown, so the move is sent without a promised date                     |
 | a trade       | unknown: the other manager decides, so a trade carries no effective date |
 
-The effective date is decided once, when the move is proposed, and stored on the move. It is derived
-again only when the group's run day changes, because that is the only decision it depends on. A later
-change in the league's published rule does not silently move an accepted group's date; the group keeps
-the date the person and the league agreed on, and the next check either applies it on that date or
-reports why it cannot.
+For a next-day league, confirming a move today sends it today and the league applies it tomorrow.
+Scheduling the same move for tomorrow sends it tomorrow and the league applies it the day after. The
+person chooses the send day; the league's rule decides the effective date. The app never asks the
+league to hold a move until its effective date, because that would submit the move a day late.
 
-**A group shares one effective date.** A group is proposed on one day, so its legs derive one date. A
-generated roster fix takes the effective date of the move it funds. An edit that changes the group's
-day re-derives it for every leg. A group whose legs somehow carry different effective dates is invalid
-and does not run.
+**A group shares one send day and one effective date.** A group is proposed on one day, so its legs
+derive one date. A generated roster fix takes the effective date of the move it funds. An edit that
+changes the group's day re-derives it for every leg. A group whose legs somehow carry different dates
+is invalid and does not run.
 
-**The confirmation decides when the person submits, not when the league applies.** Confirming records
-the owner's decision and authorises the run. It does not move the effective date, and it does not let a
-group run before that date.
+**The confirmation decides when the person sends, not when the league applies.** Confirming records
+the owner's decision and authorises the run. It does not move the effective date, and it does not make
+the group wait for the effective date.
 
 ### Waiting
 
-A group whose effective date has not yet arrived waits as a whole. It is not partly run, and it is not
-run early. Confirming it records the decision (`confirmed`), reports the date it will run, and sends
-nothing. On the effective date the check picks the group up and sends every leg in one run.
+A group waits only for its send day. It is not partly run, and it is not run early.
 
-A same-day league's group has today's effective date, so it runs when confirmed. A weekly-lock group
-whose locked week has already started has an effective date in the past, so it also runs when
-confirmed. Only a date still in the future makes a group wait.
+- A group whose send day is today runs when confirmed. A same-day league applies it today; a next-day
+  league applies it tomorrow; a weekly-lock league applies it at the start of the locked week.
+- A group whose send day is later records the decision (`confirmed`), sends nothing, and reports the
+  exact first hourly check on that day (`sendsAt`). On that day the check sends every leg in one run.
+- A send day that has passed is picked up at the next check, never discarded.
 
-The card states both dates: when the move takes effect and when it will run. For a waiting group they
-are the same date, because the group runs on the day the league applies it.
+The card states both facts in plain words:
+
+- `Runs when you confirm. Takes effect November 21.`
+- `Runs November 21 at 9:55 a.m. Takes effect November 22.`
+
+Both times are rendered in the reader's local zone by the browser. `sendsAt` is the exact check; the
+card never borrows today's check time for a later day.
 
 ## 4. The three phases of a submitted claim
 
@@ -113,8 +121,8 @@ person's decision. A submitted claim lives in Earlier as `With the league` until
 
 ## 5. Group atomicity across legs and time
 
-Ordering protects the legs from each other; the effective date protects them across time. Both are
-required.
+Ordering protects the legs from each other; the shared send day and effective date keep them on one
+league date. Both are required.
 
 - An irreversible leg never runs before the leg that funds it, on the same effective date. A drop that
   frees a place runs before the activate that uses it, and both are sent in the same run for the same
@@ -135,14 +143,14 @@ roster is the defect this model removes.
 
 ## 6. Where authority sits
 
-| Decision                                  | Authority                                                |
-| ----------------------------------------- | -------------------------------------------------------- |
-| Placement, free places, roster legality   | the lineup solver, through `placeIntentItems`            |
-| Reserve list eligibility and capacity     | the league's declared roster, interpreted once           |
-| The league's timing rule and current date | the provider's league read                               |
-| Whether a write is accepted for a date    | the provider's write                                     |
-| The effective date of a move              | derived once from the provider's rule, then stored       |
-| Whether a group may run now               | its effective date against the league day, computed once |
+| Decision                                  | Authority                                          |
+| ----------------------------------------- | -------------------------------------------------- |
+| Placement, free places, roster legality   | the lineup solver, through `placeIntentItems`      |
+| Reserve list eligibility and capacity     | the league's declared roster, interpreted once     |
+| The league's timing rule and current date | the provider's league read                         |
+| Whether a write is accepted for a date    | the provider's write                               |
+| The effective date of a move              | derived once from the provider's rule, then stored |
+| Whether a group may be sent now           | its send day against the league day, computed once |
 
 Lineupgrade does not invent a second placement rule and does not invent a second timing rule. It does
 not predict that a league will accept a write; it asks. When the provider publishes no roster date or
@@ -170,21 +178,21 @@ A group is a set of legs with one run day and one effective date.
 
 ## 8. Every place that derives roster state or timing
 
-| Place                                               | What it derives                                                        | Date it uses                                                |
-| --------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `TransactionPlanEvaluation.evaluateTransactionPlan` | validation, placement, projected roster, free places, order            | the evaluation's own roster plus the moves it is given      |
-| `ProposalOrder.placeIntentItems`                    | placement and free active or reserve places via the solver             | none; the caller passes the roster for the date             |
-| `TransactionPlanService.propose`                    | validates and stores the group                                         | the group's derived effective date                          |
-| `TransactionPlanService.save` / `edit`              | revalidates the plan after a change                                    | the group's effective date, re-derived only on a day change |
-| `TransactionPlanService.confirm`                    | decides whether a group runs now or is confirmed for its date          | the stored effective date against the league day            |
-| `TransactionPlanService.runMoves`                   | rechecks a group, orders legs, and settles each write                  | the group's stored effective date, with submitted legs      |
-| `TransactionPlanService.runDue`                     | selects plans with a confirmed leg that is due                         | run day and stored effective date                           |
-| `TransactionPlanService.checkTeams`                 | the live check behind the list and plan reads                          | each open move's effective date, with submitted legs        |
-| `TransactionPlanService.reconcileClaims`            | whether a submitted claim is `won`, `lost`, or still `with_league`     | the provider's roster and player status, never the check    |
-| `TransactionPlanService.planViewOf`                 | the plan view at propose, save, edit, and submit                       | the same, from the plan's stored moves                      |
-| `TransactionPlanRead.moveReadView` / `moveDays`     | the day a move runs and the day it applies                             | the evaluated run day, effective date, and run date         |
-| `TransactionPlanWrites.apply`                       | the roster coverage a write is sent for                                | the league's own date or week for that write                |
-| `TransactionPlanFacts.read`                         | the host roster, the league rule, and whether a slot write is accepted | the league day, never a substitute for an effective date    |
+| Place                                               | What it derives                                                        | Date it uses                                                      |
+| --------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `TransactionPlanEvaluation.evaluateTransactionPlan` | validation, placement, projected roster, free places, order            | the evaluation's own roster plus the moves it is given            |
+| `ProposalOrder.placeIntentItems`                    | placement and free active or reserve places via the solver             | none; the caller passes the roster for the date                   |
+| `TransactionPlanService.propose`                    | validates and stores the group                                         | the group's derived effective date                                |
+| `TransactionPlanService.save` / `edit`              | revalidates the plan after a change                                    | the group's effective date, re-derived only on a day change       |
+| `TransactionPlanService.confirm`                    | decides whether a group runs now or waits for its send day             | the stored send day against the league day                        |
+| `TransactionPlanService.runMoves`                   | rechecks a group, orders legs, and settles each write                  | the group's stored effective date, with submitted legs            |
+| `TransactionPlanService.runDue`                     | selects plans with a confirmed leg whose send day has arrived          | send day, never the effective date                                |
+| `TransactionPlanService.checkTeams`                 | the live check behind the list and plan reads                          | each open move's send day and effective date, with submitted legs |
+| `TransactionPlanService.reconcileClaims`            | whether a submitted claim is `won`, `lost`, or still `with_league`     | the provider's roster and player status, never the check          |
+| `TransactionPlanService.planViewOf`                 | the plan view at propose, save, edit, and submit                       | the same, from the plan's stored moves                            |
+| `TransactionPlanRead.moveReadView` / `moveDays`     | the day a move is sent, the exact check, and the day it applies        | the evaluated send day, `sendsAt`, and effective date             |
+| `TransactionPlanWrites.apply`                       | the roster coverage a write is sent for                                | the league's own date or week for that write                      |
+| `TransactionPlanFacts.read`                         | the host roster, the league rule, and whether a slot write is accepted | the league day, never a substitute for an effective date          |
 
 The defects this model corrects, and where they lived:
 
@@ -193,8 +201,11 @@ The defects this model corrects, and where they lived:
   dependent leg was refused after the drop had landed.
 - `checkTeams` and `planViewOf` projected only open moves, so the plan read showed an executed drop and
   a refused dependent leg for a group it had accepted as ready.
-- `confirm` treated a move whose run day was today as running now, whatever its effective date, so a
-  next-day group was submitted a day before the league would apply it.
-- `runDue` selected a plan on its run day alone, so the same group could be attempted early.
+- `runDue` and `isDueMove` required the effective date to arrive before sending, so a next-day move
+  confirmed today was sent tomorrow and applied the day after. The confirmation now puts the move on
+  the wire on its send day.
+- The page exposed `runsOn` as the later of the send day and the effective date, and used it as the
+  card's action and status date. A move that would run today therefore looked scheduled for tomorrow.
+  `runsOn` is gone; the card names the send moment and the effective date separately.
 - Nothing recorded that a slot move cannot be sent when the league publishes no such date, so a group
   could send its irreversible drop first and discover the fact afterwards.

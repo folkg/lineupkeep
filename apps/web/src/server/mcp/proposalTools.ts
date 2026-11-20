@@ -93,7 +93,8 @@ const AgentTransactionMove = Schema.Struct({
   ),
   reason: Schema.NonEmptyString,
   window: Schema.optional(Schema.NullOr(StoredMoveDate)).annotate({
-    description: "The day the move should run; omit it to run today.",
+    description:
+      "The league day Lineupgrade sends the move; omit it to send today. This is not the effective date.",
   }),
 });
 
@@ -126,7 +127,7 @@ const DiscardedTransactionPlan = Schema.Struct({
 export const proposalTools = Toolkit.make(
   Tool.make("propose_transactions", {
     description:
-      "Add or amend one team's queue: add, claim, drop, stash, or activate. A stash or activate names one player in `player`; the server chooses the place. Name no slot. Nothing is submitted or spent. A saved move waits in Today for the owner to confirm it; no tool confirms a move. A claim's `fallbacks` are tried if the league does not award it. `discard_transaction_move` removes a move.",
+      "Add or amend a team's queue: add, claim, drop, stash, or activate. Stash and activate name `player`; the server chooses the place. Name no slot. `window` is the send day, not the effective date. Nothing is submitted or spent. A saved move waits in Today for the owner to confirm it; no tool confirms a move. A claim's `fallbacks` are tried if the league does not award it.",
     parameters: ProposeAgentTransactionsInput,
     success: Schema.toCodecJson(ProposedTransactions),
     failure: ToolFailure,
@@ -165,7 +166,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_transaction_plan", {
     description:
-      "Read one team's queue by day: each move's check, decision, and next run time. A submitted claim carries `phase` and `attempts`, and names the league's waiver rule, not a run time. `addsPossible`, `canFree`, and `illegal` say what fits and blocks it. A group carries its status.",
+      "Read one team's queue by runDay: each move's `runDay` (send day), `effectiveDate` (league apply day), exact `sendsAt`, decision, check, and claim phase. Buckets group by runDay. `addsPossible`, `canFree`, and `illegal` say what fits and blocks it.",
     parameters: TransactionPlanInput,
     success: Schema.toCodecJson(TransactionPlanRead),
     failure: ToolFailure,

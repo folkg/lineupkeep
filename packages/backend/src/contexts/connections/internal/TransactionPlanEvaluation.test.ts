@@ -1058,7 +1058,7 @@ it("applies a same-day move on its run day", () => {
   );
 });
 
-it("waits for the next day a league applies the move, and runs then", () => {
+it("runs a next-day move on its submission day, not when the league applies it", () => {
   const evaluation = evaluate({
     facts: facts({
       slots: [bench("BN", 2)],
@@ -1079,20 +1079,15 @@ it("waits for the next day a league applies the move, and runs then", () => {
   });
 
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) => [
-      entry.runDay,
-      entry.effectiveDate,
-      entry.runsOn,
-      entry.dueToday,
-    ]),
+    evaluation.moves.map((entry) => [entry.runDay, entry.effectiveDate, entry.dueToday]),
     [
-      ["2026-11-10", "2026-11-11", "2026-11-11", false],
-      ["2026-11-12", "2026-11-13", "2026-11-13", false],
+      ["2026-11-10", "2026-11-11", true],
+      ["2026-11-12", "2026-11-13", false],
     ],
   );
 });
 
-it("runs a next-day move on its effective date once that date arrives", () => {
+it("runs a past submission day at the next check with its stored effective date", () => {
   const evaluation = evaluate({
     facts: facts({
       slots: [bench("BN", 2)],
@@ -1113,14 +1108,40 @@ it("runs a next-day move on its effective date once that date arrives", () => {
   });
 
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) => [
-      entry.runDay,
-      entry.effectiveDate,
-      entry.runsOn,
-      entry.dueToday,
-    ]),
-    [["2026-11-11", "2026-11-11", "2026-11-11", true]],
+    evaluation.moves.map((entry) => [entry.runDay, entry.effectiveDate, entry.dueToday]),
+    [["2026-11-11", "2026-11-11", true]],
   );
+});
+
+it("names the first check on a future submission day in the league's time zone", () => {
+  const evaluation = evaluate({
+    facts: facts({
+      slots: [bench("BN", 1)],
+      constraints: constraints(1),
+      roster: [rostered("p1", "Roster One", "BN")],
+      today: "2026-11-20",
+      timing: {
+        rule: "next_day",
+        currentDate: "2026-11-20",
+        periodStart: undefined,
+        timeZone: "America/Los_Angeles",
+      },
+    }),
+    moves: [
+      move("later", {
+        kind: "drop",
+        drops: [player("p1", "Roster One")],
+        decision: "confirmed",
+        runDay: "2026-11-21",
+      }),
+    ],
+  });
+
+  assert.strictEqual(
+    DateTime.formatIso(evaluation.moves[0]?.sendsAt ?? DateTime.makeUnsafe(0)),
+    "2026-11-21T08:55:00.000Z",
+  );
+  assert.strictEqual(evaluation.moves[0]?.dueToday, false);
 });
 
 it("projects the same places for a group whether its legs are open or already submitted", () => {

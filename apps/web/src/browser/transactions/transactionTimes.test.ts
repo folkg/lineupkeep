@@ -6,25 +6,22 @@ import type { TransactionMoveView } from "#contracts/connections/transactionCont
 import {
   discardLine,
   moveOutcomeLabel,
-  scheduledMoment,
+  plannedMoment,
   submittedLine,
   timingLine,
 } from "./transactionTimes.ts";
 
 const reader = { locale: "en-US", timeZone: "America/New_York" } as const;
-const nextRunAt = "2026-11-17T21:55:00.000Z";
+const sendsAt = "2026-11-17T21:55:00.000Z";
 
-it("names a scheduled moment at the 55 minute mark in the reader's local time", () => {
-  expect(scheduledMoment("2026-11-17", nextRunAt, reader)).toBe(
-    `${formatCalendarDate("2026-11-17")} at 4:55 PM`,
-  );
+it("names a scheduled moment in the reader's local time", () => {
+  expect(plannedMoment(sendsAt, reader)).toBe("Nov 17 at 4:55 PM");
 });
 
 it("shows the day of a submission, in the reader's zone and never as a bare clock", () => {
   expect(
     submittedLine(
       executed({ confirmation: { by: "owner", at: "2026-11-12T02:30:00.000Z" } }),
-      nextRunAt,
       reader,
       new Date("2026-11-12T18:00:00.000Z"),
     ),
@@ -32,7 +29,6 @@ it("shows the day of a submission, in the reader's zone and never as a bare cloc
   expect(
     submittedLine(
       executed({ confirmation: { by: "owner", at: "2026-11-11T17:35:00.000Z" } }),
-      nextRunAt,
       reader,
       new Date("2026-11-11T18:00:00.000Z"),
     ),
@@ -40,7 +36,6 @@ it("shows the day of a submission, in the reader's zone and never as a bare cloc
   expect(
     submittedLine(
       executed({ confirmation: { by: "owner", at: "2025-11-11T17:35:00.000Z" } }),
-      nextRunAt,
       reader,
       new Date("2026-11-11T18:00:00.000Z"),
     ),
@@ -53,13 +48,14 @@ it("dates a later day's submission and the day it runs", () => {
       executed({
         decision: "confirmed",
         runDay: "2026-11-17",
+        effectiveDate: "2026-11-18",
+        sendsAt,
         confirmation: { by: "owner", at: "2026-11-16T13:55:00.000Z" },
       }),
-      nextRunAt,
       reader,
       new Date("2026-11-17T12:00:00.000Z"),
     ),
-  ).toBe(`Scheduled on Nov 16 at 8:55 AM for ${formatCalendarDate("2026-11-17")} at 4:55 PM.`);
+  ).toBe("Scheduled on Nov 16 at 8:55 AM to run Nov 17 at 4:55 PM.");
 });
 
 it("dates a later day's claim without the hourly run time", () => {
@@ -68,10 +64,11 @@ it("dates a later day's claim without the hourly run time", () => {
     phase: "with_league",
     decision: "confirmed",
     runDay: "2026-11-17",
+    sendsAt,
     confirmation: { by: "owner", at: "2026-11-16T13:55:00.000Z" },
   });
-  expect(submittedLine(claim, nextRunAt, reader, new Date("2026-11-17T12:00:00.000Z"))).toBe(
-    `Scheduled on Nov 16 at 8:55 AM for ${formatCalendarDate("2026-11-17")}.`,
+  expect(submittedLine(claim, reader, new Date("2026-11-17T12:00:00.000Z"))).toBe(
+    "Scheduled on Nov 16 at 8:55 AM to run Nov 17 at 4:55 PM.",
   );
   expect(moveOutcomeLabel(claim)).toBe("With the league");
   expect(
@@ -121,7 +118,7 @@ it("dates a claim only once the league awards it", () => {
         effectiveDate: "2026-11-18",
       }),
     ),
-  ).toBe(`Takes effect ${formatCalendarDate("2026-11-18")}.`);
+  ).toBe(`Took effect ${formatCalendarDate("2026-11-18")}.`);
   expect(
     timingLine(
       executed({
@@ -132,7 +129,20 @@ it("dates a claim only once the league awards it", () => {
         effectiveDate: "2026-11-15",
       }),
     ),
-  ).toBe(`Takes effect ${formatCalendarDate("2026-11-15")}.`);
+  ).toBe(`Runs when you confirm. Takes effect ${formatCalendarDate("2026-11-15")}.`);
+  expect(
+    timingLine(
+      executed({
+        kind: "free_agent_add",
+        decision: "confirmed",
+        result: undefined,
+        runDay: "2026-11-17",
+        effectiveDate: "2026-11-18",
+        sendsAt,
+      }),
+      reader,
+    ),
+  ).toBe(`Runs Nov 17 at 4:55 PM. Takes effect ${formatCalendarDate("2026-11-18")}.`);
 });
 
 it("keeps one submission line apart from the run outcome", () => {
@@ -140,7 +150,7 @@ it("keeps one submission line apart from the run outcome", () => {
     confirmation: { by: "owner", at: "2026-11-11T17:35:00.000Z" },
     runAt: "2026-11-11T18:05:00.000Z",
   });
-  expect(submittedLine(move, nextRunAt, reader, new Date("2026-11-17T12:00:00.000Z"))).toBe(
+  expect(submittedLine(move, reader, new Date("2026-11-17T12:00:00.000Z"))).toBe(
     "You submitted this on Nov 11 at 12:35 PM.",
   );
   expect(moveOutcomeLabel(move)).toBe("Ran after you submitted");

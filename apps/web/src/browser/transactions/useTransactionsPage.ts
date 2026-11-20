@@ -22,7 +22,7 @@ import { moveCount, moveSummary } from "./transactionCopy";
 import { describeTransactionActionFailure } from "./transactionFailure";
 import { transactionQueries } from "./transactionQueries";
 import type { TransactionRemote } from "./transactionRemote";
-import { scheduledMoment } from "./transactionTimes";
+import { plannedMoment } from "./transactionTimes";
 import type { ConfirmationTarget } from "./useGroupConfirmation";
 
 export function useTransactionsPage(props: TransactionsPageOptions): TransactionsPageController {
@@ -105,9 +105,6 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
       }
     },
   );
-  const nextRunAt = (): string | undefined =>
-    open.isSuccess ? open.data.pages[0]?.nextRunAt : undefined;
-
   const refresh = (): void => {
     void open.refetch();
     if (earlier.isFetched) {
@@ -280,7 +277,7 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     }
     setFeedback({
       type: outcome.counts.failed > 0 || outcome.counts.unknown > 0 ? "attention" : "success",
-      message: confirmationMessage(outcome, target, nextRunAt()),
+      message: confirmationMessage(outcome, target),
     });
   };
 
@@ -334,7 +331,6 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     teamCount,
     teamFacts,
     groups,
-    nextRunAt,
     canConfirm,
     reportConfirmation,
     reportConfirmationFailure,
@@ -422,6 +418,10 @@ function retryFeedback(data: TransactionMoveRetryData): ActionFeedbackState {
   };
 }
 
+function withPeriod(text: string): string {
+  return text.endsWith(".") ? text : `${text}.`;
+}
+
 function canConfirm(move: TransactionMoveView): boolean {
   return move.validation.status === "current" && move.result === undefined;
 }
@@ -454,6 +454,7 @@ function addMoveDay(held: Map<string, MutableMoveDay>, day: TransactionMoveDayVi
 function moveDayView(day: MutableMoveDay): TransactionMoveDayView {
   return {
     ...(day.day === undefined ? {} : { day: day.day }),
+    groupedBy: "runDay" as const,
     today: day.today,
     teams: [...day.teams.values()]
       .map((team) => ({
@@ -497,23 +498,38 @@ type MutableMoveDay = {
 function confirmationMessage(
   outcome: TransactionMoveConfirmationData,
   target: ConfirmationTarget,
-  nextRunAt: string | undefined,
 ): string {
   if (outcome.status === "refused") {
     return outcome.refusals.map((entry) => entry.detail).join(" ");
   }
   const parts: Array<string> = [];
-  const runsOn = target.runsOn ?? target.runDay;
+  const effect =
+    target.effectiveDate === undefined
+      ? undefined
+      : `It takes effect ${formatCalendarDate(target.effectiveDate)}.`;
   if (outcome.counts.moves === 0) {
-    parts.push(
-      (target.today && runsOn === target.runDay) || runsOn === undefined
-        ? `Submitted ${moveCount(outcome.confirmed.length)}.`
-        : target.claim
-          ? `Scheduled ${moveCount(outcome.confirmed.length)} for ${formatCalendarDate(runsOn)}.`
-          : `Scheduled ${moveCount(outcome.confirmed.length)} for ${scheduledMoment(runsOn, nextRunAt)}.`,
-    );
+    if (target.today) {
+      parts.push(`Submitted ${moveCount(outcome.confirmed.length)}.`);
+    } else {
+      const when =
+        target.sendsAt === undefined
+          ? target.runDay === undefined
+            ? "on its scheduled day"
+            : `on ${formatCalendarDate(target.runDay)}`
+          : plannedMoment(target.sendsAt);
+      parts.push(
+        withPeriod(
+          target.claim
+            ? `Scheduled ${moveCount(outcome.confirmed.length)} to send ${when}`
+            : `Scheduled ${moveCount(outcome.confirmed.length)} to run ${when}`,
+        ),
+      );
+    }
   } else {
     parts.push(`Ran ${moveCount(outcome.counts.moves)}.`);
+  }
+  if (effect !== undefined && !target.claim) {
+    parts.push(effect);
   }
   if (outcome.counts.pending > 0) {
     parts.push(`${moveCount(outcome.counts.pending)} with the league.`);
@@ -541,7 +557,6 @@ export type TransactionsPageController = {
   readonly teamCount: Accessor<number>;
   readonly teamFacts: Accessor<ReadonlyMap<string, TransactionTeamFactsView>>;
   readonly groups: Accessor<ReadonlyArray<TransactionPlanGroupView>>;
-  readonly nextRunAt: () => string | undefined;
   readonly canConfirm: (move: TransactionMoveView) => boolean;
   readonly reportConfirmation: (
     outcome: TransactionMoveConfirmationData,

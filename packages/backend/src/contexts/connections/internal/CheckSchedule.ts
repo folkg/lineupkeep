@@ -9,3 +9,13 @@ export function nextCheckAt(at: DateTime.Utc): DateTime.Utc {
   const candidate = hourStart + checkMinuteMillis;
   return DateTime.makeUnsafe(candidate > millis ? candidate : candidate + hourMillis);
 }
+
+export function firstCheckOnDay(date: string, timeZone: string): DateTime.Utc {
+  const start = DateTime.toUtc(
+    DateTime.makeZonedUnsafe(`${date}T00:00:00`, {
+      timeZone,
+      adjustForTimeZone: true,
+    }),
+  );
+  return nextCheckAt(start);
+}

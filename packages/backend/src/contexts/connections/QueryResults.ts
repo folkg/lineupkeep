@@ -916,6 +916,7 @@ export const PlayerGroup = Schema.Literals([
   "actual_stats",
   "projections",
   "scoring_context",
+  "schedule",
 ]);
 export type PlayerGroup = typeof PlayerGroup.Type;
 
@@ -1203,10 +1204,11 @@ export const GetPlayersInput = Schema.Struct({
   groups: Schema.optional(
     Schema.Array(PlayerGroup).pipe(
       Schema.annotate({
-        description: "Groups of player facts to return.",
+        description: "Groups of player facts to return. `schedule` adds `gameDays` or `gameWeeks`.",
       }),
     ),
   ),
+  gamesWindow: Schema.optional(GamesWindowInput),
   cursor: Schema.optional(Cursor),
   limit: Schema.optional(PageLimit),
 });
@@ -1334,6 +1336,8 @@ const PlayerDetail = Schema.Struct({
   actualStats: Schema.optional(StatGroup),
   projections: Schema.optional(ProjectionGroup),
   scoringContext: Schema.optional(ScoringContext),
+  gameDays: Schema.optional(PlayerGameDays),
+  gameWeeks: Schema.optional(PlayerGameWeeks),
 });
 
 const StatDefinition = Schema.Struct({
@@ -1351,6 +1355,7 @@ export const PlayersData = Schema.Struct({
   periodSupport: StatPeriodSupport,
   dictionary: Schema.Array(StatDefinition),
   players: Schema.Array(PlayerDetail),
+  gamesWindow: Schema.optional(SearchGamesWindow),
   coverage: Schema.Array(QueryCoverage),
   failures: Schema.Array(QueryFailure),
   page: QueryPage,

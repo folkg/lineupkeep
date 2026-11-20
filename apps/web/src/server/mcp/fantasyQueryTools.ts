@@ -86,7 +86,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("search_players", {
     description:
-      "Search the player pool at one linked team's league. Each row carries the value that orders the requested `sort`.",
+      "Search one league's player pool. Each row carries the value that orders `sort`. Add `gamesWindow` for game days or weeks.",
     parameters: SearchPlayersInput,
     success: Schema.toCodecJson(SearchPlayersResult),
     failure: ToolFailure,
@@ -99,7 +99,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_players", {
     description:
-      "Hydrate up to 25 player references from one league in a single response. Every reference returns in `players` or `failures`.",
+      "Hydrate up to 25 player references from one league in one response. Each returns in `players` or `failures`. Group `schedule` adds `gameDays` or `gameWeeks`.",
     parameters: GetPlayersInput,
     success: Schema.toCodecJson(PlayersResult),
     failure: ToolFailure,

@@ -248,8 +248,11 @@ professional-game source covers the league, so it is not bounded by the provider
 window longer than one season (366 dates) or past the league's last scoring week is refused with
 that limit rather than truncated. A league that counts games by scoring week refuses a date window
 and names the week form instead. Omit `gamesWindow` for a cheaper search that does not read the
-league window or the professional calendar. The provider’s dated pool selector is not exposed: it projected one date’s
-opponent rather than filtering the pool, and no client used it. The probe and its results remain in
+league window or the professional calendar. `get_players` with group `schedule` returns the same
+`gameDays` or `gameWeeks` for explicit player references, covering rostered players and pool players
+in one call; its `gamesWindow` input defaults to the league's current window. The provider’s dated
+pool selector is not exposed: it projected one date’s opponent rather than filtering the pool, and no
+client used it. The probe and its results remain in
 [RESEARCH.md](RESEARCH.md#pool-player-schedule-shapes-2026-10-31).
 
 Every roster row carries `slot` as a marked value rather than a bare string: `{ status:
@@ -818,8 +821,9 @@ The input is one `team` and one or more `moves`. Each move names a `kind` (`free
 `reason`, and an optional `window`. A move adds one player, drops one player, or adds one and drops
 one. A stash or activate names its one rostered player in `player` and no place: the server chooses
 the reserve list the player's roster row makes them eligible for, or the active place. `window` is one
-calendar date written `YYYY-MM-DD`, read in the league's own fantasy day; it becomes the move's run
-day and the move starts saved. A move with no window is due today and starts undecided. A one-player
+calendar date written `YYYY-MM-DD`, read in the league's own fantasy day; it becomes the move's send
+day and the move starts saved. A move with no window is due today and starts undecided. The send day
+is not the effective date: the league's own rule derives that from the send day. A one-player
 add or waiver claim may name `fallbacks`, an ordered list of alternatives stored beside the move. If
 the league does not award the claim, the first fallback becomes a straight add and runs through the
 same dated projection and write path as any other add; a fallback that fails or is taken tries the
@@ -847,9 +851,11 @@ the amend changed a confirmed move, which now waits for the owner to confirm it 
 the amend changed nothing and kept the confirmation.
 
 `get_transaction_plan` reads one owned team's queue in order, grouped by run day, today first. Each
-move carries its stored validation and the time it was checked, its effective date, the date it will
-run (`runsOn`), its decision, the actor and surface that decided it (`decidedBy` and `surface`), its
-confirmation, and the check that carried it out once it has run. A decision reads `undecided`, `saved`, `now`, `confirmed`, or
+move carries its stored validation and the time it was checked, its send day (`runDay`), its effective
+date, its decision, the actor and surface that decided it (`decidedBy` and `surface`), its
+confirmation, and the check that carried it out once it has run. A confirmed future move also carries
+`sendsAt`, the exact first hourly check on its send day. The day buckets are grouped by `runDay`, and
+each states `groupedBy: "runDay"`. A decision reads `undecided`, `saved`, `now`, `confirmed`, or
 `discarded`. `snapshot` says whether the places came from a live read, with its time and the coverage
 it names, or from the most recent recorded check when the live read failed. `waiverBid` names the
 league's bid shape: `published` with this team's remaining FAAB, or `bidless`. The read reports the
@@ -859,19 +865,18 @@ the free active places plus the free reserve places. `canFree` names each player
 reserve list that accepts them now, with the list and the active place it frees; one entry per move
 the lists have room for. `addsWithFixes` is `addsPossible` plus those freeable moves. `illegal`
 names each blocker that makes the roster illegal, the fact that blocks it, and the plain cure,
-including the drop that clears it; adds and drops wait until every blocker is cured. `nextRunAt` is
-the exact time of the next hourly run, at the 55 minute mark, so a client never computes it; it
-schedules confirmed non-claim moves only and never appears on a claim. A move
-that ran carries `runAt` and the
-actor that started the run; a confirmed later move carries its confirmation and waits for
-`nextRunAt` on its run date. A submitted claim instead carries `phase`: `with_league` while the
+including the drop that clears it; adds and drops wait until every blocker is cured. `nextCheckAt` is
+the exact time of the next hourly check, at the 55 minute mark, so a client never computes it. A move
+that ran carries `runAt` and the actor that started the run. A confirmed later move carries its
+confirmation and `sendsAt`, the exact check on its send day, and waits for that moment. A submitted claim instead carries `phase`: `with_league` while the
 league decides, then `won` or `lost`. Its `attempts` list each claim and fallback tried, with the
 outcome and the plain reason. `waiver` reports the league's own rule, type, and waiver days, so a
 claim display says what the league publishes rather than inventing a processing time. A won claim is
 done and no fallback runs; a lost claim runs its stored fallbacks as straight adds, and the group
-ends `failed` with nothing waiting when every choice has failed. A group whose effective date has not
-arrived is confirmed as a whole,
-waits, and runs on that date; it is never sent in part. Each group says ready, blocked, ran in part, done, or failed, with the action that
+ends `failed` with nothing waiting when every choice has failed. A group whose send day has not
+arrived is confirmed as a whole, waits, and is sent on that day; it is never sent in part. A next-day
+group confirmed today is sent today and takes effect tomorrow; scheduling it for tomorrow sends it
+tomorrow and takes effect the day after. Each group says ready, blocked, ran in part, done, or failed, with the action that
 landed, the action that failed, the actions that did not run, and a plain cure. The read uses stored
 state and does not change the queue. A team the account does not own is reported as not found.
 
@@ -912,19 +917,21 @@ keeps the confirmation.
 No MCP tool submits, executes, spends, or confirms. Confirmation is the signed-in owner's, on the
 transactions page, and a saved move whose day arrives waits in Today until they decide it. The page
 shows a group as one card that lists every move in it, with one control for the group. A today group's
-control is `Run now`. A later group's control is `Schedule for <date>` and stores the owner's
-decision, who made it, the surface, and the time. One card carries one status in its header: `Needs
-your decision`, `Scheduled for <date> at <time>`, `With the league`, `Ran on schedule`, `Ran
-after you submitted`, `Partly ran`, `Blocked`, or `Failed`, and a blocked or failed card also says what
-the person can do next. A claim status names only a date, never the hourly run time. A submitted move
-carries one provenance line, either `You submitted this on
-<date> at <time>` or `Scheduled on <date> for <date> at <time>`, apart from the run outcome. A group
+control is `Run now`, with `Schedule` beside it to choose a later send day. A later group's control is
+`Schedule for <date>` and stores the owner's decision, who made it, the surface, and the time. One card
+carries one status in its header: `Needs your decision`, `Scheduled to run <date> at <time>`, `With
+the league`, `Ran on schedule`, `Ran after you submitted`, `Partly ran`, `Blocked`, or `Failed`, and a
+blocked or failed card also says what the person can do next. Every open card also states when it will
+run and when it will take effect; both times are rendered in the reader's local zone. A submitted move
+carries one provenance line, either `You submitted this on <date> at <time>` or `Scheduled on <date>
+to run <date> at <time>`, apart from the run outcome. A group
 whose moves were all submitted and have nothing left for the person, including a claim with the
 league, moves into the earlier list instead of Today; a claim there reads `With the league`, then
 `Claim won`, `Claim lost, fallback ran`, or `All choices failed`. The long explanation and the team's
 places sit behind `Why these moves`. Only confirmed moves are sent, a saved move that is not due today
-is left alone, and confirms for different teams proceed at the same time. A confirmed later move runs
-at its scheduled time on its day, through the same write path; a
+is left alone, and every move action proceeds independently; confirms for different teams run at the
+same time and confirms for one team queue behind its own run. A confirmed later move is sent at
+`sendsAt` on its day, through the same write path; a
 run skips a team another run already claims and records a failed, pending, or unknown outcome rather
 than retrying a write that may have applied.
 

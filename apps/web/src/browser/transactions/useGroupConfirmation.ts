@@ -54,7 +54,8 @@ export function useGroupConfirmation(input: {
       moves: moves.map((move) => move.move),
       key: held,
       runDay: moves.find((move) => move.runDay !== undefined)?.runDay,
-      runsOn: moves.find((move) => move.runsOn !== undefined)?.runsOn,
+      sendsAt: moves.find((move) => move.sendsAt !== undefined)?.sendsAt,
+      effectiveDate: moves.find((move) => move.effectiveDate !== undefined)?.effectiveDate,
       today: input.today(),
       claim: moves.some((move) => move.kind === "waiver_claim" || move.phase !== undefined),
     });
@@ -80,7 +81,8 @@ export type GroupConfirmation = {
 export type ConfirmationTarget = {
   readonly today: boolean;
   readonly runDay: string | undefined;
-  readonly runsOn: string | undefined;
+  readonly sendsAt: string | undefined;
+  readonly effectiveDate: string | undefined;
   readonly claim: boolean;
 };
 

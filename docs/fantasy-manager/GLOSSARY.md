@@ -421,8 +421,8 @@ What the league recorded for a move: none, `executed`, `pending`, `failed`, `ski
 _Avoid_: State when the provider's outcome is meant, success
 
 **Effective date**:
-The calendar date a move's roster change takes effect, which is not the day it is submitted: its run day in a same-day league; the following calendar day in a next-day league; and the league's published locked week date in a weekly-locking league. It is decided when the move is proposed and stored with it, so the queue can show it without another provider read, and it moves only when the group's run day changes. A group shares one effective date. A move whose effective date has not arrived waits as a whole and runs on that date; a move whose effective date has passed runs when the owner submits it.
-_Avoid_: Run date, window, the day it is submitted when the effective date is meant
+The calendar date a move's roster change takes effect, which is not the day it is sent: its send day in a same-day league; the following calendar day in a next-day league; and the league's published locked week date in a weekly-locking league. It is derived once from the send day when the move is proposed and stored with it, so the queue can show it without another provider read, and it moves only when the group's send day changes. A group shares one effective date. It never gates sending: a next-day move confirmed today is sent today and takes effect tomorrow; scheduling it for tomorrow sends it tomorrow and takes effect the day after.
+_Avoid_: Run date, window, the day it is sent when the effective date is meant
 
 **Move kind**:
 Which shape a transaction move takes: a free-agent add (players added, no bid, optionally with `to` saying active or reserve), a waiver claim (players added with a FAAB bid and the same optional `to`), a drop (players dropped only), an activate (one reserve-list player brought onto the active roster), a stash (one active player put on a reserve list that accepts their positions), a slot move (one rostered player moved to one named slot the league declares, including a reserve list; no add, drop, bid, or counterparty), or a trade (at least one player or draft pick going out and at least one coming back with one counterparty team, no bid). An activate or stash never names a slot; the server chooses the place with the lineup solver. A waiver claim is the only kind that spends a budget, so it is never presented as a free-agent add. A trade is an offer to another manager, not a change either manager has made. A slot move names only its destination; the server decides when it can run.
@@ -453,18 +453,20 @@ A person's decision to remove one move from the plan without running it. The mov
 _Avoid_: Rejection, cancellation when no provider answer is meant
 
 **Run day**:
-The calendar date, in the league's own fantasy day, that a move is set for. A future run day stays
-open because the move stays saved; when that day arrives, the move waits in Today for the owner's
-confirmation, and the check never runs it unconfirmed. A confirmed move runs on the check that day,
-or on its effective date when the league applies the change later, or is marked stale and left.
+The league's own calendar day on which Lineupgrade sends a move to the provider. It is the only day
+that gates sending. A future run day stays open because the move stays saved; when that day arrives,
+the move waits in Today for the owner's confirmation, and the check never sends it unconfirmed. A
+confirmed move is sent on the first check that day, or on its effective date when the league applies
+the change later, or is marked stale and left. The card calls the send moment `Runs …` and the later
+league date `Takes effect …`.
 _Avoid_: Effective date, run date, trigger time when the run day is meant
 
-**Run date**:
-The calendar date a move actually runs: its run day, or its effective date when that is later,
-because a league that applies roster changes a day later cannot apply the legs of a group on the day
-they were set. A move whose run date has not arrived is not run in part. The plan read reports it as
-`runsOn` beside the effective date.
-_Avoid_: Run day when the date it runs is meant, effective date
+**Send moment**:
+The exact first hourly check on a future run day, published as `sendsAt` on the move. It is the moment
+a confirmed later move will be sent, rendered in the reader's local zone beside its effective date. A
+move due today has no send moment because it is sent when the owner confirms it. It is not a second
+clock: it is the hourly check applied to the move's run day.
+_Avoid_: Run date, processing time, `runsOn`
 
 **Plan day**:
 One run day's moves in one team's plan, with whether that day is today, ordered by the server's stored position. Today comes first, then later run days. The plan read reports these days; they are a grouping of stored moves, not a second plan or an approval.

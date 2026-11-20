@@ -55,15 +55,14 @@ import type { TransactionRemote } from "./transactionRemote";
 import {
   discardLine,
   moveOutcomeLabel,
+  plannedMoment,
   resultDetailLine,
   resultTimeLine,
-  scheduledMoment,
   submittedLine,
   timingLine,
   waiverTimingLine,
 } from "./transactionTimes";
 import { useGroupConfirmation } from "./useGroupConfirmation";
-import type { GroupConfirmation } from "./useGroupConfirmation";
 import { useTransactionsPage } from "./useTransactionsPage";
 import type { TransactionsPageController } from "./useTransactionsPage";
 
@@ -251,42 +250,34 @@ function DaySection(props: DaySectionProps): JSX.Element {
 }
 
 function TeamCards(props: TeamCardsProps): JSX.Element {
-  const confirmation = useGroupConfirmation({
-    team: () => props.team.id,
-    remote: () => props.remote,
-    page: () => props.page,
-    today: () => props.today,
-  });
   const facts = (): TransactionTeamFactsView | undefined =>
     props.page.teamFacts().get(props.team.id);
   return (
     <For each={props.cards}>
-      {(card) => (
-        <GroupPanel card={card} confirmation={confirmation} facts={facts()} page={props.page} />
-      )}
+      {(card) => <GroupPanel card={card} facts={facts()} page={props.page} remote={props.remote} />}
     </For>
   );
 }
 
 function GroupPanel(props: GroupPanelProps): JSX.Element {
   let explanationElement: HTMLDetailsElement | undefined;
+  const confirmation = useGroupConfirmation({
+    team: () => props.card.lead.team.id,
+    remote: () => props.remote,
+    page: () => props.page,
+    today: () => props.card.today,
+  });
   const team = (): TransactionMoveView["team"] => props.card.lead.team;
   const members = (): ReadonlyArray<TransactionMoveView> => cardMembers(props.card);
   const status = (): CardStatus => cardStatus(props.card);
   const action = (): CardAction => cardAction(props.card);
   const headingId = (): string => `transactions-panel-${props.card.lead.team.id}-${props.card.key}`;
-  const working = (): boolean =>
-    props.confirmation.pending() &&
-    members().every((move) => props.confirmation.pendingMoves().includes(move.move));
+  const working = (): boolean => confirmation.pending();
   const confirmable = (): boolean =>
     members().every((move) => move.validation.status === "current" && move.result === undefined);
   const opened = (): boolean =>
     props.card.group === undefined || props.card.group.status === "ready";
-  const runsLater = (): boolean => {
-    const lead = props.card.lead;
-    return lead.runsOn !== undefined && lead.runDay !== undefined && lead.runsOn > lead.runDay;
-  };
-  const runsNow = (): boolean => props.card.today && !runsLater();
+  const runsNow = (): boolean => props.card.today;
   const controlLabel = (): string => (runsNow() ? "Run now" : scheduleActionLabel(props.card));
   const workingLabel = (): string => (runsNow() ? "Running now" : "Scheduling");
   const actionLabel = (): string => `${controlLabel()}: ${cardTitle(props.card)}`;
@@ -296,9 +287,9 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
       case "needs-decision":
         return "Needs your decision";
       case "scheduled":
-        return props.card.lead.kind === "waiver_claim"
-          ? `Scheduled for ${formatCalendarDate(held.runDay)}`
-          : `Scheduled for ${scheduledMoment(held.runDay, props.page.nextRunAt())}`;
+        return held.sendsAt === undefined
+          ? "Scheduled"
+          : `Scheduled to run ${plannedMoment(held.sendsAt)}`;
       case "waiting":
         return "Waiting for the league";
       case "with-league":
@@ -318,7 +309,7 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
   const nextAction = (): ReturnType<typeof cardNextAction> => cardNextAction(props.card);
   const submitted = (): string | undefined => {
     const member = members().find((move) => move.confirmation !== undefined);
-    return member === undefined ? undefined : submittedLine(member, props.page.nextRunAt());
+    return member === undefined ? undefined : submittedLine(member);
   };
   const explanation = (): string | undefined => {
     const group = props.card.group;
@@ -354,15 +345,27 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
           return undefined;
         }
         return (
-          <Button
-            variant="primary"
-            disabled={!confirmable() || props.confirmation.pending()}
-            state={working() ? "working" : "idle"}
-            aria-label={actionLabel()}
-            onClick={() => props.confirmation.start(members())}
-          >
-            {working() ? workingLabel() : controlLabel()}
-          </Button>
+          <Inline gap="sm" align="baseline">
+            <Button
+              variant="primary"
+              disabled={!confirmable() || confirmation.pending()}
+              state={working() ? "working" : "idle"}
+              aria-label={actionLabel()}
+              onClick={() => confirmation.start(members())}
+            >
+              {working() ? workingLabel() : controlLabel()}
+            </Button>
+            <Show when={props.card.today}>
+              <Button
+                variant="link"
+                disabled={!confirmable() || confirmation.pending()}
+                aria-label={`Schedule instead: ${cardTitle(props.card)}`}
+                onClick={() => props.page.startEdit(props.card.lead)}
+              >
+                Schedule
+              </Button>
+            </Show>
+          </Inline>
         );
       case "cure":
         return (
@@ -484,7 +487,7 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
               number={index() + 1}
               page={props.page}
               today={props.card.today}
-              working={props.confirmation.pending()}
+              working={confirmation.pending()}
             />
           )}
         </For>
@@ -501,7 +504,7 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
                 number={props.card.moves.length + index() + 1}
                 page={props.page}
                 today={props.card.today}
-                working={props.confirmation.pending()}
+                working={confirmation.pending()}
               />
             )}
           </For>
@@ -599,13 +602,14 @@ function GroupMoveRow(props: GroupMoveRowProps): JSX.Element {
           <Form gap="sm" onSubmit={() => props.page.saveEdit(props.move)}>
             <Stack gap="sm">
               <TextField
-                label="Run date"
+                label="Day to run"
                 type="date"
                 value={props.page.editingDate()}
                 onInput={(event) => props.page.setEditingDate(event.currentTarget.value)}
               />
               <Text type="meta" tone="muted">
-                Saving changes the day this move runs and clears your decision.
+                Lineupgrade sends the move on this day. Your league applies it by its own rule.
+                Saving clears your decision.
               </Text>
               <Show when={props.page.editingError()}>
                 {(error) => (
@@ -753,7 +757,6 @@ function EarlierSection(props: RemoteSectionProps): JSX.Element {
                 {(move) => (
                   <EarlierRow
                     move={move}
-                    nextRunAt={props.page.nextRunAt()}
                     waiver={props.page.teamFacts().get(move.team.id)?.waiver}
                   />
                 )}
@@ -778,7 +781,7 @@ function EarlierSection(props: RemoteSectionProps): JSX.Element {
 }
 
 function EarlierRow(props: EarlierRowProps): JSX.Element {
-  const submitted = (): string | undefined => submittedLine(props.move, props.nextRunAt);
+  const submitted = (): string | undefined => submittedLine(props.move);
   const discarded = (): string | undefined => discardLine(props.move);
   const result = (): string | undefined => resultDetailLine(props.move);
   const resultTime = (): string | undefined => resultTimeLine(props.move);
@@ -861,7 +864,7 @@ function statusTone(status: CardStatus): "accent" | "neutral" {
 }
 
 function scheduleActionLabel(card: GroupCard): string {
-  const day = card.lead.runsOn ?? card.lead.runDay;
+  const day = card.lead.runDay;
   return day === undefined ? "Schedule" : `Schedule for ${formatCalendarDate(day)}`;
 }
 
@@ -914,7 +917,7 @@ type TeamCardsProps = {
 type GroupPanelProps = {
   readonly card: GroupCard;
   readonly page: TransactionsPageController;
-  readonly confirmation: GroupConfirmation;
+  readonly remote: TransactionRemote;
   readonly facts: TransactionTeamFactsView | undefined;
 };
 
@@ -928,6 +931,5 @@ type GroupMoveRowProps = {
 
 type EarlierRowProps = {
   readonly move: TransactionMoveView;
-  readonly nextRunAt: string | undefined;
   readonly waiver: TransactionWaiverRuleView | undefined;
 };

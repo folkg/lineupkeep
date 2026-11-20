@@ -100,9 +100,11 @@ export function cardStatus(card: GroupCard): CardStatus {
     return { kind: "blocked" };
   }
   if (members.every(isSubmitted)) {
-    const runsOn = card.lead.runsOn ?? card.lead.runDay;
-    return members.every((move) => move.decision === "confirmed") && runsOn !== undefined
-      ? { kind: "scheduled", runDay: runsOn }
+    return members.every((move) => move.decision === "confirmed")
+      ? {
+          kind: "scheduled",
+          ...(card.lead.sendsAt === undefined ? {} : { sendsAt: card.lead.sendsAt }),
+        }
       : { kind: "running" };
   }
   return { kind: "needs-decision" };
@@ -322,7 +324,7 @@ export type GroupCard = {
 
 export type CardStatus =
   | { readonly kind: "needs-decision" }
-  | { readonly kind: "scheduled"; readonly runDay: string }
+  | { readonly kind: "scheduled"; readonly sendsAt?: string }
   | { readonly kind: "waiting" }
   | { readonly kind: "with-league" }
   | { readonly kind: "running" }

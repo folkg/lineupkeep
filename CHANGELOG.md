@@ -3,6 +3,21 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
+## Unreleased — a move is sent on its run day, and every move action runs independently
+
+- A move now has a send day (`runDay`) and an effective date, and only the send day gates sending. A
+  next-day move confirmed today is sent today and takes effect tomorrow; scheduling it for tomorrow
+  sends it tomorrow and takes effect the day after. `runsOn` is removed. A confirmed future move
+  publishes `sendsAt`, the exact first hourly check on its send day, and `nextRunAt` is renamed
+  `nextCheckAt`. Day buckets state `groupedBy: "runDay"`.
+- The transactions page offers `Run now` beside `Schedule` on a move due today, and names the exact
+  local time a future move will be sent beside the date it takes effect. Each card owns its own
+  confirmation, so every move action proceeds independently; same-team actions queue on the server
+  while different teams proceed at the same time.
+- `get_players` accepts group `schedule` and a `gamesWindow`, returning `gameDays` or `gameWeeks` for
+  rostered and pool players. `search_players` already accepted `gamesWindow`; its tool description
+  now names it.
+
 ## Unreleased — discovery reports the grant, and an expired token asks for a refresh
 
 - `server/discover` publishes `_meta["lineupkeep/grant"]` with `accessTokenLifetimeSeconds` and

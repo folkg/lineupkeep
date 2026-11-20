@@ -959,10 +959,11 @@ it("appends moves to one team queue and lists them across teams", async () => {
   ): {
     readonly team: TransactionMoveTeam;
     readonly today: string;
-    readonly nextRunAt: DateTime.Utc;
+    readonly nextCheckAt: DateTime.Utc;
     readonly moves: ReadonlyArray<typeof move>;
     readonly days: ReadonlyArray<{
       readonly day: string;
+      readonly groupedBy: "runDay";
       readonly today: boolean;
       readonly moves: ReadonlyArray<typeof move>;
     }>;
@@ -975,14 +976,17 @@ it("appends moves to one team queue and lists them across teams", async () => {
   } => ({
     team: target,
     today: "2026-11-11",
-    nextRunAt: DateTime.makeUnsafe("2026-11-11T12:55:00.000Z"),
+    nextCheckAt: DateTime.makeUnsafe("2026-11-11T12:55:00.000Z"),
     snapshot: {
       status: "live",
       checkedAt: DateTime.makeUnsafe("2026-11-11T12:00:00.000Z"),
       source: "week 1",
     },
     moves,
-    days: moves.length === 0 ? [] : [{ day: "2026-11-11", today: true, moves }],
+    days:
+      moves.length === 0
+        ? []
+        : [{ day: "2026-11-11", groupedBy: "runDay" as const, today: true, moves }],
     groups: [],
   });
   const listed: Array<{ readonly team?: string; readonly state?: string }> = [];
@@ -1021,7 +1025,7 @@ it("appends moves to one team queue and lists them across teams", async () => {
       });
       const data = {
         status: "ok" as const,
-        nextRunAt: DateTime.makeUnsafe("2026-11-11T12:55:00.000Z"),
+        nextCheckAt: DateTime.makeUnsafe("2026-11-11T12:55:00.000Z"),
         ...(input.team === undefined
           ? {}
           : { team: input.team === team ? teamView : otherTeamView }),
@@ -1029,6 +1033,7 @@ it("appends moves to one team queue and lists them across teams", async () => {
         days: [
           {
             day: "2026-11-11",
+            groupedBy: "runDay" as const,
             today: true,
             teams: [{ team: teamView, moves: [move] }],
           },
@@ -1184,7 +1189,7 @@ it("appends moves to one team queue and lists them across teams", async () => {
       structuredContent: {
         status: "ok",
         team: { id: team },
-        days: [{ today: true, teams: [{ team: { id: team } }] }],
+        days: [{ groupedBy: "runDay" as const, today: true, teams: [{ team: { id: team } }] }],
         counts: { open: 1, today: 1, saved: 0, ended: 0 },
         teamCount: 2,
         page: { returned: 1, complete: true },
@@ -1204,7 +1209,7 @@ it("appends moves to one team queue and lists them across teams", async () => {
       structuredContent: {
         team: { id: team },
         today: "2026-11-11",
-        days: [{ day: "2026-11-11", today: true }],
+        days: [{ day: "2026-11-11", groupedBy: "runDay" as const, today: true }],
         moves: [
           {
             decision: "now",
@@ -1251,14 +1256,14 @@ it("discards one saved move and reports why a run move stays", async () => {
   const planRead = {
     team: teamView,
     today: "2026-11-11",
-    nextRunAt: DateTime.makeUnsafe("2026-11-11T12:55:00.000Z"),
+    nextCheckAt: DateTime.makeUnsafe("2026-11-11T12:55:00.000Z"),
     snapshot: {
       status: "live" as const,
       checkedAt: DateTime.makeUnsafe("2026-11-11T12:00:00.000Z"),
       source: "week 1",
     },
     moves: [move],
-    days: [{ day: "2026-11-11", today: true, moves: [move] }],
+    days: [{ day: "2026-11-11", groupedBy: "runDay" as const, today: true, moves: [move] }],
     groups: [],
   };
   const discarded: Array<{
@@ -1418,14 +1423,14 @@ it("reads every effect of an activate and the reason a failed move ended", async
   const planRead = {
     team: teamView,
     today: "2026-11-11",
-    nextRunAt: DateTime.makeUnsafe("2026-11-11T12:55:00.000Z"),
+    nextCheckAt: DateTime.makeUnsafe("2026-11-11T12:55:00.000Z"),
     snapshot: {
       status: "live" as const,
       checkedAt: DateTime.makeUnsafe("2026-11-11T12:00:00.000Z"),
       source: "week 1",
     },
     moves: [move],
-    days: [{ day: "2026-11-11", today: true, moves: [move] }],
+    days: [{ day: "2026-11-11", groupedBy: "runDay" as const, today: true, moves: [move] }],
     groups: [],
   };
   const plans: TransactionPlanServiceShape = {
@@ -1441,9 +1446,16 @@ it("reads every effect of an activate and the reason a failed move ended", async
       Effect.succeed({
         status: "ok" as const,
         team: teamView,
-        nextRunAt: DateTime.makeUnsafe("2026-11-11T12:55:00.000Z"),
+        nextCheckAt: DateTime.makeUnsafe("2026-11-11T12:55:00.000Z"),
         moves: [move],
-        days: [{ day: "2026-11-11", today: true, teams: [{ team: teamView, moves: [move] }] }],
+        days: [
+          {
+            day: "2026-11-11",
+            groupedBy: "runDay" as const,
+            today: true,
+            teams: [{ team: teamView, moves: [move] }],
+          },
+        ],
         teamFacts: [],
         counts: { open: 1, today: 1, saved: 0, ended: 0 },
         teamCount: 1,
@@ -2220,8 +2232,15 @@ it("publishes fallback choices, a group label, and a stored check on the plan", 
   expect(JSON.stringify(propose.inputSchema)).toContain('"window"');
   expect(JSON.stringify(plan.outputSchema)).toContain('"checkedAt"');
   expect(JSON.stringify(plan.outputSchema)).toContain('"effectiveDate"');
+  expect(JSON.stringify(plan.outputSchema)).toContain('"runDay"');
+  expect(JSON.stringify(plan.outputSchema)).toContain('"sendsAt"');
+  expect(JSON.stringify(plan.outputSchema)).toContain('"nextCheckAt"');
+  expect(JSON.stringify(plan.outputSchema)).toContain('"groupedBy"');
+  expect(JSON.stringify(plan.outputSchema)).not.toContain('"runsOn"');
+  expect(JSON.stringify(plan.outputSchema)).not.toContain('"nextRunAt"');
   expect(JSON.stringify(plan.outputSchema)).toContain('"reason"');
   expect(JSON.stringify(plan.outputSchema)).toContain('"check"');
+  expect(JSON.stringify(propose.inputSchema)).toContain("not the effective date");
 });
 
 it("publishes the rolling move list with today, saved, and ended filters", async () => {
@@ -2283,7 +2302,7 @@ it("keeps every published description inside its budget", async () => {
     ...schemaDescriptions(tool.outputSchema ?? {}, `${tool.name}.output`),
   ]);
   expect(fields.filter((field) => field.text.length > 200)).toEqual([]);
-  expect(fields.reduce((total, field) => total + field.text.length, 0)).toBeLessThanOrEqual(30_000);
+  expect(fields.reduce((total, field) => total + field.text.length, 0)).toBeLessThanOrEqual(32_000);
 });
 
 it("publishes the accepted player-statistics periods and the compact standings form before a call", async () => {
@@ -2364,6 +2383,10 @@ it("publishes the accepted player-statistics periods and the compact standings f
   expect(playersOutput).toContain("not_published");
   expect(playersOutput).toContain("basis");
   expect(playersOutput).toContain("period");
+  expect(playersOutput).toContain("gameDays");
+  expect(playersOutput).toContain("gameWeeks");
+  expect(JSON.stringify(tool("get_players").inputSchema)).toContain('"schedule"');
+  expect(JSON.stringify(tool("get_players").inputSchema)).toContain("gamesWindow");
   expect(JSON.stringify(tool("search_players").outputSchema)).toContain("playsThisWeek");
   expect(JSON.stringify(tool("get_league").outputSchema)).toContain("inline player name");
   expect(JSON.stringify(tool("get_pending_trade_offers").outputSchema)).toContain("ownerNote");

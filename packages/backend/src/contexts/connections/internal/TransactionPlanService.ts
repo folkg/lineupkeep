@@ -85,7 +85,6 @@ import { planReserveMoves } from "./LineupPlanning.ts";
 import { QueryTokens } from "./QueryTokens.ts";
 import {
   claimTransactionPlanMoves,
-  dateHasArrived,
   describeTransactionPlanMove,
   evaluateTransactionPlan,
   projectedLegs,
@@ -242,7 +241,7 @@ export const TransactionPlanServiceLive = Layer.effect(
       return {
         team,
         ...(input.today === undefined ? {} : { today: input.today }),
-        nextRunAt: nextCheckAt(input.at),
+        nextCheckAt: nextCheckAt(input.at),
         snapshot: storedSnapshot(stored),
         moves,
         days: planDays({ moves, today: input.today }),
@@ -2097,8 +2096,7 @@ export const TransactionPlanServiceLive = Layer.effect(
             (move) =>
               move.userId === plan.userId &&
               move.team === plan.team &&
-              (move.runDay === undefined || move.runDay <= facts.today) &&
-              dateHasArrived(move, facts.today),
+              (move.runDay === undefined || move.runDay <= facts.today),
           )
         );
       });
@@ -2463,7 +2461,7 @@ export const TransactionPlanServiceLive = Layer.effect(
       return {
         status: "ok",
         team,
-        nextRunAt: nextCheckAt(at),
+        nextCheckAt: nextCheckAt(at),
         moves,
         days: moveDays({ moves, todayOf }),
         teamFacts,
@@ -2522,7 +2520,7 @@ export const TransactionPlanServiceLive = Layer.effect(
       return {
         team,
         today,
-        nextRunAt: nextCheckAt(at),
+        nextCheckAt: nextCheckAt(at),
         snapshot: check?.status === "checked" ? check.snapshot : storedSnapshot(stored),
         ...(check?.status === "checked"
           ? {
@@ -3720,7 +3718,7 @@ function moveView(
     decision: planDecision(move, today),
     runDay: entry?.runDay ?? move.runDay,
     effectiveDate: entry?.effectiveDate ?? move.effectiveDate,
-    runsOn: entry?.runsOn,
+    sendsAt: entry?.sendsAt,
     dueToday: entry?.dueToday ?? false,
     phase: move.phase,
     attempts: move.attempts,
@@ -4222,7 +4220,7 @@ function confirmationTargets(
 }
 
 function isDueMove(move: TransactionMoveRecord, today: StoredMoveDate): boolean {
-  return (move.runDay === undefined || move.runDay <= today) && dateHasArrived(move, today);
+  return move.runDay === undefined || move.runDay <= today;
 }
 
 function groupPeers(

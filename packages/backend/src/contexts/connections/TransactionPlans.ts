@@ -318,9 +318,21 @@ export const TransactionMoveRead = Schema.Struct({
   intent: Schema.optional(TransactionMoveIntentView),
   placement: Schema.optional(TransactionMovePlacementView),
   bid: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
-  runDay: Schema.optional(StoredMoveDate),
-  effectiveDate: Schema.optional(StoredMoveDate),
-  runsOn: Schema.optional(StoredMoveDate),
+  runDay: Schema.optional(StoredMoveDate).pipe(
+    Schema.annotate({
+      description: "The league day Lineupgrade sends the move; not when the league applies it.",
+    }),
+  ),
+  effectiveDate: Schema.optional(StoredMoveDate).pipe(
+    Schema.annotate({
+      description: "The league day the change applies, derived from runDay.",
+    }),
+  ),
+  sendsAt: Schema.optional(Schema.DateTimeUtc).pipe(
+    Schema.annotate({
+      description: "The exact check that sends a future runDay move.",
+    }),
+  ),
   decidedAt: Schema.optional(Schema.DateTimeUtc),
   confirmation: Schema.optional(TransactionMoveConfirmation),
   runAt: Schema.optional(Schema.DateTimeUtc),
@@ -352,6 +364,11 @@ export type TransactionMoveRead = typeof TransactionMoveRead.Type;
 
 export const TransactionMoveDay = Schema.Struct({
   day: Schema.optional(StoredMoveDate),
+  groupedBy: Schema.Literal("runDay").pipe(
+    Schema.annotate({
+      description: "Buckets group by runDay, not effectiveDate.",
+    }),
+  ),
   today: Schema.Boolean,
   teams: Schema.Array(
     Schema.Struct({
@@ -364,6 +381,11 @@ export type TransactionMoveDay = typeof TransactionMoveDay.Type;
 
 export const TransactionPlanDay = Schema.Struct({
   day: Schema.optional(StoredMoveDate),
+  groupedBy: Schema.Literal("runDay").pipe(
+    Schema.annotate({
+      description: "Buckets group by runDay, not effectiveDate.",
+    }),
+  ),
   today: Schema.Boolean,
   moves: Schema.Array(TransactionMoveRead),
 });
@@ -453,9 +475,9 @@ export type TransactionPlanSnapshot = typeof TransactionPlanSnapshot.Type;
 export const TransactionPlanRead = Schema.Struct({
   team: TransactionMoveTeam,
   today: Schema.optional(StoredMoveDate),
-  nextRunAt: Schema.DateTimeUtc.pipe(
+  nextCheckAt: Schema.DateTimeUtc.pipe(
     Schema.annotate({
-      description: "The next hourly run at the 55 minute mark; a claim never shows it.",
+      description: "The exact next hourly check. A future move states its own `sendsAt`.",
     }),
   ),
   snapshot: TransactionPlanSnapshot.pipe(
@@ -549,10 +571,9 @@ type TransactionPlanCounts = typeof TransactionPlanCounts.Type;
 export const TransactionMoveList = Schema.Struct({
   status: Schema.Literal("ok"),
   team: Schema.optional(TransactionMoveTeam),
-  nextRunAt: Schema.DateTimeUtc.pipe(
+  nextCheckAt: Schema.DateTimeUtc.pipe(
     Schema.annotate({
-      description:
-        "The next hourly run at the 55 minute mark; confirmed non-claim moves wait for it, a claim never shows it.",
+      description: "The exact next hourly check. A future move states its own `sendsAt`.",
     }),
   ),
   moves: Schema.Array(TransactionMoveRead),
@@ -796,7 +817,7 @@ export type TransactionPlanMoveView = {
   readonly decision: TransactionPlanDecision;
   readonly runDay: StoredMoveDate | undefined;
   readonly effectiveDate: StoredMoveDate | undefined;
-  readonly runsOn: StoredMoveDate | undefined;
+  readonly sendsAt: DateTime.Utc | undefined;
   readonly dueToday: boolean;
   readonly phase: TransactionMovePhase | undefined;
   readonly attempts: ReadonlyArray<StoredMoveAttempt>;

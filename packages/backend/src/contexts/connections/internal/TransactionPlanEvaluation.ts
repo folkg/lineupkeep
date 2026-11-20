@@ -13,6 +13,7 @@ import {
 import type { RosterRule } from "#contexts/connections/RosterSlots.ts";
 import type { TransactionWaiverBid } from "#contexts/connections/TransactionPlans.ts";
 
+import { firstCheckOnDay } from "./CheckSchedule.ts";
 import type {
   StoredMoveClaim,
   StoredMoveDate,
@@ -121,13 +122,6 @@ export function claimTransactionPlanMoves(input: TransactionPlanClaimInput): Tra
 
 export function describeTransactionPlanMove(move: TransactionPlanMove): string {
   return moveLabel(move);
-}
-
-export function dateHasArrived(
-  move: Pick<TransactionPlanMove, "effectiveDate">,
-  today: StoredMoveDate,
-): boolean {
-  return move.effectiveDate === undefined || move.effectiveDate <= today;
 }
 
 export function projectedLegs(input: {
@@ -1621,8 +1615,10 @@ function moveEvaluation(
 ): TransactionPlanMoveEvaluation {
   const runDay = runDayOf(step.move, facts.today);
   const effectiveDate = effectiveDateFor(step.move, runDay, facts.timing);
-  const runsOn = effectiveDate !== undefined && effectiveDate > runDay ? effectiveDate : runDay;
-  const waitsForDate = effectiveDate !== undefined && effectiveDate > facts.today;
+  const sendsAt =
+    runDay > facts.today && facts.timing.timeZone !== undefined
+      ? firstCheckOnDay(runDay, facts.timing.timeZone)
+      : undefined;
   return {
     move: step.move.id,
     group: step.move.group,
@@ -1631,8 +1627,8 @@ function moveEvaluation(
     placement: step.placement,
     runDay,
     effectiveDate,
-    runsOn,
-    dueToday: runDay === facts.today && isDueDecision(step.move.decision) && !waitsForDate,
+    ...(sendsAt === undefined ? {} : { sendsAt }),
+    dueToday: runDay === facts.today && isDueDecision(step.move.decision),
     runPosition,
     dependsOn: step.dependsOn,
     projectedRoster: step.projectedRoster,
@@ -2206,6 +2202,7 @@ export type TransactionPlanTiming = {
   readonly rule: "same_day" | "next_day" | "weekly_lock" | undefined;
   readonly currentDate: StoredMoveDate | undefined;
   readonly periodStart: StoredMoveDate | undefined;
+  readonly timeZone?: string;
 };
 
 export type TransactionPlanSlotWrites =
@@ -2294,7 +2291,7 @@ export type TransactionPlanMoveEvaluation = {
   readonly placement: StoredMovePlacement | undefined;
   readonly runDay: StoredMoveDate;
   readonly effectiveDate: StoredMoveDate | undefined;
-  readonly runsOn: StoredMoveDate;
+  readonly sendsAt?: DateTime.Utc;
   readonly dueToday: boolean;
   readonly runPosition: number | undefined;
   readonly dependsOn: ReadonlyArray<TransactionMoveId>;

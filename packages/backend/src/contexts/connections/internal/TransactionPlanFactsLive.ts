@@ -109,6 +109,7 @@ export const TransactionPlanFactsLive = Layer.effect(
           rule: league.rosterChange?.rule,
           currentDate: league.currentDate,
           periodStart,
+          timeZone: context.provider.capabilities.fantasyDay.timeZone,
         },
         slotWrites: slotWritesOf(league),
         budget,
