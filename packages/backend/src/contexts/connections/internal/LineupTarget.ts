@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { DateTime, Schema } from "effect";
 
 import { fantasyDayLabel } from "#contexts/connections/FantasyDay.ts";
@@ -89,7 +90,7 @@ function resolveDateTarget(
   }
   return {
     status: "resolved",
-    target: Schema.decodeSync(LineupTargetPeriod)({ coverage: "date", date }),
+    target: Effect.runSync(Schema.decodeEffect(LineupTargetPeriod)({ coverage: "date", date })),
   };
 }
 

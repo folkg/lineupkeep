@@ -5,6 +5,7 @@ import { decodeConnectionId } from "@lineupkeep/backend/connections/Connection";
 import { HostedLinkingSessionId } from "@lineupkeep/backend/connections/HostedLinking";
 import { verifyHostedBrowserDescriptor } from "@lineupkeep/hosted-browser/descriptor";
 import { encodeTransportMessage } from "@lineupkeep/hosted-browser/protocol";
+import { Effect } from "effect";
 import { DateTime, Redacted, Schema } from "effect";
 import { expect, it } from "vitest";
 import { WebSocketServer } from "ws";
@@ -133,7 +134,9 @@ it("reports a fault when the hosted browser closes without a result", async () =
 
 function session(): HostedBrowserSession {
   return {
-    id: Schema.decodeSync(HostedLinkingSessionId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a2"),
+    id: Effect.runSync(
+      Schema.decodeEffect(HostedLinkingSessionId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a2"),
+    ),
     userId: decodeUserId("owner"),
     provider: "yahoo",
     expiresAt: DateTime.addDuration(DateTime.nowUnsafe(), "1 minute"),

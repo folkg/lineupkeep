@@ -244,7 +244,10 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                   ),
                 );
               const byId = new Map(
-                (yield* Effect.forEach(inserted, decodeMove)).map((move) => [move.id, move]),
+                (yield* Effect.forEach(inserted, decodeMove, { concurrency: 1 })).map((move) => [
+                  move.id,
+                  move,
+                ]),
               );
               return ids.map(({ move, id }) => {
                 const stored = byId.get(id);
@@ -386,7 +389,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                     eq(transactionPlans.teamId, input.team),
                   ),
                 );
-              return yield* Effect.forEach(updated, decodeMove);
+              return yield* Effect.forEach(updated, decodeMove, { concurrency: 1 });
             }),
           )
           .pipe(Effect.mapError(persistenceFailure));
@@ -711,23 +714,29 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
         readonly settlements: Array.NonEmptyReadonlyArray<TransactionMoveSettlement>;
       }) {
         const at = DateTime.toDateUtc(input.at);
-        const steps = yield* Effect.forEach(input.settlements, (settlement) =>
-          Effect.forEach(settlement.steps, (step, position) =>
-            newStepId.pipe(
-              Effect.map((id) => ({
-                id,
-                moveId: settlement.move,
-                position,
-                kind: step.kind,
-                playerKey: step.playerKey,
-                fromSlot: step.fromSlot ?? null,
-                toSlot: step.toSlot ?? null,
-                outcome: step.outcome,
-                detail: step.detail ?? null,
-                decidedAt: DateTime.toDateUtc(step.decidedAt),
-              })),
+        const steps = yield* Effect.forEach(
+          input.settlements,
+          (settlement) =>
+            Effect.forEach(
+              settlement.steps,
+              (step, position) =>
+                newStepId.pipe(
+                  Effect.map((id) => ({
+                    id,
+                    moveId: settlement.move,
+                    position,
+                    kind: step.kind,
+                    playerKey: step.playerKey,
+                    fromSlot: step.fromSlot ?? null,
+                    toSlot: step.toSlot ?? null,
+                    outcome: step.outcome,
+                    detail: step.detail ?? null,
+                    decidedAt: DateTime.toDateUtc(step.decidedAt),
+                  })),
+                ),
+              { concurrency: 1 },
             ),
-          ),
+          { concurrency: 1 },
         );
         return yield* database
           .transaction((tx) =>
@@ -844,11 +853,17 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
               .groupBy(transactionMoves.userId, transactionMoves.teamId)
               .orderBy(asc(transactionMoves.teamId), asc(transactionMoves.userId))
               .limit(input.limit);
-            return yield* Effect.forEach(rows, (row) =>
-              Effect.all({
-                userId: Schema.decodeEffect(UserId)(row.userId),
-                team: Schema.decodeEffect(TeamId)(row.teamId),
-              }),
+            return yield* Effect.forEach(
+              rows,
+              (row) =>
+                Effect.all(
+                  {
+                    userId: Schema.decodeEffect(UserId)(row.userId),
+                    team: Schema.decodeEffect(TeamId)(row.teamId),
+                  },
+                  { concurrency: 1 },
+                ),
+              { concurrency: 1 },
             );
           }).pipe(Effect.mapError(persistenceFailure));
         },
@@ -877,7 +892,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                 asc(transactionMoves.position),
                 asc(transactionMoves.id),
               );
-            return yield* Effect.forEach(rows, decodeMove);
+            return yield* Effect.forEach(rows, decodeMove, { concurrency: 1 });
           }).pipe(Effect.mapError(persistenceFailure));
         },
       );
@@ -902,11 +917,17 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
             .groupBy(transactionMoves.userId, transactionMoves.teamId)
             .orderBy(asc(min(transactionMoves.runDay)), asc(transactionMoves.teamId))
             .limit(input.limit);
-          return yield* Effect.forEach(rows, (row) =>
-            Effect.all({
-              userId: Schema.decodeEffect(UserId)(row.userId),
-              team: Schema.decodeEffect(TeamId)(row.teamId),
-            }),
+          return yield* Effect.forEach(
+            rows,
+            (row) =>
+              Effect.all(
+                {
+                  userId: Schema.decodeEffect(UserId)(row.userId),
+                  team: Schema.decodeEffect(TeamId)(row.teamId),
+                },
+                { concurrency: 1 },
+              ),
+            { concurrency: 1 },
           );
         }).pipe(Effect.mapError(persistenceFailure));
       });
@@ -940,7 +961,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                 asc(transactionMoves.position),
                 asc(transactionMoves.id),
               );
-            return yield* Effect.forEach(rows, decodeMove);
+            return yield* Effect.forEach(rows, decodeMove, { concurrency: 1 });
           }).pipe(Effect.mapError(persistenceFailure));
         },
       );
@@ -962,7 +983,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                 asc(transactionMoves.position),
                 asc(transactionMoves.id),
               );
-            return yield* Effect.forEach(rows, decodeMove);
+            return yield* Effect.forEach(rows, decodeMove, { concurrency: 1 });
           }).pipe(Effect.mapError(persistenceFailure));
         },
       );
@@ -1114,7 +1135,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                 asc(transactionMoves.position),
                 asc(transactionMoves.id),
               );
-            return yield* Effect.forEach(rows, decodeMove);
+            return yield* Effect.forEach(rows, decodeMove, { concurrency: 1 });
           }).pipe(Effect.mapError(persistenceFailure));
         },
       );
@@ -1152,7 +1173,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                 asc(transactionMoves.position),
                 asc(transactionMoves.id),
               );
-            return yield* Effect.forEach(rows, decodeMove);
+            return yield* Effect.forEach(rows, decodeMove, { concurrency: 1 });
           }).pipe(Effect.mapError(persistenceFailure));
         },
       );
@@ -1379,8 +1400,13 @@ function withClaims(
       input.userId,
       rows.map((row) => row.id),
     );
-    return yield* Effect.forEach(rows, (row) =>
-      decodeMove(row).pipe(Effect.map((move) => ({ ...move, claims: byMove.get(move.id) ?? [] }))),
+    return yield* Effect.forEach(
+      rows,
+      (row) =>
+        decodeMove(row).pipe(
+          Effect.map((move) => ({ ...move, claims: byMove.get(move.id) ?? [] })),
+        ),
+      { concurrency: 1 },
     );
   });
 }
@@ -1396,21 +1422,24 @@ function withClaimsAndTeams(
       input.userId,
       rows.map((row) => row.id),
     );
-    return yield* Effect.forEach(rows, (row) =>
-      Effect.gen(function* () {
-        const move = yield* decodeMove(row);
-        const team = yield* decodeTeam({
-          id: row.teamId,
-          name: row.teamName,
-          league: row.teamLeague,
-          sport: row.teamSport,
-          season: row.teamSeason,
-        });
-        return {
-          move: { ...move, claims: byMove.get(move.id) ?? [] },
-          team,
-        };
-      }),
+    return yield* Effect.forEach(
+      rows,
+      (row) =>
+        Effect.gen(function* () {
+          const move = yield* decodeMove(row);
+          const team = yield* decodeTeam({
+            id: row.teamId,
+            name: row.teamName,
+            league: row.teamLeague,
+            sport: row.teamSport,
+            season: row.teamSeason,
+          });
+          return {
+            move: { ...move, claims: byMove.get(move.id) ?? [] },
+            team,
+          };
+        }),
+      { concurrency: 1 },
     );
   });
 }

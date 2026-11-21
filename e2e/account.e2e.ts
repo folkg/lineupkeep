@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 
+import { Effect } from "effect";
 import { Schema } from "effect";
 
 import { expect, signUp, test } from "./support";
@@ -17,7 +18,7 @@ test("exports the account data, erases it, and leaves the old cookie without acc
   await page.getByRole("link", { name: "Export my data" }).click();
   const path = await (await download).path();
   const body = await readFile(path, "utf8");
-  const exported = Schema.decodeSync(Schema.fromJsonString(ExportDocument))(body);
+  const exported = Effect.runSync(Schema.decodeEffect(Schema.fromJsonString(ExportDocument))(body));
 
   expect(exported.schemaVersion).toBe(1);
   expect(exported.tables.find((table) => table.table === "user")?.rows[0]?.["email"]).toBe(

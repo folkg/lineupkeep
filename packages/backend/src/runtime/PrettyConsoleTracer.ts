@@ -1,5 +1,7 @@
 import { Duration, Exit, Option, Redacted, Tracer } from "effect";
 
+import jsonTools from "#runtime/JsonText.ts";
+
 export function makePrettyConsoleTracer(options: PrettyConsoleTracerOptions): Tracer.Tracer {
   return Tracer.make({
     span: (spanOptions) => new PrettySpan(spanOptions, options),
@@ -107,7 +109,7 @@ function formatAttributes(entries: ReadonlyArray<readonly [string, unknown]>): s
 
 function renderValue(value: unknown, depth: number): string {
   if (typeof value === "string") {
-    return text(JSON.stringify(truncate(value, maxDetailLength)));
+    return text(jsonTools.jsonString(truncate(value, maxDetailLength)));
   }
   if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
     return String(value);
@@ -144,7 +146,7 @@ function renderValue(value: unknown, depth: number): string {
       descriptor !== undefined && "value" in descriptor
         ? renderValue(descriptor.value, depth + 1)
         : "[unsupported]";
-    return Array.isArray(value) ? rendered : `${JSON.stringify(text(key))}:${rendered}`;
+    return Array.isArray(value) ? rendered : `${jsonTools.jsonString(text(key))}:${rendered}`;
   });
   const count = Array.isArray(value) ? value.length : Object.keys(descriptors).length;
   if (count > maxItems) {

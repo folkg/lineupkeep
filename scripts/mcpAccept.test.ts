@@ -4,6 +4,7 @@ import {
   retiredScopeAliases,
 } from "@lineupkeep/backend/auth/AuthorizationScopes";
 import { advertisedScopes, onboardingScopes } from "@lineupkeep/backend/runtime/ApplicationScopes";
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { expect, it } from "vitest";
 
 import { AcceptanceReport, requestedScopeNames, tokenGrantedScopes } from "#e2e/mcpAccept.ts";
@@ -25,9 +26,9 @@ it("accepts a comma- or space-separated scope subset, including a retired name",
 });
 
 it("reads granted scopes from a JWT scope claim", () => {
-  const payload = Buffer.from(JSON.stringify({ scope: "connections:read teams:manage" })).toString(
-    "base64url",
-  );
+  const payload = Buffer.from(
+    jsonTools.jsonString({ scope: "connections:read teams:manage" }),
+  ).toString("base64url");
 
   expect(tokenGrantedScopes(`header.${payload}.signature`)).toEqual([
     "connections:read",

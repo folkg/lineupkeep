@@ -86,10 +86,13 @@ export class FeedbackRepository extends Context.Service<FeedbackRepository>()(
             .values([...chunk])
             .returning(),
         ).pipe(Effect.mapError((cause) => FeedbackPersistenceFailed.make({ cause })));
-        const decoded = yield* Effect.forEach(inserted, (row) =>
-          Schema.decodeEffect(FeedbackRow)(row).pipe(
-            Effect.mapError((cause) => FeedbackPersistenceFailed.make({ cause })),
-          ),
+        const decoded = yield* Effect.forEach(
+          inserted,
+          (row) =>
+            Schema.decodeEffect(FeedbackRow)(row).pipe(
+              Effect.mapError((cause) => FeedbackPersistenceFailed.make({ cause })),
+            ),
+          { concurrency: 1 },
         );
         const byId = new Map<string, FeedbackRecord>(decoded.map((record) => [record.id, record]));
         return Array.map(ids, (id) => {
@@ -123,10 +126,13 @@ export class FeedbackRepository extends Context.Service<FeedbackRepository>()(
           .orderBy(desc(feedback.createdAt), desc(feedback.id))
           .limit(input.filter.limit ?? listLimit)
           .pipe(Effect.mapError((cause) => FeedbackPersistenceFailed.make({ cause })));
-        return yield* Effect.forEach(rows, (row) =>
-          Schema.decodeEffect(FeedbackRow)(row).pipe(
-            Effect.mapError((cause) => FeedbackPersistenceFailed.make({ cause })),
-          ),
+        return yield* Effect.forEach(
+          rows,
+          (row) =>
+            Schema.decodeEffect(FeedbackRow)(row).pipe(
+              Effect.mapError((cause) => FeedbackPersistenceFailed.make({ cause })),
+            ),
+          { concurrency: 1 },
         );
       });
 

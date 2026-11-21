@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { globSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { expect, it } from "vitest";
 
 it.each(globSync("apps/web/src/server-functions/**/*.ts"))(
@@ -56,8 +57,8 @@ function compileClient(
       `
     import { readFile } from "node:fs/promises";
     import { createRequire } from "node:module";
-    import { createStartCompiler } from ${JSON.stringify(compilerUrl)};
-    const root = ${JSON.stringify(root)};
+    import { createStartCompiler } from ${jsonTools.jsonString(compilerUrl)};
+    const root = ${jsonTools.jsonString(root)};
     const compiler = createStartCompiler({
       env: "client", envName: "client", root, framework: "solid", providerEnvName: "ssr", mode: "build",
       getKnownServerFns: () => ({}),
@@ -67,7 +68,7 @@ function compileClient(
         catch { return null; }
       },
     });
-    const result = await compiler.compile({ code: ${JSON.stringify(source)}, id: root + ${JSON.stringify(path)} });
+    const result = await compiler.compile({ code: ${jsonTools.jsonString(source)}, id: root + ${jsonTools.jsonString(path)} });
     process.stdout.write(result.code);
   `,
     ],

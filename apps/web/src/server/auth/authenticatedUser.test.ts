@@ -1,6 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { AuthService } from "@lineupkeep/backend/auth/Auth";
 import type { AuthenticationSession } from "@lineupkeep/backend/auth/Auth";
+import layerTools from "@lineupkeep/backend/runtime/ProvideLayer";
 import {
   makeRequestContext,
   requestContextLayer,
@@ -19,7 +20,7 @@ it.effect("rejects an expired session before running the use case", () =>
 
     const result = yield* withAuthenticatedUser((owner) =>
       Ref.update(owners, (values) => [...values, owner]).pipe(Effect.as("saved")),
-    ).pipe(Effect.provide(Layer.merge(authentication, requestContextLayer(context))));
+    ).pipe(layerTools.provide(Layer.merge(authentication, requestContextLayer(context))));
 
     assert.deepStrictEqual(result, { type: "error", error: { type: "auth.required" } });
     assert.deepStrictEqual(yield* Ref.get(owners), []);
@@ -39,7 +40,7 @@ it.effect("runs the use case for the authenticated user", () =>
 
     const result = yield* withAuthenticatedUser((owner, session) =>
       Ref.update(owners, (values) => [...values, `${owner}/${session}`]).pipe(Effect.as("saved")),
-    ).pipe(Effect.provide(Layer.merge(authentication, requestContextLayer(context))));
+    ).pipe(layerTools.provide(Layer.merge(authentication, requestContextLayer(context))));
 
     assert.strictEqual(result, "saved");
     assert.deepStrictEqual(yield* Ref.get(owners), ["signed-in-user/signed-in-session"]);

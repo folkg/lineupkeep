@@ -1,3 +1,4 @@
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { expect, it } from "vitest";
 
 import { describePlan, parsePlanLog } from "#e2e/verify/databaseActivity.ts";
@@ -18,8 +19,10 @@ it("reads statement plans from PostgreSQL's JSON log and ignores other entries",
     },
   };
   const lines = [
-    JSON.stringify({ message: "database system is ready to accept connections" }),
-    JSON.stringify({ message: `duration: 0.512 ms  plan:\n${JSON.stringify(explained)}` }),
+    jsonTools.jsonString({ message: "database system is ready to accept connections" }),
+    jsonTools.jsonString({
+      message: `duration: 0.512 ms  plan:\n${jsonTools.jsonString(explained)}`,
+    }),
     "",
   ].join("\n");
 

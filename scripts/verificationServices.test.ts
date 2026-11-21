@@ -1,3 +1,5 @@
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { Effect } from "effect";
 import { Exit, Schema } from "effect";
 import { expect, it } from "vitest";
 
@@ -12,14 +14,16 @@ import {
 it("retains a JSON result and identifies its service-call attachment", () => {
   const name = serviceCallName(1, "create a Note");
 
-  const call = Schema.decodeUnknownSync(ServiceCallJson)(
-    JSON.stringify(
-      serviceCallEvidence(
-        "Action",
-        "create a Note",
-        "trace-1",
-        Exit.succeed({ title: "Saved" }),
-        "",
+  const call = Effect.runSync(
+    Schema.decodeUnknownEffect(ServiceCallJson)(
+      jsonTools.jsonString(
+        serviceCallEvidence(
+          "Action",
+          "create a Note",
+          "trace-1",
+          Exit.succeed({ title: "Saved" }),
+          "",
+        ),
       ),
     ),
   );
@@ -81,8 +85,8 @@ it("retains failure details while redacting known session values and sensitive f
   expect(failure).toMatchObject({
     outcome: { status: "failed", failure: { tag: "Rejected", message: "[REDACTED] cannot act" } },
   });
-  expect(JSON.stringify(success)).not.toContain("secret-token");
-  expect(JSON.stringify(success)).not.toContain("private-session");
+  expect(jsonTools.jsonString(success)).not.toContain("secret-token");
+  expect(jsonTools.jsonString(success)).not.toContain("private-session");
 });
 
 function serviceCallEvidence(

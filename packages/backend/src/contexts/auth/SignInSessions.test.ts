@@ -2,6 +2,8 @@ import { assert, it } from "@effect/vitest";
 import { DateTime, Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
 
+import layerTools from "#runtime/ProvideLayer.ts";
+
 import { AuthDatabase } from "./internal/AuthDatabase.ts";
 import { AuthDatabaseTest } from "./internal/AuthDatabaseTest.ts";
 import { session, user } from "./internal/AuthTables.ts";
@@ -71,7 +73,7 @@ it.effect(
           },
         ],
       );
-    }).pipe(Effect.provide(layer)),
+    }).pipe(layerTools.provide(layer)),
   30_000,
 );
 
@@ -102,7 +104,7 @@ it.effect(
       assert.deepStrictEqual(ended.map(String), ["session-laptop"]);
       assert.deepStrictEqual(sessionIds(yield* sessions.list(owner)), ["session-phone"]);
       assert.deepStrictEqual(sessionIds(yield* sessions.list(other)), ["session-stranger"]);
-    }).pipe(Effect.provide(layer)),
+    }).pipe(layerTools.provide(layer)),
   30_000,
 );
 
@@ -131,7 +133,7 @@ it.effect(
       assert.deepStrictEqual(ended.map(String).sort(), ["session-phone", "session-tablet"]);
       assert.deepStrictEqual(sessionIds(yield* sessions.list(owner)), ["session-laptop"]);
       assert.deepStrictEqual(sessionIds(yield* sessions.list(other)), ["session-stranger"]);
-    }).pipe(Effect.provide(layer)),
+    }).pipe(layerTools.provide(layer)),
   30_000,
 );
 

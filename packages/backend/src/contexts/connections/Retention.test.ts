@@ -11,6 +11,7 @@ import { OAuthClientRepository } from "#contexts/auth/internal/OAuthClientReposi
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { DatabaseConnection } from "#database/DatabaseConnection.ts";
 import { PostgresLive } from "#database/internal/PostgresLive.ts";
+import layerTools from "#runtime/ProvideLayer.ts";
 
 import { Connections } from "./Connections.ts";
 import { decodeTeamId } from "./FantasyTeam.ts";
@@ -97,7 +98,7 @@ it.effect("removes expired diagnostics and outcomes without touching unresolved 
     assert.strictEqual(remaining.runs.length, 1);
     assert.strictEqual(remaining.runs[0]?.run, queued.runs[0]?.id);
     assert.strictEqual(remaining.runs[0]?.status, "queued");
-  }).pipe(Effect.provide(RetentionTestLayer)),
+  }).pipe(layerTools.provide(RetentionTestLayer)),
 );
 
 it.effect(
@@ -142,7 +143,7 @@ it.effect(
         intents.map((intent) => intent.runId),
         [keptRun],
       );
-    }).pipe(Effect.provide(RetentionTestLayer)),
+    }).pipe(layerTools.provide(RetentionTestLayer)),
 );
 
 it.effect("prunes schedule observations 14 days after their covered window ends", () =>
@@ -169,14 +170,16 @@ it.effect("prunes schedule observations 14 days after their covered window ends"
     const summary = yield* retention.run(10, at);
     assert.strictEqual(summary.scheduleObservations, 2);
 
-    const remaining = yield* Effect.forEach(windows, (window) =>
-      store.readProviderOpponents({ subjectKey: team, from: window, to: window }),
+    const remaining = yield* Effect.forEach(
+      windows,
+      (window) => store.readProviderOpponents({ subjectKey: team, from: window, to: window }),
+      { concurrency: 1 },
     );
     assert.deepStrictEqual(
       remaining.map((rows) => rows.length),
       [0, 0, 1],
     );
-  }).pipe(Effect.provide(RetentionTestLayer)),
+  }).pipe(layerTools.provide(RetentionTestLayer)),
 );
 
 it.effect("removes finished hosted linking sessions after a day and keeps a live one", () =>
@@ -208,7 +211,7 @@ it.effect("removes finished hosted linking sessions after a day and keeps a live
       remaining.map((session) => session.id),
       ["live-session"],
     );
-  }).pipe(Effect.provide(RetentionTestLayer)),
+  }).pipe(layerTools.provide(RetentionTestLayer)),
 );
 
 it.effect("removes ended moves and empty plans after 90 days and keeps current work", () =>
@@ -309,7 +312,7 @@ it.effect("removes ended moves and empty plans after 90 days and keeps current w
       plans.map((plan) => plan.teamId).sort(),
       [busyTeam, emptyKeptTeam].sort(),
     );
-  }).pipe(Effect.provide(RetentionTestLayer)),
+  }).pipe(layerTools.provide(RetentionTestLayer)),
 );
 
 it.effect("keeps an in-flight run and its write intent at the retention boundary", () =>
@@ -343,7 +346,7 @@ it.effect("keeps an in-flight run and its write intent at the retention boundary
       intents.map((intent) => intent.runId),
       [inFlightRun],
     );
-  }).pipe(Effect.provide(RetentionTestLayer)),
+  }).pipe(layerTools.provide(RetentionTestLayer)),
 );
 
 function teamRow(id: TeamId, at: DateTime.Utc): typeof providerTeams.$inferInsert {
@@ -507,10 +510,12 @@ function hostedLinkingSession(
 }
 
 function lineupRequest(team: TeamId): LineupRequestInput {
-  return Schema.decodeSync(LineupRequestInput)({
-    requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9169e1",
-    teams: [{ team, period: { coverage: "week", week: 3 } }],
-  });
+  return Effect.runSync(
+    Schema.decodeEffect(LineupRequestInput)({
+      requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9169e1",
+      teams: [{ team, period: { coverage: "week", week: 3 } }],
+    }),
+  );
 }
 
 function seedTeam(

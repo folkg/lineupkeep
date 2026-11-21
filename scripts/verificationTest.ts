@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { Effect } from "effect";
 import { Schema } from "effect";
 import { assert } from "vitest";
 
@@ -42,7 +44,7 @@ export async function fakeCollector(
     const traceId = new URL(request.url ?? "/", "http://collector").searchParams.get("trace") ?? "";
     response
       .writeHead(200, { "content-type": "application/json" })
-      .end(JSON.stringify(respond(tagged.get(traceId) ?? [])));
+      .end(jsonTools.jsonString(respond(tagged.get(traceId) ?? [])));
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
@@ -85,7 +87,7 @@ export function scriptedSession(): ProfilerSession & { readonly calls: Array<str
 }
 
 export function unexpectedBudgetFailure(over: OverBudget): void {
-  throw new Error(`Unexpected budget failure: ${JSON.stringify(over)}`);
+  throw new Error(`Unexpected budget failure: ${jsonTools.jsonString(over)}`);
 }
 
 export function scriptedProbe(
@@ -140,7 +142,7 @@ export async function evidenceSink(): Promise<{
     results: () =>
       Promise.all(
         attached.map(async (path) =>
-          Schema.decodeUnknownSync(Result)(await readFile(path, "utf8")),
+          Effect.runSync(Schema.decodeUnknownEffect(Result)(await readFile(path, "utf8"))),
         ),
       ),
     attachment: async (name: string) => {
@@ -252,7 +254,7 @@ export async function runDirectory(
   try {
     const directory = await mkdtemp(join(tmpdir(), "verification-run-"));
     resources.defer(() => rm(directory, { recursive: true }));
-    const declaration = JSON.stringify(declare(matrix));
+    const declaration = jsonTools.jsonString(declare(matrix));
     const files = {
       "run.json": {
         runId: "run",
@@ -277,7 +279,7 @@ export async function runDirectory(
     for (const [name, content] of Object.entries(files)) {
       await writeFile(
         join(directory, name),
-        typeof content === "string" ? content : JSON.stringify(content),
+        typeof content === "string" ? content : jsonTools.jsonString(content),
       );
     }
     const cleanup = resources.move();

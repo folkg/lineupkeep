@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest";
-import { Effect, Redacted } from "effect";
+import { Effect, Redacted, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
@@ -237,13 +237,10 @@ it.effect("marks whether a refusal sentence came from a structured provider enve
     }).pipe(Effect.provide(layer(recording.client)));
 
   return Effect.gen(function* () {
-    const structured = yield* Effect.flip(
-      decode(
-        new Response(JSON.stringify({ error: { description: "Invalid cookie" } }), {
-          status: 401,
-        }),
-      ),
-    );
+    const invalidCookie = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+      error: { description: "Invalid cookie" },
+    });
+    const structured = yield* Effect.flip(decode(new Response(invalidCookie, { status: 401 })));
     const raw = yield* Effect.flip(decode(new Response("private-provider-body", { status: 403 })));
 
     if (structured._tag !== "Unauthorized") {

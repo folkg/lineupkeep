@@ -15,6 +15,8 @@ import {
   onboardingScopes,
   resourceScopes,
 } from "@lineupkeep/backend/runtime/ApplicationScopes";
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { Effect } from "effect";
 import { Option, Schema } from "effect";
 
 import { mcpClient, mcpEndpoint } from "./mcpClient.ts";
@@ -457,7 +459,10 @@ export class AcceptanceReport {
 
 export async function writeAcceptanceReport(report: AcceptanceReport, path: string): Promise<void> {
   await writeFile(path, redactText(report.markdown()));
-  await writeFile(join(dirname(path), "report.json"), JSON.stringify(report.summary(), null, 2));
+  await writeFile(
+    join(dirname(path), "report.json"),
+    jsonTools.jsonString(report.summary(), null, 2),
+  );
 }
 
 async function acceptLocal(acceptance: LocalAcceptance, report: AcceptanceReport): Promise<void> {
@@ -527,7 +532,9 @@ async function inspectMetadata(origin: string): Promise<MetadataInspection> {
   if (!resourceResponse.ok) {
     throw new Error(`Protected-resource metadata returned ${resourceResponse.status}.`);
   }
-  const resource = Schema.decodeUnknownSync(ResourceMetadata)(await resourceResponse.json());
+  const resource = Effect.runSync(
+    Schema.decodeUnknownEffect(ResourceMetadata)(await resourceResponse.json()),
+  );
   const issuer = resource.authorization_servers[0];
   if (issuer === undefined) {
     throw new Error("Protected-resource metadata names no authorization server.");
@@ -540,8 +547,8 @@ async function inspectMetadata(origin: string): Promise<MetadataInspection> {
   if (!authorizationResponse.ok) {
     throw new Error(`Authorization-server metadata returned ${authorizationResponse.status}.`);
   }
-  const authorization = Schema.decodeUnknownSync(AuthorizationMetadata)(
-    await authorizationResponse.json(),
+  const authorization = Effect.runSync(
+    Schema.decodeUnknownEffect(AuthorizationMetadata)(await authorizationResponse.json()),
   );
   return {
     metadataUrl,
@@ -576,7 +583,8 @@ async function inspectTools(
       `tools/list returned ${response.status}.${response.status === 401 ? " The access token was not accepted." : ""}`,
     );
   }
-  const listed = Schema.decodeUnknownSync(ToolsResponse)(await response.json()).result.tools;
+  const listed = Effect.runSync(Schema.decodeUnknownEffect(ToolsResponse)(await response.json()))
+    .result.tools;
   const anonymous = mcpClient(mcpEndpoint(origin));
   const tools: Array<ToolScope> = [];
   for (const tool of listed) {
@@ -676,7 +684,7 @@ async function runLocalFeedbackCase(
   const listedOk =
     listed.status === 200 &&
     listed.isError !== true &&
-    JSON.stringify(listed.structuredContent).includes(submittedId);
+    jsonTools.jsonString(listed.structuredContent).includes(submittedId);
   steps.push(
     `list_feedback: ${listedOk ? "ok, the submitted report is listed" : `failed (${listed.status}${listed.code === undefined ? "" : ` ${listed.code}`})`}`,
   );
@@ -727,7 +735,7 @@ async function callTool(
       description: Option.isSome(error) ? error.value.error_description : undefined,
     };
   }
-  const result = Schema.decodeUnknownSync(ToolResponse)(body).result;
+  const result = Effect.runSync(Schema.decodeUnknownEffect(ToolResponse)(body)).result;
   return {
     status: 200,
     isError: result.isError === true,
@@ -918,7 +926,7 @@ function codeList(values: ReadonlyArray<string>): string {
 
 function parseJson(text: string): unknown {
   try {
-    return JSON.parse(text);
+    return jsonTools.jsonValue(text);
   } catch {
     return undefined;
   }

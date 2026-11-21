@@ -4,6 +4,8 @@ import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { Effect } from "effect";
 import { Schema } from "effect";
 
 import { testEnvironment, verificationEnvironment } from "./verify/environment.ts";
@@ -38,7 +40,7 @@ async function main(): Promise<void> {
 
   if (values.recover === true) {
     const report = await recoverAbandonedRun();
-    console.log(JSON.stringify(report, null, 2));
+    console.log(jsonTools.jsonString(report, null, 2));
     const recovered =
       report.recovery.status === "recovered" || report.recovery.status === "no-lock";
     process.exitCode = recovered && report.orphans.problems.length === 0 ? 0 : 1;
@@ -48,7 +50,9 @@ async function main(): Promise<void> {
   const criteria =
     values.criteria === undefined
       ? undefined
-      : Schema.decodeSync(DeclaredCriteriaJson)(await readFile(values.criteria, "utf8"));
+      : Effect.runSync(
+          Schema.decodeEffect(DeclaredCriteriaJson)(await readFile(values.criteria, "utf8")),
+        );
   for (const path of positionals.filter((selected) => selected.startsWith("e2e/scratch/"))) {
     if (path.split("/").length < 4) {
       throw new Error(
@@ -64,13 +68,13 @@ async function main(): Promise<void> {
   const description = describeSource(root);
 
   await mkdir(directory, { recursive: true });
-  const declaration = criteria === undefined ? undefined : JSON.stringify(criteria, null, 2);
+  const declaration = criteria === undefined ? undefined : jsonTools.jsonString(criteria, null, 2);
   if (declaration !== undefined) {
     await writeFile(join(directory, "criteria.json"), declaration);
   }
   await writeFile(
     join(directory, "run.json"),
-    JSON.stringify(
+    jsonTools.jsonString(
       {
         runId,
         composition: "e2e-test",
@@ -130,7 +134,7 @@ async function main(): Promise<void> {
     const sourceChanged = sourceAtStart !== sourceAtEnd;
     await writeFile(
       join(directory, "source-check.json"),
-      JSON.stringify(
+      jsonTools.jsonString(
         { atStart: sourceAtStart, atEnd: sourceAtEnd, changedDuringRun: sourceChanged },
         null,
         2,

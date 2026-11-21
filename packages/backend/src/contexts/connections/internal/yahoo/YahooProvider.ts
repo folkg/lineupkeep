@@ -66,6 +66,7 @@ import type {
 import type { ProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { describeStatWindow, statWindowDays } from "#contexts/connections/StatWindow.ts";
+import jsonTools from "#runtime/JsonText.ts";
 import { PublicInternet } from "#runtime/PublicInternet.ts";
 
 import { scoreYahooRoster, yahooCapabilities } from "./YahooLineup.ts";
@@ -1145,7 +1146,7 @@ function declaredRosterCoverage(
   }
   return ProviderOperationUnsupported.make({
     operation: "read_league",
-    reason: `The league declares weekly deadline ${JSON.stringify(deadline)} and editable period ${JSON.stringify(settings.editKey ?? null)}. Neither identifies a weekly or daily roster cadence, so this league's lineup period cannot be resolved.`,
+    reason: `The league declares weekly deadline ${jsonTools.jsonString(deadline)} and editable period ${jsonTools.jsonString(settings.editKey ?? null)}. Neither identifies a weekly or daily roster cadence, so this league's lineup period cannot be resolved.`,
   });
 }
 
@@ -1985,7 +1986,7 @@ function incompleteTransaction(
 }
 
 function playerLabel(player: ProviderTransaction["players"][number]): string {
-  return player.name === undefined ? "a player" : `player ${JSON.stringify(player.name)}`;
+  return player.name === undefined ? "a player" : `player ${jsonTools.jsonString(player.name)}`;
 }
 
 function reviewBase(url: string, sport: FantasySport, leagueId: string): URL {

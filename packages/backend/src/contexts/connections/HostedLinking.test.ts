@@ -5,6 +5,7 @@ import { Duration, Effect, Layer, Redacted, Schema } from "effect";
 import { TestClock } from "effect/testing";
 
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
+import layerTools from "#runtime/ProvideLayer.ts";
 
 import { ConnectionProviderRejected } from "./Connection.ts";
 import { Connections } from "./Connections.ts";
@@ -59,7 +60,7 @@ it.effect("starts an owner-bound session, authorizes its ticket, and hides it fr
     assert.deepStrictEqual(authorized, started.session);
     assert.instanceOf(wrongTicket, HostedLinkingTicketRejected);
     assert.instanceOf(otherOwner, HostedLinkingNotFound);
-  }).pipe(Effect.provide(HostedLinkingTestLayer)),
+  }).pipe(layerTools.provide(HostedLinkingTestLayer)),
 );
 
 it.effect("completes once, stores the validated connection, and discovers teams", () =>
@@ -112,7 +113,7 @@ it.effect("completes once, stores the validated connection, and discovers teams"
       (yield* connections.listTeams(owner)).map((team) => team.name),
       ["Hosted Team"],
     );
-  }).pipe(Effect.provide(HostedLinkingTestLayer)),
+  }).pipe(layerTools.provide(HostedLinkingTestLayer)),
 );
 
 it.effect("reconnects an expired connection in place instead of creating another", () =>
@@ -153,7 +154,7 @@ it.effect("reconnects an expired connection in place instead of creating another
       (yield* connections.list(owner)).map((connection) => connection.id),
       [first.connection.id],
     );
-  }).pipe(Effect.provide(HostedLinkingTestLayer)),
+  }).pipe(layerTools.provide(HostedLinkingTestLayer)),
 );
 
 it.effect("refuses a reconnect target owned by someone else", () =>
@@ -177,7 +178,7 @@ it.effect("refuses a reconnect target owned by someone else", () =>
 
     assert.strictEqual(error._tag, "connection.not_found");
     assert.deepStrictEqual(yield* links.list(owner), []);
-  }).pipe(Effect.provide(HostedLinkingTestLayer)),
+  }).pipe(layerTools.provide(HostedLinkingTestLayer)),
 );
 
 it.effect("expires a session after its window and refuses completion", () =>
@@ -200,7 +201,7 @@ it.effect("expires a session after its window and refuses completion", () =>
     assert.instanceOf(error, HostedLinkingExpired);
     assert.strictEqual(expired[0]?.status, "expired");
     assert.deepStrictEqual(yield* connections.list(owner), []);
-  }).pipe(Effect.provide(HostedLinkingTestLayer)),
+  }).pipe(layerTools.provide(HostedLinkingTestLayer)),
 );
 
 it.effect("expires a session explicitly without leaving a connection", () =>
@@ -214,7 +215,7 @@ it.effect("expires a session explicitly without leaving a connection", () =>
     assert.strictEqual(expired[0]?.status, "expired");
     assert.isUndefined(expired[0]?.connectionId);
     assert.deepStrictEqual(yield* connections.list(owner), []);
-  }).pipe(Effect.provide(HostedLinkingTestLayer)),
+  }).pipe(layerTools.provide(HostedLinkingTestLayer)),
 );
 
 it.effect(
@@ -241,7 +242,7 @@ it.effect(
       assert.deepStrictEqual(retried, cancelled);
       assert.instanceOf(completion, HostedLinkingNotActive);
       assert.deepStrictEqual(yield* connections.list(owner), []);
-    }).pipe(Effect.provide(HostedLinkingTestLayer)),
+    }).pipe(layerTools.provide(HostedLinkingTestLayer)),
 );
 
 it.effect("fails a session without leaving a connection behind", () =>
@@ -255,7 +256,7 @@ it.effect("fails a session without leaving a connection behind", () =>
     assert.strictEqual(failed.status, "failed");
     assert.strictEqual(failed.failureReason, "provider_unavailable");
     assert.deepStrictEqual(yield* connections.list(owner), []);
-  }).pipe(Effect.provide(HostedLinkingTestLayer)),
+  }).pipe(layerTools.provide(HostedLinkingTestLayer)),
 );
 
 it.effect("leaves no connection behind when the provider rejects the captured session", () =>
@@ -277,7 +278,7 @@ it.effect("leaves no connection behind when the provider rejects the captured se
 
     assert.instanceOf(error, ConnectionProviderRejected);
     assert.deepStrictEqual(yield* connections.list(owner), []);
-  }).pipe(Effect.provide(HostedLinkingTestLayer)),
+  }).pipe(layerTools.provide(HostedLinkingTestLayer)),
 );
 
 it.effect("refuses a second concurrent session for one owner", () =>
@@ -288,7 +289,7 @@ it.effect("refuses a second concurrent session for one owner", () =>
     const error = yield* Effect.flip(hosted.start(owner, startInput));
 
     assert.instanceOf(error, HostedLinkingSessionActive);
-  }).pipe(Effect.provide(HostedLinkingTestLayer)),
+  }).pipe(layerTools.provide(HostedLinkingTestLayer)),
 );
 
 it.effect("rate-limits repeated session creation", () =>
@@ -302,7 +303,7 @@ it.effect("rate-limits repeated session creation", () =>
     const error = yield* Effect.flip(hosted.start(owner, startInput));
 
     assert.instanceOf(error, HostedLinkingRateLimited);
-  }).pipe(Effect.provide(HostedLinkingTestLayer)),
+  }).pipe(layerTools.provide(HostedLinkingTestLayer)),
 );
 
 const EncryptionTestLayer = ConnectionCredentialEncryption.forKey(
@@ -328,9 +329,11 @@ const HostedLinkingTestLayer = HostedLinkingLive.pipe(
   Layer.provide(NodeCrypto.layer),
 );
 
-const startInput = Schema.decodeSync(StartHostedLinkingInput)({
-  provider: decodeProviderKey("yahoo"),
-});
+const startInput = Effect.runSync(
+  Schema.decodeEffect(StartHostedLinkingInput)({
+    provider: decodeProviderKey("yahoo"),
+  }),
+);
 
 const owner = decodeUserId("owner");
 const other = decodeUserId("other");

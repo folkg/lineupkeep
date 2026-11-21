@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { test, type Page, expect } from "@playwright/test";
+import { Effect } from "effect";
 import { Schema } from "effect";
 
 import { pagePersona } from "./persona.ts";
@@ -27,13 +29,19 @@ export function serviceOperations(
               "content-type": "application/json",
               traceparent,
             },
-            body: JSON.stringify({ phase, persona, description, program, arguments: arguments_ }),
+            body: jsonTools.jsonString({
+              phase,
+              persona,
+              description,
+              program,
+              arguments: arguments_,
+            }),
           });
           if (response.headers.get("content-type")?.includes("application/json") !== true) {
             throw new Error(`Service invocation failed (${response.status}).`);
           }
           const text = await response.text();
-          const evidence = Schema.decodeUnknownSync(ServiceCallJson)(text);
+          const evidence = Effect.runSync(Schema.decodeUnknownEffect(ServiceCallJson)(text));
           await step.attach(serviceCallName(++sequence, description), {
             body: text,
             contentType: "application/json",
@@ -79,14 +87,14 @@ export class ServiceIdentity {
         const sent = await fetch(new URL("/api/auth/email-otp/send-verification-otp", origin), {
           method: "POST",
           headers,
-          body: JSON.stringify({ email, type: "sign-in" }),
+          body: jsonTools.jsonString({ email, type: "sign-in" }),
         });
         expect(sent.status, "request an emailed sign-in code").toBe(200);
       });
       const verified = await fetch(new URL("/api/auth/sign-in/email-otp", origin), {
         method: "POST",
         headers,
-        body: JSON.stringify({ email, otp }),
+        body: jsonTools.jsonString({ email, otp }),
       });
       expect(verified.status, "verify the delivered sign-in code").toBe(200);
       const cookie = verified.headers

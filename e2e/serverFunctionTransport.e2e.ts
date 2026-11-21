@@ -1,3 +1,4 @@
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import type { APIResponse } from "@playwright/test";
 
 import { beginAuthorization, mcpEndpoint } from "./mcpClient.ts";
@@ -48,7 +49,7 @@ test("refuses a crafted server-function argument that forges a same-origin HTML 
         "x-server-function-format": "8",
         "sec-fetch-site": "same-origin",
       },
-      data: JSON.stringify(forged),
+      data: jsonTools.jsonString(forged),
     });
     body = await response.text();
     await info.attach("crafted server-function response", {

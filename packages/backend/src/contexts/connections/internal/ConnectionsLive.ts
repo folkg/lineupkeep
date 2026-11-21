@@ -152,15 +152,18 @@ export const ConnectionsLive = Layer.effect(
         if (inputs.length === 0) {
           return [];
         }
-        const starts = yield* Effect.forEach(inputs, (input) =>
-          random.ulid.pipe(
-            Effect.flatMap((requestId) =>
-              Schema.decodeEffect(StartLinkingInputSchema)({
-                requestId,
-                provider: input.provider,
-              }).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause }))),
+        const starts = yield* Effect.forEach(
+          inputs,
+          (input) =>
+            random.ulid.pipe(
+              Effect.flatMap((requestId) =>
+                Schema.decodeEffect(StartLinkingInputSchema)({
+                  requestId,
+                  provider: input.provider,
+                }).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause }))),
+              ),
             ),
-          ),
+          { concurrency: 1 },
         );
         const started = yield* startLinking(userId, starts);
         const startedIds = started.map((connection) => connection.id);

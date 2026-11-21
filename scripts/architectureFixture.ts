@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { cruise } from "dependency-cruiser";
 import extractDepcruiseOptions from "dependency-cruiser/config-utl/extract-depcruise-options";
 export async function checkArchitecture(
@@ -188,7 +189,7 @@ function createFixture(files: Readonly<Record<string, string>>): string {
     );
     writeFileSync(
       join(fixture, "tsconfig.json"),
-      JSON.stringify({
+      jsonTools.jsonString({
         compilerOptions: {
           target: "ESNext",
           jsx: "preserve",

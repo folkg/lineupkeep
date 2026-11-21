@@ -393,11 +393,11 @@ const target = { coverage: "week" as const, week: 3 };
 const at = DateTime.makeUnsafe("2026-10-25T12:00:00Z");
 const retryAt = DateTime.makeUnsafe("2026-10-25T12:00:30Z");
 const lease = {
-  token: Schema.decodeSync(LineupId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b1"),
+  token: Effect.runSync(Schema.decodeEffect(LineupId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b1")),
   generation: 1,
 };
 const writeIntent = {
-  id: Schema.decodeSync(LineupId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b2"),
+  id: Effect.runSync(Schema.decodeEffect(LineupId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b2")),
   attempt: 1,
   status: "intended" as const,
 };
@@ -473,7 +473,7 @@ const verified = {
   writeIntent: { ...writeIntent, status: "verified_changed" as const },
 };
 const retryLease = {
-  token: Schema.decodeSync(LineupId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b3"),
+  token: Effect.runSync(Schema.decodeEffect(LineupId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b3")),
   generation: 2,
 };
 const retryClaimed = {

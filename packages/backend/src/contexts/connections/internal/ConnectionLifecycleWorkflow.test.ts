@@ -193,7 +193,7 @@ it.effect.each(invariants)("preserves $name across generated scenarios", (invari
 );
 
 function makeGeneration(value: number): ConnectionCredentialGeneration {
-  return Schema.decodeSync(ConnectionCredentialGeneration)(value);
+  return Effect.runSync(Schema.decodeEffect(ConnectionCredentialGeneration)(value));
 }
 
 const storedReconnectAt = DateTime.makeUnsafe("2026-01-02T00:00:00Z");

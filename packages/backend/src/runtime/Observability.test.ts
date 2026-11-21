@@ -15,6 +15,7 @@ import { Tool, Toolkit } from "effect/ai";
 import { HttpClient, HttpClientError } from "effect/http";
 
 import { ConnectionPersistenceFailed } from "#contexts/connections/Connection.ts";
+import layerTools from "#runtime/ProvideLayer.ts";
 
 import { makeTelemetryTest } from "./internal/TelemetryTest.ts";
 import { makeObservabilityLive } from "./Observability.ts";
@@ -33,7 +34,7 @@ it.effect("exports failed SQL children without bind values or nested causes", ()
     );
 
     const telemetry = makeTelemetryTest();
-    const exit = yield* Effect.exit(program).pipe(Effect.provide(telemetry.layer));
+    const exit = yield* Effect.exit(program).pipe(layerTools.provide(telemetry.layer));
     const { payloads, spans } = telemetry.read();
 
     assert.isTrue(Exit.isFailure(exit));
@@ -69,14 +70,14 @@ it.effect("exports real Toolkit calls without raw MCP parameters", () =>
       yield* Stream.runDrain(output);
     }).pipe(
       Effect.scoped,
-      Effect.provide(
+      layerTools.provide(
         toolkit.toLayer({ list_connections: () => Effect.void.pipe(Effect.withSpan("mcp.tool")) }),
       ),
       Effect.withSpan("mcp.request"),
     );
 
     const telemetry = makeTelemetryTest();
-    const exit = yield* Effect.exit(program).pipe(Effect.provide(telemetry.layer));
+    const exit = yield* Effect.exit(program).pipe(layerTools.provide(telemetry.layer));
     const { payloads, spans } = telemetry.read();
 
     assert.isTrue(Exit.isSuccess(exit));
@@ -106,7 +107,7 @@ it.effect("exports failed automatic HTTP children without provider causes or URL
     ).pipe(Effect.provideService(HttpClient.HttpClient, provider), Effect.withSpan("email.send"));
 
     const telemetry = makeTelemetryTest();
-    const exit = yield* Effect.exit(program).pipe(Effect.provide(telemetry.layer));
+    const exit = yield* Effect.exit(program).pipe(layerTools.provide(telemetry.layer));
     const { payloads, spans } = telemetry.read();
 
     assert.isTrue(Exit.isFailure(exit));
@@ -138,7 +139,7 @@ it.effect("exports defects and interruptions without changing their control sema
     });
 
     const telemetry = makeTelemetryTest();
-    yield* program.pipe(Effect.provide(telemetry.layer));
+    yield* program.pipe(layerTools.provide(telemetry.layer));
     const { payloads, spans } = telemetry.read();
 
     assert.strictEqual(spans.length, 2);
@@ -189,7 +190,7 @@ it.effect(
       );
 
       const telemetry = makeTelemetryTest();
-      yield* program.pipe(Effect.provide(telemetry.layer));
+      yield* program.pipe(layerTools.provide(telemetry.layer));
       const { payloads, spans } = telemetry.read();
 
       assert.strictEqual(spans.length, 1);
@@ -207,7 +208,7 @@ it.effect("keeps running when the wide event writer is unavailable", () =>
 
     assert.strictEqual(result, "ok");
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       Layer.merge(
         makeObservabilityLive({
           wideEvents: true,
@@ -231,7 +232,7 @@ it.effect("keeps an exceptional error as its own entry outside a unit", () =>
 
     yield* Effect.logError("Background operation failed").pipe(
       Effect.withSpan("telemetry.server_error"),
-      Effect.provide(layer),
+      layerTools.provide(layer),
       Effect.provideService(Console.Console, {
         assert: console.assert.bind(console),
         clear: console.clear.bind(console),
@@ -301,7 +302,7 @@ it.effect("composes development output behind the safety boundary", () =>
       Effect.tapCause((cause) => Effect.logError("dependency failed", cause)),
       Effect.withSpan("orders.import"),
       Effect.exit,
-      Effect.provide(layer),
+      layerTools.provide(layer),
     );
 
     assert.include(lines.join(""), "operation.failed");

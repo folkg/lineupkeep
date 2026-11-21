@@ -6,6 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import {
   containerNameFor,
   removeOwnedContainer,
@@ -57,7 +58,7 @@ export async function runTests(run: TestRun): Promise<VerificationOutcome> {
     };
     await writeFile(
       manifest(run.directory),
-      JSON.stringify(
+      jsonTools.jsonString(
         {
           runId: run.runId,
           stage,
@@ -161,7 +162,7 @@ export async function runTests(run: TestRun): Promise<VerificationOutcome> {
     const after = sourceFingerprint(root, run.playwrightArguments);
     await writeFile(
       join(run.directory, "source-check.json"),
-      JSON.stringify(
+      jsonTools.jsonString(
         { atStart: before, atEnd: after, changedDuringRun: before !== after },
         null,
         2,

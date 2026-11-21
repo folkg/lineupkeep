@@ -8,13 +8,16 @@ import { expect } from "vitest";
 import { deploymentState } from "./state.ts";
 
 it.effect("requires shared state configuration before any nonlocal state operation", () =>
-  Effect.forEach([{}, { ALCHEMY_STATE_DATABASE_URL: "" }], (config) =>
-    stateFailure(config).pipe(
-      Effect.map((error) => {
-        expect(error).toContain("ALCHEMY_STATE_DATABASE_URL");
-        expect(error).toContain("required for non-local plan, deploy and destroy");
-      }),
-    ),
+  Effect.forEach(
+    [{}, { ALCHEMY_STATE_DATABASE_URL: "" }],
+    (config) =>
+      stateFailure(config).pipe(
+        Effect.map((error) => {
+          expect(error).toContain("ALCHEMY_STATE_DATABASE_URL");
+          expect(error).toContain("required for non-local plan, deploy and destroy");
+        }),
+      ),
+    { concurrency: 1 },
   ),
 );
 
@@ -40,6 +43,7 @@ it.effect("rejects Neon's transaction pooler without exposing state credentials"
           expect(error).not.toContain("private-password");
         }),
       ),
+    { concurrency: 1 },
   ),
 );
 
@@ -53,6 +57,7 @@ it.effect("rejects malformed and non-Postgres URLs without echoing their values"
           expect(error).not.toContain("private-password");
         }),
       ),
+    { concurrency: 1 },
   ),
 );
 

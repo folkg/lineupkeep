@@ -4,7 +4,9 @@ import {
   currentScopeName,
   retiredScopeAliases,
 } from "@lineupkeep/backend/auth/AuthorizationScopes";
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import type { Page } from "@playwright/test";
+import { Effect } from "effect";
 import { Schema } from "effect";
 
 import {
@@ -94,7 +96,7 @@ async function registerLegacyClient(
       origin,
       cookie: cookies.map(({ name, value }) => `${name}=${value}`).join("; "),
     },
-    body: JSON.stringify({
+    body: jsonTools.jsonString({
       client_name: legacyClientName,
       redirect_uris: [callback],
       grant_types: ["authorization_code", "refresh_token"],
@@ -107,9 +109,11 @@ async function registerLegacyClient(
   if (response.status !== 201) {
     throw new Error(`Legacy client registration failed (${response.status}).`);
   }
-  const registered = Schema.decodeUnknownSync(
-    Schema.Struct({ client_id: Schema.String, scope: Schema.String }),
-  )(await response.json());
+  const registered = Effect.runSync(
+    Schema.decodeUnknownEffect(Schema.Struct({ client_id: Schema.String, scope: Schema.String }))(
+      await response.json(),
+    ),
+  );
   if (registered.scope !== retiredScope) {
     throw new Error(`The legacy client registered ${registered.scope} instead of ${retiredScope}.`);
   }
@@ -187,12 +191,14 @@ async function linkProviderTeam(
   report: AcceptanceReport,
 ): Promise<string> {
   try {
-    const discovered = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ id: Schema.String })))(
-      await services.exercise(
-        page,
-        "link the provider fake and discover teams",
-        "connectYahooAndDiscoverTeams",
-        {},
+    const discovered = Effect.runSync(
+      Schema.decodeUnknownEffect(Schema.Array(Schema.Struct({ id: Schema.String })))(
+        await services.exercise(
+          page,
+          "link the provider fake and discover teams",
+          "connectYahooAndDiscoverTeams",
+          {},
+        ),
       ),
     );
     const team = discovered[0]?.id;

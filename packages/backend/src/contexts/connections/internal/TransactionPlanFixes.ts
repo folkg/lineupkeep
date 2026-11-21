@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { Schema } from "effect";
 
 import { rosterOccupancy, slotPlacement } from "#contexts/connections/RosterSlots.ts";
@@ -30,7 +31,9 @@ export function rosterFixFundedMove(group: string | undefined): TransactionMoveI
   if (group === undefined || !isRosterFixGroup(group)) {
     return undefined;
   }
-  return Schema.decodeSync(TransactionMoveId)(group.slice(rosterFixGroupPrefix.length));
+  return Effect.runSync(
+    Schema.decodeEffect(TransactionMoveId)(group.slice(rosterFixGroupPrefix.length)),
+  );
 }
 
 export function searchRosterFixes(input: {

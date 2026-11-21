@@ -5,6 +5,8 @@ import { AccountExport, AccountExportDocument } from "@lineupkeep/backend/privac
 import { DateTime, Duration, Effect, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 
+import layerTools from "#runtime/ProvideLayer.ts";
+
 import { AccountDataRepository } from "./internal/AccountDataRepository.ts";
 import { ownedDataInventory } from "./internal/AccountDataTables.ts";
 import { AccountErasureLive } from "./internal/AccountErasureLive.ts";
@@ -119,7 +121,7 @@ it.effect(
       ]) {
         assert.isFalse(exported.includes(secret), `the export contains ${secret}`);
       }
-    }).pipe(Effect.provide(ExportTestLayer)),
+    }).pipe(layerTools.provide(ExportTestLayer)),
   30_000,
 );
 
@@ -144,7 +146,7 @@ it.effect(
           }
         }
       }
-    }).pipe(Effect.provide(ExportTestLayer)),
+    }).pipe(layerTools.provide(ExportTestLayer)),
   30_000,
 );
 
@@ -183,7 +185,7 @@ it.effect(
         held.latest?.takenAt.pipe(DateTime.formatIso),
       );
       assert.strictEqual(stale.latest?.records, held.latest?.records);
-    }).pipe(Effect.provide(ExportTestLayer)),
+    }).pipe(layerTools.provide(ExportTestLayer)),
   30_000,
 );
 

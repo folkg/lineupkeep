@@ -1,3 +1,5 @@
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { Effect } from "effect";
 import { Cause, Exit, Predicate, Schema } from "effect";
 
 import { redactEvidence } from "./redaction.ts";
@@ -37,20 +39,36 @@ export function isServiceCallAttachment(attachment: { readonly name: string }): 
   return attachment.name.startsWith(callPrefix);
 }
 
+function isJsonData(value: unknown, seen = new Set<object>()): boolean {
+  if (value === undefined || typeof value === "function" || typeof value === "symbol") {
+    return false;
+  }
+  if (typeof value === "number" && !Number.isFinite(value)) {
+    return false;
+  }
+  if (typeof value !== "object" || value === null) {
+    return true;
+  }
+  if (seen.has(value)) {
+    return false;
+  }
+  seen.add(value);
+  return Array.isArray(value)
+    ? value.every((entry) => isJsonData(entry, seen))
+    : Object.values(value).every((entry) => isJsonData(entry, seen));
+}
+
 function encodeResult(value: unknown): { readonly result: unknown } | { readonly note: string } {
   try {
-    const json = JSON.stringify(value, (_key, entry: unknown) => {
-      if (
-        entry === undefined ||
-        typeof entry === "function" ||
-        typeof entry === "symbol" ||
-        (typeof entry === "number" && !Number.isFinite(entry))
-      ) {
-        throw new Error("Not JSON data");
-      }
-      return entry;
-    });
-    return { result: Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(json) };
+    if (!isJsonData(value)) {
+      return { note: "Result is not JSON-encodable." };
+    }
+    const json = jsonTools.jsonString(value);
+    return {
+      result: Effect.runSync(
+        Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(json),
+      ),
+    };
   } catch {
     return { note: "Result is not JSON-encodable." };
   }

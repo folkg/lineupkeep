@@ -150,10 +150,13 @@ export class HostedLinkingRepository extends Context.Service<
             ),
           )
           .pipe(Effect.mapError((cause) => HostedLinkingPersistenceFailed.make({ cause })));
-        const ids = yield* Effect.forEach(stale, ({ id }) =>
-          Schema.decodeEffect(HostedLinkingSessionId)(id).pipe(
-            Effect.mapError((cause) => HostedLinkingPersistenceFailed.make({ cause })),
-          ),
+        const ids = yield* Effect.forEach(
+          stale,
+          ({ id }) =>
+            Schema.decodeEffect(HostedLinkingSessionId)(id).pipe(
+              Effect.mapError((cause) => HostedLinkingPersistenceFailed.make({ cause })),
+            ),
+          { concurrency: 1 },
         );
         if (!Array.isArrayNonEmpty(ids)) {
           return [];
@@ -306,10 +309,12 @@ export class HostedLinkingRepository extends Context.Service<
             .orderBy(hostedLinkingSessions.id)
             .for("update")
             .pipe(Effect.mapError((cause) => HostedLinkingPersistenceFailed.make({ cause })));
-          const records = yield* Effect.forEach(rows, decodeRow);
+          const records = yield* Effect.forEach(rows, decodeRow, { concurrency: 1 });
           const locked = new Map(records.map((record) => [record.id, record]));
-          const planned = yield* Effect.forEach(ids, (id) => plan(locked, id));
-          return yield* Effect.forEach(planned, (record) => persistRecord(tx, record));
+          const planned = yield* Effect.forEach(ids, (id) => plan(locked, id), { concurrency: 1 });
+          return yield* Effect.forEach(planned, (record) => persistRecord(tx, record), {
+            concurrency: 1,
+          });
         });
       }
 

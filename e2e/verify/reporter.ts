@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import type {
   FullConfig,
   FullResult,
@@ -74,7 +75,7 @@ export default class VerificationReporter implements Reporter {
     );
     await writeFile(
       join(this.directory, "results.json"),
-      JSON.stringify(
+      jsonTools.jsonString(
         { verdict, planned: this.planned, attempts: this.attempts, errors: this.errors },
         null,
         2,

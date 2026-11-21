@@ -121,7 +121,7 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
           .orderBy(asc(providerTeams.league), asc(providerTeams.name), asc(providerTeams.id))
           .limit(teamListLimit)
           .pipe(Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })));
-        return yield* Effect.forEach(rows, toTeamRecord);
+        return yield* Effect.forEach(rows, toTeamRecord, { concurrency: 1 });
       });
 
       const load = Effect.fn("TeamRepository.load")(function* (
@@ -168,14 +168,21 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
           .orderBy(asc(providerTeams.id))
           .pipe(Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })));
         const byId = new Map(
-          yield* Effect.forEach(rows, (row) =>
-            toTeamRecord(row).pipe(Effect.map((record) => [record.team.id, record] as const)),
+          yield* Effect.forEach(
+            rows,
+            (row) =>
+              toTeamRecord(row).pipe(Effect.map((record) => [record.team.id, record] as const)),
+            { concurrency: 1 },
           ),
         );
-        return yield* Effect.forEach(ids, (team) => {
-          const record = byId.get(team);
-          return record === undefined ? TeamNotFound.make({ team }) : Effect.succeed(record);
-        });
+        return yield* Effect.forEach(
+          ids,
+          (team) => {
+            const record = byId.get(team);
+            return record === undefined ? TeamNotFound.make({ team }) : Effect.succeed(record);
+          },
+          { concurrency: 1 },
+        );
       });
 
       const control = Effect.fn("TeamRepository.control")(function* (
@@ -197,11 +204,14 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
                 .orderBy(asc(providerTeams.id))
                 .for("update");
               const locked = new Map(
-                yield* Effect.forEach(rows, (row) =>
-                  Schema.decodeEffect(FantasyTeamRow)(row).pipe(
-                    Effect.map((team) => [team.id, { row, team }] as const),
-                    Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })),
-                  ),
+                yield* Effect.forEach(
+                  rows,
+                  (row) =>
+                    Schema.decodeEffect(FantasyTeamRow)(row).pipe(
+                      Effect.map((team) => [team.id, { row, team }] as const),
+                      Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })),
+                    ),
+                  { concurrency: 1 },
                 ),
               );
               const changedById = new Map<
@@ -461,11 +471,17 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
           .orderBy(asc(providerTeams.id))
           .limit(limit)
           .pipe(Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })));
-        return yield* Effect.forEach(rows, (row) =>
-          Effect.all({
-            team: Schema.decodeEffect(FantasyTeamRow)(row),
-            userId: Schema.decodeEffect(UserIdSchema)(row.userId),
-          }).pipe(Effect.mapError((cause) => TeamPersistenceFailed.make({ cause }))),
+        return yield* Effect.forEach(
+          rows,
+          (row) =>
+            Effect.all(
+              {
+                team: Schema.decodeEffect(FantasyTeamRow)(row),
+                userId: Schema.decodeEffect(UserIdSchema)(row.userId),
+              },
+              { concurrency: 1 },
+            ).pipe(Effect.mapError((cause) => TeamPersistenceFailed.make({ cause }))),
+          { concurrency: 1 },
         );
       });
 
@@ -567,7 +583,7 @@ function planAutomation(
 }
 
 function encodeAutomation(state: TeamAutomationState): unknown {
-  return Schema.encodeSync(Schema.toCodecJson(TeamAutomationState))(state);
+  return Effect.runSync(Schema.encodeEffect(Schema.toCodecJson(TeamAutomationState))(state));
 }
 
 function mapPersistenceError(cause: unknown): TeamPersistenceFailed {

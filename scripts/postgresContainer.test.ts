@@ -5,6 +5,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import {
   containerNameFor,
   postgresContainer,
@@ -152,7 +153,9 @@ esac
       for (const [index, container] of containers.entries()) {
         await writeFile(
           join(folder, `inspect-id${index}.json`),
-          JSON.stringify([{ Name: `/${container.name}`, Config: { Labels: container.labels } }]),
+          jsonTools.jsonString([
+            { Name: `/${container.name}`, Config: { Labels: container.labels } },
+          ]),
         );
       }
     },
@@ -161,7 +164,7 @@ esac
       await writeFile(join(state, name), "");
       await writeFile(
         join(folder, `inspect-${name}.json`),
-        JSON.stringify([
+        jsonTools.jsonString([
           {
             Name: `/${name}`,
             Config: {
@@ -175,7 +178,7 @@ esac
       await writeFile(join(folder, "absent-success"), "");
       await writeFile(
         join(folder, `inspect-${name}.json`),
-        JSON.stringify([
+        jsonTools.jsonString([
           {
             Name: `/${name}`,
             Config: {

@@ -30,11 +30,13 @@ export async function readSafetyRun(): Promise<{
       "Infrastructure safety tests need the owned Node E2E run; use bun run test:e2e.",
     );
   }
-  const run = Schema.decodeSync(Schema.fromJsonString(LocalRunSchema))(
-    await readFile(manifest, "utf8"),
+  const run = Effect.runSync(
+    Schema.decodeEffect(Schema.fromJsonString(LocalRunSchema))(await readFile(manifest, "utf8")),
   );
-  const endpoints = Schema.decodeSync(Schema.fromJsonString(LocalEndpointsSchema))(
-    await readFile(join(run.directory, "endpoints.json"), "utf8"),
+  const endpoints = Effect.runSync(
+    Schema.decodeEffect(Schema.fromJsonString(LocalEndpointsSchema))(
+      await readFile(join(run.directory, "endpoints.json"), "utf8"),
+    ),
   );
   return { run, database: endpoints.database };
 }

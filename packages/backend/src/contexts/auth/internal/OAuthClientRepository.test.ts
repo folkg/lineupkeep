@@ -2,6 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { DateTime, Effect, Layer } from "effect";
 
 import type { AuthorizationScope } from "#contexts/auth/AuthorizationScopes.ts";
+import layerTools from "#runtime/ProvideLayer.ts";
 
 import { AuthDatabase } from "./AuthDatabase.ts";
 import { AuthDatabaseTest } from "./AuthDatabaseTest.ts";
@@ -65,7 +66,9 @@ it.effect(
         untouchedTimestamps(after, ["dynamic-subset", "dynamic-retired"]),
         untouchedTimestamps(before, ["dynamic-subset", "dynamic-retired"]),
       );
-    }).pipe(Effect.provide(OAuthClientRepository.layer.pipe(Layer.provideMerge(AuthDatabaseTest)))),
+    }).pipe(
+      layerTools.provide(OAuthClientRepository.layer.pipe(Layer.provideMerge(AuthDatabaseTest))),
+    ),
   30_000,
 );
 

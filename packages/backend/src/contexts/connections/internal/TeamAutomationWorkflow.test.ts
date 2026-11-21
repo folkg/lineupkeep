@@ -51,8 +51,8 @@ it.effect("explores every team automation transition and branch", () =>
 it("round-trips every automation state through its JSON codec", () => {
   const codec = Schema.toCodecJson(TeamAutomationState);
   for (const state of states) {
-    const encoded = Schema.encodeSync(codec)(state);
-    const decoded = Schema.decodeSync(codec)(encoded);
+    const encoded = Effect.runSync(Schema.encodeEffect(codec)(state));
+    const decoded = Effect.runSync(Schema.decodeEffect(codec)(encoded));
     assert.deepStrictEqual(decoded, state);
   }
 });

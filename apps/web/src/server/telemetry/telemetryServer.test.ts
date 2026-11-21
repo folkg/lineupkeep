@@ -1,10 +1,11 @@
 import { assert, it } from "@effect/vitest";
 import { makeTelemetryTest } from "@lineupkeep/backend/runtime/internal/TelemetryTest";
+import layerTools from "@lineupkeep/backend/runtime/ProvideLayer";
 import {
   type RequestContext,
   requestContextLayer,
 } from "@lineupkeep/backend/runtime/RequestContext";
-import { Effect, Exit, Tracer, Logger } from "effect";
+import { Effect, Exit, Layer, Tracer, Logger } from "effect";
 import { TestClock } from "effect/testing";
 
 import {
@@ -23,7 +24,7 @@ function provideTestContext<A, E>(
   program: Effect.Effect<A, E, RequestContext>,
 ): Effect.Effect<A, E, never> {
   return program.pipe(
-    Effect.provide(requestContextLayer({ request, requestId: "request-telemetry-1" })),
+    layerTools.provide(requestContextLayer({ request, requestId: "request-telemetry-1" })),
     Effect.withSpan("telemetry-test"),
     Effect.scoped,
   );
@@ -162,20 +163,25 @@ it.effect("exports client reports without any caller-controlled text", () =>
         status: 503,
       },
     ];
-    const program = Effect.forEach(reports, (report) =>
-      recordClientReport(report, budget).pipe(Effect.withSpan("telemetry.client_report")),
+    const program = Effect.forEach(
+      reports,
+      (report) =>
+        recordClientReport(report, budget).pipe(Effect.withSpan("telemetry.client_report")),
+      { concurrency: 1 },
     ).pipe(
-      Effect.provide([
-        requestContextLayer({
-          request: new Request("https://app.test/api/telemetry"),
-          requestId: "client-report-test",
-        }),
-        Logger.layer([Logger.tracerLogger]),
-      ]),
+      layerTools.provide(
+        Layer.mergeAll(
+          requestContextLayer({
+            request: new Request("https://app.test/api/telemetry"),
+            requestId: "client-report-test",
+          }),
+          Logger.layer([Logger.tracerLogger]),
+        ),
+      ),
     );
 
     const telemetry = makeTelemetryTest();
-    const exit = yield* Effect.exit(program).pipe(Effect.provide(telemetry.layer));
+    const exit = yield* Effect.exit(program).pipe(layerTools.provide(telemetry.layer));
     const { payloads, spans } = telemetry.read();
 
     assert.isTrue(Exit.isSuccess(exit));

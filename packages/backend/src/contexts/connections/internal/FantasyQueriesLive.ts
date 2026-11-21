@@ -131,6 +131,7 @@ import {
   sameStatWindow,
   statWindowKey,
 } from "#contexts/connections/StatWindow.ts";
+import jsonTools from "#runtime/JsonText.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
 import {
@@ -4890,7 +4891,7 @@ function largestSectionBytes(entries: ReadonlyArray<readonly [string, unknown]>)
       if (value === undefined) {
         return [];
       }
-      const serialized = JSON.stringify(value);
+      const serialized = jsonTools.jsonString(value);
       return [{ name, bytes: serialized.length }];
     })
     .sort((left, right) => right.bytes - left.bytes)

@@ -1,6 +1,8 @@
 import { assert, it } from "@effect/vitest";
 import { ConfigProvider, Config, Effect, Exit, Layer } from "effect";
 
+import layerTools from "#runtime/ProvideLayer.ts";
+
 import { ConnectionEncryptionKey } from "./ConnectionEncryptionKey.ts";
 import { loadConnectionEncryptionKeyring } from "./ConnectionEncryptionKeyring.ts";
 
@@ -13,7 +15,7 @@ it.effect("loads the current key and every retained key version", () =>
     assert.strictEqual(keyring.keysByVersion.size, 2);
     assert.isDefined(keyring.keysByVersion.get(1));
     assert.isDefined(keyring.keysByVersion.get(2));
-  }).pipe(Effect.provide(KeyringLayer(`1:${oldKey}`))),
+  }).pipe(layerTools.provide(KeyringLayer(`1:${oldKey}`))),
 );
 
 it.effect("treats a blank retained list as a single-key ring", () =>
@@ -22,7 +24,7 @@ it.effect("treats a blank retained list as a single-key ring", () =>
 
     assert.deepStrictEqual(keyring.retainedKeyVersions, []);
     assert.strictEqual(keyring.keysByVersion.size, 1);
-  }).pipe(Effect.provide(KeyringLayer(""))),
+  }).pipe(layerTools.provide(KeyringLayer(""))),
 );
 
 it.effect("refuses a retained entry that repeats the current key version", () =>
@@ -33,7 +35,7 @@ it.effect("refuses a retained entry that repeats the current key version", () =>
     const rendered = Exit.isFailure(exit) ? String(exit.cause) : "";
     assert.include(rendered, "must not repeat the current key version");
     assert.notInclude(rendered, oldKey);
-  }).pipe(Effect.provide(KeyringLayer(`2:${oldKey}`))),
+  }).pipe(layerTools.provide(KeyringLayer(`2:${oldKey}`))),
 );
 
 it.effect("refuses a retained entry that declares the same version twice", () =>
@@ -44,16 +46,16 @@ it.effect("refuses a retained entry that declares the same version twice", () =>
     const rendered = Exit.isFailure(exit) ? String(exit.cause) : "";
     assert.include(rendered, "declares key version 1 more than once");
     assert.notInclude(rendered, oldKey);
-  }).pipe(Effect.provide(KeyringLayer(`1:${oldKey},1:${otherKey}`))),
+  }).pipe(layerTools.provide(KeyringLayer(`1:${oldKey},1:${otherKey}`))),
 );
 
 it.effect("refuses retained entries that are not version:key pairs", () =>
   Effect.gen(function* () {
     const missingSeparator = yield* Effect.exit(
-      loadConnectionEncryptionKeyring.pipe(Effect.provide(KeyringLayer(oldKey))),
+      loadConnectionEncryptionKeyring.pipe(layerTools.provide(KeyringLayer(oldKey))),
     );
     const invalidVersion = yield* Effect.exit(
-      loadConnectionEncryptionKeyring.pipe(Effect.provide(KeyringLayer(`0:${oldKey}`))),
+      loadConnectionEncryptionKeyring.pipe(layerTools.provide(KeyringLayer(`0:${oldKey}`))),
     );
 
     assert.isTrue(Exit.isFailure(missingSeparator));
@@ -77,7 +79,7 @@ it.effect("refuses retained material that is not a 32-byte base64 key without ec
     assert.isTrue(Exit.isFailure(exit));
     assert.include(rendered, "must be a 32-byte key");
     assert.notInclude(rendered, shortKey);
-  }).pipe(Effect.provide(KeyringLayer(`1:${shortKey}`))),
+  }).pipe(layerTools.provide(KeyringLayer(`1:${shortKey}`))),
 );
 
 it.effect("refuses retained material that is not base64 without echoing it", () =>
@@ -88,7 +90,7 @@ it.effect("refuses retained material that is not base64 without echoing it", () 
     assert.isTrue(Exit.isFailure(exit));
     assert.include(rendered, "is not base64-encoded");
     assert.notInclude(rendered, "not base64 material");
-  }).pipe(Effect.provide(KeyringLayer("1:not base64 material"))),
+  }).pipe(layerTools.provide(KeyringLayer("1:not base64 material"))),
 );
 
 const currentKey = Buffer.from("ABCDEFGHIJKLMNOPQRSTUVWXYZ987654").toString("base64");

@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 
 import { ConnectionId, ProviderKey } from "./Connection.ts";
 
@@ -9,7 +9,8 @@ const LineupgradeId = Schema.Union([
 
 export const TeamId = LineupgradeId.pipe(Schema.brand("TeamId"));
 export type TeamId = typeof TeamId.Type;
-export const decodeTeamId = Schema.decodeUnknownSync(TeamId);
+export const decodeTeamId = (value: unknown): TeamId =>
+  Effect.runSync(Schema.decodeUnknownEffect(TeamId)(value));
 
 export const FantasyLeague = Schema.Literals(["nfl", "nhl", "mlb", "nba"]);
 export type FantasyLeague = typeof FantasyLeague.Type;

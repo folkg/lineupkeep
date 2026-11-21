@@ -52,6 +52,8 @@ import {
 } from "@lineupkeep/backend/feedback/Feedback";
 import type { FeedbackShape } from "@lineupkeep/backend/feedback/Feedback";
 import { FeedbackPersistenceFailed } from "@lineupkeep/backend/feedback/Feedback";
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import layerTools from "@lineupkeep/backend/runtime/ProvideLayer";
 import { ToolCallQuota, toolCallLimits } from "@lineupkeep/backend/toolCalls/ToolCallQuota";
 import type { ToolCall } from "@lineupkeep/backend/toolCalls/ToolCallQuota";
 import { DateTime, Duration, Effect, Layer, Schema } from "effect";
@@ -97,7 +99,7 @@ it("identifies the product during protocol discovery", async () => {
   const response = await handle(request("server/discover", {}, "read"));
 
   expect(response.status).toBe(200);
-  const body = Schema.decodeUnknownSync(DiscoveryDocument)(await response.json());
+  const body = Effect.runSync(Schema.decodeUnknownEffect(DiscoveryDocument)(await response.json()));
   expect(body.result._meta["io.modelcontextprotocol/serverInfo"]).toEqual({
     name: "Lineupgrade",
     version: "1.0.0",
@@ -112,16 +114,18 @@ it("publishes the grant lifetime and the presented token's expiry during protoco
 
   expect(anonymous.status).toBe(200);
   expect(authenticated.status).toBe(200);
-  const anonymousDocument = Schema.decodeUnknownSync(DiscoveryDocument)(await anonymous.json());
-  const authenticatedDocument = Schema.decodeUnknownSync(DiscoveryDocument)(
-    await authenticated.json(),
+  const anonymousDocument = Effect.runSync(
+    Schema.decodeUnknownEffect(DiscoveryDocument)(await anonymous.json()),
+  );
+  const authenticatedDocument = Effect.runSync(
+    Schema.decodeUnknownEffect(DiscoveryDocument)(await authenticated.json()),
   );
   expect(anonymousDocument.result._meta["lineupkeep/grant"]).toEqual({
     accessTokenLifetimeSeconds: 300,
     refreshTokenGrantSupported: true,
   });
-  const grant = Schema.decodeUnknownSync(GrantReport)(
-    authenticatedDocument.result._meta["lineupkeep/grant"],
+  const grant = Effect.runSync(
+    Schema.decodeUnknownEffect(GrantReport)(authenticatedDocument.result._meta["lineupkeep/grant"]),
   );
   expect(grant.accessTokenLifetimeSeconds).toBe(300);
   expect(grant.refreshTokenGrantSupported).toBe(true);
@@ -134,10 +138,11 @@ it("publishes the grant lifetime and the presented token's expiry during protoco
     DateTime.nowUnsafe().epochMilliseconds,
   );
   expect(
-    Schema.decodeUnknownSync(GrantReport)(
-      Schema.decodeUnknownSync(DiscoveryDocument)(await expired.json()).result._meta[
-        "lineupkeep/grant"
-      ],
+    Effect.runSync(
+      Schema.decodeUnknownEffect(GrantReport)(
+        Effect.runSync(Schema.decodeUnknownEffect(DiscoveryDocument)(await expired.json())).result
+          ._meta["lineupkeep/grant"],
+      ),
     ).accessToken,
   ).toEqual({ status: "rejected" });
   expect(anonymousDocument.result.capabilities).toEqual(authenticatedDocument.result.capabilities);
@@ -167,7 +172,7 @@ it("derives the endpoint path and discovery challenge from the Auth resource", a
           ...auth,
           oauthResource: "https://connections.example/agents",
         })),
-        Effect.provide(Layer.merge(authentication, permissiveQuota)),
+        layerTools.provide(Layer.merge(authentication, permissiveQuota)),
       ),
     );
   const input = request("tools/list", {}, "read");
@@ -212,7 +217,7 @@ it("serves composed feature toolkits without requiring connection services", asy
   const run = (invocation: Request): Promise<Response> =>
     Effect.runPromise(
       mcpRequest(invocation, tools, handlers, { name: "Example", version: "1" }).pipe(
-        Effect.provide(Layer.merge(authentication, permissiveQuota)),
+        layerTools.provide(Layer.merge(authentication, permissiveQuota)),
       ),
     );
 
@@ -245,7 +250,7 @@ it("challenges an unauthenticated client with protected-resource discovery and a
     scope: "fantasy:read offline_access",
     resource_metadata: "https://connections.example/.well-known/oauth-protected-resource/mcp",
   });
-  expect(JSON.stringify(body)).not.toContain("teams:manage");
+  expect(jsonTools.jsonString(body)).not.toContain("teams:manage");
 });
 
 it("names an expired presented token as invalid_token so a client refreshes instead of authorizing again", async () => {
@@ -262,7 +267,7 @@ it("names an expired presented token as invalid_token so a client refreshes inst
     scope: "fantasy:read offline_access",
     resource_metadata: "https://connections.example/.well-known/oauth-protected-resource/mcp",
   });
-  expect(JSON.stringify(body)).toContain("refresh token");
+  expect(jsonTools.jsonString(body)).toContain("refresh token");
 });
 
 it("names an invalid non-expired token as terminal so a client authorizes again", async () => {
@@ -275,7 +280,7 @@ it("names an invalid non-expired token as terminal so a client authorizes again"
     error: "invalid_token",
     error_code: "token_invalid",
   });
-  expect(JSON.stringify(body)).not.toContain("token_expired");
+  expect(jsonTools.jsonString(body)).not.toContain("token_expired");
 });
 
 it("names only the calling tool's missing scope in a 403 body", async () => {
@@ -294,8 +299,8 @@ it("names only the calling tool's missing scope in a 403 body", async () => {
   expect(response.status).toBe(403);
   expect(response.headers.get("www-authenticate")).toContain('scope="teams:manage"');
   expect(body).toMatchObject({ error: "insufficient_scope", scope: "teams:manage" });
-  expect(JSON.stringify(body)).not.toContain("transactions:review");
-  expect(JSON.stringify(body)).not.toContain("fantasy:read");
+  expect(jsonTools.jsonString(body)).not.toContain("transactions:review");
+  expect(jsonTools.jsonString(body)).not.toContain("fantasy:read");
 });
 
 it("reads on the restricted grant and refuses only the automation tool", async () => {
@@ -344,7 +349,7 @@ it("asks the auth service only for the calling tool's scope", async () => {
           }),
         { name: "Example", version: "1" },
       ).pipe(
-        Effect.provide(
+        layerTools.provide(
           Layer.merge(
             Layer.succeed(AuthService)({
               signInMethods: { google: false },
@@ -405,7 +410,7 @@ effectIt.effect(
           tools,
           () => tools.toLayer({ echo: () => Effect.succeed("ok") }),
           { name: "Example", version: "1" },
-        ).pipe(Effect.provide(Layer.merge(authentication, quota)));
+        ).pipe(layerTools.provide(Layer.merge(authentication, quota)));
         const span = yield* Effect.currentSpan;
         const body = yield* Effect.promise(() => response.json() as Promise<unknown>);
         return { response, body, attributes: span.attributes };
@@ -485,13 +490,15 @@ it("lists only the read-only connection tool without exposing account identity",
   const body = await json(response);
 
   expect(response.status).toBe(200);
-  expect(JSON.stringify(body)).toContain('"readOnlyHint":true');
-  expect(JSON.stringify(body)).not.toContain('"userId"');
-  const decoded = Schema.decodeUnknownSync(
-    Schema.Struct({
-      result: Schema.Struct({ tools: Schema.Array(Schema.Struct({ name: Schema.String })) }),
-    }),
-  )(body);
+  expect(jsonTools.jsonString(body)).toContain('"readOnlyHint":true');
+  expect(jsonTools.jsonString(body)).not.toContain('"userId"');
+  const decoded = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Struct({
+        result: Schema.Struct({ tools: Schema.Array(Schema.Struct({ name: Schema.String })) }),
+      }),
+    )(body),
+  );
   expect(decoded.result.tools.map((tool) => tool.name)).toEqual([
     "list_connections",
     "list_teams",
@@ -520,79 +527,91 @@ it("lists only the read-only connection tool without exposing account identity",
 
 it("composes the team snapshot from the reads in one tool call", async () => {
   const team = decodeTeamId("018f79ea-7d86-7c18-9b4a-8b4d0c9164b5");
-  const teamView = Schema.decodeSync(QueryTeam)({
-    id: team,
-    name: "Alpha",
-    provider: "yahoo",
-    league: "nhl",
-    sport: "hockey",
-    season: 2026,
-  });
+  const teamView = Effect.runSync(
+    Schema.decodeEffect(QueryTeam)({
+      id: team,
+      name: "Alpha",
+      provider: "yahoo",
+      league: "nhl",
+      sport: "hockey",
+      season: 2026,
+    }),
+  );
   const page = { returned: 0, complete: true, remaining: 0 } as const;
   const budget = { targetBytes: 28 * 1024, hardLimitBytes: 32 * 1024 } as const;
   const queries: FantasyQueriesShape = {
     ...unavailableQueries,
     getTeamSummary: () =>
       Effect.succeed(
-        Schema.decodeSync(TeamSummaryData)({
-          status: "ok",
-          team: teamView,
-          ownerNote: { status: "not_set" },
-          agentNotes: [],
-          coverage: [],
-          failures: [],
-          page,
-          budget,
-        }),
+        Effect.runSync(
+          Schema.decodeEffect(TeamSummaryData)({
+            status: "ok",
+            team: teamView,
+            ownerNote: { status: "not_set" },
+            agentNotes: [],
+            coverage: [],
+            failures: [],
+            page,
+            budget,
+          }),
+        ),
       ),
     getLeague: () =>
       Effect.succeed(
-        Schema.decodeSync(LeagueData)({
-          status: "ok",
-          team: teamView,
-          coverage: [],
-          failures: [],
-          page,
-          budget,
-        }),
+        Effect.runSync(
+          Schema.decodeEffect(LeagueData)({
+            status: "ok",
+            team: teamView,
+            coverage: [],
+            failures: [],
+            page,
+            budget,
+          }),
+        ),
       ),
     getRosters: () =>
       Effect.succeed(
-        Schema.decodeSync(RosterData)({
-          status: "ok",
-          scope: "team",
-          team: teamView,
-          players: [],
-          coverage: [],
-          failures: [],
-          page,
-          budget,
-        }),
+        Effect.runSync(
+          Schema.decodeEffect(RosterData)({
+            status: "ok",
+            scope: "team",
+            team: teamView,
+            players: [],
+            coverage: [],
+            failures: [],
+            page,
+            budget,
+          }),
+        ),
       ),
     getTransactions: () =>
       Effect.succeed(
-        Schema.decodeSync(TransactionsData)({
-          status: "ok",
-          team: teamView,
-          transactions: [],
-          window: { fetched: 0, truncated: false },
-          coverage: [],
-          failures: [],
-          page,
-          budget,
-        }),
+        Effect.runSync(
+          Schema.decodeEffect(TransactionsData)({
+            status: "ok",
+            team: teamView,
+            transactions: [],
+            window: { fetched: 0, truncated: false },
+            coverage: [],
+            failures: [],
+            page,
+            budget,
+          }),
+        ),
       ),
     searchPlayers: () =>
       Effect.succeed(
-        Schema.decodeSync(SearchPlayersData)({
-          status: "ok",
-          team: teamView,
-          players: [],
-          coverage: [],
-          failures: [],
-          page,
-          budget,
-        }),
+        Effect.runSync(
+          Schema.decodeEffect(SearchPlayersData)({
+            status: "ok",
+            team: teamView,
+            players: [],
+            coverage: [],
+            failures: [],
+            page,
+            budget,
+          }),
+        ),
       ),
   };
   const plans = {
@@ -616,7 +635,8 @@ it("composes the team snapshot from the reads in one tool call", async () => {
   );
   const response = await handleMcpRequest(
     request("tools/call", { name: "get_team_snapshot", arguments: { team } }, "fantasy"),
-    (_request, _operation, program) => Effect.runPromise(Effect.provide(program, services)),
+    (_request, _operation, program) =>
+      Effect.runPromise(layerTools.provideLayer(program, services)),
   );
   const body = await json(response);
 
@@ -635,15 +655,17 @@ it("composes the team snapshot from the reads in one tool call", async () => {
       },
     },
   });
-  const content = Schema.decodeUnknownSync(
-    Schema.Struct({
-      result: Schema.Struct({
-        structuredContent: Schema.Struct({
-          failures: Schema.Array(Schema.Struct({ section: Schema.String })),
+  const content = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Struct({
+        result: Schema.Struct({
+          structuredContent: Schema.Struct({
+            failures: Schema.Array(Schema.Struct({ section: Schema.String })),
+          }),
         }),
       }),
-    }),
-  )(body);
+    )(body),
+  );
   expect(content.result.structuredContent.failures.map((failure) => failure.section)).toEqual([
     "plan",
     "offers",
@@ -707,8 +729,8 @@ it("scrubs unexpected persistence details from the tool response", async () => {
   const body = await json(response);
 
   expect(body).toMatchObject({ result: { isError: true } });
-  expect(JSON.stringify(body)).toContain("internal server error");
-  expect(JSON.stringify(body)).not.toContain("private database");
+  expect(jsonTools.jsonString(body)).toContain("internal server error");
+  expect(jsonTools.jsonString(body)).not.toContain("private database");
 });
 
 it("enforces fantasy read scope and serves bounded query results over MCP", async () => {
@@ -735,7 +757,7 @@ it("enforces fantasy read scope and serves bounded query results over MCP", asyn
   );
   const run = (invocation: Request): Promise<Response> =>
     handleMcpRequest(invocation, (_request, _operation, program) =>
-      Effect.runPromise(Effect.provide(program, services)),
+      Effect.runPromise(layerTools.provideLayer(program, services)),
     );
 
   const denied = await run(request("tools/call", { name: "list_teams", arguments: {} }, "review"));
@@ -758,7 +780,9 @@ it("enforces fantasy read scope and serves bounded query results over MCP", asyn
 });
 
 it("accepts ISO 8601 instants for transaction and feedback filters", async () => {
-  const teamId = Schema.decodeSync(TeamId)("00000000-0000-7000-8000-000000000001");
+  const teamId = Effect.runSync(
+    Schema.decodeEffect(TeamId)("00000000-0000-7000-8000-000000000001"),
+  );
   const transactionFilters: Array<Parameters<FantasyQueriesShape["getTransactions"]>[1]> = [];
   const feedbackFilters: Array<Parameters<FeedbackShape["list"]>[1]> = [];
   const queries: FantasyQueriesShape = {
@@ -804,7 +828,7 @@ it("accepts ISO 8601 instants for transaction and feedback filters", async () =>
   );
   const run = (invocation: Request): Promise<Response> =>
     handleMcpRequest(invocation, (_request, _operation, program) =>
-      Effect.runPromise(Effect.provide(program, services)),
+      Effect.runPromise(layerTools.provideLayer(program, services)),
     );
 
   for (const since of [
@@ -848,13 +872,15 @@ it("accepts ISO 8601 instants for transaction and feedback filters", async () =>
 });
 
 it("refuses a malformed or tagged instant with a readable field message", async () => {
-  const teamId = Schema.decodeSync(TeamId)("00000000-0000-7000-8000-000000000001");
+  const teamId = Effect.runSync(
+    Schema.decodeEffect(TeamId)("00000000-0000-7000-8000-000000000001"),
+  );
   const run = (arguments_: Record<string, unknown>, name: string): Promise<Response> =>
     handleMcpRequest(
       request("tools/call", { name, arguments: arguments_ }, "fantasy"),
       (_request, _operation, program) =>
         Effect.runPromise(
-          Effect.provide(
+          layerTools.provideLayer(
             program,
             Layer.mergeAll(
               authentication,
@@ -878,15 +904,17 @@ it("refuses a malformed or tagged instant with a readable field message", async 
     const taggedBody = await json(tagged);
 
     expect(malformedBody).toMatchObject({ result: { isError: true } });
-    expect(JSON.stringify(malformedBody)).toContain("Expected a valid UTC DateTime string");
-    expect(JSON.stringify(malformedBody)).toContain("since");
+    expect(jsonTools.jsonString(malformedBody)).toContain("Expected a valid UTC DateTime string");
+    expect(jsonTools.jsonString(malformedBody)).toContain("since");
     expect(tagged.status).toBe(400);
     expect(taggedBody).toMatchObject({ error: { code: -32_602, data: { field: '["since"]' } } });
   }
 });
 
 it("reaches search_players with an empty query and returns the remedy instead of invalid-params", async () => {
-  const teamId = Schema.decodeSync(TeamId)("00000000-0000-7000-8000-000000000001");
+  const teamId = Effect.runSync(
+    Schema.decodeEffect(TeamId)("00000000-0000-7000-8000-000000000001"),
+  );
   const queries: FantasyQueriesShape = {
     ...unavailableQueries,
     searchPlayers: () =>
@@ -914,18 +942,21 @@ it("reaches search_players with an empty query and returns the remedy instead of
       { name: "search_players", arguments: { team: teamId, query: "" } },
       "fantasy",
     ),
-    (_request, _operation, program) => Effect.runPromise(Effect.provide(program, services)),
+    (_request, _operation, program) =>
+      Effect.runPromise(layerTools.provideLayer(program, services)),
   );
   const body = await json(response);
 
   expect(response.status).toBe(200);
   expect(body).toMatchObject({ result: { isError: true } });
-  expect(JSON.stringify(body)).toContain('\\"code\\":\\"selection_invalid\\"');
-  expect(JSON.stringify(body)).toContain("Omit the query");
+  expect(jsonTools.jsonString(body)).toContain('\\"code\\":\\"selection_invalid\\"');
+  expect(jsonTools.jsonString(body)).toContain("Omit the query");
 });
 
 it("publishes and serves the scoring-period schedule group over MCP", async () => {
-  const teamId = Schema.decodeSync(TeamId)("00000000-0000-7000-8000-000000000001");
+  const teamId = Effect.runSync(
+    Schema.decodeEffect(TeamId)("00000000-0000-7000-8000-000000000001"),
+  );
   const queries: FantasyQueriesShape = {
     ...unavailableQueries,
     getTeamSummary: () =>
@@ -962,7 +993,7 @@ it("publishes and serves the scoring-period schedule group over MCP", async () =
           },
           players: [
             {
-              player: Schema.decodeSync(PlayerRef)("r1.test"),
+              player: Effect.runSync(Schema.decodeEffect(PlayerRef)("r1.test")),
               name: "Synthetic Skater",
               proTeam: "SYN",
               status: "scheduled",
@@ -999,7 +1030,7 @@ it("publishes and serves the scoring-period schedule group over MCP", async () =
   );
   const run = (invocation: Request): Promise<Response> =>
     handleMcpRequest(invocation, (_request, _operation, program) =>
-      Effect.runPromise(Effect.provide(program, services)),
+      Effect.runPromise(layerTools.provideLayer(program, services)),
     );
 
   const listed = await json(await run(request("tools/list", {}, "fantasy")));
@@ -1012,7 +1043,7 @@ it("publishes and serves the scoring-period schedule group over MCP", async () =
   );
 
   expect(response.status).toBe(200);
-  expect(JSON.stringify(listed)).toContain("schedule.detail");
+  expect(jsonTools.jsonString(listed)).toContain("schedule.detail");
   expect(await json(response)).toMatchObject({
     result: {
       isError: false,
@@ -1045,7 +1076,9 @@ it("publishes and serves the scoring-period schedule group over MCP", async () =
 });
 
 it("names the cause when a continuation cursor is reused with different arguments", async () => {
-  const teamId = Schema.decodeSync(TeamId)("00000000-0000-7000-8000-000000000001");
+  const teamId = Effect.runSync(
+    Schema.decodeEffect(TeamId)("00000000-0000-7000-8000-000000000001"),
+  );
   const queries: FantasyQueriesShape = {
     ...unavailableQueries,
     getTeamSummary: () => Effect.fail(QueryCursorInvalid.make({ reason: "mismatch" })),
@@ -1070,10 +1103,11 @@ it("names the cause when a continuation cursor is reused with different argument
       },
       "fantasy",
     ),
-    (_request, _operation, program) => Effect.runPromise(Effect.provide(program, services)),
+    (_request, _operation, program) =>
+      Effect.runPromise(layerTools.provideLayer(program, services)),
   );
   const body = await json(response);
-  const text = JSON.stringify(body);
+  const text = jsonTools.jsonString(body);
 
   expect(response.status).toBe(200);
   expect(body).toMatchObject({ result: { isError: true } });
@@ -1100,7 +1134,9 @@ it("appends moves to one team queue and lists them across teams", async () => {
     sport: "hockey" as const,
   };
   const move = {
-    move: Schema.decodeSync(TransactionMoveId)("018f79ea-7d86-7c18-9b4a-8b4d0c9165b1"),
+    move: Effect.runSync(
+      Schema.decodeEffect(TransactionMoveId)("018f79ea-7d86-7c18-9b4a-8b4d0c9165b1"),
+    ),
     team: teamView,
     kind: "drop" as const,
     position: 0,
@@ -1219,7 +1255,7 @@ it("appends moves to one team queue and lists them across teams", async () => {
   const run = (invocation: Request): Promise<Response> =>
     handleMcpRequest(invocation, (_request, _operation, program) =>
       Effect.runPromise(
-        Effect.provide(
+        layerTools.provideLayer(
           program,
           Layer.mergeAll(
             authentication,
@@ -1294,7 +1330,9 @@ it("appends moves to one team queue and lists them across teams", async () => {
   expect(proposed[0]?.input.team).toBe(team);
   expect(proposed[1]?.input.team).toBe(team);
 
-  const moveId = Schema.decodeSync(TransactionMoveId)("018f79ea-7d86-7c18-9b4a-8b4d0c9165b2");
+  const moveId = Effect.runSync(
+    Schema.decodeEffect(TransactionMoveId)("018f79ea-7d86-7c18-9b4a-8b4d0c9165b2"),
+  );
   const amended = await run(
     request(
       "tools/call",
@@ -1394,7 +1432,7 @@ it("appends moves to one team queue and lists them across teams", async () => {
       },
     },
   });
-  expect(JSON.stringify(planBody)).not.toContain("461.p.");
+  expect(jsonTools.jsonString(planBody)).not.toContain("461.p.");
 });
 
 it("discards one saved move and reports why a run move stays", async () => {
@@ -1406,7 +1444,9 @@ it("discards one saved move and reports why a run move stays", async () => {
     sport: "football" as const,
     season: 2026,
   };
-  const moveId = Schema.decodeSync(TransactionMoveId)("018f79ea-7d86-7c18-9b4a-8b4d0c9165b3");
+  const moveId = Effect.runSync(
+    Schema.decodeEffect(TransactionMoveId)("018f79ea-7d86-7c18-9b4a-8b4d0c9165b3"),
+  );
   const move = {
     move: moveId,
     team: teamView,
@@ -1484,7 +1524,7 @@ it("discards one saved move and reports why a run move stays", async () => {
   );
   const run = (invocation: Request): Promise<Response> =>
     handleMcpRequest(invocation, (_request, _operation, program) =>
-      Effect.runPromise(Effect.provide(program, services)),
+      Effect.runPromise(layerTools.provideLayer(program, services)),
     );
 
   const denied = await run(
@@ -1549,9 +1589,9 @@ it("discards one saved move and reports why a run move stays", async () => {
       "review",
     ),
   );
-  const decoded = Schema.decodeUnknownSync(ToolErrorResult)(await json(missing));
+  const decoded = Effect.runSync(Schema.decodeUnknownEffect(ToolErrorResult)(await json(missing)));
   const text = decoded.result.content.map((entry) => entry.text).join(" ");
-  const failure = Schema.decodeSync(Schema.fromJsonString(ToolFailure))(text);
+  const failure = Effect.runSync(Schema.decodeEffect(Schema.fromJsonString(ToolFailure))(text));
   expect(decoded.result.isError).toBe(true);
   expect(failure.code).toBe("move_not_found");
 });
@@ -1566,7 +1606,9 @@ it("reads every effect of an activate and the reason a failed move ended", async
     season: 2026,
   };
   const move = {
-    move: Schema.decodeSync(TransactionMoveId)("018f79ea-7d86-7c18-9b4a-8b4d0c9165b8"),
+    move: Effect.runSync(
+      Schema.decodeEffect(TransactionMoveId)("018f79ea-7d86-7c18-9b4a-8b4d0c9165b8"),
+    ),
     team: teamView,
     kind: "activate" as const,
     position: 0,
@@ -1647,7 +1689,7 @@ it("reads every effect of an activate and the reason a failed move ended", async
   );
   const run = (invocation: Request): Promise<Response> =>
     handleMcpRequest(invocation, (_request, _operation, program) =>
-      Effect.runPromise(Effect.provide(program, services)),
+      Effect.runPromise(layerTools.provideLayer(program, services)),
     );
 
   const planResponse = await run(
@@ -1734,7 +1776,7 @@ it("returns a coded remedy instead of a 500 when a move list cannot be read", as
     request("tools/call", { name: "list_transaction_proposals", arguments: { team } }, "fantasy"),
     (_request, _operation, program) =>
       Effect.runPromise(
-        Effect.provide(
+        layerTools.provideLayer(
           program,
           Layer.mergeAll(
             authentication,
@@ -1751,9 +1793,9 @@ it("returns a coded remedy instead of a 500 when a move list cannot be read", as
       ),
   );
   const body = await json(response);
-  const decoded = Schema.decodeUnknownSync(ToolErrorResult)(body);
+  const decoded = Effect.runSync(Schema.decodeUnknownEffect(ToolErrorResult)(body));
   const text = decoded.result.content.map((entry) => entry.text).join(" ");
-  const failure = Schema.decodeSync(Schema.fromJsonString(ToolFailure))(text);
+  const failure = Effect.runSync(Schema.decodeEffect(Schema.fromJsonString(ToolFailure))(text));
   expect(decoded.result.isError).toBe(true);
   expect(failure.code).toBe("plan_unavailable");
   expect(failure.message).toContain("start again from the first page");
@@ -1772,7 +1814,9 @@ it("returns a durable queued lineup reference without claiming success", async (
         delivery: "queued",
         runs: [
           {
-            run: Schema.decodeSync(LineupRunId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b1"),
+            run: Effect.runSync(
+              Schema.decodeEffect(LineupRunId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b1"),
+            ),
             request: input.requestId,
             team,
             target: { coverage: "week", week: 3 },
@@ -1801,7 +1845,7 @@ it("returns a durable queued lineup reference without claiming success", async (
   );
   const call = (invocation: Request): Promise<Response> =>
     handleMcpRequest(invocation, (_request, _operation, program) =>
-      Effect.runPromise(Effect.provide(program, services)),
+      Effect.runPromise(layerTools.provideLayer(program, services)),
     );
 
   const response = await call(
@@ -1830,7 +1874,7 @@ it("returns a durable queued lineup reference without claiming success", async (
       },
     },
   });
-  expect(JSON.stringify(body)).not.toContain("completed");
+  expect(jsonTools.jsonString(body)).not.toContain("completed");
 });
 
 it("requires teams:manage and changes automation through the shared team service", async () => {
@@ -1871,7 +1915,7 @@ it("requires teams:manage and changes automation through the shared team service
   );
   const call = (invocation: Request): Promise<Response> =>
     handleMcpRequest(invocation, (_request, _operation, program) =>
-      Effect.runPromise(Effect.provide(program, services)),
+      Effect.runPromise(layerTools.provideLayer(program, services)),
     );
   const arguments_ = { teams: [{ team, action: "enable" }] };
 
@@ -1947,7 +1991,8 @@ it("requires notes:write and attributes an agent note to the authenticated clien
   const call = (token: string, body: string): Promise<Response> =>
     handleMcpRequest(
       request("tools/call", { name: "add_team_agent_note", arguments: { team, body } }, token),
-      (_request, _operation, program) => Effect.runPromise(Effect.provide(program, services)),
+      (_request, _operation, program) =>
+        Effect.runPromise(layerTools.provideLayer(program, services)),
     );
 
   const denied = await call("read", "The goalie bubble is thin.");
@@ -1977,7 +2022,7 @@ it("requires notes:write and attributes an agent note to the authenticated clien
   ]);
   const unattributedBody = await json(unattributed);
   expect(unattributedBody).toMatchObject({ result: { isError: true } });
-  expect(JSON.stringify(unattributedBody)).toContain("identified client");
+  expect(jsonTools.jsonString(unattributedBody)).toContain("identified client");
   expect(recorded).toHaveLength(1);
 });
 
@@ -1991,7 +2036,9 @@ it("records agent feedback for the authenticated account on a read grant", async
       lists.push({ userId, filter });
       return Effect.succeed([
         {
-          id: Schema.decodeSync(FeedbackId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b3"),
+          id: Effect.runSync(
+            Schema.decodeEffect(FeedbackId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b3"),
+          ),
           submitter: { kind: "agent" as const, reference: "mcp" },
           kind: "bug" as const,
           status: "acknowledged" as const,
@@ -2007,7 +2054,9 @@ it("records agent feedback for the authenticated account on a read grant", async
       submitted.push({ userId, submitter });
       return Effect.succeed(
         submissions.map(() => ({
-          id: Schema.decodeSync(FeedbackId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b3"),
+          id: Effect.runSync(
+            Schema.decodeEffect(FeedbackId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b3"),
+          ),
           submitter,
           kind: "bug" as const,
           status: "open" as const,
@@ -2033,7 +2082,7 @@ it("records agent feedback for the authenticated account on a read grant", async
   );
   const call = (invocation: Request): Promise<Response> =>
     handleMcpRequest(invocation, (_request, _operation, program) =>
-      Effect.runPromise(Effect.provide(program, services)),
+      Effect.runPromise(layerTools.provideLayer(program, services)),
     );
   const arguments_ = {
     kind: "bug",
@@ -2069,7 +2118,7 @@ it("records agent feedback for the authenticated account on a read grant", async
     },
   });
   expect(submitted).toEqual([{ userId: "reader", submitter: { kind: "agent", reference: "mcp" } }]);
-  expect(JSON.stringify(body)).not.toContain("cause");
+  expect(jsonTools.jsonString(body)).not.toContain("cause");
 
   const listed = await call(
     request("tools/call", { name: "list_feedback", arguments: {} }, "read"),
@@ -2122,7 +2171,7 @@ it("returns an actionable failure for refused feedback instead of leaking persis
       request("tools/call", { name, arguments: arguments_ }, token),
       (_request, _operation, program) =>
         Effect.runPromise(
-          Effect.provide(
+          layerTools.provideLayer(
             program,
             Layer.mergeAll(
               authentication,
@@ -2148,13 +2197,13 @@ it("returns an actionable failure for refused feedback instead of leaking persis
   const throttledBody = await json(throttled);
   const invalidBody = await json(invalid);
   expect(throttledBody).toMatchObject({ result: { isError: true } });
-  expect(JSON.stringify(throttledBody)).toContain("900 seconds");
+  expect(jsonTools.jsonString(throttledBody)).toContain("900 seconds");
   expect(invalidBody).toMatchObject({ result: { isError: true } });
-  expect(JSON.stringify(invalidBody)).toContain("control characters");
+  expect(jsonTools.jsonString(invalidBody)).toContain("control characters");
   const failedBody = await json(failed);
   expect(failed.status).toBe(200);
-  expect(JSON.stringify(failedBody)).not.toContain("private database");
-  expect(JSON.stringify(failedBody)).toContain("internal server error");
+  expect(jsonTools.jsonString(failedBody)).not.toContain("private database");
+  expect(jsonTools.jsonString(failedBody)).toContain("internal server error");
   expect(invalidLimit.status).toBe(400);
   expect(await json(invalidLimit)).toMatchObject({ error: { code: -32602 } });
 });
@@ -2244,7 +2293,7 @@ function handle(
     Layer.succeed(Feedback)(unavailableFeedback),
   );
   return handleMcpRequest(request, (_request, _operation, program) =>
-    Effect.runPromise(Effect.provide(program, services)),
+    Effect.runPromise(layerTools.provideLayer(program, services)),
   );
 }
 
@@ -2312,7 +2361,7 @@ function request(
       ...(typeof params["name"] === "string" ? { "mcp-name": params["name"] } : {}),
       ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
     },
-    body: JSON.stringify({
+    body: jsonTools.jsonString({
       jsonrpc: "2.0",
       id: 1,
       method,
@@ -2329,29 +2378,29 @@ function request(
 
 it("publishes one queue per team", async () => {
   const response = await handle(request("tools/list", {}, "read"));
-  const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
+  const listed = Effect.runSync(Schema.decodeUnknownEffect(ToolListing)(await json(response)));
   const propose = listed.result.tools.find((tool) => tool.name === "propose_transactions");
   const plan = listed.result.tools.find((tool) => tool.name === "get_transaction_plan");
   if (propose === undefined || plan === undefined) {
     throw new Error("Expected the tool list to include both plan tools");
   }
-  const published = JSON.stringify(propose.inputSchema);
+  const published = jsonTools.jsonString(propose.inputSchema);
   expect(published).toContain('"team"');
-  expect(JSON.stringify(plan.outputSchema)).toContain('"moves"');
-  expect(JSON.stringify(plan.outputSchema)).toContain('"validation"');
-  expect(JSON.stringify(plan.outputSchema)).toContain('"places"');
-  expect(JSON.stringify(plan.outputSchema)).toContain('"reserve"');
-  expect(JSON.stringify(plan.outputSchema)).toContain('"canFree"');
-  expect(JSON.stringify(plan.outputSchema)).toContain('"addsWithFixes"');
-  expect(JSON.stringify(plan.outputSchema)).toContain('"illegal"');
-  expect(JSON.stringify(plan.outputSchema)).toContain('"groups"');
-  expect(JSON.stringify(plan.outputSchema)).toContain('"partly_done"');
-  expect(JSON.stringify(plan.outputSchema)).toContain('"actions"');
+  expect(jsonTools.jsonString(plan.outputSchema)).toContain('"moves"');
+  expect(jsonTools.jsonString(plan.outputSchema)).toContain('"validation"');
+  expect(jsonTools.jsonString(plan.outputSchema)).toContain('"places"');
+  expect(jsonTools.jsonString(plan.outputSchema)).toContain('"reserve"');
+  expect(jsonTools.jsonString(plan.outputSchema)).toContain('"canFree"');
+  expect(jsonTools.jsonString(plan.outputSchema)).toContain('"addsWithFixes"');
+  expect(jsonTools.jsonString(plan.outputSchema)).toContain('"illegal"');
+  expect(jsonTools.jsonString(plan.outputSchema)).toContain('"groups"');
+  expect(jsonTools.jsonString(plan.outputSchema)).toContain('"partly_done"');
+  expect(jsonTools.jsonString(plan.outputSchema)).toContain('"actions"');
 });
 
 it("leaves confirmation to the owner and says a saved move waits", async () => {
   const response = await handle(request("tools/list", {}, "read"));
-  const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
+  const listed = Effect.runSync(Schema.decodeUnknownEffect(ToolListing)(await json(response)));
   const propose = listed.result.tools.find((tool) => tool.name === "propose_transactions");
   if (propose === undefined) {
     throw new Error("Expected the tool list to include propose_transactions");
@@ -2364,7 +2413,7 @@ it("leaves confirmation to the owner and says a saved move waits", async () => {
 
 it("asks an agent for adds, drops, reserves, and activations, in plain words", async () => {
   const response = await handle(request("tools/list", {}, "read"));
-  const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
+  const listed = Effect.runSync(Schema.decodeUnknownEffect(ToolListing)(await json(response)));
   const propose = listed.result.tools.find((tool) => tool.name === "propose_transactions");
   if (propose === undefined) {
     throw new Error("Expected the tool list to include propose_transactions");
@@ -2394,50 +2443,50 @@ it("asks an agent for adds, drops, reserves, and activations, in plain words", a
 
 it("publishes fallback choices, a group label, and a stored check on the plan", async () => {
   const response = await handle(request("tools/list", {}, "read"));
-  const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
+  const listed = Effect.runSync(Schema.decodeUnknownEffect(ToolListing)(await json(response)));
   const propose = listed.result.tools.find((tool) => tool.name === "propose_transactions");
   const plan = listed.result.tools.find((tool) => tool.name === "get_transaction_plan");
   if (propose === undefined || plan === undefined) {
     throw new Error("Expected the tool list to include both plan tools");
   }
 
-  expect(JSON.stringify(propose.inputSchema)).toContain('"fallbacks"');
-  expect(JSON.stringify(propose.inputSchema)).toContain('"group"');
-  expect(JSON.stringify(propose.inputSchema)).toContain('"window"');
-  expect(JSON.stringify(plan.outputSchema)).toContain('"checkedAt"');
-  expect(JSON.stringify(plan.outputSchema)).toContain('"effectiveDate"');
-  expect(JSON.stringify(plan.outputSchema)).toContain('"runDay"');
-  expect(JSON.stringify(plan.outputSchema)).toContain('"sendsAt"');
-  expect(JSON.stringify(plan.outputSchema)).toContain('"nextCheckAt"');
-  expect(JSON.stringify(plan.outputSchema)).toContain('"groupedBy"');
-  expect(JSON.stringify(plan.outputSchema)).not.toContain('"runsOn"');
-  expect(JSON.stringify(plan.outputSchema)).not.toContain('"nextRunAt"');
-  expect(JSON.stringify(plan.outputSchema)).toContain('"reason"');
-  expect(JSON.stringify(plan.outputSchema)).toContain('"check"');
-  expect(JSON.stringify(propose.inputSchema)).toContain("not the effective date");
+  expect(jsonTools.jsonString(propose.inputSchema)).toContain('"fallbacks"');
+  expect(jsonTools.jsonString(propose.inputSchema)).toContain('"group"');
+  expect(jsonTools.jsonString(propose.inputSchema)).toContain('"window"');
+  expect(jsonTools.jsonString(plan.outputSchema)).toContain('"checkedAt"');
+  expect(jsonTools.jsonString(plan.outputSchema)).toContain('"effectiveDate"');
+  expect(jsonTools.jsonString(plan.outputSchema)).toContain('"runDay"');
+  expect(jsonTools.jsonString(plan.outputSchema)).toContain('"sendsAt"');
+  expect(jsonTools.jsonString(plan.outputSchema)).toContain('"nextCheckAt"');
+  expect(jsonTools.jsonString(plan.outputSchema)).toContain('"groupedBy"');
+  expect(jsonTools.jsonString(plan.outputSchema)).not.toContain('"runsOn"');
+  expect(jsonTools.jsonString(plan.outputSchema)).not.toContain('"nextRunAt"');
+  expect(jsonTools.jsonString(plan.outputSchema)).toContain('"reason"');
+  expect(jsonTools.jsonString(plan.outputSchema)).toContain('"check"');
+  expect(jsonTools.jsonString(propose.inputSchema)).toContain("not the effective date");
 });
 
 it("publishes the rolling move list with today, saved, and ended filters", async () => {
   const response = await handle(request("tools/list", {}, "read"));
-  const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
+  const listed = Effect.runSync(Schema.decodeUnknownEffect(ToolListing)(await json(response)));
   const list = listed.result.tools.find((tool) => tool.name === "list_transaction_proposals");
   if (list === undefined) {
     throw new Error("Expected the tool list to include list_transaction_proposals");
   }
 
-  expect(JSON.stringify(list.inputSchema)).toContain('"saved"');
-  expect(JSON.stringify(list.inputSchema)).toContain('"ended"');
-  expect(JSON.stringify(list.outputSchema)).toContain('"counts"');
-  expect(JSON.stringify(list.outputSchema)).toContain('"teamCount"');
-  expect(JSON.stringify(list.outputSchema)).toContain('"days"');
-  expect(JSON.stringify(list.outputSchema)).toContain('"checkedAt"');
-  expect(JSON.stringify(list.outputSchema)).toContain('"teamFacts"');
-  expect(JSON.stringify(list.outputSchema)).not.toContain('"sets"');
+  expect(jsonTools.jsonString(list.inputSchema)).toContain('"saved"');
+  expect(jsonTools.jsonString(list.inputSchema)).toContain('"ended"');
+  expect(jsonTools.jsonString(list.outputSchema)).toContain('"counts"');
+  expect(jsonTools.jsonString(list.outputSchema)).toContain('"teamCount"');
+  expect(jsonTools.jsonString(list.outputSchema)).toContain('"days"');
+  expect(jsonTools.jsonString(list.outputSchema)).toContain('"checkedAt"');
+  expect(jsonTools.jsonString(list.outputSchema)).toContain('"teamFacts"');
+  expect(jsonTools.jsonString(list.outputSchema)).not.toContain('"sets"');
 });
 
 it("points compact player search rows at get_players for detail", async () => {
   const response = await handle(request("tools/list", {}, "read"));
-  const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
+  const listed = Effect.runSync(Schema.decodeUnknownEffect(ToolListing)(await json(response)));
   const search = listed.result.tools.find((tool) => tool.name === "search_players");
   const detail = listed.result.tools.find((tool) => tool.name === "get_players");
 
@@ -2447,7 +2496,7 @@ it("points compact player search rows at get_players for detail", async () => {
 
 it("keeps every published description inside its budget", async () => {
   const response = await handle(request("tools/list", {}, "read"));
-  const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
+  const listed = Effect.runSync(Schema.decodeUnknownEffect(ToolListing)(await json(response)));
   const budgets: Readonly<Record<string, number>> = {
     add_team_agent_note: 220,
     discard_transaction_move: 220,
@@ -2492,7 +2541,7 @@ it("keeps every published description inside its budget", async () => {
 
 it("publishes the accepted player-statistics periods and the compact standings form before a call", async () => {
   const response = await handle(request("tools/list", {}, "read"));
-  const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
+  const listed = Effect.runSync(Schema.decodeUnknownEffect(ToolListing)(await json(response)));
   const tool = (name: string): (typeof listed.result.tools)[number] => {
     const found = listed.result.tools.find((entry) => entry.name === name);
     if (found === undefined) {
@@ -2501,30 +2550,30 @@ it("publishes the accepted player-statistics periods and the compact standings f
     return found;
   };
 
-  const playersSchema = JSON.stringify(tool("get_players").inputSchema);
+  const playersSchema = jsonTools.jsonString(tool("get_players").inputSchema);
   for (const shape of ["season", "week", "last_days", "last_weeks", "range"]) {
     expect(playersSchema).toContain(shape);
   }
   expect(playersSchema).toContain("periodSupport");
-  const searchWindow = JSON.stringify(tool("search_players").inputSchema);
+  const searchWindow = jsonTools.jsonString(tool("search_players").inputSchema);
   expect(searchWindow).toContain("last_days");
   expect(searchWindow).toContain("last_weeks");
   expect(searchWindow).toContain("get_league");
   expect(searchWindow).toContain("every player off a roster");
   expect(searchWindow).toContain("`free_agent` lists free agents only");
   expect(searchWindow).toContain("`waiver` lists waiver-listed players only");
-  expect(JSON.stringify(tool("get_league").outputSchema)).toContain("playerSearch");
-  expect(JSON.stringify(tool("get_players").outputSchema)).toContain("aggregated");
+  expect(jsonTools.jsonString(tool("get_league").outputSchema)).toContain("playerSearch");
+  expect(jsonTools.jsonString(tool("get_players").outputSchema)).toContain("aggregated");
   expect(playersSchema).toContain("1 to 25 private player references");
   expect(playersSchema).toContain("another team");
   expect(playersSchema).toContain('"maxItems":25');
   expect(playersSchema).toContain("league named by");
-  const rosterInput = JSON.stringify(tool("get_rosters").inputSchema);
+  const rosterInput = jsonTools.jsonString(tool("get_rosters").inputSchema);
   expect(rosterInput).toContain("`full` adds `undroppable` and `ownerNote`");
   expect(rosterInput).toContain("scope: league");
   expect(rosterInput).toContain("league");
   expect(rosterInput).toContain("whole teams");
-  const rosterOutput = JSON.stringify(tool("get_rosters").outputSchema);
+  const rosterOutput = jsonTools.jsonString(tool("get_rosters").outputSchema);
   expect(rosterOutput).toContain('"teams"');
   expect(rosterOutput).toContain('"owned"');
   expect(rosterOutput).toContain('"total"');
@@ -2534,14 +2583,14 @@ it("publishes the accepted player-statistics periods and the compact standings f
   expect(rosterOutput).toContain('"reserve"');
   expect(rosterOutput).not.toContain("playerSchedule");
 
-  const calendarOutput = JSON.stringify(tool("get_calendar").outputSchema);
+  const calendarOutput = jsonTools.jsonString(tool("get_calendar").outputSchema);
   expect(calendarOutput).toContain('"week"');
   expect(calendarOutput).toContain('"games"');
   expect(calendarOutput).toContain("notCovered");
   expect(calendarOutput).not.toContain("lockContext");
   expect(calendarOutput).not.toContain("historical");
 
-  const summaryOutput = JSON.stringify(tool("get_team_summary").outputSchema);
+  const summaryOutput = jsonTools.jsonString(tool("get_team_summary").outputSchema);
   expect(summaryOutput).toContain("playsThisWeek");
   expect(summaryOutput).not.toContain("probableStarters");
   expect(summaryOutput).toContain("could not be identified");
@@ -2554,41 +2603,43 @@ it("publishes the accepted player-statistics periods and the compact standings f
   expect(summaryOutput).toContain("seasonProgress");
   expect(searchWindow).toContain("gamesWindow");
   expect(searchWindow).toContain("next_weeks");
-  expect(JSON.stringify(tool("search_players").outputSchema)).toContain("gameDays");
-  expect(JSON.stringify(tool("search_players").outputSchema)).toContain("gameWeeks");
-  expect(JSON.stringify(tool("search_players").outputSchema)).toContain(
+  expect(jsonTools.jsonString(tool("search_players").outputSchema)).toContain("gameDays");
+  expect(jsonTools.jsonString(tool("search_players").outputSchema)).toContain("gameWeeks");
+  expect(jsonTools.jsonString(tool("search_players").outputSchema)).toContain(
     "plays in a requested window",
   );
-  const leagueGames = JSON.stringify(tool("get_league").outputSchema);
+  const leagueGames = jsonTools.jsonString(tool("get_league").outputSchema);
   expect(leagueGames).toContain("date_window");
   expect(leagueGames).toContain("scoring_week");
   expect(leagueGames).toContain("refuses a date window");
   expect(leagueGames).toContain("next_weeks");
 
-  const playersOutput = JSON.stringify(tool("get_players").outputSchema);
+  const playersOutput = jsonTools.jsonString(tool("get_players").outputSchema);
   expect(playersOutput).toContain("not_published");
   expect(playersOutput).toContain("basis");
   expect(playersOutput).toContain("period");
   expect(playersOutput).toContain("gameDays");
   expect(playersOutput).toContain("gameWeeks");
-  expect(JSON.stringify(tool("get_players").inputSchema)).toContain('"schedule"');
-  expect(JSON.stringify(tool("get_players").inputSchema)).toContain("gamesWindow");
-  expect(JSON.stringify(tool("get_players").inputSchema)).toContain("search_players");
+  expect(jsonTools.jsonString(tool("get_players").inputSchema)).toContain('"schedule"');
+  expect(jsonTools.jsonString(tool("get_players").inputSchema)).toContain("gamesWindow");
+  expect(jsonTools.jsonString(tool("get_players").inputSchema)).toContain("search_players");
   expect(tool("get_calendar").description).toContain("dated league returns week `unsupported`");
-  expect(JSON.stringify(tool("search_players").outputSchema)).toContain("playsThisWeek");
-  expect(JSON.stringify(tool("get_league").outputSchema)).toContain("inline player name");
-  expect(JSON.stringify(tool("get_pending_trade_offers").outputSchema)).toContain("ownerNote");
+  expect(jsonTools.jsonString(tool("search_players").outputSchema)).toContain("playsThisWeek");
+  expect(jsonTools.jsonString(tool("get_league").outputSchema)).toContain("inline player name");
+  expect(jsonTools.jsonString(tool("get_pending_trade_offers").outputSchema)).toContain(
+    "ownerNote",
+  );
   const agentNote = tool("add_team_agent_note");
-  const summaryAgentNotes = JSON.stringify(tool("get_team_summary").outputSchema);
+  const summaryAgentNotes = jsonTools.jsonString(tool("get_team_summary").outputSchema);
   expect(summaryAgentNotes).toContain("client memory");
   expect(summaryAgentNotes).toContain("owner's note");
   expect(agentNote.description).toContain("append-only");
   expect(agentNote.description).toContain("owner's note");
-  expect(JSON.stringify(agentNote.outputSchema)).toContain("writtenAt");
+  expect(jsonTools.jsonString(agentNote.outputSchema)).toContain("writtenAt");
 
   const league = tool("get_league");
-  const leagueInput = JSON.stringify(league.inputSchema);
-  const leagueOutput = JSON.stringify(league.outputSchema);
+  const leagueInput = jsonTools.jsonString(league.inputSchema);
+  const leagueOutput = jsonTools.jsonString(league.outputSchema);
   expect(leagueInput).toContain("standingsDetail");
   expect(leagueInput).toContain("compact");
   expect(leagueOutput).toContain("transactionRules");
@@ -2599,7 +2650,7 @@ it("publishes the accepted player-statistics periods and the compact standings f
   expect(league.description).not.toContain("13-team league fits in one result");
   expect(league.description).not.toContain("acquisition usage is not published");
 
-  const transactionRules = JSON.stringify(league.outputSchema);
+  const transactionRules = jsonTools.jsonString(league.outputSchema);
   expect(transactionRules).toContain("transactionRules");
   expect(transactionRules).toContain("acquisitionLimits");
   expect(transactionRules).toContain("acquisitionUsage");
@@ -2608,18 +2659,18 @@ it("publishes the accepted player-statistics periods and the compact standings f
   expect(transactionRules).toContain("not_published");
   expect(transactionRules).toContain("ratification");
 
-  const search = JSON.stringify(tool("search_players").outputSchema);
+  const search = jsonTools.jsonString(tool("search_players").outputSchema);
   expect(search).toContain("percentOwnedDelta");
   expect(search).not.toContain("percentOwnedChange");
   expect(search).toContain("ownership-change window");
   expect(search).toContain("injured_reserve");
   expect(search).toContain("observedAt");
 
-  const scoring = JSON.stringify(tool("get_league").outputSchema);
+  const scoring = jsonTools.jsonString(tool("get_league").outputSchema);
   expect(scoring).toContain("informational");
   expect(scoring).toContain("published but does not count");
 
-  const cursor = JSON.stringify(tool("get_team_summary").inputSchema);
+  const cursor = jsonTools.jsonString(tool("get_team_summary").inputSchema);
   expect(cursor).toContain("bound to the call's arguments");
 });
 

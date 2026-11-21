@@ -11,6 +11,8 @@ import {
   ProfessionalGameFactStale,
 } from "#contexts/connections/ProfessionalCalendar.ts";
 import type { ProfessionalGameFact } from "#contexts/connections/ProfessionalCalendar.ts";
+import jsonTools from "#runtime/JsonText.ts";
+import layerTools from "#runtime/ProvideLayer.ts";
 import { PublicInternet } from "#runtime/PublicInternet.ts";
 
 import { ConnectionsDatabase } from "./ConnectionsDatabase.ts";
@@ -77,7 +79,7 @@ it.effect("counts a real hockey week's games and marks its off nights", () => {
       4,
     );
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       calendarLayer(
         (weekStart) =>
           weekStart === "2026-11-01" ? jsonResponse(leagueWeek) : jsonResponse({ gameWeek: [] }),
@@ -119,7 +121,7 @@ it.effect("produces a fact for every game of one league-week request with teams 
     const storedOpener = stored.find((row) => row.sourceReference === openerId);
     assert.strictEqual(storedOpener?.value.home.sourceTeamIdentifier, "12");
     assert.strictEqual(storedOpener?.value.home.sourceTeamName, "Carolina Hurricanes");
-  }).pipe(Effect.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
+  }).pipe(layerTools.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
 });
 
 it.effect("keeps one row per game and window and never replaces a newer observation", () => {
@@ -182,7 +184,7 @@ it.effect("keeps one row per game and window and never replaces a newer observat
       "2026-11-01T14:00:00.000Z",
     );
     assert.strictEqual(row?.value.venue, "Newer Venue");
-  }).pipe(Effect.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
+  }).pipe(layerTools.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
 });
 
 it.effect(
@@ -217,7 +219,7 @@ it.effect(
       assert.strictEqual(stored.length, 1);
       assert.strictEqual(Array.getUnsafe(stored, 0).value.home.sourceTeamIdentifier, "999");
     }).pipe(
-      Effect.provide(
+      layerTools.provide(
         calendarLayer(
           () =>
             jsonResponse(
@@ -260,7 +262,7 @@ it.effect("reads a stored game with no provider key back resolved from the map",
     assert.strictEqual(game.game.home.providerTeamKey, torontoKey);
     assert.strictEqual(game.game.away.providerTeamKey, bostonKey);
     assert.deepStrictEqual(week.unresolvedTeams, []);
-  }).pipe(Effect.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
+  }).pipe(layerTools.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
 });
 
 it.effect(
@@ -296,7 +298,7 @@ it.effect(
 
       const rows = yield* database.select().from(scheduleObservations);
       assert.deepStrictEqual(Array.getUnsafe(rows, 0).value, value);
-    }).pipe(Effect.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
+    }).pipe(layerTools.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
   },
 );
 
@@ -331,7 +333,7 @@ it.effect("reads a stored game whose club the map does not hold back unresolved"
         reason: "no_map_entry",
       },
     ]);
-  }).pipe(Effect.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
+  }).pipe(layerTools.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
 });
 
 it.effect("reads a stored game whose club the map names differently back unresolved", () => {
@@ -365,7 +367,7 @@ it.effect("reads a stored game whose club the map names differently back unresol
         reason: "map_disagrees",
       },
     ]);
-  }).pipe(Effect.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
+  }).pipe(layerTools.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
 });
 
 it.effect("stores a postponed game with its status and serves it with it", () => {
@@ -405,7 +407,7 @@ it.effect("stores a postponed game with its status and serves it with it", () =>
       postponed === undefined ? undefined : postponed.value.startTime?.timeZone,
       "America/Toronto",
     );
-  }).pipe(Effect.provide(calendarLayer(() => jsonResponse(relocatedWeek), calls)));
+  }).pipe(layerTools.provide(calendarLayer(() => jsonResponse(relocatedWeek), calls)));
 });
 
 it.effect(
@@ -460,7 +462,7 @@ it.effect(
         freshness: "status",
       });
       assert.strictEqual(calls.length, 3);
-    }).pipe(Effect.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
+    }).pipe(layerTools.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
   },
 );
 
@@ -505,7 +507,7 @@ it.effect("reads a shifted week instead of serving another week's slate", () => 
       stored.some((row) => row.window.from === "2026-11-01" && row.window.to === "2026-11-07"),
     );
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       calendarLayer((weekStart) => jsonResponse(shiftWeek(leagueWeek, weekStart)), calls),
     ),
   );
@@ -554,7 +556,7 @@ it.effect("keeps the previous observation and refuses when a stale week cannot b
     assert.strictEqual(recovered.games.length, 50);
     assert.strictEqual(DateTime.formatIso(recovered.observedAt), "2026-11-01T19:00:00.000Z");
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       calendarLayer(
         () => (failing ? new Response("down", { status: 503 }) : jsonResponse(leagueWeek)),
         calls,
@@ -588,7 +590,7 @@ it.effect("keeps a club unresolved when the league names it differently from the
       },
     ]);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       calendarLayer(
         () =>
           jsonResponse(
@@ -623,7 +625,7 @@ it.effect("measures the requests a day of calendar reads costs for the hockey le
     }
 
     assert.strictEqual(calls.length, 28);
-  }).pipe(Effect.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
+  }).pipe(layerTools.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
 });
 
 it.effect("reads the same week once a day for a weekly sweep", () => {
@@ -644,7 +646,7 @@ it.effect("reads the same week once a day for a weekly sweep", () => {
     }
 
     assert.strictEqual(calls.length, 7);
-  }).pipe(Effect.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
+  }).pipe(layerTools.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
 });
 
 it.effect("refuses a league no game source covers", () => {
@@ -672,7 +674,7 @@ it.effect("refuses a league no game source covers", () => {
     assert.instanceOf(malformed, ProfessionalCalendarUnavailable);
     assert.strictEqual(malformed.reason, "invalid_week");
     assert.strictEqual(calls.length, 0);
-  }).pipe(Effect.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
+  }).pipe(layerTools.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
 });
 
 const WeekPayload = Schema.Struct({
@@ -682,7 +684,7 @@ const WeekPayload = Schema.Struct({
 });
 
 function shiftWeek(payload: unknown, weekStart: string): unknown {
-  const decoded = Schema.decodeUnknownSync(WeekPayload)(payload);
+  const decoded = Effect.runSync(Schema.decodeUnknownEffect(WeekPayload)(payload));
   return {
     gameWeek: decoded.gameWeek.map((day, index) => ({
       ...day,
@@ -824,7 +826,7 @@ function factOf(games: ReadonlyArray<ProfessionalGameFact>, id: string): Profess
 }
 
 function fixture(name: string): unknown {
-  return JSON.parse(
+  return jsonTools.jsonValue(
     readFileSync(new URL(`./game-sources/nhl/fixtures/${name}`, import.meta.url), "utf8"),
   );
 }

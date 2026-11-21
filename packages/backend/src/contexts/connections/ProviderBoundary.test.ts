@@ -7,6 +7,7 @@ import { Connections } from "#contexts/connections/Connections.ts";
 import { FantasyQueries } from "#contexts/connections/FantasyQueries.ts";
 import { GameSourceRegistry, gameSourceRegistryOf } from "#contexts/connections/GameSource.ts";
 import { ProviderRegistry, providerRegistryOf } from "#contexts/connections/ProviderRegistry.ts";
+import layerTools from "#runtime/ProvideLayer.ts";
 
 import { ConnectionCredentialEncryption } from "./internal/ConnectionCredentialEncryption.ts";
 import { ConnectionEncryptionKey } from "./internal/ConnectionEncryptionKey.ts";
@@ -161,7 +162,7 @@ it.effect("reads a second provider's player search and states its own schedule b
       (summary.roster ?? []).map((row) => row.slot),
       secondProviderRoster.players.map((player) => player.slot),
     );
-  }).pipe(Effect.provide(SecondProviderTestLayer)),
+  }).pipe(layerTools.provide(SecondProviderTestLayer)),
 );
 
 it.effect("refuses a schedule window wider than one read of the league's roster schedule", () =>
@@ -194,5 +195,5 @@ it.effect("refuses a schedule window wider than one read of the league's roster 
       assert.include(summary.schedule.detail, "narrower window");
       assert.include(summary.schedule.detail, "`days`");
     }
-  }).pipe(Effect.provide(SecondProviderTestLayer)),
+  }).pipe(layerTools.provide(SecondProviderTestLayer)),
 );

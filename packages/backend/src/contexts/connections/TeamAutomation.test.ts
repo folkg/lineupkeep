@@ -9,6 +9,7 @@ import { TestClock } from "effect/testing";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { DatabaseConnection } from "#database/DatabaseConnection.ts";
 import { PostgresLive } from "#database/internal/PostgresLive.ts";
+import layerTools from "#runtime/ProvideLayer.ts";
 
 import { agentNoteLimit } from "./AgentNote.ts";
 import { Connections } from "./Connections.ts";
@@ -65,7 +66,7 @@ it.effect("enrolls, disables, and re-enrolls a team without deleting its configu
     const current = yield* teams.get(owner, seeded);
     assert.strictEqual(current.team.name, "Alpha");
     assert.strictEqual(current.team.availability, "available");
-  }).pipe(Effect.provide(TeamsTestLayer)),
+  }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
 it.effect("pauses until the provider fantasy day ends and resumes explicitly", () =>
@@ -90,7 +91,7 @@ it.effect("pauses until the provider fantasy day ends and resumes explicitly", (
     assert.strictEqual(resumed.enrolled, true);
     assert.strictEqual(resumed.automation.status, "enabled");
     assert.isUndefined(resumed.automation.resumesAt);
-  }).pipe(Effect.provide(TeamsTestLayer)),
+  }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
 it.effect("reports repeated actions as unchanged no-ops", () =>
@@ -116,7 +117,7 @@ it.effect("reports repeated actions as unchanged no-ops", () =>
     assert.deepStrictEqual(repeatedPause.automation.resumesAt, paused.automation.resumesAt);
     assert.strictEqual(repeatedResume.outcome, "unchanged");
     assert.strictEqual(repeatedResume.automation.status, "enabled");
-  }).pipe(Effect.provide(TeamsTestLayer)),
+  }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
 it.effect("rejects a mismatched action without changing the stored state", () =>
@@ -142,7 +143,7 @@ it.effect("rejects a mismatched action without changing the stored state", () =>
     assert.strictEqual(resumeWhileDisabled.automation.status, "disabled");
     assert.include(resumeWhileDisabled.detail, "Enable it before resuming");
     assert.strictEqual((yield* teams.get(owner, seeded)).team.automation.status, "disabled");
-  }).pipe(Effect.provide(TeamsTestLayer)),
+  }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
 it.effect("keeps availability separate from the automation setting", () =>
@@ -177,7 +178,7 @@ it.effect("keeps availability separate from the automation setting", () =>
     const current = yield* teams.get(owner, seeded);
     assert.strictEqual(current.team.availability, "unavailable");
     assert.strictEqual(current.team.automation.status, "enabled");
-  }).pipe(Effect.provide(TeamsTestLayer)),
+  }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
 it.effect("hides another owner's team behind not-found and leaves it untouched", () =>
@@ -197,7 +198,7 @@ it.effect("hides another owner's team behind not-found and leaves it untouched",
     assert.strictEqual(foreign.team, seeded);
     assert.strictEqual(current.team.automation.status, "enabled");
     assert.deepStrictEqual(yield* teams.list(other), []);
-  }).pipe(Effect.provide(TeamsTestLayer)),
+  }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
 it.effect("serializes competing controls and never stores an invalid combination", () =>
@@ -225,7 +226,7 @@ it.effect("serializes competing controls and never stores an invalid combination
     );
     assert.strictEqual(enabledOrDisabled.length, 2);
     assert.isTrue(["disabled", "enabled"].includes(afterEnrollmentRace.team.automation.status));
-  }).pipe(Effect.provide(TeamsTestLayer)),
+  }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
 it.effect("reports mixed batch outcomes in input order", () =>
@@ -263,7 +264,7 @@ it.effect("reports mixed batch outcomes in input order", () =>
     );
     assert.strictEqual((yield* teams.get(owner, second)).team.automation.status, "disabled");
     assert.strictEqual((yield* teams.get(owner, third)).team.automation.status, "disabled");
-  }).pipe(Effect.provide(TeamsTestLayer)),
+  }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
 it.effect("expires pauses only at the stored fantasy-day boundary", () =>
@@ -289,7 +290,7 @@ it.effect("expires pauses only at the stored fantasy-day boundary", () =>
     assert.strictEqual(expired.length, 1);
     assert.strictEqual(after.team.automation.status, "enabled");
     assert.deepStrictEqual(repeated, []);
-  }).pipe(Effect.provide(TeamsTestLayer)),
+  }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
 it.effect("uses a 23-hour fantasy day across the spring DST transition", () =>
@@ -308,7 +309,7 @@ it.effect("uses a 23-hour fantasy day across the spring DST transition", () =>
     assert.strictEqual(DateTime.formatIso(resumesAt), "2026-03-09T07:00:00.000Z");
     assert.strictEqual(expired.length, 1);
     assert.strictEqual((yield* teams.get(owner, seeded)).team.automation.status, "enabled");
-  }).pipe(Effect.provide(TeamsTestLayer)),
+  }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
 it.effect("uses a 25-hour fantasy day across the autumn DST transition", () =>
@@ -327,7 +328,7 @@ it.effect("uses a 25-hour fantasy day across the autumn DST transition", () =>
     assert.strictEqual(DateTime.formatIso(resumesAt), "2026-11-02T08:00:00.000Z");
     assert.strictEqual(expired.length, 1);
     assert.strictEqual((yield* teams.get(owner, seeded)).team.automation.status, "enabled");
-  }).pipe(Effect.provide(TeamsTestLayer)),
+  }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
 it.effect("includes the latest verified run in team activity", () =>
@@ -347,7 +348,7 @@ it.effect("includes the latest verified run in team activity", () =>
     assert.strictEqual(detail.lastRun?.outcome?.kind, "changed");
     assert.strictEqual(detail.recentRuns.length, 1);
     assert.strictEqual(detail.connectionStatus, "ready");
-  }).pipe(Effect.provide(TeamsTestLayer)),
+  }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
 it.effect("shows only the current fantasy day's checks and keeps the last earlier check", () =>
@@ -395,7 +396,7 @@ it.effect("shows only the current fantasy day's checks and keeps the last earlie
       [current.runs[0]?.run],
     );
     assert.strictEqual(activeSummary.lastRun?.run, current.runs[0]?.run);
-  }).pipe(Effect.provide(TeamsTestLayer)),
+  }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
 it.effect("saves an owner note with the team and reads it back for the owner only", () =>
@@ -417,7 +418,7 @@ it.effect("saves an owner note with the team and reads it back for the owner onl
     const foreign = yield* Effect.flip(teams.saveNote(other, { team: seeded, note: "Foreign" }));
     assert.strictEqual(foreign._tag, "team.not_found");
     assert.strictEqual((yield* teams.get(owner, seeded)).team.ownerNote, saved.note);
-  }).pipe(Effect.provide(TeamsTestLayer)),
+  }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
 it.effect("clears an owner note", () =>
@@ -434,7 +435,7 @@ it.effect("clears an owner note", () =>
     assert.strictEqual(cleared.updatedAt, null);
     assert.strictEqual(read.team.ownerNote, null);
     assert.strictEqual(read.team.ownerNoteUpdatedAt, null);
-  }).pipe(Effect.provide(TeamsTestLayer)),
+  }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
 it.effect("refuses a note past its limit without storing it", () =>
@@ -451,7 +452,7 @@ it.effect("refuses a note past its limit without storing it", () =>
     assert.strictEqual(rejected.reason, "too_long");
     assert.ok(rejected.message.includes(String(teamNoteLimit)));
     assert.strictEqual((yield* teams.get(owner, seeded)).team.ownerNote, null);
-  }).pipe(Effect.provide(TeamsTestLayer)),
+  }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
 it.effect(
@@ -495,7 +496,7 @@ it.effect(
           DateTime.toEpochMillis(first.writtenAt),
       );
       assert.strictEqual((yield* teams.get(owner, seeded)).team.ownerNote, null);
-    }).pipe(Effect.provide(TeamsTestLayer)),
+    }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
 it.effect("refuses an empty agent note and a note on a team the account does not own", () =>
@@ -525,7 +526,7 @@ it.effect("refuses an empty agent note and a note on a team the account does not
     assert.instanceOf(tooLong, TeamAgentNoteRejected);
     assert.strictEqual(tooLong.reason, "too_long");
     assert.deepStrictEqual(yield* queries.recentAgentNotes(owner, seeded), []);
-  }).pipe(Effect.provide(TeamsTestLayer)),
+  }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
 it.effect("keeps an owner note when discovery refreshes the team", () =>
@@ -543,7 +544,7 @@ it.effect("keeps an owner note when discovery refreshes the team", () =>
 
     assert.strictEqual(refreshed.team.name, "Renamed Alpha");
     assert.strictEqual(refreshed.team.ownerNote, "Dynasty; keep both goalies.");
-  }).pipe(Effect.provide(TeamsTestLayer)),
+  }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
 function control(
@@ -573,10 +574,12 @@ function requiredResumeBoundary(automation: TeamAutomation): DateTime.Utc {
 }
 
 function lineupRequest(team: TeamId): LineupRequestInput {
-  return Schema.decodeSync(LineupRequestInput)({
-    requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164e1",
-    teams: [{ team, period: { coverage: "week", week: 3 } }],
-  });
+  return Effect.runSync(
+    Schema.decodeEffect(LineupRequestInput)({
+      requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164e1",
+      teams: [{ team, period: { coverage: "week", week: 3 } }],
+    }),
+  );
 }
 
 function seedTeam(fake: FakeProviderWorld["Service"]): Effect.Effect<TeamId, never, Connections> {

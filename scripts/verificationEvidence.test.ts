@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { expect, it } from "vitest";
 
 import {
@@ -225,7 +226,7 @@ it("blocks delivery when criteria were not declared before the run", async () =>
   await using run = await runDirectory(claims([criterion()]));
   await writeFile(
     join(run.directory, "run.json"),
-    JSON.stringify({ runId: "run", criteriaDeclared: false }),
+    jsonTools.jsonString({ runId: "run", criteriaDeclared: false }),
   );
 
   const problems = await deliveryProblems(run.directory);
@@ -237,8 +238,8 @@ it("blocks delivery when criteria were changed after the run started", async () 
   const matrix = claims([criterion()]);
   await using run = await runDirectory(matrix);
   const reworded = claims([criterion({ statement: "Something easier" })]);
-  await writeFile(join(run.directory, "criteria.json"), JSON.stringify(declare(reworded)));
-  await writeFile(join(run.directory, "claims.json"), JSON.stringify(reworded));
+  await writeFile(join(run.directory, "criteria.json"), jsonTools.jsonString(declare(reworded)));
+  await writeFile(join(run.directory, "claims.json"), jsonTools.jsonString(reworded));
 
   const problems = await deliveryProblems(run.directory);
 
@@ -335,7 +336,7 @@ it("blocks delivery when a video's direction changed after it was rendered", asy
   await using run = await renderedRun();
   await writeFile(
     join(run.directory, "shots.json"),
-    JSON.stringify(shots([{ start: 6.1, end: 8.9, claims: ["C1"], artifacts: [] }])),
+    jsonTools.jsonString(shots([{ start: 6.1, end: 8.9, claims: ["C1"], artifacts: [] }])),
   );
 
   const problems = await deliveryProblems(run.directory);
@@ -548,7 +549,7 @@ it.each([
     await using run = await renderedRun();
     await writeFile(
       join(run.directory, file),
-      typeof value === "string" ? value : JSON.stringify(value),
+      typeof value === "string" ? value : jsonTools.jsonString(value),
     );
 
     const problems = await deliveryProblems(run.directory);
@@ -569,7 +570,7 @@ it("explains how to disclose visual coverage gaps", async () => {
   await using run = await renderedRun();
   await writeFile(
     join(run.directory, "shots.json"),
-    JSON.stringify({
+    jsonTools.jsonString({
       ...shots([]),
       notShown: [{ claim: "C1", reason: "" }],
     }),
@@ -582,7 +583,7 @@ it("explains how to disclose visual coverage gaps", async () => {
 
 it("explains how to label or disclose an omitted video criterion", async () => {
   await using run = await renderedRun();
-  await writeFile(join(run.directory, "shots.json"), JSON.stringify(shots([])));
+  await writeFile(join(run.directory, "shots.json"), jsonTools.jsonString(shots([])));
 
   const problems = await deliveryProblems(run.directory);
 
@@ -593,11 +594,17 @@ it("explains how to label or disclose an omitted video criterion", async () => {
 
 it("collects acting personas from service, MCP, and browser checkpoint evidence", () => {
   const attachments = [
-    { name: "Service call 1: create", body: Buffer.from(JSON.stringify({ persona: "owner" })) },
-    { name: "MCP exchange 1: tools/list", body: Buffer.from(JSON.stringify({ persona: "other" })) },
+    {
+      name: "Service call 1: create",
+      body: Buffer.from(jsonTools.jsonString({ persona: "owner" })),
+    },
+    {
+      name: "MCP exchange 1: tools/list",
+      body: Buffer.from(jsonTools.jsonString({ persona: "other" })),
+    },
     {
       name: checkpointPersonaName("saved"),
-      body: Buffer.from(JSON.stringify({ persona: "owner" })),
+      body: Buffer.from(jsonTools.jsonString({ persona: "owner" })),
     },
     { name: "unrelated data", body: Buffer.from("{}") },
   ];
@@ -616,7 +623,9 @@ async function renderedRun(): Promise<{
   const hash = (content: string): string => createHash("sha256").update(content).digest("hex");
   await mkdir(join(run.directory, "test-results"));
   await mkdir(join(run.directory, "review-frames"));
-  const direction = JSON.stringify(shots([{ start: 6, end: 9, claims: ["C1"], artifacts: [] }]));
+  const direction = jsonTools.jsonString(
+    shots([{ start: 6, end: 9, claims: ["C1"], artifacts: [] }]),
+  );
   await file("shots.json", direction);
   await file("test-results/video.webm", "raw footage");
   await file("walkthrough.mp4", "rendered footage");
@@ -624,7 +633,7 @@ async function renderedRun(): Promise<{
   const read = (name: string): Promise<string> => readFile(join(run.directory, name), "utf8");
   await file(
     "media-check.json",
-    JSON.stringify({
+    jsonTools.jsonString({
       walkthroughSha256: hash("rendered footage"),
       fullDecode: "passed",
       inputs: {
@@ -638,7 +647,7 @@ async function renderedRun(): Promise<{
   );
   await file(
     "visual-review.json",
-    JSON.stringify({
+    jsonTools.jsonString({
       walkthroughSha256: hash("rendered footage"),
       reviewedFrames: ["scene-01-middle.png"],
       approved: true,

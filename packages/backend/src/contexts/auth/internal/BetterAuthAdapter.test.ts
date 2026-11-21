@@ -26,6 +26,8 @@ import { EmailDelivery, EmailDeliveryFailed } from "#email/EmailDelivery.ts";
 import { EmailDeliveryTest, EmailOutbox } from "#email/internal/EmailDeliveryTest.ts";
 import { advertisedScopes, resourceScopes } from "#runtime/ApplicationScopes.ts";
 import { BackgroundWork } from "#runtime/BackgroundWork.ts";
+import jsonTools from "#runtime/JsonText.ts";
+import layerTools from "#runtime/ProvideLayer.ts";
 import { publicInternetProcess } from "#runtime/public-internet/transport/node/PublicInternetProcess.ts";
 import { PublicInternet } from "#runtime/PublicInternet.ts";
 
@@ -54,7 +56,7 @@ it.effect(
 
       assert.strictEqual(session, undefined);
       assert.deepStrictEqual(statements, []);
-    }).pipe(Effect.provide(adapterLayer(baseConfig))),
+    }).pipe(layerTools.provide(adapterLayer(baseConfig))),
   databaseTestTimeout,
 );
 
@@ -77,7 +79,7 @@ it.effect(
         });
       }
       assert.deepStrictEqual(statements, []);
-    }).pipe(Effect.provide(adapterLayer(baseConfig))),
+    }).pipe(layerTools.provide(adapterLayer(baseConfig))),
   databaseTestTimeout,
 );
 
@@ -86,8 +88,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const first = yield* BetterAuthAdapter;
-      const second = yield* Effect.provide(BetterAuthAdapter, instanceLayer);
-      const third = yield* Effect.provide(BetterAuthAdapter, instanceLayer);
+      const second = yield* layerTools.provideLayer(BetterAuthAdapter, instanceLayer);
+      const third = yield* layerTools.provideLayer(BetterAuthAdapter, instanceLayer);
 
       const replies = yield* Effect.all(
         [
@@ -102,7 +104,7 @@ it.effect(
         replies.map((response) => response.status),
         [200, 200, 200],
       );
-    }).pipe(Effect.provide(adapterLayer(baseConfig))),
+    }).pipe(layerTools.provide(adapterLayer(baseConfig))),
   databaseTestTimeout,
 );
 
@@ -113,7 +115,7 @@ it.effect(
       const { AUTH_CLIENT_IP_HEADERS: _omitted, ...withoutClientAddress } = baseConfig;
       const layer = adapterLayer({ ...withoutClientAddress, APP_ENV: "production" });
 
-      const exit = yield* Effect.exit(Effect.provide(BetterAuthAdapter, layer));
+      const exit = yield* Effect.exit(layerTools.provideLayer(BetterAuthAdapter, layer));
 
       assert.isTrue(Exit.isFailure(exit));
       assert.include(String(Exit.isFailure(exit) ? exit.cause : ""), "AUTH_CLIENT_IP_HEADERS");
@@ -141,7 +143,7 @@ it.effect(
         users.map(({ email, emailVerified, name }) => ({ email, emailVerified, name })),
         [{ email: "new.reader@example.test", emailVerified: true, name: "" }],
       );
-    }).pipe(Effect.provide(adapterLayer(baseConfig))),
+    }).pipe(layerTools.provide(adapterLayer(baseConfig))),
   databaseTestTimeout,
 );
 
@@ -166,7 +168,7 @@ it.effect(
       yield* sessions.end(userId, [listedSession.id]);
 
       assert.isUndefined(yield* adapter.getSession(headers));
-    }).pipe(Effect.provide(adapterLayer(baseConfig))),
+    }).pipe(layerTools.provide(adapterLayer(baseConfig))),
   databaseTestTimeout,
 );
 
@@ -185,7 +187,7 @@ it.effect(
       assert.strictEqual(message?.subject, `${code} is your Lineupgrade sign-in code`);
       assert.include(message?.text ?? "", "expires in 10 minutes");
       assert.notInclude(yield* Effect.promise(() => response.text()), code);
-    }).pipe(Effect.provide(adapterLayer(baseConfig))),
+    }).pipe(layerTools.provide(adapterLayer(baseConfig))),
   databaseTestTimeout,
 );
 
@@ -223,7 +225,7 @@ it.effect(
         { status: 400, code: "INVALID_OTP" },
         { status: 403, code: "TOO_MANY_ATTEMPTS" },
       ]);
-    }).pipe(Effect.provide(adapterLayer(baseConfig))),
+    }).pipe(layerTools.provide(adapterLayer(baseConfig))),
   databaseTestTimeout,
 );
 
@@ -251,7 +253,7 @@ it.effect(
       assert.strictEqual(limited.status, 429);
       assert.match(limited.headers.get("X-Retry-After") ?? "", /^\d+$/u);
       assert.strictEqual((yield* outbox.messages).length, 5);
-    }).pipe(Effect.provide(adapterLayer(baseConfig))),
+    }).pipe(layerTools.provide(adapterLayer(baseConfig))),
   databaseTestTimeout,
 );
 
@@ -259,8 +261,8 @@ it.effect(
   "enforces client rate limits recorded in the database shared by instances",
   () =>
     Effect.gen(function* () {
-      const first = yield* Effect.provide(BetterAuthAdapter, instanceLayer);
-      const second = yield* Effect.provide(BetterAuthAdapter, instanceLayer);
+      const first = yield* layerTools.provideLayer(BetterAuthAdapter, instanceLayer);
+      const second = yield* layerTools.provideLayer(BetterAuthAdapter, instanceLayer);
       const attempt = (
         adapter: typeof first,
       ): Effect.Effect<number, import("#contexts/auth/Auth.ts").AuthenticationUnavailable, never> =>
@@ -279,7 +281,7 @@ it.effect(
       assert.notStrictEqual(statuses[2], 429);
       assert.strictEqual(statuses[3], 429);
     }).pipe(
-      Effect.provide(
+      layerTools.provide(
         Layer.mergeAll(
           AuthDatabaseTest,
           BackgroundWork.processLifetime,
@@ -303,7 +305,7 @@ it.effect(
         status: 503,
         code: "EMAIL_UNAVAILABLE",
       });
-    }).pipe(Effect.provide(adapterLayer(baseConfig, unavailableEmail))),
+    }).pipe(layerTools.provide(adapterLayer(baseConfig, unavailableEmail))),
   databaseTestTimeout,
 );
 
@@ -319,7 +321,7 @@ it.effect(
         status: 422,
         code: "EMAIL_RECIPIENT_NOT_ALLOWED",
       });
-    }).pipe(Effect.provide(adapterLayer(baseConfig, senderRefusedEmail))),
+    }).pipe(layerTools.provide(adapterLayer(baseConfig, senderRefusedEmail))),
   databaseTestTimeout,
 );
 
@@ -346,7 +348,7 @@ it.effect(
         status: 400,
         code: "EMAIL_PASSWORD_DISABLED",
       });
-    }).pipe(Effect.provide(adapterLayer(baseConfig))),
+    }).pipe(layerTools.provide(adapterLayer(baseConfig))),
   databaseTestTimeout,
 );
 
@@ -354,9 +356,15 @@ it.effect(
   "offers Google sign-in only when its credentials are configured",
   () =>
     Effect.gen(function* () {
-      const withoutGoogle = yield* Effect.provide(BetterAuthAdapter, adapterLayer(baseConfig));
+      const withoutGoogle = yield* layerTools.provideLayer(
+        BetterAuthAdapter,
+        adapterLayer(baseConfig),
+      );
 
-      const withGoogle = yield* Effect.provide(BetterAuthAdapter, adapterLayer(googleConfig));
+      const withGoogle = yield* layerTools.provideLayer(
+        BetterAuthAdapter,
+        adapterLayer(googleConfig),
+      );
 
       assert.deepStrictEqual(withoutGoogle.signInMethods, { google: false });
       assert.deepStrictEqual(withGoogle.signInMethods, { google: true });
@@ -384,7 +392,7 @@ it.effect(
       );
       assert.strictEqual(authorization.searchParams.get("scope"), "email profile openid");
       assert.strictEqual(authorization.searchParams.get("prompt"), "select_account");
-    }).pipe(Effect.provide(adapterLayer(googleConfig))),
+    }).pipe(layerTools.provide(adapterLayer(googleConfig))),
   databaseTestTimeout,
 );
 
@@ -508,7 +516,7 @@ it.effect(
         (yield* adapter.getSession(new Headers({ cookie: cookieHeader(returned) })))?.user.email,
         "google-oauth@example.test",
       );
-    }).pipe(Effect.provide(adapterLayer(googleConfig, EmailDeliveryTest, testMetadata))),
+    }).pipe(layerTools.provide(adapterLayer(googleConfig, EmailDeliveryTest, testMetadata))),
   databaseTestTimeout,
 );
 
@@ -518,7 +526,7 @@ it.effect(
     Effect.gen(function* () {
       const layer = adapterLayer({ ...baseConfig, GOOGLE_CLIENT_ID: "google-client-id" });
 
-      const exit = yield* Effect.exit(Effect.provide(BetterAuthAdapter, layer));
+      const exit = yield* Effect.exit(layerTools.provideLayer(BetterAuthAdapter, layer));
 
       assert.isTrue(Exit.isFailure(exit));
       assert.include(String(Exit.isFailure(exit) ? exit.cause : ""), "GOOGLE_CLIENT_SECRET");
@@ -609,7 +617,7 @@ it.effect(
       assert.deepStrictEqual(yield* adapter.resolveAccessToken(valid.token, ["connections:read"]), {
         status: "invalid",
       });
-    }).pipe(Effect.provide(adapterLayer(baseConfig))),
+    }).pipe(layerTools.provide(adapterLayer(baseConfig))),
   databaseTestTimeout,
 );
 
@@ -618,8 +626,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const database = yield* AuthDatabase;
-      const first = yield* Effect.provide(BetterAuthAdapter, instanceLayer);
-      const second = yield* Effect.provide(BetterAuthAdapter, instanceLayer);
+      const first = yield* layerTools.provideLayer(BetterAuthAdapter, instanceLayer);
+      const second = yield* layerTools.provideLayer(BetterAuthAdapter, instanceLayer);
       const query = new URLSearchParams({
         response_type: "code",
         client_id: "https://connections-client.test/client.json",
@@ -663,7 +671,7 @@ it.effect(
       );
       assert.strictEqual(metadataClients.length, 1);
     }).pipe(
-      Effect.provide(
+      layerTools.provide(
         Layer.mergeAll(
           AuthDatabaseTest,
           BackgroundWork.processLifetime,
@@ -690,7 +698,9 @@ it.effect(
           "Metadata document fetch was refused: redirects are not followed by policy",
       });
     }).pipe(
-      Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, redirectingMetadata, testScopes)),
+      layerTools.provide(
+        adapterLayer(baseConfig, EmailDeliveryTest, redirectingMetadata, testScopes),
+      ),
     ),
   databaseTestTimeout,
 );
@@ -709,7 +719,9 @@ it.effect(
         error_description: "Failed to fetch metadata document (network error)",
       });
     }).pipe(
-      Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, unreachableMetadata, testScopes)),
+      layerTools.provide(
+        adapterLayer(baseConfig, EmailDeliveryTest, unreachableMetadata, testScopes),
+      ),
     ),
   databaseTestTimeout,
 );
@@ -752,7 +764,7 @@ it.effect(
         assert.notInclude(protectedResource.scopes_supported, retired);
       }
     }).pipe(
-      Effect.provide(
+      layerTools.provide(
         adapterLayer(baseConfig, EmailDeliveryTest, publicInternetProcess, realScopes),
       ),
     ),
@@ -815,7 +827,7 @@ it.effect(
         status: "insufficient_scope",
       });
     }).pipe(
-      Effect.provide(
+      layerTools.provide(
         adapterLayer(baseConfig, EmailDeliveryTest, publicInternetProcess, realScopes),
       ),
     ),
@@ -906,7 +918,7 @@ it.effect(
         },
       );
     }).pipe(
-      Effect.provide(
+      layerTools.provide(
         adapterLayer(baseConfig, EmailDeliveryTest, publicInternetProcess, realScopes),
       ),
     ),
@@ -943,7 +955,7 @@ it.effect(
       );
       assert.strictEqual(body.error, "temporarily_unavailable");
       assert.include(body.error_description, "100");
-    }).pipe(Effect.provide(adapterLayer(baseConfig))),
+    }).pipe(layerTools.provide(adapterLayer(baseConfig))),
   databaseTestTimeout,
 );
 
@@ -962,7 +974,7 @@ it.effect(
       const laterScope = { name: "later:read", description: "Read a scope added later." };
       const advertised = [...current, laterScope.name];
 
-      const restarted = yield* Effect.provide(
+      const restarted = yield* layerTools.provideLayer(
         BetterAuthAdapter,
         Layer.fresh(BetterAuthAdapter.layer).pipe(
           Layer.provide(SignInCodeQuotaRepository.layer),
@@ -996,7 +1008,7 @@ it.effect(
       );
       assert.deepStrictEqual(widened?.scopes, [...advertised, "connections:read"]);
     }).pipe(
-      Effect.provide(
+      layerTools.provide(
         adapterLayer(baseConfig, EmailDeliveryTest, publicInternetProcess, realScopes),
       ),
     ),
@@ -1054,7 +1066,7 @@ it.effect(
         name: "Lineupgrade Support",
         host: "an unverified client",
       });
-    }).pipe(Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
+    }).pipe(layerTools.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
   databaseTestTimeout,
 );
 
@@ -1244,7 +1256,7 @@ it.effect(
       assert.propertyVal(identity, "userId", signedInUser?.user.id);
       assert.propertyVal(identity, "clientId", "https://connections-client.test/client.json");
     }).pipe(
-      Effect.provide(
+      layerTools.provide(
         adapterLayer(
           baseConfig,
           EmailDeliveryTest,
@@ -1316,7 +1328,7 @@ it.effect(
       assert.strictEqual(storedKeys[0]?.id, jwtHeader(credentials.access_token).kid);
       assert.isAbove(storedKeys[0]?.privateKey.length ?? 0, 0);
 
-      const restarted = yield* Effect.provide(BetterAuthAdapter, instanceLayer);
+      const restarted = yield* layerTools.provideLayer(BetterAuthAdapter, instanceLayer);
       assert.propertyVal(
         yield* restarted.resolveAccessToken(credentials.access_token, ["connections:read"]),
         "status",
@@ -1363,7 +1375,7 @@ it.effect(
           .set({ expiresAt: DateTime.toDateUtc(DateTime.makeUnsafe(0)) })
           .where(eq(jwks.id, storedKeys[0]?.id ?? "")),
       );
-      const rotatedKeys = yield* Effect.provide(BetterAuthAdapter, instanceLayer);
+      const rotatedKeys = yield* layerTools.provideLayer(BetterAuthAdapter, instanceLayer);
       const renewed = yield* jsonOf(
         yield* rotatedKeys.handle(refreshTokenRequest(refreshed.refresh_token)),
         Schema.Struct({ access_token: Schema.String, refresh_token: Schema.String }),
@@ -1383,7 +1395,7 @@ it.effect(
         yield* rotatedKeys.resolveAccessToken(renewed.access_token, ["connections:read"]),
         { userId: refreshRow.userId },
       );
-    }).pipe(Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
+    }).pipe(layerTools.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
   databaseTestTimeout,
 );
 
@@ -1419,7 +1431,7 @@ it.effect(
       );
     }).pipe(
       Effect.ensuring(Effect.sync(() => vi.useRealTimers())),
-      Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata)),
+      layerTools.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata)),
     ),
   databaseTestTimeout,
 );
@@ -1470,7 +1482,7 @@ it.effect(
       assert.notInclude(exported, grant.refreshToken);
       assert.notInclude(exported, rotated.refresh_token);
       assert.notInclude(exported, rotated.access_token);
-    }).pipe(Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
+    }).pipe(layerTools.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
   databaseTestTimeout,
 );
 
@@ -1518,7 +1530,7 @@ it.effect(
         "status",
         "authenticated",
       );
-    }).pipe(Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
+    }).pipe(layerTools.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
   databaseTestTimeout,
 );
 
@@ -1558,7 +1570,7 @@ it.effect(
       });
     }).pipe(
       Effect.ensuring(Effect.sync(() => vi.useRealTimers())),
-      Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata)),
+      layerTools.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata)),
     ),
   databaseTestTimeout,
 );
@@ -1616,7 +1628,7 @@ it.effect(
       assert.notInclude(exported, "refusal-log@example.test");
     }).pipe(
       Effect.ensuring(Effect.sync(() => vi.useRealTimers())),
-      Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata)),
+      layerTools.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata)),
     ),
   databaseTestTimeout,
 );
@@ -1648,7 +1660,7 @@ it.effect(
           clientName: "no-resource@example.test",
         },
       );
-    }).pipe(Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
+    }).pipe(layerTools.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
   databaseTestTimeout,
 );
 
@@ -1674,7 +1686,7 @@ it.effect(
       assert.strictEqual(response.status, 400);
       assert.include(body, "5KB size limit");
     }).pipe(
-      Effect.provide(
+      layerTools.provide(
         adapterLayer(
           baseConfig,
           EmailDeliveryTest,
@@ -1828,7 +1840,7 @@ function dynamicRegistrationRequest(clientName: string, scope?: string): Request
   return new Request("http://localhost:5173/api/auth/oauth2/register", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
+    body: jsonTools.jsonString({
       client_name: clientName,
       redirect_uris: ["http://127.0.0.1:19999/callback"],
       grant_types: ["authorization_code"],
@@ -1984,7 +1996,7 @@ function grantRegistrationRequest(clientName: string): Request {
   return new Request("http://localhost:5173/api/auth/oauth2/register", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
+    body: jsonTools.jsonString({
       client_name: clientName,
       redirect_uris: ["http://127.0.0.1:19999/callback"],
       grant_types: ["authorization_code", "refresh_token"],
@@ -2053,15 +2065,15 @@ function assertAuthenticated(
 }
 
 function jwtPayload(token: string): typeof JwtPayload.Type {
-  return Schema.decodeUnknownSync(JwtPayload)(jwtSegment(token, 1));
+  return Effect.runSync(Schema.decodeUnknownEffect(JwtPayload)(jwtSegment(token, 1)));
 }
 
 function jwtHeader(token: string): typeof JwtHeader.Type {
-  return Schema.decodeUnknownSync(JwtHeader)(jwtSegment(token, 0));
+  return Effect.runSync(Schema.decodeUnknownEffect(JwtHeader)(jwtSegment(token, 0)));
 }
 
 function jwtSegment(token: string, index: 0 | 1): unknown {
-  return JSON.parse(Buffer.from(token.split(".")[index] ?? "", "base64url").toString());
+  return jsonTools.jsonValue(Buffer.from(token.split(".")[index] ?? "", "base64url").toString());
 }
 
 function authRequest(
@@ -2072,7 +2084,7 @@ function authRequest(
   return new Request(`http://localhost:5173/api/auth${path}`, {
     method: "POST",
     headers: { "content-type": "application/json", origin: "http://localhost:5173", ...headers },
-    body: JSON.stringify(body),
+    body: jsonTools.jsonString(body),
   });
 }
 

@@ -21,6 +21,7 @@ import {
   queryCursorTtlMillis,
 } from "#contexts/connections/QueryValues.ts";
 import type { QueryCursorInvalidReason } from "#contexts/connections/QueryValues.ts";
+import jsonTools from "#runtime/JsonText.ts";
 
 export type QueryTokensShape = {
   readonly sealCursor: (input: {
@@ -178,7 +179,7 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
         ),
       sealPlayerRef: ({ userId, leagueKey, playerKey }) =>
         Effect.promise(() => sealReference(keys.aes, "player", userId, leagueKey, playerKey)).pipe(
-          Effect.map((value) => Schema.decodeSync(PlayerRef)(value)),
+          Effect.map((value) => Effect.runSync(Schema.decodeEffect(PlayerRef)(value))),
         ),
       sealPlayerRefs: ({ userId, leagueKey, playerKeys }) =>
         Effect.promise(() =>
@@ -187,7 +188,11 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
               sealReference(keys.aes, "player", userId, leagueKey, playerKey),
             ),
           ),
-        ).pipe(Effect.map((values) => values.map((value) => Schema.decodeSync(PlayerRef)(value)))),
+        ).pipe(
+          Effect.map((values) =>
+            values.map((value) => Effect.runSync(Schema.decodeEffect(PlayerRef)(value))),
+          ),
+        ),
       sealPlayerRefGroups: ({ userId, groups }) =>
         Effect.promise(() =>
           Promise.all(
@@ -201,7 +206,9 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
           ),
         ).pipe(
           Effect.map((groupValues) =>
-            groupValues.map((values) => values.map((value) => Schema.decodeSync(PlayerRef)(value))),
+            groupValues.map((values) =>
+              values.map((value) => Effect.runSync(Schema.decodeEffect(PlayerRef)(value))),
+            ),
           ),
         ),
       openPlayerRef: ({ userId, leagueKey, ref }) =>
@@ -234,7 +241,7 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
       sealCounterpartyRef: ({ userId, leagueKey, teamKey }) =>
         Effect.promise(() =>
           sealReference(keys.aes, "counterparty", userId, leagueKey, teamKey),
-        ).pipe(Effect.map((value) => Schema.decodeSync(CounterpartyRef)(value))),
+        ).pipe(Effect.map((value) => Effect.runSync(Schema.decodeEffect(CounterpartyRef)(value)))),
       sealCounterpartyRefs: ({ userId, leagueKey, teamKeys }) =>
         Effect.promise(() =>
           Promise.all(
@@ -243,7 +250,9 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
             ),
           ),
         ).pipe(
-          Effect.map((values) => values.map((value) => Schema.decodeSync(CounterpartyRef)(value))),
+          Effect.map((values) =>
+            values.map((value) => Effect.runSync(Schema.decodeEffect(CounterpartyRef)(value))),
+          ),
         ),
       sealCounterpartyRefGroups: ({ userId, groups }) =>
         Effect.promise(() =>
@@ -259,7 +268,7 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
         ).pipe(
           Effect.map((groupValues) =>
             groupValues.map((values) =>
-              values.map((value) => Schema.decodeSync(CounterpartyRef)(value)),
+              values.map((value) => Effect.runSync(Schema.decodeEffect(CounterpartyRef)(value))),
             ),
           ),
         ),
@@ -296,7 +305,7 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
         ).pipe(
           Effect.map((groupValues) =>
             groupValues.map((values) =>
-              values.map((value) => Schema.decodeSync(TradeOfferRef)(value)),
+              values.map((value) => Effect.runSync(Schema.decodeEffect(TradeOfferRef)(value))),
             ),
           ),
         ),
@@ -355,7 +364,7 @@ function sealCursor(
     readonly expiresAt: number;
   },
 ): Promise<string> {
-  const payload = JSON.stringify({
+  const payload = jsonTools.jsonString({
     v: 1,
     o: input.offset,
     e: input.expiresAt,
@@ -421,7 +430,7 @@ function sealReference(
   value: string,
 ): Promise<string> {
   const nonce = buffer(crypto.getRandomValues(new Uint8Array(12)));
-  const plaintext = buffer(new TextEncoder().encode(JSON.stringify({ v: 1, k: value })));
+  const plaintext = buffer(new TextEncoder().encode(jsonTools.jsonString({ v: 1, k: value })));
   return crypto.subtle
     .encrypt(
       {
@@ -476,7 +485,9 @@ function statRef(key: CryptoKey, leagueKey: string, statId: number): Promise<Sta
       buffer(new TextEncoder().encode(`stat\u0000${leagueKey}\u0000${String(statId)}`)),
     )
     .then((signature) =>
-      Schema.decodeSync(StatRef)(`s1.${base64Url(new Uint8Array(signature).slice(0, 16))}`),
+      Effect.runSync(
+        Schema.decodeEffect(StatRef)(`s1.${base64Url(new Uint8Array(signature).slice(0, 16))}`),
+      ),
     );
 }
 

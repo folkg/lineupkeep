@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { Schema } from "effect";
 import { expect, it } from "vitest";
 
@@ -21,8 +22,10 @@ it("preserves signed repeated parameters and encoded bytes in both consent input
   const query =
     "oauth_query=scope%3Dconnections%253Aread%26scope%3Doffline_access&sig=a%2Bb+%20&scope=x&scope=y";
 
-  expect(Schema.decodeSync(ConsentRequestInput)({ query })).toEqual({ query });
-  expect(Schema.decodeSync(ConsentDecisionInput)({ query, accept: true })).toEqual({
+  expect(Effect.runSync(Schema.decodeEffect(ConsentRequestInput)({ query }))).toEqual({ query });
+  expect(
+    Effect.runSync(Schema.decodeEffect(ConsentDecisionInput)({ query, accept: true })),
+  ).toEqual({
     query,
     accept: true,
   });

@@ -1,4 +1,5 @@
 import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
+import { Effect } from "effect";
 import { Schema } from "effect";
 
 import { expect, signUp, test } from "./support";
@@ -33,7 +34,9 @@ test("authorizes named browser personas independently through the fixture", asyn
   const calls = test
     .info()
     .attachments.filter(isMcpExchangeAttachment)
-    .map((attachment) => Schema.decodeUnknownSync(McpExchangeJson)(attachment.body?.toString()));
+    .map((attachment) =>
+      Effect.runSync(Schema.decodeUnknownEffect(McpExchangeJson)(attachment.body?.toString())),
+    );
   expect(calls.at(-2)?.persona).toBe("owner");
   expect(calls.at(-1)?.persona).toBe("other");
 });

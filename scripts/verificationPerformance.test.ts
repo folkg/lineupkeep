@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { Effect } from "effect";
 import { Schema } from "effect";
 import { expect, it } from "vitest";
 
@@ -503,7 +505,7 @@ it("refuses to profile a server inspector that belongs to another process", asyn
 
   const [result] = await evidence.results();
   expect(result?.["serverCpu"]).toMatchObject({ kind: "unavailable" });
-  expect(JSON.stringify(result?.["serverCpu"])).toContain("belongs to another process");
+  expect(jsonTools.jsonString(result?.["serverCpu"])).toContain("belongs to another process");
 });
 
 it("measures headless calls with isolated trace linkage and client latency", async () => {
@@ -538,8 +540,12 @@ it("measures headless calls with isolated trace linkage and client latency", asy
     serverActivity: { kind: "captured" },
   });
   expect(samples[1]).toMatchObject({ calls: [{ surface: "mcp" }], requests: ["mcp tools/call"] });
-  const first = Schema.decodeUnknownSync(MeasurementJson)(JSON.stringify(samples[0]));
-  const second = Schema.decodeUnknownSync(MeasurementJson)(JSON.stringify(samples[1]));
+  const first = Effect.runSync(
+    Schema.decodeUnknownEffect(MeasurementJson)(jsonTools.jsonString(samples[0])),
+  );
+  const second = Effect.runSync(
+    Schema.decodeUnknownEffect(MeasurementJson)(jsonTools.jsonString(samples[1])),
+  );
   expect(first.calls?.[0]?.durationMs).toBeGreaterThanOrEqual(0);
   expect(first.calls?.[0]?.traceId).not.toBe(second.calls?.[0]?.traceId);
   const secondSpans = await evidence.attachment("backend spans: measurement mcp-2");
@@ -606,7 +612,7 @@ it("profiles without a Page and marks browser and non-Node CPU unavailable", asy
     browserCpu: { kind: "unavailable" },
     serverCpu: { kind: "unavailable" },
   });
-  expect(JSON.stringify(result?.["browserCpu"])).toContain("Page");
+  expect(jsonTools.jsonString(result?.["browserCpu"])).toContain("Page");
 });
 
 it("settles delayed headless exports and counts duplicate SQL spans and logs once", async () => {

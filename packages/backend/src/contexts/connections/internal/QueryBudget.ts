@@ -7,6 +7,7 @@ import {
   QueryPage,
   type QueryError,
 } from "#contexts/connections/QueryValues.ts";
+import jsonTools from "#runtime/JsonText.ts";
 
 const queryResultTargetBytes = 28 * 1024;
 const queryResultHardLimitBytes = 32 * 1024;
@@ -120,8 +121,8 @@ export function fitPage<Row, Result>(
 }
 
 function clientResultBytes(schema: Schema.Codec<unknown, unknown>, value: unknown): number {
-  const encoded = Schema.encodeSync(Schema.toCodecJson(schema))(value);
-  const structuredContent = JSON.stringify(encoded);
+  const encoded = Effect.runSync(Schema.encodeEffect(Schema.toCodecJson(schema))(value));
+  const structuredContent = jsonTools.jsonString(encoded);
   return utf8.encode(structuredContent).length + envelopeAllowanceBytes;
 }
 

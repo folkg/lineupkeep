@@ -1,6 +1,8 @@
 import { assert, it } from "@effect/vitest";
 import { ConfigProvider, Config, Effect, Exit, Layer } from "effect";
 
+import layerTools from "#runtime/ProvideLayer.ts";
+
 import { ConnectionEncryptionKey } from "./ConnectionEncryptionKey.ts";
 
 it.effect("imports a configured 32-byte base64 key", () =>
@@ -10,7 +12,7 @@ it.effect("imports a configured 32-byte base64 key", () =>
     assert.strictEqual(key.keyVersion, 1);
     assert.strictEqual(key.key.type, "secret");
     assert.strictEqual(key.key.algorithm.name, "AES-GCM");
-  }).pipe(Effect.provide(KeyLayer({ CONNECTION_ENCRYPTION_KEY: configuredKey }))),
+  }).pipe(layerTools.provide(KeyLayer({ CONNECTION_ENCRYPTION_KEY: configuredKey }))),
 );
 
 it.effect("reads the configured key version", () =>
@@ -19,7 +21,7 @@ it.effect("reads the configured key version", () =>
 
     assert.strictEqual(key.keyVersion, 3);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       KeyLayer({
         CONNECTION_ENCRYPTION_KEY: configuredKey,
         CONNECTION_ENCRYPTION_KEY_VERSION: "3",
@@ -59,7 +61,7 @@ it.effect("rejects key material that is not exactly 32 bytes without echoing it"
     assert.notInclude(rendered, configured);
     assert.include(rendered, "CONNECTION_ENCRYPTION_KEY");
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       ConfigProvider.layer(ConfigProvider.fromUnknown({ CONNECTION_ENCRYPTION_KEY: configured })),
     ),
   );
@@ -74,7 +76,7 @@ it.effect("rejects malformed base64 without echoing it", () => {
     const rendered = Exit.isFailure(exit) ? String(exit.cause) : "";
     assert.notInclude(rendered, configured);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       ConfigProvider.layer(ConfigProvider.fromUnknown({ CONNECTION_ENCRYPTION_KEY: configured })),
     ),
   );

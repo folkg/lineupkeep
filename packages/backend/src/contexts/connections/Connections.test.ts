@@ -7,6 +7,7 @@ import { SecureRandom } from "effect/crypto";
 import { TestClock } from "effect/testing";
 
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
+import layerTools from "#runtime/ProvideLayer.ts";
 
 import {
   ConnectionId,
@@ -34,17 +35,19 @@ const lineupgradeUlid = /^[0-9A-HJKMNP-TV-Z]{26}$/u;
 
 it("accepts stored UUIDs and new ULIDs and rejects malformed connection identifiers", () => {
   assert.strictEqual(
-    Schema.decodeSync(ConnectionId)("018f79ea-7d86-7c18-9b4a-8b4d0c916001"),
+    Effect.runSync(Schema.decodeEffect(ConnectionId)("018f79ea-7d86-7c18-9b4a-8b4d0c916001")),
     "018f79ea-7d86-7c18-9b4a-8b4d0c916001",
   );
   assert.strictEqual(
-    Schema.decodeSync(ConnectionId)("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
+    Effect.runSync(Schema.decodeEffect(ConnectionId)("01ARZ3NDEKTSV4RRFFQ69G5FAV")),
     "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   );
-  assert.throws(() => Schema.decodeSync(ConnectionId)("not-a-uuid"));
-  assert.throws(() => Schema.decodeSync(ConnectionIdInput)({ id: "not-a-uuid" }));
+  assert.throws(() => Effect.runSync(Schema.decodeEffect(ConnectionId)("not-a-uuid")));
+  assert.throws(() => Effect.runSync(Schema.decodeEffect(ConnectionIdInput)({ id: "not-a-uuid" })));
   assert.throws(() =>
-    Schema.decodeSync(LinkInput)({ provider: decodeProviderKey("yahoo"), session: "" }),
+    Effect.runSync(
+      Schema.decodeEffect(LinkInput)({ provider: decodeProviderKey("yahoo"), session: "" }),
+    ),
   );
 });
 
@@ -61,7 +64,7 @@ it.effect("links a captured session into one ready connection", () =>
     assert.isDefined(connection.approvedAt);
     assert.isUndefined(connection.linkingExpiresAt);
     assert.deepStrictEqual(yield* connections.list(owner), linked);
-  }).pipe(Effect.provide(ConnectionsTestLayer)),
+  }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
 it.effect("leaves no connection when a link's session is rejected", () =>
@@ -74,7 +77,7 @@ it.effect("leaves no connection when a link's session is rejected", () =>
 
     assert.instanceOf(error, ConnectionProviderRejected);
     assert.deepStrictEqual(yield* connections.list(owner), []);
-  }).pipe(Effect.provide(ConnectionsTestLayer)),
+  }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
 it.effect("rejects malformed stored connections through the public service", () =>
@@ -95,7 +98,7 @@ it.effect("rejects malformed stored connections through the public service", () 
     const error = yield* Effect.flip(Connections.use((connections) => connections.list(owner)));
 
     assert.instanceOf(error, ConnectionPersistenceFailed);
-  }).pipe(Effect.provide(ConnectionsLayerFor(NodeCrypto.layer))),
+  }).pipe(layerTools.provide(ConnectionsLayerFor(NodeCrypto.layer))),
 );
 
 it.effect("reports whether the stored session is usable and names the layer to reconnect", () =>
@@ -137,7 +140,7 @@ it.effect("reports whether the stored session is usable and names the layer to r
       actionDetail: providerSessionReconnectDetail,
     });
     assert.include(refused.session.actionDetail, "not the MCP connector in your client");
-  }).pipe(Effect.provide(ConnectionsTestLayer)),
+  }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
 it.effect("reconnects a ready connection to a new credential generation", () =>
@@ -156,7 +159,7 @@ it.effect("reconnects a ready connection to a new credential generation", () =>
     assert.strictEqual(reconnected.status, "ready");
     assert.strictEqual(reconnected.credentialGeneration, 2);
     assert.deepStrictEqual(yield* connections.list(owner), [reconnected]);
-  }).pipe(Effect.provide(ConnectionsTestLayer)),
+  }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
 it.effect("records the provider's refusal status and wording on the incident", () =>
@@ -179,7 +182,7 @@ it.effect("records the provider's refusal status and wording on the incident", (
     assert.strictEqual(incidents[0]?.operation, "discover_teams");
     assert.strictEqual(incidents[0]?.providerStatus, 403);
     assert.strictEqual(incidents[0]?.providerDetail, detail);
-  }).pipe(Effect.provide(ConnectionsTestLayer)),
+  }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
 it.effect("resolves the open incident when a reconnect replaces the session", () =>
@@ -210,7 +213,7 @@ it.effect("resolves the open incident when a reconnect replaces the session", ()
       { id: linked.id, provider: decodeProviderKey("yahoo"), session },
     ]);
     assert.deepStrictEqual(yield* database.select().from(connectionIncidents), incidents);
-  }).pipe(Effect.provide(ConnectionsTestLayer)),
+  }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
 it.effect("reconnects a connection the provider marked reconnect-required", () =>
@@ -235,7 +238,7 @@ it.effect("reconnects a connection the provider marked reconnect-required", () =
     assert.strictEqual(reconnected.credentialGeneration, 2);
     assert.isDefined(reconnected.approvedAt);
     assert.isUndefined(reconnected.reconnectRequiredAt);
-  }).pipe(Effect.provide(ConnectionsTestLayer)),
+  }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
 it.effect("resolves an open incident on disconnect and leaves it resolved on retry", () =>
@@ -256,7 +259,7 @@ it.effect("resolves an open incident on disconnect and leaves it resolved on ret
 
     yield* connections.disconnect(owner, [{ id: linked.id }]);
     assert.deepStrictEqual(yield* database.select().from(connectionIncidents), incidents);
-  }).pipe(Effect.provide(ConnectionsTestLayer)),
+  }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
 it.effect("disconnects a ready connection, deletes its credentials, and is idempotent", () =>
@@ -296,7 +299,7 @@ it.effect("disconnects a ready connection, deletes its credentials, and is idemp
     assert.strictEqual(remainingConnections[0]?.credentialGeneration, null);
     assert.instanceOf(reconnectError, ConnectionLinkRejected);
     assert.strictEqual(reconnectError.status, "disconnected");
-  }).pipe(Effect.provide(ConnectionsTestLayer)),
+  }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
 it.effect("rejects disconnect before a credential exists", () =>
@@ -320,7 +323,7 @@ it.effect("rejects disconnect before a credential exists", () =>
 
     assert.instanceOf(error, ConnectionLinkRejected);
     assert.strictEqual(error.status, "linking");
-  }).pipe(Effect.provide(ConnectionsTestLayer)),
+  }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
 function ConnectionsLayerFor(

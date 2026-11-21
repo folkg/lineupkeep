@@ -90,8 +90,10 @@ export class ConnectionCredentialEncryption extends Context.Service<
           input.current.bytes,
           input.current.keyVersion,
         );
-        const retained = yield* Effect.forEach(input.retained ?? [], (entry) =>
-          importConnectionEncryptionKey(entry.bytes, entry.keyVersion),
+        const retained = yield* Effect.forEach(
+          input.retained ?? [],
+          (entry) => importConnectionEncryptionKey(entry.bytes, entry.keyVersion),
+          { concurrency: 1 },
         );
         return plainEncryption(credentialCipher(keyringOf(current, retained), random));
       }),

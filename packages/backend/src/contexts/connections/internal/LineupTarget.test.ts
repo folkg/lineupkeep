@@ -1,4 +1,5 @@
 import { assert, it } from "@effect/vitest";
+import { Effect } from "effect";
 import { DateTime, Schema } from "effect";
 
 import { LineupTargetPeriod } from "#contexts/connections/LineupRun.ts";
@@ -240,7 +241,7 @@ function instant(value: string): DateTime.Utc {
 }
 
 function dateTarget(date: string): TargetPeriod {
-  return Schema.decodeSync(LineupTargetPeriod)({ coverage: "date", date });
+  return Effect.runSync(Schema.decodeEffect(LineupTargetPeriod)({ coverage: "date", date }));
 }
 
 const footballLeague: ProviderLeagueSettings = {

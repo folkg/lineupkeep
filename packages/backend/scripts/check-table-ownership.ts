@@ -4,7 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { getTableName, getTableSchema, is } from "drizzle-orm";
 import { PgTable } from "drizzle-orm/pg-core";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 
 import { findTableOwnershipConflicts } from "./tableOwnership.ts";
 
@@ -14,7 +14,9 @@ const definitions = await Promise.all(
     const owner = file.slice(0, file.indexOf(sep));
     const tableModule: unknown = await import(pathToFileURL(join(contextsRoot, file)).href);
     return Object.values(
-      Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown))(tableModule),
+      Effect.runSync(
+        Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.Unknown))(tableModule),
+      ),
     )
       .filter((value) => is(value, PgTable))
       .map((table) => ({

@@ -3,6 +3,7 @@ import type { SQL } from "drizzle-orm";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import type { AccountExportArea } from "#contexts/privacy/AccountExport.ts";
+import jsonTools from "#runtime/JsonText.ts";
 
 import { accountExports } from "./AccountExportTable.ts";
 
@@ -321,7 +322,7 @@ export function recordOwnerExport(
 ): SQL {
   return sql`
     insert into ${accountExports} (user_id, taken_at, contents)
-    values (${userId}, ${takenAt}, ${JSON.stringify(contents)}::jsonb)
+    values (${userId}, ${takenAt}, ${jsonTools.jsonString(contents)}::jsonb)
     on conflict (user_id) do update
       set taken_at = excluded.taken_at, contents = excluded.contents
   `;

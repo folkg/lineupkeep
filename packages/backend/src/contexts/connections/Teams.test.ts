@@ -6,6 +6,7 @@ import { Array, DateTime, Effect, Layer, Redacted, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
+import layerTools from "#runtime/ProvideLayer.ts";
 
 import {
   type ConnectionError,
@@ -57,7 +58,7 @@ it.effect("discovers multiple teams in one league and persists them disabled", (
     assert.isTrue(discovered.every((row) => row.availability === "available"));
     assert.deepStrictEqual(yield* connections.listTeams(owner), discovered);
     assert.deepStrictEqual(yield* connections.listTeams(other), []);
-  }).pipe(Effect.provide(ConnectionsTestLayer)),
+  }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
 it.effect("keeps the fantasy league name and provider url discovered for each team", () =>
@@ -100,7 +101,7 @@ it.effect("keeps the fantasy league name and provider url discovered for each te
       Array.getUnsafe(refreshed, 0).providerUrl,
       "https://provider.example/hockey/1/2",
     );
-  }).pipe(Effect.provide(ConnectionsTestLayer)),
+  }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
 it.effect("names a stored team's league on the teams list read", () =>
@@ -129,7 +130,7 @@ it.effect("names a stored team's league on the teams list read", () =>
     assert.strictEqual(summary.team.leagueName, "Elite League 25");
     assert.strictEqual(summary.team.providerUrl, "https://provider.example/hockey/1/1");
     assert.strictEqual(summary.connectionCount, 1);
-  }).pipe(Effect.provide(TeamsTestLayer)),
+  }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
 it.effect("does not rediscover a team whose league is already named", () =>
@@ -152,7 +153,7 @@ it.effect("does not rediscover a team whose league is already named", () =>
 
     assert.strictEqual(summary.team.leagueName, "Elite League 25");
     assert.strictEqual((yield* fake.providerReads) - before, 0);
-  }).pipe(Effect.provide(TeamsTestLayer)),
+  }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
 it.effect("lists a team whose league name cannot be read", () =>
@@ -170,7 +171,7 @@ it.effect("lists a team whose league name cannot be read", () =>
     assert.strictEqual(summary.team.name, "First Skate");
     assert.strictEqual(summary.team.leagueName, undefined);
     assert.strictEqual(summary.connectionStatus, "ready");
-  }).pipe(Effect.provide(TeamsTestLayer)),
+  }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
 it.effect("refreshes availability, restores teams, and preserves configuration", () =>
@@ -221,7 +222,7 @@ it.effect("refreshes availability, restores teams, and preserves configuration",
     assert.isTrue(restored.every((row) => row.availability === "available"));
     assert.strictEqual(findTeam(restored, first.providerTeamKey).automation.status, "enabled");
     assert.strictEqual(findTeam(restored, third.providerTeamKey).automation.status, "disabled");
-  }).pipe(Effect.provide(ConnectionsTestLayer)),
+  }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
 it.effect("requires a new credential generation after the provider rejects discovery", () =>
@@ -255,7 +256,7 @@ it.effect("requires a new credential generation after the provider rejects disco
     assert.strictEqual(recovered.status, "ready");
     assert.strictEqual(recovered.credentialGeneration, 2);
     assert.strictEqual(Array.getUnsafe(rediscovered, 0).availability, "available");
-  }).pipe(Effect.provide(ConnectionsTestLayer)),
+  }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
 it.effect("rejects discovery for another owner", () =>
@@ -266,7 +267,7 @@ it.effect("rejects discovery for another owner", () =>
     const foreign = yield* Effect.flip(connections.discoverTeams(other, [{ id: ready.id }]));
 
     assert.instanceOf(foreign, ConnectionNotFound);
-  }).pipe(Effect.provide(ConnectionsTestLayer)),
+  }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
 it.effect("marks teams unavailable when their connection is disconnected", () =>
@@ -282,7 +283,7 @@ it.effect("marks teams unavailable when their connection is disconnected", () =>
 
     assert.strictEqual(Array.getUnsafe(teams, 0).availability, "unavailable");
     assert.strictEqual(Array.getUnsafe(teams, 0).automation.status, "disabled");
-  }).pipe(Effect.provide(ConnectionsTestLayer)),
+  }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
 it.effect("rejects tampered credentials without exposing their contents", () =>
@@ -300,7 +301,7 @@ it.effect("rejects tampered credentials without exposing their contents", () =>
     assert.strictEqual(error._tag, "connection.persistence_failed");
     assert.notInclude(String(error), "tampered-envelope");
     assert.deepStrictEqual(yield* connections.listTeams(owner), []);
-  }).pipe(Effect.provide(ConnectionsTestLayer)),
+  }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
 it.effect("leaves stored teams unchanged when the provider is unavailable", () =>
@@ -317,7 +318,7 @@ it.effect("leaves stored teams unchanged when the provider is unavailable", () =
 
     assert.instanceOf(error, ConnectionProviderUnavailable);
     assert.strictEqual(Array.getUnsafe(teams, 0).availability, "available");
-  }).pipe(Effect.provide(ConnectionsTestLayer)),
+  }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
 function connect(

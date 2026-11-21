@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 
+import { Effect } from "effect";
 import { Schema } from "effect";
 import postgres from "postgres";
 
@@ -95,8 +96,10 @@ export async function testContainers(
     await Promise.all(
       ids.map(async (id) => {
         try {
-          return Schema.decodeUnknownSync(InspectedContainers)(
-            await docker(["container", "inspect", id], signal),
+          return Effect.runSync(
+            Schema.decodeUnknownEffect(InspectedContainers)(
+              await docker(["container", "inspect", id], signal),
+            ),
           );
         } catch (error) {
           if (error instanceof Error && /No such (container|object)/u.test(error.message)) {
@@ -123,8 +126,10 @@ async function removeIfPresent(
   signal: AbortSignal,
 ): Promise<boolean> {
   try {
-    const [container] = Schema.decodeSync(InspectedContainers)(
-      await docker(["container", "inspect", name], signal),
+    const [container] = Effect.runSync(
+      Schema.decodeEffect(InspectedContainers)(
+        await docker(["container", "inspect", name], signal),
+      ),
     );
     if (
       container?.Config.Labels?.[disposableLabel] !== kind ||

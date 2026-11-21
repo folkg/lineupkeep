@@ -294,15 +294,18 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
           .orderBy(desc(providerTeamAgentNotes.writtenAt), desc(providerTeamAgentNotes.id))
           .limit(recentAgentNoteLimit)
           .pipe(Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })));
-        return yield* Effect.forEach(rows, (row) =>
-          Schema.decodeEffect(AgentNoteRow)(row).pipe(
-            Effect.map((stored): TeamAgentNote => ({
-              author: { clientId: stored.authorClientId, name: stored.authorName },
-              body: stored.body,
-              writtenAt: stored.writtenAt,
-            })),
-            Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })),
-          ),
+        return yield* Effect.forEach(
+          rows,
+          (row) =>
+            Schema.decodeEffect(AgentNoteRow)(row).pipe(
+              Effect.map((stored): TeamAgentNote => ({
+                author: { clientId: stored.authorClientId, name: stored.authorName },
+                body: stored.body,
+                writtenAt: stored.writtenAt,
+              })),
+              Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })),
+            ),
+          { concurrency: 1 },
         );
       });
 

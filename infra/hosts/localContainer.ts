@@ -26,8 +26,9 @@ export function localContainerHost(
   return Layer.effect(HostDeployment)(
     Effect.gen(function* () {
       const docker = yield* Docker.Docker;
-      const bridge = Schema.decodeUnknownSync(BridgeNetwork)(
-        yield* docker.network.inspect("bridge").pipe(Effect.orDie),
+      const inspectedBridge = yield* docker.network.inspect("bridge").pipe(Effect.orDie);
+      const bridge = yield* Schema.decodeUnknownEffect(BridgeNetwork)(inspectedBridge).pipe(
+        Effect.orDie,
       );
       const gateways = bridge.IPAM.Config.flatMap(({ Gateway }) =>
         Gateway === undefined || Gateway === "" ? [] : [Gateway],

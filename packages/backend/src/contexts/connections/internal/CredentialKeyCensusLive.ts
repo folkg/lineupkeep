@@ -19,11 +19,14 @@ export const CredentialKeyCensusLive = Layer.effect(
 
     const report = Effect.fn("CredentialKeyCensus.report")(function* () {
       const envelopes = yield* credentials.listAllEnvelopes();
-      const keyVersions = yield* Effect.forEach(envelopes, (envelope) =>
-        decodeCredentialEnvelope(envelope).pipe(
-          Effect.map((decoded) => decoded.keyVersion),
-          Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
-        ),
+      const keyVersions = yield* Effect.forEach(
+        envelopes,
+        (envelope) =>
+          decodeCredentialEnvelope(envelope).pipe(
+            Effect.map((decoded) => decoded.keyVersion),
+            Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+          ),
+        { concurrency: 1 },
       );
       const usage = countKeyVersions(keyVersions);
       const currentKeyVersion = encryption.currentKeyVersion;

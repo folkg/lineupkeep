@@ -70,8 +70,10 @@ export const nhlGameSource: Effect.Effect<GameSourceShape, never, PublicInternet
           GameSourceResponseInvalid.make({ source: sourceKey, field: "payload" }),
         ),
       );
-      const games = yield* Effect.forEach(decoded.gameWeek.flatMap(gameDayEntries), (entry) =>
-        gameOf(entry.date, entry.game),
+      const games = yield* Effect.forEach(
+        decoded.gameWeek.flatMap(gameDayEntries),
+        (entry) => gameOf(entry.date, entry.game),
+        { concurrency: 1 },
       );
       return {
         league: input.league,

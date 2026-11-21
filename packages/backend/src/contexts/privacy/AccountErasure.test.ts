@@ -5,6 +5,8 @@ import { Duration, Effect, Exit, Layer } from "effect";
 import { Digest } from "effect/crypto";
 import { TestClock } from "effect/testing";
 
+import layerTools from "#runtime/ProvideLayer.ts";
+
 import { AccountErasure } from "./AccountErasure.ts";
 import { AccountExport } from "./AccountExport.ts";
 import { AccountDataRepository } from "./internal/AccountDataRepository.ts";
@@ -46,7 +48,7 @@ it.effect(
           `the erasure inventory names ${entry.table}, which is not a table in the catalog`,
         );
       }
-    }).pipe(Effect.provide(ErasureTestLayer)),
+    }).pipe(layerTools.provide(ErasureTestLayer)),
   30_000,
 );
 
@@ -63,7 +65,7 @@ it.effect(
 
       assert.strictEqual(refused._tag, "account_erasure.export_required");
       assert.deepStrictEqual(yield* countClasses(account), before);
-    }).pipe(Effect.provide(ErasureTestLayer)),
+    }).pipe(layerTools.provide(ErasureTestLayer)),
   30_000,
 );
 
@@ -83,7 +85,7 @@ it.effect(
 
       assert.strictEqual(refused._tag, "account_erasure.export_required");
       assert.deepStrictEqual(yield* countClasses(account), before);
-    }).pipe(Effect.provide(ErasureTestLayer)),
+    }).pipe(layerTools.provide(ErasureTestLayer)),
   30_000,
 );
 
@@ -109,7 +111,7 @@ it.effect(
       );
       const refused = yield* Effect.flip(erasure.erase(owner.id));
       assert.strictEqual(refused._tag, "account_erasure.export_required");
-    }).pipe(Effect.provide(ErasureTestLayer)),
+    }).pipe(layerTools.provide(ErasureTestLayer)),
   30_000,
 );
 
@@ -130,7 +132,7 @@ it.effect(
       yield* exporter.exportData(owner.id);
       const second = yield* erasure.erase(owner.id);
       assert.deepStrictEqual(second, { removed: [] });
-    }).pipe(Effect.provide(ErasureTestLayer)),
+    }).pipe(layerTools.provide(ErasureTestLayer)),
   30_000,
 );
 
@@ -183,7 +185,7 @@ it.effect(
         summary.removed.reduce((total, entry) => total + entry.count, 0),
         0,
       );
-    }).pipe(Effect.provide(ErasureTestLayer)),
+    }).pipe(layerTools.provide(ErasureTestLayer)),
   30_000,
 );
 
@@ -201,7 +203,7 @@ it.effect(
       const second = yield* erasure.erase(owner.id);
 
       assert.deepStrictEqual(second, { removed: [] });
-    }).pipe(Effect.provide(ErasureTestLayer)),
+    }).pipe(layerTools.provide(ErasureTestLayer)),
   30_000,
 );
 
@@ -230,7 +232,7 @@ it.effect(
         countRowsCarryingOwnerColumn("user", "id", owner.id),
       );
       assert.strictEqual(storedUser.rows[0]?.["count"], 1);
-    }).pipe(Effect.provide(ErasureTestLayer)),
+    }).pipe(layerTools.provide(ErasureTestLayer)),
   30_000,
 );
 

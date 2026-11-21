@@ -1,5 +1,7 @@
 import { Exit, Option, Redacted, Tracer } from "effect";
 
+import jsonTools from "#runtime/JsonText.ts";
+
 const maximumAttributes = 64;
 const maximumAttributeLength = 512;
 const maximumArrayItems = 16;
@@ -67,7 +69,7 @@ function makeRecorder(write: (line: string) => void): SpanRecorder {
         if (!record.nested) {
           traces.delete(record.traceId);
         }
-        write(JSON.stringify(entryOf(unitKind, spans, record)));
+        write(jsonTools.jsonString(entryOf(unitKind, spans, record)));
       } catch {
         return;
       }

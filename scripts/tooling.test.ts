@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { findTableOwnershipConflicts } from "@lineupkeep/backend/scripts/tableOwnership.ts";
+import { Effect } from "effect";
 import { Schema } from "effect";
 import { expect, it } from "vitest";
 
@@ -58,7 +60,7 @@ it("discovers only owned table modules for migrations in an unlisted domain", as
   const result = await checkMigrationDiscovery(files);
 
   expect(result.status, result.output).toBe(0);
-  expect(JSON.parse(result.output)).toEqual([
+  expect(jsonTools.jsonValue(result.output)).toEqual([
     "packages/backend/src/contexts/calendar/internal/AppointmentTable.ts",
     "packages/backend/src/contexts/calendar/internal/nested/CalendarTables.ts",
   ]);
@@ -93,11 +95,13 @@ it("permits repeated definitions within one owner and distinct physical schemas"
 });
 
 it("keeps a concrete remedy in every dependency rule's diagnostic contract", () => {
-  const configuration = Schema.decodeUnknownSync(
-    Schema.Struct({
-      forbidden: Schema.Array(Schema.Struct({ name: Schema.String, comment: Schema.String })),
-    }),
-  )(dependencyConfiguration);
+  const configuration = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Struct({
+        forbidden: Schema.Array(Schema.Struct({ name: Schema.String, comment: Schema.String })),
+      }),
+    )(dependencyConfiguration),
+  );
 
   expect(configuration.forbidden.length).toBeGreaterThan(0);
   expect(new Set(configuration.forbidden.map((rule) => rule.name)).size).toBe(
@@ -130,7 +134,7 @@ it("keeps Bun-dispatched Alchemy on its Node branch without inherited credential
     import { writeFileSync } from "node:fs";
     registerHooks({ load(url, context, next) {
       if (url.endsWith("/alchemy/bin/register-oxc.js")) {
-        writeFileSync(${JSON.stringify(report)}, JSON.stringify({
+        writeFileSync(${jsonTools.jsonString(report)}, JSON.stringify({
           runtime: process.release.name,
           version: process.versions.node,
           npmExecpath: process.env.npm_execpath ?? null,
@@ -155,7 +159,7 @@ it("keeps Bun-dispatched Alchemy on its Node branch without inherited credential
     timeout: 30_000,
     stdio: "pipe",
   });
-  const observed: unknown = JSON.parse(await readFile(report, "utf8"));
+  const observed: unknown = jsonTools.jsonValue(await readFile(report, "utf8"));
 
   expect(observed).toEqual({
     runtime: "node",
@@ -204,13 +208,15 @@ it("includes root tooling without generated TypeScript or scratch scenarios", as
     ],
     { encoding: "utf8", timeout: 30_000 },
   );
-  const config = Schema.decodeSync(
-    Schema.fromJsonString(
-      Schema.Struct({
-        files: Schema.Array(Schema.String),
-      }),
-    ),
-  )(output);
+  const config = Effect.runSync(
+    Schema.decodeEffect(
+      Schema.fromJsonString(
+        Schema.Struct({
+          files: Schema.Array(Schema.String),
+        }),
+      ),
+    )(output),
+  );
 
   expect(config.files).toEqual(expect.arrayContaining(expected.map((path) => `./${path}`)));
   for (const path of excluded) {
@@ -219,7 +225,7 @@ it("includes root tooling without generated TypeScript or scratch scenarios", as
 });
 
 const consumedBackendFixture = {
-  "package.json": JSON.stringify({
+  "package.json": jsonTools.jsonString({
     private: true,
     type: "module",
     workspaces: ["packages/*", "apps/*"],

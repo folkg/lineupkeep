@@ -2,6 +2,8 @@ import { Effect, Layer, ManagedRuntime, Option, Tracer } from "effect";
 import { Headers, HttpTraceContext } from "effect/http";
 import * as OtlpExporter from "effect/observability/OtlpExporter";
 
+import layerTools from "#runtime/ProvideLayer.ts";
+
 import { ApplicationLayer } from "./ApplicationLayer.ts";
 import type { BackendServices } from "./ApplicationLayer.ts";
 import type { BackendPlatform } from "./BackendPlatform.ts";
@@ -38,8 +40,7 @@ export class BackendRuntime<Services = BackendServices> {
 
     const runtime = ManagedRuntime.make(processLayer);
     return new BackendRuntime({
-      run: (effect) =>
-        runtime.runPromise(Effect.provide(effect, applicationLayer, { local: true })),
+      run: (effect) => runtime.runPromise(layerTools.provideLayer(effect, applicationLayer)),
       runPlatform: (effect) => runtime.runPromise(effect),
       dispose: () => runtime.dispose(),
       afterResponse: platform.afterResponse,
@@ -132,7 +133,7 @@ export class BackendRuntime<Services = BackendServices> {
             kind: "server",
             parent: traceParent(request),
           }),
-          Effect.provide(requestContextLayer(requestContext)),
+          layerTools.provide(requestContextLayer(requestContext)),
         );
       }),
     );

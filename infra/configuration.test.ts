@@ -196,9 +196,9 @@ it.effect("exports traces using the forwarded production configuration", () =>
         expect(request.headers["authorization"]).toBe("private-exporter-secret");
         expect(request.body._tag).toBe("Uint8Array");
         if (request.body._tag === "Uint8Array") {
-          const payload = Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(
+          const payload = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(
             new TextDecoder().decode(request.body.body),
-          );
+          ).pipe(Effect.orDie);
           yield* Ref.update(exports, (payloads) => [...payloads, payload]);
         }
         return HttpClientResponse.fromWeb(request, new Response("{}"));

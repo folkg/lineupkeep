@@ -2,6 +2,8 @@ import { assert, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Fiber, Option, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 
+import layerTools from "#runtime/ProvideLayer.ts";
+
 import { publicInternetIsolate } from "./public-internet/transport/isolate/PublicInternetIsolate.ts";
 import { publicInternetProcess } from "./public-internet/transport/node/PublicInternetProcess.ts";
 import { PublicInternet } from "./PublicInternet.ts";
@@ -30,7 +32,7 @@ for (const [name, layer] of [
 
         assert.isTrue(Exit.isFailure(result), url);
       }
-    }).pipe(Effect.provide(layer)),
+    }).pipe(layerTools.provide(layer)),
   );
 
   it.effect(`cancels before any connection on ${name}`, () =>
@@ -41,7 +43,7 @@ for (const [name, layer] of [
       const result = yield* Effect.exit(internet.request(request));
 
       assert.isTrue(Exit.isFailure(result));
-    }).pipe(Effect.provide(layer)),
+    }).pipe(layerTools.provide(layer)),
   );
 }
 
@@ -115,7 +117,7 @@ it.effect(
       ]) {
         assert.notInclude(exported, secret);
       }
-    }).pipe(Effect.provide(layer), Effect.withSpan("provider.send"), Effect.withTracer(tracer));
+    }).pipe(layerTools.provide(layer), Effect.withSpan("provider.send"), Effect.withTracer(tracer));
   },
 );
 
@@ -131,7 +133,7 @@ it.effect("refuses a redirect and says why it refused", () => {
     const error = yield* Effect.flip(internet.request(new Request("https://client.test/move")));
 
     assert.strictEqual(error.reason, "blocked_redirect");
-  }).pipe(Effect.provide(layer));
+  }).pipe(layerTools.provide(layer));
 });
 
 it.effect("scrubs streamed failures before callers can export their causes", () =>
@@ -147,7 +149,7 @@ it.effect("scrubs streamed failures before callers can export their causes", () 
     assert.include(error, "PublicInternetUnavailable");
     assert.notInclude(error, "private-body");
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       PublicInternet.fromTransport(() =>
         Promise.resolve(
           new Response(
@@ -172,7 +174,7 @@ it.effect("reads a response body inside its request scope", () =>
 
     assert.strictEqual(text, "inside");
   }).pipe(
-    Effect.provide(PublicInternet.fromTransport(() => Promise.resolve(new Response("inside")))),
+    layerTools.provide(PublicInternet.fromTransport(() => Promise.resolve(new Response("inside")))),
   ),
 );
 
@@ -189,7 +191,7 @@ it.effect("names a body read after its request scope closed", () =>
     assert.notInclude(error.message, "abort");
     assert.strictEqual(tagOf(error), "PublicInternetBodyUnavailable");
   }).pipe(
-    Effect.provide(PublicInternet.fromTransport(() => Promise.resolve(new Response("late")))),
+    layerTools.provide(PublicInternet.fromTransport(() => Promise.resolve(new Response("late")))),
   ),
 );
 
@@ -208,7 +210,9 @@ it.effect("cancels a response body inside its request scope without failing", ()
 
     assert.isTrue(Exit.isSuccess(result));
   }).pipe(
-    Effect.provide(PublicInternet.fromTransport(() => Promise.resolve(new Response("cancelled")))),
+    layerTools.provide(
+      PublicInternet.fromTransport(() => Promise.resolve(new Response("cancelled"))),
+    ),
   ),
 );
 
@@ -229,7 +233,7 @@ it.effect("names a second read of a consumed body as already read", () =>
     assert.include(second.message, "already read");
     assert.strictEqual(tagOf(second), "PublicInternetBodyUnavailable");
   }).pipe(
-    Effect.provide(PublicInternet.fromTransport(() => Promise.resolve(new Response("twice")))),
+    layerTools.provide(PublicInternet.fromTransport(() => Promise.resolve(new Response("twice")))),
   ),
 );
 
@@ -250,7 +254,7 @@ it.effect("uses a 15-second deadline when the caller omits one", () => {
     const result = yield* Effect.exit(Fiber.join(pending));
 
     assert.isTrue(Exit.isFailure(result));
-  }).pipe(Effect.provide(layer));
+  }).pipe(layerTools.provide(layer));
 });
 
 it.effect("allows only empty responses with a zero-byte cap", () =>
@@ -269,7 +273,7 @@ it.effect("allows only empty responses with a zero-byte cap", () =>
     assert.strictEqual(text, "");
     assert.strictEqual(tagOf(error), "PublicInternetUnavailable");
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       PublicInternet.fromTransport((request) =>
         Promise.resolve(new Response(request.url.endsWith("/empty") ? "" : "x")),
       ),
@@ -300,7 +304,7 @@ it.effect("rejects invalid limits before invoking a transport", () => {
       assert.isTrue(Exit.isFailure(result));
       assert.isFalse(connected);
     }
-  }).pipe(Effect.provide(layer));
+  }).pipe(layerTools.provide(layer));
 });
 
 function readFailure(read: () => Promise<unknown>): Effect.Effect<Error> {

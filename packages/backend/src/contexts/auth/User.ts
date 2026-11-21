@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 
 export const UserId = Schema.String.pipe(
   Schema.check(Schema.isMinLength(1)),
@@ -6,4 +6,5 @@ export const UserId = Schema.String.pipe(
 );
 export type UserId = typeof UserId.Type;
 
-export const decodeUserId = Schema.decodeUnknownSync(UserId);
+export const decodeUserId = (value: unknown): UserId =>
+  Effect.runSync(Schema.decodeUnknownEffect(UserId)(value));

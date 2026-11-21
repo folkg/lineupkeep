@@ -1,5 +1,5 @@
 import { UserId } from "@lineupkeep/backend/auth/User";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import type { DateTime } from "effect";
 
 import { ProviderKey } from "./ProviderKey.ts";
@@ -13,7 +13,8 @@ const LineupgradeId = Schema.Union([
 
 export const ConnectionId = LineupgradeId.pipe(Schema.brand("ConnectionId"));
 export type ConnectionId = typeof ConnectionId.Type;
-export const decodeConnectionId = Schema.decodeUnknownSync(ConnectionId);
+export const decodeConnectionId = (value: unknown): ConnectionId =>
+  Effect.runSync(Schema.decodeUnknownEffect(ConnectionId)(value));
 
 export const ConnectionStatus = Schema.Literals([
   "linking",

@@ -124,8 +124,10 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
           .orderBy(asc(providerConnections.id))
           .limit(connectionListLimit)
           .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
-        return yield* Effect.forEach(rows, (row) =>
-          toConnection({ connection: row, provenAt: row.provenAt }),
+        return yield* Effect.forEach(
+          rows,
+          (row) => toConnection({ connection: row, provenAt: row.provenAt }),
+          { concurrency: 1 },
         );
       });
 
@@ -154,11 +156,14 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
           .from(providerConnections)
           .where(or(...filters))
           .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
-        return yield* Effect.forEach(rows, (row) =>
-          Effect.map(Schema.decodeEffect(ConnectionStatus)(row.status), (status) => ({
-            id: decodeConnectionId(row.id),
-            status,
-          })).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause }))),
+        return yield* Effect.forEach(
+          rows,
+          (row) =>
+            Effect.map(Schema.decodeEffect(ConnectionStatus)(row.status), (status) => ({
+              id: decodeConnectionId(row.id),
+              status,
+            })).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause }))),
+          { concurrency: 1 },
         );
       });
 
@@ -198,17 +203,24 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
           .orderBy(asc(providerConnections.id))
           .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
         const byId = new Map(
-          yield* Effect.forEach(rows, (row) =>
-            Schema.decodeEffect(ConnectionRow)(row).pipe(
-              Effect.map((record) => [record.id, record] as const),
-              Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
-            ),
+          yield* Effect.forEach(
+            rows,
+            (row) =>
+              Schema.decodeEffect(ConnectionRow)(row).pipe(
+                Effect.map((record) => [record.id, record] as const),
+                Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+              ),
+            { concurrency: 1 },
           ),
         );
-        return yield* Effect.forEach(ids, (id) => {
-          const record = byId.get(id);
-          return record === undefined ? ConnectionNotFound.make({ id }) : Effect.succeed(record);
-        });
+        return yield* Effect.forEach(
+          ids,
+          (id) => {
+            const record = byId.get(id);
+            return record === undefined ? ConnectionNotFound.make({ id }) : Effect.succeed(record);
+          },
+          { concurrency: 1 },
+        );
       });
 
       const loadCredential = Effect.fn("ConnectionRepository.loadCredential")(function* (
@@ -253,21 +265,24 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
         }
         const now = yield* DateTime.now;
         const expiresAt = DateTime.addDuration(now, connectionLinkingWindowMillis);
-        const rows = yield* Effect.forEach(inputs, (input) =>
-          Effect.map(generateConnectionId, (id) => ({
-            id,
-            userId,
-            requestId: input.requestId,
-            provider: input.provider,
-            status: "linking" as const,
-            expiresAt: DateTime.toDateUtc(expiresAt),
-            approvedAt: null,
-            credentialGeneration: null,
-            reconnectRequiredAt: null,
-            disconnectedAt: null,
-            createdAt: DateTime.toDateUtc(now),
-            updatedAt: DateTime.toDateUtc(now),
-          })),
+        const rows = yield* Effect.forEach(
+          inputs,
+          (input) =>
+            Effect.map(generateConnectionId, (id) => ({
+              id,
+              userId,
+              requestId: input.requestId,
+              provider: input.provider,
+              status: "linking" as const,
+              expiresAt: DateTime.toDateUtc(expiresAt),
+              approvedAt: null,
+              credentialGeneration: null,
+              reconnectRequiredAt: null,
+              disconnectedAt: null,
+              createdAt: DateTime.toDateUtc(now),
+              updatedAt: DateTime.toDateUtc(now),
+            })),
+          { concurrency: 1 },
         );
         return yield* database
           .transaction((tx) =>
@@ -317,8 +332,10 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                 "connections.created_count": inserted.length,
                 "connections.replayed_count": inputs.length - inserted.length,
               });
-              return yield* Effect.forEach(ordered, (row) =>
-                toConnection({ connection: row, provenAt: null }),
+              return yield* Effect.forEach(
+                ordered,
+                (row) => toConnection({ connection: row, provenAt: null }),
+                { concurrency: 1 },
               );
             }),
           )
@@ -757,23 +774,26 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                         );
                       if (Array.isArrayNonEmpty(open)) {
                         const initial = initialConnectionNotificationState(at);
-                        const pending = yield* Effect.forEach(open, (incident) =>
-                          Effect.map(
-                            newNotificationId,
-                            (id): typeof notifications.$inferInsert => ({
-                              id,
-                              userId: incident.userId,
-                              incidentId: incident.id,
-                              kind: "connection_reconnect_required",
-                              status: initial._tag,
-                              attempts: initial.attempts,
-                              nextAttemptAt: DateTime.toDateUtc(initial.nextAttemptAt),
-                              lastError: initial.lastError,
-                              createdAt: DateTime.toDateUtc(at),
-                              updatedAt: DateTime.toDateUtc(initial.updatedAt),
-                              sentAt: null,
-                            }),
-                          ),
+                        const pending = yield* Effect.forEach(
+                          open,
+                          (incident) =>
+                            Effect.map(
+                              newNotificationId,
+                              (id): typeof notifications.$inferInsert => ({
+                                id,
+                                userId: incident.userId,
+                                incidentId: incident.id,
+                                kind: "connection_reconnect_required",
+                                status: initial._tag,
+                                attempts: initial.attempts,
+                                nextAttemptAt: DateTime.toDateUtc(initial.nextAttemptAt),
+                                lastError: initial.lastError,
+                                createdAt: DateTime.toDateUtc(at),
+                                updatedAt: DateTime.toDateUtc(initial.updatedAt),
+                                sentAt: null,
+                              }),
+                            ),
+                          { concurrency: 1 },
                         );
                         yield* transaction
                           .insert(notifications)
@@ -826,21 +846,28 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
           .orderBy(asc(providerCredentials.connectionId))
           .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
         const byId = new Map(
-          yield* Effect.forEach(rows, (row) =>
-            Schema.decodeEffect(ReadyCredentialRow)(row).pipe(
-              Effect.map((credential) => [credential.connectionId, credential] as const),
-              Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
-            ),
+          yield* Effect.forEach(
+            rows,
+            (row) =>
+              Schema.decodeEffect(ReadyCredentialRow)(row).pipe(
+                Effect.map((credential) => [credential.connectionId, credential] as const),
+                Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+              ),
+            { concurrency: 1 },
           ),
         );
-        return yield* Effect.forEach(ids, (id) => {
-          const credential = byId.get(id);
-          return credential === undefined
-            ? ConnectionPersistenceFailed.make({
-                cause: new Error("ready connection is missing its credential"),
-              })
-            : Effect.succeed(credential);
-        });
+        return yield* Effect.forEach(
+          ids,
+          (id) => {
+            const credential = byId.get(id);
+            return credential === undefined
+              ? ConnectionPersistenceFailed.make({
+                  cause: new Error("ready connection is missing its credential"),
+                })
+              : Effect.succeed(credential);
+          },
+          { concurrency: 1 },
+        );
       });
 
       const recordDiscoveries = Effect.fn("ConnectionRepository.recordDiscoveries")(function* (
@@ -856,6 +883,12 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
           return;
         }
         const atDate = DateTime.toDateUtc(at);
+        const disabledAutomation = yield* Schema.encodeEffect(
+          Schema.toCodecJson(TeamAutomationState),
+        )({
+          _tag: "Disabled" as const,
+          changedAt: at,
+        }).pipe(Effect.orDie);
         const rows = yield* Effect.forEach(
           discoveries,
           ({ connectionId, teams }) =>
@@ -877,10 +910,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                     leagueName: team.leagueName ?? null,
                     providerUrl: team.providerUrl ?? null,
                     availability: "available" as const,
-                    automationState: Schema.encodeSync(Schema.toCodecJson(TeamAutomationState))({
-                      _tag: "Disabled" as const,
-                      changedAt: at,
-                    }),
+                    automationState: disabledAutomation,
                     automationStatus: "disabled" as const,
                     lastSeenAt: atDate,
                     createdAt: atDate,
@@ -959,7 +989,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
           .where(eq(providerTeams.userId, userId))
           .orderBy(asc(providerTeams.league), asc(providerTeams.name), asc(providerTeams.id))
           .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
-        return yield* Effect.forEach(rows, toFantasyTeam);
+        return yield* Effect.forEach(rows, toFantasyTeam, { concurrency: 1 });
       });
 
       const listTeamsForConnections = Effect.fn("ConnectionRepository.listTeamsForConnections")(
@@ -976,7 +1006,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
             )
             .orderBy(asc(providerTeams.league), asc(providerTeams.name), asc(providerTeams.id))
             .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
-          return yield* Effect.forEach(rows, toFantasyTeam);
+          return yield* Effect.forEach(rows, toFantasyTeam, { concurrency: 1 });
         },
       );
 
@@ -1029,13 +1059,16 @@ function resolveIncidents(
       ids: openIds,
       codec: ConnectionIncidentsRow,
       plan: (locked) =>
-        Effect.forEach([...locked.values()], (row) =>
-          Effect.map(
-            Effect.flatMap(snapshotOf(ConnectionIncidentWorkflow, row.state), (snapshot) =>
-              plan(ConnectionIncidentWorkflow, snapshot, { _tag: "Resolved", at, resolution }),
+        Effect.forEach(
+          [...locked.values()],
+          (row) =>
+            Effect.map(
+              Effect.flatMap(snapshotOf(ConnectionIncidentWorkflow, row.state), (snapshot) =>
+                plan(ConnectionIncidentWorkflow, snapshot, { _tag: "Resolved", at, resolution }),
+              ),
+              (state) => ({ ...row, state }),
             ),
-            (state) => ({ ...row, state }),
-          ),
+          { concurrency: 1 },
         ),
     });
     const incidentIds: string[] = resolved.map((row) => row.id);
@@ -1058,13 +1091,16 @@ function resolveIncidents(
         ids: notificationIds,
         codec: NotificationsRow,
         plan: (locked) =>
-          Effect.forEach([...locked.values()], (row) =>
-            Effect.map(
-              Effect.flatMap(snapshotOf(ConnectionNotificationWorkflow, row.state), (snapshot) =>
-                plan(ConnectionNotificationWorkflow, snapshot, { _tag: "Cancelled", at }),
+          Effect.forEach(
+            [...locked.values()],
+            (row) =>
+              Effect.map(
+                Effect.flatMap(snapshotOf(ConnectionNotificationWorkflow, row.state), (snapshot) =>
+                  plan(ConnectionNotificationWorkflow, snapshot, { _tag: "Cancelled", at }),
+                ),
+                (state) => ({ ...row, state }),
               ),
-              (state) => ({ ...row, state }),
-            ),
+            { concurrency: 1 },
           ),
       });
     }
@@ -1129,7 +1165,7 @@ function orderConnections(
 }
 
 function makeCredentialGeneration(value: number): ConnectionCredentialGeneration {
-  return Schema.decodeSync(ConnectionCredentialGeneration)(value);
+  return Effect.runSync(Schema.decodeEffect(ConnectionCredentialGeneration)(value));
 }
 
 function mapTransactionError<A, R>(

@@ -69,7 +69,9 @@ export async function resetDevelopmentDatabase(
   }
   const volumes = await docker(["volume", "ls", "--quiet", "--filter", `name=^${volume}$`]);
   if (volumes !== "") {
-    const [entry] = Schema.decodeSync(Volumes)(await docker(["volume", "inspect", volume]));
+    const [entry] = Effect.runSync(
+      Schema.decodeEffect(Volumes)(await docker(["volume", "inspect", volume])),
+    );
     if (entry?.Labels?.[ownerLabel] !== checkout || entry.Labels[purposeLabel] !== "development") {
       throw new Error("Refusing reset of a volume with different ownership labels");
     }
@@ -121,7 +123,9 @@ async function startDatabase(identity: DevelopmentDatabaseIdentity): Promise<{
         volume,
       ]);
     }
-    const [entry] = Schema.decodeSync(Volumes)(await docker(["volume", "inspect", volume]));
+    const [entry] = Effect.runSync(
+      Schema.decodeEffect(Volumes)(await docker(["volume", "inspect", volume])),
+    );
     if (entry?.Labels?.[ownerLabel] !== checkout || entry.Labels[purposeLabel] !== "development") {
       throw new Error("Refusing a development volume owned elsewhere");
     }
@@ -175,7 +179,7 @@ async function inspectContainer(identity: DevelopmentDatabaseIdentity): Promise<
   if (names === "") {
     return false;
   }
-  const [entry] = Schema.decodeSync(Containers)(await docker(["inspect", name]));
+  const [entry] = Effect.runSync(Schema.decodeEffect(Containers)(await docker(["inspect", name])));
   if (
     entry?.Config.Labels?.[ownerLabel] !== checkout ||
     entry.Config.Labels[purposeLabel] !== "development" ||

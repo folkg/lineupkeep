@@ -51,9 +51,9 @@ export function makeTelemetryTest(): {
     read: () => ({
       payloads,
       spans: payloads.flatMap((payload) =>
-        Schema.decodeSync(Schema.fromJsonString(TracePayload))(payload).resourceSpans.flatMap(
-          (resource) => resource.scopeSpans.flatMap((scope) => scope.spans),
-        ),
+        Effect.runSync(
+          Schema.decodeEffect(Schema.fromJsonString(TracePayload))(payload),
+        ).resourceSpans.flatMap((resource) => resource.scopeSpans.flatMap((scope) => scope.spans)),
       ),
     }),
   };

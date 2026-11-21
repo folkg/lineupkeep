@@ -5,6 +5,8 @@ import { connect } from "node:net";
 import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { Effect } from "effect";
 import { Schema } from "effect";
 
 export async function runVerification(plan: VerificationPlan): Promise<VerificationOutcome> {
@@ -82,7 +84,7 @@ export async function recoverVerification(
   const complete = steps.every((step) => step.status === "done");
   await writeFile(
     join(owner.directory, "recovery.json"),
-    JSON.stringify({ runId: owner.runId, complete, steps, recoveredAt: now() }, null, 2),
+    jsonTools.jsonString({ runId: owner.runId, complete, steps, recoveredAt: now() }, null, 2),
   );
 
   if (complete) {
@@ -163,7 +165,7 @@ async function finish(
   try {
     await writeFile(
       join(plan.directory, "cleanup.json"),
-      JSON.stringify({ runId: plan.runId, ...outcome, finishedAt: now() }, null, 2),
+      jsonTools.jsonString({ runId: plan.runId, ...outcome, finishedAt: now() }, null, 2),
     );
   } catch (error) {
     problems.push(`Cleanup report could not be written: ${describe(error)}`);
@@ -378,7 +380,7 @@ class OwnedProcesses {
 
   private persist(): void {
     const temporary = `${this.journal}.tmp`;
-    writeFileSync(temporary, JSON.stringify([...this.known.values()], null, 2));
+    writeFileSync(temporary, jsonTools.jsonString([...this.known.values()], null, 2));
     renameSync(temporary, this.journal);
   }
 
@@ -407,7 +409,7 @@ async function acquireLock(plan: VerificationPlan): Promise<RecoveryOutcome | un
     startedAt: now(),
     ...(plan.alchemy === undefined ? {} : { alchemy: plan.alchemy }),
   };
-  await writeFile(join(staging, "owner.json"), JSON.stringify(owner, null, 2));
+  await writeFile(join(staging, "owner.json"), jsonTools.jsonString(owner, null, 2));
   try {
     await rename(staging, plan.lockDirectory);
     return undefined;
@@ -442,7 +444,7 @@ async function claimRecovery(lockDirectory: string): Promise<RecoveryClaim> {
   const claims = (await readdir(lockDirectory)).filter((name) => recoveryClaim.test(name));
   for (const name of claims) {
     const holder = await readFile(join(lockDirectory, name, "holder.json"), "utf8")
-      .then((text) => Schema.decodeSync(OwnedProcessJson)(text))
+      .then((text) => Effect.runSync(Schema.decodeEffect(OwnedProcessJson)(text)))
       .catch(() => undefined);
 
     if (holder === undefined) {
@@ -457,7 +459,7 @@ async function claimRecovery(lockDirectory: string): Promise<RecoveryClaim> {
 
   const staging = join(lockDirectory, `staging-${process.pid}-${Date.now()}`);
   await mkdir(staging);
-  await writeFile(join(staging, "holder.json"), JSON.stringify(ownProcess()));
+  await writeFile(join(staging, "holder.json"), jsonTools.jsonString(ownProcess()));
   try {
     await rename(staging, claim);
   } catch (error) {
@@ -480,7 +482,7 @@ class OwnerJournal {
   }
 
   async read(): Promise<OwnerRecord> {
-    return Schema.decodeSync(OwnerRecordJson)(await readFile(this.path, "utf8"));
+    return Effect.runSync(Schema.decodeEffect(OwnerRecordJson)(await readFile(this.path, "utf8")));
   }
 
   async setInfrastructure(state: InfrastructureState): Promise<void> {
@@ -498,7 +500,7 @@ class OwnerJournal {
 
   private async write(owner: OwnerRecord): Promise<void> {
     const temporary = `${this.path}.tmp`;
-    await writeFile(temporary, JSON.stringify(owner, null, 2));
+    await writeFile(temporary, jsonTools.jsonString(owner, null, 2));
     await rename(temporary, this.path);
   }
 
@@ -516,7 +518,7 @@ async function readOwnerDescription(lockDirectory: string): Promise<string> {
 }
 
 async function readOwnedProcesses(path: string): Promise<ReadonlyArray<OwnedProcess>> {
-  return Schema.decodeSync(OwnedProcessList)(await readFile(path, "utf8"));
+  return Effect.runSync(Schema.decodeEffect(OwnedProcessList)(await readFile(path, "utf8")));
 }
 
 function processJournal(directory: string): string {

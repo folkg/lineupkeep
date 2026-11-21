@@ -22,6 +22,7 @@ import { http, HttpResponse } from "msw/http";
 import { setupServer } from "msw/node";
 
 import { makeTelemetryTest } from "#runtime/internal/TelemetryTest.ts";
+import layerTools from "#runtime/ProvideLayer.ts";
 
 import { EmailDelivery, EmailDeliveryFailed } from "./EmailDelivery.ts";
 import type { EmailMessage } from "./EmailDelivery.ts";
@@ -40,7 +41,7 @@ it.effect(
         }),
       );
 
-      yield* send(signInMessage).pipe(Effect.provide(resendLayer));
+      yield* send(signInMessage).pipe(layerTools.provide(resendLayer));
 
       assert.strictEqual(requests.length, 1);
       assert.strictEqual(
@@ -71,7 +72,7 @@ it.effect("reports provider rejection without retrying", () =>
       }),
     );
 
-    const exit = yield* Effect.exit(send(signInMessage).pipe(Effect.provide(resendLayer)));
+    const exit = yield* Effect.exit(send(signInMessage).pipe(layerTools.provide(resendLayer)));
 
     assert.strictEqual(failureReason(exit), "rejected");
     assert.strictEqual(attempts, 1);
@@ -95,7 +96,7 @@ it.effect("keeps the sender's own words when it refuses a recipient it may not r
       ),
     );
 
-    const exit = yield* Effect.exit(send(signInMessage).pipe(Effect.provide(resendLayer)));
+    const exit = yield* Effect.exit(send(signInMessage).pipe(layerTools.provide(resendLayer)));
 
     assert.strictEqual(failureReason(exit), "rejected");
     const failure = failureOf(exit);
@@ -114,7 +115,7 @@ it.effect("keeps a rejection that is not about the recipient unmarked", () =>
       ),
     );
 
-    const exit = yield* Effect.exit(send(signInMessage).pipe(Effect.provide(resendLayer)));
+    const exit = yield* Effect.exit(send(signInMessage).pipe(layerTools.provide(resendLayer)));
 
     const failure = failureOf(exit);
     assert.strictEqual(failureReason(exit), "rejected");
@@ -137,7 +138,7 @@ it.effect("retries transient failures with one stable key and succeeds", () =>
     );
     const retry = yield* retryClock;
     const delivery = yield* Effect.forkChild(
-      send(signInMessage).pipe(Effect.provide(Layer.merge(resendLayer, retry.layer))),
+      send(signInMessage).pipe(layerTools.provide(Layer.merge(resendLayer, retry.layer))),
     );
 
     yield* retry.advance;
@@ -163,7 +164,7 @@ it.effect("exhausts retries and scrubs failed HTTP child exports", () =>
     const retry = yield* retryClock;
     const delivery = yield* Effect.forkChild(
       send(signInMessage).pipe(
-        Effect.provide(Layer.mergeAll(resendLayer, telemetry.layer, retry.layer)),
+        layerTools.provide(Layer.mergeAll(resendLayer, telemetry.layer, retry.layer)),
         Effect.exit,
       ),
     );
@@ -197,10 +198,12 @@ it.effect("rejects malformed provider JSON and response shapes", () =>
         () => new HttpResponse("not-json", { headers: { "content-type": "application/json" } }),
       ),
     );
-    const malformed = yield* Effect.exit(send(signInMessage).pipe(Effect.provide(resendLayer)));
+    const malformed = yield* Effect.exit(send(signInMessage).pipe(layerTools.provide(resendLayer)));
     server.use(http.post(endpoint, () => HttpResponse.json({ unexpected: true })));
 
-    const wrongShape = yield* Effect.exit(send(signInMessage).pipe(Effect.provide(resendLayer)));
+    const wrongShape = yield* Effect.exit(
+      send(signInMessage).pipe(layerTools.provide(resendLayer)),
+    );
 
     assert.strictEqual(failureReason(malformed), "unavailable");
     assert.strictEqual(failureReason(wrongShape), "unavailable");
@@ -219,7 +222,9 @@ it.effect("cancels a pending provider request with its delivery fiber", () =>
         return aborted.promise.then(() => HttpResponse.error());
       }),
     );
-    const delivery = yield* Effect.forkChild(send(signInMessage).pipe(Effect.provide(resendLayer)));
+    const delivery = yield* Effect.forkChild(
+      send(signInMessage).pipe(layerTools.provide(resendLayer)),
+    );
     yield* Effect.promise(() => started.promise);
 
     yield* Fiber.interrupt(delivery);
@@ -235,7 +240,7 @@ it.effect("records delivery facts without the recipient, content, or key", () =>
     server.use(http.post(endpoint, () => HttpResponse.json({ id: "email-1" })));
     const telemetry = makeTelemetryTest();
 
-    yield* send(signInMessage).pipe(Effect.provide(Layer.merge(resendLayer, telemetry.layer)));
+    yield* send(signInMessage).pipe(layerTools.provide(Layer.merge(resendLayer, telemetry.layer)));
     const { payloads, spans } = telemetry.read();
 
     assert.isTrue(spans.some((span) => span.name === "email.send"));
@@ -254,12 +259,12 @@ it.effect("writes messages to the development console without a configured trans
       Layer.provide(transport),
     );
 
-    yield* send(signInMessage).pipe(Effect.provide(layer));
+    yield* send(signInMessage).pipe(layerTools.provide(layer));
 
     const lines = yield* TestConsole.logLines;
     assert.include(String(lines.at(-1)), "reader@example.test");
     assert.include(String(lines.at(-1)), "Your code is 123456.");
-  }).pipe(Effect.provide(TestConsole.layer)),
+  }).pipe(layerTools.provide(TestConsole.layer)),
 );
 
 it.effect("refuses production startup without any mail transport", () =>
@@ -270,7 +275,7 @@ it.effect("refuses production startup without any mail transport", () =>
       Layer.provide(transport),
     );
 
-    const exit = yield* Effect.exit(Effect.provide(EmailDelivery, layer));
+    const exit = yield* Effect.exit(layerTools.provideLayer(EmailDelivery, layer));
 
     assert.isTrue(Exit.isFailure(exit));
     const cause = String(Exit.isFailure(exit) ? exit.cause : "");
@@ -292,7 +297,7 @@ it.effect("refuses a half-configured SMTP login", () =>
       ),
     );
 
-    const exit = yield* Effect.exit(Effect.provide(EmailDelivery, layer));
+    const exit = yield* Effect.exit(layerTools.provideLayer(EmailDelivery, layer));
 
     assert.isTrue(Exit.isFailure(exit));
     assert.include(
@@ -309,7 +314,7 @@ it.effect(
       const sink = yield* startSmtpSink();
 
       yield* send({ ...signInMessage, idempotencyKey: "01K5SMTPSINK000000000000000" }).pipe(
-        Effect.provide(smtpDelivery(sink.port)),
+        layerTools.provide(smtpDelivery(sink.port)),
       );
 
       assert.strictEqual(sink.messages.length, 1);
@@ -330,7 +335,9 @@ it.effect("reports an unreachable SMTP relay as unavailable", () =>
     const port = sink.port;
     yield* sink.close;
 
-    const exit = yield* Effect.exit(send(signInMessage).pipe(Effect.provide(smtpDelivery(port))));
+    const exit = yield* Effect.exit(
+      send(signInMessage).pipe(layerTools.provide(smtpDelivery(port))),
+    );
 
     assert.strictEqual(failureReason(exit), "unavailable");
   }),
@@ -342,7 +349,7 @@ it.effect("keeps the relay's own words when it refuses a recipient", () =>
 
     const exit = yield* Effect.exit(
       send({ ...signInMessage, to: "refused@example.test" }).pipe(
-        Effect.provide(smtpDelivery(sink.port)),
+        layerTools.provide(smtpDelivery(sink.port)),
       ),
     );
 
@@ -362,7 +369,7 @@ it.effect("requires STARTTLS by default", () =>
 
     const exit = yield* Effect.exit(
       send(signInMessage).pipe(
-        Effect.provide(
+        layerTools.provide(
           EmailDelivery.smtp.pipe(
             Layer.provide(
               configLayer({
@@ -400,7 +407,7 @@ it.effect("prefers a configured SMTP relay over a Resend key", () =>
       Layer.provide(transport),
     );
 
-    yield* send(signInMessage).pipe(Effect.provide(layer));
+    yield* send(signInMessage).pipe(layerTools.provide(layer));
 
     assert.strictEqual(sink.messages.length, 1);
   }),
@@ -421,7 +428,7 @@ it.effect("selects Resend in production when a key is configured", () =>
       Layer.provide(transport),
     );
 
-    yield* send(signInMessage).pipe(Effect.provide(layer));
+    yield* send(signInMessage).pipe(layerTools.provide(layer));
 
     assert.isTrue(delivered);
   }),

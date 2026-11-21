@@ -43,6 +43,7 @@ import type {
 import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
 import { ScheduleGate } from "#contexts/connections/ScheduleGate.ts";
 import type { ScheduleGateDecision } from "#contexts/connections/ScheduleGate.ts";
+import jsonTools from "#runtime/JsonText.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
 import { planAssignments } from "./LineupPlanning.ts";
@@ -1538,7 +1539,9 @@ function sameSlot(left: ProviderRosterSlot, right: ProviderRosterSlot): boolean 
 }
 
 function slotLabel(slot: ProviderRosterSlot): string {
-  return slot.status === "verified" ? slot.slot : `unverified (${JSON.stringify(slot.rawValue)})`;
+  return slot.status === "verified"
+    ? slot.slot
+    : `unverified (${jsonTools.jsonString(slot.rawValue)})`;
 }
 
 function nativeSummary(plan: LineupPlan | undefined, changeCount: number): string {

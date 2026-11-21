@@ -10,6 +10,7 @@ import {
   type ConnectionError,
 } from "@lineupkeep/backend/connections/Connection";
 import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
+import layerTools from "@lineupkeep/backend/runtime/ProvideLayer";
 import {
   makeRequestContext,
   requestContextLayer,
@@ -36,7 +37,7 @@ it.effect("rejects anonymous invalid input before reporting validation failure",
 it.effect("preserves defects instead of classifying them as expected rejections", () =>
   Effect.gen(function* () {
     const program = authenticatedUseCase(() => Effect.die("private defect"), mapConnectionError);
-    const exit = yield* program.pipe(Effect.provide(yield* authentication(true)), Effect.exit);
+    const exit = yield* program.pipe(layerTools.provide(yield* authentication(true)), Effect.exit);
 
     assert.isTrue(Exit.isFailure(exit) && Cause.hasDies(exit.cause));
   }),
@@ -59,7 +60,7 @@ it.effect("returns ownership-free ISO dates through the authenticated result", (
     const result = yield* authenticatedUseCase(
       () => Effect.succeed(toConnectionView(connection, 3)),
       mapConnectionError,
-    ).pipe(Effect.provide(yield* authentication(true)));
+    ).pipe(layerTools.provide(yield* authentication(true)));
 
     assert.deepStrictEqual(result, {
       type: "success",
@@ -105,7 +106,7 @@ it.effect("projects every expected connection failure to a safe code and busines
           })),
         ),
         Effect.withSpan("test.expected_failure"),
-        Effect.provide(layer),
+        layerTools.provide(layer),
       );
 
       assert.deepStrictEqual(observation, {
@@ -137,7 +138,7 @@ function execute(signedIn: boolean): Effect.Effect<
   return authenticatedUseCase(
     () => Effect.fromResult(decoded).pipe(Effect.mapError(() => ConnectionInputInvalid.make({}))),
     mapConnectionError,
-  ).pipe(Effect.provide(authentication(signedIn).pipe(Layer.unwrap)));
+  ).pipe(layerTools.provide(authentication(signedIn).pipe(Layer.unwrap)));
 }
 
 function authentication(

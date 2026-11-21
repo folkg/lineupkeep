@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 
 import { assert, it } from "@effect/vitest";
+import { Effect } from "effect";
 import { Schema } from "effect";
+
+import jsonTools from "#runtime/JsonText.ts";
 
 import { hockeyProfessionalTeamMap, matchProfessionalTeam } from "./ProfessionalTeamMap.ts";
 
@@ -12,31 +15,35 @@ const LeagueClub = Schema.Struct({
   commonName: Schema.optional(Schema.Struct({ default: Schema.NonEmptyString })),
 });
 
-const ProviderTeamRead = Schema.decodeUnknownSync(
-  Schema.Struct({
-    read: Schema.Struct({
-      url: Schema.NonEmptyString,
-      observedAt: Schema.DateTimeUtcFromString,
+const ProviderTeamRead = Effect.runSync(
+  Schema.decodeUnknownEffect(
+    Schema.Struct({
+      read: Schema.Struct({
+        url: Schema.NonEmptyString,
+        observedAt: Schema.DateTimeUtcFromString,
+      }),
+      teams: Schema.Array(
+        Schema.Struct({
+          providerTeamKey: Schema.NonEmptyString,
+          abbreviation: Schema.NonEmptyString,
+          displayName: Schema.NonEmptyString,
+        }),
+      ),
     }),
-    teams: Schema.Array(
-      Schema.Struct({
-        providerTeamKey: Schema.NonEmptyString,
-        abbreviation: Schema.NonEmptyString,
-        displayName: Schema.NonEmptyString,
-      }),
-    ),
-  }),
-)(fixture("fixtures/provider-hockey-teams.json"));
+  )(fixture("fixtures/provider-hockey-teams.json")),
+);
 
-const LeagueWeek = Schema.decodeUnknownSync(
-  Schema.Struct({
-    gameWeek: Schema.Array(
-      Schema.Struct({
-        games: Schema.Array(Schema.Struct({ homeTeam: LeagueClub, awayTeam: LeagueClub })),
-      }),
-    ),
-  }),
-)(fixture("game-sources/nhl/fixtures/league-week.json"));
+const LeagueWeek = Effect.runSync(
+  Schema.decodeUnknownEffect(
+    Schema.Struct({
+      gameWeek: Schema.Array(
+        Schema.Struct({
+          games: Schema.Array(Schema.Struct({ homeTeam: LeagueClub, awayTeam: LeagueClub })),
+        }),
+      ),
+    }),
+  )(fixture("game-sources/nhl/fixtures/league-week.json")),
+);
 
 const providerTeams = new Map(ProviderTeamRead.teams.map((team) => [team.providerTeamKey, team]));
 const leagueClubs = new Map(
@@ -140,5 +147,5 @@ function plain(value: string): string {
 }
 
 function fixture(name: string): unknown {
-  return JSON.parse(readFileSync(new URL(`./${name}`, import.meta.url), "utf8"));
+  return jsonTools.jsonValue(readFileSync(new URL(`./${name}`, import.meta.url), "utf8"));
 }

@@ -3,6 +3,8 @@ import { mkdtempDisposable, readFile, symlink, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { Effect } from "effect";
 import { Schema } from "effect";
 import { expect, it } from "vitest";
 
@@ -67,7 +69,7 @@ it("labels service citations and correlates their application runtime spans in b
   );
   await writeFile(
     join(run.directory, "service.json"),
-    JSON.stringify({
+    jsonTools.jsonString({
       phase: "Action",
       description: "create",
       traceId: "service-trace",
@@ -80,7 +82,11 @@ it("labels service citations and correlates their application runtime spans in b
   );
   await writeFile(
     join(run.directory, "server-spans.jsonl"),
-    JSON.stringify({ traceId: "service-trace", name: "verification.service", attributes: {} }),
+    jsonTools.jsonString({
+      traceId: "service-trace",
+      name: "verification.service",
+      attributes: {},
+    }),
   );
 
   expect(await deliveryProblems(run.directory)).toEqual([]);
@@ -96,12 +102,14 @@ it("labels service citations and correlates their application runtime spans in b
     expect(report).toContain("#service-1");
   }
 
-  const call = Schema.decodeUnknownSync(ServiceCallJson)(
-    await readFile(join(run.directory, "service.json"), "utf8"),
+  const call = Effect.runSync(
+    Schema.decodeUnknownEffect(ServiceCallJson)(
+      await readFile(join(run.directory, "service.json"), "utf8"),
+    ),
   );
   await writeFile(
     join(run.directory, "service.json"),
-    JSON.stringify({ ...call, persona: "other" }),
+    jsonTools.jsonString({ ...call, persona: "other" }),
   );
   expect((await deliveryProblems(run.directory)).join(" ")).toContain(
     "not attached to its service phase step",
@@ -109,7 +117,7 @@ it("labels service citations and correlates their application runtime spans in b
 
   await writeFile(
     join(run.directory, "results.json"),
-    JSON.stringify({ ...results, attempts: [{ ...results.attempts[0], steps: [] }] }),
+    jsonTools.jsonString({ ...results, attempts: [{ ...results.attempts[0], steps: [] }] }),
   );
   expect((await deliveryProblems(run.directory)).join(" ")).toContain(
     "not attached to its service phase step",
@@ -147,7 +155,7 @@ it("renders step-linked MCP transcripts in both reports", async () => {
   await using run = await runDirectory(matrix, { "results.json": results });
   await writeFile(
     join(run.directory, "exchange.json"),
-    JSON.stringify({
+    jsonTools.jsonString({
       persona: "owner",
       method: "POST",
       url: "https://app.test/mcp",
@@ -162,7 +170,7 @@ it("renders step-linked MCP transcripts in both reports", async () => {
   );
   await writeFile(
     join(run.directory, "server-spans.jsonl"),
-    JSON.stringify({ traceId: "trace-1", name: "mcp.request", attributes: {} }),
+    jsonTools.jsonString({ traceId: "trace-1", name: "mcp.request", attributes: {} }),
   );
 
   await writeReport(run.directory, []);
@@ -190,9 +198,11 @@ it("removes the run directory when artifact setup rejects", async () => {
     await using run = await runDirectory(claims([criterion()]), { "missing/file.json": {} });
     expect.unreachable(`Setup unexpectedly succeeded in ${run.directory}`);
   } catch (error) {
-    const failure = Schema.decodeUnknownSync(
-      Schema.Struct({ code: Schema.Literal("ENOENT"), path: Schema.String }),
-    )(error);
+    const failure = Effect.runSync(
+      Schema.decodeUnknownEffect(
+        Schema.Struct({ code: Schema.Literal("ENOENT"), path: Schema.String }),
+      )(error),
+    );
 
     expect(existsSync(dirname(dirname(failure.path)))).toBe(false);
   }
@@ -252,7 +262,7 @@ it("tabulates database statements, query plans, server logs, and the application
   await using run = await runDirectory(claims([criterion()]), { "results.json": results });
   await writeFile(
     join(run.directory, "measurement.json"),
-    JSON.stringify({
+    jsonTools.jsonString({
       name: "list",
       sample: 1,
       outcome: "completed",
@@ -308,7 +318,7 @@ it("tabulates database statements, query plans, server logs, and the application
       },
       { name: "notes.update", attributes: {}, error: "NoteNotFound" },
     ]
-      .map((span) => JSON.stringify(span))
+      .map((span) => jsonTools.jsonString(span))
       .join("\n"),
   );
 
@@ -396,7 +406,10 @@ it("counts samples where an operation did not run as zero in its median", async 
   };
   await using run = await runDirectory(claims([criterion()]), { "results.json": results });
   for (const [index, file] of files.entries()) {
-    await writeFile(join(run.directory, `measurement-${index + 1}.json`), JSON.stringify(file));
+    await writeFile(
+      join(run.directory, `measurement-${index + 1}.json`),
+      jsonTools.jsonString(file),
+    );
   }
 
   await writeReport(run.directory, []);
@@ -452,7 +465,10 @@ it("leads repeated samples with their median, and keeps different budgets apart"
   };
   await using run = await runDirectory(claims([criterion()]), { "results.json": results });
   for (const [index, file] of files.entries()) {
-    await writeFile(join(run.directory, `measurement-${index + 1}.json`), JSON.stringify(file));
+    await writeFile(
+      join(run.directory, `measurement-${index + 1}.json`),
+      jsonTools.jsonString(file),
+    );
   }
 
   await writeReport(run.directory, []);
@@ -503,14 +519,16 @@ it("round-trips produced measurements and profiles into reports, including unava
     }),
   );
 
-  const partial = Schema.decodeSync(MeasurementJson)(
-    await evidence.attachment("measurement: partial save #1"),
+  const partial = Effect.runSync(
+    Schema.decodeEffect(MeasurementJson)(await evidence.attachment("measurement: partial save #1")),
   );
-  const unavailable = Schema.decodeSync(MeasurementJson)(
-    await evidence.attachment("measurement: unavailable save #1"),
+  const unavailable = Effect.runSync(
+    Schema.decodeEffect(MeasurementJson)(
+      await evidence.attachment("measurement: unavailable save #1"),
+    ),
   );
-  const profiled = Schema.decodeSync(ProfileJson)(
-    await evidence.attachment("profile: profile save #1"),
+  const profiled = Effect.runSync(
+    Schema.decodeEffect(ProfileJson)(await evidence.attachment("profile: profile save #1")),
   );
   expect(partial.serverActivity).toMatchObject({
     kind: "captured",
@@ -531,7 +549,7 @@ it("round-trips produced measurements and profiles into reports, including unava
       },
     ],
   };
-  await writeFile(join(evidence.folder, "results.json"), JSON.stringify(results));
+  await writeFile(join(evidence.folder, "results.json"), jsonTools.jsonString(results));
 
   await writeReport(evidence.folder, []);
 

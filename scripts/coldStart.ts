@@ -4,6 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { chromium } from "playwright";
 
 const run = promisify(execFile);
@@ -61,7 +62,7 @@ try {
       }
       const cold: Sample = { ...sample, ...timeline };
       samples.push(cold);
-      console.log(JSON.stringify(cold));
+      console.log(jsonTools.jsonString(cold));
       break;
     }
   }
@@ -70,7 +71,7 @@ try {
 }
 await writeFile(
   join(output, "samples.json"),
-  `${JSON.stringify({ label, origin, revision, samples }, null, 2)}\n`,
+  `${jsonTools.jsonString({ label, origin, revision, samples }, null, 2)}\n`,
 );
 console.log(`Recorded ${samples.length} cold samples in ${output}`);
 
@@ -217,7 +218,7 @@ async function lifecycleEntries(): Promise<ReadonlyArray<LifecycleEntry>> {
     "--format=json",
     "--freshness=1h",
   ]);
-  const parsed: unknown = JSON.parse(stdout === "" ? "[]" : stdout);
+  const parsed: unknown = jsonTools.jsonValue(stdout === "" ? "[]" : stdout);
   if (!Array.isArray(parsed)) {
     return [];
   }

@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import type { TestInfo } from "@playwright/test";
+import { Effect } from "effect";
 import { Schema } from "effect";
 
 import type { DatabaseActivity, DatabaseProbe } from "./databaseActivity.ts";
@@ -591,7 +593,9 @@ async function serverActivity(
     > => {
       const url = new URL("/spans", collector);
       url.searchParams.set("trace", tracing.traceId);
-      const spans = Schema.decodeUnknownSync(SpansJson)(await (await fetch(url)).text());
+      const spans = Effect.runSync(
+        Schema.decodeUnknownEffect(SpansJson)(await (await fetch(url)).text()),
+      );
       return [...new Map(spans.map((span) => [span.spanId, span])).values()];
     };
     const missing = (
@@ -649,9 +653,11 @@ async function saveProfile(
   }
   return attempt(async () => {
     const path = info.outputPath(`${file}.cpuprofile`);
-    await writeFile(path, JSON.stringify(profile.value));
+    await writeFile(path, jsonTools.jsonString(profile.value));
     await info.attach(`cpuprofile: ${file}`, { path, contentType: "application/json" });
-    return summarizeCpuProfile(Schema.decodeUnknownSync(CpuProfileSchema)(profile.value));
+    return summarizeCpuProfile(
+      Effect.runSync(Schema.decodeUnknownEffect(CpuProfileSchema)(profile.value)),
+    );
   });
 }
 
@@ -668,8 +674,9 @@ async function startBrowserProfile(
   }
   return async () => {
     try {
-      return Schema.decodeUnknownSync(ProfilerStopResult)(await session.send("Profiler.stop"))
-        .profile;
+      return Effect.runSync(
+        Schema.decodeUnknownEffect(ProfilerStopResult)(await session.send("Profiler.stop")),
+      ).profile;
     } finally {
       await session.detach();
     }
@@ -680,12 +687,14 @@ async function startNodeProfile(
   inspector: URL,
   run: string | undefined,
 ): Promise<() => Promise<unknown>> {
-  const targets = Schema.decodeUnknownSync(InspectorTargets)(
-    await (
-      await fetch(new URL("/json/list", inspector), {
-        signal: AbortSignal.timeout(inspectorTimeoutMs),
-      })
-    ).text(),
+  const targets = Effect.runSync(
+    Schema.decodeUnknownEffect(InspectorTargets)(
+      await (
+        await fetch(new URL("/json/list", inspector), {
+          signal: AbortSignal.timeout(inspectorTimeoutMs),
+        })
+      ).text(),
+    ),
   );
   const target = targets[0];
   if (target === undefined) {
@@ -707,7 +716,9 @@ async function startNodeProfile(
         }
       };
       const onMessage = (event: MessageEvent): void => {
-        const message = Schema.decodeUnknownSync(InspectorReply)(String(event.data));
+        const message = Effect.runSync(
+          Schema.decodeUnknownEffect(InspectorReply)(String(event.data)),
+        );
         if (message.id === id) {
           settle(
             message.error === undefined ? undefined : new Error(message.error.message),
@@ -722,7 +733,7 @@ async function startNodeProfile(
       );
       socket.addEventListener("message", onMessage);
       socket.addEventListener("close", onClose);
-      socket.send(JSON.stringify({ id, method, params }));
+      socket.send(jsonTools.jsonString({ id, method, params }));
     });
   try {
     await new Promise<void>((resolve, reject) => {
@@ -747,11 +758,13 @@ async function startNodeProfile(
         { once: true },
       );
     });
-    const owner = Schema.decodeUnknownSync(EvaluateResult)(
-      await send("Runtime.evaluate", {
-        expression: "process.env.VERIFICATION_DIR",
-        returnByValue: true,
-      }),
+    const owner = Effect.runSync(
+      Schema.decodeUnknownEffect(EvaluateResult)(
+        await send("Runtime.evaluate", {
+          expression: "process.env.VERIFICATION_DIR",
+          returnByValue: true,
+        }),
+      ),
     ).result.value;
     if (run === undefined || owner !== run) {
       throw new Error(
@@ -766,7 +779,9 @@ async function startNodeProfile(
   }
   return async () => {
     try {
-      return Schema.decodeUnknownSync(ProfilerStopResult)(await send("Profiler.stop")).profile;
+      return Effect.runSync(
+        Schema.decodeUnknownEffect(ProfilerStopResult)(await send("Profiler.stop")),
+      ).profile;
     } finally {
       socket.close();
     }
@@ -777,7 +792,7 @@ const inspectorTimeoutMs = 10_000;
 
 async function attachJson(info: EvidenceSink, name: string, value: unknown): Promise<void> {
   const path = info.outputPath(`${slug(name)}.json`);
-  await writeFile(path, JSON.stringify(value, null, 2));
+  await writeFile(path, jsonTools.jsonString(value, null, 2));
   await info.attach(name, { path, contentType: "application/json" });
 }
 

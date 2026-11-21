@@ -3,7 +3,9 @@ import { spawnSync } from "node:child_process";
 import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { chromium } from "@playwright/test";
+import { Effect } from "effect";
 import { Schema } from "effect";
 
 import {
@@ -62,11 +64,15 @@ export function videoDirection(
 
 async function renderVideo(directory: string): Promise<void> {
   const root = await realpath(directory);
-  const direction = Schema.decodeSync(ShotsJson)(await readFile(join(root, "shots.json"), "utf8"));
-  const results = Schema.decodeSync(ResultsJson)(
-    await readFile(join(root, "results.json"), "utf8"),
+  const direction = Effect.runSync(
+    Schema.decodeEffect(ShotsJson)(await readFile(join(root, "shots.json"), "utf8")),
   );
-  const claims = Schema.decodeSync(ClaimsJson)(await readFile(join(root, "claims.json"), "utf8"));
+  const results = Effect.runSync(
+    Schema.decodeEffect(ResultsJson)(await readFile(join(root, "results.json"), "utf8")),
+  );
+  const claims = Effect.runSync(
+    Schema.decodeEffect(ClaimsJson)(await readFile(join(root, "claims.json"), "utf8")),
+  );
   const status = new Map(claims.criteria.map((criterion) => [criterion.id, criterion.status]));
 
   await rm(join(root, "media-check.json"), { force: true });
@@ -154,7 +160,7 @@ async function renderVideo(directory: string): Promise<void> {
   );
   await writeFile(
     join(root, "media-check.json"),
-    JSON.stringify(
+    jsonTools.jsonString(
       {
         raw: media,
         rendered: probe(output),
@@ -242,7 +248,7 @@ function probe(path: string): { width: number; height: number; duration: number 
   if (result.status !== 0) {
     throw new Error(`ffprobe failed: ${result.stderr}`);
   }
-  const metadata = Schema.decodeSync(Media)(result.stdout);
+  const metadata = Effect.runSync(Schema.decodeEffect(Media)(result.stdout));
   const stream = metadata.streams[0];
   const duration = Number(metadata.format.duration);
   if (stream === undefined || !Number.isFinite(duration) || duration <= 0) {

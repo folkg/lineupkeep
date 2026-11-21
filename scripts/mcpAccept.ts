@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { Option, Schema } from "effect";
 
 import { testEnvironment, verificationEnvironment } from "#e2e/verify/environment.ts";
@@ -241,7 +242,7 @@ function isEnvironmentName(value: string): boolean {
 
 function parseJson(text: string): unknown {
   try {
-    return JSON.parse(text);
+    return jsonTools.jsonValue(text);
   } catch {
     return undefined;
   }

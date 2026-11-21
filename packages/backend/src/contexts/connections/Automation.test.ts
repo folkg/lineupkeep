@@ -10,6 +10,7 @@ import { AccountRetention } from "#contexts/auth/AccountRetention.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { DatabaseConnection } from "#database/DatabaseConnection.ts";
 import { PostgresLive } from "#database/internal/PostgresLive.ts";
+import layerTools from "#runtime/ProvideLayer.ts";
 
 import { Automation } from "./Automation.ts";
 import { Connections } from "./Connections.ts";
@@ -89,7 +90,7 @@ it.effect("runs one current-period automation per team per hour", () =>
     const nextHour = yield* automation.run(10);
     assert.strictEqual(nextHour.scheduledRuns, 1);
     assert.strictEqual(yield* fake.nativeCallCount, 2);
-  }).pipe(Effect.provide(AutomationTestLayer)),
+  }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
 it.effect("reports stored credential key versions with the maintenance tick", () =>
@@ -105,7 +106,7 @@ it.effect("reports stored credential key versions with the maintenance tick", ()
     assert.deepStrictEqual(summary.credentialKeys.usage, [{ keyVersion: 1, envelopes: 1 }]);
     assert.strictEqual(summary.credentialKeys.olderEnvelopes, 0);
     assert.strictEqual(summary.credentialKeys.unreadableEnvelopes, 0);
-  }).pipe(Effect.provide(AutomationTestLayer)),
+  }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
 it.effect("checks all five owner teams at minute 55 without repeating an hour's period", () =>
@@ -150,7 +151,7 @@ it.effect("checks all five owner teams at minute 55 without repeating an hour's 
 
     assert.strictEqual(manual.runs[0]?.trigger, "manual");
     assert.strictEqual(manual.runs[0]?.status, "completed");
-  }).pipe(Effect.provide(AutomationTestLayer)),
+  }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
 it.effect("collapses several missed hourly ticks into one current run", () =>
@@ -168,7 +169,7 @@ it.effect("collapses several missed hourly ticks into one current run", () =>
     assert.strictEqual(summary.scheduledRuns, 1);
     assert.strictEqual(summary.delivered, 1);
     assert.strictEqual(yield* fake.nativeCallCount, 1);
-  }).pipe(Effect.provide(AutomationTestLayer)),
+  }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
 it.effect("leaves a saved move for the owner when its date arrives on the hourly tick", () =>
@@ -200,7 +201,7 @@ it.effect("leaves a saved move for the owner when its date arrives on the hourly
     assert.strictEqual(move?.result, undefined);
     assert.strictEqual(move?.runDay, "2026-11-01");
     assert.deepStrictEqual(yield* fake.transactionRequests, []);
-  }).pipe(Effect.provide(AutomationTestLayer)),
+  }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
 it.effect("runs a confirmed move when its date arrives on the hourly tick", () =>
@@ -253,7 +254,7 @@ it.effect("runs a confirmed move when its date arrives on the hourly tick", () =
       (yield* fake.transactionRequests).map((request) => request.drops),
       [["461.p.10002"]],
     );
-  }).pipe(Effect.provide(AutomationTestLayer)),
+  }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
 it.effect("sends the funding drop before the activate and leaves the roster legal", () =>
@@ -303,7 +304,7 @@ it.effect("sends the funding drop before the activate and leaves the roster lega
         ["461.p.10004", { status: "verified", slot: "BN" }],
       ],
     );
-  }).pipe(Effect.provide(AutomationTestLayer)),
+  }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
 it.effect("runs a drop and an activate group so the paperwork ends legal", () =>
@@ -362,7 +363,7 @@ it.effect("runs a drop and an activate group so the paperwork ends legal", () =>
         ["461.p.10004", { status: "verified", slot: "BN" }],
       ],
     );
-  }).pipe(Effect.provide(AutomationTestLayer)),
+  }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
 it.effect("uses the league's published week start for a weekly-lock move", () =>
@@ -391,7 +392,7 @@ it.effect("uses the league's published week start for a weekly-lock move", () =>
     });
 
     assert.strictEqual(proposed.plan.moves[0]?.effectiveDate, "2026-11-09");
-  }).pipe(Effect.provide(AutomationTestLayer)),
+  }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
 it.effect("excludes disabled and paused teams but still schedules an available-flag team", () =>
@@ -427,7 +428,7 @@ it.effect("excludes disabled and paused teams but still schedules an available-f
     assert.strictEqual(summary.delivered, 1);
     assert.strictEqual(yield* fake.nativeCallCount, 1);
     assert.notStrictEqual(disabled, paused);
-  }).pipe(Effect.provide(AutomationTestLayer)),
+  }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
 it.effect("completes a current hockey run in a rotisserie league with no scoring weeks", () =>
@@ -457,7 +458,7 @@ it.effect("completes a current hockey run in a rotisserie league with no scoring
     ]);
     assert.deepStrictEqual(yield* fake.nativeTargets, [{ type: "date", date: "2026-10-25" }]);
     assert.strictEqual(yield* fake.nativeCallCount, 1);
-  }).pipe(Effect.provide(AutomationTestLayer)),
+  }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
 it.effect("resolves the current fantasy day for a head-to-head hockey league with weeks", () =>
@@ -486,7 +487,7 @@ it.effect("resolves the current fantasy day for a head-to-head hockey league wit
     ]);
     assert.deepStrictEqual(yield* fake.nativeTargets, [{ type: "date", date: "2026-10-25" }]);
     assert.strictEqual(yield* fake.nativeCallCount, 1);
-  }).pipe(Effect.provide(AutomationTestLayer)),
+  }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
 it.effect("blocks a current hockey run outside the declared season with the actual cause", () =>
@@ -511,7 +512,7 @@ it.effect("blocks a current hockey run outside the declared season with the actu
     assert.include(submitted.runs[0]?.outcome?.summary, "outside the league's declared season");
     assert.deepStrictEqual(yield* fake.rosterPeriods, []);
     assert.strictEqual(yield* fake.nativeCallCount, 0);
-  }).pipe(Effect.provide(AutomationTestLayer)),
+  }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
 it.effect("repairs an undispatched scheduled delivery before scheduling another", () =>
@@ -540,7 +541,7 @@ it.effect("repairs an undispatched scheduled delivery before scheduling another"
     assert.strictEqual(loaded.runs[0]?.run, pending.runs[0]?.id);
     assert.strictEqual(loaded.runs[0]?.status, "completed");
     assert.strictEqual(yield* fake.nativeCallCount, 1);
-  }).pipe(Effect.provide(AutomationTestLayer)),
+  }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
 it.effect("recovers a queued run whose delivery was dispatched but never claimed", () =>
@@ -572,7 +573,7 @@ it.effect("recovers a queued run whose delivery was dispatched but never claimed
     assert.strictEqual(summary.delivered, 1);
     assert.strictEqual(loaded.runs[0]?.run, queued.runs[0]?.id);
     assert.strictEqual(loaded.runs[0]?.status, "completed");
-  }).pipe(Effect.provide(AutomationTestLayer)),
+  }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
 it.effect("rejects illegal delivery finishes without changing the stored delivery", () =>
@@ -625,7 +626,7 @@ it.effect("rejects illegal delivery finishes without changing the stored deliver
       assert.strictEqual(repeated.failure._tag, "lineup.persistence_failed");
     }
     assert.strictEqual((yield* repository.loadDelivery(owner, requestId))?.status, "dispatched");
-  }).pipe(Effect.provide(AutomationTestLayer)),
+  }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
 it.effect("treats a team with an in-flight manual run as busy for scheduling", () =>
@@ -656,7 +657,7 @@ it.effect("treats a team with an in-flight manual run as busy for scheduling", (
     const busy = yield* repository.scheduledTeamIds([team]);
 
     assert.isTrue(busy.has(team));
-  }).pipe(Effect.provide(AutomationTestLayer)),
+  }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
 it.effect("joins the run that is already waiting for a team", () =>
@@ -685,7 +686,7 @@ it.effect("joins the run that is already waiting for a team", () =>
     assert.strictEqual(submitted.delivery, "queued");
     const listed = yield* runs.get(owner, { team });
     assert.strictEqual(listed.runs.length, 1);
-  }).pipe(Effect.provide(AutomationTestLayer)),
+  }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
 it.effect("starts the waiting run once the run ahead of it finishes", () =>
@@ -738,7 +739,7 @@ it.effect("starts the waiting run once the run ahead of it finishes", () =>
 
     const loaded = yield* runs.get(owner, { runs: [successor.run] });
     assert.strictEqual(Array.getUnsafe(loaded.runs, 0).status, "completed");
-  }).pipe(Effect.provide(AutomationTestLayer)),
+  }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
 it.effect("blocks a stale explicit week instead of replaying or editing a future period", () =>
@@ -755,7 +756,7 @@ it.effect("blocks a stale explicit week instead of replaying or editing a future
 
     assert.strictEqual(submitted.runs[0]?.status, "blocked");
     assert.strictEqual(yield* fake.nativeCallCount, 0);
-  }).pipe(Effect.provide(AutomationTestLayer)),
+  }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
 type SeedShape = {

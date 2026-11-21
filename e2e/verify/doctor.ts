@@ -1,6 +1,7 @@
 import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { chromium, expect } from "@playwright/test";
 import postgres from "postgres";
 
@@ -31,7 +32,7 @@ export default async function doctor(): Promise<void> {
       await expect(page.getByRole("button", { name: "Continue with Google" })).toHaveCount(0);
       await writeFile(
         join(directory, "doctor.json"),
-        JSON.stringify(
+        jsonTools.jsonString(
           {
             status: "ready",
             checkedAt: new Date().toISOString(),
@@ -57,7 +58,7 @@ export default async function doctor(): Promise<void> {
   } catch (error) {
     await writeFile(
       join(directory, "doctor.json"),
-      JSON.stringify({ status: "blocked", error: String(error) }, null, 2),
+      jsonTools.jsonString({ status: "blocked", error: String(error) }, null, 2),
     );
     throw error;
   } finally {

@@ -7,6 +7,7 @@ import {
   type Page,
   type Request,
 } from "@playwright/test";
+import { Effect } from "effect";
 import { Schema } from "effect";
 
 import { mcpEndpoint, authorizedMcp, type AuthorizeMcp } from "./mcpClient.ts";
@@ -176,7 +177,7 @@ async function inboxFor(email: string): Promise<ReadonlyArray<InboxMessage>> {
   const inbox = new URL("/inbox", process.env["RESEND_API_BASE_URL"]);
   inbox.searchParams.set("to", email);
   const response = await fetch(inbox);
-  return Schema.decodeSync(Inbox)(await response.text());
+  return Effect.runSync(Schema.decodeEffect(Inbox)(await response.text()));
 }
 
 const Inbox = Schema.fromJsonString(

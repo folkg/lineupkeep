@@ -4,6 +4,7 @@ import { DateTime, Effect, Layer, Redacted, Schema } from "effect";
 import { TestClock } from "effect/testing";
 
 import { decodeUserId } from "#contexts/auth/User.ts";
+import layerTools from "#runtime/ProvideLayer.ts";
 
 import { decodeConnectionId } from "./Connection.ts";
 import { decodeTeamId } from "./FantasyTeam.ts";
@@ -35,7 +36,9 @@ import type { ScheduleGateDecision } from "./ScheduleGate.ts";
 
 const teamId = decodeTeamId("00000000-0000-7000-8000-000000000001");
 const owner = decodeUserId("owner-schedule-gate");
-const currentRun = Schema.decodeSync(LineupRunId)("018f79ea-7d86-7c18-9b4a-0000000000ff");
+const currentRun = Effect.runSync(
+  Schema.decodeEffect(LineupRunId)("018f79ea-7d86-7c18-9b4a-0000000000ff"),
+);
 
 const ScheduleObservationRepositoryTest = ScheduleObservationRepository.layer.pipe(
   Layer.provide(ConnectionsDatabaseTest),
@@ -180,7 +183,7 @@ it.effect("skips a quiet tick, runs a busy one, and fails open on unknown data",
       excludingRun: currentRun,
     });
     assert.deepStrictEqual(failed, { kind: "run", reason: "game_source_unavailable" });
-  }).pipe(Effect.provide(GateTest)),
+  }).pipe(layerTools.provide(GateTest)),
 );
 
 it("skips a quiet tick with a plain reason when no game is scheduled", () => {
@@ -251,7 +254,7 @@ it.effect("fails open when the provider schedule or a roster team is unknown", (
       excludingRun: currentRun,
     });
     assert.deepStrictEqual(unmapped, { kind: "run", reason: "roster_team_unmapped" });
-  }).pipe(Effect.provide(GateTest)),
+  }).pipe(layerTools.provide(GateTest)),
 );
 
 it.effect("places a team from a stored game whose club the map knows", () =>
@@ -313,7 +316,7 @@ it.effect("places a team from a stored game whose club the map knows", () =>
         "2026-11-02T23:00:00.000Z",
       );
     }
-  }).pipe(Effect.provide(GateTest)),
+  }).pipe(layerTools.provide(GateTest)),
 );
 
 it.effect("fails open for a sport with no game source", () =>
@@ -352,7 +355,7 @@ it.effect("fails open for a sport with no game source", () =>
       excludingRun: currentRun,
     });
     assert.deepStrictEqual(decision, { kind: "run", reason: "no_game_source" });
-  }).pipe(Effect.provide(NoSourceGateTest)),
+  }).pipe(layerTools.provide(NoSourceGateTest)),
 );
 
 it.effect("measures one provider read across a quiet day of hourly ticks", () =>
@@ -386,13 +389,13 @@ it.effect("measures one provider read across a quiet day of hourly ticks", () =>
 
     assert.strictEqual(yield* fake.providerCalls, 1);
     assert.strictEqual(yield* fake.providerReads, 1);
-  }).pipe(Effect.provide(GateTest)),
+  }).pipe(layerTools.provide(GateTest)),
 );
 
 it.effect("runs a quiet tick when the team has no lineup run today", () =>
   Effect.gen(function* () {
     assert.deepStrictEqual(yield* evaluateQuietTick(), { kind: "run", reason: "no_run_today" });
-  }).pipe(Effect.provide(GateTest)),
+  }).pipe(layerTools.provide(GateTest)),
 );
 
 it.effect("runs a quiet tick when today's last run was blocked", () =>
@@ -407,7 +410,7 @@ it.effect("runs a quiet tick when today's last run was blocked", () =>
       kind: "run",
       reason: "last_run_blocked",
     });
-  }).pipe(Effect.provide(GateTest)),
+  }).pipe(layerTools.provide(GateTest)),
 );
 
 it.effect("skips a quiet tick after a verified run today and names the next game", () =>
@@ -427,7 +430,7 @@ it.effect("skips a quiet tick after a verified run today and names the next game
         "2026-11-03T23:00:00.000Z",
       );
     }
-  }).pipe(Effect.provide(GateTest)),
+  }).pipe(layerTools.provide(GateTest)),
 );
 
 it.effect("runs a quiet tick when today's last run ended unverified", () =>
@@ -442,7 +445,7 @@ it.effect("runs a quiet tick when today's last run ended unverified", () =>
       kind: "run",
       reason: "last_run_unverified",
     });
-  }).pipe(Effect.provide(GateTest)),
+  }).pipe(layerTools.provide(GateTest)),
 );
 
 it.effect("runs a quiet tick when today's last run has no outcome yet", () =>
@@ -457,7 +460,7 @@ it.effect("runs a quiet tick when today's last run has no outcome yet", () =>
       kind: "run",
       reason: "last_run_unverified",
     });
-  }).pipe(Effect.provide(GateTest)),
+  }).pipe(layerTools.provide(GateTest)),
 );
 
 it.effect("runs a quiet tick when the verified run is from yesterday", () =>
@@ -469,7 +472,7 @@ it.effect("runs a quiet tick when the verified run is from yesterday", () =>
     });
 
     assert.deepStrictEqual(yield* evaluateQuietTick(), { kind: "run", reason: "no_run_today" });
-  }).pipe(Effect.provide(GateTest)),
+  }).pipe(layerTools.provide(GateTest)),
 );
 
 it.effect("ignores the run whose schedule gate is being decided", () =>
@@ -481,7 +484,7 @@ it.effect("ignores the run whose schedule gate is being decided", () =>
     });
 
     assert.deepStrictEqual(yield* evaluateQuietTick(), { kind: "run", reason: "no_run_today" });
-  }).pipe(Effect.provide(GateTest)),
+  }).pipe(layerTools.provide(GateTest)),
 );
 
 it.effect("runs a busy tick even after a verified run today", () =>
@@ -509,7 +512,7 @@ it.effect("runs a busy tick even after a verified run today", () =>
       excludingRun: currentRun,
     });
     assert.deepStrictEqual(decision, { kind: "run", reason: "game_before_next_tick" });
-  }).pipe(Effect.provide(GateTest)),
+  }).pipe(layerTools.provide(GateTest)),
 );
 
 it("runs a quiet tick unless today's run is verified", () => {
@@ -568,8 +571,8 @@ function evaluateQuietTick(): Effect.Effect<
 }
 
 function runId(serial: number): LineupRunId {
-  return Schema.decodeSync(LineupRunId)(
-    `018f79ea-7d86-7c18-9b4a-${String(serial).padStart(12, "0")}`,
+  return Effect.runSync(
+    Schema.decodeEffect(LineupRunId)(`018f79ea-7d86-7c18-9b4a-${String(serial).padStart(12, "0")}`),
   );
 }
 

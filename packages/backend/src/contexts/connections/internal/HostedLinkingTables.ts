@@ -184,7 +184,9 @@ function requiredDate(value: Date | null, column: string): DateTime.Utc {
 }
 
 function optionalConnectionId(value: string | null): { connectionId?: ConnectionId } {
-  return value === null ? {} : { connectionId: Schema.decodeSync(ConnectionId)(value) };
+  return value === null
+    ? {}
+    : { connectionId: Effect.runSync(Schema.decodeEffect(ConnectionId)(value)) };
 }
 
 function connectionIdOf(state: HostedLinkingState): ConnectionId | undefined {

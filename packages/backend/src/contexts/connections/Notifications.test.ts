@@ -8,6 +8,7 @@ import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { EmailDelivery, EmailDeliveryFailed } from "#email/EmailDelivery.ts";
 import type { EmailMessage } from "#email/EmailDelivery.ts";
 import { EmailDeliveryTest, EmailOutbox } from "#email/internal/EmailDeliveryTest.ts";
+import layerTools from "#runtime/ProvideLayer.ts";
 
 import type { ProviderConnection } from "./Connection.ts";
 import { Connections } from "./Connections.ts";
@@ -90,7 +91,7 @@ it.effect("opens one incident and sends one email for a connection expiration", 
     assert.strictEqual(rows[0]?.attempts, 1);
     assert.isNotNull(rows[0]?.sentAt);
     assert.isNull(rows[0]?.lastError);
-  }).pipe(Effect.provide(TestLayer)),
+  }).pipe(layerTools.provide(TestLayer)),
 );
 
 it.effect("cancels the notification when the connection is reconnected", () =>
@@ -120,7 +121,7 @@ it.effect("cancels the notification when the connection is reconnected", () =>
     assert.strictEqual(rows[0]?.status, "cancelled");
     assert.strictEqual(rows[0]?.attempts, 0);
     assert.isNull(rows[0]?.sentAt);
-  }).pipe(Effect.provide(TestLayer)),
+  }).pipe(layerTools.provide(TestLayer)),
 );
 
 it.effect("cancels a pending incident notification when the connection is disconnected", () =>
@@ -144,7 +145,7 @@ it.effect("cancels a pending incident notification when the connection is discon
     assert.strictEqual(incidents[0]?.resolution, "disconnected");
     const rows = yield* database.select().from(notifications);
     assert.strictEqual(rows[0]?.status, "cancelled");
-  }).pipe(Effect.provide(TestLayer)),
+  }).pipe(layerTools.provide(TestLayer)),
 );
 
 it.effect("retries an unavailable email without creating a second notification", () =>
@@ -171,7 +172,7 @@ it.effect("retries an unavailable email without creating a second notification",
     assert.strictEqual(rows[0]?.status, "sent");
     assert.strictEqual(rows[0]?.attempts, 2);
     assert.isNull(rows[0]?.lastError);
-  }).pipe(Effect.provide(FlakyTestLayer)),
+  }).pipe(layerTools.provide(FlakyTestLayer)),
 );
 
 it.effect("fails without a verified recipient without counting a delivery attempt", () =>
@@ -193,7 +194,7 @@ it.effect("fails without a verified recipient without counting a delivery attemp
     assert.strictEqual(rows[0]?.attempts, 0);
     assert.strictEqual(rows[0]?.lastError, "No verified email address for the account");
     assert.isNull(rows[0]?.sentAt);
-  }).pipe(Effect.provide(MissingEmailTestLayer)),
+  }).pipe(layerTools.provide(MissingEmailTestLayer)),
 );
 
 function credentialGeneration(connection: {
@@ -227,15 +228,18 @@ const FlakyEmailDelivery = Layer.effect(EmailDelivery)(
           yield* Effect.annotateCurrentSpan("email.purpose", message.purpose);
         }),
       sendMany: (messages: ReadonlyArray<EmailMessage>) =>
-        Effect.forEach(messages, (message) =>
-          Effect.gen(function* () {
-            const shouldFail = yield* Ref.getAndSet(failNext, false);
-            if (shouldFail) {
-              return { _tag: "failed" as const, reason: "unavailable" as const };
-            }
-            yield* Effect.annotateCurrentSpan("email.purpose", message.purpose);
-            return { _tag: "sent" as const };
-          }),
+        Effect.forEach(
+          messages,
+          (message) =>
+            Effect.gen(function* () {
+              const shouldFail = yield* Ref.getAndSet(failNext, false);
+              if (shouldFail) {
+                return { _tag: "failed" as const, reason: "unavailable" as const };
+              }
+              yield* Effect.annotateCurrentSpan("email.purpose", message.purpose);
+              return { _tag: "sent" as const };
+            }),
+          { concurrency: 1 },
         ),
     };
   }),

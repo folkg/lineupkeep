@@ -8,6 +8,7 @@ import {
   HostedLinkingSessionId,
 } from "#contexts/connections/HostedLinking.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
+import jsonTools from "#runtime/JsonText.ts";
 import { snapshotOf } from "#utilities/machine.ts";
 import * as MachineTest from "#utilities/machineTest.ts";
 
@@ -71,7 +72,7 @@ it.effect("round-trips every hosted linking lifecycle state through its row code
     const explored = yield* MachineTest.explore(HostedLinkingWorkflow, {
       input,
       events: () => events,
-      stateKey: ({ snapshot }) => JSON.stringify(snapshot),
+      stateKey: ({ snapshot }) => jsonTools.jsonString(snapshot),
       invariants,
     });
     assert.strictEqual(explored.completeness._tag, "Complete");
@@ -197,8 +198,10 @@ it.effect("checks generated event sequences against the hosted linking machine",
 );
 
 const at = DateTime.makeUnsafe("2026-10-25T12:00:00.000Z");
-const sessionId = Schema.decodeSync(HostedLinkingSessionId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a2");
-const owner = Schema.decodeSync(UserId)("owner");
+const sessionId = Effect.runSync(
+  Schema.decodeEffect(HostedLinkingSessionId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a2"),
+);
+const owner = Effect.runSync(Schema.decodeEffect(UserId)("owner"));
 const connectionId = decodeConnectionId("018f79ea-7d86-7c18-9b4a-8b4d0c9164a3");
 
 const input = {

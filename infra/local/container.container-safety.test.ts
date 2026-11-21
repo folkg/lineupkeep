@@ -11,7 +11,7 @@ it.live("retains image safety settings, rejects foreign ownership and stops grac
     const { run } = yield* Effect.promise(readSafetyRun);
     const name = `${run.databaseName}-web`;
     const [container] = yield* Effect.promise(async () =>
-      Schema.decodeSync(Inspection)(await docker(["inspect", name])),
+      Effect.runSync(Schema.decodeEffect(Inspection)(await docker(["inspect", name]))),
     );
     assert.ok(container);
     assert.deepEqual(container.Config.Cmd, ["node", "server/index.mjs"]);
@@ -47,7 +47,7 @@ it.live("retains image safety settings, rejects foreign ownership and stops grac
 
     yield* Effect.promise(() => docker(["stop", name]));
     const [stopped] = yield* Effect.promise(async () =>
-      Schema.decodeSync(Inspection)(await docker(["inspect", name])),
+      Effect.runSync(Schema.decodeEffect(Inspection)(await docker(["inspect", name]))),
     );
 
     assert.equal(stopped?.State.ExitCode, 0);

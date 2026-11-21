@@ -38,25 +38,28 @@ export function loadTeamContext(
               ),
             }),
           )
-        : Effect.all([
-            encryption
-              .open({
-                userId,
-                connectionId: owned.connection.id,
-                provider: owned.connection.provider,
-                envelope: owned.connection.envelope,
-              })
-              .pipe(Effect.mapError((cause) => QueryPersistenceFailed.make({ cause }))),
-            registry
-              .requireProvider(owned.connection.provider)
-              .pipe(
-                Effect.mapError((error) =>
-                  QueryPersistenceFailed.make({ cause: new Error(error.message) }),
+        : Effect.all(
+            [
+              encryption
+                .open({
+                  userId,
+                  connectionId: owned.connection.id,
+                  provider: owned.connection.provider,
+                  envelope: owned.connection.envelope,
+                })
+                .pipe(Effect.mapError((cause) => QueryPersistenceFailed.make({ cause }))),
+              registry
+                .requireProvider(owned.connection.provider)
+                .pipe(
+                  Effect.mapError((error) =>
+                    QueryPersistenceFailed.make({ cause: new Error(error.message) }),
+                  ),
                 ),
-              ),
-            Ref.make(false),
-            Ref.make(false),
-          ]).pipe(
+              Ref.make(false),
+              Ref.make(false),
+            ],
+            { concurrency: 1 },
+          ).pipe(
             Effect.map(([session, provider, sessionProven, sessionRejected]) => ({
               userId,
               owned,

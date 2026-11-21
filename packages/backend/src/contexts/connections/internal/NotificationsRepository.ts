@@ -49,19 +49,23 @@ export const NotificationsLive = Layer.effect(
             ids,
             codec: NotificationsRow,
             plan: (locked) =>
-              Effect.forEach([...locked.values()], (row) => {
-                const event = events.get(row.id);
-                if (event === undefined) {
-                  throw new Error("A locked notification has no event");
-                }
-                return Effect.map(
-                  Effect.flatMap(
-                    snapshotOf(ConnectionNotificationWorkflow, row.state),
-                    (snapshot) => plan(ConnectionNotificationWorkflow, snapshot, event),
-                  ),
-                  (state) => ({ ...row, state }),
-                );
-              }),
+              Effect.forEach(
+                [...locked.values()],
+                (row) => {
+                  const event = events.get(row.id);
+                  if (event === undefined) {
+                    throw new Error("A locked notification has no event");
+                  }
+                  return Effect.map(
+                    Effect.flatMap(
+                      snapshotOf(ConnectionNotificationWorkflow, row.state),
+                      (snapshot) => plan(ConnectionNotificationWorkflow, snapshot, event),
+                    ),
+                    (state) => ({ ...row, state }),
+                  );
+                },
+                { concurrency: 1 },
+              ),
           }),
         )
         .pipe(Effect.mapError((cause) => NotificationsFailed.make({ cause })));
@@ -107,10 +111,13 @@ export const NotificationsLive = Layer.effect(
         .orderBy(notifications.nextAttemptAt)
         .limit(limit);
 
-      const userIds = yield* Effect.forEach([...new Set(rows.map((row) => row.userId))], (id) =>
-        Schema.decodeEffect(UserId)(id).pipe(
-          Effect.mapError((cause) => NotificationsFailed.make({ cause })),
-        ),
+      const userIds = yield* Effect.forEach(
+        [...new Set(rows.map((row) => row.userId))],
+        (id) =>
+          Schema.decodeEffect(UserId)(id).pipe(
+            Effect.mapError((cause) => NotificationsFailed.make({ cause })),
+          ),
+        { concurrency: 1 },
       );
       const emails = new Map(
         (yield* directory.emailsFor(userIds)).map((entry) => [entry.userId, entry.email]),
@@ -126,13 +133,18 @@ export const NotificationsLive = Layer.effect(
           ids: notificationIds,
           codec: NotificationsRow,
           plan: (locked) =>
-            Effect.forEach([...locked.values()], (row) =>
-              Effect.map(
-                Effect.flatMap(snapshotOf(ConnectionNotificationWorkflow, row.state), (snapshot) =>
-                  plan(ConnectionNotificationWorkflow, snapshot, { _tag: "Claimed", at }),
+            Effect.forEach(
+              [...locked.values()],
+              (row) =>
+                Effect.map(
+                  Effect.flatMap(
+                    snapshotOf(ConnectionNotificationWorkflow, row.state),
+                    (snapshot) =>
+                      plan(ConnectionNotificationWorkflow, snapshot, { _tag: "Claimed", at }),
+                  ),
+                  (state) => ({ ...row, state }),
                 ),
-                (state) => ({ ...row, state }),
-              ),
+              { concurrency: 1 },
             ),
         }),
       );

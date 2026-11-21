@@ -36,7 +36,7 @@ export const FeedbackLive = Layer.effect(
       if (submissions.length === 0) {
         return [];
       }
-      const accepted = yield* Effect.forEach(submissions, acceptSubmission);
+      const accepted = yield* Effect.forEach(submissions, acceptSubmission, { concurrency: 1 });
       const now = yield* DateTime.now;
       const windowStartedAt = DateTime.makeUnsafe(
         Math.floor(DateTime.toEpochMillis(now) / windowMillis) * windowMillis,

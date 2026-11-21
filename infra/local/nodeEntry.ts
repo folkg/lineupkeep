@@ -3,6 +3,8 @@ import { url } from "node:inspector";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+
 const directory = process.env["VERIFICATION_DIR"];
 const inspector = url();
 const entry = process.env["NODE_PRODUCTION_ENTRY"];
@@ -15,7 +17,7 @@ if (directory !== undefined) {
   }
   writeFileSync(
     join(directory, "inspector.json"),
-    JSON.stringify({ url: inspector, pid: process.pid }),
+    jsonTools.jsonString({ url: inspector, pid: process.pid }),
   );
   console.log(`Owned Node inspector: ${inspector}`);
 }

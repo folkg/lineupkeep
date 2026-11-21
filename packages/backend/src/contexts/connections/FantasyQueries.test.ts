@@ -8,6 +8,8 @@ import { TestClock } from "effect/testing";
 import { providerSessionReconnectDetail } from "#contexts/connections/Connection.ts";
 import { GameSourceRegistry, gameSourceRegistryOf } from "#contexts/connections/GameSource.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
+import jsonTools from "#runtime/JsonText.ts";
+import layerTools from "#runtime/ProvideLayer.ts";
 
 import { Connections } from "./Connections.ts";
 import { FantasyQueries } from "./FantasyQueries.ts";
@@ -112,7 +114,7 @@ it.effect("lists owned teams with stable paging and owner-bound continuations", 
     const foreignCursor = yield* Effect.flip(queries.listTeams(other, { cursor: firstCursor }));
     assert.strictEqual(foreignCursor._tag, "query.cursor_invalid");
     assert.strictEqual(seeded.length, 2);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("resolves calendar periods from league settings without guessing locks", () =>
@@ -149,7 +151,7 @@ it.effect("resolves calendar periods from league settings without guessing locks
       queries.getCalendar(decodeUserId("other"), { team: Array.getUnsafe(seeded, 0).id }),
     );
     assert.instanceOf(other, QueryTeamNotFound);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("answers which professional teams play in a requested period", () =>
@@ -210,7 +212,7 @@ it.effect("answers which professional teams play in a requested period", () =>
       { proTeam: "PIT", plays: false, games: [] },
     ]);
     assert.deepStrictEqual(games.notCovered, ["MISSING"]);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("returns league scoring, roster rules, and explicit standings coverage", () =>
@@ -253,7 +255,7 @@ it.effect("returns league scoring, roster rules, and explicit standings coverage
         (entry) => entry.resource === "standings" && entry.status === "unsupported",
       ),
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect(
@@ -309,7 +311,7 @@ it.effect(
         gamesPlayed: { status: "published", value: 48 },
         inningsPitched: { status: "not_set" },
       });
-    }).pipe(Effect.provide(QueriesTestLayer)),
+    }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("keeps the raw deadline and publishes its decoded roster-change rule", () =>
@@ -347,7 +349,7 @@ it.effect("keeps the raw deadline and publishes its decoded roster-change rule",
       source: ["weekly_deadline", "edit_key"],
       detail,
     });
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("reports a league's unset transaction rules as not set rather than zero", () =>
@@ -376,7 +378,7 @@ it.effect("reports a league's unset transaction rules as not set rather than zer
       inningsPitched: { status: "not_set" },
     });
     assert.notProperty(rules, "acquisitionUsage");
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("publishes each team's acquisition usage beside the league limits", () =>
@@ -432,7 +434,7 @@ it.effect("publishes each team's acquisition usage beside the league limits", ()
       weeklyAddsRemaining: 0,
     });
     assert.include(league.standings.detailNote, "No per-team games-played count");
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("publishes usage without a remaining count when the league sets no limit", () =>
@@ -470,7 +472,7 @@ it.effect("publishes usage without a remaining count when the league sets no lim
       weeklyAddsUsed: 0,
       coverage: { week: 3 },
     });
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("reports a team with no published counters as not published rather than zero", () =>
@@ -503,7 +505,7 @@ it.effect("reports a team with no published counters as not published rather tha
       detail:
         "Your league published neither a season move count nor a weekly adds count for this team.",
     });
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("carries the owning team's acquisition usage on the team summary", () =>
@@ -550,7 +552,7 @@ it.effect("carries the owning team's acquisition usage on the team summary", () 
       weeklyAddsRemaining: 4,
     });
     assert.strictEqual(summary.acquisitionUsage.gamesPlayedUsage.status, "not_published");
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("carries the league's roster-change timing on the team summary", () =>
@@ -584,7 +586,7 @@ it.effect("carries the league's roster-change timing on the team summary", () =>
       rosterChange: "next_day",
       waiverDays: 2,
     });
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("publishes the league's waiver bid shape on the team summary", () =>
@@ -617,7 +619,7 @@ it.effect("publishes the league's waiver bid shape on the team summary", () =>
       return;
     }
     assert.deepStrictEqual(published.waiverBid, { kind: "published", balance: 42 });
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("publishes an innings cap only for a league that declares one", () =>
@@ -641,7 +643,7 @@ it.effect("publishes an innings cap only for a league that declares one", () =>
       gamesPlayed: { status: "not_set" },
       inningsPitched: { status: "published", value: 1400 },
     });
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("marks your league category the league does not score as informational", () =>
@@ -702,7 +704,7 @@ it.effect("marks your league category the league does not score as informational
         },
       ],
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("keeps roster, calendar, and matchup reads with degraded league coverage", () =>
@@ -750,7 +752,7 @@ it.effect("keeps roster, calendar, and matchup reads with degraded league covera
       );
       assert.include(Array.getUnsafe(calendar.failures, 0).message, "league.num_teams");
     }
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("keeps the league failure when the roster read also fails", () =>
@@ -777,7 +779,7 @@ it.effect("keeps the league failure when the roster read also fails", () =>
       roster.coverage.find((entry) => entry.resource === "league")?.status,
       "degraded",
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("reports a league without a scoring-week window instead of inventing periods", () =>
@@ -833,7 +835,7 @@ it.effect("reports a league without a scoring-week window instead of inventing p
       assert.strictEqual(roster.players.length, 2);
       assert.strictEqual(roster.period, undefined);
     }
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("reads compact and full rosters for an exact selected week", () =>
@@ -890,7 +892,7 @@ it.effect("reads compact and full rosters for an exact selected week", () =>
       queries.getRosters(owner, { team: teamId, period: { week: 18 } }),
     );
     assert.strictEqual(outsideSeason._tag, "query.selection_invalid");
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("publishes the site's starting status on team roster rows and the summary roster", () =>
@@ -944,14 +946,14 @@ it.effect("publishes the site's starting status on team roster rows and the summ
       leagueRoster.teams.flatMap((entry) => entry.players.map((player) => player.startingStatus)),
       ["not_requested", "not_requested", "not_requested"],
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("reads every team's roster in the linked league with team identity on each row", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
-    const tokens = yield* Effect.provide(
+    const tokens = yield* layerTools.provideLayer(
       QueryTokens,
       QueryTokens.fromSecret("test-query-token-secret-at-least-32-chars"),
     );
@@ -1044,7 +1046,7 @@ it.effect("reads every team's roster in the linked league with team identity on 
     );
     assert.isFalse(includesText(read, "461.l.1000.t.2"));
     assert.isFalse(includesText(read, "461.p.20001"));
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("pages league rosters by whole teams with a cursor", () =>
@@ -1110,7 +1112,7 @@ it.effect("pages league rosters by whole teams with a cursor", () =>
       size: 1,
       total: 3,
     });
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("refuses a league roster read for a team the account does not own", () =>
@@ -1133,7 +1135,7 @@ it.effect("refuses a league roster read for a team the account does not own", ()
 
     assert.instanceOf(refused, QueryTeamNotFound);
     assert.strictEqual((yield* fake.providerReads) - before, 0);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("resolves an unowned player reference from a league roster read in get_players", () =>
@@ -1184,7 +1186,7 @@ it.effect("resolves an unowned player reference from a league roster read in get
     assert.strictEqual(player.identity?.name, "Rival Player");
     assert.strictEqual(player.availability?.rosterStatus, "rostered");
     assert.deepStrictEqual(resolved.failures, []);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("points a get_players call without references at search_players", () =>
@@ -1204,7 +1206,7 @@ it.effect("points a get_players call without references at search_players", () =
       assert.include(refused.detail, "search_players");
     }
     assert.strictEqual((yield* fake.providerReads) - before, 0);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("reports a refused league roster read instead of an empty roster", () =>
@@ -1229,7 +1231,7 @@ it.effect("reports a refused league roster read instead of an empty roster", () 
       [["roster", "league_rosters", "unsupported"]],
     );
     assert.deepStrictEqual(read.failures, []);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("refuses an exact period for a league roster read", () =>
@@ -1250,7 +1252,7 @@ it.effect("refuses an exact period for a league roster read", () =>
 
     assert.strictEqual(refused._tag, "query.selection_invalid");
     assert.strictEqual((yield* fake.providerReads) - before, 0);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect(
@@ -1291,7 +1293,7 @@ it.effect(
       }
       assert.deepStrictEqual(summary.roster?.[0]?.slot, unverified);
       assert.deepStrictEqual(summary.roster?.[1]?.slot, { status: "verified", slot: "BN" });
-    }).pipe(Effect.provide(QueriesTestLayer)),
+    }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect(
@@ -1385,7 +1387,7 @@ it.effect(
         eligibleSummary.status === "ok" ? eligibleSummary.illegalSlots : "not ok",
         [],
       );
-    }).pipe(Effect.provide(QueriesTestLayer)),
+    }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("publishes place accounting and each reserve list on the roster and team summary", () =>
@@ -1474,7 +1476,7 @@ it.effect("publishes place accounting and each reserve list on the roster and te
       assert.deepStrictEqual(plain.places, { used: 3, maximum: 7, free: 4 });
       assert.deepStrictEqual(plain.reserve, []);
     }
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("publishes each reserve move a full roster can make and the adds they allow", () =>
@@ -1516,7 +1518,7 @@ it.effect("publishes each reserve move a full roster can make and the adds they 
     );
     assert.strictEqual(summary.addsWithFixes, 4);
     assert.deepStrictEqual(summary.illegal, []);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("rejects a blank player search query with the remedy instead of a generic failure", () =>
@@ -1546,7 +1548,7 @@ it.effect("rejects a blank player search query with the remedy instead of a gene
       assert.isUndefined(listed.players[0]?.status.observedAt);
       assert.isUndefined(listed.players[0]?.transactionTrend);
     }
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("resolves a dropped player's identity from transaction history", () =>
@@ -1607,7 +1609,7 @@ it.effect("resolves a dropped player's identity from transaction history", () =>
       ),
     );
     assert.isFalse(includesText(hydrated, "461.p.10004"));
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("hydrates a free agent's availability without the actual_stats group", () =>
@@ -1646,7 +1648,7 @@ it.effect("hydrates a free agent's availability without the actual_stats group",
       injury: { reported: false },
     });
     assert.deepStrictEqual(hydrated.failures, []);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("publishes an off-roster player's injury note instead of reporting none", () =>
@@ -1684,7 +1686,7 @@ it.effect("publishes an off-roster player's injury note instead of reporting non
       rosterStatus: "free_agent",
       injury: { reported: true, detail: "Out indefinitely with a foot injury" },
     });
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("names the input position of a player reference that does not open", () =>
@@ -1699,7 +1701,7 @@ it.effect("names the input position of a player reference that does not open", (
       return;
     }
     const rosterRef = Array.getUnsafe(roster.players, 0).player;
-    const foreignRef = yield* Effect.provide(
+    const foreignRef = yield* layerTools.provideLayer(
       Effect.flatMap(QueryTokens, (tokens) =>
         tokens.sealPlayerRef({
           userId: owner,
@@ -1729,7 +1731,7 @@ it.effect("names the input position of a player reference that does not open", (
     assert.strictEqual(failure?.code, "invalid_player_reference");
     assert.strictEqual(failure?.resource, foreignRef);
     assert.include(failure?.message, "input position 2");
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("reports a requested availability your league does not publish", () =>
@@ -1738,7 +1740,7 @@ it.effect("reports a requested availability your league does not publish", () =>
     const fake = yield* FakeProviderWorld;
     const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
     const teamId = Array.getUnsafe(seeded, 0).id;
-    const ref = yield* Effect.provide(
+    const ref = yield* layerTools.provideLayer(
       Effect.flatMap(QueryTokens, (tokens) =>
         tokens.sealPlayerRef({
           userId: owner,
@@ -1761,7 +1763,7 @@ it.effect("reports a requested availability your league does not publish", () =>
         hydrated.failures.some((failure) => failure.code === "player_availability_unavailable"),
       );
     }
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("searches bounded free agents and preserves zero versus missing stats", () =>
@@ -1815,7 +1817,7 @@ it.effect("searches bounded free agents and preserves zero versus missing stats"
     assert.deepStrictEqual(hydrated.period, { kind: "season" });
     assert.strictEqual(hydrated.dictionary.length, 1);
     assert.strictEqual(Array.getUnsafe(hydrated.dictionary, 0).name, "Passing Yards");
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("states each pool row's week, opponent, and projected rank", () =>
@@ -1902,7 +1904,7 @@ it.effect("states each pool row's week, opponent, and projected rank", () =>
         ],
       ],
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("reads a pool's games by scoring week over several weeks", () =>
@@ -2022,7 +2024,7 @@ it.effect("reads a pool's games by scoring week over several weeks", () =>
         ],
       ],
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("orders the pool by a recent window and states each row's rank", () =>
@@ -2125,7 +2127,7 @@ it.effect("orders the pool by a recent window and states each row's rank", () =>
       "a recent-rank ordering carries no season stat value",
     );
     assert.deepStrictEqual(search.failures, []);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect(
@@ -2252,7 +2254,7 @@ it.effect(
           "both sports publish the same row shape and the value that ordered it",
         );
       }
-    }).pipe(Effect.provide(QueriesTestLayer)),
+    }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("refuses a recent window a season order cannot answer with", () =>
@@ -2312,7 +2314,7 @@ it.effect("refuses a recent window a season order cannot answer with", () =>
       }),
     );
     assert.instanceOf(weekWindow, QuerySelectionInvalid);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("refuses a recent window the league does not publish and names the nearest", () =>
@@ -2332,7 +2334,7 @@ it.effect("refuses a recent window the league does not publish and names the nea
     assert.instanceOf(error, QuerySelectionInvalid);
     assert.include(error.detail, "the last 4 weeks");
     assert.include(error.detail, "nearest window");
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("does not offer a recent-form ordering a league publishes no rank for", () =>
@@ -2372,7 +2374,7 @@ it.effect("does not offer a recent-form ordering a league publishes no rank for"
     assert.instanceOf(error, QuerySelectionInvalid);
     assert.include(error.detail, "no recent-form player rank");
     assert.include(error.detail, "Order the pool by ownership");
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("stops a summary at its first refused read and names the layer to reconnect", () =>
@@ -2425,7 +2427,7 @@ it.effect("stops a summary at its first refused read and names the layer to reco
       connection.session.provenAt,
       DateTime.makeUnsafe("2026-11-08T14:11:29.000Z"),
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("publishes the football projected week rank as the player's projection", () =>
@@ -2475,7 +2477,7 @@ it.effect("publishes the football projected week rank as the player's projection
       return;
     }
     assert.strictEqual(Array.getUnsafe(summary.roster ?? [], 0).week?.projectedRank, 14);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("returns every explicitly requested player reference in one response", () =>
@@ -2513,7 +2515,7 @@ it.effect("returns every explicitly requested player reference in one response",
       })),
     });
     const teamId = Array.getUnsafe(seeded, 0).id;
-    const players = yield* Effect.provide(
+    const players = yield* layerTools.provideLayer(
       Effect.flatMap(QueryTokens, (tokens) =>
         tokens.sealPlayerRefs({
           userId: owner,
@@ -2539,7 +2541,7 @@ it.effect("returns every explicitly requested player reference in one response",
     }
     assert.strictEqual(hydrated.players.length, 25);
     assert.deepStrictEqual(hydrated.page, { returned: 25, complete: true, remaining: 0 });
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("answers a batch when one player's details fail verification", () =>
@@ -2584,7 +2586,7 @@ it.effect("answers a batch when one player's details fail verification", () =>
     assert.strictEqual(failure?.resource, Array.getUnsafe(refs, 2));
     assert.include(failure?.message, "Ask again for this player alone");
     assert.strictEqual(yield* fake.readCount("read_player_details"), 5);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("answers a repeated player reference from one detail read", () =>
@@ -2612,7 +2614,7 @@ it.effect("answers a repeated player reference from one detail read", () =>
     );
     assert.deepStrictEqual(hydrated.failures, []);
     assert.strictEqual(yield* fake.readCount("read_player_details"), 1);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("refuses a batch when no requested player's details can be verified", () =>
@@ -2635,7 +2637,7 @@ it.effect("refuses a batch when no requested player's details can be verified", 
 
     assert.instanceOf(refused, QuerySelectionInvalid);
     assert.include(refused.detail, "Ask again for one player per call");
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect(
@@ -2858,7 +2860,7 @@ it.effect(
         detail:
           "This row's professional team could not be resolved to a key, so its game days cannot be joined without guessing from an abbreviation.",
       });
-    }).pipe(Effect.provide(queriesTestLayerWithGames(6))),
+    }).pipe(layerTools.provide(queriesTestLayerWithGames(6))),
 );
 
 it.effect("counts a pool window's game days instead of the scoring window", () =>
@@ -2971,7 +2973,7 @@ it.effect("counts a pool window's game days instead of the scoring window", () =
         ],
       ],
     );
-  }).pipe(Effect.provide(queriesTestLayerWithGames(6))),
+  }).pipe(layerTools.provide(queriesTestLayerWithGames(6))),
 );
 
 it.effect("reads a season's worth of game days from the league's weekly schedule ranges", () =>
@@ -3054,7 +3056,7 @@ it.effect("reads a season's worth of game days from the league's weekly schedule
           'This league has a dated professional schedule. Ask `search_players` with `gamesWindow: {kind: "current"}` or `{start, end}` dates; it refuses a week window.',
       });
     }
-  }).pipe(Effect.provide(queriesTestLayerWithGames(6))),
+  }).pipe(layerTools.provide(queriesTestLayerWithGames(6))),
 );
 
 it.effect("refuses a game window longer than one season", () =>
@@ -3076,7 +3078,7 @@ it.effect("refuses a game window longer than one season", () =>
     assert.instanceOf(error, QuerySelectionInvalid);
     assert.include(error.detail, "367 dates");
     assert.include(error.detail, "one season (366 dates)");
-  }).pipe(Effect.provide(queriesTestLayerWithGames(6))),
+  }).pipe(layerTools.provide(queriesTestLayerWithGames(6))),
 );
 
 it.effect("refuses a game window for a league that counts games by scoring week", () =>
@@ -3097,7 +3099,7 @@ it.effect("refuses a game window for a league that counts games by scoring week"
     assert.include(error.detail, "counts games by scoring week");
     assert.include(error.detail, "a date window cannot answer for it");
     assert.include(error.detail, 'gamesWindow: {kind: "next_weeks", weeks: 4}');
-  }).pipe(Effect.provide(queriesTestLayerWithGames(6))),
+  }).pipe(layerTools.provide(queriesTestLayerWithGames(6))),
 );
 
 it.effect(
@@ -3179,7 +3181,7 @@ it.effect(
             entry.detail === "Actual statistics use the season basis.",
         ),
       );
-    }).pipe(Effect.provide(QueriesTestLayer)),
+    }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("carries a screening status and its observation time on every search row", () =>
@@ -3285,7 +3287,7 @@ it.effect("carries a screening status and its observation time on every search r
         },
       ],
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("publishes the professional team on search rows", () =>
@@ -3336,7 +3338,7 @@ it.effect("publishes the professional team on search rows", () =>
         ["Unsigned Skater", null],
       ],
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("returns distinct free-agent, waiver, and all pools with all as their union", () =>
@@ -3402,7 +3404,7 @@ it.effect("returns distinct free-agent, waiver, and all pools with all as their 
     assert.deepStrictEqual(waivers, ["Waiver Player"]);
     assert.deepStrictEqual(all, ["Free Agent", "Waiver Player"]);
     assert.deepStrictEqual(all, [...freeAgents, ...waivers].sort());
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("answers a league with no waiver players honestly", () =>
@@ -3442,7 +3444,7 @@ it.effect("answers a league with no waiver players honestly", () =>
     assert.isTrue(
       empty.coverage.some((entry) => entry.resource === "players" && entry.status === "available"),
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("carries your league's day-window transaction counts on search rows", () =>
@@ -3503,7 +3505,7 @@ it.effect("carries your league's day-window transaction counts on search rows", 
         ["Uncounted Skater", { status: "not_published", reason: "Synthetic absence." }],
       ],
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("carries the transaction counts on roster rows", () =>
@@ -3543,7 +3545,7 @@ it.effect("carries the transaction counts on roster rows", () =>
         ["Synthetic 1", { status: "not_published", reason: "Synthetic absence." }],
       ],
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("refuses a period your league cannot honour instead of ignoring it", () =>
@@ -3615,7 +3617,7 @@ it.effect("refuses a period your league cannot honour instead of ignoring it", (
       assert.include(currentWeek.detail, "week 3 is the current or upcoming week");
       assert.include(currentWeek.detail, "completed scoring week");
     }
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect(
@@ -3702,7 +3704,7 @@ it.effect(
               "Actual statistics use the date_range basis: 7 daily reads summed from 2026-10-20 to 2026-10-26.",
         ),
       );
-    }).pipe(Effect.provide(QueriesTestLayer)),
+    }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("never pairs an unsupported stat group with a period failure", () =>
@@ -3754,7 +3756,7 @@ it.effect("never pairs an unsupported stat group with a period failure", () =>
       (entry) => entry.resource === "players" && entry.status === "degraded",
     );
     assert.include(detailsCoverage?.detail, "did not report the requested week 3");
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("reads a date-scoped roster without inventing a week", () =>
@@ -3777,7 +3779,7 @@ it.effect("reads a date-scoped roster without inventing a week", () =>
     assert.isTrue(
       roster.coverage.some((entry) => entry.resource === "roster" && entry.status === "available"),
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("reports add/drop transactions without inventing execution", () =>
@@ -3827,7 +3829,7 @@ it.effect("reports add/drop transactions without inventing execution", () =>
     assert.strictEqual(removed.movement.kind, "drop");
     assert.strictEqual(removed.movement.from?.name, "Alpha");
     assert.strictEqual(removed.movement.to, null);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("reports both sides of a trade with the team each player left and joined", () =>
@@ -3895,7 +3897,7 @@ it.effect("reports both sides of a trade with the team each player left and join
     assert.strictEqual(returned.movement.to?.name, "Alpha");
     assert.strictEqual(returned.movement.from?.team, sent.movement.to?.team);
     assert.strictEqual(returned.movement.to?.team, sent.movement.from?.team);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("flags a transaction with no player movements incomplete instead of an empty trade", () =>
@@ -3940,7 +3942,7 @@ it.effect("flags a transaction with no player movements incomplete instead of an
       detail: "Your league published this transaction with no player movements.",
     });
     assert.strictEqual(trade.completeness.status, "incomplete");
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("reports a pick-only trade with both sides and no players", () =>
@@ -3987,7 +3989,7 @@ it.effect("reports a pick-only trade with both sides and no players", () =>
       ],
     );
     assert.strictEqual(trade.teams.length, 2);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("returns draft history with round, pick, team, and player for the league", () =>
@@ -4070,7 +4072,7 @@ it.effect("returns draft history with round, pick, team, and player for the leag
       assert.strictEqual(draftedIdentity.draft.draftSeason, 2026);
       assert.match(draftedIdentity.draft.draftedBy.team, /^r1\./u);
     }
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect(
@@ -4161,7 +4163,7 @@ it.effect(
       assert.deepStrictEqual(search.players.find((row) => row.name === "Undrafted")?.draft, {
         status: "undrafted",
       });
-    }).pipe(Effect.provide(QueriesTestLayer)),
+    }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect(
@@ -4186,7 +4188,7 @@ it.effect(
       );
       assert.strictEqual(coverage?.status, "unsupported");
       assert.include(coverage?.detail ?? "", "published no draft picks");
-    }).pipe(Effect.provide(QueriesTestLayer)),
+    }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("states that draft history was unreadable instead of calling players undrafted", () =>
@@ -4232,7 +4234,7 @@ it.effect("states that draft history was unreadable instead of calling players u
     assert.deepStrictEqual(Array.getUnsafe(players.players, 0).identity?.draft, {
       status: "not_published",
     });
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("reads one draft history for the whole response, not one read per player", () =>
@@ -4296,7 +4298,7 @@ it.effect("reads one draft history for the whole response, not one read per play
     const search = yield* queries.searchPlayers(owner, { team: teamId, detail: "full" });
     assert.strictEqual(search.status, "ok");
     assert.strictEqual((yield* fake.readCount("read_draft_results")) - beforeSearch, 1);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("returns explicit unsupported coverage instead of empty success", () =>
@@ -4338,7 +4340,7 @@ it.effect("returns explicit unsupported coverage instead of empty success", () =
         assert.isTrue(result.coverage.some((entry) => entry.status === "unsupported"));
       }
     }
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("pages a large multi-byte roster inside the encoded result budget", () =>
@@ -4376,7 +4378,7 @@ it.effect("pages a large multi-byte roster inside the encoded result budget", ()
     if (next.status === "ok" && next.scope === "team") {
       assert.notStrictEqual(next.players[0]?.player, page.players[0]?.player);
     }
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("fits the structured result inside the hard byte limit", () =>
@@ -4398,7 +4400,7 @@ it.effect("fits the structured result inside the hard byte limit", () =>
       return;
     }
     assert.isAtMost(receivedToolResultBytes(page), page.budget.hardLimitBytes);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 function encodedKeys(value: unknown): ReadonlyArray<string> {
@@ -4408,14 +4410,18 @@ function encodedKeys(value: unknown): ReadonlyArray<string> {
 }
 
 function summarySectionBytes(summary: TeamSummaryResult): number {
-  const structuredContent = Schema.encodeSync(Schema.toCodecJson(TeamSummaryResult))(summary);
-  const received = JSON.stringify({ structuredContent, isError: false });
+  const structuredContent = Effect.runSync(
+    Schema.encodeEffect(Schema.toCodecJson(TeamSummaryResult))(summary),
+  );
+  const received = jsonTools.jsonString({ structuredContent, isError: false });
   return new TextEncoder().encode(received).length;
 }
 
 function receivedToolResultBytes(page: RosterResult): number {
-  const structuredContent = Schema.encodeSync(Schema.toCodecJson(RosterResult))(page);
-  const received = JSON.stringify({ structuredContent, isError: false });
+  const structuredContent = Effect.runSync(
+    Schema.encodeEffect(Schema.toCodecJson(RosterResult))(page),
+  );
+  const received = jsonTools.jsonString({ structuredContent, isError: false });
   return new TextEncoder().encode(received).length;
 }
 
@@ -4523,7 +4529,7 @@ it.effect("returns a thirteen-team compact standings table in one result", () =>
         "`standingsDetail` applies only when the `standings` group",
       );
     }
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("reads standings with category totals and marks the linked team", () =>
@@ -4612,7 +4618,7 @@ it.effect("reads standings with category totals and marks the linked team", () =
       ),
     );
     assert.isFalse(includesText(league, "461.l.1000"));
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("reports rotisserie standings without inventing a record or weekly matchup", () =>
@@ -4804,7 +4810,7 @@ it.effect("reports rotisserie standings without inventing a record or weekly mat
     }
     assert.strictEqual(summary.matchup?.status, "unsupported");
     assert.isTrue((summary.roster ?? []).length > 0);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("states the rotisserie categories whose points your league does not publish", () =>
@@ -4869,7 +4875,7 @@ it.effect("states the rotisserie categories whose points your league does not pu
       ),
       "every unpublished category states why instead of returning a bare null",
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("degrades one team summary section without failing the snapshot", () =>
@@ -4912,7 +4918,7 @@ it.effect("degrades one team summary section without failing the snapshot", () =
     }
     assert.notInclude(encodedKeys(summary), "probableStarters");
     assert.deepStrictEqual(summary.ownerNote, { status: "not_set" });
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("publishes how far the season has progressed in a team summary", () =>
@@ -4937,7 +4943,7 @@ it.effect("publishes how far the season has progressed in a team summary", () =>
       startDate: "2026-09-03",
       endDate: "2026-12-28",
     });
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("returns the owner note as owner context in a team summary", () =>
@@ -4967,7 +4973,7 @@ it.effect("returns the owner note as owner context in a team summary", () =>
       text: "Dynasty league. Keep both goalies; cost rises by 5 each season.",
       updatedAt: writtenAt,
     });
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("returns recent agent notes newest first and bounds them beside the owner note", () =>
@@ -5026,7 +5032,7 @@ it.effect("returns recent agent notes newest first and bounds them beside the ow
       summary.ownerNote.status === "provided" ? summary.ownerNote.text : undefined,
       "The owner's instruction.",
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("returns an explicitly empty agent-note list when the team has none", () =>
@@ -5046,7 +5052,7 @@ it.effect("returns an explicitly empty agent-note list when the team has none", 
     }
     assert.deepStrictEqual(summary.agentNotes, []);
     assert.deepStrictEqual(summary.ownerNote, { status: "not_set" });
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("carries the owner note on the full roster read", () =>
@@ -5083,7 +5089,7 @@ it.effect("carries the owner note on the full roster read", () =>
       text: note,
       updatedAt: writtenAt,
     });
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("filters transactions by scope and date inside the bounded provider window", () =>
@@ -5164,7 +5170,7 @@ it.effect("filters transactions by scope and date inside the bounded provider wi
       }),
     );
     assert.strictEqual(invalid._tag, "query.selection_invalid");
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("reports a transaction range that starts before your league's history", () =>
@@ -5212,7 +5218,7 @@ it.effect("reports a transaction range that starts before your league's history"
     assert.isTrue(
       ranged.failures.some((failure) => failure.code === "transaction_history_starts_after_range"),
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("pages back to a transaction range older than the newest provider page", () =>
@@ -5271,7 +5277,7 @@ it.effect("pages back to a transaction range older than the newest provider page
     assert.strictEqual(occurred.length, 13);
     assert.strictEqual(occurred[0], occurredAt(94));
     assert.strictEqual(occurred[12], occurredAt(106));
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("reports truncation when the transaction read reaches its page cap", () =>
@@ -5314,7 +5320,7 @@ it.effect("reports truncation when the transaction read reaches its page cap", (
     assert.isTrue(
       ranged.failures.some((failure) => failure.code === "transaction_window_truncated"),
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("resolves a league stat reference for a stat-ordered player search", () =>
@@ -5351,7 +5357,7 @@ it.effect("resolves a league stat reference for a stat-ordered player search", (
       queries.searchPlayers(owner, { team: teamId, sort: "stat" }),
     );
     assert.strictEqual(missing._tag, "query.selection_invalid");
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("refuses a weekly player sort the rows cannot explain", () =>
@@ -5381,7 +5387,7 @@ it.effect("refuses a weekly player sort the rows cannot explain", () =>
       window: { kind: "season" },
     });
     assert.strictEqual(season.status, "ok");
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("surfaces the rank and stat values that each provider-ordered sort uses", () =>
@@ -5483,7 +5489,7 @@ it.effect("surfaces the rank and stat values that each provider-ordered sort use
       byStat.players.map((player) => player.statValue),
       [240, 120],
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("carries the professional team on every compact roster entry", () =>
@@ -5500,7 +5506,7 @@ it.effect("carries the professional team on every compact roster entry", () =>
     }
     assert.strictEqual(roster.players[0]?.proTeam, "SYN");
     assert.isNull(roster.players[1]?.proTeam);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("reports this week's and next week's remaining player-games for hockey", () =>
@@ -5574,7 +5580,7 @@ it.effect("reports this week's and next week's remaining player-games for hockey
         (entry) => entry.resource === "remaining_player_games" && entry.status === "available",
       ),
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("reports each rostered player's scheduled games and the roster count per date", () =>
@@ -5697,7 +5703,7 @@ it.effect("reports each rostered player's scheduled games and the roster count p
         (entry) => entry.resource === "schedule" && entry.status === "available",
       ),
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect(
@@ -5863,7 +5869,7 @@ it.effect(
           (entry) => entry.resource === "schedule" && entry.source === "professional_games",
         ),
       );
-    }).pipe(Effect.provide(queriesTestLayerWithGames(6))),
+    }).pipe(layerTools.provide(queriesTestLayerWithGames(6))),
 );
 
 it.effect(
@@ -5924,7 +5930,7 @@ it.effect(
       assert.deepStrictEqual(Array.getUnsafe(schedule.players, 0).games, [
         { date: "2026-10-20", opponent: "BOS", home: true, offNight: true },
       ]);
-    }).pipe(Effect.provide(queriesTestLayerWithGames(6))),
+    }).pipe(layerTools.provide(queriesTestLayerWithGames(6))),
 );
 
 it.effect("reports the league's professional games instead of reading the provider schedule", () =>
@@ -5973,7 +5979,7 @@ it.effect("reports the league's professional games instead of reading the provid
       }
     }
     assert.deepStrictEqual(yield* fake.schedulePeriods, []);
-  }).pipe(Effect.provide(queriesTestLayerWithGames(6))),
+  }).pipe(layerTools.provide(queriesTestLayerWithGames(6))),
 );
 
 it.effect("serve your league's opponent fact with off nights absent for a football league", () =>
@@ -6022,7 +6028,7 @@ it.effect("serve your league's opponent fact with off nights absent for a footba
       source: "provider_opponent",
     });
     assert.isUndefined(Array.getUnsafe(Array.getUnsafe(schedule.players, 0).games, 0).offNight);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("serves a repeated schedule window from stored opponent facts", () =>
@@ -6078,7 +6084,7 @@ it.effect("serves a repeated schedule window from stored opponent facts", () =>
         ["TOR", "fixture.t.1"],
       ],
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("re-reads only the date past its fantasy-day boundary", () =>
@@ -6140,7 +6146,7 @@ it.effect("re-reads only the date past its fantasy-day boundary", () =>
         { date: "2026-10-21", rosterGames: 1 },
       ]);
     }
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("keeps a stale opponent's previous observation when the re-read fails", () =>
@@ -6219,7 +6225,7 @@ it.effect("keeps a stale opponent's previous observation when the re-read fails"
         "2026-10-20T09:00:00.000Z",
       );
     }
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("lets two workers record the same date without conflicting", () =>
@@ -6261,7 +6267,7 @@ it.effect("lets two workers record the same date without conflicting", () =>
     }
     assert.strictEqual(settled.schedule?.status, "available");
     assert.strictEqual((yield* fake.schedulePeriods).length, readsByWorkers);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("measures a day of uncached hourly schedule sweeps", () =>
@@ -6288,7 +6294,7 @@ it.effect("measures a day of uncached hourly schedule sweeps", () =>
 
     assert.strictEqual(periods.length, 120);
     assert.strictEqual(scheduleDateReads(periods), 360);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("serves a day of hourly sweeps with one newly covered date per team", () =>
@@ -6337,7 +6343,7 @@ it.effect("serves a day of hourly sweeps with one newly covered date per team", 
       tickReads.slice(48, 51).reduce((total, reads) => total + reads, 0),
       5,
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("uses the scoring week's opponent for a league whose coverage is a week", () =>
@@ -6390,7 +6396,7 @@ it.effect("uses the scoring week's opponent for a league whose coverage is a wee
     );
     assert.include(schedule.detail, "Scoring week 3");
     assert.include(schedule.detail, "no per-week game count");
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("refuses a date window it cannot establish instead of inventing one", () =>
@@ -6427,7 +6433,7 @@ it.effect("refuses a date window it cannot establish instead of inventing one", 
         (entry) => entry.resource === "schedule" && entry.status === "unsupported",
       ),
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("reads the rest of your league's week for a league with no scoring period", () =>
@@ -6507,7 +6513,7 @@ it.effect("reads the rest of your league's week for a league with no scoring per
     );
     assert.include(schedule.detail, "rest of your league's current week");
     assert.include(schedule.detail, "2026-10-30 to 2026-11-01");
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("counts a requested day window from your league's current date", () =>
@@ -6565,7 +6571,7 @@ it.effect("counts a requested day window from your league's current date", () =>
       source: "requested",
     });
     assert.include(schedule.detail, "requested window");
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("uses a requested window instead of the league's scoring period", () =>
@@ -6620,7 +6626,7 @@ it.effect("uses a requested window instead of the league's scoring period", () =
       end: "2026-10-28",
       source: "requested",
     });
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("refuses a date window for a league whose coverage is a scoring week", () =>
@@ -6647,7 +6653,7 @@ it.effect("refuses a date window for a league whose coverage is a scoring week",
     assert.include(schedule.detail, "scoring week");
     assert.include(schedule.detail, "Omit `window` and `days`");
     assert.deepStrictEqual(yield* fake.schedulePeriods, []);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("reports your league refusal for the schedule as unsupported with its reason", () =>
@@ -6681,7 +6687,7 @@ it.effect("reports your league refusal for the schedule as unsupported with its 
       return;
     }
     assert.include(schedule.detail, "does not support read_roster_schedule");
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("pages a full roster's schedule through the roster page and one cursor", () =>
@@ -6789,7 +6795,7 @@ it.effect("pages a full roster's schedule through the roster page and one cursor
       globalThis.Array.from({ length: 22 }, () => 3),
     );
     assert.strictEqual(refs.size, 22);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("shares one player reference between the roster and schedule sections", () =>
@@ -6841,7 +6847,7 @@ it.effect("shares one player reference between the roster and schedule sections"
       schedule.players.map((player) => player.name),
       summary.roster?.map((player) => player.name),
     );
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("fits a multi-section team summary inside the result budget", () =>
@@ -6925,7 +6931,7 @@ it.effect("fits a multi-section team summary inside the result budget", () =>
       assert.isAtLeast(allGroups.page.returned, 1);
       assert.isAtMost(summarySectionBytes(allGroups), allGroups.budget.hardLimitBytes);
     }
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 function thirteenTeamRotoLeague(): {
@@ -7001,7 +7007,7 @@ it.effect("names the sections that consume the budget for the client's exact gro
     }
     assert.strictEqual(summary.status, "ok");
     assert.isAtMost(summarySectionBytes(summary), summary.budget.hardLimitBytes);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("pairs the matchup's category values in one row per category", () =>
@@ -7032,7 +7038,7 @@ it.effect("pairs the matchup's category values in one row per category", () =>
     assert.strictEqual(first.own, 3);
     assert.strictEqual(first.opponent, 3);
     assert.isUndefined(first.detail);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("fits the ordinary six-group summary for a thirteen-team league", () =>
@@ -7090,7 +7096,7 @@ it.effect("fits the ordinary six-group summary for a thirteen-team league", () =
       }
     }
     assert.isAtMost(summarySectionBytes(summary), summary.budget.hardLimitBytes);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("omits the roster page from a summary that did not request the roster group", () =>
@@ -7136,7 +7142,7 @@ it.effect("omits the roster page from a summary that did not request the roster 
     }
     assert.strictEqual(withRoster.roster?.length, 2);
     assert.strictEqual(withRoster.page.returned, 2);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("names the selected sections when a summary without a roster page cannot fit", () =>
@@ -7173,7 +7179,7 @@ it.effect("names the selected sections when a summary without a roster page cann
       return;
     }
     assert.strictEqual(withRoster.resource, "team_summary.roster");
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("refuses a continuation cursor issued for different request arguments", () =>
@@ -7218,7 +7224,7 @@ it.effect("refuses a continuation cursor issued for different request arguments"
         assert.fail("expected a cursor-invalid failure");
       }
     }
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 it.effect("documents how to narrow a summary that cannot fit a single record", () =>
@@ -7246,7 +7252,7 @@ it.effect("documents how to narrow a summary that cannot fit a single record", (
     ]);
     assert.include(summary.detail, "Request fewer summary groups");
     assert.isUndefined(summary.record);
-  }).pipe(Effect.provide(QueriesTestLayer)),
+  }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
 function transactionPlayer(
@@ -7298,7 +7304,7 @@ function transaction(fields: {
 const alphaTeam: ProviderTransactionTeam = { providerTeamKey: "461.l.1000.t.1", name: "Alpha" };
 const betaTeam: ProviderTransactionTeam = { providerTeamKey: "461.l.1000.t.2", name: "Beta" };
 
-const unknownStatRef = Schema.decodeSync(StatRef)("s1.unknown");
+const unknownStatRef = Effect.runSync(Schema.decodeEffect(StatRef)("s1.unknown"));
 
 const owner = decodeUserId("owner");
 const session = Redacted.make("A1=test-session-cookie");
@@ -8062,7 +8068,7 @@ function poolPlayerDetails(playerKeys: ReadonlyArray<string>): ReadonlyArray<Pro
 function sealedPlayerRefs(
   playerKeys: ReadonlyArray<string>,
 ): Effect.Effect<ReadonlyArray<PlayerRef>> {
-  return Effect.provide(
+  return layerTools.provideLayer(
     Effect.flatMap(QueryTokens, (tokens) =>
       tokens.sealPlayerRefs({ userId: owner, leagueKey: "461.l.1000", playerKeys }),
     ),

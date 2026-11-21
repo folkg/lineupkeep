@@ -7,6 +7,7 @@ import {
   decodeConnectionId,
 } from "#contexts/connections/Connection.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
+import jsonTools from "#runtime/JsonText.ts";
 import { snapshotOf } from "#utilities/machine.ts";
 import * as MachineTest from "#utilities/machineTest.ts";
 
@@ -19,7 +20,7 @@ it.effect("round-trips every explored lifecycle state through its row codec", ()
     const explored = yield* MachineTest.explore(ConnectionLifecycleWorkflow, {
       input,
       events: () => events,
-      stateKey: ({ snapshot }) => JSON.stringify(snapshot),
+      stateKey: ({ snapshot }) => jsonTools.jsonString(snapshot),
     });
     assert.strictEqual(explored.completeness._tag, "Complete");
     assert.strictEqual(explored.transitionCoverage.definitions.missing, 0);
@@ -184,12 +185,13 @@ it.effect("rejects incomplete lifecycle rows through the codec", () =>
         Effect.gen(function* () {
           assert.isTrue(yield* Effect.isFailure(Schema.decodeUnknownEffect(ConnectionRow)(row)));
         }),
+      { concurrency: 1 },
     );
   }),
 );
 
 function makeGeneration(value: number): ConnectionCredentialGeneration {
-  return Schema.decodeSync(ConnectionCredentialGeneration)(value);
+  return Effect.runSync(Schema.decodeEffect(ConnectionCredentialGeneration)(value));
 }
 
 const at = DateTime.makeUnsafe("2026-01-01T00:00:00Z");

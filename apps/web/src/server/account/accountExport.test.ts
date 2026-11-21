@@ -7,6 +7,7 @@ import {
   AccountExportDocument,
   AccountExportPersistenceFailed,
 } from "@lineupkeep/backend/privacy/AccountExport";
+import layerTools from "@lineupkeep/backend/runtime/ProvideLayer";
 import {
   makeRequestContext,
   requestContextLayer,
@@ -36,7 +37,7 @@ it.effect("refuses to export for an anonymous request", () =>
   Effect.gen(function* () {
     const context = yield* makeRequestContext(request);
     const response = yield* exportAccountData.pipe(
-      Effect.provide(
+      layerTools.provide(
         Layer.mergeAll(
           authenticationLayer(undefined),
           exportLayer(() => Effect.succeed(document)),
@@ -58,7 +59,7 @@ it.effect("returns the owner's export as a JSON attachment", () =>
     const context = yield* makeRequestContext(request);
     const owners: Array<string> = [];
     const response = yield* exportAccountData.pipe(
-      Effect.provide(
+      layerTools.provide(
         Layer.mergeAll(
           authenticationLayer(session),
           exportLayer((owner) =>
@@ -91,7 +92,7 @@ it.effect("answers with a readable refusal when the export cannot be prepared", 
   Effect.gen(function* () {
     const context = yield* makeRequestContext(request);
     const response = yield* exportAccountData.pipe(
-      Effect.provide(
+      layerTools.provide(
         Layer.mergeAll(
           authenticationLayer(session),
           exportLayer(() =>

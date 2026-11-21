@@ -3,6 +3,8 @@ import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { Duration, Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
 
+import layerTools from "#runtime/ProvideLayer.ts";
+
 import { ToolCallQuotaDatabaseTest } from "./internal/ToolCallQuotaDatabaseTest.ts";
 import { ToolCallQuotaLive } from "./internal/ToolCallQuotaLive.ts";
 import { ToolCallQuotaRepository } from "./internal/ToolCallQuotaRepository.ts";
@@ -26,7 +28,7 @@ it.effect("allows a read loop up to its client allowance and refuses with the re
 
     yield* TestClock.adjust(limit.window);
     assert.deepStrictEqual(yield* quota.consume(read("client-a")), { allowed: true });
-  }).pipe(Effect.provide(ToolCallQuotaTest)),
+  }).pipe(layerTools.provide(ToolCallQuotaTest)),
 );
 
 it.effect("gives a write a smaller allowance than a read, and keeps the buckets apart", () =>
@@ -49,7 +51,7 @@ it.effect("gives a write a smaller allowance than a read, and keeps the buckets 
 
     assert.deepStrictEqual(yield* quota.consume(read("client-a")), { allowed: true });
     assert.deepStrictEqual(yield* quota.consume(destructive("client-b")), { allowed: true });
-  }).pipe(Effect.provide(ToolCallQuotaTest)),
+  }).pipe(layerTools.provide(ToolCallQuotaTest)),
 );
 
 it.effect("leaves a second client's allowance intact when one client spends its own", () =>
@@ -73,7 +75,7 @@ it.effect("leaves a second client's allowance intact when one client spends its 
     assert.strictEqual(shared.bucket, "owner");
     assert.strictEqual(shared.limit.ownerMax, limit.ownerMax);
     assert.deepStrictEqual(yield* quota.consume(write("client-c")), { allowed: true });
-  }).pipe(Effect.provide(ToolCallQuotaTest)),
+  }).pipe(layerTools.provide(ToolCallQuotaTest)),
 );
 
 it.effect("charges a refused call, so hammering spends the owner's allowance too", () =>
@@ -92,13 +94,13 @@ it.effect("charges a refused call, so hammering spends the owner's allowance too
       assert.deepStrictEqual(yield* quota.consume(destructive("client-b")), { allowed: true });
     }
     assert.strictEqual(refusal(yield* quota.consume(destructive("client-c"))).bucket, "owner");
-  }).pipe(Effect.provide(ToolCallQuotaTest)),
+  }).pipe(layerTools.provide(ToolCallQuotaTest)),
 );
 
 it.effect("keeps the count across a fresh process over the same durable store", () =>
   Effect.gen(function* () {
     const limit = toolCallLimits.destructive;
-    const first = yield* Effect.provide(
+    const first = yield* layerTools.provideLayer(
       ToolCallQuota,
       ToolCallQuotaLive.pipe(Layer.provide(ToolCallQuotaRepository.layer)),
     );
@@ -106,13 +108,13 @@ it.effect("keeps the count across a fresh process over the same durable store", 
       yield* first.consume(destructive("client-a"));
     }
 
-    const second = yield* Effect.provide(
+    const second = yield* layerTools.provideLayer(
       ToolCallQuota,
       ToolCallQuotaLive.pipe(Layer.provide(ToolCallQuotaRepository.layer)),
     );
     assert.deepStrictEqual(yield* second.consume(destructive("client-a")), { allowed: true });
     assert.isFalse((yield* second.consume(destructive("client-a"))).allowed);
-  }).pipe(Effect.provide(ToolCallQuotaDatabaseTest)),
+  }).pipe(layerTools.provide(ToolCallQuotaDatabaseTest)),
 );
 
 it.effect("charges only the owner bucket when the token names no client", () =>
@@ -123,7 +125,7 @@ it.effect("charges only the owner bucket when the token names no client", () =>
       assert.deepStrictEqual(yield* quota.consume(write(undefined)), { allowed: true });
     }
     assert.deepStrictEqual(yield* quota.consume(write(undefined)), { allowed: true });
-  }).pipe(Effect.provide(ToolCallQuotaTest)),
+  }).pipe(layerTools.provide(ToolCallQuotaTest)),
 );
 
 it.effect("reports the durable store's failure instead of allowing the call", () =>
@@ -132,7 +134,7 @@ it.effect("reports the durable store's failure instead of allowing the call", ()
     const failure = yield* Effect.flip(quota.consume(read("client-a")));
     assert.instanceOf(failure, ToolCallQuotaUnavailable);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       ToolCallQuotaLive.pipe(
         Layer.provide(
           Layer.succeed(ToolCallQuotaRepository)({

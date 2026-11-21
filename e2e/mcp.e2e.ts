@@ -2,7 +2,9 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import type { Page } from "@playwright/test";
+import { Effect } from "effect";
 import { DateTime, Schema } from "effect";
 
 import {
@@ -46,11 +48,13 @@ test("discovers and authorizes a stateless client through email sign-in, consent
 
   expect(tools.status).toBe(200);
   expect(tools.headers.has("mcp-session-id")).toBe(false);
-  const listedTools = Schema.decodeUnknownSync(
-    Schema.Struct({
-      result: Schema.Struct({ tools: Schema.Array(Schema.Struct({ name: Schema.String })) }),
-    }),
-  )(await tools.json());
+  const listedTools = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Struct({
+        result: Schema.Struct({ tools: Schema.Array(Schema.Struct({ name: Schema.String })) }),
+      }),
+    )(await tools.json()),
+  );
   expect(listedTools.result.tools.map((tool) => tool.name)).toEqual([
     "list_connections",
     "list_teams",
@@ -85,7 +89,9 @@ test("answers the documented token-free discovery request with the same document
   const discovery = await documentedDiscoveryRequest(origin);
 
   expect(discovery.status).toBe(200);
-  const document = Schema.decodeUnknownSync(DiscoveryResponse)(await discovery.json());
+  const document = Effect.runSync(
+    Schema.decodeUnknownEffect(DiscoveryResponse)(await discovery.json()),
+  );
   expect(Object.keys(document.result).sort()).toEqual([
     "_meta",
     "cacheScope",
@@ -100,7 +106,7 @@ test("answers the documented token-free discovery request with the same document
     capabilities: { tools: {} },
   });
   expect(document.result["capabilities"]).toEqual({ tools: {} });
-  const tokenFree = Schema.decodeUnknownSync(DiscoveredGrant)(document);
+  const tokenFree = Effect.runSync(Schema.decodeUnknownEffect(DiscoveredGrant)(document));
   expect(tokenFree.result._meta["lineupkeep/grant"]).toEqual({
     accessTokenLifetimeSeconds: 3600,
     refreshTokenGrantSupported: true,
@@ -111,7 +117,9 @@ test("answers the documented token-free discovery request with the same document
   const authenticated = await mcpClient(mcpEndpoint(origin), credentials.access_token).request(
     "server/discover",
   );
-  const presented = Schema.decodeUnknownSync(DiscoveredGrant)(await authenticated.json());
+  const presented = Effect.runSync(
+    Schema.decodeUnknownEffect(DiscoveredGrant)(await authenticated.json()),
+  );
   const grant = presented.result._meta["lineupkeep/grant"];
 
   expect(grant.accessToken?.status).toBe("active");
@@ -193,7 +201,7 @@ test("lists the owner's connection status over MCP without exposing account iden
   expect(listed.structuredContent).toMatchObject({
     connections: [{ provider: decodeProviderKey("yahoo"), status: "ready" }],
   });
-  expect(JSON.stringify(listed.structuredContent)).not.toContain("userId");
+  expect(jsonTools.jsonString(listed.structuredContent)).not.toContain("userId");
 
   const other = await newUser();
   await signUp(other);
@@ -222,9 +230,11 @@ test("reports and retrieves feedback for the acting account only", async ({
   });
 
   expect(submitted.isError).toBe(false);
-  const report = Schema.decodeUnknownSync(
-    Schema.Struct({ feedback: Schema.Struct({ id: Schema.String, status: Schema.String }) }),
-  )(submitted.structuredContent).feedback;
+  const report = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Struct({ feedback: Schema.Struct({ id: Schema.String, status: Schema.String }) }),
+    )(submitted.structuredContent),
+  ).feedback;
   expect(report.status).toBe("open");
   const feedback = report.id;
 
@@ -237,7 +247,7 @@ test("reports and retrieves feedback for the acting account only", async ({
   expect(nullContext.isError).toBe(false);
 
   const listed = await client.callTool("list_feedback", { statuses: ["open"], limit: 5 });
-  expect(JSON.stringify(listed.structuredContent)).toContain(feedback);
+  expect(jsonTools.jsonString(listed.structuredContent)).toContain(feedback);
 
   const other = await newUser();
   await signUp(other);
@@ -264,9 +274,15 @@ test("enforces fantasy read and transaction review scopes over MCP", async ({ pa
   });
   expect(readDenied.status).toBe(403);
   expect(readDenied.headers.get("www-authenticate")).toContain('scope="fantasy:read"');
-  const denial = Schema.decodeUnknownSync(
-    Schema.Struct({ error: Schema.String, scope: Schema.String, error_description: Schema.String }),
-  )(await readDenied.json());
+  const denial = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Struct({
+        error: Schema.String,
+        scope: Schema.String,
+        error_description: Schema.String,
+      }),
+    )(await readDenied.json()),
+  );
   expect(denial.scope).toBe("fantasy:read");
   expect(denial.error).toBe("insufficient_scope");
   expect(denial.error_description).toContain("fantasy:read");
@@ -310,20 +326,20 @@ test("enforces fantasy read and transaction review scopes over MCP", async ({ pa
 
   const missing = await reader.callTool("get_calendar", { team: randomUUID() });
   expect(missing.isError).toBe(true);
-  expect(JSON.stringify(missing)).not.toContain("cause");
+  expect(jsonTools.jsonString(missing)).not.toContain("cause");
 
   const reviewAuthorization = await authorize(page, origin, "fantasy:read transactions:review");
   const reviewer = mcpClient(mcpEndpoint(origin), reviewAuthorization.credentials.access_token);
   const review = await reviewer.callTool("get_transaction_plan", { team: randomUUID() });
   expect(review.isError).toBe(true);
-  expect(JSON.stringify(review)).not.toContain("submit");
+  expect(jsonTools.jsonString(review)).not.toContain("submit");
 
   const missingTeam = await client.callTool("set_lineup", {
     requestId: randomUUID(),
     teams: [{ team: randomUUID(), period: { coverage: "week", week: 3 } }],
   });
   expect(missingTeam.isError).toBe(true);
-  expect(JSON.stringify(missingTeam)).not.toContain("completed");
+  expect(jsonTools.jsonString(missingTeam)).not.toContain("completed");
 });
 
 test("reads on a restricted grant and refuses only the manage tools", async ({ page, baseURL }) => {
@@ -355,10 +371,12 @@ test("reads on a restricted grant and refuses only the manage tools", async ({ p
     body: "A read-only client can still report a problem.",
   });
   expect(submitted.isError).toBe(false);
-  expect(JSON.stringify(submitted.structuredContent)).toContain('"status":"open"');
-  const feedbackId = Schema.decodeUnknownSync(
-    Schema.Struct({ feedback: Schema.Struct({ id: Schema.String }) }),
-  )(submitted.structuredContent).feedback.id;
+  expect(jsonTools.jsonString(submitted.structuredContent)).toContain('"status":"open"');
+  const feedbackId = Effect.runSync(
+    Schema.decodeUnknownEffect(Schema.Struct({ feedback: Schema.Struct({ id: Schema.String }) }))(
+      submitted.structuredContent,
+    ),
+  ).feedback.id;
 
   const listed = await client.callTool("list_feedback", {});
   expect(listed.isError).toBe(false);
@@ -383,9 +401,11 @@ test("lists tools and submits feedback on the onboarding grant", async ({ page, 
     title: "Onboarding grant",
     body: "The minimal first authorization can submit this report.",
   });
-  const feedbackId = Schema.decodeUnknownSync(
-    Schema.Struct({ feedback: Schema.Struct({ id: Schema.String }) }),
-  )(submitted.structuredContent).feedback.id;
+  const feedbackId = Effect.runSync(
+    Schema.decodeUnknownEffect(Schema.Struct({ feedback: Schema.Struct({ id: Schema.String }) }))(
+      submitted.structuredContent,
+    ),
+  ).feedback.id;
   const listed = await client.callTool("list_feedback", {});
 
   expect(tools.status).toBe(200);
@@ -431,19 +451,21 @@ test("appends moves to one team queue without writing to the provider and reads 
 }) => {
   const origin = requiredOrigin(baseURL);
   await signUp(page);
-  const discovered = Schema.decodeUnknownSync(
-    Schema.Array(
-      Schema.Struct({
-        id: Schema.String,
-        name: Schema.String,
-      }),
-    ),
-  )(
-    await services.exercise(
-      page,
-      "link the provider fake and discover teams",
-      "connectYahooAndDiscoverTeams",
-      {},
+  const discovered = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Array(
+        Schema.Struct({
+          id: Schema.String,
+          name: Schema.String,
+        }),
+      ),
+    )(
+      await services.exercise(
+        page,
+        "link the provider fake and discover teams",
+        "connectYahooAndDiscoverTeams",
+        {},
+      ),
     ),
   );
   const football = discovered.find((team) => team.name === "Embedded Browser Team");
@@ -459,9 +481,11 @@ test("appends moves to one team queue without writing to the provider and reads 
 
   const roster = await client.callTool("get_rosters", { team: football.id });
   expect(roster.isError).toBe(false);
-  const players = Schema.decodeUnknownSync(
-    Schema.Struct({ players: Schema.Array(Schema.Struct({ player: Schema.String })) }),
-  )(roster.structuredContent).players;
+  const players = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Struct({ players: Schema.Array(Schema.Struct({ player: Schema.String })) }),
+    )(roster.structuredContent),
+  ).players;
   expect(players.length).toBeGreaterThan(2);
   const firstDrop = players[0]?.player;
   const lockedDrop = players[1]?.player;
@@ -480,13 +504,15 @@ test("appends moves to one team queue without writing to the provider and reads 
     ],
   });
   expect(proposed.isError).toBe(false);
-  const queued = Schema.decodeUnknownSync(
-    Schema.Struct({
-      team: Schema.Struct({ id: Schema.String }),
-      moves: Schema.Array(Schema.Struct({ move: Schema.String })),
-      refused: Schema.Array(Schema.Unknown),
-    }),
-  )(proposed.structuredContent);
+  const queued = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Struct({
+        team: Schema.Struct({ id: Schema.String }),
+        moves: Schema.Array(Schema.Struct({ move: Schema.String })),
+        refused: Schema.Array(Schema.Unknown),
+      }),
+    )(proposed.structuredContent),
+  );
   expect(queued.team.id).toBe(football.id);
   expect(queued.moves).toHaveLength(1);
   expect(queued.refused).toStrictEqual([]);
@@ -496,16 +522,18 @@ test("appends moves to one team queue without writing to the provider and reads 
     moves: [{ kind: "drop", drops: [secondDrop], reason: "Open a second bench spot." }],
   });
   expect(appended.isError).toBe(false);
-  const plan = Schema.decodeUnknownSync(
-    Schema.Struct({
-      team: Schema.Struct({ id: Schema.String }),
-      today: Schema.optional(Schema.String),
-      moves: Schema.Array(
-        Schema.Struct({ move: Schema.String, group: Schema.optional(Schema.String) }),
-      ),
-      days: Schema.Array(Schema.Struct({ today: Schema.Boolean })),
-    }),
-  )(appended.structuredContent);
+  const plan = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Struct({
+        team: Schema.Struct({ id: Schema.String }),
+        today: Schema.optional(Schema.String),
+        moves: Schema.Array(
+          Schema.Struct({ move: Schema.String, group: Schema.optional(Schema.String) }),
+        ),
+        days: Schema.Array(Schema.Struct({ today: Schema.Boolean })),
+      }),
+    )(appended.structuredContent),
+  );
   expect(plan.team.id).toBe(football.id);
   expect(plan.moves).toHaveLength(2);
   expect(plan.days.some((day) => day.today)).toBe(true);
@@ -515,12 +543,14 @@ test("appends moves to one team queue without writing to the provider and reads 
     moves: [{ kind: "drop", drops: [lockedDrop], reason: "Try the locked player." }],
   });
   expect(locked.isError).toBe(false);
-  const lockedPlan = Schema.decodeUnknownSync(
-    Schema.Struct({
-      moves: Schema.Array(Schema.Unknown),
-      refused: Schema.Array(Schema.Struct({ code: Schema.String, detail: Schema.String })),
-    }),
-  )(locked.structuredContent);
+  const lockedPlan = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Struct({
+        moves: Schema.Array(Schema.Unknown),
+        refused: Schema.Array(Schema.Struct({ code: Schema.String, detail: Schema.String })),
+      }),
+    )(locked.structuredContent),
+  );
   expect(lockedPlan.moves).toHaveLength(2);
   expect(lockedPlan.refused).toHaveLength(1);
   expect(lockedPlan.refused[0]?.code).toBe("player_locked");
@@ -531,28 +561,32 @@ test("appends moves to one team queue without writing to the provider and reads 
 
   const read = await client.callTool("get_transaction_plan", { team: football.id });
   expect(read.isError).toBe(false);
-  const readPlan = Schema.decodeUnknownSync(
-    Schema.Struct({
-      team: Schema.Struct({ id: Schema.String }),
-      moves: Schema.Array(Schema.Unknown),
-    }),
-  )(read.structuredContent);
+  const readPlan = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Struct({
+        team: Schema.Struct({ id: Schema.String }),
+        moves: Schema.Array(Schema.Unknown),
+      }),
+    )(read.structuredContent),
+  );
   expect(readPlan.team.id).toBe(football.id);
   expect(readPlan.moves).toHaveLength(2);
-  expect(JSON.stringify(read)).not.toContain("461.p.90001");
+  expect(jsonTools.jsonString(read)).not.toContain("461.p.90001");
 
   const listed = await client.callTool("list_transaction_proposals", {
     team: football.id,
     state: "today",
   });
   expect(listed.isError).toBe(false);
-  const rolling = Schema.decodeUnknownSync(
-    Schema.Struct({
-      counts: Schema.Struct({ open: Schema.Number, today: Schema.Number, saved: Schema.Number }),
-      teamCount: Schema.Number,
-      days: Schema.Array(Schema.Struct({ today: Schema.Boolean })),
-    }),
-  )(listed.structuredContent);
+  const rolling = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Struct({
+        counts: Schema.Struct({ open: Schema.Number, today: Schema.Number, saved: Schema.Number }),
+        teamCount: Schema.Number,
+        days: Schema.Array(Schema.Struct({ today: Schema.Boolean })),
+      }),
+    )(listed.structuredContent),
+  );
   expect(rolling.counts.open).toBeGreaterThanOrEqual(2);
   expect(rolling.teamCount).toBe(1);
   expect(rolling.days.some((day) => day.today)).toBe(true);
@@ -563,7 +597,7 @@ test("appends moves to one team queue without writing to the provider and reads 
   const otherClient = mcpClient(mcpEndpoint(origin), otherAuthorization.credentials.access_token);
   const hidden = await otherClient.callTool("get_transaction_plan", { team: football.id });
   expect(hidden.isError).toBe(true);
-  expect(JSON.stringify(hidden)).not.toContain("Open a bench spot");
+  expect(jsonTools.jsonString(hidden)).not.toContain("Open a bench spot");
 
   const offers = await client.callTool("get_pending_trade_offers", { team: hockey.id });
   expect(offers.isError).toBe(false);
@@ -580,7 +614,7 @@ test("appends moves to one team queue without writing to the provider and reads 
       },
     ],
   });
-  expect(JSON.stringify(offers)).not.toContain("465.p.95001");
+  expect(jsonTools.jsonString(offers)).not.toContain("465.p.95001");
 });
 
 test("appends an agent note that reads back with its author on the summary and trade read", async ({
@@ -590,14 +624,16 @@ test("appends an agent note that reads back with its author on the summary and t
 }) => {
   const origin = requiredOrigin(baseURL);
   await signUp(page);
-  const discovered = Schema.decodeUnknownSync(
-    Schema.Array(Schema.Struct({ id: Schema.String, name: Schema.String })),
-  )(
-    await services.exercise(
-      page,
-      "link the provider fake and discover teams",
-      "connectYahooAndDiscoverTeams",
-      {},
+  const discovered = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Array(Schema.Struct({ id: Schema.String, name: Schema.String })),
+    )(
+      await services.exercise(
+        page,
+        "link the provider fake and discover teams",
+        "connectYahooAndDiscoverTeams",
+        {},
+      ),
     ),
   );
   const football = discovered.find((team) => team.name === "Embedded Browser Team");
@@ -697,21 +733,23 @@ test("changes automation over MCP and reports it through list_teams", async ({
 }) => {
   const origin = requiredOrigin(baseURL);
   await signUp(page);
-  const discovered = Schema.decodeUnknownSync(
-    Schema.Array(
-      Schema.Struct({
-        id: Schema.String,
-        name: Schema.String,
-        availability: Schema.String,
-        automation: Schema.Struct({ status: Schema.String }),
-      }),
-    ),
-  )(
-    await services.exercise(
-      page,
-      "link the provider fake and discover teams",
-      "connectYahooAndDiscoverTeams",
-      {},
+  const discovered = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Array(
+        Schema.Struct({
+          id: Schema.String,
+          name: Schema.String,
+          availability: Schema.String,
+          automation: Schema.Struct({ status: Schema.String }),
+        }),
+      ),
+    )(
+      await services.exercise(
+        page,
+        "link the provider fake and discover teams",
+        "connectYahooAndDiscoverTeams",
+        {},
+      ),
     ),
   );
   const team = discovered[0]?.id;
@@ -843,7 +881,7 @@ test("rejects legacy protocols and registers dynamic clients", async ({ page, ba
   const registration = await fetch(new URL("/api/auth/oauth2/register", origin), {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
+    body: jsonTools.jsonString({
       client_name: "Registration probe",
       redirect_uris: [callback],
       grant_types: ["authorization_code"],
@@ -869,7 +907,7 @@ test("authorizes a dynamically registered client through consent", async ({ page
   const registration = await fetch(new URL("/api/auth/oauth2/register", origin), {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
+    body: jsonTools.jsonString({
       client_name: "Muse probe",
       redirect_uris: [callback],
       grant_types: ["authorization_code", "refresh_token"],
@@ -914,13 +952,15 @@ test("rotates refresh credentials over HTTP and replays the previous token", asy
     origin,
     "fantasy:read offline_access",
   );
-  const initial = Schema.decodeUnknownSync(IssuedCredentials)(credentials);
+  const initial = Effect.runSync(Schema.decodeUnknownEffect(IssuedCredentials)(credentials));
 
   expect(initial.expires_in).toBe(3660);
   expect(await advertisedKeyIds(origin)).toContain(jwtHeader(initial.access_token).kid);
   const response = await exchangeRefreshToken(authorization, initial.refresh_token);
   expect(response.status).toBe(200);
-  const rotated = Schema.decodeUnknownSync(IssuedCredentials)(await response.json());
+  const rotated = Effect.runSync(
+    Schema.decodeUnknownEffect(IssuedCredentials)(await response.json()),
+  );
   const tools = await mcpClient(mcpEndpoint(origin), rotated.access_token).request("tools/call", {
     name: "list_connections",
     arguments: {},
@@ -932,7 +972,8 @@ test("rotates refresh credentials over HTTP and replays the previous token", asy
   const replayResponse = await exchangeRefreshToken(authorization, initial.refresh_token);
   expect(replayResponse.status).toBe(200);
   expect(
-    Schema.decodeUnknownSync(RefreshCredentials)(await replayResponse.json()).refresh_token,
+    Effect.runSync(Schema.decodeUnknownEffect(RefreshCredentials)(await replayResponse.json()))
+      .refresh_token,
   ).toBe(rotated.refresh_token);
   expect(
     (await mcpClient(mcpEndpoint(origin), rotated.access_token).callTool("list_connections", {}))
@@ -992,7 +1033,7 @@ function documentedDiscoveryRequest(origin: string): Promise<Response> {
   return fetch(new URL("/mcp", origin), {
     method: "POST",
     headers: documentedHeaders("server/discover"),
-    body: JSON.stringify({
+    body: jsonTools.jsonString({
       jsonrpc: "2.0",
       id: 1,
       method: "server/discover",
@@ -1080,7 +1121,7 @@ async function registerRetiredScopeClient(
       origin,
       cookie: cookies.map(({ name, value }) => `${name}=${value}`).join("; "),
     },
-    body: JSON.stringify({
+    body: jsonTools.jsonString({
       client_name: retiredClientName,
       redirect_uris: [callback],
       grant_types: ["authorization_code", "refresh_token"],
@@ -1091,9 +1132,11 @@ async function registerRetiredScopeClient(
     }),
   });
   expect(response.status, "a managed client registration").toBe(201);
-  const registered = Schema.decodeUnknownSync(
-    Schema.Struct({ client_id: Schema.String, scope: Schema.String }),
-  )(await response.json());
+  const registered = Effect.runSync(
+    Schema.decodeUnknownEffect(Schema.Struct({ client_id: Schema.String, scope: Schema.String }))(
+      await response.json(),
+    ),
+  );
   expect(registered.scope).toBe(scope);
   return registered.client_id;
 }
@@ -1177,15 +1220,19 @@ const IssuedCredentials = Schema.Struct({
 
 async function advertisedKeyIds(origin: string): Promise<ReadonlyArray<string>> {
   const response = await fetch(new URL("/api/auth/jwks", origin));
-  const document = Schema.decodeUnknownSync(
-    Schema.Struct({ keys: Schema.Array(Schema.Struct({ kid: Schema.String })) }),
-  )(await response.json());
+  const document = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Struct({ keys: Schema.Array(Schema.Struct({ kid: Schema.String })) }),
+    )(await response.json()),
+  );
   return document.keys.map((key) => key.kid);
 }
 
 function jwtHeader(token: string): { readonly kid: string } {
-  return Schema.decodeUnknownSync(Schema.Struct({ kid: Schema.String }))(
-    JSON.parse(Buffer.from(token.split(".")[0] ?? "", "base64url").toString()),
+  return Effect.runSync(
+    Schema.decodeUnknownEffect(Schema.Struct({ kid: Schema.String }))(
+      jsonTools.jsonValue(Buffer.from(token.split(".")[0] ?? "", "base64url").toString()),
+    ),
   );
 }
 

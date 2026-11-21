@@ -183,7 +183,7 @@ export const TransactionPlanServiceLive = Layer.effect(
     const newId = random.ulid;
     const newClaim = random.ulid;
     const newRunId = random.ulid.pipe(
-      Effect.map((id) => Schema.decodeSync(TransactionRunIdSchema)(id)),
+      Effect.flatMap((id) => Schema.decodeEffect(TransactionRunIdSchema)(id).pipe(Effect.orDie)),
     );
 
     const finishedRun = (
@@ -293,7 +293,13 @@ export const TransactionPlanServiceLive = Layer.effect(
         }
         const ids = yield* Effect.forEach(
           plans.flatMap((plan) => plan.fixes),
-          () => newId.pipe(Effect.map((id) => Schema.decodeSync(TransactionMoveIdSchema)(id))),
+          () =>
+            newId.pipe(
+              Effect.flatMap((id) =>
+                Schema.decodeEffect(TransactionMoveIdSchema)(id).pipe(Effect.orDie),
+              ),
+            ),
+          { concurrency: 1 },
         );
         let cursor = 0;
         const generated = plans.map((plan) => ({
@@ -372,12 +378,20 @@ export const TransactionPlanServiceLive = Layer.effect(
             ),
           ],
           (label) => newId.pipe(Effect.map((id) => [label, id] as const)),
+          { concurrency: 1 },
         ),
       );
       const firstPosition =
         stored.reduce((position, move) => Math.max(position, move.position), -1) + 1;
-      const ids = yield* Effect.forEach(input.moves, () =>
-        newId.pipe(Effect.map((id) => Schema.decodeSync(TransactionMoveIdSchema)(id))),
+      const ids = yield* Effect.forEach(
+        input.moves,
+        () =>
+          newId.pipe(
+            Effect.flatMap((id) =>
+              Schema.decodeEffect(TransactionMoveIdSchema)(id).pipe(Effect.orDie),
+            ),
+          ),
+        { concurrency: 1 },
       );
       const entries = input.moves.map((draft, index): ProposedEntry => {
         const id = requireId(ids, index);
@@ -402,9 +416,11 @@ export const TransactionPlanServiceLive = Layer.effect(
         cure === undefined
           ? entries
           : yield* newId.pipe(
-              Effect.map((id) => {
-                const group = Schema.decodeSync(TransactionMoveIdSchema)(id);
-                return entries.map((entry, index) =>
+              Effect.flatMap((id) =>
+                Schema.decodeEffect(TransactionMoveIdSchema)(id).pipe(Effect.orDie),
+              ),
+              Effect.map((group) =>
+                entries.map((entry, index) =>
                   index === cure[0] || index === cure[1]
                     ? {
                         ...entry,
@@ -412,8 +428,8 @@ export const TransactionPlanServiceLive = Layer.effect(
                         candidate: { ...entry.candidate, group },
                       }
                     : entry,
-                );
-              }),
+                ),
+              ),
             );
       const fixed = yield* rosterFixedEntries({
         facts,
@@ -493,10 +509,17 @@ export const TransactionPlanServiceLive = Layer.effect(
       const open = (
         refs: ReadonlyArray<string>,
       ): Effect.Effect<ReadonlyArray<string | undefined>> =>
-        tokens.openPlayerRefs({
-          userId: input.userId,
-          leagueKey: input.leagueKey,
-          refs: refs.map((ref) => Schema.decodeSync(PlayerRef)(ref)),
+        Effect.gen(function* () {
+          const decoded = yield* Effect.forEach(
+            refs,
+            (ref) => Schema.decodeEffect(PlayerRef)(ref).pipe(Effect.orDie),
+            { concurrency: 1 },
+          );
+          return yield* tokens.openPlayerRefs({
+            userId: input.userId,
+            leagueKey: input.leagueKey,
+            refs: decoded,
+          });
         });
       const addRefs = yield* open(input.draft.adds ?? []);
       const fallbackRefs = yield* open(input.draft.fallbacks ?? []);
@@ -596,15 +619,18 @@ export const TransactionPlanServiceLive = Layer.effect(
       if (Option.isNone(team)) {
         return yield* TransactionPlanTeamNotFound.make({ team: input.team });
       }
-      const resolved = yield* Effect.forEach(input.moves, (draft, index) =>
-        resolveDraft({
-          userId,
-          team: input.team,
-          providerTeamKey: team.value.providerTeamKey,
-          teamName: team.value.name,
-          leagueKey: team.value.providerLeagueKey,
-          draft,
-        }).pipe(Effect.map((result) => ({ index, result }))),
+      const resolved = yield* Effect.forEach(
+        input.moves,
+        (draft, index) =>
+          resolveDraft({
+            userId,
+            team: input.team,
+            providerTeamKey: team.value.providerTeamKey,
+            teamName: team.value.name,
+            leagueKey: team.value.providerLeagueKey,
+            draft,
+          }).pipe(Effect.map((result) => ({ index, result }))),
+        { concurrency: 1 },
       );
       const refused: Array<TransactionPlanRefusal> = resolved.flatMap((entry) =>
         entry.result.status === "refused"
@@ -1211,8 +1237,15 @@ export const TransactionPlanServiceLive = Layer.effect(
         );
       }
 
-      const ids = yield* Effect.forEach(search.fixes, () =>
-        newId.pipe(Effect.map((id) => Schema.decodeSync(TransactionMoveIdSchema)(id))),
+      const ids = yield* Effect.forEach(
+        search.fixes,
+        () =>
+          newId.pipe(
+            Effect.flatMap((id) =>
+              Schema.decodeEffect(TransactionMoveIdSchema)(id).pipe(Effect.orDie),
+            ),
+          ),
+        { concurrency: 1 },
       );
       const candidates = search.fixes.map((fix, index) =>
         fixCandidateOf({
@@ -2478,6 +2511,7 @@ export const TransactionPlanServiceLive = Layer.effect(
             moves: groupMoves.filter((move) => move.team === teamId),
             check: checks.get(teamId),
           }),
+        { concurrency: 1 },
       ))
         .flat()
         .sort((left, right) => left.team.localeCompare(right.team));

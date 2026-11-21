@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { Schema } from "effect";
 
 import { expect, signUp, test } from "./support";
@@ -9,19 +10,21 @@ test("proposes a move into one team queue and runs it from the transactions page
   mcp,
 }, info) => {
   await signUp(page);
-  const discovered = Schema.decodeUnknownSync(
-    Schema.Array(
-      Schema.Struct({
-        id: Schema.String,
-        name: Schema.String,
-      }),
-    ),
-  )(
-    await services.exercise(
-      page,
-      "link the provider fake and discover teams",
-      "connectYahooAndDiscoverTeams",
-      {},
+  const discovered = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Array(
+        Schema.Struct({
+          id: Schema.String,
+          name: Schema.String,
+        }),
+      ),
+    )(
+      await services.exercise(
+        page,
+        "link the provider fake and discover teams",
+        "connectYahooAndDiscoverTeams",
+        {},
+      ),
     ),
   );
   const football = discovered.find((team) => team.name === "Embedded Browser Team");
@@ -35,9 +38,11 @@ test("proposes a move into one team queue and runs it from the transactions page
   const client = await mcp(["fantasy:read", "transactions:review"], page);
   const roster = await client.callTool("get_rosters", { team: football.id });
   expect(roster.isError).toBe(false);
-  const players = Schema.decodeUnknownSync(
-    Schema.Struct({ players: Schema.Array(Schema.Struct({ player: Schema.String })) }),
-  )(roster.structuredContent).players;
+  const players = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Struct({ players: Schema.Array(Schema.Struct({ player: Schema.String })) }),
+    )(roster.structuredContent),
+  ).players;
   const drop = players[0]?.player;
   expect(drop, "a rostered player reference").toBeDefined();
   if (drop === undefined) {
@@ -50,19 +55,21 @@ test("proposes a move into one team queue and runs it from the transactions page
     moves: [{ kind: "drop", drops: [drop], reason }],
   });
   expect(proposed.isError).toBe(false);
-  const queued = Schema.decodeUnknownSync(
-    Schema.Struct({
-      team: Schema.Struct({ id: Schema.String, name: Schema.String }),
-      moves: Schema.Array(
-        Schema.Struct({
-          move: Schema.String,
-          kind: Schema.String,
-          drops: Schema.Array(Schema.Struct({ name: Schema.optional(Schema.String) })),
-        }),
-      ),
-      refused: Schema.Array(Schema.Struct({ code: Schema.String })),
-    }),
-  )(proposed.structuredContent);
+  const queued = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Struct({
+        team: Schema.Struct({ id: Schema.String, name: Schema.String }),
+        moves: Schema.Array(
+          Schema.Struct({
+            move: Schema.String,
+            kind: Schema.String,
+            drops: Schema.Array(Schema.Struct({ name: Schema.optional(Schema.String) })),
+          }),
+        ),
+        refused: Schema.Array(Schema.Struct({ code: Schema.String })),
+      }),
+    )(proposed.structuredContent),
+  );
   expect(queued.team.id).toBe(football.id);
   expect(queued.moves).toHaveLength(1);
   expect(queued.refused).toStrictEqual([]);
@@ -132,19 +139,21 @@ test("proposes a move into one team queue and runs it from the transactions page
 
 test("discards a move today and keeps it out of earlier", async ({ page, services, mcp }) => {
   await signUp(page);
-  const discovered = Schema.decodeUnknownSync(
-    Schema.Array(
-      Schema.Struct({
-        id: Schema.String,
-        name: Schema.String,
-      }),
-    ),
-  )(
-    await services.exercise(
-      page,
-      "link the provider fake and discover teams",
-      "connectYahooAndDiscoverTeams",
-      {},
+  const discovered = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Array(
+        Schema.Struct({
+          id: Schema.String,
+          name: Schema.String,
+        }),
+      ),
+    )(
+      await services.exercise(
+        page,
+        "link the provider fake and discover teams",
+        "connectYahooAndDiscoverTeams",
+        {},
+      ),
     ),
   );
   const football = discovered.find((team) => team.name === "Embedded Browser Team");
@@ -155,9 +164,11 @@ test("discards a move today and keeps it out of earlier", async ({ page, service
 
   const client = await mcp(["fantasy:read", "transactions:review"], page);
   const roster = await client.callTool("get_rosters", { team: football.id });
-  const drop = Schema.decodeUnknownSync(
-    Schema.Struct({ players: Schema.Array(Schema.Struct({ player: Schema.String })) }),
-  )(roster.structuredContent).players[0]?.player;
+  const drop = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Struct({ players: Schema.Array(Schema.Struct({ player: Schema.String })) }),
+    )(roster.structuredContent),
+  ).players[0]?.player;
   expect(drop, "a rostered player reference").toBeDefined();
   if (drop === undefined) {
     return;
@@ -197,14 +208,16 @@ test("names a refused move without storing it or returning an identifier", async
   mcp,
 }) => {
   await signUp(page);
-  const discovered = Schema.decodeUnknownSync(
-    Schema.Array(Schema.Struct({ id: Schema.String, name: Schema.String })),
-  )(
-    await services.exercise(
-      page,
-      "link the provider fake and discover teams",
-      "connectYahooAndDiscoverTeams",
-      {},
+  const discovered = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Array(Schema.Struct({ id: Schema.String, name: Schema.String })),
+    )(
+      await services.exercise(
+        page,
+        "link the provider fake and discover teams",
+        "connectYahooAndDiscoverTeams",
+        {},
+      ),
     ),
   );
   const football = discovered.find((team) => team.name === "Embedded Browser Team");
@@ -219,12 +232,14 @@ test("names a refused move without storing it or returning an identifier", async
     moves: [{ kind: "drop", drops: ["r1.not-a-player"], reason: "Try a move that cannot run." }],
   });
   expect(proposed.isError).toBe(false);
-  const body = Schema.decodeUnknownSync(
-    Schema.Struct({
-      moves: Schema.Array(Schema.Unknown),
-      refused: Schema.Array(Schema.Struct({ code: Schema.String, detail: Schema.String })),
-    }),
-  )(proposed.structuredContent);
+  const body = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Struct({
+        moves: Schema.Array(Schema.Unknown),
+        refused: Schema.Array(Schema.Struct({ code: Schema.String, detail: Schema.String })),
+      }),
+    )(proposed.structuredContent),
+  );
   expect(body.moves).toHaveLength(0);
   expect(body.refused).toHaveLength(1);
   expect(body.refused[0]?.code).toBe("reference_invalid");

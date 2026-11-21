@@ -628,10 +628,12 @@ describe("Yahoo scoring translation", () => {
   });
 });
 
-const hockeyTarget = Schema.decodeSync(LineupTargetPeriod)({
-  coverage: "date",
-  date: "2026-10-26",
-});
+const hockeyTarget = Effect.runSync(
+  Schema.decodeEffect(LineupTargetPeriod)({
+    coverage: "date",
+    date: "2026-10-26",
+  }),
+);
 
 function hockeyRequest(): ProviderScoreRequest {
   return {

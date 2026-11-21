@@ -2,6 +2,8 @@ import { appendFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { Effect } from "effect";
 import { Schema } from "effect";
 
 const endpoint = new URL(readRequired("OTEL_EXPORTER_OTLP_ENDPOINT"));
@@ -16,7 +18,9 @@ const server = createServer((request, response) => {
     request.on("data", (chunk: Buffer) => chunks.push(chunk));
     request.on("end", () => {
       const received = collectSpans(
-        Schema.decodeUnknownSync(ExportJson)(Buffer.concat(chunks).toString("utf8")),
+        Effect.runSync(
+          Schema.decodeUnknownEffect(ExportJson)(Buffer.concat(chunks).toString("utf8")),
+        ),
       ).filter((span) => !seen.has(`${span.traceId}/${span.spanId}`));
       for (const span of received) {
         seen.add(`${span.traceId}/${span.spanId}`);
@@ -24,7 +28,7 @@ const server = createServer((request, response) => {
       for (const span of received) {
         spans.push(span);
       }
-      appendFileSync(evidence, received.map((span) => `${JSON.stringify(span)}\n`).join(""));
+      appendFileSync(evidence, received.map((span) => `${jsonTools.jsonString(span)}\n`).join(""));
       response.writeHead(200, { "content-type": "application/json" }).end("{}");
     });
     return;
@@ -32,7 +36,9 @@ const server = createServer((request, response) => {
   if (request.method === "GET" && url.pathname === "/spans") {
     const trace = url.searchParams.get("trace");
     const inTrace = spans.filter((span) => span.traceId === trace);
-    response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(inTrace));
+    response
+      .writeHead(200, { "content-type": "application/json" })
+      .end(jsonTools.jsonString(inTrace));
     return;
   }
   response.writeHead(request.method === "GET" && url.pathname === "/" ? 200 : 404).end();

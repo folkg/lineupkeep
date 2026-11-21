@@ -1,6 +1,8 @@
 import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { type Page, expect, test, type TestInfo } from "@playwright/test";
+import { Effect } from "effect";
 import { Schema } from "effect";
 
 import { namePage, pagePersona } from "./persona.ts";
@@ -56,7 +58,7 @@ export function mcpClient(
         ...(typeof params["name"] === "string" ? { "mcp-name": params["name"] } : {}),
         ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
       },
-      body: JSON.stringify({
+      body: jsonTools.jsonString({
         jsonrpc: "2.0",
         id: randomUUID(),
         method,
@@ -72,10 +74,14 @@ export function mcpClient(
   return {
     request,
     listTools: async () =>
-      Schema.decodeUnknownSync(ToolsResponse)(await (await request("tools/list")).json()).result,
+      Effect.runSync(
+        Schema.decodeUnknownEffect(ToolsResponse)(await (await request("tools/list")).json()),
+      ).result,
     callTool: async (name: string, arguments_: Record<string, unknown>) =>
-      Schema.decodeUnknownSync(ToolResponse)(
-        await (await request("tools/call", { name, arguments: arguments_ })).json(),
+      Effect.runSync(
+        Schema.decodeUnknownEffect(ToolResponse)(
+          await (await request("tools/call", { name, arguments: arguments_ })).json(),
+        ),
       ).result,
   };
 }
@@ -166,15 +172,17 @@ export async function exchangeCode(
   if (!response.ok) {
     throw new Error(`OAuth token exchange failed (${response.status})`);
   }
-  return Schema.decodeUnknownSync(
-    Schema.Struct({
-      access_token: Schema.String,
-      token_type: Schema.Literal("Bearer"),
-      scope: Schema.String,
-      expires_in: Schema.optional(Schema.Finite),
-      refresh_token: Schema.optional(Schema.String),
-    }),
-  )(await response.json());
+  return Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Struct({
+        access_token: Schema.String,
+        token_type: Schema.Literal("Bearer"),
+        scope: Schema.String,
+        expires_in: Schema.optional(Schema.Finite),
+        refresh_token: Schema.optional(Schema.String),
+      }),
+    )(await response.json()),
+  );
 }
 
 export async function registerPublicClientDetails(
@@ -184,7 +192,7 @@ export async function registerPublicClientDetails(
   const response = await fetch(new URL("/api/auth/oauth2/register", origin), {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
+    body: jsonTools.jsonString({
       client_name: clientName,
       redirect_uris: [callback],
       grant_types: ["authorization_code", "refresh_token"],
@@ -196,13 +204,15 @@ export async function registerPublicClientDetails(
   if (response.status !== 201) {
     throw new Error(`Public client registration failed (${response.status})`);
   }
-  const body = Schema.decodeUnknownSync(
-    Schema.Struct({
-      client_id: Schema.String,
-      client_secret: Schema.optional(Schema.String),
-      scope: Schema.String,
-    }),
-  )(await response.json());
+  const body = Effect.runSync(
+    Schema.decodeUnknownEffect(
+      Schema.Struct({
+        client_id: Schema.String,
+        client_secret: Schema.optional(Schema.String),
+        scope: Schema.String,
+      }),
+    )(await response.json()),
+  );
   if (body.client_secret !== undefined) {
     throw new Error("Public client registration returned a client secret");
   }
@@ -244,12 +254,16 @@ export async function discoverAuthorization(
     throw new Error("MCP discovery requires a 401 resource_metadata challenge.");
   }
   const response = await transport(new URL(metadataUrl));
-  const resource = Schema.decodeUnknownSync(ResourceMetadata)(await response.json());
+  const resource = Effect.runSync(
+    Schema.decodeUnknownEffect(ResourceMetadata)(await response.json()),
+  );
   const issuer = new URL(resource.authorization_servers[0] ?? "");
   const discovery = await transport(
     new URL(`/.well-known/oauth-authorization-server${issuer.pathname}`, issuer),
   );
-  const metadata = Schema.decodeUnknownSync(AuthorizationMetadata)(await discovery.json());
+  const metadata = Effect.runSync(
+    Schema.decodeUnknownEffect(AuthorizationMetadata)(await discovery.json()),
+  );
   return {
     resource: resource.resource,
     authorizationEndpoint: metadata.authorization_endpoint,
@@ -318,7 +332,7 @@ export function authorizedMcp(
           const body = typeof init?.body === "string" ? init.body : init?.body?.toString();
           const rpc: unknown =
             headers.get("content-type") === "application/json" && body !== undefined
-              ? JSON.parse(body)
+              ? jsonTools.jsonValue(body)
               : undefined;
           const response = await fetch(url, { ...init, headers });
           const responseBody: unknown =
@@ -334,7 +348,7 @@ export function authorizedMcp(
             arguments:
               rpc === undefined
                 ? undefined
-                : Schema.decodeUnknownSync(Invocation)(rpc).params.arguments,
+                : Effect.runSync(Schema.decodeUnknownEffect(Invocation)(rpc)).params.arguments,
             traceId,
             request: { headers: Object.fromEntries(headers), body: rpc ?? body },
             status: response.status,
@@ -346,7 +360,7 @@ export function authorizedMcp(
           await info.attach(
             mcpExchangeName(++sequence, headers.get("mcp-method") ?? init?.method ?? "GET"),
             {
-              body: JSON.stringify(exchange, null, 2),
+              body: jsonTools.jsonString(exchange, null, 2),
               contentType: "application/json",
             },
           );

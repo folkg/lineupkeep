@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 
 import * as GCP from "@alchemy.run/gcp";
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import * as Command from "alchemy/Command";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
@@ -72,13 +73,17 @@ export function cloudRunHost(
             role: "roles/telemetry.tracesWriter",
             member: Output.map(writer.email, (email) => `serviceAccount:${email}`),
           }),
+        { concurrency: 1 },
       );
       const { plain, secrets } = partitionEnvironment(environment);
-      const secretEntries = yield* Effect.forEach(secrets, ([name, value]) =>
-        runtimeSecret(name, value, [
-          { id: `Access-${name}`, account },
-          { id: `Access-${name}-Worker`, account: workerAccount },
-        ]),
+      const secretEntries = yield* Effect.forEach(
+        secrets,
+        ([name, value]) =>
+          runtimeSecret(name, value, [
+            { id: `Access-${name}`, account },
+            { id: `Access-${name}-Worker`, account: workerAccount },
+          ]),
+        { concurrency: 1 },
       );
       const registryUri = Output.map(registry.registryUri, (uri) => {
         if (uri === undefined) {
@@ -235,7 +240,7 @@ export function cloudRunHost(
           uri: Output.interpolate`${workerUrl}/api/internal/lineup-worker`,
           httpMethod: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action: "tick", limit: 50 }),
+          body: jsonTools.jsonString({ action: "tick", limit: 50 }),
           oidcToken: {
             serviceAccountEmail: queueEnqueuer.email,
             audience: workerUrl,
@@ -482,13 +487,16 @@ function runtimeSecret(
 > {
   return Effect.gen(function* () {
     const secret = yield* GCP.SecretManager.Secret(`Secret-${name}`, {});
-    const accesses = yield* Effect.forEach(readers, ({ id, account }) =>
-      GCP.IAM.Member(id, {
-        kind: "secretmanager.secret",
-        name: secret.name,
-        role: "roles/secretmanager.secretAccessor",
-        member: Output.map(account.email, (email) => `serviceAccount:${email}`),
-      }),
+    const accesses = yield* Effect.forEach(
+      readers,
+      ({ id, account }) =>
+        GCP.IAM.Member(id, {
+          kind: "secretmanager.secret",
+          name: secret.name,
+          role: "roles/secretmanager.secretAccessor",
+          member: Output.map(account.email, (email) => `serviceAccount:${email}`),
+        }),
+      { concurrency: 1 },
     );
     const directory = new URL(`../.alchemy/versions/${yield* Stage}/${name}/`, import.meta.url);
 

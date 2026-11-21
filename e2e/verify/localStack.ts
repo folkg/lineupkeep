@@ -14,6 +14,7 @@ import {
   postgresContainer,
   removeOwnedContainer,
 } from "@lineupkeep/tools/local-stack/postgresContainer.ts";
+import { Effect } from "effect";
 import { Schema } from "effect";
 
 import type { OwnedInfrastructure } from "./lifecycle.ts";
@@ -58,7 +59,9 @@ export function localStack(name: string, lockDirectory: string): OwnedInfrastruc
           },
         );
         if (content !== undefined) {
-          const endpoints = Schema.decodeSync(Schema.fromJsonString(LocalEndpointsSchema))(content);
+          const endpoints = Effect.runSync(
+            Schema.decodeEffect(Schema.fromJsonString(LocalEndpointsSchema))(content),
+          );
           return {
             database: new URL(endpoints.database),
             ports: {
@@ -129,8 +132,10 @@ export function localStack(name: string, lockDirectory: string): OwnedInfrastruc
       if (failure !== undefined) {
         throw failure;
       }
-      const { remainingResources } = Schema.decodeSync(Schema.fromJsonString(LocalDestroySchema))(
-        await readFile(outcome, "utf8"),
+      const { remainingResources } = Effect.runSync(
+        Schema.decodeEffect(Schema.fromJsonString(LocalDestroySchema))(
+          await readFile(outcome, "utf8"),
+        ),
       );
       if (remainingResources.length > 0) {
         throw new Error(`Alchemy still owns resources: ${remainingResources.join(", ")}`);
@@ -144,11 +149,15 @@ function hasExited(child: ChildProcess): boolean {
 }
 
 async function journaledRun(lockDirectory: string): Promise<LocalRun> {
-  const owner = Schema.decodeSync(
-    Schema.fromJsonString(Schema.Struct({ directory: Schema.String })),
-  )(await readFile(join(lockDirectory, "owner.json"), "utf8"));
-  return Schema.decodeSync(Schema.fromJsonString(LocalRunSchema))(
-    await readFile(manifest(owner.directory), "utf8"),
+  const owner = Effect.runSync(
+    Schema.decodeEffect(Schema.fromJsonString(Schema.Struct({ directory: Schema.String })))(
+      await readFile(join(lockDirectory, "owner.json"), "utf8"),
+    ),
+  );
+  return Effect.runSync(
+    Schema.decodeEffect(Schema.fromJsonString(LocalRunSchema))(
+      await readFile(manifest(owner.directory), "utf8"),
+    ),
   );
 }
 

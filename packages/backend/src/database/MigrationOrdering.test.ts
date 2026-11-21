@@ -5,6 +5,8 @@ import { PgliteClient } from "@effect/sql-pglite";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Exit } from "effect";
 
+import layerTools from "#runtime/ProvideLayer.ts";
+
 const migrationsFolder = "packages/backend/migrations";
 const targetMigration = "20261028220000_hosted_linking_connection_on_success";
 
@@ -47,7 +49,7 @@ describe("hosted linking connection migration", () => {
         { id: "session-abandoned", connection_id: null },
         { id: "session-kept", connection_id: "kept" },
       ]);
-    }).pipe(Effect.provide(PgliteClient.layer())),
+    }).pipe(layerTools.provide(PgliteClient.layer())),
   );
 });
 
@@ -111,7 +113,7 @@ describe("local linking helper removal migration", () => {
         );
         expect(rows).toEqual([{ count: 0 }]);
       }
-    }).pipe(Effect.provide(PgliteClient.layer())),
+    }).pipe(layerTools.provide(PgliteClient.layer())),
   );
 });
 
@@ -242,7 +244,7 @@ describe("lineupgrade identifier storage migration", () => {
       expect(
         yield* sql.unsafe<{ readonly id: string }>("select id from provider_teams order by id"),
       ).toEqual([{ id: oldTeam }, { id: newTeam }]);
-    }).pipe(Effect.provide(PgliteClient.layer())),
+    }).pipe(layerTools.provide(PgliteClient.layer())),
   );
 });
 
@@ -285,7 +287,7 @@ describe("ready connection approval backfill", () => {
         { id: "ready-legacy", missing: false, matches_update: true },
         { id: "reconnecting", missing: true, matches_update: false },
       ]);
-    }).pipe(Effect.provide(PgliteClient.layer())),
+    }).pipe(layerTools.provide(PgliteClient.layer())),
   );
 });
 
@@ -343,7 +345,7 @@ describe("transaction plan storage migration", () => {
         "select user_id, team_id from transaction_plans",
       );
       expect(plans).toEqual([{ user_id: "owner", team_id: team }]);
-    }).pipe(Effect.provide(PgliteClient.layer())),
+    }).pipe(layerTools.provide(PgliteClient.layer())),
   );
 });
 
@@ -459,7 +461,7 @@ describe("transaction proposal storage removal migration", () => {
         `select reason, decision from transaction_moves where id = '${move}'`,
       );
       expect(stored).toEqual([{ reason: "Keep the queue.", decision: "undecided" }]);
-    }).pipe(Effect.provide(PgliteClient.layer())),
+    }).pipe(layerTools.provide(PgliteClient.layer())),
   );
 });
 

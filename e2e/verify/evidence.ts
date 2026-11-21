@@ -3,6 +3,8 @@ import { existsSync, realpathSync, statSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { Effect } from "effect";
 import { Schema } from "effect";
 
 import { isMcpExchangeAttachment, McpExchangeJson } from "./mcpEvidence.ts";
@@ -415,7 +417,7 @@ async function videoProblems(
     );
   }
   const expected = media.reviewFrames.map((frame) => frame.name).toSorted();
-  if (JSON.stringify(review.reviewedFrames.toSorted()) !== JSON.stringify(expected)) {
+  if (jsonTools.jsonString(review.reviewedFrames.toSorted()) !== jsonTools.jsonString(expected)) {
     problems.push(
       "visual-review.json must list every frame extracted from this render to establish complete review; inspect each media-check.json review frame and record its name in reviewedFrames.",
     );
@@ -444,7 +446,7 @@ export async function writeDeliveryVerdict(directory: string): Promise<ReadonlyA
   const problems = await deliveryProblems(directory);
   await writeFile(
     join(directory, "delivery.json"),
-    JSON.stringify(
+    jsonTools.jsonString(
       {
         status: problems.length === 0 ? "ready" : "not-ready",
         problems,
@@ -501,7 +503,7 @@ function requiredReader(directory: string, problems: Array<string>): RequiredRea
       return undefined;
     }
     try {
-      return Schema.decodeSync(schema)(await readFile(path, "utf8"));
+      return Effect.runSync(Schema.decodeEffect(schema)(await readFile(path, "utf8")));
     } catch (error) {
       problems.push(
         `${name} is invalid: ${error instanceof Error ? error.message : String(error)}. Regenerate runner-owned evidence or correct review-authored JSON to the verify-app skill's schema, then rerun bun run verify:review <run-dir>.`,
@@ -628,7 +630,9 @@ export function actingPersonas(
         attachment.name.startsWith("Checkpoint persona: "),
     )
     .map(
-      (attachment) => Schema.decodeUnknownSync(PersonaJson)(attachment.body?.toString()).persona,
+      (attachment) =>
+        Effect.runSync(Schema.decodeUnknownEffect(PersonaJson)(attachment.body?.toString()))
+          .persona,
     );
   return [...new Set(names)];
 }

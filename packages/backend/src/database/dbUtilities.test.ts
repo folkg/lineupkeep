@@ -15,6 +15,8 @@ import {
 import { Array as EffectArray, Data, Effect, Exit, Schema } from "effect";
 import { expect, expectTypeOf } from "vitest";
 
+import layerTools from "#runtime/ProvideLayer.ts";
+
 import { maxInsertRows, mutateRows, unnestRows } from "./dbUtilities.ts";
 
 it("requires table-matched scalar unnest rows", () => {
@@ -137,7 +139,7 @@ it.effect(
       );
       expect(Exit.isFailure(changedKey)).toBe(true);
       expect(String(changedKey)).toContain("preserve every locked primary key");
-    }).pipe(Effect.provide(PgliteClient.layer())),
+    }).pipe(layerTools.provide(PgliteClient.layer())),
 );
 
 it.effect("rejects composite primary keys with a constructive remedy before querying", () =>
@@ -160,7 +162,7 @@ it.effect("rejects composite primary keys with a constructive remedy before quer
     expect(Exit.isFailure(result)).toBe(true);
     expect(String(result)).toContain("single-column primary key");
     expect(String(result)).toContain("dedicated set-based mutation");
-  }).pipe(Effect.provide(PgliteClient.layer())),
+  }).pipe(layerTools.provide(PgliteClient.layer())),
 );
 
 class PlanRejected extends Data.TaggedError("PlanRejected") {}

@@ -8,6 +8,7 @@ import { pipeline } from "node:stream/promises";
 import { ReadableStream as NodeReadableStream } from "node:stream/web";
 
 import { isPublicRoutableHost } from "@better-auth/core/utils/host";
+import { Effect } from "effect";
 import { Schema } from "effect";
 
 import { PublicInternet } from "#runtime/PublicInternet.ts";
@@ -59,14 +60,18 @@ export function makePublicInternetProcess(
         },
         (incoming) => {
           try {
-            const status = Schema.decodeUnknownSync(ResponseStatus)(incoming.statusCode);
+            const status = Effect.runSync(
+              Schema.decodeUnknownEffect(ResponseStatus)(incoming.statusCode),
+            );
             const noBody = webRequest.method === "HEAD" || [204, 205, 304].includes(status);
             if (noBody) {
               incoming.destroy();
             }
             resolve(
               new Response(
-                noBody ? null : Schema.decodeUnknownSync(WebBody)(Readable.toWeb(incoming)),
+                noBody
+                  ? null
+                  : Effect.runSync(Schema.decodeUnknownEffect(WebBody)(Readable.toWeb(incoming))),
                 {
                   headers: responseHeaders(incoming.headers),
                   status,
@@ -85,7 +90,7 @@ export function makePublicInternetProcess(
         outgoing.end();
       } else {
         void pipeline(
-          Readable.fromWeb(Schema.decodeUnknownSync(NodeBody)(webRequest.body)),
+          Readable.fromWeb(Effect.runSync(Schema.decodeUnknownEffect(NodeBody)(webRequest.body))),
           outgoing,
           { signal: init.signal },
         ).catch(reject);

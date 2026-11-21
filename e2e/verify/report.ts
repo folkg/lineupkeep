@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { Option, Schema } from "effect";
 
 import { ClaimsJson, resolveArtifact, ResultsJson } from "./evidence.ts";
@@ -215,7 +216,7 @@ function mcpBlocks(model: ReportModel): ReadonlyArray<Block> {
         {
           kind: "transcript",
           id: `mcp-${index + 1}`,
-          text: `${entry.test} — ${entry.name}\nArtifact: ${entry.file}\n${exchange === undefined ? "Missing or invalid transcript" : JSON.stringify(exchange, null, 2)}`,
+          text: `${entry.test} — ${entry.name}\nArtifact: ${entry.file}\n${exchange === undefined ? "Missing or invalid transcript" : jsonTools.jsonString(exchange, null, 2)}`,
         },
         paragraph(
           spans.length === 0
@@ -251,7 +252,7 @@ function serviceBlocks(model: ReportModel): ReadonlyArray<Block> {
         {
           kind: "transcript",
           id: `service-${index + 1}`,
-          text: `${entry.test} — ${entry.name}\nArtifact: ${entry.file}\n${entry.call === undefined ? "Missing or invalid service evidence" : JSON.stringify(entry.call, null, 2)}`,
+          text: `${entry.test} — ${entry.name}\nArtifact: ${entry.file}\n${entry.call === undefined ? "Missing or invalid service evidence" : jsonTools.jsonString(entry.call, null, 2)}`,
         },
         paragraph(
           spans.length === 0
@@ -775,7 +776,7 @@ function telemetryBlocks(model: ReportModel): ReadonlyArray<Block> {
                       .filter(([key]) => /^(ui|error|telemetry)\./u.test(key))
                       .map(
                         ([key, value]) =>
-                          `${key}=${typeof value === "string" ? value : JSON.stringify(value)}`,
+                          `${key}=${typeof value === "string" ? value : jsonTools.jsonString(value)}`,
                       )
                       .join("; "),
                   ]),

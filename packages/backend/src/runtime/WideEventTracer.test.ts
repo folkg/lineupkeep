@@ -1,6 +1,8 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, Exit, Layer, Redacted, Schema, Tracer } from "effect";
 
+import layerTools from "#runtime/ProvideLayer.ts";
+
 import { safeTracerLayer } from "./Observability.ts";
 import { makeWideEventTracer } from "./WideEventTracer.ts";
 
@@ -36,7 +38,7 @@ it.effect("writes one wide event for a request and one for each lineup run insid
         kind: "server",
       }),
       Effect.exit,
-      Effect.provide(wideEventLayer(lines)),
+      layerTools.provide(wideEventLayer(lines)),
     );
 
     assert.isTrue(Exit.isSuccess(exit));
@@ -104,7 +106,7 @@ it.effect("never carries a token, cookie, crumb, note, address or provider paylo
         attributes: { "http.request.method": "GET", "url.path": "/connections" },
         kind: "server",
       }),
-      Effect.provide(wideEventLayer(lines)),
+      layerTools.provide(wideEventLayer(lines)),
     );
 
     assert.strictEqual(lines.length, 1);
@@ -138,7 +140,7 @@ it.effect("names the MCP tool a request served", () =>
         attributes: { "http.request.method": "POST", "url.path": "/api/mcp" },
         kind: "server",
       }),
-      Effect.provide(wideEventLayer(lines)),
+      layerTools.provide(wideEventLayer(lines)),
     );
 
     assert.strictEqual(lines.length, 1);
@@ -170,7 +172,7 @@ it.effect("carries business attributes without repeating transport statement det
         attributes: { "http.request.method": "GET", "url.path": "/teams" },
         kind: "server",
       }),
-      Effect.provide(wideEventLayer(lines)),
+      layerTools.provide(wideEventLayer(lines)),
     );
 
     assert.strictEqual(lines.length, 1);
@@ -210,7 +212,7 @@ it.effect(
           kind: "server",
         }),
         Effect.exit,
-        Effect.provide(wideEventLayer(lines)),
+        layerTools.provide(wideEventLayer(lines)),
       );
 
       assert.strictEqual(lines.length, 2);
@@ -235,7 +237,7 @@ it.effect("records a rejected operation as a warning without widening privacy", 
         attributes: { "http.request.method": "GET", "url.path": "/teams" },
         kind: "server",
       }),
-      Effect.provide(wideEventLayer(lines)),
+      layerTools.provide(wideEventLayer(lines)),
     );
 
     assert.strictEqual(lines.length, 1);
@@ -272,7 +274,7 @@ it.effect("passes every span to the exporter unchanged", () =>
         attributes: { "http.request.method": "GET", "url.path": "/teams" },
         kind: "server",
       }),
-      Effect.provide(layer),
+      layerTools.provide(layer),
     );
 
     assert.deepStrictEqual(exported, ["LineupWorker.run:team-1", "http.server.request:undefined"]);
@@ -286,7 +288,7 @@ it.effect("never fails the operation when the log writer is unavailable", () =>
         attributes: { "http.request.method": "GET", "url.path": "/" },
         kind: "server",
       }),
-      Effect.provide(
+      layerTools.provide(
         safeTracerLayer.pipe(
           Layer.provideMerge(
             Layer.succeed(Tracer.Tracer)(
@@ -319,7 +321,7 @@ function wideEventLayer(lines: Array<string>): Layer.Layer<never> {
 function decodeEntries(
   lines: ReadonlyArray<string>,
 ): Effect.Effect<ReadonlyArray<Entry>, Schema.SchemaError> {
-  return Effect.forEach(lines, decodeEntry);
+  return Effect.forEach(lines, decodeEntry, { concurrency: 1 });
 }
 
 function decodeEntry(line: string): Effect.Effect<Entry, Schema.SchemaError> {

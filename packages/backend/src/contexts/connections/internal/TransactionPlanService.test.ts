@@ -19,6 +19,7 @@ import type {
   TransactionPlanMoveDraft,
   TransactionPlanView,
 } from "#contexts/connections/TransactionPlans.ts";
+import layerTools from "#runtime/ProvideLayer.ts";
 
 import { nextCheckAt } from "./CheckSchedule.ts";
 import { ConnectionsDatabase } from "./ConnectionsDatabase.ts";
@@ -104,7 +105,9 @@ it.effect("proposes into an empty team and leaves a move for today undecided", (
     const stored = yield* database.select().from(transactionMoves);
     assert.strictEqual(stored.length, 1);
     assert.strictEqual(stored[0]?.decision, "undecided");
-  }).pipe(Effect.provide(serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])]))),
+  }).pipe(
+    layerTools.provide(serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])])),
+  ),
 );
 
 it.effect("proposes into an existing queue and keeps one plan", () =>
@@ -140,7 +143,7 @@ it.effect("proposes into an existing queue and keeps one plan", () =>
     assert.strictEqual((yield* database.select().from(transactionPlans)).length, 1);
     assert.strictEqual((yield* database.select().from(transactionMoves)).length, 2);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [],
@@ -175,7 +178,7 @@ it.effect("orders the plan by what each move needs, not by proposal order", () =
     assert.deepStrictEqual(result.plan.moves[1]?.dependsOn.length, 1);
     assert.strictEqual(result.plan.moves[1]?.validation.status, "current");
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
@@ -214,7 +217,7 @@ it.effect("refuses a group whole when one of its moves cannot run", () =>
     assert.deepStrictEqual(result.plan.moves, []);
     assert.deepStrictEqual(yield* database.select().from(transactionMoves), []);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league([rostered("a1", "Roster One", "BN", ["RB"])], [waived("w1", "Waiver One", ["RB"])]),
       ]),
@@ -245,7 +248,7 @@ it.effect("orders a stash before the add that uses the place it frees", () =>
     );
     assert.deepStrictEqual(result.plan.moves[1]?.dependsOn, [requireMoveId(result.plan.moves[0])]);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["WR"])],
@@ -289,7 +292,7 @@ it.effect("accepts and validates a standalone activate", () => {
       ["activate"],
     );
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer(
         [
           league(
@@ -329,7 +332,7 @@ it.effect("refuses a second stash that claims the same reserve place", () =>
       [["a1", [{ kind: "place", key: "IR" }]]],
     );
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
@@ -365,7 +368,9 @@ it.effect("refuses a proposed move for a player who has already played today", (
     );
     assert.deepStrictEqual(result.plan.moves, []);
     assert.deepStrictEqual(yield* database.select().from(transactionMoves), []);
-  }).pipe(Effect.provide(serviceLayer([league([locked("a1", "Locked One", "BN", ["RB"])], [])]))),
+  }).pipe(
+    layerTools.provide(serviceLayer([league([locked("a1", "Locked One", "BN", ["RB"])], [])])),
+  ),
 );
 
 it.effect("refuses a second drop of the same player in one plan", () =>
@@ -392,7 +397,7 @@ it.effect("refuses a second drop of the same player in one plan", () =>
     );
     assert.strictEqual((yield* database.select().from(transactionMoves)).length, 1);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
@@ -427,7 +432,7 @@ it.effect("refuses a second move to the same place in one plan", () =>
     );
     assert.strictEqual((yield* database.select().from(transactionMoves)).length, 1);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
@@ -479,7 +484,7 @@ it.effect("saves one move of a group for one day and revalidates the plan", () =
       ],
     );
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
@@ -540,7 +545,7 @@ it.effect("edits a saved move in place and revalidates the moves after it", () =
     assert.strictEqual(result.plan.moves[1]?.reason, "Add the other free agent instead.");
     assert.strictEqual((yield* database.select().from(transactionMoves)).length, 2);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
@@ -590,7 +595,7 @@ it.effect("refuses an edit that would make a later move impossible", () =>
       ["Drop Roster One.", "Add Free Agent One."],
     );
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
@@ -663,7 +668,7 @@ it.effect("amends a saved move's reason and fallbacks in place and revalidates t
       ["fa1", "fa3"],
     );
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [],
@@ -756,7 +761,7 @@ it.effect("changes a saved move's run day and reorders the plan", () =>
       positionBefore(downstream),
     );
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
@@ -825,7 +830,9 @@ it.effect("reports a cleared confirmation when a real amend changes a confirmed 
     assert.strictEqual(stored[0]?.decision, "saved");
     assert.strictEqual(stored[0]?.confirmedAt, null);
     assert.strictEqual(stored[0]?.confirmedBy, null);
-  }).pipe(Effect.provide(serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])]))),
+  }).pipe(
+    layerTools.provide(serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])])),
+  ),
 );
 
 it.effect("refuses an amendment for a move in another owner's queue", () =>
@@ -870,7 +877,7 @@ it.effect("refuses an amendment for a move in another owner's queue", () =>
     assert.strictEqual(failure.team, team);
     assert.strictEqual(failure.move, otherMove);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league([rostered("a1", "Roster One", "BN", ["RB"])], []),
         leagueFor(secondTeam, [rostered("a1", "Roster One", "BN", ["RB"])], []),
@@ -913,7 +920,7 @@ it.effect("discards a saved move and leaves the plan open", () =>
     );
     assert.strictEqual((yield* database.select().from(transactionPlans)).length, 1);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
@@ -960,7 +967,7 @@ it.effect("rechecks the queue after discarding the move that funds an add", () =
     );
     assert.strictEqual(remaining?.runPosition, undefined);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
@@ -1005,7 +1012,9 @@ it.effect("refuses to discard a move that has already run", () =>
     assert.include(result.refused[0]?.detail ?? "", "has ended");
     const stored = yield* database.select().from(transactionMoves);
     assert.strictEqual(stored[0]?.decision, "saved");
-  }).pipe(Effect.provide(serviceLayer([league([rostered("a1", "Roster One", "BN", ["RB"])], [])]))),
+  }).pipe(
+    layerTools.provide(serviceLayer([league([rostered("a1", "Roster One", "BN", ["RB"])], [])])),
+  ),
 );
 
 it.effect("discards one move and leaves the plan's other moves", () =>
@@ -1040,7 +1049,7 @@ it.effect("discards one move and leaves the plan's other moves", () =>
     assert.deepStrictEqual((yield* database.select().from(transactionPlans)).length, 1);
     assert.strictEqual((yield* database.select().from(transactionMoves)).length, 2);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
@@ -1110,7 +1119,7 @@ it.effect("discards a failed move and a stale move out of the open list", () => 
     const counts = yield* service.counts(owner, { team });
     assert.strictEqual(counts.totals.open, 0);
     assert.strictEqual(counts.totals.ended, 0);
-  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts)));
 });
 
 it.effect("resolves concurrent proposals to one plan without losing a move", () =>
@@ -1146,7 +1155,7 @@ it.effect("resolves concurrent proposals to one plan without losing a move", () 
       ["fa1", "fa2"],
     );
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [],
@@ -1195,7 +1204,7 @@ it.effect("rechecks a saved drop when the league no longer rosters the player", 
     );
     assert.deepStrictEqual(move?.check, { status: "checked" });
     assert.strictEqual(move === undefined ? 0 : checkedAtOf(move), DateTime.toEpochMillis(readAt));
-  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts)));
 });
 
 it.effect("publishes places and each reserve list on the plan read", () => {
@@ -1242,7 +1251,7 @@ it.effect("publishes places and each reserve list on the plan read", () => {
     ]);
     assert.strictEqual(read.addsPossible, 1);
     assert.strictEqual(DateTime.formatIso(read.nextCheckAt), DateTime.formatIso(nextCheckAt(at)));
-  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts)));
 });
 
 it.effect("counts a player in IR+ and accepts an add that fits", () => {
@@ -1296,7 +1305,7 @@ it.effect("counts a player in IR+ and accepts an add that fits", () => {
       checkedAt: at,
       reasons: [],
     });
-  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts)));
 });
 
 it.effect("states the last recorded check when the live roster cannot be read", () => {
@@ -1329,7 +1338,7 @@ it.effect("states the last recorded check when the live roster cannot be read", 
     );
     assert.strictEqual(read.places, undefined);
     assert.strictEqual(read.moves[0]?.check.status, "last_checked");
-  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts)));
 });
 
 it.effect("flags a saved free-agent add when the league moves the player to waivers", () => {
@@ -1369,7 +1378,7 @@ it.effect("flags a saved free-agent add when the league moves the player to waiv
       taken.moves[0]?.validation.reasons.map(({ code, detail }) => [code, detail]),
       [["player_unavailable", "Free Agent One is not in the league's available player pool."]],
     );
-  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts)));
 });
 
 it.effect("flags an open move when its player becomes locked before the read", () => {
@@ -1402,7 +1411,7 @@ it.effect("flags an open move when its player becomes locked before the read", (
         ],
       ],
     );
-  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts)));
 });
 
 it.effect("reads a healthy player in an injury reserve place as illegal", () => {
@@ -1467,7 +1476,7 @@ it.effect("reads a healthy player in an injury reserve place as illegal", () => 
     assert.deepStrictEqual(refs, ["h1"]);
     assert.deepStrictEqual(read.canFree, []);
     assert.strictEqual(read.addsWithFixes, 1);
-  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts)));
 });
 
 it.effect("publishes both reserve moves and the adds a full roster gains from them", () => {
@@ -1509,7 +1518,7 @@ it.effect("publishes both reserve moves and the adds a full roster gains from th
       refs: read.canFree?.map((entry) => entry.player) ?? [],
     });
     assert.deepStrictEqual(refs, ["a1", "a2"]);
-  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts)));
 });
 
 it.effect("groups the timeline by run day and team with today first", () => {
@@ -1603,7 +1612,7 @@ it.effect("groups the timeline by run day and team with today first", () => {
         ["2026-11-15", false, 1],
       ],
     );
-  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts)));
 });
 
 it.effect("keeps a team's ended moves in its plan read", () =>
@@ -1637,7 +1646,7 @@ it.effect("keeps a team's ended moves in its plan read", () =>
       ],
     );
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
@@ -1725,7 +1734,7 @@ it.effect("counts open, today, saved, and ended moves, overall and per team", ()
       teams: [{ team, open: 2, today: 1, saved: 1, ended: 1 }],
       teamCount: 1,
     });
-  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts)));
 });
 
 it.effect("pages the timeline by run day, team, position, and move", () =>
@@ -1776,7 +1785,7 @@ it.effect("pages the timeline by run day, team, position, and move", () =>
       [["2026-11-14", true]],
     );
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [
@@ -1844,7 +1853,7 @@ it.effect("lists earlier moves newest first and resumes with the next older page
     );
     assert.isTrue(second.page.complete);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [
@@ -1903,7 +1912,7 @@ it.effect("returns the stored check and its time when the league cannot be read"
       status: "last_checked",
       note: `Last checked ${DateTime.formatIso(at)}.`,
     });
-  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts)));
 });
 
 it.effect("lists one team's moves by today, saved, and ended", () => {
@@ -1991,7 +2000,7 @@ it.effect("lists one team's moves by today, saved, and ended", () => {
     const everyTeam = yield* service.list(owner, { state: "today" });
     assert.strictEqual(everyTeam.team, undefined);
     assert.strictEqual(everyTeam.moves.length, 1);
-  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts)));
 });
 
 it.effect("submits today's chosen move and records its result, steps, and check time", () => {
@@ -2056,7 +2065,7 @@ it.effect("submits today's chosen move and records its result, steps, and check 
     const read = yield* service.plan(owner, { team });
     assert.strictEqual(read.moves.find((move) => move.move === submitted?.id)?.result, "executed");
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer(
         [
           league(
@@ -2111,7 +2120,7 @@ it.effect("confirms today's move, runs only it, and discards another", () => {
     assert.strictEqual(stored.find((move) => move.id === first.move)?.result, "executed");
     assert.strictEqual(stored.find((move) => move.id === second.move)?.decision, "discarded");
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer(
         [
           league(
@@ -2178,7 +2187,7 @@ it.effect("waits for a recorded run that is still in progress", () => {
     assert.strictEqual(result.counts.recovered, 1);
     assert.strictEqual(writes.requests.length, 0);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])], writes.layer),
     ),
   );
@@ -2292,7 +2301,7 @@ it.effect("runs a confirmed future move on the check after its day, recording bo
       DateTime.formatIso(later),
     );
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       mutableFactsLayer(facts, writes.layer, () => {
         providerReads += 1;
       }),
@@ -2324,7 +2333,7 @@ it.effect("records an agent's discard over MCP", () => {
     assert.strictEqual(read.moves[0]?.decision, "discarded");
     assert.strictEqual(read.moves[0]?.decidedBy, "agent");
     assert.strictEqual(read.moves[0]?.surface, "discard_transaction_move");
-  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts)));
 });
 
 it.effect("names the bidless shape and accepts a claim with no bid", () => {
@@ -2356,7 +2365,7 @@ it.effect("names the bidless shape and accepts a claim with no bid", () => {
     assert.deepStrictEqual(read.waiverBid, { kind: "bidless" });
     assert.deepStrictEqual(read.moves[0]?.validation.reasons, []);
     assert.strictEqual(read.moves[0]?.validation.status, "current");
-  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts)));
 });
 
 it.effect("names the published bid shape and accepts a zero bid", () => {
@@ -2386,7 +2395,7 @@ it.effect("names the published bid shape and accepts a zero bid", () => {
     });
     assert.strictEqual(omitted.refused[0]?.code, "bid_required");
     assert.include(omitted.refused[0]?.detail ?? "", "takes a FAAB bid and publishes the balance");
-  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts)));
 });
 
 it.effect("refuses a bidless claim at save when the league publishes a balance", () => {
@@ -2452,7 +2461,7 @@ it.effect("refuses a bidless claim at save when the league publishes a balance",
       (yield* service.plan(owner, { team })).moves[0]?.validation.status,
       "current",
     );
-  }).pipe(Effect.provide(bidAwareFactsLayer(facts)));
+  }).pipe(layerTools.provide(bidAwareFactsLayer(facts)));
 });
 
 it.effect("refuses a bid at save when the league takes bidless claims", () => {
@@ -2512,7 +2521,7 @@ it.effect("refuses a bid at save when the league takes bidless claims", () => {
       (yield* service.plan(owner, { team })).moves[0]?.validation.status,
       "current",
     );
-  }).pipe(Effect.provide(bidAwareFactsLayer(facts)));
+  }).pipe(layerTools.provide(bidAwareFactsLayer(facts)));
 });
 
 it.effect("refuses a bidless claim at save after the league starts publishing a balance", () => {
@@ -2550,7 +2559,7 @@ it.effect("refuses a bidless claim at save after the league starts publishing a 
       read.moves[0]?.validation.reasons.map((reason) => reason.code),
       ["bid_required"],
     );
-  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts)));
 });
 
 it.effect("returns the recorded run when one submit key is used twice", () => {
@@ -2592,7 +2601,7 @@ it.effect("returns the recorded run when one submit key is used twice", () => {
     );
     assert.strictEqual(recordedCounts.executed, 1);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])], writes.layer),
     ),
   );
@@ -2630,7 +2639,7 @@ it.effect("confirms a whole group from one member", () => {
     const decisions = result.plan.moves.map((move) => move.decision);
     assert.deepStrictEqual(decisions.sort(), ["now", "now"]);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer(
         [
           league(
@@ -2683,7 +2692,7 @@ it.effect("submits a two move group in the evaluated order", () => {
       ],
     );
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer(
         [
           league(
@@ -2753,7 +2762,7 @@ it.effect("refuses a group whole when one of its moves fails, and runs an indepe
     assert.strictEqual(peer?.result, "skipped");
     assert.include(peer?.resultDetail ?? "", "The group did not run");
     assert.strictEqual(stored.find((move) => move.drops[0]?.key === "a1")?.result, "executed");
-  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("settles a refusal that cannot change with its reason", () => {
@@ -2785,7 +2794,7 @@ it.effect("settles a refusal that cannot change with its reason", () => {
     const next = yield* service.runDue(10, at);
     assert.strictEqual(next.counts.moves, 0);
     assert.strictEqual(writes.requests.length, 0);
-  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("leaves a transient provider failure for the next hourly tick", () => {
@@ -2824,7 +2833,7 @@ it.effect("leaves a transient provider failure for the next hourly tick", () => 
     const stored = yield* repository.readPlanMoves({ userId: owner, team });
     assert.strictEqual(stored[0]?.result, "executed");
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])], writes.layer),
     ),
   );
@@ -2854,7 +2863,7 @@ it.effect("never runs an undecided move on the tick", () => {
     assert.strictEqual(stored[0]?.result, undefined);
     assert.strictEqual(stored[0]?.decision, "undecided");
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])], writes.layer),
     ),
   );
@@ -2911,7 +2920,7 @@ it.effect("waits undecided on its day and runs only after the owner confirms", (
       DateTime.formatIso(Option.getOrThrow(Option.fromNullishOr(stored[0]?.runAt))),
       DateTime.formatIso(at),
     );
-  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("skips a plan that another run holds", () => {
@@ -2949,7 +2958,7 @@ it.effect("skips a plan that another run holds", () => {
 
     const plans = yield* database.select().from(transactionPlans);
     assert.strictEqual(plans[0]?.runClaim, "held-run");
-  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("recovers a stale claim before running the due moves", () => {
@@ -2993,7 +3002,7 @@ it.effect("recovers a stale claim before running the due moves", () => {
     assert.strictEqual(writes.requests.length, 1);
     const plans = yield* database.select().from(transactionPlans);
     assert.strictEqual(plans[0]?.runClaim, null);
-  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("blocks a dependent when its move fails and runs an independent move", () => {
@@ -3037,7 +3046,7 @@ it.effect("blocks a dependent when its move fails and runs an independent move",
     );
     assert.strictEqual(stored.find((move) => move.drops[0]?.key === "a2")?.result, "executed");
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer(
         [
           league(
@@ -3088,7 +3097,7 @@ it.effect("records an unknown provider outcome and never retries it", () => {
     assert.strictEqual(second.counts.moves, 0);
     assert.strictEqual(writes.requests.length, 1);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])], writes.layer),
     ),
   );
@@ -3130,7 +3139,7 @@ it.effect("records a pending waiver claim and does not retry it", () => {
     assert.strictEqual(next.counts.moves, 0);
     assert.strictEqual(writes.requests.length, 1);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer(
         [league([], [waived("w1", "Waiver One", ["RB"])], { budget: 100 })],
         writes.layer,
@@ -3185,7 +3194,7 @@ it.effect(
       const open = yield* service.counts(owner, { team });
       assert.strictEqual(open.totals.open, 0);
     }).pipe(
-      Effect.provide(
+      layerTools.provide(
         serviceLayer(
           [
             league(
@@ -3254,7 +3263,7 @@ it.effect("reconciles a won claim to done and runs no fallback", () => {
     const again = yield* service.runDue(10, at);
     assert.strictEqual(again.counts.moves, 0);
     assert.strictEqual(writes.requests.length, 1);
-  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("runs the first fallback when a claim is lost and never repeats it", () => {
@@ -3325,7 +3334,7 @@ it.effect("runs the first fallback when a claim is lost and never repeats it", (
     const again = yield* service.runDue(10, at);
     assert.strictEqual(again.counts.moves, 0);
     assert.strictEqual(writes.requests.length, 2);
-  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("dates a lost claim's fallback from the day the fallback is sent", () => {
@@ -3383,7 +3392,7 @@ it.effect("dates a lost claim's fallback from the day the fallback is sent", () 
       stored[0]?.attempts.find((attempt) => attempt.kind === "fallback")?.effectiveDate,
       later,
     );
-  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("tries each fallback in turn and ends failed when all choices fail", () => {
@@ -3469,7 +3478,7 @@ it.effect("tries each fallback in turn and ends failed when all choices fail", (
     const again = yield* service.runDue(10, at);
     assert.strictEqual(again.counts.moves, 0);
     assert.strictEqual(writes.requests.length, 3);
-  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 for (const timing of [
@@ -3548,7 +3557,7 @@ for (const timing of [
       assert.strictEqual(run?.result, "executed");
       assert.strictEqual(run?.runDay, "2026-11-15");
       assert.strictEqual(run?.effectiveDate, timing.effectiveDate);
-    }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+    }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
   });
 }
 
@@ -3573,7 +3582,7 @@ it.effect("stores the locked week's start as a weekly-lock move's effective date
       ],
     );
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [rostered("a1", "Roster One", "BN", ["RB"]), rostered("a2", "Roster Two", "BN", ["RB"])],
@@ -3642,7 +3651,7 @@ it.effect("runs a drop, a stash, and an add group in the order its effects need"
       [["done", 3]],
     );
     assert.include(read.groups[0]?.detail ?? "", "This group ran whole.");
-  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("stops a whole group when one member is stale and sends nothing", () => {
@@ -3699,7 +3708,7 @@ it.effect("stops a whole group when one member is stale and sends nothing", () =
       read.groups[0]?.detail ?? "",
       /^This group does not run\. The drop of Roster One cannot run: /u,
     );
-  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("leaves a group unwhole when one of its members is discarded", () => {
@@ -3742,7 +3751,7 @@ it.effect("leaves a group unwhole when one of its members is discarded", () => {
       read.groups[0]?.detail,
       "This group is not whole. The drop of Roster One was discarded, so the rest cannot run until you discard the group or form it again.",
     );
-  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect(
@@ -3828,7 +3837,7 @@ it.effect(
         group?.detail,
         "This group ran in part. The drop of Roster One reached your league. The move of Roster Two to IR failed: The player was already there. The add did not run. Check your roster, then choose the move again or discard it.",
       );
-    }).pipe(Effect.provide(layer));
+    }).pipe(layerTools.provide(layer));
   },
 );
 
@@ -3872,7 +3881,7 @@ it.effect("adds a visible Roster fixes group before the add it funds", () => {
       ["stash", "free_agent_add"],
     );
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer(
         [
           league(
@@ -3908,7 +3917,7 @@ it.effect("adds no Roster fixes group when the add already fits", () =>
       ["free_agent_add"],
     );
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [{ ...rostered("a1", "Roster One", "BN", ["RB"]), injured: true }],
@@ -3949,7 +3958,7 @@ it.effect("stashes an injured player to the reserve list their roster row names"
       [],
     );
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [{ ...rostered("a1", "Day To Day", "BN", ["LW", "RW", "Util", "IR+"]), injured: true }],
@@ -3992,7 +4001,7 @@ it.effect("activates a healthy player off a reserve list so an add can run", () 
       ["activate"],
     );
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [
@@ -4032,7 +4041,7 @@ it.effect("names the cure when no roster fix can make an add fit", () =>
     assert.include(result.refused[0]?.detail ?? "", "Add a drop");
     assert.deepStrictEqual(result.plan.moves, []);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [rostered("a1", "Roster One", "BN", ["WR"])],
@@ -4102,7 +4111,7 @@ it.effect("runs an activate with the funding drop and leaves the roster legal", 
     assert.deepStrictEqual(read.illegal, []);
     assert.deepStrictEqual(read.places, { used: 2, maximum: 2, free: 0 });
     assert.strictEqual(read.moves[0]?.result, "executed");
-  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("accepts a drop and an activate as one group when that is the legal cure", () => {
@@ -4176,7 +4185,7 @@ it.effect("accepts a drop and an activate as one group when that is the legal cu
     const after = yield* service.plan(owner, { team });
     assert.deepStrictEqual(after.illegal, []);
     assert.strictEqual(after.groups[0]?.status, "done");
-  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("runs a next-day group on its submission day and records tomorrow's effect", () => {
@@ -4242,7 +4251,7 @@ it.effect("runs a next-day group on its submission day and records tomorrow's ef
     assert.strictEqual(ran?.result, "executed");
     assert.strictEqual(ran?.validation.status, "current");
     assert.deepStrictEqual(ran?.validation.reasons, []);
-  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("runs a same-day group as soon as the owner confirms it", () => {
@@ -4288,7 +4297,7 @@ it.effect("runs a same-day group as soon as the owner confirms it", () => {
       writes.requests.map((request) => request.kind),
       ["drop", "activate"],
     );
-  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("refuses an impossible next-day group at propose and sends nothing", () => {
@@ -4321,7 +4330,7 @@ it.effect("refuses an impossible next-day group at propose and sends nothing", (
     assert.deepStrictEqual(proposed.plan.moves, []);
     assert.deepStrictEqual(yield* database.select().from(transactionMoves), []);
     assert.deepStrictEqual(writes.requests, []);
-  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("refuses a group at propose when the league cannot accept its slot move", () => {
@@ -4352,7 +4361,7 @@ it.effect("refuses a group at propose when the league cannot accept its slot mov
     assert.deepStrictEqual(proposed.plan.moves, []);
     assert.deepStrictEqual(yield* database.select().from(transactionMoves), []);
     assert.deepStrictEqual(writes.requests, []);
-  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("keeps a refused dependent leg valid after its group's drop landed for that date", () => {
@@ -4397,7 +4406,7 @@ it.effect("keeps a refused dependent leg valid after its group's drop landed for
       amendedRead.moves.find((move) => move.kind === "activate")?.validation.status,
       "current",
     );
-  }).pipe(Effect.provide(mutableFactsLayer(facts, writes.layer)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
 it.effect("keeps a failed move's reason and time in the plan and list reads", () =>
@@ -4432,7 +4441,7 @@ it.effect("keeps a failed move's reason and time in the plan and list reads", ()
       DateTime.formatIso(at),
     );
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer(
         [league([rostered("a1", "Roster One", "BN", ["RB"])], [], { constraints: constraints(2) })],
         writeLayer(() => ({ status: "failed", detail: "Your league refused the drop." })).layer,
@@ -4463,7 +4472,7 @@ it.effect("names the illegal blocker and its cure when no fix can cure it", () =
     assert.include(result.refused[0]?.detail ?? "", "drop Healthy Reserve");
     assert.deepStrictEqual(result.plan.moves, []);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [
@@ -4519,7 +4528,7 @@ it.effect("regenerates a move's Roster fixes when it is edited", () =>
     );
     assert.strictEqual(read.groups[0]?.status, "ready");
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [{ ...rostered("a1", "Roster One", "BN", ["RB"]), injured: true }],
@@ -4562,7 +4571,7 @@ it.effect("discards a move's Roster fixes with it", () =>
     );
     assert.deepStrictEqual(read.groups, []);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league(
           [{ ...rostered("a1", "Roster One", "BN", ["RB"]), injured: true }],
@@ -4628,7 +4637,7 @@ it.effect("adds the Roster fixes that make a stored add fit", () => {
       "current",
     );
     assert.strictEqual(read.moves.filter((move) => move.kind === "stash").length, 1);
-  }).pipe(Effect.provide(mutableFactsLayer(facts)));
+  }).pipe(layerTools.provide(mutableFactsLayer(facts)));
 });
 
 it.effect("refuses roster fixes for a move that already fits", () =>
@@ -4648,7 +4657,7 @@ it.effect("refuses roster fixes for a move that already fits", () =>
     const fitting = yield* service.fix(owner, { team, move });
     assert.strictEqual(fitting.refused[0]?.code, "move_not_blocked");
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer([
         league([rostered("a1", "Roster One", "BN", ["RB"])], [], { constraints: constraints(2) }),
       ]),
@@ -4688,7 +4697,7 @@ it.effect("retries a failed group when nothing reached the league", () => {
     assert.strictEqual(again.refusals[0]?.code, "group_ran_in_part");
     assert.strictEqual(writes.requests.length, 2);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer(
         [league([rostered("a1", "Roster One", "BN", ["RB"])], [], { constraints: constraints(2) })],
         writes.layer,
@@ -4752,7 +4761,7 @@ it.effect("refuses to retry a group that ran in part and discards what is left",
     const read = yield* service.plan(owner, { team });
     assert.strictEqual(read.moves.filter((move) => move.decision !== "discarded").length, 1);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       serviceLayer(
         [
           league(
@@ -5067,8 +5076,10 @@ let storedMoveSequence = 0;
 
 function nextStoredMoveId(): TransactionMoveId {
   storedMoveSequence += 1;
-  return Schema.decodeSync(TransactionMoveIdSchema)(
-    `01K${String(storedMoveSequence).padStart(23, "0")}`,
+  return Effect.runSync(
+    Schema.decodeEffect(TransactionMoveIdSchema)(
+      `01K${String(storedMoveSequence).padStart(23, "0")}`,
+    ),
   );
 }
 

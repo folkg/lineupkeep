@@ -271,7 +271,7 @@ function sessionFor(
   id = "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",
 ): HostedBrowserSession {
   return {
-    id: Schema.decodeSync(HostedLinkingSessionId)(id),
+    id: Effect.runSync(Schema.decodeEffect(HostedLinkingSessionId)(id)),
     userId: decodeUserId("owner"),
     provider: "yahoo",
     expiresAt: DateTime.addDuration(DateTime.nowUnsafe(), "1 minute"),

@@ -1,4 +1,5 @@
 import { assert, it } from "@effect/vitest";
+import { Effect } from "effect";
 import { DateTime, Schema } from "effect";
 
 import { rosterRuleOf } from "#contexts/connections/RosterSlots.ts";
@@ -1836,7 +1837,9 @@ function moveId(label: string): TransactionMoveId {
   if (high === undefined || low === undefined) {
     throw new Error("This test declared more moves than the identifier alphabet allows");
   }
-  const id = Schema.decodeSync(TransactionMoveIdSchema)(`01ARZ3NDEKTSV4RRFFQ69G5F${high}${low}`);
+  const id = Effect.runSync(
+    Schema.decodeEffect(TransactionMoveIdSchema)(`01ARZ3NDEKTSV4RRFFQ69G5F${high}${low}`),
+  );
   idsByLabel.set(label, id);
   return id;
 }

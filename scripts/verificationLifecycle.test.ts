@@ -7,6 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { Effect } from "effect";
 import { Schema } from "effect";
 import { assert, expect, it, vi } from "vitest";
 
@@ -43,7 +45,7 @@ it("stops a command that ignores interruption, then cleans up", async () => {
   const interruption = new AbortController();
   const stubborn = fixture.script(`
     process.on("SIGINT", () => {});
-    require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+    require("node:fs").writeFileSync(${jsonTools.jsonString(pidFile)}, String(process.pid));
     setInterval(() => {}, 1000);
   `);
 
@@ -161,7 +163,7 @@ it("passes resource-reported endpoints to commands without borrowing occupied po
     },
     commands: (stack: Stack) => [
       fixture.script(
-        `require("node:fs").writeFileSync(${JSON.stringify(stackFile)}, ${JSON.stringify(JSON.stringify({ database: stack.database.href, ports: stack.ports }))})`,
+        `require("node:fs").writeFileSync(${jsonTools.jsonString(stackFile)}, ${jsonTools.jsonString(jsonTools.jsonString({ database: stack.database.href, ports: stack.ports }))})`,
       ),
     ],
   };
@@ -169,11 +171,13 @@ it("passes resource-reported endpoints to commands without borrowing occupied po
   const outcome = await runVerification(plan);
 
   expect(outcome.status).toBe("completed");
-  const stack = Schema.decodeSync(
-    Schema.fromJsonString(
-      Schema.Struct({ database: Schema.String, ports: Schema.Record(Schema.String, Schema.Int) }),
-    ),
-  )(await readFile(stackFile, "utf8"));
+  const stack = Effect.runSync(
+    Schema.decodeEffect(
+      Schema.fromJsonString(
+        Schema.Struct({ database: Schema.String, ports: Schema.Record(Schema.String, Schema.Int) }),
+      ),
+    )(await readFile(stackFile, "utf8")),
+  );
   expect(stack.database).toBe("postgres://fixture.invalid/verify_fixture");
   const ports = Object.values(stack.ports);
   expect(Object.keys(stack.ports)).toEqual(["app", "email", "traces"]);
@@ -240,7 +244,7 @@ it("kills owned processes at once after a second interruption", async () => {
   const urgency = new AbortController();
   const stubborn = fixture.script(`
     process.on("SIGINT", () => {});
-    require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+    require("node:fs").writeFileSync(${jsonTools.jsonString(pidFile)}, String(process.pid));
     setInterval(() => {}, 1000);
   `);
   const plan = {
@@ -362,10 +366,10 @@ it("stops a descendant that a process spawns while being stopped", async () => {
   const latePidFile = join(fixture.folder, "late.pid");
   const spawnsOnTerm = fixture.script(`
     const { spawn } = require("node:child_process");
-    const server = spawn(process.execPath, ["-e", ${JSON.stringify(`
+    const server = spawn(process.execPath, ["-e", ${jsonTools.jsonString(`
       process.on("SIGTERM", () => {
         const late = require("node:child_process").spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore" });
-        require("node:fs").writeFileSync(${JSON.stringify(latePidFile)}, String(late.pid));
+        require("node:fs").writeFileSync(${jsonTools.jsonString(latePidFile)}, String(late.pid));
         late.unref();
         setTimeout(() => process.exit(0), 300);
       });
@@ -398,7 +402,7 @@ it("leaves a lock alone when it was recovered and retaken while a late recovery 
   const live = runVerification(
     await fixture.plan([
       fixture.script(
-        `require("node:fs").writeFileSync(${JSON.stringify(livePid)}, "1"); setTimeout(() => {}, 1500);`,
+        `require("node:fs").writeFileSync(${jsonTools.jsonString(livePid)}, "1"); setTimeout(() => {}, 1500);`,
       ),
     ]),
   );
@@ -423,7 +427,7 @@ it("stops before starting a command when interrupted while its log opens", async
   const plan = await fixture.plan(
     [
       fixture.script(
-        `require("node:fs").writeFileSync(${JSON.stringify(startedFile)}, "1"); setInterval(() => {}, 1000);`,
+        `require("node:fs").writeFileSync(${jsonTools.jsonString(startedFile)}, "1"); setInterval(() => {}, 1000);`,
       ),
     ],
     interruption.signal,
@@ -471,11 +475,13 @@ it("recovers past a claim left by a recovery that died", async () => {
   owner.kill();
   await owner.exited;
 
-  const deadHolder = Schema.decodeSync(
-    Schema.fromJsonString(Schema.Struct({ owner: Schema.Unknown })),
-  )(await readFile(join(lock, "owner.json"), "utf8")).owner;
+  const deadHolder = Effect.runSync(
+    Schema.decodeEffect(Schema.fromJsonString(Schema.Struct({ owner: Schema.Unknown })))(
+      await readFile(join(lock, "owner.json"), "utf8"),
+    ),
+  ).owner;
   await mkdir(join(lock, "recovery-1"));
-  await writeFile(join(lock, "recovery-1", "holder.json"), JSON.stringify(deadHolder));
+  await writeFile(join(lock, "recovery-1", "holder.json"), jsonTools.jsonString(deadHolder));
 
   const outcome = await recoverVerification(lock, (name) => fileDatabase(name, databaseFile), 300);
 
@@ -657,7 +663,7 @@ async function lifecycleFixture(): Promise<{
     script(`
       const { spawn } = require("node:child_process");
       const server = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore" });
-      require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(server.pid));
+      require("node:fs").writeFileSync(${jsonTools.jsonString(pidFile)}, String(server.pid));
       server.unref();
       setTimeout(() => {}, ${lingerMs});
     `);
@@ -697,30 +703,30 @@ async function lifecycleFixture(): Promise<{
         options.command === "detached-server"
           ? detachedServer(options.pidFile, 60_000)
           : script(`
-              require("node:fs").writeFileSync(${JSON.stringify(options.pidFile)}, String(process.pid));
+              require("node:fs").writeFileSync(${jsonTools.jsonString(options.pidFile)}, String(process.pid));
               setInterval(() => {}, 1000);
             `);
       await writeFile(
         path,
         `
         import { writeFile, rm } from "node:fs/promises";
-        import { runVerification } from ${JSON.stringify(lifecycle)};
+        import { runVerification } from ${jsonTools.jsonString(lifecycle)};
         const database = (name) => ({
           name,
           create: async () => {
-            await writeFile(${JSON.stringify(options.databaseFile)}, name);
+            await writeFile(${jsonTools.jsonString(options.databaseFile)}, name);
             ${options.createHangs === true ? "await new Promise(() => {});" : ""}
             return { database: new URL("postgres://fixture.invalid/" + name), ports: {} };
           },
-          remove: () => rm(${JSON.stringify(options.databaseFile)}, { force: true }),
+          remove: () => rm(${jsonTools.jsonString(options.databaseFile)}, { force: true }),
         });
         await runVerification({
           runId: "owned",
-          directory: ${JSON.stringify(join(folder, "owned"))},
-          lockDirectory: ${JSON.stringify(join(folder, ".lock"))},
+          directory: ${jsonTools.jsonString(join(folder, "owned"))},
+          lockDirectory: ${jsonTools.jsonString(join(folder, ".lock"))},
           infrastructure: database("verify_owned"),
           infrastructureNamed: database,
-          commands: () => [${JSON.stringify(command)}],
+          commands: () => [${jsonTools.jsonString(command)}],
 
           signal: new AbortController().signal,
           urgent: new AbortController().signal,
@@ -769,9 +775,9 @@ async function lifecycleFixture(): Promise<{
         path,
         `
         import { rm } from "node:fs/promises";
-        import { recoverVerification } from ${JSON.stringify(lifecycle)};
-        const database = (name) => ({ name, create: () => Promise.reject(new Error("unused")), remove: () => rm(${JSON.stringify(databaseFile)}, { force: true }) });
-        const outcome = await recoverVerification(${JSON.stringify(join(folder, ".lock"))}, database, 300);
+        import { recoverVerification } from ${jsonTools.jsonString(lifecycle)};
+        const database = (name) => ({ name, create: () => Promise.reject(new Error("unused")), remove: () => rm(${jsonTools.jsonString(databaseFile)}, { force: true }) });
+        const outcome = await recoverVerification(${jsonTools.jsonString(join(folder, ".lock"))}, database, 300);
         process.stdout.write(outcome.status);
         `,
       );

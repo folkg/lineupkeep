@@ -31,10 +31,13 @@ export const UserDirectoryLive = Layer.effect(
             .where(anyOf(user.id, ids)),
         catch: (cause) => UserDirectoryUnavailable.make({ cause }),
       });
-      return yield* Effect.forEach(rows, (row) =>
-        Schema.decodeEffect(UserEmail)(row).pipe(
-          Effect.mapError((cause) => UserDirectoryUnavailable.make({ cause })),
-        ),
+      return yield* Effect.forEach(
+        rows,
+        (row) =>
+          Schema.decodeEffect(UserEmail)(row).pipe(
+            Effect.mapError((cause) => UserDirectoryUnavailable.make({ cause })),
+          ),
+        { concurrency: 1 },
       );
     });
 

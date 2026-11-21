@@ -470,6 +470,9 @@ const correctnessRules = {
   ],
   "solid/self-closing-comp": "error",
   "solid/style-prop": "error",
+  "effecttsgo/schema-sync": "error",
+  "effecttsgo/missing-concurrency-option": "error",
+  "effecttsgo/global-json-in-effect": "error",
 } satisfies Rules;
 
 const effectRules = {

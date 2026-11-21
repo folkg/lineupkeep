@@ -4,6 +4,7 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 
 import { LineupRunId, LineupId } from "#contexts/connections/LineupRun.ts";
 import { LineupDelivery } from "#contexts/connections/LineupWork.ts";
+import layerTools from "#runtime/ProvideLayer.ts";
 
 import { LineupDeliveryCloudTasks } from "./LineupDeliveryCloudTasks.ts";
 
@@ -39,7 +40,7 @@ it.effect("enqueues deterministic Cloud Tasks deliveries with no credentials", (
     assert.notInclude(body, "cookie");
     assert.notInclude(body, "session");
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       LineupDeliveryCloudTasks.pipe(
         Layer.provide(Layer.succeed(HttpClient.HttpClient)(sink)),
         Layer.provide(
@@ -66,7 +67,7 @@ it.effect("retries a task that could not be created before reporting the deliver
 
     assert.strictEqual(taskAttempts, 2);
   }).pipe(
-    Effect.provide(
+    layerTools.provide(
       LineupDeliveryCloudTasks.pipe(
         Layer.provide(Layer.succeed(HttpClient.HttpClient)(retryingSink)),
         Layer.provide(

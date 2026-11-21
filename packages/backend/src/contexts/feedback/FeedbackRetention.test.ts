@@ -4,6 +4,8 @@ import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { DateTime, Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
 
+import layerTools from "#runtime/ProvideLayer.ts";
+
 import { Feedback } from "./Feedback.ts";
 import { FeedbackRetention } from "./FeedbackRetention.ts";
 import { FeedbackDatabase } from "./internal/FeedbackDatabase.ts";
@@ -51,7 +53,7 @@ it.effect("removes closed reports once their retention window ends", () =>
       remaining.map((report) => report.title),
       ["Keep this"],
     );
-  }).pipe(Effect.provide(FeedbackRetentionTestLayer)),
+  }).pipe(layerTools.provide(FeedbackRetentionTestLayer)),
 );
 
 it.effect("removes quota windows that can no longer accept submissions", () =>
@@ -71,7 +73,7 @@ it.effect("removes quota windows that can no longer accept submissions", () =>
 
     assert.strictEqual(deleted.quotas, 2);
     assert.deepStrictEqual(yield* database.select().from(feedbackQuota), []);
-  }).pipe(Effect.provide(FeedbackRetentionTestLayer)),
+  }).pipe(layerTools.provide(FeedbackRetentionTestLayer)),
 );
 
 const user = decodeUserId("owner");

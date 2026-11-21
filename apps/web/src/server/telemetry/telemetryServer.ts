@@ -184,10 +184,13 @@ class TelemetryInputInvalid extends Schema.TaggedError<
 >()("TelemetryInputInvalid", { cause: Schema.Defect() }) {}
 
 const { clientReportBudget, serverErrorBudget } = Effect.runSync(
-  Effect.all({
-    clientReportBudget: makeReportBudget({ limit: 100, windowMs: 60_000 }),
-    serverErrorBudget: makeReportBudget({ limit: 200, windowMs: 60_000 }),
-  }),
+  Effect.all(
+    {
+      clientReportBudget: makeReportBudget({ limit: 100, windowMs: 60_000 }),
+      serverErrorBudget: makeReportBudget({ limit: 200, windowMs: 60_000 }),
+    },
+    { concurrency: 1 },
+  ),
 );
 
 export function isExpectedHttpOutcome(error: unknown): boolean {

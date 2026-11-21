@@ -1,5 +1,6 @@
 import { writeFile } from "node:fs/promises";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import type { Page, TestInfo } from "@playwright/test";
 
 import { pagePersona } from "#e2e/persona.ts";
@@ -20,7 +21,7 @@ export async function captureCheckpoint(page: Page, info: TestInfo, name: string
   });
   await info.attach(`${name}-aria`, { path: snapshot, contentType: "text/plain" });
   await info.attach(checkpointPersonaName(name), {
-    body: JSON.stringify({ persona: pagePersona(page) }),
+    body: jsonTools.jsonString({ persona: pagePersona(page) }),
     contentType: "application/json",
   });
   if (process.env["VERIFICATION_VIDEO"] === "true") {

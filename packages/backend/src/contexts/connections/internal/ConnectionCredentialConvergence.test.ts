@@ -7,6 +7,7 @@ import { ConfigProvider, Context, DateTime, Effect, Layer, Redacted, Schema } fr
 import { decodeUserId } from "#contexts/auth/User.ts";
 import { decodeConnectionId } from "#contexts/connections/Connection.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
+import layerTools from "#runtime/ProvideLayer.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
 import { ConnectionEncryptionKey } from "./ConnectionEncryptionKey.ts";
@@ -46,7 +47,7 @@ it.effect("reseals a retained envelope under the current key when it is opened",
       envelope: stored,
     });
     assert.strictEqual(Redacted.value(reopened), "retained-cookie-value");
-  }).pipe(Effect.provide(TestLayer)),
+  }).pipe(layerTools.provide(TestLayer)),
 );
 
 it.effect("keeps the resealed envelope when it is opened again", () =>
@@ -80,7 +81,7 @@ it.effect("keeps the resealed envelope when it is opened again", () =>
 
     assert.strictEqual(Redacted.value(opened), "retained-cookie-value");
     assert.strictEqual(second, first);
-  }).pipe(Effect.provide(TestLayer)),
+  }).pipe(layerTools.provide(TestLayer)),
 );
 
 it.effect("leaves a newer envelope in place when the opened envelope has been replaced", () =>
@@ -116,7 +117,7 @@ it.effect("leaves a newer envelope in place when the opened envelope has been re
 
     assert.strictEqual(Redacted.value(opened), "retained-cookie-value");
     assert.strictEqual(yield* storedEnvelope(database), newer);
-  }).pipe(Effect.provide(TestLayer)),
+  }).pipe(layerTools.provide(TestLayer)),
 );
 
 function sealWithRetainedKey(): Effect.Effect<string> {
@@ -151,7 +152,8 @@ function storedEnvelope(
 }
 
 function keyVersionOf(envelope: string): number {
-  return Schema.decodeSync(Schema.fromJsonString(EnvelopeView))(envelope).keyVersion;
+  return Effect.runSync(Schema.decodeEffect(Schema.fromJsonString(EnvelopeView))(envelope))
+    .keyVersion;
 }
 
 const owner = decodeUserId("owner");

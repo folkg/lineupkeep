@@ -1,3 +1,4 @@
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { expect, it } from "vitest";
 
 import { redactEvidence } from "#e2e/verify/redaction.ts";
@@ -31,7 +32,7 @@ it("redacts OAuth credentials, cookies and echoed secrets without losing tool ev
     arguments: { title: "Retained title" },
   };
 
-  const result = JSON.stringify(redactEvidence(exchange));
+  const result = jsonTools.jsonString(redactEvidence(exchange));
 
   for (const secret of [
     "authorization-secret",

@@ -1,6 +1,8 @@
 import { assert, it } from "@effect/vitest";
 import { DateTime, Effect, Layer } from "effect";
 
+import layerTools from "#runtime/ProvideLayer.ts";
+
 import { AccountRetention } from "./AccountRetention.ts";
 import { AccountRetentionLive } from "./internal/AccountRetentionLive.ts";
 import { AccountRetentionRepository } from "./internal/AccountRetentionRepository.ts";
@@ -58,7 +60,7 @@ it.effect(
         "client-fresh",
         "client-token-authorized",
       ]);
-    }).pipe(Effect.provide(AccountRetentionTestLayer)),
+    }).pipe(layerTools.provide(AccountRetentionTestLayer)),
   30_000,
 );
 
@@ -88,7 +90,7 @@ it.effect(
         remaining.map((row) => row.clientId),
         ["client-used"],
       );
-    }).pipe(Effect.provide(AccountRetentionTestLayer)),
+    }).pipe(layerTools.provide(AccountRetentionTestLayer)),
   30_000,
 );
 
@@ -142,7 +144,7 @@ it.effect(
         codes.map((row) => row.id),
         ["live-code"],
       );
-    }).pipe(Effect.provide(AccountRetentionTestLayer)),
+    }).pipe(layerTools.provide(AccountRetentionTestLayer)),
   30_000,
 );
 

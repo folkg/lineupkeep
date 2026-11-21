@@ -1,3 +1,5 @@
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { Effect } from "effect";
 import { Schema } from "effect";
 
 import { ServiceIdentity } from "./serviceSetup.ts";
@@ -16,7 +18,9 @@ test("retains failed service outcomes and rejects non-JSON results", async ({ se
   const calls = test
     .info()
     .attachments.filter(isServiceCallAttachment)
-    .map((attachment) => Schema.decodeUnknownSync(ServiceCallJson)(attachment.body?.toString()));
+    .map((attachment) =>
+      Effect.runSync(Schema.decodeUnknownEffect(ServiceCallJson)(attachment.body?.toString())),
+    );
   expect(calls[0]).toMatchObject({
     phase: "Action",
     persona: "owner",
@@ -34,7 +38,7 @@ test("signs in named personas headlessly and isolates persisted service outcomes
 }) => {
   const owner = await services.signIn("owner");
   expect(owner).toBeInstanceOf(ServiceIdentity);
-  expect(JSON.stringify(owner)).toBe('{"persona":"owner"}');
+  expect(jsonTools.jsonString(owner)).toBe('{"persona":"owner"}');
   const other = await services.signIn("other");
   await services.arrange(owner, "verify the empty starting collection", "readConnections");
 
@@ -57,7 +61,9 @@ test("signs in named personas headlessly and isolates persisted service outcomes
   const evidence = test
     .info()
     .attachments.filter(isServiceCallAttachment)
-    .map((attachment) => Schema.decodeUnknownSync(ServiceCallJson)(attachment.body?.toString()));
+    .map((attachment) =>
+      Effect.runSync(Schema.decodeUnknownEffect(ServiceCallJson)(attachment.body?.toString())),
+    );
   expect(evidence.map(({ phase }) => phase)).toEqual(["Setup", "Action", "Read", "Read"]);
   expect(evidence.map(({ persona }) => persona)).toEqual(["owner", "owner", "owner", "other"]);
   expect(evidence.every(({ traceId }) => /^[a-f0-9]{32}$/u.test(traceId))).toBe(true);
@@ -92,7 +98,9 @@ test("uses named browser personas with their real sessions for service calls", a
   const calls = test
     .info()
     .attachments.filter(isServiceCallAttachment)
-    .map((attachment) => Schema.decodeUnknownSync(ServiceCallJson)(attachment.body?.toString()));
+    .map((attachment) =>
+      Effect.runSync(Schema.decodeUnknownEffect(ServiceCallJson)(attachment.body?.toString())),
+    );
   expect(calls.map(({ persona }) => persona)).toEqual(["owner", "other"]);
 });
 

@@ -19,7 +19,7 @@ export function makeServiceHandler(
     }
     let input: typeof Invocation.Type;
     try {
-      input = Schema.decodeUnknownSync(Invocation)(await request.json());
+      input = Effect.runSync(Schema.decodeUnknownEffect(Invocation)(await request.json()));
     } catch {
       return new Response("Invalid service invocation", { status: 400 });
     }

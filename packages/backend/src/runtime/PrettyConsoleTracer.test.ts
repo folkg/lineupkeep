@@ -12,6 +12,8 @@ import {
   Tracer,
 } from "effect";
 
+import layerTools from "#runtime/ProvideLayer.ts";
+
 import { safeTracerLayer } from "./Observability.ts";
 import { makePrettyConsoleTracer } from "./PrettyConsoleTracer.ts";
 
@@ -104,7 +106,7 @@ it.effect("distinguishes defects interruptions mixed causes and finalizer failur
       Effect.withSpan("finalizer"),
       Effect.withTracerTiming(false),
       Effect.exit,
-      Effect.provide(f.layer),
+      layerTools.provide(f.layer),
     );
 
     assert.notInclude(f.output(), "private-");
@@ -129,7 +131,7 @@ it.effect("renders structured events and escapes controls in stable key order", 
     yield* Effect.logInfo("checkpoint").pipe(
       Effect.withSpan("logged"),
       Effect.withTracerTiming(false),
-      Effect.provide(Layer.merge(Logger.layer([Logger.tracerLogger]), f.layer)),
+      layerTools.provide(Layer.merge(Logger.layer([Logger.tracerLogger]), f.layer)),
     );
 
     span.end(3_000_000n, Exit.void);
@@ -167,7 +169,7 @@ it.effect("keeps interleaved requests and concurrent siblings attributable", () 
     ).pipe(
       Effect.withSpan("orders.parallel"),
       Effect.withTracerTiming(false),
-      Effect.provide(f.layer),
+      layerTools.provide(f.layer),
     );
 
     expect(f.output()).toMatchInlineSnapshot(`
@@ -362,7 +364,7 @@ function fixture(): {
     },
   });
   const layer = safeTracerLayer.pipe(Layer.provide(Layer.succeed(Tracer.Tracer)(deterministic)));
-  const tracer = Effect.runSync(Effect.scoped(Effect.provide(Tracer.Tracer, layer)));
+  const tracer = Effect.runSync(Effect.scoped(layerTools.provideLayer(Tracer.Tracer, layer)));
   const span = (
     name: string,
     options: Partial<Parameters<Tracer.Tracer["span"]>[0]> = {},

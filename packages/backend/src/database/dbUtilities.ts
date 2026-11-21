@@ -134,16 +134,22 @@ export function mutateRows<Table extends PgTable, Row, E, RD, RE, R>(
       .where(and(options.where, anyOf(id, options.ids)))
       .orderBy(asc(id))
       .for("update");
-    const rows = yield* Effect.forEach(selected, (row) =>
-      Schema.decodeUnknownEffect(Schema.toEncoded(options.codec))(row),
+    const rows = yield* Effect.forEach(
+      selected,
+      (row) => Schema.decodeUnknownEffect(Schema.toEncoded(options.codec))(row),
+      { concurrency: 1 },
     );
-    const locked = yield* Effect.forEach(rows, (row) => Schema.decodeEffect(options.codec)(row));
+    const locked = yield* Effect.forEach(rows, (row) => Schema.decodeEffect(options.codec)(row), {
+      concurrency: 1,
+    });
     const keyed = new Map(
       Array.zip(rows, locked).map(([row, value]) => [String(row[idKey]), value]),
     );
     const planned = yield* options.plan(keyed);
-    const encoded = yield* Effect.forEach(planned, (value) =>
-      Schema.encodeEffect(options.codec)(value),
+    const encoded = yield* Effect.forEach(
+      planned,
+      (value) => Schema.encodeEffect(options.codec)(value),
+      { concurrency: 1 },
     );
     const next = new Map(encoded.map((row) => [String(row[idKey]), row]));
     if (next.size !== rows.length || encoded.length !== rows.length) {
@@ -177,8 +183,10 @@ export function mutateRows<Table extends PgTable, Row, E, RD, RE, R>(
         .from(batch.source)
         .where(and(options.where, eq(id, batch.column(idKey))))
         .returning(getTableColumns(target));
-      const decoded = yield* Effect.forEach(changed, (row) =>
-        Schema.decodeUnknownEffect(options.codec)(row),
+      const decoded = yield* Effect.forEach(
+        changed,
+        (row) => Schema.decodeUnknownEffect(options.codec)(row),
+        { concurrency: 1 },
       );
       for (const [row, value] of Array.zip(changed, decoded)) {
         results.set(String(row[idKey]), value);

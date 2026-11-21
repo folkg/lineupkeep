@@ -6,6 +6,7 @@ import { decodeUserId } from "#contexts/auth/User.ts";
 import { decodeConnectionId } from "#contexts/connections/Connection.ts";
 import { CredentialKeyCensus } from "#contexts/connections/CredentialKeyCensus.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
+import layerTools from "#runtime/ProvideLayer.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
 import { ConnectionCredentialRepository } from "./ConnectionCredentialRepository.ts";
@@ -37,7 +38,7 @@ it.effect("counts stored envelopes by key version", () =>
     ]);
     assert.strictEqual(report.olderEnvelopes, 1);
     assert.strictEqual(report.unreadableEnvelopes, 0);
-  }).pipe(Effect.provide(CensusTestLayer)),
+  }).pipe(layerTools.provide(CensusTestLayer)),
 );
 
 it.effect("separates readable older versions from versions the ring no longer holds", () =>
@@ -56,7 +57,7 @@ it.effect("separates readable older versions from versions the ring no longer ho
     ]);
     assert.strictEqual(report.olderEnvelopes, 2);
     assert.strictEqual(report.unreadableEnvelopes, 1);
-  }).pipe(Effect.provide(CensusTestLayer)),
+  }).pipe(layerTools.provide(CensusTestLayer)),
 );
 
 it.effect("reports an empty census when no credentials are stored", () =>
@@ -68,7 +69,7 @@ it.effect("reports an empty census when no credentials are stored", () =>
     assert.deepStrictEqual(report.usage, []);
     assert.strictEqual(report.olderEnvelopes, 0);
     assert.strictEqual(report.unreadableEnvelopes, 0);
-  }).pipe(Effect.provide(CensusTestLayer)),
+  }).pipe(layerTools.provide(CensusTestLayer)),
 );
 
 function credential(

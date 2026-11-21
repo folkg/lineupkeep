@@ -9,6 +9,7 @@ import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { DatabaseConnection } from "#database/DatabaseConnection.ts";
 import { PostgresLive } from "#database/internal/PostgresLive.ts";
 import { makeTelemetryTest } from "#runtime/internal/TelemetryTest.ts";
+import layerTools from "#runtime/ProvideLayer.ts";
 
 import type { ConnectionId } from "./Connection.ts";
 import { providerSessionReconnectDetail } from "./Connection.ts";
@@ -104,7 +105,7 @@ it.effect(
         runs.get(other, { runs: submitted.runs.map((run) => run.run) }),
       );
       assert.instanceOf(foreign, LineupRunNotFound);
-    }).pipe(Effect.provide(LineupTestLayer)),
+    }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("emits one run span carrying the run, request, team and verified outcome", () => {
@@ -136,7 +137,7 @@ it.effect("emits one run span carrying the run, request, team and verified outco
     const providerSpan = spans.find((span) => span.name === "FakeProvider.readRoster");
     assert.isDefined(providerSpan);
     assert.strictEqual(providerSpan.parentSpanId, runSpan.spanId);
-  }).pipe(Effect.provide(Layer.merge(LineupTestLayer, telemetry.layer)));
+  }).pipe(layerTools.provide(Layer.merge(LineupTestLayer, telemetry.layer)));
 });
 
 it.effect("links a domain request to the run spans it created", () => {
@@ -158,7 +159,7 @@ it.effect("links a domain request to the run spans it created", () => {
     assert.strictEqual(stringAttribute(submitSpan, "lineup.request"), requestId);
     assert.strictEqual(stringAttribute(runSpan, "lineup.request"), requestId);
     assert.strictEqual(stringAttribute(runSpan, "lineup.run"), submitted.runs[0]?.run);
-  }).pipe(Effect.provide(Layer.merge(LineupTestLayer, telemetry.layer)));
+  }).pipe(layerTools.provide(Layer.merge(LineupTestLayer, telemetry.layer)));
 });
 
 it.effect("marks a failed run span so failed and uncertain runs can be alerted", () => {
@@ -181,7 +182,7 @@ it.effect("marks a failed run span so failed and uncertain runs can be alerted",
     assert.strictEqual(stringAttribute(runSpan, "app.outcome"), "failure");
     assert.strictEqual(stringAttribute(runSpan, "lineup.outcome"), "failed");
     assert.strictEqual(stringAttribute(runSpan, "lineup.failure_reason"), "provider_rejected");
-  }).pipe(Effect.provide(Layer.merge(LineupTestLayer, telemetry.layer)));
+  }).pipe(layerTools.provide(Layer.merge(LineupTestLayer, telemetry.layer)));
 });
 
 function stringAttribute(
@@ -218,7 +219,7 @@ it.effect("reconciles a lost provider response only when readback proves the cha
     assert.strictEqual(submitted.runs[0]?.outcome?.verified, true);
     assert.strictEqual(submitted.runs[0]?.outcome?.reconciled, true);
     assert.strictEqual(yield* fake.nativeCallCount, 1);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("keeps a lost response uncertain when readback does not prove a change", () =>
@@ -245,7 +246,7 @@ it.effect("keeps a lost response uncertain when readback does not prove a change
     assert.strictEqual(yield* fake.nativeCallCount, 1);
     const after = yield* runs.get(owner, { runs: [run.run] });
     assert.strictEqual(after.runs[0]?.status, "uncertain");
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("reports a definitive provider rejection as failed, never completed", () =>
@@ -262,7 +263,7 @@ it.effect("reports a definitive provider rejection as failed, never completed", 
     assert.strictEqual(submitted.runs[0]?.outcome?.kind, "failed");
     assert.strictEqual(submitted.runs[0]?.outcome?.verified, false);
     assert.strictEqual(yield* fake.nativeCallCount, 1);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("applies and verifies changed explicit assignments", () =>
@@ -291,7 +292,7 @@ it.effect("applies and verifies changed explicit assignments", () =>
     assert.strictEqual(yield* fake.nativeCallCount, 0);
     const requests = yield* fake.explicitRequests;
     assert.strictEqual(requests[0]?.length, 2);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("writes a reserve transit instead of blocking the team", () =>
@@ -318,7 +319,7 @@ it.effect("writes a reserve transit instead of blocking the team", () =>
     const requests = yield* fake.explicitRequests;
     assert.strictEqual(yield* fake.explicitCallCount, 1);
     assert.deepStrictEqual(requests[0]?.map((assignment) => assignment.slot).sort(), ["IR", "QB"]);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("leaves a reserve player in place and writes only the rest of the lineup", () =>
@@ -355,7 +356,7 @@ it.effect("leaves a reserve player in place and writes only the rest of the line
       requests[0]?.map((assignment) => assignment.providerPlayerKey),
       ["461.p.20002", "461.p.20003"],
     );
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("reports your league's own words when it refuses the lineup and never retries", () =>
@@ -385,7 +386,7 @@ it.effect("reports your league's own words when it refuses the lineup and never 
       ["Healthy Skater"],
     );
     assert.strictEqual(yield* fake.explicitCallCount, 1);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("never writes a player whose slot is unverified and does not mismatch on readback", () =>
@@ -441,7 +442,7 @@ it.effect("never writes a player whose slot is unverified and does not mismatch 
       requests[0]?.map((assignment) => assignment.providerPlayerKey).toSorted(),
       ["461.p.20001", "461.p.20004"],
     );
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("benches a player once a games-limited position's projection fills it", () =>
@@ -471,7 +472,7 @@ it.effect("benches a player once a games-limited position's projection fills it"
     );
     const requests = yield* fake.explicitRequests;
     assert.deepStrictEqual(requests[0], [{ providerPlayerKey: "461.p.20002", slot: "BN" }]);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("records each player's scheduled and starting-lineup facts in the run observation", () =>
@@ -517,7 +518,7 @@ it.effect("records each player's scheduled and starting-lineup facts in the run 
         ["QB Two", true, "confirmed-not-starting"],
       ],
     );
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("fails loudly when the response stops matching the decoder", () =>
@@ -548,7 +549,7 @@ it.effect("fails loudly when the response stops matching the decoder", () =>
     assert.strictEqual(yield* fake.explicitCallCount, 0);
     yield* worker.deliver([runId]);
     assert.strictEqual(yield* fake.nativeCallCount, 0);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("reports exactly which explicit assignments differed after acceptance", () =>
@@ -575,7 +576,7 @@ it.effect("reports exactly which explicit assignments differed after acceptance"
     assert.strictEqual(yield* fake.explicitCallCount, 1);
     yield* worker.deliver([runId]);
     assert.strictEqual(yield* fake.explicitCallCount, 1);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("reports unplanned readback changes as a mismatch after acceptance", () =>
@@ -606,7 +607,7 @@ it.effect("reports unplanned readback changes as a mismatch after acceptance", (
     assert.strictEqual(yield* fake.explicitCallCount, 1);
     yield* worker.deliver([runId]);
     assert.strictEqual(yield* fake.explicitCallCount, 1);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("fails an invalid explicit assignment request without retrying", () =>
@@ -633,7 +634,7 @@ it.effect("fails an invalid explicit assignment request without retrying", () =>
     assert.strictEqual(yield* fake.explicitCallCount, 1);
     yield* worker.deliver([runId]);
     assert.strictEqual(yield* fake.explicitCallCount, 1);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("uses the recorded acceptance when verification resumes", () =>
@@ -704,7 +705,7 @@ it.effect("uses the recorded acceptance when verification resumes", () =>
       .where(eq(lineupWriteIntents.id, intent.id));
     assert.strictEqual(updatedIntent?.status, resumed.state.writeIntent?.status);
     assert.strictEqual(yield* fake.explicitCallCount, 1);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("reconciles a lost explicit response when the readback matches the plan", () =>
@@ -728,7 +729,7 @@ it.effect("reconciles a lost explicit response when the readback matches the pla
     assert.strictEqual(run.state.outcome.verified, true);
     assert.strictEqual(run.state.outcome.reconciled, true);
     assert.strictEqual(yield* fake.explicitCallCount, 1);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect(
@@ -756,7 +757,7 @@ it.effect(
       assert.strictEqual(yield* fake.explicitCallCount, 1);
       yield* worker.deliver([runId]);
       assert.strictEqual(yield* fake.explicitCallCount, 1);
-    }).pipe(Effect.provide(LineupTestLayer)),
+    }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("retries a lost explicit response only when the readback is unchanged", () =>
@@ -813,7 +814,7 @@ it.effect("retries a lost explicit response only when the readback is unchanged"
     assert.strictEqual(yield* fake.explicitCallCount, 2);
     const retried = yield* loadRun(repository, runId);
     assert.strictEqual(retried.status, "completed");
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("plans a manual run from your league's declared scores", () =>
@@ -832,7 +833,7 @@ it.effect("plans a manual run from your league's declared scores", () =>
     assert.strictEqual(submitted.runs[0]?.outcome?.changes.length, 2);
     assert.strictEqual(yield* fake.explicitCallCount, 1);
     assert.strictEqual(yield* fake.nativeCallCount, 0);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("falls back to the native action when the planner reports a structural refusal", () =>
@@ -861,7 +862,7 @@ it.effect("falls back to the native action when the planner reports a structural
     assert.match(run.state.outcome.provenance.detail, /publishes no score/u);
     assert.strictEqual(yield* fake.nativeCallCount, 1);
     assert.strictEqual(yield* fake.explicitCallCount, 0);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("blocks a run when the planner reports a transient refusal", () =>
@@ -895,7 +896,7 @@ it.effect("blocks a run when the planner reports a transient refusal", () =>
     assert.match(run.state.outcome.provenance.detail, /No completed scoring period/u);
     assert.strictEqual(yield* fake.nativeCallCount, 0);
     assert.strictEqual(yield* fake.explicitCallCount, 0);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("runs a queued intent on the active implementation after the cutover", () =>
@@ -920,7 +921,7 @@ it.effect("runs a queued intent on the active implementation after the cutover",
     assert.strictEqual(run.state.implementation, "custom_policy");
     assert.strictEqual(run.state.outcome.implementation, "custom_policy");
     assert.strictEqual(yield* fake.explicitCallCount, 1);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect(
@@ -1002,7 +1003,7 @@ it.effect(
       assert.isTrue(attempts.some((attempt) => attempt.leaseToken !== updatedIntent?.leaseToken));
       assert.strictEqual(yield* fake.nativeCallCount, 1);
       assert.strictEqual(yield* fake.explicitCallCount, 0);
-    }).pipe(Effect.provide(LineupTestLayer)),
+    }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("replans from a fresh read instead of writing a stale explicit plan", () =>
@@ -1027,7 +1028,7 @@ it.effect("replans from a fresh read instead of writing a stale explicit plan", 
     assert.include(run.state.outcome.summary, "roster changed before the write");
     const requests = yield* fake.explicitRequests;
     assert.strictEqual(requests[0]?.length, 4);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("blocks an explicit write when the roster membership changed", () =>
@@ -1047,7 +1048,7 @@ it.effect("blocks an explicit write when the roster membership changed", () =>
     const run = yield* loadRun(repository, runId);
     assert.strictEqual(run.status, "blocked");
     assert.strictEqual(yield* fake.explicitCallCount, 0);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("blocks an explicit write when the roster period changed", () =>
@@ -1067,7 +1068,7 @@ it.effect("blocks an explicit write when the roster period changed", () =>
     const run = yield* loadRun(repository, runId);
     assert.strictEqual(run.status, "blocked");
     assert.strictEqual(yield* fake.explicitCallCount, 0);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("blocks an explicit write when the scoring week changes during planning", () =>
@@ -1091,7 +1092,7 @@ it.effect("blocks an explicit write when the scoring week changes during plannin
     const run = yield* loadRun(repository, runId);
     assert.strictEqual(run.status, "blocked");
     assert.strictEqual(yield* fake.explicitCallCount, 0);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("lets a manual run bypass pause and enrollment after observation", () =>
@@ -1126,7 +1127,7 @@ it.effect("lets a manual run bypass pause and enrollment after observation", () 
     assert.strictEqual(submitted.runs[0]?.status, "completed");
     assert.strictEqual(submitted.runs[0]?.outcome?.kind, "changed");
     assert.strictEqual(yield* fake.nativeCallCount, 1);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("blocks when the connection credential generation changes after observation", () =>
@@ -1153,7 +1154,7 @@ it.effect("blocks when the connection credential generation changes after observ
 
     assert.strictEqual(submitted.runs[0]?.status, "blocked");
     assert.strictEqual(yield* fake.nativeCallCount, 0);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("blocks when the connection is disconnected after observation", () =>
@@ -1172,7 +1173,7 @@ it.effect("blocks when the connection is disconnected after observation", () =>
 
     assert.strictEqual(submitted.runs[0]?.status, "blocked");
     assert.strictEqual(yield* fake.nativeCallCount, 0);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("serializes duplicate workers and does not replay a completed team", () =>
@@ -1213,7 +1214,7 @@ it.effect("serializes duplicate workers and does not replay a completed team", (
     assert.strictEqual(yield* fake.nativeCallCount, 1);
     const loaded = yield* repository.loadRuns(owner, { runs: [runId], limit: 1 });
     assert.strictEqual(loaded.runs[0]?.status, "completed");
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("keeps a partial multi-team batch honest and never replays a completed team", () =>
@@ -1262,7 +1263,7 @@ it.effect("keeps a partial multi-team batch honest and never replays a completed
     assert.strictEqual(statusByTeam.get(second.id), "blocked");
     yield* worker.deliver(created.runs.map((run) => run.id));
     assert.strictEqual(yield* fake.nativeCallCount, 1);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 function setStoredImplementation(
@@ -1624,7 +1625,7 @@ it.effect("records a skipped outcome and its reason for a scheduled run", () =>
       outcome?.nextGameAt === undefined ? undefined : DateTime.formatIso(outcome.nextGameAt),
       "2026-11-05T23:30:00.000Z",
     );
-  }).pipe(Effect.provide(SkippingLayer)),
+  }).pipe(layerTools.provide(SkippingLayer)),
 );
 
 it.effect("refuses a delivery on a known-dead connection before its first provider read", () =>
@@ -1652,7 +1653,7 @@ it.effect("refuses a delivery on a known-dead connection before its first provid
       return;
     }
     assert.strictEqual(run.state.outcome.summary, `Not started: ${providerSessionReconnectDetail}`);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect(
@@ -1723,7 +1724,7 @@ it.effect(
       assert.strictEqual(dead?.session.action, "reconnect-provider-connection");
       assert.strictEqual(alive?.status, "ready");
       assert.strictEqual(alive?.session.usable, true);
-    }).pipe(Effect.provide(LineupTestLayer)),
+    }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("counts the four provider reads one ordinary check makes", () =>
@@ -1735,7 +1736,7 @@ it.effect("counts the four provider reads one ordinary check makes", () =>
     yield* runs.submit(owner, lineupRequest(team.id, requestId));
     const reads = (yield* fake.providerReads) - before;
     assert.strictEqual(reads, 4);
-  }).pipe(Effect.provide(LineupTestLayer)),
+  }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
 it.effect("lets a manual set_lineup bypass the schedule gate", () =>
@@ -1748,7 +1749,7 @@ it.effect("lets a manual set_lineup bypass the schedule gate", () =>
     const submitted = yield* runs.submit(owner, lineupRequest(team.id, requestId));
     assert.strictEqual(submitted.runs.length, 1);
     assert.notStrictEqual(Array.getUnsafe(submitted.runs, 0).status, "skipped");
-  }).pipe(Effect.provide(SkippingRunsLayer)),
+  }).pipe(layerTools.provide(SkippingRunsLayer)),
 );
 
 function lineupRequest(
@@ -1756,10 +1757,12 @@ function lineupRequest(
   requestId: string,
   period: import("./LineupRun.ts").LineupTargetPeriod = { coverage: "week", week: 3 },
 ): LineupRequestInput {
-  return Schema.decodeSync(LineupRequestInput)({
-    requestId,
-    teams: [{ team, period }],
-  });
+  return Effect.runSync(
+    Schema.decodeEffect(LineupRequestInput)({
+      requestId,
+      teams: [{ team, period }],
+    }),
+  );
 }
 
 function seedOne(

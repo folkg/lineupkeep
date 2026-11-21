@@ -3,6 +3,8 @@ import { Context, Effect, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { dual } from "effect/Function";
 
+import layerTools from "#runtime/ProvideLayer.ts";
+
 export class RequestContext extends Context.Service<RequestContext, RequestContextShape>()(
   "@lineupkeep/backend/runtime/RequestContext",
 ) {}
@@ -27,7 +29,7 @@ export function correlateRequestEffect(request: Request): Effect.Effect<{
       request: withRequestHeaders(request, { "x-request-id": requestId }),
       requestId,
     })),
-    Effect.provide(NodeCrypto.layer),
+    layerTools.provide(NodeCrypto.layer),
   );
 }
 

@@ -1,4 +1,5 @@
 import { assert, it } from "@effect/vitest";
+import { Effect } from "effect";
 import { Schema } from "effect";
 
 import { rosterRuleOf } from "#contexts/connections/RosterSlots.ts";
@@ -263,7 +264,9 @@ function teamFacts(input: {
 
 function fundedMove(): TransactionPlanMove {
   return {
-    id: Schema.decodeSync(TransactionMoveIdSchema)(`01J${String(1).padStart(23, "0")}`),
+    id: Effect.runSync(
+      Schema.decodeEffect(TransactionMoveIdSchema)(`01J${String(1).padStart(23, "0")}`),
+    ),
     group: undefined,
     position: 0,
     kind: "free_agent_add",

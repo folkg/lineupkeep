@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
+import { Effect } from "effect";
 import { Option, Schema } from "effect";
 
 const port = Number(readRequired("FAKE_RESEND_PORT"));
@@ -82,7 +83,7 @@ function readBody(request: IncomingMessage): Promise<string> {
 
 function respond(response: ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, { "content-type": "application/json" });
-  response.end(Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(body));
+  response.end(Effect.runSync(Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(body)));
 }
 
 function readRequired(name: string): string {

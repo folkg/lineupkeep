@@ -4,6 +4,8 @@ import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { Array, DateTime, Effect, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 
+import layerTools from "#runtime/ProvideLayer.ts";
+
 import {
   Feedback,
   FeedbackContentInvalid,
@@ -52,7 +54,7 @@ it.effect("records an owner's submission with normalized text and an open status
       "title",
       "updatedAt",
     ]);
-  }).pipe(Effect.provide(FeedbackTestLayer)),
+  }).pipe(layerTools.provide(FeedbackTestLayer)),
 );
 
 it.effect("accepts null context fields and stores only the provided context", () =>
@@ -80,7 +82,7 @@ it.effect("accepts null context fields and stores only the provided context", ()
 
     assert.deepStrictEqual(withNullFields?.context, {});
     assert.deepStrictEqual(withNullContext?.context, {});
-  }).pipe(Effect.provide(FeedbackTestLayer)),
+  }).pipe(layerTools.provide(FeedbackTestLayer)),
 );
 
 it.effect("returns only the owner's reports, newest first", () =>
@@ -106,7 +108,7 @@ it.effect("returns only the owner's reports, newest first", () =>
       ["agent", "user"],
     );
     assert.deepStrictEqual(otherReports, []);
-  }).pipe(Effect.provide(FeedbackTestLayer)),
+  }).pipe(layerTools.provide(FeedbackTestLayer)),
 );
 
 it.effect("filters the owner's reports by status, kind, and start time", () =>
@@ -142,7 +144,7 @@ it.effect("filters the owner's reports by status, kind, and start time", () =>
       recent.map((report) => report.title),
       ["Slow run"],
     );
-  }).pipe(Effect.provide(FeedbackTestLayer)),
+  }).pipe(layerTools.provide(FeedbackTestLayer)),
 );
 
 it.effect("limits submissions per acting client and per owner", () =>
@@ -183,7 +185,7 @@ it.effect("limits submissions per acting client and per owner", () =>
       0,
     );
     assert.strictEqual(accepted.status, "open");
-  }).pipe(Effect.provide(FeedbackTestLayer)),
+  }).pipe(layerTools.provide(FeedbackTestLayer)),
 );
 
 it.effect("refuses content that is blank or too long once control characters are removed", () =>
@@ -203,12 +205,14 @@ it.effect("refuses content that is blank or too long once control characters are
     assert.instanceOf(blank, FeedbackContentInvalid);
     assert.instanceOf(tooLong, FeedbackContentInvalid);
     assert.deepStrictEqual(yield* feedback.list(user, {}), []);
-  }).pipe(Effect.provide(FeedbackTestLayer)),
+  }).pipe(layerTools.provide(FeedbackTestLayer)),
 );
 
 const user = decodeUserId("owner");
 const other = decodeUserId("other");
-const team = Schema.decodeSync(TeamReference)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a2");
+const team = Effect.runSync(
+  Schema.decodeEffect(TeamReference)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a2"),
+);
 const FeedbackTestLayer = FeedbackLive.pipe(
   Layer.provide(FeedbackRepository.layer),
   Layer.provideMerge(FeedbackDatabaseTest),

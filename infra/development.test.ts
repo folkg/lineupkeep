@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import {
   containerNameFor,
   postgresContainer,
@@ -74,7 +75,7 @@ it("reclaims a development lock whose owner no longer exists", async () => {
   await using temporary = await mkdtempDisposable(join(tmpdir(), "lineupkeep-dev-lock-"));
   const root = temporary.path;
   const directory = pathToFileURL(`${root}/`);
-  await writeFile(new URL("owner.json", directory), JSON.stringify({ pid: 2147483647 }));
+  await writeFile(new URL("owner.json", directory), jsonTools.jsonString({ pid: 2147483647 }));
 
   const release = await acquireDevelopmentLock(directory);
   await expect(acquireDevelopmentLock(directory)).rejects.toThrow(
@@ -115,12 +116,12 @@ async function developmentInterruptFixture(
   const module = new URL("./local/developmentInterrupt.ts", import.meta.url).href;
   await writeFile(
     join(root, "package.json"),
-    JSON.stringify({ type: "module", scripts: { dev: "node fixture.mjs" } }),
+    jsonTools.jsonString({ type: "module", scripts: { dev: "node fixture.mjs" } }),
   );
   await writeFile(
     join(root, "fixture.mjs"),
     `
-    import { developmentStopSignal } from ${JSON.stringify(module)};
+    import { developmentStopSignal } from ${jsonTools.jsonString(module)};
     const signal = developmentStopSignal();
     const resource = setInterval(() => {}, 1000);
     console.log("READY");

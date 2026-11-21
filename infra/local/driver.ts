@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 import * as Core from "@alchemy.run/test/Core";
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { LocalEndpointsSchema, LocalRunSchema } from "@lineupkeep/tools/local-stack/contract.ts";
 import type { LocalRun } from "@lineupkeep/tools/local-stack/contract.ts";
 import * as Alchemy from "alchemy";
@@ -36,8 +37,10 @@ async function serveStack(driver: Driver): Promise<void> {
   process.once("SIGINT", () => stop.abort());
   process.once("SIGTERM", () => stop.abort());
   try {
-    const endpoints = Schema.decodeUnknownSync(LocalEndpointsSchema)(
-      await Core.run(Core.makeDeploy(options, scope)(stack), options, scope),
+    const endpoints = Effect.runSync(
+      Schema.decodeUnknownEffect(LocalEndpointsSchema)(
+        await Core.run(Core.makeDeploy(options, scope)(stack), options, scope),
+      ),
     );
     await assertTestArtifact(run);
     for (const url of [endpoints.application, endpoints.email, endpoints.traces]) {
@@ -45,8 +48,10 @@ async function serveStack(driver: Driver): Promise<void> {
     }
     const inspector =
       run.target === "node" && run.environment["VERIFICATION_DIR"] !== undefined
-        ? Schema.decodeSync(Schema.fromJsonString(Schema.Struct({ url: Schema.String })))(
-            await readFile(join(run.directory, "inspector.json"), "utf8"),
+        ? Effect.runSync(
+            Schema.decodeEffect(Schema.fromJsonString(Schema.Struct({ url: Schema.String })))(
+              await readFile(join(run.directory, "inspector.json"), "utf8"),
+            ),
           ).url
         : undefined;
     await publish(run.directory, "endpoints.json", { ...endpoints, inspector });
@@ -87,8 +92,8 @@ async function readRun(path: string | undefined): Promise<LocalRun> {
   if (path === undefined) {
     throw new Error("A journaled local run manifest is required");
   }
-  const run = Schema.decodeSync(Schema.fromJsonString(LocalRunSchema))(
-    await readFile(path, "utf8"),
+  const run = Effect.runSync(
+    Schema.decodeEffect(Schema.fromJsonString(LocalRunSchema))(await readFile(path, "utf8")),
   );
   if (process.cwd() !== run.cwd) {
     throw new Error("Alchemy recovery must use the journaled checkout cwd");
@@ -113,7 +118,7 @@ function makeDriver(run: LocalRun): Driver {
 
 async function publish(directory: string, name: string, value: unknown): Promise<void> {
   const path = join(directory, name);
-  await writeFile(`${path}.tmp`, JSON.stringify(value, null, 2), { mode: 0o600 });
+  await writeFile(`${path}.tmp`, jsonTools.jsonString(value, null, 2), { mode: 0o600 });
   await rename(`${path}.tmp`, path);
 }
 

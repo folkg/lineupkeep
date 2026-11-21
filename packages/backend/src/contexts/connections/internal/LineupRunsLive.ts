@@ -20,6 +20,7 @@ import {
 import { LineupRuns } from "#contexts/connections/LineupRuns.ts";
 import type { LineupRunsShape } from "#contexts/connections/LineupRuns.ts";
 import { LineupDispatcher } from "#contexts/connections/LineupWork.ts";
+import jsonTools from "#runtime/JsonText.ts";
 
 import type { NewLineupRun, RunQuery } from "./LineupRunRepository.ts";
 import { LineupRunRepository } from "./LineupRunRepository.ts";
@@ -178,7 +179,7 @@ function canonicalIntent(input: LineupRequestInput): string {
   const teams = [...input.teams]
     .sort((left, right) => left.team.localeCompare(right.team))
     .map((team) => ({ team: team.team, period: team.period }));
-  return JSON.stringify({ teams });
+  return jsonTools.jsonString({ teams });
 }
 
 function mapRepositoryError<A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, LineupError> {

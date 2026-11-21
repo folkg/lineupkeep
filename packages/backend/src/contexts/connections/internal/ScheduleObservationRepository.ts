@@ -6,6 +6,7 @@ import type { FantasySport, TeamId } from "#contexts/connections/FantasyTeam.ts"
 import type { PublishedProfessionalGame } from "#contexts/connections/ProfessionalGame.ts";
 import { QueryPersistenceFailed } from "#contexts/connections/QueryValues.ts";
 import { anyOf, excludedValues, incomingIsNewer, maxInsertRows } from "#database/dbUtilities.ts";
+import jsonTools from "#runtime/JsonText.ts";
 import { chunked } from "#utilities/collections.ts";
 
 import { ConnectionsDatabase } from "./ConnectionsDatabase.ts";
@@ -84,18 +85,21 @@ export class ScheduleObservationRepository extends Context.Service<ScheduleObser
           .pipe(
             Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })),
             Effect.flatMap((rows) =>
-              Effect.forEach(rows, (row) =>
-                Schema.decodeUnknownEffect(input.value)(row.value).pipe(
-                  Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })),
-                  Effect.map((value): ScheduleObservation<Value> => ({
-                    source: row.source,
-                    subjectKey: row.subjectKey,
-                    window: { from: row.coversFrom, to: row.coversTo },
-                    value,
-                    observedAt: DateTime.fromDateUnsafe(row.observedAt),
-                    sourceReference: row.sourceReference,
-                  })),
-                ),
+              Effect.forEach(
+                rows,
+                (row) =>
+                  Schema.decodeUnknownEffect(input.value)(row.value).pipe(
+                    Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })),
+                    Effect.map((value): ScheduleObservation<Value> => ({
+                      source: row.source,
+                      subjectKey: row.subjectKey,
+                      window: { from: row.coversFrom, to: row.coversTo },
+                      value,
+                      observedAt: DateTime.fromDateUnsafe(row.observedAt),
+                      sourceReference: row.sourceReference,
+                    })),
+                  ),
+                { concurrency: 1 },
               ),
             ),
           );
@@ -206,7 +210,9 @@ export class ScheduleObservationRepository extends Context.Service<ScheduleObser
           .orderBy(desc(scheduleObservations.observedAt))
           .pipe(
             Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })),
-            Effect.flatMap((rows) => Effect.forEach(rows, (row) => decodeProfessionalGame(row))),
+            Effect.flatMap((rows) =>
+              Effect.forEach(rows, (row) => decodeProfessionalGame(row), { concurrency: 1 }),
+            ),
           ),
       );
 
@@ -218,15 +224,23 @@ export class ScheduleObservationRepository extends Context.Service<ScheduleObser
           readonly confidence: ScheduleObservationConfidence;
           readonly observations: ReadonlyArray<ProfessionalGameObservationWrite>;
         }) =>
-          recordObservations({
-            observationKind: "professional_game",
-            subjectKind: "professional_game",
-            source: input.source,
-            confidence: input.confidence,
-            observations: input.observations.map((observation) => ({
-              ...observation,
-              value: Schema.encodeSync(publishedProfessionalGameValue)(observation.value),
-            })),
+          Effect.gen(function* () {
+            const observations = yield* Effect.forEach(
+              input.observations,
+              (observation) =>
+                Schema.encodeEffect(publishedProfessionalGameValue)(observation.value).pipe(
+                  Effect.orDie,
+                  Effect.map((value) => ({ ...observation, value })),
+                ),
+              { concurrency: 1 },
+            );
+            return yield* recordObservations({
+              observationKind: "professional_game",
+              subjectKind: "professional_game",
+              source: input.source,
+              confidence: input.confidence,
+              observations,
+            });
           }),
       );
 
@@ -247,7 +261,7 @@ export class ScheduleObservationRepository extends Context.Service<ScheduleObser
             asc(professionalTeamIdentities.providerTeamKey),
           )
           .pipe(Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })));
-        return yield* Effect.forEach(rows, decodeTeamIdentity);
+        return yield* Effect.forEach(rows, decodeTeamIdentity, { concurrency: 1 });
       });
 
       const readProviderTeamIdentities = Effect.fn(
@@ -271,7 +285,7 @@ export class ScheduleObservationRepository extends Context.Service<ScheduleObser
             ),
           )
           .pipe(Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })));
-        return yield* Effect.forEach(rows, decodeTeamIdentity);
+        return yield* Effect.forEach(rows, decodeTeamIdentity, { concurrency: 1 });
       });
 
       const recordTeamIdentities = Effect.fn("ScheduleObservationRepository.recordTeamIdentities")(
@@ -349,7 +363,7 @@ function scheduleObservationKey(row: {
   readonly coversFrom: string;
   readonly coversTo: string;
 }): string {
-  return JSON.stringify([
+  return jsonTools.jsonString([
     row.source,
     row.subjectKind,
     row.subjectKey,

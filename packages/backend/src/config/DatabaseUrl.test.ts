@@ -6,6 +6,8 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Redacted from "effect/Redacted";
 
+import jsonTools from "#runtime/JsonText.ts";
+
 import { databaseUrlConfig } from "./DatabaseUrl.ts";
 
 it.effect("decodes a PostgreSQL database URL from Effect configuration", () =>
@@ -32,7 +34,7 @@ it.effect("keeps database credentials redacted in diagnostics", () =>
 
     expect(Redacted.isRedacted(url)).toBe(true);
     expect(String(url)).toBe("<redacted>");
-    expect(JSON.stringify({ url })).toBe('{"url":"<redacted>"}');
+    expect(jsonTools.jsonString({ url })).toBe('{"url":"<redacted>"}');
     expect(inspect(url)).toBe("<redacted>");
   }),
 );

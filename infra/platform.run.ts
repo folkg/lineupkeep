@@ -34,8 +34,10 @@ export default Alchemy.Stack(
     secrets: Secrets.ProcessEnv(),
   },
   Effect.gen(function* () {
-    yield* Effect.forEach(projectApis, ({ id, service }) =>
-      GCP.ServiceUsage.ProjectService(id, { service }),
+    yield* Effect.forEach(
+      projectApis,
+      ({ id, service }) => GCP.ServiceUsage.ProjectService(id, { service }),
+      { concurrency: 1 },
     );
     const budget = yield* GCP.BillingBudgets.BillingBudget("MonthlyBudget", {
       displayName: "Lineupkeep monthly budget",

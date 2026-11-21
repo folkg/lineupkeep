@@ -5,6 +5,8 @@ import type { UserId } from "@lineupkeep/backend/auth/User";
 import { eq } from "drizzle-orm";
 import { Array, DateTime, Effect, Layer, Option, Schema } from "effect";
 
+import layerTools from "#runtime/ProvideLayer.ts";
+
 import { decodeTeamId } from "./FantasyTeam.ts";
 import type { TeamId } from "./FantasyTeam.ts";
 import { ConnectionsDatabase } from "./internal/ConnectionsDatabase.ts";
@@ -65,7 +67,7 @@ it.effect("creates one plan per owner and team when two creates race", () =>
       separate.map((plan) => plan.teamId).sort(),
       [firstTeam, secondTeam].sort(),
     );
-  }).pipe(Effect.provide(RepositoryTest)),
+  }).pipe(layerTools.provide(RepositoryTest)),
 );
 
 it.effect("appends two interleaved batches without losing a move or its claims", () =>
@@ -111,7 +113,7 @@ it.effect("appends two interleaved batches without losing a move or its claims",
     );
     assert.strictEqual((yield* database.select().from(transactionMoves)).length, 3);
     assert.strictEqual((yield* database.select().from(transactionMoveClaims)).length, 3);
-  }).pipe(Effect.provide(RepositoryTest)),
+  }).pipe(layerTools.provide(RepositoryTest)),
 );
 
 it.effect("refuses a run claim while another run holds the plan", () =>
@@ -162,7 +164,7 @@ it.effect("refuses a run claim while another run holds the plan", () =>
     });
     assert.strictEqual(reclaimed.status, "claimed");
     assert.strictEqual(reclaimed.plan.runClaim, "run-two");
-  }).pipe(Effect.provide(RepositoryTest)),
+  }).pipe(layerTools.provide(RepositoryTest)),
 );
 
 it.effect("edits a move in place and replaces the claims it holds", () =>
@@ -210,7 +212,7 @@ it.effect("edits a move in place and replaces the claims it holds", () =>
       (yield* database.select().from(transactionMoveClaims)).map((claim) => claim.claimKey),
       ["nhl.p.2"],
     );
-  }).pipe(Effect.provide(RepositoryTest)),
+  }).pipe(layerTools.provide(RepositoryTest)),
 );
 
 it.effect("discards a move and releases the claims it held", () =>
@@ -245,7 +247,7 @@ it.effect("discards a move and releases the claims it held", () =>
     );
     assert.deepStrictEqual(moves[0]?.claims, []);
     assert.deepStrictEqual(yield* database.select().from(transactionMoveClaims), []);
-  }).pipe(Effect.provide(RepositoryTest)),
+  }).pipe(layerTools.provide(RepositoryTest)),
 );
 
 it.effect("records a result and releases claims only when the result ends the move", () =>
@@ -299,7 +301,7 @@ it.effect("records a result and releases claims only when the result ends the mo
       (yield* database.select().from(transactionMoveClaims)).map((claim) => claim.claimKey),
       ["nhl.p.1"],
     );
-  }).pipe(Effect.provide(RepositoryTest)),
+  }).pipe(layerTools.provide(RepositoryTest)),
 );
 
 it.effect("reads the submitted legs of a plan for one effective date", () =>
@@ -358,7 +360,7 @@ it.effect("reads the submitted legs of a plan for one effective date", () =>
       })).map((move) => move.id),
       [],
     );
-  }).pipe(Effect.provide(RepositoryTest)),
+  }).pipe(layerTools.provide(RepositoryTest)),
 );
 
 it.effect("pages one owner's moves by state and orders them by run day, team, and position", () =>
@@ -513,7 +515,7 @@ it.effect("pages one owner's moves by state and orders them by run day, team, an
       [...firstToday, ...afterUndated].map(({ move }) => move.claims[0]?.key),
       ["nhl.p.4", "nhl.p.1", "nhl.p.3", "nhl.p.2"],
     );
-  }).pipe(Effect.provide(RepositoryTest)),
+  }).pipe(layerTools.provide(RepositoryTest)),
 );
 
 it.effect("removes a plan's moves and claims when the plan is removed", () =>
@@ -542,7 +544,7 @@ it.effect("removes a plan's moves and claims when the plan is removed", () =>
     assert.deepStrictEqual(yield* database.select().from(transactionMoves), []);
     assert.deepStrictEqual(yield* database.select().from(transactionMoveClaims), []);
     assert.deepStrictEqual(yield* database.select().from(transactionMoveSteps), []);
-  }).pipe(Effect.provide(RepositoryTest)),
+  }).pipe(layerTools.provide(RepositoryTest)),
 );
 
 function teamRow(id: TeamId, userId: UserId): typeof providerTeams.$inferInsert {
@@ -569,7 +571,9 @@ let moveSequence = 0;
 
 function nextMoveId(): TransactionMoveIdType {
   moveSequence += 1;
-  return Schema.decodeSync(TransactionMoveId)(`01J${String(moveSequence).padStart(23, "0")}`);
+  return Effect.runSync(
+    Schema.decodeEffect(TransactionMoveId)(`01J${String(moveSequence).padStart(23, "0")}`),
+  );
 }
 
 function appendMove(

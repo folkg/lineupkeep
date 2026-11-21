@@ -6,6 +6,7 @@ import { Context, Effect, Layer, Redacted, Schema, Tracer as EffectTracer } from
 import { decodeUserId } from "#contexts/auth/User.ts";
 import { decodeConnectionId } from "#contexts/connections/Connection.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
+import layerTools from "#runtime/ProvideLayer.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
 import { ConnectionEncryptionKey } from "./ConnectionEncryptionKey.ts";
@@ -33,7 +34,7 @@ it.effect("round-trips a provider session through a versioned AES-GCM envelope",
     const decoded = yield* Schema.decodeEffect(Schema.fromJsonString(EnvelopeView))(envelope);
     assert.strictEqual(decoded.version, 1);
     assert.strictEqual(decoded.keyVersion, 1);
-  }).pipe(Effect.provide(EncryptionTestLayer)),
+  }).pipe(layerTools.provide(EncryptionTestLayer)),
 );
 
 it.effect("uses a unique nonce for every encryption", () =>
@@ -58,7 +59,7 @@ it.effect("uses a unique nonce for every encryption", () =>
 
     assert.notStrictEqual(firstEnvelope.nonce, secondEnvelope.nonce);
     assert.notStrictEqual(firstEnvelope.ciphertext, secondEnvelope.ciphertext);
-  }).pipe(Effect.provide(EncryptionTestLayer)),
+  }).pipe(layerTools.provide(EncryptionTestLayer)),
 );
 
 it.effect("rejects tampered ciphertext, nonce, and envelope version", () =>
@@ -89,21 +90,24 @@ it.effect("rejects tampered ciphertext, nonce, and envelope version", () =>
       }),
     ];
 
-    yield* Effect.forEach(tampered, (value) =>
-      Effect.gen(function* () {
-        const error = yield* Effect.flip(
-          encryption.open({
-            userId: owner,
-            connectionId,
-            provider: decodeProviderKey("yahoo"),
-            envelope: value,
-          }),
-        );
-        assert.strictEqual(error._tag, "connection.credential_decryption_failed");
-        assert.notInclude(String(error), "canary-cookie-value");
-      }),
+    yield* Effect.forEach(
+      tampered,
+      (value) =>
+        Effect.gen(function* () {
+          const error = yield* Effect.flip(
+            encryption.open({
+              userId: owner,
+              connectionId,
+              provider: decodeProviderKey("yahoo"),
+              envelope: value,
+            }),
+          );
+          assert.strictEqual(error._tag, "connection.credential_decryption_failed");
+          assert.notInclude(String(error), "canary-cookie-value");
+        }),
+      { concurrency: 1 },
     );
-  }).pipe(Effect.provide(EncryptionTestLayer)),
+  }).pipe(layerTools.provide(EncryptionTestLayer)),
 );
 
 it.effect("rejects cross-owner and cross-connection decryption", () =>
@@ -135,7 +139,7 @@ it.effect("rejects cross-owner and cross-connection decryption", () =>
 
     assert.strictEqual(wrongOwner._tag, "connection.credential_decryption_failed");
     assert.strictEqual(wrongConnection._tag, "connection.credential_decryption_failed");
-  }).pipe(Effect.provide(EncryptionTestLayer)),
+  }).pipe(layerTools.provide(EncryptionTestLayer)),
 );
 
 it.effect("rejects different key material under the same version", () => {
@@ -163,27 +167,30 @@ it.effect("rejects different key material under the same version", () => {
     );
 
     assert.strictEqual(wrongKey._tag, "connection.credential_decryption_failed");
-  }).pipe(Effect.provide(EncryptionTestLayer));
+  }).pipe(layerTools.provide(EncryptionTestLayer));
 });
 
 it.effect("rejects malformed envelopes", () =>
   Effect.gen(function* () {
     const encryption = yield* ConnectionCredentialEncryption;
 
-    yield* Effect.forEach(["not-json", "{}", "null"], (envelope) =>
-      Effect.gen(function* () {
-        const error = yield* Effect.flip(
-          encryption.open({
-            userId: owner,
-            connectionId,
-            provider: decodeProviderKey("yahoo"),
-            envelope,
-          }),
-        );
-        assert.strictEqual(error._tag, "connection.credential_decryption_failed");
-      }),
+    yield* Effect.forEach(
+      ["not-json", "{}", "null"],
+      (envelope) =>
+        Effect.gen(function* () {
+          const error = yield* Effect.flip(
+            encryption.open({
+              userId: owner,
+              connectionId,
+              provider: decodeProviderKey("yahoo"),
+              envelope,
+            }),
+          );
+          assert.strictEqual(error._tag, "connection.credential_decryption_failed");
+        }),
+      { concurrency: 1 },
     );
-  }).pipe(Effect.provide(EncryptionTestLayer)),
+  }).pipe(layerTools.provide(EncryptionTestLayer)),
 );
 
 it.effect("opens an envelope retained from an older key version", () => {
@@ -214,7 +221,7 @@ it.effect("opens an envelope retained from an older key version", () => {
     assert.strictEqual(Redacted.value(opened), "retained-cookie-value");
     assert.strictEqual(encryption.currentKeyVersion, 2);
     assert.deepStrictEqual(encryption.retainedKeyVersions, [1]);
-  }).pipe(Effect.provide(RotatedKeyringLayer));
+  }).pipe(layerTools.provide(RotatedKeyringLayer));
 });
 
 it.effect("refuses a key version the ring does not hold by name", () => {
@@ -255,7 +262,7 @@ it.effect("refuses a key version the ring does not hold by name", () => {
     );
     assert.isNotEmpty(refusals);
     assert.strictEqual(refusals[0]?.attributes.get("connection.credential_key_version"), 7);
-  }).pipe(Effect.provide(EncryptionTestLayer), Effect.withTracer(tracer));
+  }).pipe(layerTools.provide(EncryptionTestLayer), Effect.withTracer(tracer));
 });
 
 it.effect("binds a retained key version as authenticated data", () => {
@@ -291,7 +298,7 @@ it.effect("binds a retained key version as authenticated data", () => {
     );
 
     assert.strictEqual(error._tag, "connection.credential_decryption_failed");
-  }).pipe(Effect.provide(RotatedKeyringLayer));
+  }).pipe(layerTools.provide(RotatedKeyringLayer));
 });
 
 function flipFirst(value: string): string {

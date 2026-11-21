@@ -7,6 +7,8 @@ import {
   GameSourceRequestFailed,
   GameSourceResponseInvalid,
 } from "#contexts/connections/GameSource.ts";
+import jsonTools from "#runtime/JsonText.ts";
+import layerTools from "#runtime/ProvideLayer.ts";
 import { PublicInternet } from "#runtime/PublicInternet.ts";
 
 import { nhlGameSource } from "./NhlGameSource.ts";
@@ -64,7 +66,7 @@ it.effect("reads a whole league week as games with identifiers, times, venues an
       "lineupkeep/0.1 (professional schedule reference)",
     );
     assert.strictEqual(call?.options?.maxResponseBytes, 262_144);
-  }).pipe(Effect.provide(internet));
+  }).pipe(layerTools.provide(internet));
 });
 
 it.effect("serves a postponed and a cancelled game with their own statuses", () => {
@@ -86,7 +88,7 @@ it.effect("serves a postponed and a cancelled game with their own statuses", () 
     assert.strictEqual(postponed.home.name, "Toronto Maple Leafs");
     assert.strictEqual(postponed.venue, "Scotiabank Arena");
     assert.strictEqual(postponed.startTime?.timeZone, "America/Toronto");
-  }).pipe(Effect.provide(internet));
+  }).pipe(layerTools.provide(internet));
 });
 
 it.effect("reports an unrecognised schedule state as unknown rather than on", () => {
@@ -108,7 +110,7 @@ it.effect("reports an unrecognised schedule state as unknown rather than on", ()
       week.games.map((game) => game.status),
       ["unknown", "unknown", "unknown", "unknown"],
     );
-  }).pipe(Effect.provide(internet));
+  }).pipe(layerTools.provide(internet));
 });
 
 it.effect("fails the read when a day publishes no games key", () => {
@@ -121,7 +123,7 @@ it.effect("fails the read when a day publishes no games key", () => {
 
     assert.instanceOf(error, GameSourceResponseInvalid);
     assert.strictEqual(error.field, "payload");
-  }).pipe(Effect.provide(internet));
+  }).pipe(layerTools.provide(internet));
 });
 
 it.effect("reads an empty league week as a fact with no games", () => {
@@ -144,7 +146,7 @@ it.effect("reads an empty league week as a fact with no games", () => {
 
     assert.deepStrictEqual(week.games, []);
     assert.strictEqual(week.weekEnd, "2026-11-07");
-  }).pipe(Effect.provide(internet));
+  }).pipe(layerTools.provide(internet));
 });
 
 it.effect("reports a failed request with its status and leaves no games behind", () => {
@@ -157,7 +159,7 @@ it.effect("reports a failed request with its status and leaves no games behind",
 
     assert.instanceOf(error, GameSourceRequestFailed);
     assert.strictEqual(error.status, 503);
-  }).pipe(Effect.provide(internet));
+  }).pipe(layerTools.provide(internet));
 });
 
 it.effect("refuses a start instant that arrives without its venue time zone", () => {
@@ -176,7 +178,7 @@ it.effect("refuses a start instant that arrives without its venue time zone", ()
 
     assert.instanceOf(error, GameSourceResponseInvalid);
     assert.strictEqual(error.field, "startTimeUTC");
-  }).pipe(Effect.provide(internet));
+  }).pipe(layerTools.provide(internet));
 });
 
 function gameOf<Game extends { readonly id: string }>(
@@ -204,7 +206,7 @@ it.effect("reads the response body before the request scope closes", () => {
     const week = yield* source.readLeagueWeek({ league: "nhl", weekStart: "2026-11-01" });
 
     assert.strictEqual(week.games.length, 50);
-  }).pipe(Effect.provide(internet));
+  }).pipe(layerTools.provide(internet));
 });
 
 function recordingInternet(respond: () => Response): Layer.Layer<PublicInternet> & {
@@ -243,7 +245,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 function fixture(name: string): unknown {
-  return JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8"));
+  return jsonTools.jsonValue(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8"));
 }
 
 function weekPayload(games: ReadonlyArray<unknown>): unknown {

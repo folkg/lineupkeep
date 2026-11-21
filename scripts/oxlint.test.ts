@@ -525,7 +525,7 @@ it.concurrent.each([
   "yield* notes.update(owner, inputs);",
   "yield* Effect.flatMap(Effect.succeed(inputs), (commands) => notes.update(owner, commands));",
   "const commands = inputs.map((input) => input.toUpperCase()); yield* notes.update(owner, commands);",
-  "yield* Effect.forEach(inputs, (input) => Effect.succeed(input));",
+  "yield* Effect.forEach(inputs, (input) => Effect.succeed(input), { concurrency: 1 });",
   "inputs.map((notes) => notes.toString());",
   "for (const input of inputs) { const notes = { update: () => input }; notes.update(); }",
 ])("permits batching and unrelated pure bindings: %s", async (body) => {

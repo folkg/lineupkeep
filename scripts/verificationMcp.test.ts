@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 
+import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { assert, expect, it } from "vitest";
 
 import { discoverAuthorization, mcpClient } from "#e2e/mcpClient.ts";
@@ -19,10 +20,10 @@ it("decodes tool discovery and calls while preserving raw protocol responses", a
       response.setHeader("content-type", "application/json");
       response.end(
         body.includes("tools/list")
-          ? JSON.stringify({
+          ? jsonTools.jsonString({
               result: { tools: [{ name: "echo", inputSchema: { type: "object" } }] },
             })
-          : JSON.stringify({
+          : jsonTools.jsonString({
               result: {
                 isError: false,
                 content: [{ type: "text", text: "hello" }],
