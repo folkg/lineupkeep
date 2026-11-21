@@ -1,5 +1,6 @@
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
+import { EffectString } from "@lineupkeep/collections";
 import { DateTime, Effect, Layer, Redacted, Schema } from "effect";
 import { TestClock } from "effect/testing";
 
@@ -572,7 +573,9 @@ function evaluateQuietTick(): Effect.Effect<
 
 function runId(serial: number): LineupRunId {
   return Effect.runSync(
-    Schema.decodeEffect(LineupRunId)(`018f79ea-7d86-7c18-9b4a-${String(serial).padStart(12, "0")}`),
+    Schema.decodeEffect(LineupRunId)(
+      `018f79ea-7d86-7c18-9b4a-${EffectString.padStart(String(serial), 12, "0")}`,
+    ),
   );
 }
 

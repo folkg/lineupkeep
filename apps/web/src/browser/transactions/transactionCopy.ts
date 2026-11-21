@@ -1,5 +1,6 @@
 import { EffectArray } from "@lineupkeep/collections";
 import { EffectOption } from "@lineupkeep/collections";
+import { EffectString } from "@lineupkeep/collections";
 
 import type {
   TransactionMovePlayerView,
@@ -157,7 +158,7 @@ export function openMoveCount(count: number): string {
 }
 
 export function readableReason(reason: string): string {
-  return reason.replace(/^\s*\d{1,2}[A-Z]\s*[:.)\-–—]\s*/u, "").trim();
+  return EffectString.trim(EffectString.replace(reason, /^\s*\d{1,2}[A-Z]\s*[:.)\-–—]\s*/u, ""));
 }
 
 function remainingFallbacks(move: TransactionMoveView): ReadonlyArray<string> {

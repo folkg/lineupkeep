@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { DateTime } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
@@ -1947,7 +1948,10 @@ function claimSubject(kind: StoredMoveClaim["kind"]): string {
 }
 
 function compareClaims(left: StoredMoveClaim, right: StoredMoveClaim): number {
-  return left.kind.localeCompare(right.kind) || left.key.localeCompare(right.key);
+  return (
+    EffectString.localeCompare(left.kind, right.kind) ||
+    EffectString.localeCompare(left.key, right.key)
+  );
 }
 
 function addDependency(
@@ -2004,7 +2008,7 @@ function movesById(
 }
 
 function comparePlanMoves(left: TransactionPlanMove, right: TransactionPlanMove): number {
-  return left.position - right.position || left.id.localeCompare(right.id);
+  return left.position - right.position || EffectString.localeCompare(left.id, right.id);
 }
 
 function isAddKind(kind: TransactionPlanMove["kind"]): boolean {

@@ -4,6 +4,7 @@ import { Array as EffectArray } from "effect";
 import { IntFromStringOrNumber, decodePayload, optionalNonEmpty } from "#yahoo/decode.ts";
 import { YahooParseError } from "#yahoo/errors.ts";
 import type { YahooLeagueKey, YahooTeamKey } from "#yahoo/keys.ts";
+import { EffectString } from "#yahoo/stringTools.ts";
 
 export function decodeAvailableDraftPicks(
   payload: unknown,
@@ -52,8 +53,11 @@ export function decodeDraftResults(
       EffectArray.some(
         decoded.league.draft_results,
         ({ draft_result }) =>
-          draft_result.team_key.slice(0, draft_result.team_key.lastIndexOf(".t.")) !==
-          requestedLeagueKey,
+          EffectString.slice(
+            draft_result.team_key,
+            0,
+            EffectString.lastIndexOf(draft_result.team_key, ".t."),
+          ) !== requestedLeagueKey,
       )
     ) {
       return yield* new YahooParseError({

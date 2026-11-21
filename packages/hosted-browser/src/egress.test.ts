@@ -4,6 +4,7 @@ import { createServer as createTcpServer, connect } from "node:net";
 import type { Server, Socket } from "node:net";
 
 import { EffectArray } from "@lineupkeep/collections";
+import { EffectString } from "@lineupkeep/collections";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -149,7 +150,7 @@ describe("address-based egress proxy", () => {
           return;
         }
         handshake += chunk.toString("latin1");
-        if (!handshake.includes("\r\n\r\n")) {
+        if (!EffectString.includes(handshake, "\r\n\r\n")) {
           return;
         }
         open = true;
@@ -330,12 +331,12 @@ function connectRequest(
     });
     const onData = (chunk: Buffer): void => {
       received += chunk.toString("latin1");
-      const lineEnd = received.indexOf("\r\n");
+      const lineEnd = EffectString.indexOf(received, "\r\n");
       if (lineEnd === -1) {
         return;
       }
       socket.off("data", onData);
-      const status = Number(received.slice(0, lineEnd).split(" ")[1]);
+      const status = Number(EffectString.split(EffectString.slice(received, 0, lineEnd), " ")[1]);
       resolve({ status, socket });
     };
     socket.on("data", onData);
@@ -405,5 +406,5 @@ function readData(socket: Socket): Promise<string> {
 }
 
 function formatAuthority(address: string): string {
-  return address.includes(":") ? `[${address}]` : address;
+  return EffectString.includes(address, ":") ? `[${address}]` : address;
 }

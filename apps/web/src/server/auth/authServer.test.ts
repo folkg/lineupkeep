@@ -1,10 +1,11 @@
+import { EffectString } from "@lineupkeep/collections";
 import { Effect } from "effect";
 import { Schema } from "effect";
 import { expect, it } from "vitest";
 
 import { ConsentRequestInput, ConsentDecisionInput } from "./authServer.ts";
 
-it.each([{ query: 42 }, { query: "" }, { query: "x".repeat(16_385) }])(
+it.each([{ query: 42 }, { query: "" }, { query: EffectString.repeat("x", 16_385) }])(
   "rejects a malformed consent lookup: %j",
   (input) => {
     expect(Schema.decodeUnknownResult(ConsentRequestInput)(input)._tag).toBe("Failure");

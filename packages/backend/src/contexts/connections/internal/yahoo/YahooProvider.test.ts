@@ -1,4 +1,5 @@
 import { assert, it } from "@effect/vitest";
+import { EffectString } from "@lineupkeep/collections";
 import type { Tracer } from "effect";
 import {
   Array,
@@ -121,6 +122,7 @@ import {
 } from "./YahooPayloadFixturesTest.ts";
 import { yahooNhlDatePlayerDetails } from "./YahooPayloadFixturesTest.ts";
 import { yahooProvider } from "./YahooProvider.ts";
+
 function sortWithComparator<A>(
   self: ReadonlyArray<A>,
   compare: (left: A, right: A) => number,
@@ -303,7 +305,7 @@ it.effect("sends the native start-active action to the read-write roster endpoin
           body,
           headers: Object.fromEntries(request.headers.entries()),
         });
-        return request.url.includes("getCrumb")
+        return EffectString.includes(request.url, "getCrumb")
           ? jsonResponse({
               service: { "xml:lang": "en-US", crumb: "canary-crumb-value" },
             })
@@ -355,7 +357,7 @@ it.effect("sends explicit player assignments to the read-write roster endpoint",
           body,
           headers: Object.fromEntries(request.headers.entries()),
         });
-        return request.url.includes("getCrumb")
+        return EffectString.includes(request.url, "getCrumb")
           ? jsonResponse({
               service: { "xml:lang": "en-US", crumb: "canary-crumb-value" },
             })
@@ -398,7 +400,7 @@ it.effect("reports an explicit assignment rejection without retrying a different
   const layer = Layer.succeed(PublicInternet)({
     request: (request) =>
       Effect.succeed(
-        request.url.includes("getCrumb")
+        EffectString.includes(request.url, "getCrumb")
           ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
           : new Response('{"error":{"description":"That position has already been filled."}}', {
               status: 400,
@@ -442,7 +444,7 @@ it.effect("posts a swap as one transaction with the add before the drop", () => 
           body,
           headers: Object.fromEntries(request.headers.entries()),
         });
-        return request.url.includes("getCrumb")
+        return EffectString.includes(request.url, "getCrumb")
           ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
           : jsonResponse({ fantasy_content: { transaction: { status: "success" } } });
       }),
@@ -475,7 +477,10 @@ it.effect("posts a swap as one transaction with the add before the drop", () => 
       write.body,
       '<?xml version="1.0" encoding="UTF-8"?><fantasy_content><transaction><type>add/drop</type><players><player><player_key>461.p.10001</player_key><transaction_data><type>add</type><destination_team_key>461.l.1000.t.1</destination_team_key></transaction_data></player><player><player_key>461.p.10002</player_key><transaction_data><type>drop</type><source_team_key>461.l.1000.t.1</source_team_key></transaction_data></player></players></transaction></fantasy_content>',
     );
-    assert.isBelow(write.body.indexOf("<type>add</type>"), write.body.indexOf("<type>drop</type>"));
+    assert.isBelow(
+      EffectString.indexOf(write.body, "<type>add</type>"),
+      EffectString.indexOf(write.body, "<type>drop</type>"),
+    );
     assert.notInclude(write.body, "faab_bid");
   }).pipe(layerTools.provide(yahooLayer(layer)));
 });
@@ -489,7 +494,7 @@ it.effect("sends a waiver claim with its FAAB bid", () => {
           url: new URL(request.url),
           body: request.body === null ? "" : await request.clone().text(),
         });
-        return request.url.includes("getCrumb")
+        return EffectString.includes(request.url, "getCrumb")
           ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
           : jsonResponse({ fantasy_content: { transaction: { status: "pending" } } });
       }),
@@ -527,7 +532,7 @@ it.effect("proposes a two-sided trade and reads the pt key from the response", (
           method: request.method,
           body: request.body === null ? "" : await request.clone().text(),
         });
-        return request.url.includes("getCrumb")
+        return EffectString.includes(request.url, "getCrumb")
           ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
           : jsonResponse({
               fantasy_content: {
@@ -594,7 +599,7 @@ it.effect("sends a draft-pick trade to the app write host and keeps the captured
           url: new URL(request.url),
           body: request.body === null ? "" : await request.clone().text(),
         });
-        return request.url.includes("getCrumb")
+        return EffectString.includes(request.url, "getCrumb")
           ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
           : jsonResponse({
               fantasy_content: {
@@ -651,7 +656,7 @@ it.effect("returns the app write host's sentence for a refused draft-pick trade"
   const layer = Layer.succeed(PublicInternet)({
     request: (request) =>
       Effect.succeed(
-        request.url.includes("getCrumb")
+        EffectString.includes(request.url, "getCrumb")
           ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
           : new Response(
               "<error><description>Invalid XML POSTed. Error code 25</description></error>",
@@ -692,7 +697,7 @@ it.effect("returns the app write host's sentence for a refused draft-pick trade"
 it.effect("reads a proposed trade's key before the request scope closes", () => {
   const internet = PublicInternet.fromTransport((request) =>
     Promise.resolve(
-      request.url.includes("getCrumb")
+      EffectString.includes(request.url, "getCrumb")
         ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
         : jsonResponse({
             fantasy_content: {
@@ -728,7 +733,7 @@ it.effect("treats an accepted trade propose without a pt key as unknown and neve
     request: (request) =>
       Effect.sync(() => {
         calls.push(request.url);
-        return request.url.includes("getCrumb")
+        return EffectString.includes(request.url, "getCrumb")
           ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
           : jsonResponse({ fantasy_content: { league: [{ league_key: "461.l.1000" }] } });
       }),
@@ -767,7 +772,7 @@ it.effect("withdraws a pending trade with DELETE and no body", () => {
           body: request.body === null ? null : await request.clone().text(),
           headers: Object.fromEntries(request.headers.entries()),
         });
-        return request.url.includes("getCrumb")
+        return EffectString.includes(request.url, "getCrumb")
           ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
           : new Response(null, { status: 204 });
       }),
@@ -799,7 +804,7 @@ it.effect("moves a player to a reserve slot through the roster endpoint", () => 
           method: request.method,
           body: request.body === null ? "" : await request.clone().text(),
         });
-        return request.url.includes("getCrumb")
+        return EffectString.includes(request.url, "getCrumb")
           ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
           : jsonResponse({ fantasy_content: { roster: { status: "success" } } });
       }),
@@ -833,7 +838,7 @@ it.effect("returns your league's own wording for a rejected transaction", () => 
   const layer = Layer.succeed(PublicInternet)({
     request: (request) =>
       Effect.succeed(
-        request.url.includes("getCrumb")
+        EffectString.includes(request.url, "getCrumb")
           ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
           : new Response(
               "<error><description>There is no room on the roster.</description></error>",
@@ -864,7 +869,7 @@ it.effect("returns your league's own wording for a rejected transaction", () => 
 it.effect("says a healthy player left in IR blocks the transaction, in your league's words", () => {
   const internet = PublicInternet.fromTransport((request) =>
     Promise.resolve(
-      request.url.includes("getCrumb")
+      EffectString.includes(request.url, "getCrumb")
         ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
         : new Response(capturedTransactionRefusal.response.body, {
             status: capturedTransactionRefusal.response.status,
@@ -897,7 +902,7 @@ it.effect("surfaces the status and the raw words when the refusal has no readabl
     '{"error":null,"yahoo:uri":"/fantasy/v2/league/461.l.1000/transactions?format=json_f&amp;crumb=canary-crumb-value","unexpected":{"state":"refused"}}';
   const internet = PublicInternet.fromTransport((request) =>
     Promise.resolve(
-      request.url.includes("getCrumb")
+      EffectString.includes(request.url, "getCrumb")
         ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
         : new Response(refusal, { status: 400 }),
     ),
@@ -927,7 +932,7 @@ it.effect("names the HTTP status when a rejected transaction gives no reason", (
   const layer = Layer.succeed(PublicInternet)({
     request: (request) =>
       Effect.succeed(
-        request.url.includes("getCrumb")
+        EffectString.includes(request.url, "getCrumb")
           ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
           : new Response(null, { status: 400 }),
       ),
@@ -958,7 +963,7 @@ it.effect("treats a server failure as unknown without retrying", () => {
     request: (request) =>
       Effect.sync(() => {
         calls.push(request.url);
-        return request.url.includes("getCrumb")
+        return EffectString.includes(request.url, "getCrumb")
           ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
           : new Response("server failed", { status: 503 });
       }),
@@ -985,7 +990,7 @@ it.effect("treats a write the internet could not send as unknown, never as a ref
     request: (request) =>
       Effect.suspend(() => {
         calls.push(request.url);
-        return request.url.includes("getCrumb")
+        return EffectString.includes(request.url, "getCrumb")
           ? Effect.succeed(
               jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } }),
             )
@@ -1014,7 +1019,7 @@ it.effect("does not send a write when the crumb request never reaches the provid
     request: (request) =>
       Effect.suspend(() => {
         calls.push(request.url);
-        return request.url.includes("getCrumb")
+        return EffectString.includes(request.url, "getCrumb")
           ? Effect.fail(PublicInternetUnavailable.make())
           : Effect.die("the write must not be attempted");
       }),
@@ -1039,7 +1044,7 @@ it.effect("reports a rate-limited write as not sent rather than unknown", () => 
   const layer = Layer.succeed(PublicInternet)({
     request: (request) =>
       Effect.succeed(
-        request.url.includes("getCrumb")
+        EffectString.includes(request.url, "getCrumb")
           ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
           : new Response("Too Many Requests", { status: 429 }),
       ),
@@ -1068,7 +1073,7 @@ it.effect("reports an expired session on a write with the provider's sentence", 
   const layer = Layer.succeed(PublicInternet)({
     request: (request) =>
       Effect.succeed(
-        request.url.includes("getCrumb")
+        EffectString.includes(request.url, "getCrumb")
           ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
           : new Response(
               jsonTools.jsonString({
@@ -1109,7 +1114,7 @@ it.effect("records a transaction write with its outcome and no credential in the
   const layer = Layer.succeed(PublicInternet)({
     request: (request) =>
       Effect.succeed(
-        request.url.includes("getCrumb")
+        EffectString.includes(request.url, "getCrumb")
           ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
           : new Response("<error><description>Private provider detail.</description></error>", {
               status: 400,
@@ -1815,7 +1820,7 @@ it.effect(
   () => {
     const internet = recordingInternet((request) =>
       jsonResponse(
-        request.url.pathname.includes(";out=settings")
+        EffectString.includes(request.url.pathname, ";out=settings")
           ? yahooNflLeagueSettingsWith({ weekly_deadline: "3", edit_key: "6" })
           : yahooNflRoster,
       ),
@@ -2226,7 +2231,7 @@ it.effect("sends the requested date to a date-scoped roster read", () => {
 
 it.effect("treats a rejected date selector as uncovered period coverage", () => {
   const internet = recordingInternet((request) =>
-    request.url.pathname.includes("/roster;date=2026-10-26/players")
+    EffectString.includes(request.url.pathname, "/roster;date=2026-10-26/players")
       ? jsonResponse({ error: { description: "Synthetic provider rejection" } }, 400)
       : jsonResponse(yahooNhlRoster),
   );
@@ -2250,7 +2255,7 @@ it.effect("treats a rejected date selector as uncovered period coverage", () => 
 
 it.effect("treats a rejected week selector as uncovered period coverage", () => {
   const internet = recordingInternet((request) =>
-    request.url.pathname.includes("/roster;week=6/players")
+    EffectString.includes(request.url.pathname, "/roster;week=6/players")
       ? jsonResponse({ error: { description: "Synthetic provider rejection" } }, 400)
       : jsonResponse(yahooNhlRoster),
   );
@@ -2807,7 +2812,7 @@ it.effect("keeps a season stat order at its season value and candidate window", 
 it.effect("orders the pool by a recent window and publishes the rank that decided it", () => {
   const internet = recordingInternet((request) =>
     jsonResponse(
-      request.url.href.includes("player_keys=")
+      EffectString.includes(request.url.href, "player_keys=")
         ? yahooNhlGoaliePoolRecentRankValues
         : yahooNhlGoaliePoolRecentRank,
     ),
@@ -2861,7 +2866,7 @@ it.effect(
   () => {
     const internet = recordingInternet((request) =>
       jsonResponse(
-        request.url.href.includes("player_keys=")
+        EffectString.includes(request.url.href, "player_keys=")
           ? yahooNflFreeAgentPoolLast4WeeksValues
           : yahooNflFreeAgentPoolLast4Weeks,
       ),
@@ -3632,7 +3637,7 @@ it.effect("serves a hockey recent window as the sum of batched daily reads", () 
     );
     assert.isTrue(
       EffectArray.every(internet.calls, (call) =>
-        call.url.pathname.includes("player_keys=466.p.30001,466.p.30002"),
+        EffectString.includes(call.url.pathname, "player_keys=466.p.30001,466.p.30002"),
       ),
       "each day batches every requested player reference into one request",
     );
@@ -3843,9 +3848,9 @@ it.effect("declares each period kind's support as the capability table says", ()
 it.effect("reads a declared games limit and the team's per-position allowance", () => {
   const internet = recordingInternet((request) =>
     jsonResponse(
-      request.url.pathname.includes(";out=settings")
+      EffectString.includes(request.url.pathname, ";out=settings")
         ? yahooNflLeagueSettingsWithGamesLimit
-        : request.url.pathname.includes("/teams;")
+        : EffectString.includes(request.url.pathname, "/teams;")
           ? yahooNflGamesPlayed
           : yahooNflPlayerDetailsWithOwnership,
     ),
@@ -3889,9 +3894,9 @@ it.effect("reads a declared games limit and the team's per-position allowance", 
 it.effect("maps the published innings allowance to the league's pitcher slot", () => {
   const internet = recordingInternet((request) =>
     jsonResponse(
-      request.url.pathname.includes(";out=settings")
+      EffectString.includes(request.url.pathname, ";out=settings")
         ? yahooNflLeagueSettingsWithPitcherSlot
-        : request.url.pathname.includes("/teams;")
+        : EffectString.includes(request.url.pathname, "/teams;")
           ? yahooNflGamesPlayed
           : yahooNflPlayerDetailsWithOwnership,
     ),
@@ -3932,9 +3937,9 @@ it.effect("maps the published innings allowance to the league's pitcher slot", (
 it.effect("refuses a games-played answer for another league", () => {
   const internet = recordingInternet((request) =>
     jsonResponse(
-      request.url.pathname.includes(";out=settings")
+      EffectString.includes(request.url.pathname, ";out=settings")
         ? yahooNflLeagueSettingsWithGamesLimit
-        : request.url.pathname.includes("/teams;")
+        : EffectString.includes(request.url.pathname, "/teams;")
           ? yahooNflGamesPlayedForAnotherLeague
           : yahooNflPlayerDetailsWithOwnership,
     ),
@@ -3968,9 +3973,9 @@ it.effect("refuses a games-played answer for another league", () => {
 
 it.effect("refuses the score when the provider fails the games-played read", () => {
   const internet = recordingInternet((request) =>
-    request.url.pathname.includes(";out=settings")
+    EffectString.includes(request.url.pathname, ";out=settings")
       ? jsonResponse(yahooNflLeagueSettingsWithGamesLimit)
-      : request.url.pathname.includes("/teams;")
+      : EffectString.includes(request.url.pathname, "/teams;")
         ? jsonResponse({}, 500)
         : jsonResponse(yahooNflPlayerDetailsWithOwnership),
   );
@@ -4004,9 +4009,9 @@ it.effect("refuses the score when the provider fails the games-played read", () 
 it.effect("prices a games-limited league from the ownership composite, not the crowd", () => {
   const internet = recordingInternet((request) =>
     jsonResponse(
-      request.url.pathname.includes(";out=settings")
+      EffectString.includes(request.url.pathname, ";out=settings")
         ? yahooNflLeagueSettingsWithGamesLimit
-        : request.url.pathname.includes("/teams;")
+        : EffectString.includes(request.url.pathname, "/teams;")
           ? yahooNflGamesPlayed
           : yahooNflPlayerDetailsWithOwnership,
     ),
@@ -4044,7 +4049,9 @@ it.effect("prices a games-limited league from the ownership composite, not the c
       { providerPlayerKey: "466.p.20002", score: 125000, availability: "will-play" },
     ]);
     const factsRequest = EffectOption.getOrUndefined(
-      EffectArray.findFirst(internet.calls, (call) => call.url.pathname.includes("player_keys=")),
+      EffectArray.findFirst(internet.calls, (call) =>
+        EffectString.includes(call.url.pathname, "player_keys="),
+      ),
     );
     assert.include(factsRequest?.url.pathname, ";out=percent_started,percent_owned,ranks");
     assert.include(
@@ -4099,7 +4106,7 @@ it.effect("reads each selected player's week, opponent, and projected week rank"
 it.effect("prices a weekly league from the projected week rank your league publishes", () => {
   const internet = recordingInternet((request) =>
     jsonResponse(
-      request.url.search.includes("%2C")
+      EffectString.includes(request.url.search, "%2C")
         ? yahooNflPlayerDetailsWithDefaultRanks
         : yahooNflPlayerDetailsWithProjectedWeekRanks,
     ),

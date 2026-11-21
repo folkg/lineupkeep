@@ -1,6 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
+import { EffectString } from "@lineupkeep/collections";
 import { Duration, Effect, Layer, Redacted, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { TestClock } from "effect/testing";
@@ -49,7 +50,7 @@ it.effect("starts an owner-bound session, authorizes its ticket, and hides it fr
       ticket: Redacted.value(started.ticket),
     });
     const wrongTicket = yield* Effect.flip(
-      hosted.authorize(owner, { id: started.session.id, ticket: "x".repeat(43) }),
+      hosted.authorize(owner, { id: started.session.id, ticket: EffectString.repeat("x", 43) }),
     );
     const otherOwner = yield* Effect.flip(
       hosted.authorize(other, {

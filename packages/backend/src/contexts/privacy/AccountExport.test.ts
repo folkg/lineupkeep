@@ -2,6 +2,7 @@ import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { AccountErasure } from "@lineupkeep/backend/privacy/AccountErasure";
 import { AccountExport, AccountExportDocument } from "@lineupkeep/backend/privacy/AccountExport";
+import { EffectString } from "@lineupkeep/collections";
 import { DateTime, Duration, Effect, Layer, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { Order as EffectOrder } from "effect";
@@ -15,6 +16,7 @@ import { AccountErasureLive } from "./internal/AccountErasureLive.ts";
 import { AccountExportLive } from "./internal/AccountExportLive.ts";
 import { otherOwner, owner, seedOwnedAccount } from "./internal/OwnedAccountSeedRepository.ts";
 import { PrivacyDatabaseTest } from "./internal/PrivacyDatabaseTest.ts";
+
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
   value: A | null | undefined,
@@ -138,7 +140,7 @@ it.effect(
         otherOwner.providerEnvelope,
         otherOwner.agentNoteBody,
       ]) {
-        assert.isFalse(exported.includes(secret), `the export contains ${secret}`);
+        assert.isFalse(EffectString.includes(exported, secret), `the export contains ${secret}`);
       }
     }).pipe(layerTools.provide(ExportTestLayer)),
   30_000,
@@ -156,8 +158,8 @@ it.effect(
         document,
       );
 
-      assert.isTrue(exported.includes(owner.id));
-      assert.isFalse(exported.includes(otherOwner.id));
+      assert.isTrue(EffectString.includes(exported, owner.id));
+      assert.isFalse(EffectString.includes(exported, otherOwner.id));
       for (const table of document.tables) {
         for (const row of table.rows) {
           if ("user_id" in row) {

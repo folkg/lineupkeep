@@ -1,4 +1,5 @@
 import { assert, it } from "@effect/vitest";
+import { EffectString } from "@lineupkeep/collections";
 import { Effect, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 
@@ -13,7 +14,7 @@ const NamesResult = Schema.Struct({
 
 it.effect("refuses a record that cannot fit the hard byte limit", () =>
   Effect.gen(function* () {
-    const rows = [{ name: "x".repeat(40_000) }];
+    const rows = [{ name: EffectString.repeat("x", 40_000) }];
     const result = yield* fitPage({
       schema: NamesResult,
       rows,
@@ -33,7 +34,7 @@ it.effect("refuses a record that cannot fit the hard byte limit", () =>
 
 it.effect("applies a caller-supplied budget instead of the shared default", () =>
   Effect.gen(function* () {
-    const rows = [{ name: "a".repeat(30_000) }];
+    const rows = [{ name: EffectString.repeat("a", 30_000) }];
     const input = {
       schema: NamesResult,
       rows,

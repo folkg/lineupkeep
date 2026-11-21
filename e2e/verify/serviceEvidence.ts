@@ -1,4 +1,5 @@
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
 import { Effect } from "effect";
 import { Cause, Exit, Predicate, Schema } from "effect";
 import { Array as EffectArray } from "effect";
@@ -15,7 +16,9 @@ export function serviceCallEvidence(
 ): unknown {
   const credentials = [
     cookie,
-    ...EffectArray.map(cookie.split(";"), (part) => part.slice(part.indexOf("=") + 1).trim()),
+    ...EffectArray.map(EffectString.split(cookie, ";"), (part) =>
+      EffectString.trim(EffectString.slice(part, EffectString.indexOf(part, "=") + 1)),
+    ),
   ];
   return redactEvidence(
     {
@@ -37,7 +40,7 @@ export function serviceCallName(sequence: number, description: string): string {
 }
 
 export function isServiceCallAttachment(attachment: { readonly name: string }): boolean {
-  return attachment.name.startsWith(callPrefix);
+  return EffectString.startsWith(attachment.name, callPrefix);
 }
 
 function isJsonData(value: unknown, seen = new Set<object>()): boolean {

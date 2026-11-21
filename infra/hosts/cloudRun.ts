@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import * as GCP from "@alchemy.run/gcp";
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
 import * as Command from "alchemy/Command";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
@@ -431,7 +432,7 @@ function publishImage(
 > {
   return Effect.gen(function* () {
     const image = Output.map(Output.all(registry, build.imageId), ([name, hash]) => {
-      return `${name}/${tag}:${hash.replace("sha256:", "")}`;
+      return `${name}/${tag}:${EffectString.replace(hash, "sha256:", "")}`;
     });
     const published = yield* Command.Exec(id, {
       cwd: new URL("../../", import.meta.url).pathname,
@@ -528,7 +529,10 @@ function runtimeSecret(
       Output.mapEffect(() =>
         Effect.promise(async () => {
           const resourceName = await readFile(new URL("version", directory), "utf8");
-          const number = resourceName.trim().match(/\/versions\/([1-9]\d*)$/)?.[1];
+          const number = EffectString.match(
+            EffectString.trim(resourceName),
+            /\/versions\/([1-9]\d*)$/,
+          )?.[1];
           if (number === undefined) {
             throw new Error("Secret Manager did not return an immutable version identity");
           }

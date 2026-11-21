@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { retiredScopeNames } from "@lineupkeep/backend/auth/AuthorizationScopes";
 import { advertisedScopes, onboardingScopes } from "@lineupkeep/backend/runtime/ApplicationScopes";
+import { EffectString } from "@lineupkeep/collections";
 import { Array as EffectArray } from "effect";
 import { expect, it } from "vitest";
 
@@ -28,7 +29,7 @@ it("documents the full authorization-server scope set in the MCP contract", () =
 });
 
 it("says in the MCP contract that retired names are accepted but never advertised", () => {
-  const contract = read("docs/fantasy-manager/MCP.md").replaceAll(/\s+/gu, " ");
+  const contract = EffectString.replaceAll(read("docs/fantasy-manager/MCP.md"), /\s+/gu, " ");
 
   expect(contract).toContain("accepted but never advertised");
   for (const retired of retiredScopeNames) {

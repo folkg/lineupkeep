@@ -3,6 +3,7 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
 import { Option, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { Order as EffectOrder } from "effect";
@@ -14,6 +15,7 @@ import { isMcpExchangeAttachment, McpExchangeJson } from "./mcpEvidence.ts";
 import { Cpu, MeasurementJson, ProfileJson } from "./performanceEvidence.ts";
 import type { DatabaseSummary, SpanGroup, PlanGroup } from "./performanceEvidence.ts";
 import { isServiceCallAttachment, ServiceCallJson } from "./serviceEvidence.ts";
+
 function sortWithComparator<A>(
   self: ReadonlyArray<A>,
   compare: (left: A, right: A) => number,
@@ -73,17 +75,17 @@ async function reportModel(
           EffectArray.filter(
             attempt.attachments,
             (attachment) =>
-              attachment.name.startsWith("measurement: ") ||
-              attachment.name.startsWith("profile: "),
+              EffectString.startsWith(attachment.name, "measurement: ") ||
+              EffectString.startsWith(attachment.name, "profile: "),
           ),
           async (attachment) => ({
             test: attempt.title,
-            kind: attachment.name.startsWith("profile: ")
+            kind: EffectString.startsWith(attachment.name, "profile: ")
               ? ("profile" as const)
               : ("measurement" as const),
             file: attachment.path,
             attachments: attempt.attachments,
-            result: attachment.name.startsWith("profile: ")
+            result: EffectString.startsWith(attachment.name, "profile: ")
               ? await read(attachment.path, ProfileJson)
               : await read(attachment.path, MeasurementJson).then((result) =>
                   result === undefined
@@ -100,7 +102,7 @@ async function reportModel(
   const spans =
     spansPath === undefined
       ? undefined
-      : EffectArray.flatMap((await readFile(spansPath, "utf8")).split("\n"), (line) => {
+      : EffectArray.flatMap(EffectString.split(await readFile(spansPath, "utf8"), "\n"), (line) => {
           const flatMapped1 = Option.toArray(Schema.decodeOption(SpanLine)(line));
           return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
         });
@@ -173,7 +175,7 @@ function reportBlocks(model: ReportModel, directory: string): ReadonlyArray<Bloc
     heading(2, "Criteria"),
     ...EffectArray.flatMap(criteria, (criterion) => {
       const flatMapped2 = [
-        heading(3, `${criterion.id} — ${criterion.status.toUpperCase()}`),
+        heading(3, `${criterion.id} — ${EffectString.toUpperCase(criterion.status)}`),
         paragraph(criterion.statement),
         paragraph(`Observed: ${criterion.observation}`),
         table(
@@ -284,7 +286,9 @@ function mcpBlocks(model: ReportModel): ReadonlyArray<Block> {
           const flatMapped4 = optionalArrayValue(
             EffectArray.filter(
               attempt.steps,
-              (step) => !step.title.startsWith("Setup") && (step.mcpExchanges?.length ?? 0) > 0,
+              (step) =>
+                !EffectString.startsWith(step.title, "Setup") &&
+                (step.mcpExchanges?.length ?? 0) > 0,
             ),
             (value) =>
               EffectArray.map(value, (step) => [
@@ -339,7 +343,9 @@ function serviceBlocks(model: ReportModel): ReadonlyArray<Block> {
           const flatMapped5 = optionalArrayValue(
             EffectArray.filter(
               attempt.steps,
-              (step) => !step.title.startsWith("Setup") && (step.serviceCalls?.length ?? 0) > 0,
+              (step) =>
+                !EffectString.startsWith(step.title, "Setup") &&
+                (step.serviceCalls?.length ?? 0) > 0,
             ),
             (value) =>
               EffectArray.map(value, (step) => [
@@ -764,8 +770,8 @@ function groupBlocks(group: GroupSummary): ReadonlyArray<Block> {
             EffectArray.filter(
               sample.attachments,
               (attachment) =>
-                attachment.name.startsWith("backend spans: ") ||
-                attachment.name.startsWith("database statements: "),
+                EffectString.startsWith(attachment.name, "backend spans: ") ||
+                EffectString.startsWith(attachment.name, "database statements: "),
             ),
             (attachment) => `Full evidence (${attachment.name}): ${attachment.path}`,
           ),
@@ -931,7 +937,9 @@ function telemetryBlocks(model: ReportModel): ReadonlyArray<Block> {
   if (model.spans === undefined) {
     return [];
   }
-  const reports = EffectArray.filter(model.spans, (span) => span.name.startsWith("telemetry."));
+  const reports = EffectArray.filter(model.spans, (span) =>
+    EffectString.startsWith(span.name, "telemetry."),
+  );
   const failed = EffectArray.filter(model.spans, (span) => span.error !== undefined);
   return [
     heading(2, "Application telemetry"),
@@ -1081,13 +1089,16 @@ function table(columns: ReadonlyArray<string>, rows: ReadonlyArray<ReadonlyArray
 }
 
 function status(value: string): Cell {
-  return { text: value.toUpperCase(), status: value };
+  return { text: EffectString.toUpperCase(value), status: value };
 }
 
 function code(value: string): Cell {
-  const line = value.replaceAll(/\s+/gu, " ").trim();
-  const elided = line.replace(/^select (.{40,}?) from /iu, "select … from ");
-  return { text: elided.length > 300 ? `${elided.slice(0, 299)}…` : elided, code: true };
+  const line = EffectString.trim(EffectString.replaceAll(value, /\s+/gu, " "));
+  const elided = EffectString.replace(line, /^select (.{40,}?) from /iu, "select … from ");
+  return {
+    text: elided.length > 300 ? `${EffectString.slice(elided, 0, 299)}…` : elided,
+    code: true,
+  };
 }
 
 function count(value: number, noun: string): string {
@@ -1096,18 +1107,20 @@ function count(value: number, noun: string): string {
 
 function renderMarkdown(blocks: ReadonlyArray<Block>): string {
   const cell = (value: Cell): string => {
-    const content = (typeof value === "string" ? value : value.text)
-      .replaceAll("|", "\\|")
-      .replaceAll(/\s*\n\s*/gu, " ");
+    const content = EffectString.replaceAll(
+      EffectString.replaceAll(typeof value === "string" ? value : value.text, "|", "\\|"),
+      /\s*\n\s*/gu,
+      " ",
+    );
     return typeof value !== "string" && value.code === true && content !== ""
-      ? `\`${content.replaceAll("`", "'")}\``
+      ? `\`${EffectString.replaceAll(content, "`", "'")}\``
       : content;
   };
   return `${EffectArray.join(
     EffectArray.flatMap(blocks, (block) => {
       switch (block.kind) {
         case "heading":
-          return [`${"#".repeat(block.level)} ${block.text}`];
+          return [`${EffectString.repeat("#", block.level)} ${block.text}`];
         case "verdict":
           return [`**${block.text}**`];
         case "paragraph":
@@ -1144,7 +1157,7 @@ function renderMarkdown(blocks: ReadonlyArray<Block>): string {
           return [`[${block.text}](${block.href})`];
         case "transcript":
           return [
-            `<a id="${block.id}"></a>\n\n\`\`\`\`json\n${block.text.replaceAll("`", "\\u0060")}\n\`\`\`\``,
+            `<a id="${block.id}"></a>\n\n\`\`\`\`json\n${EffectString.replaceAll(block.text, "`", "\\u0060")}\n\`\`\`\``,
           ];
         case "image":
           return [`![${block.alt}](${block.artifact})`];
@@ -1234,12 +1247,19 @@ ${EffectArray.join(EffectArray.filter(rendered, Boolean), "\n")}
 }
 
 function escape(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+  return EffectString.replaceAll(
+    EffectString.replaceAll(
+      EffectString.replaceAll(
+        EffectString.replaceAll(EffectString.replaceAll(value, "&", "&amp;"), "<", "&lt;"),
+        ">",
+        "&gt;",
+      ),
+      '"',
+      "&quot;",
+    ),
+    "'",
+    "&#39;",
+  );
 }
 
 const SpanLine = Schema.fromJsonString(

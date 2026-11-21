@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 
 import { it } from "@effect/vitest";
+import { EffectString } from "@lineupkeep/collections";
 
 import { normalizeNoteText, noteTextLength } from "./NoteText.ts";
 
 it("counts a character outside the basic plane once", () => {
-  assert.strictEqual(noteTextLength("🏒".repeat(2_000)), 2_000);
+  assert.strictEqual(noteTextLength(EffectString.repeat("🏒", 2_000)), 2_000);
 });
 
 it("normalizes line endings and drops control characters", () => {

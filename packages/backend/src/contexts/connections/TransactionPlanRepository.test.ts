@@ -2,6 +2,7 @@ import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import type { UserId } from "@lineupkeep/backend/auth/User";
+import { EffectString } from "@lineupkeep/collections";
 import { eq } from "drizzle-orm";
 import { Array, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { Array as EffectArray } from "effect";
@@ -605,7 +606,9 @@ let moveSequence = 0;
 function nextMoveId(): TransactionMoveIdType {
   moveSequence += 1;
   return Effect.runSync(
-    Schema.decodeEffect(TransactionMoveId)(`01J${String(moveSequence).padStart(23, "0")}`),
+    Schema.decodeEffect(TransactionMoveId)(
+      `01J${EffectString.padStart(String(moveSequence), 23, "0")}`,
+    ),
   );
 }
 

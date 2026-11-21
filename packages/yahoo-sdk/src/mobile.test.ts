@@ -1,6 +1,8 @@
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 
+import { EffectString } from "#yahoo/stringTools.ts";
+
 import { crumbPayload } from "./fixturesTest.ts";
 import * as Yahoo from "./index.ts";
 import { jsonResponse, recordingClient, testLayer } from "./testSupportTest.ts";
@@ -347,7 +349,7 @@ it.effect("reads the mobile dashboard and sorts league summaries", () => {
 
 it.effect("proposes a draft-pick-only trade with the observed XML body", () => {
   const recording = recordingClient((call) =>
-    call.url.includes("/getCrumb")
+    EffectString.includes(call.url, "/getCrumb")
       ? jsonResponse(crumbPayload)
       : jsonResponse({
           fantasy_content: {
@@ -388,7 +390,7 @@ it.effect("proposes a draft-pick-only trade with the observed XML body", () => {
 
 it.effect("finds the pending key in a draft-pick receipt nested under league", () => {
   const recording = recordingClient((call) =>
-    call.url.includes("/getCrumb")
+    EffectString.includes(call.url, "/getCrumb")
       ? jsonResponse(crumbPayload)
       : jsonResponse(
           {
@@ -440,7 +442,7 @@ it.effect("keeps the provider's draft-pick trade refusal wording", () => {
   const refusal =
     "Player Devin Cooley is in a IR position on your roster, but is no longer on the real-life IR.  Please edit your lineup to activate this player from your IR and then attempt your transaction again.";
   const recording = recordingClient((call) =>
-    call.url.includes("/getCrumb")
+    EffectString.includes(call.url, "/getCrumb")
       ? jsonResponse(crumbPayload)
       : jsonResponse(
           {

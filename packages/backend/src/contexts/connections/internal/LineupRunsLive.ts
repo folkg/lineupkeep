@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { DateTime, Duration, Effect, Layer, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
@@ -181,7 +182,7 @@ function validateTeams(
 
 function canonicalIntent(input: LineupRequestInput): string {
   const teams = EffectArray.map(
-    [...input.teams].sort((left, right) => left.team.localeCompare(right.team)),
+    [...input.teams].sort((left, right) => EffectString.localeCompare(left.team, right.team)),
     (team) => ({ team: team.team, period: team.period }),
   );
   return jsonTools.jsonString({ teams });

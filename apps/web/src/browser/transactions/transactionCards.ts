@@ -1,5 +1,6 @@
 import { EffectArray } from "@lineupkeep/collections";
 import { EffectOption } from "@lineupkeep/collections";
+import { EffectString } from "@lineupkeep/collections";
 
 import type {
   TransactionMoveDayView,
@@ -8,6 +9,7 @@ import type {
 } from "#contracts/connections/transactionContract.ts";
 
 import { moveCount, moveSummary } from "./transactionCopy";
+
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
   value: A | null | undefined,
@@ -84,7 +86,7 @@ function groupCards(input: GroupCardsInput): ReadonlyArray<GroupCard> {
   return cards.sort(
     (left, right) =>
       cardPosition(left) - cardPosition(right) ||
-      left.lead.team.name.localeCompare(right.lead.team.name),
+      EffectString.localeCompare(left.lead.team.name, right.lead.team.name),
   );
 }
 

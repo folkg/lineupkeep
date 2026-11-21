@@ -488,6 +488,19 @@ const correctnessRules = {
   "effecttsgo/missing-concurrency-option": "error",
   "effecttsgo/global-json-in-effect": "error",
   "effecttsgo/prefer-effect-array": "error",
+  "effecttsgo/global-json": "off",
+  "effecttsgo/map-map-error-to-map-both": "off",
+  "effecttsgo/missed-pipeable-opportunity": "off",
+  "effecttsgo/prefer-schema-tagged-error": "off",
+  "effecttsgo/provide-merge-all-to-array": "off",
+  "effecttsgo/type-union-to-schema-union": "off",
+  "effecttsgo/prefer-barrel-import": "off",
+  "effecttsgo/prefer-namespace-import": "off",
+  "effecttsgo/prefer-effect-string": "error",
+  "effecttsgo/prefer-effect-record": "off",
+  "effecttsgo/missing-pipeable-signature": "off",
+  "effecttsgo/yield-in-call-argument": "off",
+  "effecttsgo/effect-try-without-catch": "off",
 } satisfies Rules;
 
 const effectRules = {
@@ -985,6 +998,26 @@ export default defineConfig({
       rules: {
         "effecttsgo/strict-effect-provide": "off",
         "effecttsgo/async-function": "off",
+      },
+    },
+    {
+      files: ["packages/hosted-browser/src/browser.ts"],
+      rules: {
+        "effecttsgo/prefer-effect-string": "off",
+      },
+    },
+    {
+      files: [
+        "packages/collections/src/**/*.ts",
+        "packages/yahoo-sdk/src/stringTools.ts",
+        "tools/local-stack/stringTools.ts",
+        "scripts/lintPlugin.ts",
+        "packages/backend/scripts/check-table-ownership.ts",
+      ],
+      rules: {
+        "effecttsgo/prefer-effect-array": "off",
+        "effecttsgo/prefer-effect-string": "off",
+        "typescript/no-unsafe-type-assertion": "off",
       },
     },
     {

@@ -4,6 +4,8 @@ import type { DB } from "@better-auth/drizzle-adapter/relations-v2";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import { mcp } from "@better-auth/mcp";
 import { productName } from "@lineupkeep/brand/product";
+import { EffectString } from "@lineupkeep/collections";
+import { optionalStringValue } from "@lineupkeep/collections";
 import { getSessionCookie } from "better-auth/cookies";
 import { betterAuth } from "better-auth/minimal";
 import { emailOTP } from "better-auth/plugins/email-otp";
@@ -277,7 +279,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
           return { status: "invalid" };
         }
         const granted = EffectArray.map(
-          EffectArray.filter(claims.value.scope.split(" "), Boolean),
+          EffectArray.filter(EffectString.split(claims.value.scope, " "), Boolean),
           currentScope,
         );
         if (
@@ -362,7 +364,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
         );
         const requested = new Set(
           EffectArray.map(
-            EffectArray.filter((params.get("scope") ?? "").split(" "), Boolean),
+            EffectArray.filter(EffectString.split(params.get("scope") ?? "", " "), Boolean),
             currentScope,
           ),
         );
@@ -639,17 +641,20 @@ function providerRefreshTokenHash(
 }
 
 function accessTokenIsExpired(token: string): boolean {
-  const payload = token.split(".")[1];
+  const payload = EffectString.split(token, ".")[1];
   if (payload === undefined || !/^[A-Za-z0-9_-]+$/u.test(payload)) {
     return false;
   }
-  const padding = payload.length % 4 === 0 ? "" : "=".repeat(4 - (payload.length % 4));
+  const padding =
+    payload.length % 4 === 0 ? "" : EffectString.repeat("=", 4 - (payload.length % 4));
   try {
     const decoded = Schema.decodeOption(EncodedAccessTokenExpiryJson)(
       new TextDecoder().decode(
         Uint8Array.from(
-          atob(payload.replaceAll("-", "+").replaceAll("_", "/") + padding),
-          (character) => character.charCodeAt(0),
+          atob(
+            EffectString.replaceAll(EffectString.replaceAll(payload, "-", "+"), "_", "/") + padding,
+          ),
+          (character) => EffectString.charCodeAt(character, 0),
         ),
       ),
     );
@@ -667,7 +672,12 @@ function isFormPost(request: Request, path: string): boolean {
   return (
     request.method === "POST" &&
     new URL(request.url).pathname === path &&
-    contentType.split(";")[0]?.trim().toLowerCase() === "application/x-www-form-urlencoded"
+    optionalStringValue(
+      optionalStringValue(EffectString.split(contentType, ";")[0], (value) =>
+        EffectString.trim(value),
+      ),
+      (value) => EffectString.toLowerCase(value),
+    ) === "application/x-www-form-urlencoded"
   );
 }
 
@@ -697,8 +707,8 @@ function tokenExchangeClientId(headers: Headers, params: URLSearchParams): strin
   }
   try {
     const credential = atob(encoded);
-    const separator = credential.indexOf(":");
-    return separator <= 0 ? undefined : credential.slice(0, separator);
+    const separator = EffectString.indexOf(credential, ":");
+    return separator <= 0 ? undefined : EffectString.slice(credential, 0, separator);
   } catch {
     return undefined;
   }
@@ -825,7 +835,7 @@ function signInCodeEmail(code: SignInCode): EmailMessage {
 function isSignInCodeRequest(request: Request): boolean {
   return (
     request.method === "POST" &&
-    new URL(request.url).pathname.endsWith("/email-otp/send-verification-otp")
+    EffectString.endsWith(new URL(request.url).pathname, "/email-otp/send-verification-otp")
   );
 }
 
@@ -986,7 +996,7 @@ const clientAddressConfig = Config.all({
 
 function splitList(value: string): Array<string> {
   return EffectArray.filter(
-    EffectArray.map(value.split(","), (entry) => entry.trim()),
+    EffectArray.map(EffectString.split(value, ","), (entry) => EffectString.trim(entry)),
     (entry) => entry.length > 0,
   );
 }

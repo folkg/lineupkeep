@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
 import type { TestInfo } from "@playwright/test";
 import { Effect } from "effect";
 import { Schema } from "effect";
@@ -20,6 +21,7 @@ import type {
   ProfileResult,
   ObservedCall,
 } from "./performanceEvidence.ts";
+
 function sortWithComparator<A>(
   self: ReadonlyArray<A>,
   compare: (left: A, right: A) => number,
@@ -438,7 +440,7 @@ export function summarizeCpuProfile(profile: CpuProfile): CpuSummary {
 export function summarizeSpans(spans: ReadonlyArray<CollectedSpan>): SpanSummary {
   const operations = group(
     EffectArray.filter(spans, (span) => typeof span.attributes["app.operation"] === "string"),
-    (span) => `${span.name} ${text(span.attributes["app.outcome"])}`.trim(),
+    (span) => EffectString.trim(`${span.name} ${text(span.attributes["app.outcome"])}`),
   );
   const statements = EffectArray.filter(
     spans,
@@ -497,11 +499,11 @@ function group(
 
 export function describeServerRequest(request: RequestLike): string | undefined {
   const { pathname } = new URL(request.url());
-  if (pathname.startsWith("/_serverFn/")) {
+  if (EffectString.startsWith(pathname, "/_serverFn/")) {
     const singleFlight = request.headers()["x-single-flight"] === undefined ? "" : " single-flight";
     return `${request.method()} server function${singleFlight}`;
   }
-  if (pathname.startsWith("/api/") && pathname !== "/api/telemetry") {
+  if (EffectString.startsWith(pathname, "/api/") && pathname !== "/api/telemetry") {
     return `${request.method()} ${pathname}`;
   }
   return undefined;
@@ -849,14 +851,14 @@ function unavailable<A>(reason: string): Attempt<A> {
 
 function shortenUrl(encoded: string): string {
   const url = decodeLocation(encoded);
-  const packageIndex = url.lastIndexOf("node_modules/");
+  const packageIndex = EffectString.lastIndexOf(url, "node_modules/");
   if (packageIndex !== -1) {
-    return url.slice(packageIndex + "node_modules/".length);
+    return EffectString.slice(url, packageIndex + "node_modules/".length);
   }
   for (const root of ["/apps/", "/packages/"]) {
-    const index = url.lastIndexOf(root);
+    const index = EffectString.lastIndexOf(url, root);
     if (index !== -1) {
-      return url.slice(index + 1);
+      return EffectString.slice(url, index + 1);
     }
   }
   return URL.canParse(url) ? new URL(url).pathname : url;
@@ -871,10 +873,11 @@ function decodeLocation(url: string): string {
 }
 
 function slug(name: string): string {
-  return name
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/gu, "-")
-    .replaceAll(/^-|-$/gu, "");
+  return EffectString.replaceAll(
+    EffectString.replaceAll(EffectString.toLowerCase(name), /[^a-z0-9]+/gu, "-"),
+    /^-|-$/gu,
+    "",
+  );
 }
 
 function tenths(value: number): number {

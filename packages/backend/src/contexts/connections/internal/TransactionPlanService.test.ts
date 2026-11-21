@@ -2,6 +2,8 @@ import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import type { UserId } from "@lineupkeep/backend/auth/User";
+import { EffectString } from "@lineupkeep/collections";
+import { optionalStringValue } from "@lineupkeep/collections";
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
 import { DateTime, Effect, Fiber, Layer, Option, Schema } from "effect";
 import { Array as EffectArray } from "effect";
@@ -61,6 +63,7 @@ import type {
   TransactionPlanWriteRequest,
   TransactionPlanWritesShape,
 } from "./TransactionPlanWrites.ts";
+
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
   value: A | null | undefined,
@@ -2816,7 +2819,7 @@ it.effect("submits a two move group in the evaluated order", () => {
     const steps = yield* database.select().from(transactionMoveSteps);
     assert.deepStrictEqual(
       EffectArray.map(steps, (step) => [step.playerKey, step.outcome]).sort((left, right) =>
-        String(left[0]).localeCompare(String(right[0])),
+        EffectString.localeCompare(String(left[0]), String(right[0])),
       ),
       [
         ["fa1", "executed"],
@@ -4758,7 +4761,10 @@ it.effect("regenerates a move's Roster fixes when it is edited", () =>
     const stored = yield* database.select().from(transactionMoves);
     const fixes = EffectArray.filter(
       stored,
-      (move) => move.groupId?.startsWith("roster-fixes:") === true,
+      (move) =>
+        optionalStringValue(move.groupId, (value) =>
+          EffectString.startsWith(value, "roster-fixes:"),
+        ) === true,
     );
     assert.strictEqual(
       EffectArray.filter(fixes, (move) => move.decision !== "discarded").length,
@@ -5370,7 +5376,7 @@ function nextStoredMoveId(): TransactionMoveId {
   storedMoveSequence += 1;
   return Effect.runSync(
     Schema.decodeEffect(TransactionMoveIdSchema)(
-      `01K${String(storedMoveSequence).padStart(23, "0")}`,
+      `01K${EffectString.padStart(String(storedMoveSequence), 23, "0")}`,
     ),
   );
 }

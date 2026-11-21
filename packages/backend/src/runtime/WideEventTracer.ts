@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { Exit, Option, Redacted, Tracer } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
@@ -229,10 +230,10 @@ function mergedAttributes(spans: ReadonlyArray<SpanRecord>): SafeAttributes {
 
 function isTransportDetail(key: string): boolean {
   return (
-    key.startsWith("db.") ||
-    key.startsWith("effect.sql.") ||
-    key.startsWith("network.") ||
-    key.startsWith("server.") ||
+    EffectString.startsWith(key, "db.") ||
+    EffectString.startsWith(key, "effect.sql.") ||
+    EffectString.startsWith(key, "network.") ||
+    EffectString.startsWith(key, "server.") ||
     key === "url.path" ||
     key === "http.request.method" ||
     key === "http.response.status_code"
@@ -373,17 +374,17 @@ function safeValue(value: unknown): SafeValue | undefined {
 }
 
 function isSuppressedKey(key: string): boolean {
-  const lower = key.toLowerCase();
+  const lower = EffectString.toLowerCase(key);
   return (
-    lower.endsWith(".cookie") ||
-    lower.endsWith(".crumb") ||
-    lower.endsWith(".token") ||
-    lower.endsWith(".secret") ||
-    lower.endsWith(".password") ||
-    lower.endsWith(".email") ||
-    lower.endsWith(".note") ||
-    lower.endsWith(".body") ||
-    lower.endsWith(".payload")
+    EffectString.endsWith(lower, ".cookie") ||
+    EffectString.endsWith(lower, ".crumb") ||
+    EffectString.endsWith(lower, ".token") ||
+    EffectString.endsWith(lower, ".secret") ||
+    EffectString.endsWith(lower, ".password") ||
+    EffectString.endsWith(lower, ".email") ||
+    EffectString.endsWith(lower, ".note") ||
+    EffectString.endsWith(lower, ".body") ||
+    EffectString.endsWith(lower, ".payload")
   );
 }
 
@@ -409,7 +410,7 @@ function roundMillis(value: number): number {
 }
 
 function truncate(value: string, length: number): string {
-  return value.length <= length ? value : `${value.slice(0, length - 1)}…`;
+  return value.length <= length ? value : `${EffectString.slice(value, 0, length - 1)}…`;
 }
 
 const outcomeRank: Readonly<Record<Outcome, number>> = {

@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { DateTime } from "effect";
 import { Array as EffectArray } from "effect";
 
@@ -320,14 +321,17 @@ function compareMoveDays(
   if (left.day === undefined || right.day === undefined) {
     return left.day === right.day ? 0 : left.day === undefined ? 1 : -1;
   }
-  return left.day.localeCompare(right.day);
+  return EffectString.localeCompare(left.day, right.day);
 }
 
 function compareMoveTeams(
   left: TransactionMoveDay["teams"][number],
   right: TransactionMoveDay["teams"][number],
 ): number {
-  return left.team.name.localeCompare(right.team.name) || left.team.id.localeCompare(right.team.id);
+  return (
+    EffectString.localeCompare(left.team.name, right.team.name) ||
+    EffectString.localeCompare(left.team.id, right.team.id)
+  );
 }
 
 export type TransactionTeamCheck =

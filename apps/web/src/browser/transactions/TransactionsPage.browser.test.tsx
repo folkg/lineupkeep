@@ -1,4 +1,5 @@
 import { EffectArray } from "@lineupkeep/collections";
+import { EffectString } from "@lineupkeep/collections";
 import { render } from "@solidjs/web";
 import { QueryClientProvider } from "@tanstack/solid-query";
 import {
@@ -9,10 +10,10 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/solid-router";
-import { expect, it } from "vitest";
 
 import "#web/styles.css";
 
+import { expect, it } from "vitest";
 import { page } from "vitest/browser";
 
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
@@ -1204,8 +1205,8 @@ it("never says confirmed in the provenance of a submitted move", async () => {
 
   const line = submittedLine(scheduled) ?? "";
   await expect.element(page.getByText(line, { exact: true })).toBeVisible();
-  expect(line.toLowerCase()).not.toContain("confirm");
-  expect(document.body.textContent.toLowerCase()).not.toContain("confirm");
+  expect(EffectString.toLowerCase(line)).not.toContain("confirm");
+  expect(EffectString.toLowerCase(document.body.textContent)).not.toContain("confirm");
 });
 
 it("starts the explanation closed and drops an agent's plan letter", async () => {
@@ -1687,7 +1688,7 @@ it("shows the stored fallback chain before it is needed", async () => {
 
   await page.getByText("If the claim fails: Tank Bigsby, then Tyler Boyd", { exact: true }).click();
   await expect.element(page.getByText(body, { exact: true })).toBeVisible();
-  expect(document.body.textContent.toLowerCase()).not.toContain("suggestion");
+  expect(EffectString.toLowerCase(document.body.textContent)).not.toContain("suggestion");
 });
 
 it("records which fallback ran, which failed, and that none are left", async () => {

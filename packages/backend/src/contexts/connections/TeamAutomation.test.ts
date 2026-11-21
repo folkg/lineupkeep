@@ -1,6 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, beforeEach, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
+import { EffectString } from "@lineupkeep/collections";
 import { and, eq } from "drizzle-orm";
 import { Array, DateTime, Duration, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { Config } from "effect";
@@ -167,13 +168,13 @@ it.effect("keeps availability separate from the automation setting", () =>
     assert.strictEqual(enabled.outcome, "changed");
     assert.strictEqual(enabled.enrolled, true);
     assert.strictEqual(enabled.availability, "unavailable");
-    assert.ok(!enabled.detail.includes("unavailable"));
+    assert.ok(!EffectString.includes(enabled.detail, "unavailable"));
     assert.strictEqual(repeated.outcome, "unchanged");
     assert.strictEqual(repeated.availability, "unavailable");
     assert.strictEqual(paused.outcome, "changed");
     assert.strictEqual(paused.automation.status, "paused-until-fantasy-day-end");
     assert.strictEqual(paused.availability, "unavailable");
-    assert.ok(!paused.detail.includes("unavailable"));
+    assert.ok(!EffectString.includes(paused.detail, "unavailable"));
     assert.strictEqual(resumed.outcome, "changed");
     assert.strictEqual(resumed.automation.status, "enabled");
     assert.strictEqual(resumed.availability, "unavailable");
@@ -448,12 +449,12 @@ it.effect("refuses a note past its limit without storing it", () =>
     const seeded = yield* seedTeam(fake);
 
     const rejected = yield* Effect.flip(
-      teams.saveNote(owner, { team: seeded, note: "a".repeat(teamNoteLimit + 1) }),
+      teams.saveNote(owner, { team: seeded, note: EffectString.repeat("a", teamNoteLimit + 1) }),
     );
 
     assert.instanceOf(rejected, TeamNoteRejected);
     assert.strictEqual(rejected.reason, "too_long");
-    assert.ok(rejected.message.includes(String(teamNoteLimit)));
+    assert.ok(EffectString.includes(rejected.message, String(teamNoteLimit)));
     assert.strictEqual((yield* teams.get(owner, seeded)).team.ownerNote, null);
   }).pipe(layerTools.provide(TeamsTestLayer)),
 );
@@ -519,7 +520,7 @@ it.effect("refuses an empty agent note and a note on a team the account does not
     const tooLong = yield* Effect.flip(
       teams.addAgentNote(owner, author, {
         team: seeded,
-        body: "a".repeat(agentNoteLimit + 1),
+        body: EffectString.repeat("a", agentNoteLimit + 1),
       }),
     );
 

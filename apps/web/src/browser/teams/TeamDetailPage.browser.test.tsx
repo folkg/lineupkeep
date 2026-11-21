@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { render } from "@solidjs/web";
 import { QueryClientProvider } from "@tanstack/solid-query";
 import {
@@ -9,9 +10,10 @@ import {
   createRouter,
 } from "@tanstack/solid-router";
 import { expect, it } from "vitest";
-import { page } from "vitest/browser";
 
 import "#web/styles.css";
+
+import { page } from "vitest/browser";
 
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
@@ -576,7 +578,7 @@ it("refuses a note past the stated limit", async () => {
   });
 
   const note = page.getByLabelText("Note for this team");
-  await note.fill("a".repeat(2_001));
+  await note.fill(EffectString.repeat("a", 2_001));
   await expect.element(page.getByText("2001 of 2000 characters")).toBeVisible();
   await page.getByRole("button", { name: "Save note" }).click();
 

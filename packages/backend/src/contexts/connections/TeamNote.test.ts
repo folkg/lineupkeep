@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { it } from "@effect/vitest";
+import { EffectString } from "@lineupkeep/collections";
 
 import type { TeamNoteCheck } from "./TeamNote.ts";
 import { checkTeamNote, teamNoteLimit } from "./TeamNote.ts";
@@ -28,13 +29,13 @@ it("clears a note that holds only whitespace", () => {
 });
 
 it("accepts a note at the character limit and refuses one past it", () => {
-  const atLimit = checkTeamNote("a".repeat(teamNoteLimit));
-  const pastLimit = checkTeamNote("a".repeat(teamNoteLimit + 1));
+  const atLimit = checkTeamNote(EffectString.repeat("a", teamNoteLimit));
+  const pastLimit = checkTeamNote(EffectString.repeat("a", teamNoteLimit + 1));
 
-  assert.deepStrictEqual(atLimit, { valid: true, note: "a".repeat(teamNoteLimit) });
+  assert.deepStrictEqual(atLimit, { valid: true, note: EffectString.repeat("a", teamNoteLimit) });
   const rejected = rejection(pastLimit);
   assert.strictEqual(rejected.reason, "too_long");
-  assert.ok(rejected.message.includes(String(teamNoteLimit)));
+  assert.ok(EffectString.includes(rejected.message, String(teamNoteLimit)));
 });
 
 it("accepts a note that contains a token-shaped value", () => {

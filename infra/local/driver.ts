@@ -4,6 +4,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import * as Core from "@alchemy.run/test/Core";
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
 import { LocalEndpointsSchema, LocalRunSchema } from "@lineupkeep/tools/local-stack/contract.ts";
 import type { LocalRun } from "@lineupkeep/tools/local-stack/contract.ts";
 import * as Alchemy from "alchemy";
@@ -150,7 +151,10 @@ async function assertTestArtifact(run: LocalRun): Promise<void> {
   );
   for await (const file of glob("**/*.{js,mjs,cjs}", { cwd: directory })) {
     if (
-      (await readFile(join(directory, file), "utf8")).includes("E2E_TEST_COMPOSITION_DO_NOT_DEPLOY")
+      EffectString.includes(
+        await readFile(join(directory, file), "utf8"),
+        "E2E_TEST_COMPOSITION_DO_NOT_DEPLOY",
+      )
     ) {
       return;
     }

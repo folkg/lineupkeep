@@ -1,4 +1,5 @@
 import { EffectArray } from "@lineupkeep/collections";
+import { EffectString } from "@lineupkeep/collections";
 import { render } from "@solidjs/web";
 import { createServerReference } from "@solidjs/web/server-functions/client";
 import { Errored, OBSERVE, createSignal, flush } from "solid-js";
@@ -18,9 +19,9 @@ it("collects private-safe reactive records without verbose console logs", async 
 
   expect(fixture.records.length).toBeGreaterThan(0);
   expect(JSON.stringify([...fixture.records, ...fixture.events])).not.toContain("Private draft");
-  expect(EffectArray.filter(fixture.consoleOutput, (line) => line.includes("[why-run]"))).toEqual(
-    [],
-  );
+  expect(
+    EffectArray.filter(fixture.consoleOutput, (line) => EffectString.includes(line, "[why-run]")),
+  ).toEqual([]);
 
   fixture.telemetry[Symbol.dispose]();
   await page.getByRole("button", { name: "Private draft after", exact: true }).click();

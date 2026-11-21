@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import {
   Config,
   ConfigProvider,
@@ -398,7 +399,7 @@ function openCursor(
     readonly nowMillis: number;
   },
 ): Promise<number | QueryCursorInvalidReason> {
-  const [version, payloadPart, signaturePart] = input.cursor.split(".");
+  const [version, payloadPart, signaturePart] = EffectString.split(input.cursor, ".");
   if (version !== "c1" || payloadPart === undefined || signaturePart === undefined) {
     return Promise.resolve("invalid" as const);
   }
@@ -462,7 +463,7 @@ function openReference(
   leagueKey: string,
   ref: string,
 ): Promise<string> {
-  const [version, noncePart, ciphertextPart] = ref.split(".");
+  const [version, noncePart, ciphertextPart] = EffectString.split(ref, ".");
   if (version !== "r1" || noncePart === undefined || ciphertextPart === undefined) {
     return Promise.reject(new Error("invalid reference"));
   }
@@ -549,17 +550,23 @@ function base64Url(bytes: Uint8Array): string {
   for (const byte of bytes) {
     binary += String.fromCharCode(byte);
   }
-  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+  return EffectString.replaceAll(
+    EffectString.replaceAll(EffectString.replaceAll(btoa(binary), "+", "-"), "/", "_"),
+    "=",
+    "",
+  );
 }
 
 function fromBase64Url(value: string): Uint8Array | undefined {
   if (!/^[A-Za-z0-9_-]+$/u.test(value)) {
     return undefined;
   }
-  const padding = value.length % 4 === 0 ? "" : "=".repeat(4 - (value.length % 4));
+  const padding = value.length % 4 === 0 ? "" : EffectString.repeat("=", 4 - (value.length % 4));
   try {
-    const binary = atob(value.replaceAll("-", "+").replaceAll("_", "/") + padding);
-    return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const binary = atob(
+      EffectString.replaceAll(EffectString.replaceAll(value, "-", "+"), "_", "/") + padding,
+    );
+    return Uint8Array.from(binary, (character) => EffectString.charCodeAt(character, 0));
   } catch {
     return undefined;
   }

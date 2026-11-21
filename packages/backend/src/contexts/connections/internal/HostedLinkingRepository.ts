@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { and, count, eq, gte, lte, or } from "drizzle-orm";
 import { Array, Context, DateTime, Effect, Layer, Schema } from "effect";
 import { Array as EffectArray } from "effect";
@@ -534,6 +535,6 @@ function isHostedLinkingError(error: unknown): error is HostedLinkingError {
     error !== null &&
     "_tag" in error &&
     typeof error._tag === "string" &&
-    error._tag.startsWith("hosted_linking.")
+    EffectString.startsWith(error._tag, "hosted_linking.")
   );
 }

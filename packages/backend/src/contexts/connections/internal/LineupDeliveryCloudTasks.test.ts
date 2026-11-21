@@ -1,4 +1,5 @@
 import { assert, it } from "@effect/vitest";
+import { EffectString } from "@lineupkeep/collections";
 import { ConfigProvider, Effect, Layer, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
@@ -19,7 +20,9 @@ it.effect("enqueues deterministic Cloud Tasks deliveries with no credentials", (
     yield* delivery.enqueueMany([{ delivery: deliveryId, runs: [runId] }]);
 
     assert.strictEqual(requests.length, 4);
-    const tasks = EffectArray.filter(requests, (request) => request.url.endsWith("/tasks"));
+    const tasks = EffectArray.filter(requests, (request) =>
+      EffectString.endsWith(request.url, "/tasks"),
+    );
     assert.strictEqual(tasks.length, 2);
     const first = tasks[0];
     if (first === undefined) {
@@ -88,7 +91,7 @@ it.effect("retries a task that could not be created before reporting the deliver
 const requests: Array<{ readonly url: string; readonly body: unknown }> = [];
 let taskAttempts = 0;
 const retryingSink = HttpClient.make((request) => {
-  if (request.url.includes("metadata.google.internal")) {
+  if (EffectString.includes(request.url, "metadata.google.internal")) {
     return Effect.succeed(
       HttpClientResponse.fromWeb(
         request,
@@ -105,7 +108,7 @@ const retryingSink = HttpClient.make((request) => {
 });
 const sink = HttpClient.make((request) => {
   requests.push({ url: request.url, body: request.body });
-  if (request.url.includes("metadata.google.internal")) {
+  if (EffectString.includes(request.url, "metadata.google.internal")) {
     return Effect.succeed(
       HttpClientResponse.fromWeb(
         request,
@@ -117,7 +120,9 @@ const sink = HttpClient.make((request) => {
     );
   }
   const status =
-    EffectArray.filter(requests, (entry) => entry.url.endsWith("/tasks")).length === 1 ? 409 : 200;
+    EffectArray.filter(requests, (entry) => EffectString.endsWith(entry.url, "/tasks")).length === 1
+      ? 409
+      : 200;
   return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}", { status })));
 });
 

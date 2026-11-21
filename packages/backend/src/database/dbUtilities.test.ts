@@ -1,5 +1,6 @@
 import { PgliteClient } from "@effect/sql-pglite";
 import { it } from "@effect/vitest";
+import { EffectString } from "@lineupkeep/collections";
 import { eq } from "drizzle-orm";
 import * as EffectDrizzle from "drizzle-orm/effect-pglite";
 import {
@@ -19,6 +20,7 @@ import { expect, expectTypeOf } from "vitest";
 import layerTools from "#runtime/ProvideLayer.ts";
 
 import { maxInsertRows, mutateRows, unnestRows } from "./dbUtilities.ts";
+
 function sortWithComparator<A>(
   self: ReadonlyArray<A>,
   compare: (left: A, right: A) => number,
@@ -121,7 +123,9 @@ it.effect(
       );
       expect(rejected).toBeInstanceOf(PlanRejected);
       expect(
-        sortWithComparator(yield* db.select().from(entities), (a, b) => a.key.localeCompare(b.key)),
+        sortWithComparator(yield* db.select().from(entities), (a, b) =>
+          EffectString.localeCompare(a.key, b.key),
+        ),
       ).toEqual([
         { key: "a", count: "1", owner: "mine" },
         { key: "b", count: "20", owner: "mine" },

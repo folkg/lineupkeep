@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { expect, it } from "vitest";
 
 import { makeAuthClient } from "./authClient";
@@ -21,7 +22,9 @@ it.each(["email", "google"] as const)(
         : await authClient.signIn.social({ provider: "google", callbackURL: "/account" });
 
     expect(response.error).toBeNull();
-    expect(response.data).toMatchObject({ posted: { oauth_query: rawQuery.slice(1) } });
+    expect(response.data).toMatchObject({
+      posted: { oauth_query: EffectString.slice(rawQuery, 1) },
+    });
   },
 );
 

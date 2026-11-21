@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
 import { Array, Context, DateTime, Effect, Layer, Schema } from "effect";
 import { Array as EffectArray } from "effect";
@@ -17,6 +18,7 @@ import { chunked } from "#utilities/collections.ts";
 import { FeedbackDatabase } from "./FeedbackDatabase.ts";
 import type { FeedbackRecord } from "./FeedbackRecord.ts";
 import { feedback, feedbackQuota, FeedbackRow } from "./FeedbackTables.ts";
+
 function sortWithComparator<A>(
   self: ReadonlyArray<A>,
   compare: (left: A, right: A) => number,
@@ -95,7 +97,7 @@ export class FeedbackRepository extends Context.Service<FeedbackRepository>()(
         const ids = yield* Effect.replicateEffect(input.submissions.length)(newId);
         const rows = sortWithComparator(
           Array.zipWith(ids, input.submissions, (id, submission) => toRow(id, input, submission)),
-          (left, right) => left.id.localeCompare(right.id),
+          (left, right) => EffectString.localeCompare(left.id, right.id),
         );
         const inserted = yield* chunked(rows, maxInsertRows(feedback), (chunk) =>
           database

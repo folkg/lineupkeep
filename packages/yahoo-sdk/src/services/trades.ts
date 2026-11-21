@@ -16,6 +16,7 @@ import {
   leagueKeyOfTeam,
 } from "#yahoo/keys.ts";
 import { TradeReceipt, WriteReceipt } from "#yahoo/receipt.ts";
+import { EffectString } from "#yahoo/stringTools.ts";
 import { tradeProposalBody, tradeResponseBody } from "#yahoo/xml.ts";
 
 const Players = Schema.Array(YahooPlayerKey).pipe(
@@ -125,7 +126,7 @@ export const CounterRequest = CounterShape.pipe(
       const league = leagueKeyOfTeam(input.offer.proposerTeamKey);
       return (
         league === leagueKeyOfTeam(input.offer.receiverTeamKey) &&
-        input.offer.transactionKey.startsWith(`${league}.pt.`) &&
+        EffectString.startsWith(input.offer.transactionKey, `${league}.pt.`) &&
         input.offer.proposerTeamKey !== input.offer.receiverTeamKey &&
         (input.send?.length ?? 0) +
           (input.receive?.length ?? 0) +

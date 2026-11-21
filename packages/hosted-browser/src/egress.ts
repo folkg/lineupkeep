@@ -7,6 +7,7 @@ import type { Duplex } from "node:stream";
 
 import { EffectArray } from "@lineupkeep/collections";
 import { EffectOption } from "@lineupkeep/collections";
+import { EffectString } from "@lineupkeep/collections";
 
 export type EgressRefusalReason = "non_public_address" | "unresolvable" | "invalid_destination";
 
@@ -335,7 +336,7 @@ function fixtureAuthority(origin: string): string {
 }
 
 function isLoopbackHostname(hostname: string): boolean {
-  const host = stripBrackets(hostname).toLowerCase();
+  const host = EffectString.toLowerCase(stripBrackets(hostname));
   return host === "localhost" || host === "127.0.0.1" || host === "::1";
 }
 
@@ -370,30 +371,33 @@ function connectTarget(
   if (authority === undefined) {
     return undefined;
   }
-  if (authority.startsWith("[")) {
-    const end = authority.indexOf("]");
+  if (EffectString.startsWith(authority, "[")) {
+    const end = EffectString.indexOf(authority, "]");
     if (end === -1) {
       return undefined;
     }
-    const host = authority.slice(1, end);
-    const remainder = authority.slice(end + 1);
+    const host = EffectString.slice(authority, 1, end);
+    const remainder = EffectString.slice(authority, end + 1);
     if (remainder === "") {
       return { host, port: 443 };
     }
-    if (!remainder.startsWith(":")) {
+    if (!EffectString.startsWith(remainder, ":")) {
       return undefined;
     }
-    return { host, port: Number(remainder.slice(1)) };
+    return { host, port: Number(EffectString.slice(remainder, 1)) };
   }
-  const colon = authority.lastIndexOf(":");
+  const colon = EffectString.lastIndexOf(authority, ":");
   if (colon === -1) {
     return { host: authority, port: 443 };
   }
-  return { host: authority.slice(0, colon), port: Number(authority.slice(colon + 1)) };
+  return {
+    host: EffectString.slice(authority, 0, colon),
+    port: Number(EffectString.slice(authority, colon + 1)),
+  };
 }
 
 function authorityKey(host: string, port: number): string {
-  return `${host.toLowerCase()}:${port}`;
+  return `${EffectString.toLowerCase(host)}:${port}`;
 }
 
 function isValidHostname(host: string): boolean {
@@ -447,7 +451,9 @@ function listen(server: Server): Promise<void> {
 }
 
 function stripBrackets(hostname: string): string {
-  return hostname.startsWith("[") && hostname.endsWith("]") ? hostname.slice(1, -1) : hostname;
+  return EffectString.startsWith(hostname, "[") && EffectString.endsWith(hostname, "]")
+    ? EffectString.slice(hostname, 1, -1)
+    : hostname;
 }
 
 function mappedIpv4(address: string): string | undefined {
@@ -486,7 +492,7 @@ function refusalPage(refusal: EgressRefusal): string {
 }
 
 function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/gu, (character) => {
+  return EffectString.replace(value, /[&<>"']/gu, (character) => {
     switch (character) {
       case "&":
         return "&amp;";

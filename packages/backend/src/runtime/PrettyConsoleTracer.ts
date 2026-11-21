@@ -1,8 +1,10 @@
+import { EffectString } from "@lineupkeep/collections";
 import { Duration, Exit, Option, Redacted, Tracer } from "effect";
 import { Array as EffectArray } from "effect";
 import { Order as EffectOrder } from "effect";
 
 import jsonTools from "#runtime/JsonText.ts";
+
 function sortWithComparator<A>(
   self: ReadonlyArray<A>,
   compare: (left: A, right: A) => number,
@@ -114,7 +116,7 @@ function spanIndentation(span: Tracer.Span): {
     depth += 1;
     parent = Option.getOrUndefined(parent.parent);
   }
-  return { indentation: "  ".repeat(depth), clipped: parent?._tag === "Span" };
+  return { indentation: EffectString.repeat("  ", depth), clipped: parent?._tag === "Span" };
 }
 
 function formatAttributes(entries: ReadonlyArray<readonly [string, unknown]>): string {
@@ -125,7 +127,7 @@ function formatAttributes(entries: ReadonlyArray<readonly [string, unknown]>): s
   const rendered = EffectArray.map(sorted.slice(0, maxDetails), ([key, value]) => {
     const normalized =
       key === "db.query.text" && typeof value === "string"
-        ? value.replaceAll(/\s+/gu, " ").trim()
+        ? EffectString.trim(EffectString.replaceAll(value, /\s+/gu, " "))
         : value;
     return `${text(key)}=${truncate(renderValue(normalized, 0), maxDetailLength)}`;
   });
@@ -190,16 +192,18 @@ function renderValue(value: unknown, depth: number): string {
 
 function text(value: string): string {
   return truncate(
-    value.replaceAll(
+    EffectString.replaceAll(
+      value,
       /[\p{Cc}\p{Zl}\p{Zp}]/gu,
-      (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+      (character) =>
+        `\\u${EffectString.padStart(EffectString.charCodeAt(character, 0).toString(16), 4, "0")}`,
     ),
     maxDetailLength,
   );
 }
 
 function truncate(value: string, length: number): string {
-  return value.length <= length ? value : `${value.slice(0, length - 1)}…`;
+  return value.length <= length ? value : `${EffectString.slice(value, 0, length - 1)}…`;
 }
 
 const maxDetailLength = 160;

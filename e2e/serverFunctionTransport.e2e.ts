@@ -1,4 +1,5 @@
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
 import type { APIResponse } from "@playwright/test";
 
 import { beginAuthorization, mcpEndpoint } from "./mcpClient.ts";
@@ -20,14 +21,18 @@ test("refuses a crafted server-function argument that forges a same-origin HTML 
     await signUp(page);
     const decision = page.waitForRequest(
       (request) =>
-        request.method() === "POST" && new URL(request.url()).pathname.startsWith("/_serverFn/"),
+        request.method() === "POST" &&
+        EffectString.startsWith(new URL(request.url()).pathname, "/_serverFn/"),
     );
     await beginAuthorization(page, mcpEndpoint(origin), "fantasy:read");
     await expect(page.getByRole("heading", { name: "Connect a client?" })).toBeVisible();
     await page.getByRole("button", { name: "Deny access", exact: true }).click();
 
     const captured = new URL((await decision).url());
-    functionId = captured.pathname.slice(captured.pathname.lastIndexOf("/") + 1);
+    functionId = EffectString.slice(
+      captured.pathname,
+      EffectString.lastIndexOf(captured.pathname, "/") + 1,
+    );
     expect(functionId, "the consent decision exposes a server function id").not.toBe("");
   });
 

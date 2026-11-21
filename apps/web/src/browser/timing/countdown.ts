@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { createSignal, onCleanup } from "solid-js";
 import type { Accessor } from "solid-js";
 
@@ -33,7 +34,7 @@ export function createCountdown(): Countdown {
 
 export function formatCountdown(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
-  return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
+  return `${minutes}:${EffectString.padStart(String(seconds % 60), 2, "0")}`;
 }
 
 export type Countdown = {

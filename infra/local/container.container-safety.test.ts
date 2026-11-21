@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { it } from "@effect/vitest";
+import { EffectString } from "@lineupkeep/collections";
 import { docker, removeOwnedContainer } from "@lineupkeep/tools/local-stack/postgresContainer.ts";
 import { Effect, Schema, Schedule } from "effect";
 import { Array as EffectArray } from "effect";
@@ -23,7 +24,7 @@ it.live("retains image safety settings, rejects foreign ownership and stops grac
     assert.match(EffectArray.join(container.Config.Healthcheck.Test, " "), /fetch/);
     assert.ok(
       EffectArray.some(container.Config.Env, (value) =>
-        value.startsWith("OTEL_EXPORTER_OTLP_ENDPOINT=http://host.docker.internal:"),
+        EffectString.startsWith(value, "OTEL_EXPORTER_OTLP_ENDPOINT=http://host.docker.internal:"),
       ),
     );
     yield* Effect.tryPromise(async () => {

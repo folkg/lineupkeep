@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
 import { Effect } from "effect";
 import { Schema } from "effect";
 import { Array as EffectArray } from "effect";
@@ -58,11 +59,11 @@ async function main(): Promise<void> {
           Schema.decodeEffect(DeclaredCriteriaJson)(await readFile(values.criteria, "utf8")),
         );
   for (const path of EffectArray.filter(positionals, (selected) =>
-    selected.startsWith("e2e/scratch/"),
+    EffectString.startsWith(selected, "e2e/scratch/"),
   )) {
-    if (path.split("/").length < 4) {
+    if (EffectString.split(path, "/").length < 4) {
       throw new Error(
-        `${path} must be inside a task directory, such as e2e/scratch/<task>/${path.slice("e2e/scratch/".length)}.`,
+        `${path} must be inside a task directory, such as e2e/scratch/<task>/${EffectString.slice(path, "e2e/scratch/".length)}.`,
       );
     }
   }
@@ -125,7 +126,7 @@ async function main(): Promise<void> {
         ),
         E2E_TEST_COMPOSITION: "true",
         VERIFICATION_SCRATCH: EffectArray.some(positionals, (path) =>
-          path.startsWith("e2e/scratch/"),
+          EffectString.startsWith(path, "e2e/scratch/"),
         )
           ? "true"
           : "false",

@@ -1,4 +1,5 @@
 import { EffectArray } from "@lineupkeep/collections";
+import { EffectString } from "@lineupkeep/collections";
 import { render } from "@solidjs/web";
 import { QueryClientProvider } from "@tanstack/solid-query";
 import {
@@ -90,7 +91,7 @@ it("puts appearance, connections, sessions, and data in order", async () => {
   );
   expect(headings).toEqual(["Appearance", "Connections", "Sign-in sessions", "Your data"]);
 
-  const copy = document.body.textContent.replace(/\s+/g, " ");
+  const copy = EffectString.replace(document.body.textContent, /\s+/g, " ");
   expect(copy).not.toContain("Yahoo is connected. Lineup checks use this connection.");
   expect(copy).not.toContain("Your connections");
 });
@@ -110,7 +111,7 @@ it("offers an export and explains what erasure cannot undo", async () => {
 
   await expect.element(page.getByRole("heading", { name: "Account" })).toBeVisible();
   await expect.element(page.getByRole("heading", { name: "Your data" })).toBeVisible();
-  const copy = document.body.textContent.replace(/\s+/g, " ");
+  const copy = EffectString.replace(document.body.textContent, /\s+/g, " ");
   expect(copy).toContain(
     "The file includes your account, connections, teams, lineup runs, transaction proposals, feedback, and sign-in records. Sign-in sessions, passwords, and agent tokens are left out, because a copy should not let anyone sign in as you.",
   );
@@ -126,7 +127,7 @@ it("offers an export and explains what erasure cannot undo", async () => {
 
   const text = document.body.textContent;
   expect(text).not.toContain("—");
-  expect(text.toLowerCase()).not.toContain("purge");
+  expect(EffectString.toLowerCase(text)).not.toContain("purge");
 });
 
 it("explains that erasing needs an export and hides the control", async () => {

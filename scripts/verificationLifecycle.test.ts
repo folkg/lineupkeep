@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
 import { Effect } from "effect";
 import { Schema } from "effect";
 import { assert, expect, it, vi } from "vitest";
@@ -763,7 +764,9 @@ async function lifecycleFixture(): Promise<{
     pausedRecovery: async (databaseFile: string) => {
       const bin = join(folder, "pausing-bin");
       await mkdir(bin);
-      const ps = spawnSync("sh", ["-c", "command -v ps"], { encoding: "utf8" }).stdout.trim();
+      const ps = EffectString.trim(
+        spawnSync("sh", ["-c", "command -v ps"], { encoding: "utf8" }).stdout,
+      );
       await writeFile(join(bin, "pause"), "");
       await writeFile(
         join(bin, "ps"),

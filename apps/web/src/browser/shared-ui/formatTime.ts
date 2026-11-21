@@ -1,3 +1,5 @@
+import { EffectString } from "@lineupkeep/collections";
+
 const dateTimeFormat = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
   timeStyle: "short",
@@ -72,7 +74,7 @@ export function formatWeekday(value: string | Date): string {
 }
 
 export function formatCalendarDate(value: string): string {
-  return calendarDateFormat.format(new Date(`${value.slice(0, 10)}T00:00:00Z`));
+  return calendarDateFormat.format(new Date(`${EffectString.slice(value, 0, 10)}T00:00:00Z`));
 }
 
 export function formatClockTime(value: string | Date, reader: ClockReader = {}): string {
@@ -84,7 +86,9 @@ export function formatClockTime(value: string | Date, reader: ClockReader = {}):
           minute: "2-digit",
           ...(reader.timeZone === undefined ? {} : { timeZone: reader.timeZone }),
         });
-  return format.format(toDate(value)).replace(/\b(AM|PM)\b/gu, (period) => period.toLowerCase());
+  return EffectString.replace(format.format(toDate(value)), /\b(AM|PM)\b/gu, (period) =>
+    EffectString.toLowerCase(period),
+  );
 }
 
 export type ClockReader = {

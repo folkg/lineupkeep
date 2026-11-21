@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { useNavigate } from "@tanstack/solid-router";
 import { createSignal, onCleanup } from "solid-js";
 import type { Accessor } from "solid-js";
@@ -262,7 +263,7 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
 function textChunks(text: string): ReadonlyArray<string> {
   const chunks: Array<string> = [];
   for (let index = 0; index < text.length; index += maximumHostedBrowserTextLength) {
-    chunks.push(text.slice(index, index + maximumHostedBrowserTextLength));
+    chunks.push(EffectString.slice(text, index, index + maximumHostedBrowserTextLength));
   }
   return chunks;
 }

@@ -13,6 +13,7 @@ import {
 import { Unauthorized, YahooParseError } from "#yahoo/errors.ts";
 import { YahooDate, YahooGameKey } from "#yahoo/keys.ts";
 import type { YahooLeagueKey, YahooTeamKey } from "#yahoo/keys.ts";
+import { EffectString } from "#yahoo/stringTools.ts";
 
 import { decodeLeagueSettings } from "./league.ts";
 import type { YahooLeagueSettings } from "./league.ts";
@@ -42,7 +43,9 @@ export function decodeLeagueTeams(
       decoded.league.league_key !== requestedLeagueKey ||
       EffectArray.some(
         decoded.league.teams,
-        (team) => team.team_key.slice(0, team.team_key.lastIndexOf(".t.")) !== requestedLeagueKey,
+        (team) =>
+          EffectString.slice(team.team_key, 0, EffectString.lastIndexOf(team.team_key, ".t.")) !==
+          requestedLeagueKey,
       )
     ) {
       return yield* new YahooParseError({
@@ -118,7 +121,7 @@ export function gamesPlayedOf(
 function teamOf(team: typeof TeamPayload.Type): YahooLeagueTeam {
   return {
     teamKey: team.team_key,
-    leagueKey: team.team_key.slice(0, team.team_key.lastIndexOf(".t.")),
+    leagueKey: EffectString.slice(team.team_key, 0, EffectString.lastIndexOf(team.team_key, ".t.")),
     name: team.name,
     url: team.url,
     isOwnedByCurrentLogin: team.is_owned_by_current_login,

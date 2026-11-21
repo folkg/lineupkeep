@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { Effect, Redacted, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { describe, expect, it } from "vitest";
@@ -1117,7 +1118,7 @@ function hockeyRoster(): ProviderRoster {
 function hockeyRosterPlayer(providerPlayerKey: string, slot: string): ProviderRosterPlayer {
   return {
     providerPlayerKey,
-    name: `Synthetic hockey player ${providerPlayerKey.slice("hockey-player-".length)}`,
+    name: `Synthetic hockey player ${EffectString.slice(providerPlayerKey, "hockey-player-".length)}`,
     displayPosition: "C",
     primaryPosition: "C",
     positionType: "P",
@@ -1165,7 +1166,11 @@ function position(
   count: number,
 ): ProviderLeagueSettings["rosterPositions"][number] {
   const kind =
-    positionName === "BN" ? "bench" : positionName.startsWith("IR") ? "reserve" : "starting";
+    positionName === "BN"
+      ? "bench"
+      : EffectString.startsWith(positionName, "IR")
+        ? "reserve"
+        : "starting";
   return {
     position: positionName,
     positionType: undefined,

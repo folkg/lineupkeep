@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import * as Yahoo from "@lineupkeep/yahoo-sdk";
 import { Context, Effect, Layer, Option, Schema, Tracer } from "effect";
 import { Array as EffectArray } from "effect";
@@ -776,7 +777,7 @@ function searchPlayerStatusOf(status: Yahoo.YahooPlayerStatus | undefined): {
       detail: status?.detail,
     };
   }
-  const code = raw === undefined || raw.trim().length === 0 ? undefined : raw;
+  const code = raw === undefined || EffectString.trim(raw).length === 0 ? undefined : raw;
   return { value: yahooPlayerStatus(code), code, detail: status?.detail };
 }
 
@@ -949,12 +950,14 @@ export function scheduledOpponent(
   opponent: string | null | undefined,
 ): PlayerWeekOpponent | undefined {
   const named =
-    opponent === undefined || opponent === null || opponent.trim() === "" ? undefined : opponent;
+    opponent === undefined || opponent === null || EffectString.trim(opponent) === ""
+      ? undefined
+      : opponent;
   if (named === undefined || named === "Bye") {
     return undefined;
   }
-  return named.startsWith("@")
-    ? { opponent: named.slice(1), home: false }
+  return EffectString.startsWith(named, "@")
+    ? { opponent: EffectString.slice(named, 1), home: false }
     : { opponent: named, home: true };
 }
 
@@ -1137,7 +1140,11 @@ function writeRefusalOf(
 }
 
 function providerDetail(message: string): string {
-  return message.replace(/\s+/gu, " ").trim().slice(0, providerDetailLimit);
+  return EffectString.slice(
+    EffectString.trim(EffectString.replace(message, /\s+/gu, " ")),
+    0,
+    providerDetailLimit,
+  );
 }
 
 function rosterFailureOf(

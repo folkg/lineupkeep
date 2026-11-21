@@ -4,6 +4,8 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 
+import { EffectString } from "#yahoo/stringTools.ts";
+
 import { ConfigError } from "./errors.ts";
 
 export interface YahooSession {
@@ -11,7 +13,7 @@ export interface YahooSession {
 }
 
 const SessionCookie = Schema.String.pipe(
-  Schema.check(Schema.makeFilter((value: string) => value.trim().length > 0)),
+  Schema.check(Schema.makeFilter((value: string) => EffectString.trim(value).length > 0)),
   Schema.check(Schema.makeFilter((value: string) => !/[\r\n]/.test(value))),
 );
 

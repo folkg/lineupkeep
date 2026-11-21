@@ -1,6 +1,7 @@
 import type { BackendPlatform } from "@lineupkeep/backend/runtime/BackendPlatform";
 import { BackendRuntime as Runtime } from "@lineupkeep/backend/runtime/BackendRuntime";
 import { PublicInternet } from "@lineupkeep/backend/runtime/PublicInternet";
+import { EffectString } from "@lineupkeep/collections";
 import { Array as EffectArray } from "effect";
 
 import transactionRefusal from "#repo/packages/backend/src/contexts/connections/fixtures/yahoo-transaction-refusal-2026-11-03.json";
@@ -43,8 +44,11 @@ function yahooResponse(url: URL): unknown {
       : undefined;
   }
   if (url.origin === "https://pub-api-rw.fantasysports.yahoo.com") {
-    if (url.pathname.startsWith("/fantasy/v2/league/") && url.pathname.endsWith("/transactions")) {
-      return url.pathname.includes("/465.l.9100/")
+    if (
+      EffectString.startsWith(url.pathname, "/fantasy/v2/league/") &&
+      EffectString.endsWith(url.pathname, "/transactions")
+    ) {
+      return EffectString.includes(url.pathname, "/465.l.9100/")
         ? new Response(transactionRefusal.response.body, {
             status: transactionRefusal.response.status,
             headers: { "content-type": "application/json" },
@@ -110,8 +114,8 @@ function sessionPayload(): unknown {
 }
 
 function rosterPayload(teamKey: string): unknown {
-  const leagueKey = teamKey.slice(0, teamKey.lastIndexOf(".t."));
-  const game = leagueKey.split(".")[0] ?? "461";
+  const leagueKey = EffectString.slice(teamKey, 0, EffectString.lastIndexOf(teamKey, ".t."));
+  const game = EffectString.split(leagueKey, ".")[0] ?? "461";
   return {
     fantasy_content: {
       team: [
@@ -220,14 +224,14 @@ function rosterPayload(teamKey: string): unknown {
 }
 
 function pendingTradesPayload(leagueKey: string, teamKey: string): unknown {
-  const game = leagueKey.split(".")[0] ?? "461";
+  const game = EffectString.split(leagueKey, ".")[0] ?? "461";
   const rivalKey = `${leagueKey}.t.1`;
   return {
     fantasy_content: {
       league: [
         {
           league_key: leagueKey,
-          league_id: leagueKey.slice(leagueKey.lastIndexOf(".l.") + 3),
+          league_id: EffectString.slice(leagueKey, EffectString.lastIndexOf(leagueKey, ".l.") + 3),
           name: "Synthetic League",
           url: "https://hockey.fantasysports.yahoo.com/hockey/9100",
         },
@@ -376,7 +380,7 @@ function discoverLeague(leagueKey: string, teamName: string): unknown {
 
 function leagueSettingsPayload(leagueKey: string): unknown {
   const { attributes, settings, teamKey } = leagueSettingsFragments(leagueKey);
-  const playerKey = `${leagueKey.slice(0, leagueKey.indexOf("."))}.p.90001`;
+  const playerKey = `${EffectString.slice(leagueKey, 0, EffectString.indexOf(leagueKey, "."))}.p.90001`;
   const ranks =
     leagueKey === "461.l.9000"
       ? [{ rank_type: "L4W", rank_value: "25" }]

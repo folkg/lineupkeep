@@ -8,6 +8,8 @@ import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { decodeConnectionId } from "@lineupkeep/backend/connections/Connection";
 import { HostedLinkingSessionId } from "@lineupkeep/backend/connections/HostedLinking";
+import { optionalStringValue } from "@lineupkeep/collections";
+import { EffectString } from "@lineupkeep/collections";
 import { DateTime, Deferred, Effect, Redacted, Schema, Scope } from "effect";
 
 import type { HostedBrowserMessage } from "#contracts/connections/hostedBrowserProtocol.ts";
@@ -376,14 +378,20 @@ function viewportProviderServer(
 ): Effect.Effect<TestServer, never, Scope.Scope> {
   return Effect.acquireRelease(
     startServer((request: IncomingMessage, response: ServerResponse) => {
-      if (request.url?.startsWith("/metrics") === true) {
-        reports.push(new URL(request.url, "http://127.0.0.1"));
+      if (
+        optionalStringValue(request.url, (value) => EffectString.startsWith(value, "/metrics")) ===
+        true
+      ) {
+        reports.push(new URL(request.url ?? "", "http://127.0.0.1"));
         response.writeHead(200, { "content-type": "image/gif" });
         response.end();
         return;
       }
-      if (request.url?.startsWith("/typed") === true) {
-        typed.push(new URL(request.url, "http://127.0.0.1").searchParams.get("value") ?? "");
+      if (
+        optionalStringValue(request.url, (value) => EffectString.startsWith(value, "/typed")) ===
+        true
+      ) {
+        typed.push(new URL(request.url ?? "", "http://127.0.0.1").searchParams.get("value") ?? "");
         response.writeHead(200, { "content-type": "image/gif" });
         response.end();
         return;
@@ -443,16 +451,28 @@ function popupProviderServer(): Effect.Effect<TestServer, never, Scope.Scope> {
         return;
       }
       response.writeHead(200, { "content-type": "text/html" });
-      if (request.url?.startsWith("/verify/identity") === true) {
+      if (
+        optionalStringValue(request.url, (value) =>
+          EffectString.startsWith(value, "/verify/identity"),
+        ) === true
+      ) {
         response.end(identityPopupPage);
         return;
       }
-      if (request.url?.startsWith("/verify/close") === true) {
+      if (
+        optionalStringValue(request.url, (value) =>
+          EffectString.startsWith(value, "/verify/close"),
+        ) === true
+      ) {
         response.end(closingPopupPage);
         return;
       }
       response.end(
-        request.url?.startsWith("/login-close") === true ? closingProviderPage : popupProviderPage,
+        optionalStringValue(request.url, (value) =>
+          EffectString.startsWith(value, "/login-close"),
+        ) === true
+          ? closingProviderPage
+          : popupProviderPage,
       );
     }),
     closeServer,

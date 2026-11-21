@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption, Order as EffectOrder } from "effect";
@@ -117,6 +118,7 @@ import {
   type YahooRecentWindow,
   yahooSdkContext,
 } from "./YahooSdk.ts";
+
 function sortWithComparator<A>(
   self: ReadonlyArray<A>,
   compare: (left: A, right: A) => number,
@@ -982,7 +984,7 @@ function reportSchemaMismatch(field: string | undefined): Effect.Effect<void> {
 }
 
 function providerLeagueKey(teamKey: string): string {
-  return teamKey.slice(0, teamKey.lastIndexOf(".t."));
+  return EffectString.slice(teamKey, 0, EffectString.lastIndexOf(teamKey, ".t."));
 }
 
 const teamPagePath = {
@@ -1000,17 +1002,21 @@ function teamProviderUrl(
   if (payloadUrl !== undefined) {
     return payloadUrl;
   }
-  const leagueId = team.teamKey.slice(
-    team.teamKey.indexOf(".l.") + ".l.".length,
-    team.teamKey.lastIndexOf(".t."),
+  const leagueId = EffectString.slice(
+    team.teamKey,
+    EffectString.indexOf(team.teamKey, ".l.") + ".l.".length,
+    EffectString.lastIndexOf(team.teamKey, ".t."),
   );
-  const teamId = team.teamKey.slice(team.teamKey.lastIndexOf(".t.") + ".t.".length);
+  const teamId = EffectString.slice(
+    team.teamKey,
+    EffectString.lastIndexOf(team.teamKey, ".t.") + ".t.".length,
+  );
   const sport = leagueSport[league];
   return `https://${reviewHosts[sport]}/${teamPagePath[sport]}/${leagueId}/${teamId}`;
 }
 
 function httpsUrl(value: string | undefined): string | undefined {
-  if (value === undefined || value.trim().length === 0) {
+  if (value === undefined || EffectString.trim(value).length === 0) {
     return undefined;
   }
   try {
@@ -2066,7 +2072,10 @@ function reviewBase(url: string, sport: FantasySport, leagueId: string): URL {
   ) {
     throw new Error("Yahoo review base escaped its fixed host");
   }
-  const segments = EffectArray.filter(parsed.pathname.split("/"), (segment) => segment !== "");
+  const segments = EffectArray.filter(
+    EffectString.split(parsed.pathname, "/"),
+    (segment) => segment !== "",
+  );
   if (
     segments.length !== 2 ||
     segments[1] !== leagueId ||
@@ -2173,7 +2182,7 @@ function ValidSearchQuery(
   if (value === undefined) {
     return Effect.as(Effect.void, undefined);
   }
-  const trimmed = value.trim();
+  const trimmed = EffectString.trim(value);
   return trimmed.length === 0 || trimmed.length > 80
     ? ProviderResponseInvalid.make({ operation: "search_players" })
     : Effect.succeed(trimmed);

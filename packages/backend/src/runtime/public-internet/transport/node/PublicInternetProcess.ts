@@ -8,6 +8,7 @@ import { pipeline } from "node:stream/promises";
 import { ReadableStream as NodeReadableStream } from "node:stream/web";
 
 import { isPublicRoutableHost } from "@better-auth/core/utils/host";
+import { EffectString } from "@lineupkeep/collections";
 import { Effect } from "effect";
 import { Schema } from "effect";
 import { Array as EffectArray } from "effect";
@@ -24,7 +25,7 @@ export function makePublicInternetProcess(
 ): import("effect/Layer").Layer<PublicInternet, never, never> {
   return PublicInternet.fromTransport(async (webRequest, init) => {
     const url = new URL(webRequest.url);
-    const hostname = url.hostname.replace(/^\[|\]$/gu, "");
+    const hostname = EffectString.replace(url.hostname, /^\[|\]$/gu, "");
     const addresses = await network.resolve(hostname);
     init.signal.throwIfAborted();
     const pinned = addresses[0];

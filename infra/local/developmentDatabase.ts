@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import { EffectString } from "@lineupkeep/collections";
 import {
   docker,
   image,
@@ -14,6 +15,7 @@ import { Effect, Layer, Redacted, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 
 import { DatabaseDeployment } from "#infra/services/DatabaseDeployment.ts";
+
 function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
   return EffectArray.isArray(value);
 }
@@ -55,7 +57,7 @@ export function developmentDatabaseIdentity(): {
   restartPolicy: "unless-stopped";
 } {
   const checkout = new URL("../../", import.meta.url).pathname;
-  const hash = createHash("sha256").update(checkout).digest("hex").slice(0, 10);
+  const hash = EffectString.slice(createHash("sha256").update(checkout).digest("hex"), 0, 10);
   return {
     name: `lineupkeep-dev-${hash}`,
     volume: `lineupkeep-dev-${hash}-data`,

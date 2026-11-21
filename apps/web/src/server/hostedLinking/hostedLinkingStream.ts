@@ -5,6 +5,8 @@ import {
   HostedLinkingSessionId,
   HostedLinkingTicket,
 } from "@lineupkeep/backend/connections/HostedLinking";
+import { EffectString } from "@lineupkeep/collections";
+import { optionalStringValue } from "@lineupkeep/collections";
 import { Config, Effect, Option, Schema } from "effect";
 import type { WebSocketHooks } from "h3";
 
@@ -37,7 +39,11 @@ export function hostedLinkingHooks(
   request: Request,
   sessionId: string,
 ): Promise<Partial<WebSocketHooks>> {
-  if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+  if (
+    optionalStringValue(request.headers.get("upgrade"), (value) =>
+      EffectString.toLowerCase(value),
+    ) !== "websocket"
+  ) {
     return Promise.resolve(rejectUpgrade(426, "WebSocket upgrade is required."));
   }
   const viewport = new URL(request.url).searchParams.get("viewport");
@@ -282,10 +288,15 @@ function hostedLinkingTicket(cookieHeader: string | null): string | undefined {
   if (cookieHeader === null) {
     return undefined;
   }
-  for (const entry of cookieHeader.split(";")) {
-    const [name, value] = entry.split("=");
-    if (name?.trim() === "lineupkeep_hosted_link" && value !== undefined) {
-      return Option.getOrUndefined(Schema.decodeOption(HostedLinkingTicket)(value.trim()));
+  for (const entry of EffectString.split(cookieHeader, ";")) {
+    const [name, value] = EffectString.split(entry, "=");
+    if (
+      optionalStringValue(name, (value) => EffectString.trim(value)) === "lineupkeep_hosted_link" &&
+      value !== undefined
+    ) {
+      return Option.getOrUndefined(
+        Schema.decodeOption(HostedLinkingTicket)(EffectString.trim(value)),
+      );
     }
   }
   return undefined;

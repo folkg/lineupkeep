@@ -4,6 +4,32 @@ import { dirname, extname, relative, resolve } from "node:path";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
 import { parseSync } from "oxc-parser";
+const EffectString = {
+  endsWith: (self: string, search: string, position?: number): boolean =>
+    self.endsWith(search, position),
+  includes: (self: string, search: string, position?: number): boolean =>
+    self.includes(search, position),
+  indexOf: (self: string, search: string, position?: number): number =>
+    self.indexOf(search, position),
+  lastIndexOf: (self: string, search: string): number => self.lastIndexOf(search),
+  matchAll: (
+    self: string,
+    regexp: RegExp,
+  ): IterableIterator<RegExpMatchArray & { readonly index: number }> =>
+    self.matchAll(regexp) as IterableIterator<RegExpMatchArray & { readonly index: number }>,
+  repeat: (self: string, count: number): string => self.repeat(count),
+  replace: (self: string, search: string | RegExp, replacement: string): string =>
+    self.replace(search, replacement),
+  replaceAll: (self: string, search: string | RegExp, replacement: string): string =>
+    self.replaceAll(search, replacement),
+  slice: (self: string, start?: number, end?: number): string => self.slice(start, end),
+  split: (self: string, separator: string | RegExp, limit?: number): string[] =>
+    self.split(separator, limit),
+  startsWith: (self: string, search: string, position?: number): boolean =>
+    self.startsWith(search, position),
+  trim: (self: string): string => self.trim(),
+};
+
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
   value: A | null | undefined,
@@ -26,8 +52,8 @@ const plugin = {
             return;
           }
           const facts = testingFacts(context.filename, context.sourceCode.text);
-          const browser = context.filename.includes("apps/web/");
-          const backend = context.filename.includes("packages/backend/");
+          const browser = EffectString.includes(context.filename, "apps/web/");
+          const backend = EffectString.includes(context.filename, "packages/backend/");
           const browserExploration = facts.calls.has("exploreWorkflow");
           const backendExploration = facts.calls.has("MachineTest.explore");
           if (!((!backend && browserExploration) || (!browser && backendExploration))) {
@@ -68,7 +94,7 @@ const plugin = {
     "codec-tests": {
       create: (context: CommentsRuleContext) => ({
         Program: () => {
-          if (!context.filename.endsWith(".test.ts")) {
+          if (!EffectString.endsWith(context.filename, ".test.ts")) {
             return;
           }
           const facts = testingFacts(context.filename, context.sourceCode.text);
@@ -86,7 +112,7 @@ const plugin = {
       meta: { fixable: "code" },
       create: (context: PackageImportRuleContext) => {
         const check = (node: PackageImportNode): void => {
-          if (typeof node.value !== "string" || !node.value.startsWith("../")) {
+          if (typeof node.value !== "string" || !EffectString.startsWith(node.value, "../")) {
             return;
           }
           const replacement = packageImport(context.filename, node.value);
@@ -142,7 +168,8 @@ const plugin = {
         ): void => {
           const owner = object?.property?.name ?? object?.property?.value;
           if (
-            (typeof property === "string" && property.startsWith("toHaveBeenCalled")) ||
+            (typeof property === "string" &&
+              EffectString.startsWith(property, "toHaveBeenCalled")) ||
             (owner === "mock" && (property === "calls" || property === "results"))
           ) {
             context.report({
@@ -235,7 +262,7 @@ const plugin = {
           }
           if (
             EffectArray.some(providerIdentityOwners, (owner) =>
-              normalizedPath(context.filename).includes(owner),
+              EffectString.includes(normalizedPath(context.filename), owner),
             )
           ) {
             return;
@@ -256,7 +283,10 @@ const plugin = {
           if (!isGenericSourceModule(context.filename)) {
             return;
           }
-          for (const match of context.sourceCode.text.matchAll(sportOrLeagueComparison)) {
+          for (const match of EffectString.matchAll(
+            context.sourceCode.text,
+            sportOrLeagueComparison,
+          )) {
             sourceReport(
               context,
               match.index,
@@ -412,7 +442,7 @@ const plugin = {
               ) {
                 report(specifier);
               }
-              if (name === "brand" && source.startsWith("effect")) {
+              if (name === "brand" && EffectString.startsWith(source, "effect")) {
                 brandNames.add(specifier.local.name);
               }
             }
@@ -662,18 +692,26 @@ function packageImport(filename: string, specifier: string): string | undefined 
     (entry): entry is [string, string] => typeof entry[1] === "string",
   );
   for (const [alias, destination] of entries.sort(([, a], [, b]) => b.length - a.length)) {
-    if (!destination.startsWith("./")) {
+    if (!EffectString.startsWith(destination, "./")) {
       continue;
     }
-    const wildcard = destination.indexOf("*");
-    const prefix = wildcard < 0 ? destination : destination.slice(0, wildcard);
-    const suffix = wildcard < 0 ? "" : destination.slice(wildcard + 1);
-    if (wildcard < 0 ? path === destination : path.startsWith(prefix) && path.endsWith(suffix)) {
+    const wildcard = EffectString.indexOf(destination, "*");
+    const prefix = wildcard < 0 ? destination : EffectString.slice(destination, 0, wildcard);
+    const suffix = wildcard < 0 ? "" : EffectString.slice(destination, wildcard + 1);
+    if (
+      wildcard < 0
+        ? path === destination
+        : EffectString.startsWith(path, prefix) && EffectString.endsWith(path, suffix)
+    ) {
       const matched =
         wildcard < 0
           ? alias
-          : alias.replace("*", path.slice(prefix.length, path.length - suffix.length));
-      return local ? matched : `${String(owner.manifest["name"])}${matched.slice(1)}`;
+          : EffectString.replace(
+              alias,
+              "*",
+              EffectString.slice(path, prefix.length, path.length - suffix.length),
+            );
+      return local ? matched : `${String(owner.manifest["name"])}${EffectString.slice(matched, 1)}`;
     }
   }
   return undefined;
@@ -710,8 +748,8 @@ const designSystemTokenProperty =
   /^(?:color|background(?:-color)?|font(?:-[a-z]+)?|line-height|letter-spacing|text-[a-z-]+|border(?:-[a-z]+)?-(?:radius|color)|border-radius|box-shadow|transition(?:-[a-z]+)?|animation(?:-[a-z]+)?|fill|stroke|outline-color|caret-color|accent-color)$/;
 
 function designSystemUntokenizedUtilities(text: string): ReadonlyArray<string> {
-  return EffectArray.filter(text.split(/\s+/), (token) => {
-    const utility = designSystemWithoutVariants(token).replace(/^[!-]+|!$/g, "");
+  return EffectArray.filter(EffectString.split(text, /\s+/), (token) => {
+    const utility = EffectString.replace(designSystemWithoutVariants(token), /^[!-]+|!$/g, "");
     const property = /^\[([a-z-]+):/.exec(utility)?.[1];
     return property === undefined
       ? designSystemTokenUtility.test(utility) || designSystemNumericTiming.test(utility)
@@ -732,7 +770,7 @@ function designSystemWithoutVariants(token: string): string {
       start = index + 1;
     }
   }
-  return token.slice(start);
+  return EffectString.slice(token, start);
 }
 
 function designSystemIntrinsicName(name: DesignSystemJSXElementName): string | undefined {
@@ -841,8 +879,8 @@ function batchFirstServiceTag(node: BatchFirstAstNode, context: BatchFirstRuleCo
   return (
     typeof source === "string" &&
     /(?:^|\/)[A-Z][^/]*$/u.test(source) &&
-    !source.startsWith("effect/") &&
-    !source.includes("/runtime/")
+    !EffectString.startsWith(source, "effect/") &&
+    !EffectString.includes(source, "/runtime/")
   );
 }
 
@@ -1008,7 +1046,7 @@ function serverFunctionTypePosition(node: ServerFunctionAstNode): boolean {
   let parent = node.parent;
   while (parent !== undefined && parent !== null) {
     if (
-      parent.type.startsWith("TS") &&
+      EffectString.startsWith(parent.type, "TS") &&
       parent.type !== "TSAsExpression" &&
       parent.type !== "TSSatisfiesExpression" &&
       parent.type !== "TSNonNullExpression"
@@ -1016,9 +1054,9 @@ function serverFunctionTypePosition(node: ServerFunctionAstNode): boolean {
       return true;
     }
     if (
-      parent.type.endsWith("Statement") ||
-      parent.type.endsWith("Declaration") ||
-      parent.type.endsWith("Expression")
+      EffectString.endsWith(parent.type, "Statement") ||
+      EffectString.endsWith(parent.type, "Declaration") ||
+      EffectString.endsWith(parent.type, "Expression")
     ) {
       return false;
     }
@@ -1136,17 +1174,19 @@ const providerIdentityOwners = [
 function isGenericSourceModule(filename: string): boolean {
   const normalized = normalizedPath(filename);
   if (
-    !normalized.includes("/src/") ||
+    !EffectString.includes(normalized, "/src/") ||
     /\.test\.[cm]?[jt]sx?$/u.test(normalized) ||
-    normalized.endsWith("Test.ts")
+    EffectString.endsWith(normalized, "Test.ts")
   ) {
     return false;
   }
-  return !EffectArray.some(providerImplementationOwners, (owner) => normalized.includes(owner));
+  return !EffectArray.some(providerImplementationOwners, (owner) =>
+    EffectString.includes(normalized, owner),
+  );
 }
 
 function normalizedPath(filename: string): string {
-  return filename.replaceAll("\\", "/");
+  return EffectString.replaceAll(filename, "\\", "/");
 }
 
 function occurrencesOf(
@@ -1155,10 +1195,10 @@ function occurrencesOf(
 ): ReadonlyArray<readonly [string, number]> {
   const occurrences: Array<readonly [string, number]> = [];
   for (const term of terms) {
-    let offset = source.indexOf(term);
+    let offset = EffectString.indexOf(source, term);
     while (offset >= 0) {
       occurrences.push([term, offset]);
-      offset = source.indexOf(term, offset + term.length);
+      offset = EffectString.indexOf(source, term, offset + term.length);
     }
   }
   return occurrences;
@@ -1175,10 +1215,10 @@ function sourceReport(context: CommentsRuleContext, offset: number, message: str
 }
 
 function forbiddenComments(path: string, source: string): ReadonlyArray<number> {
-  const normalized = path.replaceAll("\\", "/");
+  const normalized = EffectString.replaceAll(path, "\\", "/");
   if (
     normalized === "apps/web/src/routeTree.gen.ts" ||
-    normalized.endsWith("/apps/web/src/routeTree.gen.ts")
+    EffectString.endsWith(normalized, "/apps/web/src/routeTree.gen.ts")
   ) {
     return [];
   }
@@ -1187,7 +1227,8 @@ function forbiddenComments(path: string, source: string): ReadonlyArray<number> 
     throw new Error(`Cannot check comments in ${path}: ${JSON.stringify(parsed.errors)}`);
   }
   const isViteDeclaration =
-    normalized === "apps/web/src/assets.d.ts" || normalized.endsWith("/apps/web/src/assets.d.ts");
+    normalized === "apps/web/src/assets.d.ts" ||
+    EffectString.endsWith(normalized, "/apps/web/src/assets.d.ts");
   return EffectArray.map(
     EffectArray.filter(
       parsed.comments,
@@ -1195,7 +1236,7 @@ function forbiddenComments(path: string, source: string): ReadonlyArray<number> 
         !(
           isViteDeclaration &&
           comment.type === "Line" &&
-          comment.value.trim() === '/ <reference types="vite/client" />'
+          EffectString.trim(comment.value) === '/ <reference types="vite/client" />'
         ),
     ),
     (comment) => comment.start,
@@ -1223,7 +1264,7 @@ function testingFacts(path: string, source: string): TestingFacts {
           isRecord(specifier) &&
           specifier["type"] === "ImportSpecifier" &&
           specifier["importKind"] !== "type" &&
-          (name(specifier["imported"]) ?? "").endsWith("Row"),
+          EffectString.endsWith(name(specifier["imported"]) ?? "", "Row"),
       );
     }
     if (node["type"] !== "CallExpression") {

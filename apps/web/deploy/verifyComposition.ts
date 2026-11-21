@@ -1,10 +1,13 @@
 import { glob, readFile } from "node:fs/promises";
 
+import { EffectString } from "@lineupkeep/collections";
 import type { Plugin } from "vite";
+
 export async function assertDeployableComposition(directory: URL): Promise<void> {
   for await (const path of glob("**/*.{js,mjs,cjs}", { cwd: directory })) {
     if (
-      (await readFile(new URL(path, directory), "utf8")).includes(
+      EffectString.includes(
+        await readFile(new URL(path, directory), "utf8"),
         "E2E_TEST_COMPOSITION_DO_NOT_DEPLOY",
       )
     ) {
@@ -43,6 +46,7 @@ function isServerModule(id: string): boolean {
   return (
     /(?:^|\/)(?:effect|@effect)\//u.test(id) ||
     /\/apps\/web\/src\/server(?:\/|\.ts)/u.test(id) ||
-    (id.includes("/packages/backend/src/") && !/\/contexts\/[^/]+\/[^/]+Limits\.ts$/u.test(id))
+    (EffectString.includes(id, "/packages/backend/src/") &&
+      !/\/contexts\/[^/]+\/[^/]+Limits\.ts$/u.test(id))
   );
 }

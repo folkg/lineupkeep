@@ -1,6 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
 
+import { EffectString } from "@lineupkeep/collections";
 import { Array as EffectArray } from "effect";
 import { Order as EffectOrder } from "effect";
 
@@ -19,7 +20,7 @@ export function scenarioFiles(
       const flatMapped1 = EffectArray.map(
         EffectArray.filter(
           readdirSync(join(root, directory), { recursive: true, withFileTypes: true }),
-          (entry) => entry.isFile() && entry.name.endsWith(".ts"),
+          (entry) => entry.isFile() && EffectString.endsWith(entry.name, ".ts"),
         ),
         (entry) => relative(root, join(entry.parentPath, entry.name)),
       );

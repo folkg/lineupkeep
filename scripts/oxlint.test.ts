@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import { strict } from "@effect/tsgo/oxlint-presets";
+import { EffectString } from "@lineupkeep/collections";
 import { Array as EffectArray } from "effect";
 import { expect, it } from "vitest";
 
@@ -19,7 +20,7 @@ it("enables every strict Effect rule as an error", () => {
   const source = readFileSync(new URL("../oxlint.config.ts", import.meta.url), "utf8");
   const missing = EffectArray.filter(
     Object.getOwnPropertyNames(strict.rules),
-    (rule) => !source.includes(`"${rule}": "error"`),
+    (rule) => !EffectString.includes(source, `"${rule}": "error"`),
   );
 
   expect(missing).toEqual([]);
@@ -35,7 +36,7 @@ it.concurrent.each([
   });
 
   expect(result.status).toBeGreaterThan(0);
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(`add ${missing}`);
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(`add ${missing}`);
   expect(result.output).toContain("repository(workflow-tests)");
   expect(result.output).toContain("calendarWorkflow.test.ts");
 });
@@ -49,8 +50,8 @@ it.concurrent("rejects workflow markers hidden in strings and comments", async (
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("repository(workflow-tests)");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("add exploration");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("add property test");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain("add exploration");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain("add property test");
 });
 
 it.concurrent.each([
@@ -95,7 +96,7 @@ it.concurrent.each([
   });
 
   expect(result.status).toBeGreaterThan(0);
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(`add ${missing}`);
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(`add ${missing}`);
   expect(result.output).toContain("repository(workflow-tests)");
 });
 
@@ -132,7 +133,7 @@ it.concurrent.each([
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("repository(codec-tests)");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "CalendarTables.test.ts: add a round-trip test",
   );
 });
@@ -173,7 +174,7 @@ it.concurrent.each([
   });
 
   expect(result.output).not.toContain("repository(codec-tests)");
-  if (test.startsWith("/*")) {
+  if (EffectString.startsWith(test, "/*")) {
     expect(result.status).toBeGreaterThan(0);
     expect(result.output).toContain("repository(no-comments)");
   } else {
@@ -296,7 +297,7 @@ it.concurrent("rejects parent imports", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("repository(package-imports)");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("package.json imports");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain("package.json imports");
 });
 
 it.concurrent.each(packageImportCases)(
@@ -348,7 +349,7 @@ it.concurrent("explains missing aliases without rewriting an unexported cross-pa
   );
 
   expect(result.status).toBeGreaterThan(0);
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "add a matching package.json imports alias",
   );
   expect(result.sources["scripts/example.ts"]).toBe(source);
@@ -386,7 +387,9 @@ it.concurrent.each([
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("repository(no-test-internals)");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("assert observable outcomes instead");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+    "assert observable outcomes instead",
+  );
 });
 
 it.concurrent.each([
@@ -405,7 +408,9 @@ it.concurrent.each([
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("repository(no-test-internals)");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("inject the dependency or use MSW");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+    "inject the dependency or use MSW",
+  );
 });
 
 it.concurrent.each(["e2e/scenarios/example.e2e.ts"])("rejects mock history in %s", async (path) => {
@@ -518,7 +523,7 @@ it.concurrent.each([
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("repository(no-per-item-service-calls)");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "gather arguments, then invoke the batch method once",
   );
 });
@@ -526,7 +531,7 @@ it.concurrent.each([
 it.concurrent.each([
   "yield* notes.update(owner, inputs);",
   "yield* Effect.flatMap(Effect.succeed(inputs), (commands) => notes.update(owner, commands));",
-  "const commands = EffectArray.map(inputs, (input) => input.toUpperCase()); yield* notes.update(owner, commands);",
+  "const commands = EffectArray.map(inputs, (input) => input); yield* notes.update(owner, commands);",
   "yield* Effect.forEach(inputs, (input) => Effect.succeed(input), { concurrency: 1 });",
   "EffectArray.map(inputs, (notes) => notes.toString());",
   "for (const input of inputs) { const notes = { update: () => input }; notes.update(); }",
@@ -681,7 +686,7 @@ it.concurrent.each([
   const result = await checkLint(files);
 
   expect(result.status).toBeGreaterThan(0);
-  expect(result.output.match(/repository\(token-values\)/g)).toHaveLength(2);
+  expect(EffectString.match(result.output, /repository\(token-values\)/g)).toHaveLength(2);
   expect(result.output).toContain("add a token to brand-theme.css and design-system.css");
 });
 
@@ -947,7 +952,9 @@ it.concurrent.each([
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("no-restricted-imports");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("structured, context-owned persistence");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+    "structured, context-owned persistence",
+  );
 });
 
 it.concurrent("permits parameterized SQL expressions only in the shared helper", async () => {
@@ -990,7 +997,7 @@ it.concurrent.each([
 
   expect(result.status).not.toBe(0);
   expect(result.output).toContain("repository(production-services)");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "call public backend services with the authenticated User",
   );
   expect(result.output).toContain("e2e/scenarios/services.ts");

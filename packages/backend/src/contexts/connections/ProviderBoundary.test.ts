@@ -1,6 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
+import { EffectString } from "@lineupkeep/collections";
 import { Array, DateTime, Effect, Layer, Redacted } from "effect";
 import { Array as EffectArray } from "effect";
 
@@ -88,7 +89,7 @@ it("plans a second provider's dated rotisserie league from its own declared slot
   }
   assert.deepStrictEqual(
     [...result.assignments].sort((left, right) =>
-      left.providerPlayerKey.localeCompare(right.providerPlayerKey),
+      EffectString.localeCompare(left.providerPlayerKey, right.providerPlayerKey),
     ),
     [
       { providerPlayerKey: "atlas.p.3", slot: "UTIL" },

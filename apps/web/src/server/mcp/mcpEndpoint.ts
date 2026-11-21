@@ -6,6 +6,8 @@ import type {
   ToolCallDecision,
   ToolCallQuotaUnavailable,
 } from "@lineupkeep/backend/toolCalls/ToolCallQuota";
+import { EffectString } from "@lineupkeep/collections";
+import { optionalStringValue } from "@lineupkeep/collections";
 import { Context, DateTime, Duration, Effect, Layer, Option, Result, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
@@ -350,8 +352,8 @@ function invalidArgumentsDetail(message: string): {
   readonly message: string;
   readonly field: string | undefined;
 } {
-  const [reason = message, location] = message.split("\n  at ");
-  const field = location?.trim();
+  const [reason = message, location] = EffectString.split(message, "\n  at ");
+  const field = optionalStringValue(location, (value) => EffectString.trim(value));
   return {
     message: field === undefined ? reason : `${reason} at ${field}`,
     field,
@@ -387,7 +389,7 @@ const serveToolkit = Effect.fnUntraced(function* <Tools extends Record<string, T
 
 function dropDuplicateToolText(response: Response): Effect.Effect<Response, never, never> {
   return Effect.gen(function* () {
-    if (!(response.headers.get("content-type") ?? "").includes("application/json")) {
+    if (!EffectString.includes(response.headers.get("content-type") ?? "", "application/json")) {
       return response;
     }
     const decoded = yield* Effect.tryPromise({

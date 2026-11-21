@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { setup, types } from "xstate/fsm";
 
 import type { SignInFailureReason } from "./signInFailure";
@@ -72,7 +73,7 @@ export const signInWorkflow = setup({
         codeSent: ({ context }) => ({
           target: "code",
           context: {
-            sentTo: context.email.trim(),
+            sentTo: EffectString.trim(context.email),
             code: "",
             showCodeProblem: false,
             codeRejection: undefined,
@@ -147,7 +148,7 @@ export const signInWorkflow = setup({
 });
 
 export function emailProblem(email: string): "missing" | "malformed" | undefined {
-  const value = email.trim();
+  const value = EffectString.trim(email);
   if (value.length === 0) {
     return "missing";
   }
@@ -159,7 +160,7 @@ export function isCompleteCode(code: string): boolean {
 }
 
 export function codeDigits(value: string): string {
-  return value.replaceAll(/\D/gu, "").slice(0, codeLength);
+  return EffectString.slice(EffectString.replaceAll(value, /\D/gu, ""), 0, codeLength);
 }
 
 const codeLength = 6;

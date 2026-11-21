@@ -1,6 +1,8 @@
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
+import { EffectString } from "@lineupkeep/collections";
+import { optionalStringValue } from "@lineupkeep/collections";
 import { eq } from "drizzle-orm";
 import { Array, Cause, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { Array as EffectArray } from "effect";
@@ -68,6 +70,7 @@ import {
   QuerySelectionInvalid,
   QueryTeamNotFound,
 } from "./QueryValues.ts";
+
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
   value: A | null | undefined,
@@ -847,7 +850,9 @@ it.effect("reports a league without a scoring-week window instead of inventing p
           (entry) =>
             entry.resource === "calendar" &&
             entry.status === "unsupported" &&
-            entry.detail?.includes("no scoring-week window") === true,
+            optionalStringValue(entry.detail, (value) =>
+              EffectString.includes(value, "no scoring-week window"),
+            ) === true,
         ),
       );
       assert.deepStrictEqual(calendar.failures, []);
@@ -7329,7 +7334,7 @@ it.effect("names the selected sections when a summary without a roster page cann
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
     const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
-      league: { ...leagueFixture, name: "L".repeat(40_000) },
+      league: { ...leagueFixture, name: EffectString.repeat("L", 40_000) },
     });
     const teamId = Array.getUnsafe(seeded, 0).id;
 
@@ -7411,7 +7416,7 @@ it.effect("documents how to narrow a summary that cannot fit a single record", (
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
     const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
-      roster: rosterFixture({ count: 1, name: "A".repeat(40_000) }),
+      roster: rosterFixture({ count: 1, name: EffectString.repeat("A", 40_000) }),
     });
     const teamId = Array.getUnsafe(seeded, 0).id;
 
@@ -7601,7 +7606,10 @@ function seedOpponentTeams(
 }
 
 function opponentSchedule(providerTeamKey: string): import("./Provider.ts").ProviderRosterSchedule {
-  const teamNumber = providerTeamKey.slice(providerTeamKey.lastIndexOf(".t.") + 3);
+  const teamNumber = EffectString.slice(
+    providerTeamKey,
+    EffectString.lastIndexOf(providerTeamKey, ".t.") + 3,
+  );
   return scheduleFixture({
     providerTeamKey,
     dates: ["2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22", "2026-10-23"],
@@ -7762,7 +7770,11 @@ function matchupFixture(input: {
 }
 
 function team(providerTeamKey: string, name: string, league: "nfl" | "nhl" = "nfl"): ProviderTeam {
-  const providerLeagueKey = providerTeamKey.slice(0, providerTeamKey.lastIndexOf(".t."));
+  const providerLeagueKey = EffectString.slice(
+    providerTeamKey,
+    0,
+    EffectString.lastIndexOf(providerTeamKey, ".t."),
+  );
   return {
     provider: decodeProviderKey("yahoo"),
     providerTeamKey,
@@ -8267,7 +8279,7 @@ function sealedPlayerRefs(
 
 function includesText(value: unknown, needle: string): boolean {
   if (typeof value === "string") {
-    return value.includes(needle);
+    return EffectString.includes(value, needle);
   }
   if (EffectArray.isArray(value)) {
     return EffectArray.some(value, (item) => includesText(item, needle));
@@ -8350,7 +8362,5 @@ const QueriesTestLayer = queriesTestLayer(EmptyGameSourceTest);
 
 function noteId(index: number): string {
   const crockfordBase32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-  return `01ARZ3NDEKTSV4RRFFQ69G5${crockfordBase32.charAt(
-    Math.floor(index / 32),
-  )}${crockfordBase32.charAt(index % 32)}`;
+  return `01ARZ3NDEKTSV4RRFFQ69G5${EffectString.charAt(crockfordBase32, Math.floor(index / 32))}${EffectString.charAt(crockfordBase32, index % 32)}`;
 }

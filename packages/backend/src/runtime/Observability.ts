@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import {
   Config,
   Console,
@@ -228,13 +229,13 @@ function isSuppressedAttribute(key: string, kind?: Tracer.SpanKind): boolean {
   return (
     key === "parameters" ||
     key === "error.message" ||
-    key.startsWith("error.stack") ||
-    key.startsWith("exception.") ||
+    EffectString.startsWith(key, "error.stack") ||
+    EffectString.startsWith(key, "exception.") ||
     key === "url.full" ||
     key === "url.query" ||
     (kind === "client" && key === "url.path") ||
-    key.startsWith("http.request.header.") ||
-    key.startsWith("http.response.header.")
+    EffectString.startsWith(key, "http.request.header.") ||
+    EffectString.startsWith(key, "http.response.header.")
   );
 }
 

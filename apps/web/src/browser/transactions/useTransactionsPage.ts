@@ -1,4 +1,5 @@
 import { EffectArray } from "@lineupkeep/collections";
+import { EffectString } from "@lineupkeep/collections";
 import { useInfiniteQuery, useMutation } from "@tanstack/solid-query";
 import type { MutationFunctionContext } from "@tanstack/solid-query";
 import { createMemo, createSignal } from "solid-js";
@@ -24,6 +25,7 @@ import { transactionQueries } from "./transactionQueries";
 import type { TransactionRemote } from "./transactionRemote";
 import { plannedMoment } from "./transactionTimes";
 import type { ConfirmationTarget } from "./useGroupConfirmation";
+
 function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
   return EffectArray.isArray(value);
 }
@@ -421,7 +423,7 @@ function retryFeedback(data: TransactionMoveRetryData): ActionFeedbackState {
 }
 
 function withPeriod(text: string): string {
-  return text.endsWith(".") ? text : `${text}.`;
+  return EffectString.endsWith(text, ".") ? text : `${text}.`;
 }
 
 function canConfirm(move: TransactionMoveView): boolean {
@@ -475,18 +477,21 @@ function compareMoveDays(left: TransactionMoveDayView, right: TransactionMoveDay
   if (left.day === undefined || right.day === undefined) {
     return left.day === right.day ? 0 : left.day === undefined ? 1 : -1;
   }
-  return left.day.localeCompare(right.day);
+  return EffectString.localeCompare(left.day, right.day);
 }
 
 function compareTeamNames(
   left: TransactionMoveTeamDayView,
   right: TransactionMoveTeamDayView,
 ): number {
-  return left.team.name.localeCompare(right.team.name) || left.team.id.localeCompare(right.team.id);
+  return (
+    EffectString.localeCompare(left.team.name, right.team.name) ||
+    EffectString.localeCompare(left.team.id, right.team.id)
+  );
 }
 
 function compareMoveCards(left: TransactionMoveView, right: TransactionMoveView): number {
-  return left.position - right.position || left.move.localeCompare(right.move);
+  return left.position - right.position || EffectString.localeCompare(left.move, right.move);
 }
 
 type MutableMoveDay = {

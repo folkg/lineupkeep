@@ -12,10 +12,12 @@ import {
 import { YahooCoverageMismatch, YahooParseError } from "#yahoo/errors.ts";
 import { YahooDate, leagueKeyOfTeam, sameCoverage } from "#yahoo/keys.ts";
 import type { YahooCoverage, YahooLeagueKey, YahooTeamKey } from "#yahoo/keys.ts";
+import { EffectString } from "#yahoo/stringTools.ts";
 
 import type { YahooTransactionCounts } from "./player.ts";
 import { GamesPlayedDetailPayload, gamesPlayedOf } from "./team.ts";
 import type { YahooGamesPlayed } from "./team.ts";
+
 function sortWithComparator<A>(
   self: ReadonlyArray<A>,
   compare: (left: A, right: A) => number,
@@ -60,7 +62,11 @@ export function decodeRoster(
     }
     return {
       teamKey: decoded.team.team_key,
-      leagueKey: decoded.team.team_key.slice(0, decoded.team.team_key.lastIndexOf(".t.")),
+      leagueKey: EffectString.slice(
+        decoded.team.team_key,
+        0,
+        EffectString.lastIndexOf(decoded.team.team_key, ".t."),
+      ),
       coverage,
       editable: rows.declared?.is_editable,
       players: EffectArray.map(rows.players, rosterPlayerOf),

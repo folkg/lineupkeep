@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
 import {
   containerNameFor,
   removeOwnedContainer,
@@ -53,7 +54,7 @@ export async function runTests(run: TestRun): Promise<VerificationOutcome> {
       console.error(problem);
     }
     const before = sourceFingerprint(root, run.playwrightArguments);
-    const stage = `verify-${createHash("sha256").update(root).digest("hex").slice(0, 10)}-${run.runId}`;
+    const stage = `verify-${EffectString.slice(createHash("sha256").update(root).digest("hex"), 0, 10)}-${run.runId}`;
     const environment = {
       ...run.environment(defaults, undefined),
       E2E_SERVICE_PROGRAMS: selectServiceModule(root, run.playwrightArguments),
@@ -64,7 +65,7 @@ export async function runTests(run: TestRun): Promise<VerificationOutcome> {
         {
           runId: run.runId,
           stage,
-          cwd: root.replace(/\/$/u, ""),
+          cwd: EffectString.replace(root, /\/$/u, ""),
           directory: run.directory,
           databaseName: containerNameFor(run.runId),
           lockDirectory,
@@ -100,7 +101,7 @@ export async function runTests(run: TestRun): Promise<VerificationOutcome> {
         infrastructureNamed: (name) => localStack(name, lockDirectory),
         alchemy: {
           stage,
-          cwd: root.replace(/\/$/u, ""),
+          cwd: EffectString.replace(root, /\/$/u, ""),
           manifest: manifest(run.directory),
           sourceFingerprint: before,
         },
@@ -213,12 +214,12 @@ async function collectOrphanedContainers(signal: AbortSignal): Promise<OrphanCol
     problems.push(`Test containers could not be listed: ${describe(error)}`);
   }
   for (const container of containers) {
-    if (!container.name.startsWith("lineupkeep-test-")) {
+    if (!EffectString.startsWith(container.name, "lineupkeep-test-")) {
       continue;
     }
     try {
-      const web = container.name.endsWith("-web");
-      const databaseName = web ? container.name.slice(0, -4) : container.name;
+      const web = EffectString.endsWith(container.name, "-web");
+      const databaseName = web ? EffectString.slice(container.name, 0, -4) : container.name;
       if (await isOrphaned(container.lockDirectory, databaseName)) {
         await removeOwnedContainer(
           container.name,

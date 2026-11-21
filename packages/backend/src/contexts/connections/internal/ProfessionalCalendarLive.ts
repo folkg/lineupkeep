@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { DateTime, Effect, Layer, Option, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { Order as EffectOrder } from "effect";
@@ -10,6 +11,7 @@ import { professionalGameFreshness } from "#contexts/connections/ProfessionalGam
 
 import { readProfessionalGameWeek } from "./ProfessionalGameFacts.ts";
 import { ScheduleObservationRepository } from "./ScheduleObservationRepository.ts";
+
 function sortWithComparator<A>(
   self: ReadonlyArray<A>,
   compare: (left: A, right: A) => number,
@@ -154,8 +156,8 @@ export const ProfessionalCalendarLive = Layer.effect(
             return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
           }),
           (left, right) =>
-            left.game.date.localeCompare(right.game.date) ||
-            left.sourceReference.localeCompare(right.sourceReference),
+            EffectString.localeCompare(left.game.date, right.game.date) ||
+            EffectString.localeCompare(left.sourceReference, right.sourceReference),
         ),
         unresolvedTeams: EffectArray.flatMap(served, (week) => {
           const flatMapped2 = week.unresolvedTeams;

@@ -1,4 +1,5 @@
 import { productName } from "@lineupkeep/brand/product";
+import { EffectString } from "@lineupkeep/collections";
 import { Data, Duration, Effect } from "effect";
 
 export function renderWakingShell(
@@ -87,17 +88,25 @@ function isDocumentNavigation(request: Request): boolean {
     return false;
   }
   const { pathname } = new URL(request.url);
-  if (pathname.startsWith("/api/") || pathname === "/mcp" || pathname.startsWith("/.well-known/")) {
+  if (
+    EffectString.startsWith(pathname, "/api/") ||
+    pathname === "/mcp" ||
+    EffectString.startsWith(pathname, "/.well-known/")
+  ) {
     return false;
   }
-  return (request.headers.get("accept") ?? "").includes("text/html");
+  return EffectString.includes(request.headers.get("accept") ?? "", "text/html");
 }
 
 function escapeAttribute(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
+  return EffectString.replaceAll(
+    EffectString.replaceAll(EffectString.replaceAll(value, "&", "&amp;"), '"', "&quot;"),
+    "<",
+    "&lt;",
+  );
 }
 
-const wordmark = productName.toLowerCase();
+const wordmark = EffectString.toLowerCase(productName);
 
 export type WakingShellOptions = {
   readonly deadlineMs: number;

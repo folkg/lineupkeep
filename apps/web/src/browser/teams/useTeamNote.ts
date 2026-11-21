@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { useMutation } from "@tanstack/solid-query";
 import { createSignal } from "solid-js";
 import type { Accessor } from "solid-js";
@@ -58,7 +59,7 @@ export function useTeamNote(options: TeamNoteOptions): TeamNoteController {
   };
 
   const submit = (): void => {
-    if (Array.from(draft().trim()).length > limit()) {
+    if (Array.from(EffectString.trim(draft())).length > limit()) {
       setError(
         `A team note can be up to ${String(limit())} characters. Shorten it and save again.`,
       );

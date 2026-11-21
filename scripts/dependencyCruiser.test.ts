@@ -1,8 +1,10 @@
 import { dirname, relative } from "node:path";
 
+import { EffectString } from "@lineupkeep/collections";
 import { expect, it } from "vitest";
 
 import { checkArchitecture, checkLint } from "./architectureFixture.ts";
+
 it("permits a view, its controller, and a pure workflow", async () => {
   const lint = await checkLint(referenceFeature);
   const architecture = await checkArchitecture(referenceFeature);
@@ -33,7 +35,9 @@ it.each([
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("views-render-controller-models");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("move them into a use*.ts controller");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+    "move them into a use*.ts controller",
+  );
 });
 
 it.each([
@@ -69,7 +73,9 @@ it("rejects running a workflow outside a controller, even through a helper", asy
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("controllers-alone-run-workflows-and-writes");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("start them in a use*.ts controller");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+    "start them in a use*.ts controller",
+  );
 });
 
 it.each(["infra/stage.ts", "infra/alchemy.run.ts"])(
@@ -96,7 +102,7 @@ it.each([
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("feature-infrastructure-only-used-by-stage-composition");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "register the Layer in infra/stage.ts or",
   );
 });
@@ -116,7 +122,9 @@ it.each([
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("feature-infrastructure-uses-owned-public-contracts");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("import only its own root public");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+    "import only its own root public",
+  );
 });
 
 it.each(["node:fs", "postgres"])(
@@ -129,7 +137,9 @@ it.each(["node:fs", "postgres"])(
 
     expect(result.status).toBeGreaterThan(0);
     expect(result.output).toContain("feature-infrastructure-uses-owned-public-contracts");
-    expect(result.output.replaceAll(/\s+/g, " ")).toContain("import only its own root public");
+    expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+      "import only its own root public",
+    );
   },
 );
 
@@ -146,7 +156,7 @@ it.each([
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("application-independent-of-provisioning");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "receive plain configuration or services from",
   );
   expect(result.output).toContain("alchemy");
@@ -266,7 +276,7 @@ it.each(["e2e/helper.ts", "tools/local-stack/example.ts"])(
 
     expect(result.status).toBeGreaterThan(0);
     expect(result.output).toContain("application-independent-of-provisioning");
-    expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+    expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
       "receive plain configuration or services from",
     );
   },
@@ -289,7 +299,7 @@ it.each([
   expect(result.output).toContain(
     "local-stack-tools-only-used-by-local-infrastructure-and-supervisor",
   );
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "keep them in infra/local/, e2e/verify/, or",
   );
 });
@@ -316,7 +326,7 @@ it("rejects shared local-stack imports of application contracts", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("local-stack-tools-are-independent");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "put integrations in infra/local/ or e2e/verify/",
   );
 });
@@ -329,7 +339,7 @@ it("rejects infrastructure imports of application internals", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("infrastructure-uses-public-contracts-and-build-inputs");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "use public backend contracts or apps/web/deploy",
   );
 });
@@ -342,7 +352,7 @@ it("rejects provisioning helpers imported by runtime modules", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("application-independent-of-provisioning");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "receive plain configuration or services from",
   );
 });
@@ -371,7 +381,7 @@ it.each([
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("application-independent-of-provisioning");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "receive plain configuration or services from",
   );
 });
@@ -393,7 +403,9 @@ it.each([
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("mcp-adapter-dependencies");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("use public backend use cases through");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+    "use public backend use cases through",
+  );
 });
 
 it.each(["solid-js", "@tanstack/solid-router", "drizzle-orm", "better-auth"])(
@@ -405,7 +417,9 @@ it.each(["solid-js", "@tanstack/solid-router", "drizzle-orm", "better-auth"])(
 
     expect(result.status).toBeGreaterThan(0);
     expect(result.output).toContain("mcp-adapter-dependencies");
-    expect(result.output.replaceAll(/\s+/g, " ")).toContain("use public backend use cases through");
+    expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+      "use public backend use cases through",
+    );
   },
 );
 
@@ -421,7 +435,9 @@ it.each(["apps/web/src/routes/api/other.ts"])(
 
     expect(result.status).toBeGreaterThan(0);
     expect(result.output).toContain("mcp-only-used-by-protocol-route");
-    expect(result.output.replaceAll(/\s+/g, " ")).toContain("use public backend use cases and");
+    expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+      "use public backend use cases and",
+    );
   },
 );
 
@@ -432,7 +448,7 @@ it("rejects backend calls and Effect in the MCP route", async () => {
   const lint = await checkLint(files);
 
   expect(architecture.output).toContain("mcp-route-delegates-to-adapter");
-  expect(architecture.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(architecture.output, /\s+/g, " ")).toContain(
     "delegate to apps/web/src/server/mcp/ and keep only",
   );
   expect(lint.output).toContain("no-restricted-imports");
@@ -452,7 +468,7 @@ it.each([
   });
 
   expect(rejected.output).toContain("oauth-packages-only-in-auth-adapter");
-  expect(rejected.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(rejected.output, /\s+/g, " ")).toContain(
     "use AuthService and keep plugin composition",
   );
   expect(accepted.status, accepted.output).toBe(0);
@@ -467,7 +483,7 @@ it("confines the documented OAuth client plugin to the session client adapter", 
   });
 
   expect(rejected.output).toContain("oauth-client-only-in-session-adapter");
-  expect(rejected.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(rejected.output, /\s+/g, " ")).toContain(
     "use browser/session/authClient.ts and register the plugin",
   );
   expect(accepted.status, accepted.output).toBe(0);
@@ -513,7 +529,7 @@ it("keeps feature scope catalogues out of Auth and permits application compositi
   });
 
   expect(rejected.output).toContain("context-dependencies-auth");
-  expect(rejected.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(rejected.output, /\s+/g, " ")).toContain(
     "declare only the needed public contract in permittedContextImports",
   );
   expect(accepted.status, accepted.output).toBe(0);
@@ -530,7 +546,7 @@ it.each(["node:dns/promises", "node:http", "node:https", "node:net", "node:tls"]
     });
 
     expect(rejected.output).toContain("public-internet-process-owns-network-primitives");
-    expect(rejected.output.replaceAll(/\s+/g, " ")).toContain(
+    expect(EffectString.replaceAll(rejected.output, /\s+/g, " ")).toContain(
       "use PublicInternet and keep sockets and",
     );
     expect(accepted.status, accepted.output).toBe(0);
@@ -545,7 +561,9 @@ it.each(["@modelcontextprotocol/sdk", "zod"])(
     });
 
     expect(result.output).toContain("effect-mcp-and-schema-contracts");
-    expect(result.output.replaceAll(/\s+/g, " ")).toContain("use Effect Schema and the stateless");
+    expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+      "use Effect Schema and the stateless",
+    );
   },
 );
 
@@ -606,7 +624,7 @@ it("rejects repository dependencies from server functions in the module graph", 
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("server-functions-use-public-backend-contracts");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "call public backend services inside compiler-erased handlers",
   );
 });
@@ -619,7 +637,9 @@ it("rejects runtime dependencies in shared domain limits", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("domain-limits-have-no-runtime-dependencies");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("export literal limits without imports");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+    "export literal limits without imports",
+  );
 });
 
 it("accepts browser-safe primitive limits in a previously unnamed domain", async () => {
@@ -645,7 +665,7 @@ it("rejects SQL utility imports from domain behavior", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("database-utilities-only-used-by-repositories");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "call the repository's atomic batch operation",
   );
 });
@@ -684,7 +704,9 @@ it.each(["effect/observability", "effect/observability/OtlpTracer"])(
 
     expect(rejected.status).toBeGreaterThan(0);
     expect(rejected.output).toContain("telemetry-exporters-only-in-observability");
-    expect(rejected.output.replaceAll(/\s+/gu, " ")).toContain("compose exporters through");
+    expect(EffectString.replaceAll(rejected.output, /\s+/gu, " ")).toContain(
+      "compose exporters through",
+    );
     expect(accepted.status, accepted.output).toBe(0);
   },
 );
@@ -702,7 +724,9 @@ it("confines the development renderer to the same safety composition", async () 
 
   expect(rejected.status).toBeGreaterThan(0);
   expect(rejected.output).toContain("telemetry-exporters-only-in-observability");
-  expect(rejected.output.replaceAll(/\s+/gu, " ")).toContain("compose exporters through");
+  expect(EffectString.replaceAll(rejected.output, /\s+/gu, " ")).toContain(
+    "compose exporters through",
+  );
   expect(accepted.status, accepted.output).toBe(0);
 });
 
@@ -721,7 +745,7 @@ it("rejects importing fixture implementations into a scenario helper", async () 
   });
 
   expect(result.output).toContain("verification-programs-do-not-import-fixtures");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "use public backend contracts and e2e/serviceContract.ts",
   );
 });
@@ -737,7 +761,9 @@ it("rejects dynamic server imports through a TSX helper", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("server-implementations-only-used-by-server-adapters");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("call a browser Remote backed by");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+    "call a browser Remote backed by",
+  );
 });
 
 it("permits backend domain types and server-function and API-handler adapters", async () => {
@@ -769,7 +795,9 @@ it("rejects server-function invocation outside browser remotes", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("server-functions-only-invoked-by-remotes");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("invoke them only in *Remote.ts and");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+    "invoke them only in *Remote.ts and",
+  );
 });
 
 it("rejects imports between browser features", async () => {
@@ -783,7 +811,7 @@ it("rejects imports between browser features", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("browser-features-are-isolated");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "compose shared browser platform modules and",
   );
 });
@@ -799,7 +827,7 @@ it("rejects browser platform modules depending on features", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("browser-features-are-isolated");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "compose shared browser platform modules and",
   );
 });
@@ -815,7 +843,9 @@ it("rejects neutral primitives depending on application composition", async () =
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("shared-ui-is-neutral");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("pass models and callbacks to shared-ui");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+    "pass models and callbacks to shared-ui",
+  );
 });
 
 it("permits features to compose browser platform modules", async () => {
@@ -853,7 +883,7 @@ it.each(["effect", "node:fs"])(
 
     expect(result.status).toBeGreaterThan(0);
     expect(result.output).toContain("brand-has-no-runtime-dependencies");
-    expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+    expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
       "export literal brand values without runtime imports",
     );
   },
@@ -870,7 +900,9 @@ it("rejects neutral primitives depending on brand compositions", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("shared-ui-is-neutral");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("pass models and callbacks to shared-ui");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+    "pass models and callbacks to shared-ui",
+  );
 });
 
 it("rejects brand compositions depending on anything but neutral primitives", async () => {
@@ -884,7 +916,9 @@ it("rejects brand compositions depending on anything but neutral primitives", as
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("brand-ui-composes-shared-ui");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("build brand-ui from shared-ui and pass");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+    "build brand-ui from shared-ui and pass",
+  );
 });
 
 it("permits features and app-shell to compose brand compositions built on neutral primitives", async () => {
@@ -916,7 +950,7 @@ it.each(["scenarios/task/helper.ts"])(
 
     expect(result.status).toBeGreaterThan(0);
     expect(result.output).toContain("verification-uses-public-services");
-    expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+    expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
       "call public backend services from scenarios",
     );
   },
@@ -940,7 +974,7 @@ it("rejects persistence drivers in verification scenarios", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("verification-uses-public-services");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "call public backend services from scenarios",
   );
 });
@@ -980,7 +1014,9 @@ it("rejects cycles through a helper even when they include the generated route t
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("no-circular-dependencies");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("extract a shared contract or inject");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+    "extract a shared contract or inject",
+  );
 });
 
 it("rejects a context's undeclared dependency on another public contract", async () => {
@@ -994,7 +1030,7 @@ it("rejects a context's undeclared dependency on another public contract", async
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("context-dependencies-connections");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "declare only the needed public contract in permittedContextImports",
   );
 });
@@ -1034,7 +1070,7 @@ it("rejects another Auth public contract from Connections", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("context-dependencies-connections");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "declare only the needed public contract in permittedContextImports",
   );
 });
@@ -1050,7 +1086,7 @@ it("denies cross-context dependencies from an unlisted context", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("undeclared-context-dependencies");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "define the smallest public contract permission in permittedContextImports",
   );
 });
@@ -1078,7 +1114,7 @@ it("rejects foreign tables even when a public identity relationship exists", asy
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("no-cross-context-internals");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "call the owning context's permitted public",
   );
 });
@@ -1094,7 +1130,7 @@ it("rejects undeclared shared-kernel participation", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("context-dependencies-connections");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "declare only the needed public contract in permittedContextImports",
   );
 });
@@ -1111,7 +1147,7 @@ it("rejects a generic context module importing a provider adapter", async () => 
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("provider-adapters-are-injected");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "use ProviderRegistry and construct each adapter",
   );
 });
@@ -1141,7 +1177,7 @@ it("rejects a generic context module importing a game source adapter", async () 
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("game-source-adapters-are-injected");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "use GameSourceRegistry and construct each adapter",
   );
 });
@@ -1170,7 +1206,7 @@ it("rejects persistence re-exports from a public context module", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("public-context-contracts-have-no-storage");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "expose domain schemas and service interfaces,",
   );
 });
@@ -1186,7 +1222,7 @@ it("rejects table access granted only by a public repository filename", async ()
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("tables-only-used-by-persistence-and-composition");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "use domain values and repositories, keeping",
   );
 });
@@ -1201,7 +1237,7 @@ it("rejects Drizzle imports in feature workflow implementations", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("drizzle-only-used-by-persistence-and-tables");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "call an owned repository returning domain",
   );
 });
@@ -1216,7 +1252,7 @@ it.each(["UploadRepository.ts", "UploadAdapter.ts", "UploadsTables.ts", "Uploads
 
     expect(result.status).toBeGreaterThan(0);
     expect(result.output).toContain("backend-workflows-have-no-persistence");
-    expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+    expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
       "keep row schemas and codecs in Table/Tables modules",
     );
   },
@@ -1244,7 +1280,7 @@ it("rejects storage definitions outside context persistence modules", async () =
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("storage-definitions-only-in-context-persistence");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "declare storage in the owning context's",
   );
 });
@@ -1270,7 +1306,9 @@ it("rejects backend dependencies on web frameworks", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("backend-independent-of-web");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("pass domain inputs to backend services");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+    "pass domain inputs to backend services",
+  );
 });
 
 it("rejects backend dependencies on web application modules", async () => {
@@ -1284,7 +1322,9 @@ it("rejects backend dependencies on web application modules", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("backend-independent-of-web");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("pass domain inputs to backend services");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+    "pass domain inputs to backend services",
+  );
 });
 
 it("rejects dynamic persistence-library imports", async () => {
@@ -1297,7 +1337,7 @@ it("rejects dynamic persistence-library imports", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("no-dynamic-persistence-imports");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "use static imports in owned persistence",
   );
 });
@@ -1312,7 +1352,7 @@ it("rejects independent client construction in a repository", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("database-drivers-only-used-by-construction");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "use the context's database contract and",
   );
 });
@@ -1466,7 +1506,7 @@ it.each([
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("provider-scoring-stays-in-the-adapter");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("implementation detail");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain("implementation detail");
 });
 
 it.each([
@@ -1506,7 +1546,7 @@ it("rejects provider scoring vocabulary in generic code", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("repository(provider-scoring-vocabulary)");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "keep scoring vocabulary inside the provider adapter",
   );
 });
@@ -1528,7 +1568,7 @@ it("rejects a provider action name in generic code", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("repository(provider-action-vocabulary)");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "keep provider action names inside the adapter",
   );
 });
@@ -1550,7 +1590,9 @@ it("rejects a provider identity in generic code", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("repository(provider-identity)");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("keep provider identity in its adapter");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+    "keep provider identity in its adapter",
+  );
 });
 
 it.each([
@@ -1580,7 +1622,9 @@ it.each([
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("repository(provider-sport-rule)");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("decide by sport or league");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+    "decide by sport or league",
+  );
 });
 
 it.each([
@@ -1608,7 +1652,9 @@ it("rejects a provider wire fragment in generic code", async () => {
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("repository(provider-wire-vocabulary)");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain("one provider's wire vocabulary");
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
+    "one provider's wire vocabulary",
+  );
 });
 
 it.each([
@@ -1628,7 +1674,7 @@ it("rejects one provider's transaction request shape in generic code", async () 
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("repository(provider-transaction-vocabulary)");
-  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+  expect(EffectString.replaceAll(result.output, /\s+/g, " ")).toContain(
     "read the declared limits from ProviderCapabilities.transactionRequest",
   );
 });

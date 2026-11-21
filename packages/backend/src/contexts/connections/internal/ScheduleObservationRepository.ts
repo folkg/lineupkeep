@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
 import { Array, Context, DateTime, Effect, Layer, Schema } from "effect";
 import { Array as EffectArray } from "effect";
@@ -25,6 +26,7 @@ import {
   professionalTeamIdentities,
   ProfessionalTeamIdentityRow,
 } from "./ScheduleObservationTables.ts";
+
 function sortWithComparator<A>(
   self: ReadonlyArray<A>,
   compare: (left: A, right: A) => number,
@@ -146,7 +148,7 @@ export class ScheduleObservationRepository extends Context.Service<ScheduleObser
           }
         }
         const rows = sortWithComparator([...newestByWindow.values()], (left, right) =>
-          observationKey(left).localeCompare(observationKey(right)),
+          EffectString.localeCompare(observationKey(left), observationKey(right)),
         );
         return chunked(rows, maxInsertRows(scheduleObservations), (chunk) =>
           database
@@ -313,7 +315,7 @@ export class ScheduleObservationRepository extends Context.Service<ScheduleObser
               providerTeamKey: identity.providerTeamKey,
               observedAt: DateTime.toDateUtc(identity.observedAt),
             })),
-            (left, right) => identityKey(left).localeCompare(identityKey(right)),
+            (left, right) => EffectString.localeCompare(identityKey(left), identityKey(right)),
           );
           yield* chunked(rows, maxInsertRows(professionalTeamIdentities), (chunk) =>
             database

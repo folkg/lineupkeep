@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
 import { Array as EffectArray } from "effect";
 import { assert, expect, it } from "vitest";
 
@@ -20,7 +21,7 @@ it("decodes tool discovery and calls while preserving raw protocol responses", a
       }
       response.setHeader("content-type", "application/json");
       response.end(
-        body.includes("tools/list")
+        EffectString.includes(body, "tools/list")
           ? jsonTools.jsonString({
               result: { tools: [{ name: "echo", inputSchema: { type: "object" } }] },
             })

@@ -1,6 +1,7 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
+import { EffectString } from "@lineupkeep/collections";
 import { betterAuth } from "better-auth/minimal";
 import { jwt } from "better-auth/plugins/jwt";
 import { eq, isNotNull } from "drizzle-orm";
@@ -78,7 +79,7 @@ it.effect(
         "client_id=",
         "client_id=not%20a%20url&sig=forged",
         "client_id=http%3A%2F%2Fclient.test%2Fmeta&sig=forged",
-        `client_id=${"a".repeat(129)}&sig=forged`,
+        `client_id=${EffectString.repeat("a", 129)}&sig=forged`,
       ]) {
         assert.deepStrictEqual(yield* adapter.getConsentRequest(new Headers(), query), {
           status: "invalid",
@@ -449,10 +450,15 @@ it.effect(
       const hash = yield* Effect.promise(() =>
         crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)),
       );
-      const challenge = btoa(String.fromCharCode(...new Uint8Array(hash)))
-        .replaceAll("+", "-")
-        .replaceAll("/", "_")
-        .replaceAll("=", "");
+      const challenge = EffectString.replaceAll(
+        EffectString.replaceAll(
+          EffectString.replaceAll(btoa(String.fromCharCode(...new Uint8Array(hash))), "+", "-"),
+          "/",
+          "_",
+        ),
+        "=",
+        "",
+      );
       const query = new URLSearchParams({
         response_type: "code",
         client_id: "https://connections-client.test/client.json",
@@ -476,7 +482,7 @@ it.effect(
         authRequest("/sign-in/social", {
           provider: "google",
           callbackURL: "/connections",
-          oauth_query: login.search.slice(1),
+          oauth_query: EffectString.slice(login.search, 1),
         }),
       );
       const destination = new URL(
@@ -644,7 +650,7 @@ it.effect(
         redirect_uri: "http://127.0.0.1:19999/callback",
         scope: "connections:read",
         resource: "http://localhost:5173/mcp",
-        code_challenge: "a".repeat(43),
+        code_challenge: EffectString.repeat("a", 43),
         code_challenge_method: "S256",
       });
 
@@ -896,7 +902,10 @@ it.effect(
         authorization.headers.get("location") ?? "",
         baseConfig.BETTER_AUTH_URL,
       );
-      const consentRequest = yield* adapter.getConsentRequest(headers, location.search.slice(1));
+      const consentRequest = yield* adapter.getConsentRequest(
+        headers,
+        EffectString.slice(location.search, 1),
+      );
       assert.deepStrictEqual(
         consentRequest.status === "valid"
           ? EffectArray.map(consentRequest.scopes, (scope) => scope.name)
@@ -904,7 +913,7 @@ it.effect(
         ["fantasy:read", offlineAccess.name],
       );
 
-      const consent = yield* adapter.consent(headers, location.search.slice(1), true);
+      const consent = yield* adapter.consent(headers, EffectString.slice(location.search, 1), true);
       const credentials = yield* jsonOf(
         yield* adapter.handle(
           new Request("http://localhost:5173/api/auth/oauth2/token", {
@@ -1005,7 +1014,7 @@ it.effect(
         redirect_uri: "http://127.0.0.1:19999/callback",
         scope: EffectArray.join(advertised, " "),
         resource: mcpResource,
-        code_challenge: "a".repeat(43),
+        code_challenge: EffectString.repeat("a", 43),
         code_challenge_method: "S256",
       });
       const authorization = yield* restarted.handle(
@@ -1072,7 +1081,10 @@ it.effect(
         authorization.headers.get("location") ?? "",
         baseConfig.BETTER_AUTH_URL,
       );
-      const consent = yield* adapter.getConsentRequest(new Headers(), location.search.slice(1));
+      const consent = yield* adapter.getConsentRequest(
+        new Headers(),
+        EffectString.slice(location.search, 1),
+      );
 
       assert.strictEqual(registration.status, 201);
       assert.strictEqual(consent.status, "valid");
@@ -1100,10 +1112,15 @@ it.effect(
       const hash = yield* Effect.promise(() =>
         crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)),
       );
-      const challenge = btoa(String.fromCharCode(...new Uint8Array(hash)))
-        .replaceAll("+", "-")
-        .replaceAll("/", "_")
-        .replaceAll("=", "");
+      const challenge = EffectString.replaceAll(
+        EffectString.replaceAll(
+          EffectString.replaceAll(btoa(String.fromCharCode(...new Uint8Array(hash))), "+", "-"),
+          "/",
+          "_",
+        ),
+        "=",
+        "",
+      );
       const query = new URLSearchParams({
         response_type: "code",
         client_id: "https://connections-client.test/client.json",
@@ -1132,7 +1149,10 @@ it.effect(
         );
       const location = new URL(response.headers.get("location") ?? "", baseConfig.BETTER_AUTH_URL);
 
-      const client = yield* adapter.getConsentRequest(headers, location.search.slice(1));
+      const client = yield* adapter.getConsentRequest(
+        headers,
+        EffectString.slice(location.search, 1),
+      );
       assert.deepStrictEqual(client, {
         status: "valid",
         client: {
@@ -1149,7 +1169,7 @@ it.effect(
           },
         ],
       });
-      const consent = yield* adapter.consent(headers, location.search.slice(1), true);
+      const consent = yield* adapter.consent(headers, EffectString.slice(location.search, 1), true);
       const code = new URL(consent).searchParams.get("code");
       const exchanged = yield* adapter.handle(
         new Request("http://localhost:5173/api/auth/oauth2/token", {
@@ -1329,7 +1349,7 @@ it.effect(
         authorization.headers.get("location") ?? "",
         baseConfig.BETTER_AUTH_URL,
       );
-      const consent = yield* adapter.consent(headers, location.search.slice(1), true);
+      const consent = yield* adapter.consent(headers, EffectString.slice(location.search, 1), true);
       const code = new URL(consent).searchParams.get("code") ?? "";
       const credentials = yield* jsonOf(
         yield* adapter.handle(codeExchangeRequest(code, pkceVerifier)),
@@ -1718,7 +1738,7 @@ it.effect(
         response_type: "code",
         scope: "connections:read",
         resource: "http://localhost:5173/mcp",
-        code_challenge: "a".repeat(43),
+        code_challenge: EffectString.repeat("a", 43),
         code_challenge_method: "S256",
       }).toString();
 
@@ -1736,7 +1756,7 @@ it.effect(
             Promise.resolve(
               Response.json({
                 client_id: request.url,
-                client_name: "x".repeat(6_000),
+                client_name: EffectString.repeat("x", 6_000),
                 redirect_uris: ["http://127.0.0.1:19999/callback"],
                 token_endpoint_auth_method: "none",
               }),
@@ -1872,7 +1892,7 @@ function metadataClientAuthorization(): Request {
       redirect_uri: "http://127.0.0.1:19999/callback",
       scope: "connections:read",
       resource: "http://localhost:5173/mcp",
-      code_challenge: "a".repeat(43),
+      code_challenge: EffectString.repeat("a", 43),
       code_challenge_method: "S256",
     })}`,
   );
@@ -1934,10 +1954,15 @@ const pkceVerifier = "1234567890123456789012345678901234567890123";
 function pkceChallenge(verifier: string): Effect.Effect<string> {
   return Effect.promise(async () => {
     const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
-    return btoa(String.fromCharCode(...new Uint8Array(hash)))
-      .replaceAll("+", "-")
-      .replaceAll("/", "_")
-      .replaceAll("=", "");
+    return EffectString.replaceAll(
+      EffectString.replaceAll(
+        EffectString.replaceAll(btoa(String.fromCharCode(...new Uint8Array(hash))), "+", "-"),
+        "/",
+        "_",
+      ),
+      "=",
+      "",
+    );
   });
 }
 
@@ -2006,7 +2031,7 @@ function issueGrant(
       new Request(`http://localhost:5173/api/auth/oauth2/authorize?${authorization}`, { headers }),
     );
     const location = new URL(redirect.headers.get("location") ?? "", baseConfig.BETTER_AUTH_URL);
-    const consent = yield* adapter.consent(headers, location.search.slice(1), true);
+    const consent = yield* adapter.consent(headers, EffectString.slice(location.search, 1), true);
 
     const exchange = new URLSearchParams({
       grant_type: "authorization_code",
@@ -2119,7 +2144,9 @@ function jwtHeader(token: string): typeof JwtHeader.Type {
 }
 
 function jwtSegment(token: string, index: 0 | 1): unknown {
-  return jsonTools.jsonValue(Buffer.from(token.split(".")[index] ?? "", "base64url").toString());
+  return jsonTools.jsonValue(
+    Buffer.from(EffectString.split(token, ".")[index] ?? "", "base64url").toString(),
+  );
 }
 
 function authRequest(
@@ -2197,7 +2224,10 @@ const ErrorDescription = Schema.Struct({
 function cookieHeader(response: Response): string {
   return EffectArray.join(
     EffectArray.filter(
-      EffectArray.map(response.headers.getSetCookie(), (cookie) => cookie.split(";")[0]),
+      EffectArray.map(
+        response.headers.getSetCookie(),
+        (cookie) => EffectString.split(cookie, ";")[0],
+      ),
       (value): value is string => value !== undefined,
     ),
     "; ",

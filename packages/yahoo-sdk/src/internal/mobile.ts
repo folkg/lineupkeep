@@ -3,6 +3,7 @@ import { Array as EffectArray } from "effect";
 
 import { IntFromStringOrNumber, decodePayload } from "#yahoo/decode.ts";
 import { YahooParseError } from "#yahoo/errors.ts";
+import { EffectString } from "#yahoo/stringTools.ts";
 
 export function decodePlayerCards(
   payload: unknown,
@@ -135,7 +136,7 @@ export function decodeGames(
         continue;
       }
       for (const [key, value] of Object.entries(league)) {
-        if (!key.endsWith("Games") || !EffectArray.isArray(value)) {
+        if (!EffectString.endsWith(key, "Games") || !EffectArray.isArray(value)) {
           continue;
         }
         const decodedGames = yield* decodePayload(Schema.Array(GamePayload), value, "read_games");
@@ -196,7 +197,9 @@ function teamOf(team: (typeof TeamPayload)["Type"]): YahooMobileTeam {
 }
 
 function optionalText(value: string | null | undefined): string | undefined {
-  return value === null || value === undefined || value.trim() === "" ? undefined : value;
+  return value === null || value === undefined || EffectString.trim(value) === ""
+    ? undefined
+    : value;
 }
 
 export type YahooPlayerCard = {

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import { assert, it } from "@effect/vitest";
+import { EffectString } from "@lineupkeep/collections";
 import { Effect } from "effect";
 import { Schema } from "effect";
 import { Array as EffectArray } from "effect";
@@ -9,6 +10,7 @@ import { Option as EffectOption } from "effect";
 import jsonTools from "#runtime/JsonText.ts";
 
 import { hockeyProfessionalTeamMap, matchProfessionalTeam } from "./ProfessionalTeamMap.ts";
+
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
   value: A | null | undefined,
@@ -172,7 +174,7 @@ function clubName(club: typeof LeagueClub.Type): string {
 }
 
 function plain(value: string): string {
-  return value.normalize("NFD").replaceAll(/\p{Diacritic}/gu, "");
+  return EffectString.replaceAll(EffectString.normalize(value, "NFD"), /\p{Diacritic}/gu, "");
 }
 
 function fixture(name: string): unknown {

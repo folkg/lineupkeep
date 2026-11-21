@@ -1,4 +1,6 @@
 import { EffectArray } from "@lineupkeep/collections";
+import { EffectString } from "@lineupkeep/collections";
+
 const storageKey = "lineupkeep.team-headers.v1";
 
 export type CachedTeamHeader = {
@@ -13,7 +15,10 @@ export function readCachedTeamHeaders(viewerId: string): ReadonlyArray<CachedTea
     return [];
   }
   try {
-    const [cachedViewer, ...lines] = (localStorage.getItem(storageKey) ?? "").split("\n");
+    const [cachedViewer, ...lines] = EffectString.split(
+      localStorage.getItem(storageKey) ?? "",
+      "\n",
+    );
     if (cachedViewer !== viewerId) {
       return [];
     }

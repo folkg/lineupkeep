@@ -25,6 +25,8 @@ import {
   YahooWeek,
   allYahooGameKeys,
 } from "#yahoo/keys.ts";
+import { optionalStringValue } from "#yahoo/stringTools.ts";
+import { EffectString } from "#yahoo/stringTools.ts";
 
 const StatQuery = Schema.Union([
   Schema.Struct({ type: Schema.Literal("season") }),
@@ -35,7 +37,7 @@ const StatQuery = Schema.Union([
 const Search = Schema.String.pipe(
   Schema.check(
     Schema.makeFilter((value: string) => {
-      const trimmed = value.trim();
+      const trimmed = EffectString.trim(value);
       return trimmed.length > 0 && trimmed.length <= 80;
     }),
   ),
@@ -165,7 +167,7 @@ export const search: API.OperationMethod<
   request: (input) => {
     const statId = input.sort === "stat" ? input.statId : undefined;
     const status = availabilityFilter(input.availability);
-    const query = input.query?.trim();
+    const query = optionalStringValue(input.query, (value) => EffectString.trim(value));
     const search =
       query === undefined || query.length === 0 ? "" : `;search=${encodeURIComponent(query)}`;
     const position = input.position === undefined ? "" : `;position=${input.position}`;

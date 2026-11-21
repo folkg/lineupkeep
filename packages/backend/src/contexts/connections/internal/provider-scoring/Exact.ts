@@ -1,3 +1,5 @@
+import { EffectString } from "@lineupkeep/collections";
+
 export type Exact = {
   readonly units: bigint;
   readonly scale: number;
@@ -9,8 +11,11 @@ export function parseExact(text: string): Exact {
   if (!DecimalText.test(text)) {
     throw new Error(`"${text}" is not a plain decimal.`);
   }
-  const negative = text.startsWith("-");
-  const [whole = "", fraction = ""] = (negative ? text.slice(1) : text).split(".");
+  const negative = EffectString.startsWith(text, "-");
+  const [whole = "", fraction = ""] = EffectString.split(
+    negative ? EffectString.slice(text, 1) : text,
+    ".",
+  );
   const magnitude = BigInt(whole + fraction);
   return exact(negative ? -magnitude : magnitude, fraction.length);
 }

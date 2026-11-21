@@ -1,4 +1,5 @@
 import { EffectArray } from "@lineupkeep/collections";
+import { EffectString } from "@lineupkeep/collections";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 
@@ -51,7 +52,9 @@ const invariants = {
     event: Event | undefined,
   ) => {
     if (previous.value === "sendingCode" && event?.type === "codeSent") {
-      expect(state.value === "code" && state.context.sentTo).toBe(previous.context.email.trim());
+      expect(state.value === "code" && state.context.sentTo).toBe(
+        EffectString.trim(previous.context.email),
+      );
     }
   },
   "pasting a code keeps its first six ASCII digits": (
@@ -60,7 +63,9 @@ const invariants = {
     event: Event | undefined,
   ) => {
     if (previous.value === "code" && event?.type === "codeChanged") {
-      expect(state.context.code).toBe(event.value.replaceAll(/\D/gu, "").slice(0, 6));
+      expect(state.context.code).toBe(
+        EffectString.slice(EffectString.replaceAll(event.value, /\D/gu, ""), 0, 6),
+      );
     }
   },
   "editing a refused code clears its rejection": (

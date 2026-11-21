@@ -6,6 +6,8 @@ import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
+import { optionalStringValue } from "@lineupkeep/collections";
 import { Effect } from "effect";
 import { Schema } from "effect";
 import { Array as EffectArray } from "effect";
@@ -399,7 +401,7 @@ class OwnedProcesses {
 }
 
 function describeProcess(entry: OwnedProcess): string {
-  return `${entry.pid} ${entry.command.slice(0, 160)}`;
+  return `${entry.pid} ${EffectString.slice(entry.command, 0, 160)}`;
 }
 
 async function acquireLock(plan: VerificationPlan): Promise<RecoveryOutcome | undefined> {
@@ -466,7 +468,10 @@ async function claimRecovery(lockDirectory: string): Promise<RecoveryClaim> {
     }
   }
   const next =
-    Math.max(0, ...EffectArray.map(claims, (name) => Number(name.slice("recovery-".length)))) + 1;
+    Math.max(
+      0,
+      ...EffectArray.map(claims, (name) => Number(EffectString.slice(name, "recovery-".length))),
+    ) + 1;
   const claim = join(lockDirectory, `recovery-${next}`);
 
   const staging = join(lockDirectory, `staging-${process.pid}-${Date.now()}`);
@@ -573,7 +578,10 @@ async function portsReleased(ports: ReadonlyArray<URL>): Promise<void> {
 
 function isListening(url: URL): Promise<boolean> {
   return new Promise((resolve, reject) => {
-    const socket = connect({ host: url.hostname.replace(/^\[|\]$/gu, ""), port: Number(url.port) });
+    const socket = connect({
+      host: EffectString.replace(url.hostname, /^\[|\]$/gu, ""),
+      port: Number(url.port),
+    });
     socket.setTimeout(1000);
     socket.once("connect", () => {
       socket.destroy();
@@ -606,7 +614,7 @@ function processTable(): ReadonlyArray<OwnedProcess> {
   if (result.status !== 0) {
     throw new Error(`ps failed: ${result.stderr}`);
   }
-  return EffectArray.flatMap(result.stdout.split("\n"), (line) => {
+  return EffectArray.flatMap(EffectString.split(result.stdout, "\n"), (line) => {
     const match =
       /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\w{3}\s+\w{3}\s+\d+\s+[\d:]+\s+\d{4})\s+(.*)$/u.exec(line);
     return match === null
@@ -616,7 +624,10 @@ function processTable(): ReadonlyArray<OwnedProcess> {
             pid: Number(match[1]),
             ppid: Number(match[2]),
             pgid: Number(match[3]),
-            started: match[4]?.replaceAll(/\s+/gu, " ") ?? "",
+            started:
+              optionalStringValue(match[4], (value) =>
+                EffectString.replaceAll(value, /\s+/gu, " "),
+              ) ?? "",
             command: match[5] ?? "",
           },
         ];

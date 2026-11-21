@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import { PgliteClient } from "@effect/sql-pglite";
 import { describe, expect, it } from "@effect/vitest";
+import { EffectString } from "@lineupkeep/collections";
 import { Effect, Exit } from "effect";
 import { Array as EffectArray } from "effect";
 
@@ -474,8 +475,8 @@ function migrationStatements(select: (name: string) => boolean): ReadonlyArray<s
   const statements: string[] = [];
   for (const name of EffectArray.filter(readdirSync(migrationsFolder), select).sort()) {
     const contents = readFileSync(join(migrationsFolder, name, "migration.sql"), "utf8");
-    for (const statement of contents.split("--> statement-breakpoint")) {
-      const trimmed = statement.trim();
+    for (const statement of EffectString.split(contents, "--> statement-breakpoint")) {
+      const trimmed = EffectString.trim(statement);
       if (trimmed.length > 0) {
         statements.push(trimmed);
       }

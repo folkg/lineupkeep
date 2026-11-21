@@ -1,4 +1,6 @@
+import { EffectString } from "@lineupkeep/collections";
 import { Array as EffectArray, Option as EffectOption } from "effect";
+
 const browsers: ReadonlyArray<readonly [RegExp, string]> = [
   [/\bEdg(?:iOS|A)?\//u, "Edge"],
   [/\bOPR\//u, "Opera"],
@@ -19,7 +21,7 @@ const systems: ReadonlyArray<readonly [RegExp, string]> = [
 ];
 
 export function deviceHint(userAgent: string | null): string {
-  if (userAgent === null || userAgent.trim() === "") {
+  if (userAgent === null || EffectString.trim(userAgent) === "") {
     return unknownClient;
   }
   const browser = match(browsers, userAgent);

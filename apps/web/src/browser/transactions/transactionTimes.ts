@@ -1,4 +1,5 @@
 import { EffectArray, EffectOption } from "@lineupkeep/collections";
+import { EffectString } from "@lineupkeep/collections";
 
 import { formatCalendarDate } from "#browser/shared-ui/formatTime.ts";
 import type { ClockReader } from "#browser/shared-ui/formatTime.ts";
@@ -194,7 +195,7 @@ export function discardLine(
 }
 
 function withPeriod(text: string): string {
-  return text.endsWith(".") ? text : `${text}.`;
+  return EffectString.endsWith(text, ".") ? text : `${text}.`;
 }
 
 function clockFormat(reader: ClockReader): Intl.DateTimeFormat {

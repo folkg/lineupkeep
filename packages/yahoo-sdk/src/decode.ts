@@ -1,6 +1,8 @@
 import { DateTime, Effect, Schema, SchemaIssue, SchemaTransformation } from "effect";
 import { Array as EffectArray } from "effect";
 
+import { EffectString } from "#yahoo/stringTools.ts";
+
 import { YahooParseError } from "./errors.ts";
 
 export const IntFromStringOrNumber: Schema.Codec<number, number | string> = Schema.Union([
@@ -57,7 +59,7 @@ export function isReadonlyArray<A>(value: ReadonlyArray<A> | A): value is Readon
 }
 
 export function optionalNonEmpty(value: string | undefined): string | undefined {
-  return value === undefined || value.trim().length === 0 ? undefined : value;
+  return value === undefined || EffectString.trim(value).length === 0 ? undefined : value;
 }
 
 export function numberOrNull(value: number | string | null | undefined): number | null {

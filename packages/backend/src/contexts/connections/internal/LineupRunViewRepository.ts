@@ -1,3 +1,5 @@
+import { EffectString } from "@lineupkeep/collections";
+
 import type { LineupRun } from "#contexts/connections/LineupRun.ts";
 
 import type { LineupRunRecord } from "./LineupRunTables.ts";
@@ -76,7 +78,10 @@ function pendingInfo(state: LineupRunState): LineupRun["pending"] {
     case "Validating":
     case "Applying":
     case "Verifying":
-      return { reason: state._tag.toLocaleLowerCase(), detail: "The durable run is in progress." };
+      return {
+        reason: EffectString.toLocaleLowerCase(state._tag),
+        detail: "The durable run is in progress.",
+      };
     case "Completed":
     case "Skipped":
     case "Blocked":

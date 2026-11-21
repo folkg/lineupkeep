@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import {
   Array as EffectArray,
   Config,
@@ -208,7 +209,7 @@ function smtpFailure(error: unknown): EmailDeliveryFailed {
 
 function smtpMessageId(idempotencyKey: string, from: string): string {
   const sender = /<([^<>]+)>/u.exec(from)?.[1] ?? from;
-  const domain = sender.slice(sender.lastIndexOf("@") + 1);
+  const domain = EffectString.slice(sender, EffectString.lastIndexOf(sender, "@") + 1);
   return `<${idempotencyKey}@${domain}>`;
 }
 
@@ -250,8 +251,10 @@ function providerDetail(message: string | undefined): string | undefined {
   if (message === undefined) {
     return undefined;
   }
-  const withoutAddresses = message.replaceAll(/[^\s@]+@[^\s@]+/gu, "[address]");
-  return withoutAddresses.length > 200 ? `${withoutAddresses.slice(0, 197)}...` : withoutAddresses;
+  const withoutAddresses = EffectString.replaceAll(message, /[^\s@]+@[^\s@]+/gu, "[address]");
+  return withoutAddresses.length > 200
+    ? `${EffectString.slice(withoutAddresses, 0, 197)}...`
+    : withoutAddresses;
 }
 
 function providerRefusesRecipient(message: string): boolean {

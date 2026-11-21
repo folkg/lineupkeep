@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 export function signInDestinations(
   rawQuery: string,
   redirect: string | undefined,
@@ -17,5 +18,5 @@ export function signInDestinations(
 
 export function isApplicationPath(path: string): boolean {
   const base = "http://application.invalid";
-  return path.startsWith("/") && new URL(path, base).origin === base;
+  return EffectString.startsWith(path, "/") && new URL(path, base).origin === base;
 }

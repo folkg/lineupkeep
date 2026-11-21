@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import type { IConfiguration, IRegularForbiddenRuleType } from "dependency-cruiser";
 import { Array as EffectArray } from "effect";
 
@@ -298,7 +299,10 @@ export default {
           path: `${backendRoot}(?:contexts|shared-kernels)/`,
           pathNot: [
             `${backendRoot}contexts/${context}/`,
-            ...EffectArray.map(imports, (path) => `${backendRoot}${path.replaceAll(".", "\\.")}$`),
+            ...EffectArray.map(
+              imports,
+              (path) => `${backendRoot}${EffectString.replaceAll(path, ".", "\\.")}$`,
+            ),
           ],
         },
       ),

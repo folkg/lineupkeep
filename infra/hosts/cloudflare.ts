@@ -1,4 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import { EffectString } from "@lineupkeep/collections";
 import {
   assertPublicRouting,
   workerConfiguration,
@@ -73,7 +74,7 @@ function postgresOrigin(value: Redacted.Redacted<string>): {
     scheme: "postgres" as const,
     host: url.hostname,
     port: Number(url.port || 5432),
-    database: decodeURIComponent(url.pathname.slice(1)),
+    database: decodeURIComponent(EffectString.slice(url.pathname, 1)),
     user: decodeURIComponent(url.username),
     password: Redacted.make(decodeURIComponent(url.password)),
   };

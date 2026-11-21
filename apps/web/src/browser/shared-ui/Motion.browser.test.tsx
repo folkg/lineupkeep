@@ -1,5 +1,6 @@
 import "#web/styles.css";
 import { EffectArray } from "@lineupkeep/collections";
+import { EffectString } from "@lineupkeep/collections";
 import { render } from "@solidjs/web";
 import type { JSX } from "@solidjs/web";
 import { For, Show, createSignal } from "solid-js";
@@ -121,11 +122,13 @@ function listOf(host: HTMLElement): HTMLElement {
 }
 
 function token(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return EffectString.trim(getComputedStyle(document.documentElement).getPropertyValue(name));
 }
 
 function time(value: string): number {
-  return value.endsWith("ms") ? Number.parseFloat(value) : Number.parseFloat(value) * 1000;
+  return EffectString.endsWith(value, "ms")
+    ? Number.parseFloat(value)
+    : Number.parseFloat(value) * 1000;
 }
 
 function hasSend(value: unknown): value is {

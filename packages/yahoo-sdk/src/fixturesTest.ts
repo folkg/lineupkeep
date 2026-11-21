@@ -1,4 +1,7 @@
 import { Array as EffectArray } from "effect";
+
+import { EffectString } from "#yahoo/stringTools.ts";
+
 export const sessionPayload = {
   fantasy_content: {
     users: {
@@ -189,7 +192,7 @@ function playerFragments(input: {
 }): ReadonlyArray<unknown> {
   return [
     { player_key: input.key },
-    { player_id: input.key.split(".").at(-1) },
+    { player_id: EffectString.split(input.key, ".").at(-1) },
     { name: { full: input.name } },
     ...(input.proTeam === undefined ? [] : [{ editorial_team_abbr: input.proTeam }]),
     ...(input.proTeamKey === undefined ? [] : [{ editorial_team_key: input.proTeamKey }]),
@@ -467,7 +470,7 @@ export const leagueRostersPayload = {
 
 const playerIdentity = (playerKey: string, name: string): ReadonlyArray<unknown> => [
   { player_key: playerKey },
-  { player_id: playerKey.split(".").at(-1) },
+  { player_id: EffectString.split(playerKey, ".").at(-1) },
   { name: { full: name } },
   { editorial_team_abbr: "SYN" },
   { editorial_team_key: "nfl.t.2" },

@@ -4,6 +4,7 @@ import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
 import { chromium } from "@playwright/test";
 import { Effect } from "effect";
 import { Schema } from "effect";
@@ -19,6 +20,7 @@ import {
   ShotsJson,
 } from "./evidence.ts";
 import type { Shots } from "./evidence.ts";
+
 function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
   return EffectArray.isArray(value);
 }
@@ -43,7 +45,7 @@ export function videoDirection(
     ) {
       throw new Error("Scene timing must fit the raw video and remain ordered without overlaps.");
     }
-    if (EffectArray.some([scene.title, scene.text], (value) => value.trim() === "")) {
+    if (EffectArray.some([scene.title, scene.text], (value) => EffectString.trim(value) === "")) {
       throw new Error("Each scene needs a title and directing text.");
     }
     if (scene.claims.length + scene.artifacts.length === 0) {
@@ -85,7 +87,11 @@ async function renderVideo(directory: string): Promise<void> {
   const inputs = await renderInputs(root, direction.rawVideo);
   const rawVideo = await realpath(resolve(root, direction.rawVideo));
   const rawRelative = relative(root, rawVideo);
-  if (rawRelative === ".." || rawRelative.startsWith(`..${sep}`) || isAbsolute(rawRelative)) {
+  if (
+    rawRelative === ".." ||
+    EffectString.startsWith(rawRelative, `..${sep}`) ||
+    isAbsolute(rawRelative)
+  ) {
     throw new Error("Raw video must belong to this evidence directory.");
   }
   const media = probe(rawVideo);
@@ -197,9 +203,12 @@ function sceneStatus(
   verdict: string,
 ): string {
   return claims.length === 0
-    ? `TEST RUN: ${verdict.toUpperCase()}`
+    ? `TEST RUN: ${EffectString.toUpperCase(verdict)}`
     : EffectArray.join(
-        EffectArray.map(claims, (claim) => `${claim} ${String(status.get(claim)).toUpperCase()}`),
+        EffectArray.map(
+          claims,
+          (claim) => `${claim} ${EffectString.toUpperCase(String(status.get(claim)))}`,
+        ),
         " · ",
       );
 }
@@ -221,7 +230,7 @@ async function extractReviewFrames(
       end: scene.end - inset,
     };
     for (const [label, time] of Object.entries(moments)) {
-      const name = `scene-${String(index + 1).padStart(2, "0")}-${label}.png`;
+      const name = `scene-${EffectString.padStart(String(index + 1), 2, "0")}-${label}.png`;
       await ffmpeg(root, "review-frames.log", [
         "-y",
         "-v",

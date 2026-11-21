@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
 
+import { EffectString } from "@lineupkeep/collections";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -31,9 +32,11 @@ describe("hosted browser session descriptors", () => {
     ) {
       throw new Error("The test envelope is not a signed descriptor");
     }
-    const payload = Buffer.from(envelope.payload, "base64url")
-      .toString("utf8")
-      .replace("login.yahoo.com", "attacker.example");
+    const payload = EffectString.replace(
+      Buffer.from(envelope.payload, "base64url").toString("utf8"),
+      "login.yahoo.com",
+      "attacker.example",
+    );
     const tampered = JSON.stringify({
       payload: Buffer.from(payload).toString("base64url"),
       signature: envelope.signature,

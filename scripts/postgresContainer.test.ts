@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
 import {
   containerNameFor,
   postgresContainer,
@@ -19,7 +20,7 @@ it("manages only containers named for a run", () => {
 
   const owned = postgresContainer(containerNameFor(runId), "/lock");
 
-  expect(owned.name).toBe(`lineupkeep-test-${runId.replaceAll("-", "")}`);
+  expect(owned.name).toBe(`lineupkeep-test-${EffectString.replaceAll(runId, "-", "")}`);
   expect(() => postgresContainer("lineupkeep-postgres", "/lock")).toThrow("Refusing to manage");
 });
 
@@ -37,7 +38,9 @@ it("removes a container that an orphaned Docker client finishes creating after i
   await postgresContainer(name, "/lock").remove(AbortSignal.timeout(20_000), false);
 
   expect(existsSync(join(docker.state, name))).toBe(false);
-  expect(EffectArray.filter(docker.calls(), (call) => call.startsWith("rm "))).not.toHaveLength(0);
+  expect(
+    EffectArray.filter(docker.calls(), (call) => EffectString.startsWith(call, "rm ")),
+  ).not.toHaveLength(0);
 });
 
 it("refuses removal when a journaled container name has another checkout's ownership label", async () => {
@@ -198,7 +201,7 @@ esac
     environment: { ...process.env },
     calls: () =>
       existsSync(join(folder, "calls"))
-        ? readFileSync(join(folder, "calls"), "utf8").trim().split("\n")
+        ? EffectString.split(EffectString.trim(readFileSync(join(folder, "calls"), "utf8")), "\n")
         : [],
     [Symbol.asyncDispose]: () => cleanup.disposeAsync(),
   };

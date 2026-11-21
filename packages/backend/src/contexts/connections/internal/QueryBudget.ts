@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { Effect, Schema } from "effect";
 
 import {
@@ -16,7 +17,7 @@ const summaryResultHardLimitBytes = 28 * 1024;
 const playerListResultLimitBytes = 256 * 1024;
 
 const envelopeAllowanceBytes = 1_024;
-const cursorPlaceholder = "x".repeat(256);
+const cursorPlaceholder = EffectString.repeat("x", 256);
 const utf8 = new TextEncoder();
 
 export const queryBudget: QueryBudget = {

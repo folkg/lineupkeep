@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { DateTime, Effect, Option } from "effect";
 import { Array as EffectArray } from "effect";
 import { Order as EffectOrder } from "effect";
@@ -33,6 +34,7 @@ import type {
   ProfessionalGameObservation,
   ProfessionalGameObservationWrite,
 } from "./ScheduleObservationRepository.ts";
+
 function sortWithComparator<A>(
   self: ReadonlyArray<A>,
   compare: (left: A, right: A) => number,
@@ -184,8 +186,8 @@ function servedWeek(input: {
       servedGame({ league: input.league, source: input.source, observation }),
     ),
     (left, right) =>
-      left.fact.game.date.localeCompare(right.fact.game.date) ||
-      left.fact.sourceReference.localeCompare(right.fact.sourceReference),
+      EffectString.localeCompare(left.fact.game.date, right.fact.game.date) ||
+      EffectString.localeCompare(left.fact.sourceReference, right.fact.sourceReference),
   );
   return {
     league: input.league,

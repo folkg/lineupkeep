@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import { assert, it } from "@effect/vitest";
+import { EffectString } from "@lineupkeep/collections";
 import { Array, DateTime, Effect, Layer, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption, Order as EffectOrder } from "effect";
@@ -24,6 +25,7 @@ import { countGamesForTeam, isLeagueOffNight, leagueGamesByDate } from "./League
 import { ProfessionalCalendarLive } from "./ProfessionalCalendarLive.ts";
 import { ScheduleObservationRepository } from "./ScheduleObservationRepository.ts";
 import { scheduleObservations } from "./ScheduleObservationTables.ts";
+
 function sortWithComparator<A>(
   self: ReadonlyArray<A>,
   compare: (left: A, right: A) => number,
@@ -423,7 +425,7 @@ it.effect("stores a postponed game with its status and serves it with it", () =>
           ["2026020301", "postponed", "2026-11-01"],
           ["2026020304", "final", "2026-11-02"],
         ],
-        (left, right) => String(left[0]).localeCompare(String(right[0])),
+        (left, right) => EffectString.localeCompare(String(left[0]), String(right[0])),
       ),
     );
     const postponed = EffectOption.getOrUndefined(
@@ -740,7 +742,9 @@ function calendarLayer(
       Effect.sync(() => {
         const url = new URL(request.url);
         calls.push(url);
-        return respond(url.pathname.slice(url.pathname.lastIndexOf("/") + 1));
+        return respond(
+          EffectString.slice(url.pathname, EffectString.lastIndexOf(url.pathname, "/") + 1),
+        );
       }),
   });
   const sources = Layer.effect(GameSourceRegistry)(
@@ -785,8 +789,12 @@ function teamPayload(club: ClubPayload): unknown {
   return {
     id: club.id,
     abbrev: club.abbrev,
-    placeName: { default: club.name.slice(0, club.name.lastIndexOf(" ")) },
-    commonName: { default: club.name.slice(club.name.lastIndexOf(" ") + 1) },
+    placeName: {
+      default: EffectString.slice(club.name, 0, EffectString.lastIndexOf(club.name, " ")),
+    },
+    commonName: {
+      default: EffectString.slice(club.name, EffectString.lastIndexOf(club.name, " ") + 1),
+    },
   };
 }
 

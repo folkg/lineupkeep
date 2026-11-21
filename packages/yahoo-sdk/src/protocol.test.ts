@@ -5,6 +5,8 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
 
+import { EffectString } from "#yahoo/stringTools.ts";
+
 import { Credentials, CredentialsFromSession } from "./credentials.ts";
 import type { YahooReadError } from "./errors.ts";
 import { Protocol, YahooProtocol } from "./protocol.ts";
@@ -169,7 +171,7 @@ it.effect("stops a write response above its byte bound", () => {
   const protocolRequest = HttpClientRequest.get("https://pub-api-rw.fantasysports.yahoo.com/x");
   const response = HttpClientResponse.fromWeb(
     protocolRequest,
-    new Response("x".repeat(300 * 1024), { status: 200 }),
+    new Response(EffectString.repeat("x", 300 * 1024), { status: 200 }),
   );
   return Effect.gen(function* () {
     const protocol = yield* Protocol;

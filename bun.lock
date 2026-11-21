@@ -5,6 +5,7 @@
     "": {
       "name": "starter",
       "dependencies": {
+        "@lineupkeep/collections": "workspace:*",
         "effect": "4.1.4",
       },
       "devDependencies": {
@@ -122,6 +123,7 @@
         "@effect/sql-pglite": "catalog:",
         "@electric-sql/pglite": "catalog:",
         "@lineupkeep/brand": "workspace:*",
+        "@lineupkeep/collections": "workspace:*",
         "@lineupkeep/lineup-solver": "workspace:*",
         "@lineupkeep/yahoo-sdk": "workspace:*",
         "@xstate/effect": "catalog:",

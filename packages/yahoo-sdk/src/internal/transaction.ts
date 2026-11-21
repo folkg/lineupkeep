@@ -9,6 +9,7 @@ import {
 } from "#yahoo/decode.ts";
 import { YahooParseError } from "#yahoo/errors.ts";
 import type { YahooLeagueKey } from "#yahoo/keys.ts";
+import { EffectString } from "#yahoo/stringTools.ts";
 
 export function decodeTransactions(
   payload: unknown,
@@ -68,7 +69,8 @@ export function decodePendingTrades(
       for (const team of [proposer, receiver]) {
         if (
           team !== undefined &&
-          team.teamKey.slice(0, team.teamKey.lastIndexOf(".t.")) !== requestedLeagueKey
+          EffectString.slice(team.teamKey, 0, EffectString.lastIndexOf(team.teamKey, ".t.")) !==
+            requestedLeagueKey
         ) {
           return yield* new YahooParseError({
             operation: "read_pending_trades",
@@ -150,7 +152,7 @@ function transactionTypeOf(type: string): YahooTransactionType {
     case "pending_trade":
       return "pending_trade";
     default:
-      return type.startsWith("commish") ? "commissioner" : "other";
+      return EffectString.startsWith(type, "commish") ? "commissioner" : "other";
   }
 }
 

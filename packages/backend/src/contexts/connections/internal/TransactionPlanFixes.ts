@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { Effect } from "effect";
 import { Schema } from "effect";
 import { Array as EffectArray } from "effect";
@@ -30,7 +31,7 @@ export function rosterFixGroupOf(move: TransactionMoveId): string {
 }
 
 export function isRosterFixGroup(group: string | undefined): boolean {
-  return group !== undefined && group.startsWith(rosterFixGroupPrefix);
+  return group !== undefined && EffectString.startsWith(group, rosterFixGroupPrefix);
 }
 
 export function rosterFixFundedMove(group: string | undefined): TransactionMoveId | undefined {
@@ -38,7 +39,7 @@ export function rosterFixFundedMove(group: string | undefined): TransactionMoveI
     return undefined;
   }
   return Effect.runSync(
-    Schema.decodeEffect(TransactionMoveId)(group.slice(rosterFixGroupPrefix.length)),
+    Schema.decodeEffect(TransactionMoveId)(EffectString.slice(group, rosterFixGroupPrefix.length)),
   );
 }
 

@@ -1,6 +1,7 @@
 import { createServer, isIP } from "node:net";
 
 import * as Docker from "@alchemy.run/docker";
+import { EffectString } from "@lineupkeep/collections";
 import * as Command from "alchemy/Command";
 import * as Output from "alchemy/Output";
 import { Stage } from "alchemy/Stage";
@@ -63,7 +64,9 @@ export function localContainerHost(
           cwd: new URL("../../", import.meta.url).pathname,
           command: "node infra/local/loopbackRelay.ts",
           env: {
-            RELAY_HOST: Output.map(endpoint, ({ url }) => url.hostname.replace(/^\[|\]$/gu, "")),
+            RELAY_HOST: Output.map(endpoint, ({ url }) =>
+              EffectString.replace(url.hostname, /^\[|\]$/gu, ""),
+            ),
             RELAY_BIND: Output.map(endpoint, ({ loopback }) =>
               loopback ? relayNetwork.bind : "127.0.0.1",
             ),

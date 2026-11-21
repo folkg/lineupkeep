@@ -1,5 +1,8 @@
 import { Array as EffectArray } from "effect";
 import { Order as EffectOrder } from "effect";
+
+import { EffectString } from "#yahoo/stringTools.ts";
+
 function sortWithComparator<A>(
   self: ReadonlyArray<A>,
   compare: (left: A, right: A) => number,
@@ -83,7 +86,7 @@ function normalizeFragments(fragments: ReadonlyArray<unknown>, key: string): unk
     (fragment) => !(EffectArray.isArray(fragment) && fragment.length === 0),
   );
   if (
-    (key.endsWith("s") && !attributeFragmentKeys.has(key)) ||
+    (EffectString.endsWith(key, "s") && !attributeFragmentKeys.has(key)) ||
     !EffectArray.every(attributeFragments, isRecord) ||
     !hasOnlyDistinctFields(attributeFragments)
   ) {

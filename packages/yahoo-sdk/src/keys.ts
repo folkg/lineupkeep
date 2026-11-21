@@ -1,5 +1,7 @@
 import { Schema } from "effect";
 
+import { EffectString } from "#yahoo/stringTools.ts";
+
 export const YahooLeagueKey = Schema.String.pipe(
   Schema.check(Schema.isPattern(/^[0-9]+\.l\.[0-9]+$/u)),
 );
@@ -68,7 +70,7 @@ export const YahooLineupSlot = Schema.String.pipe(
 export type YahooLineupSlot = typeof YahooLineupSlot.Type;
 
 export function leagueKeyOfTeam(teamKey: YahooTeamKey): YahooLeagueKey {
-  return teamKey.slice(0, teamKey.lastIndexOf(".t."));
+  return EffectString.slice(teamKey, 0, EffectString.lastIndexOf(teamKey, ".t."));
 }
 
 export function sameCoverage(left: YahooCoverage, right: YahooCoverage): boolean {

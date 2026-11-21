@@ -1,6 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
+import { EffectString } from "@lineupkeep/collections";
 import { Array, DateTime, Effect, Layer, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { TestClock } from "effect/testing";
@@ -199,7 +200,7 @@ it.effect("refuses content that is blank or too long once control characters are
     );
     const tooLong = yield* Effect.flip(
       feedback.submit(user, { kind: "user", reference: "web" }, [
-        submission({ body: "x".repeat(4_001) }),
+        submission({ body: EffectString.repeat("x", 4_001) }),
       ]),
     );
 

@@ -1,5 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 
+import { EffectString } from "@lineupkeep/collections";
 import { Option, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import postgres from "postgres";
@@ -56,7 +57,7 @@ export function postgresProbe(databaseUrl: string): DatabaseProbe {
 }
 
 export function parsePlanLog(lines: string): ReadonlyArray<StatementPlan> {
-  return EffectArray.flatMap(lines.split("\n"), (line) => {
+  return EffectArray.flatMap(EffectString.split(lines, "\n"), (line) => {
     const entry = Option.getOrUndefined(Schema.decodeOption(LogLine)(line));
     const match =
       entry === undefined ? null : /^duration: ([\d.]+) ms\s+plan:\n/u.exec(entry.message);
@@ -64,7 +65,7 @@ export function parsePlanLog(lines: string): ReadonlyArray<StatementPlan> {
       return [];
     }
     const explained = Option.getOrUndefined(
-      Schema.decodeOption(Explained)(entry.message.slice(match[0].length)),
+      Schema.decodeOption(Explained)(EffectString.slice(entry.message, match[0].length)),
     );
     if (explained === undefined) {
       return [];
@@ -72,7 +73,7 @@ export function parsePlanLog(lines: string): ReadonlyArray<StatementPlan> {
     const top = explained.Plan;
     return [
       {
-        query: explained["Query Text"].trim(),
+        query: EffectString.trim(explained["Query Text"]),
         durationMs: tenths(Number(match[1])),
         plan: describePlan(top),
         rows: numberAt(top, "Actual Rows"),

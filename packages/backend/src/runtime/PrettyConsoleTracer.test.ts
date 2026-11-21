@@ -1,4 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
+import { EffectString } from "@lineupkeep/collections";
 import {
   Cause,
   Context,
@@ -40,7 +41,10 @@ it("renders slow SQL without overriding its successful operation outcome", () =>
   const f = fixture();
   const operation = f.span("orders.import");
   const sql = f.span("sql.execute", { parent: Option.some(operation) });
-  sql.attribute("db.query.text", ` SELECT\n id FROM orders WHERE id IN (${"$1, ".repeat(80)}$2) `);
+  sql.attribute(
+    "db.query.text",
+    ` SELECT\n id FROM orders WHERE id IN (${EffectString.repeat("$1, ", 80)}$2) `,
+  );
   sql.end(100_000_000n, Exit.void);
   operation.attribute("app.outcome", "success");
 
@@ -213,7 +217,7 @@ it("bounds nesting and discards a deep secret-bearing error stack", () => {
     span = f.span(`level-${depth}`, { parent: Option.some(span) });
   }
   const error = new Error("private-message");
-  error.stack = "private-stack\n".repeat(10_000);
+  error.stack = EffectString.repeat("private-stack\n", 10_000);
 
   span.end(1_000_000n, Exit.die(error));
 
@@ -270,10 +274,10 @@ it("bounds safe values arrays records events and unsupported objects without coe
   span.attribute("c.object", hostile);
   span.attribute("d.error", new Error("private-error"));
   span.attribute("e.cycle", cycle);
-  span.attribute("f.long", "x".repeat(300));
+  span.attribute("f.long", EffectString.repeat("x", 300));
   span.attribute("g.deep", { one: { two: { three: { four: true } } } });
   for (let index = 0; index < 16; index += 1) {
-    span.attribute(`z${index.toString().padStart(2, "0")}`, index);
+    span.attribute(`z${EffectString.padStart(index.toString(), 2, "0")}`, index);
     span.event(`event-${index}`, 1n);
   }
 

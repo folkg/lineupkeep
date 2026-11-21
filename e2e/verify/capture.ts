@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
 import type { Page, TestInfo } from "@playwright/test";
 import { Array as EffectArray } from "effect";
 
@@ -41,7 +42,8 @@ export function hasCheckpoint(
       EffectArray.some(
         attachments,
         (snapshot) =>
-          snapshot.name === `${image.name.replace(/ \(screen still changing\)$/u, "")}-aria` &&
+          snapshot.name ===
+            `${EffectString.replace(image.name, / \(screen still changing\)$/u, "")}-aria` &&
           snapshot.contentType === "text/plain",
       ),
   );

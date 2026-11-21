@@ -1,3 +1,5 @@
+import { EffectString } from "@lineupkeep/collections";
+import { optionalStringValue } from "@lineupkeep/collections";
 import { Array as EffectArray, DateTime, Effect, Layer, Option, Ref } from "effect";
 import { Option as EffectOption, Order as EffectOrder } from "effect";
 
@@ -153,6 +155,7 @@ import { QueryRepository } from "./QueryRepository.ts";
 import type { OwnedTeam } from "./QueryRepository.ts";
 import { QueryTokens } from "./QueryTokens.ts";
 import { ScheduleObservationRepository } from "./ScheduleObservationRepository.ts";
+
 function sortWithComparator<A>(
   self: ReadonlyArray<A>,
   compare: (left: A, right: A) => number,
@@ -949,9 +952,9 @@ export const FantasyQueriesLive = Layer.effect(
           }),
         ),
         (left, right) =>
-          left.league.localeCompare(right.league) ||
-          left.name.localeCompare(right.name) ||
-          left.team.localeCompare(right.team),
+          EffectString.localeCompare(left.league, right.league) ||
+          EffectString.localeCompare(left.name, right.name) ||
+          EffectString.localeCompare(left.team, right.team),
       );
       const fingerprintValue = yield* queryFingerprint(
         EffectArray.join(
@@ -1658,7 +1661,7 @@ export const FantasyQueriesLive = Layer.effect(
       userId: UserId,
       input: SearchPlayersInput,
     ) {
-      const query = input.query?.trim();
+      const query = optionalStringValue(input.query, (value) => EffectString.trim(value));
       if (query === "") {
         return yield* QuerySelectionInvalid.make({
           detail:
@@ -6171,16 +6174,16 @@ function comparePlayers(
 ): number {
   switch (sort) {
     case "name":
-      return left.name.localeCompare(right.name);
+      return EffectString.localeCompare(left.name, right.name);
     case "position":
       return (
-        left.primaryPosition.localeCompare(right.primaryPosition) ||
-        left.name.localeCompare(right.name)
+        EffectString.localeCompare(left.primaryPosition, right.primaryPosition) ||
+        EffectString.localeCompare(left.name, right.name)
       );
     case "ownership":
       return (
         (right.percentOwned ?? -1) - (left.percentOwned ?? -1) ||
-        left.name.localeCompare(right.name)
+        EffectString.localeCompare(left.name, right.name)
       );
     case "actual_rank":
     case "overall_rank":
@@ -6227,7 +6230,9 @@ function queryFingerprint(value: string): Effect.Effect<string> {
   return Effect.promise(() =>
     crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)).then((digest) =>
       EffectArray.join(
-        EffectArray.map([...new Uint8Array(digest)], (byte) => byte.toString(16).padStart(2, "0")),
+        EffectArray.map([...new Uint8Array(digest)], (byte) =>
+          EffectString.padStart(byte.toString(16), 2, "0"),
+        ),
         "",
       ),
     ),

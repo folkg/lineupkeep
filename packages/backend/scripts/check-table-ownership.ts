@@ -8,13 +8,17 @@ import { Effect, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 
 import { findTableOwnershipConflicts } from "./tableOwnership.ts";
+const EffectString = {
+  indexOf: (self: string, search: string): number => self.indexOf(search),
+  slice: (self: string, start?: number, end?: number): string => self.slice(start, end),
+};
 
 const contextsRoot = fileURLToPath(new URL("../src/contexts", import.meta.url));
 const definitions = await Promise.all(
   EffectArray.map(
     globSync("*/internal/**/*{Table,Tables}.ts", { cwd: contextsRoot }),
     async (file) => {
-      const owner = file.slice(0, file.indexOf(sep));
+      const owner = EffectString.slice(file, 0, EffectString.indexOf(file, sep));
       const tableModule: unknown = await import(pathToFileURL(join(contextsRoot, file)).href);
       return EffectArray.map(
         EffectArray.filter(

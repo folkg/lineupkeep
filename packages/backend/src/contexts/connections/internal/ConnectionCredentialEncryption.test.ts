@@ -1,5 +1,6 @@
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
+import { EffectString } from "@lineupkeep/collections";
 import type { Tracer } from "effect";
 import { Context, Effect, Layer, Redacted, Schema, Tracer as EffectTracer } from "effect";
 import { Array as EffectArray } from "effect";
@@ -304,7 +305,7 @@ it.effect("binds a retained key version as authenticated data", () => {
 });
 
 function flipFirst(value: string): string {
-  return `${value[0] === "A" ? "B" : "A"}${value.slice(1)}`;
+  return `${value[0] === "A" ? "B" : "A"}${EffectString.slice(value, 1)}`;
 }
 
 const owner = decodeUserId("owner");

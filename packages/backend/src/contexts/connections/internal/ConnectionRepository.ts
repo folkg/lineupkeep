@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { and, asc, eq, getTableColumns, notInArray, or } from "drizzle-orm";
 import { Array, Context, DateTime, Effect, Layer, Schema } from "effect";
 import { Array as EffectArray } from "effect";
@@ -69,6 +70,7 @@ import {
   NotificationsRow,
 } from "./IncidentTables.ts";
 import { TeamAutomationState } from "./TeamAutomationWorkflow.ts";
+
 function sortWithComparator<A>(
   self: ReadonlyArray<A>,
   compare: (left: A, right: A) => number,
@@ -306,7 +308,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
           .transaction((tx) =>
             Effect.gen(function* () {
               const sortedRows = sortWithComparator(rows, (left, right) =>
-                left.requestId.localeCompare(right.requestId),
+                EffectString.localeCompare(left.requestId, right.requestId),
               );
               const inserted = yield* chunked(
                 sortedRows,

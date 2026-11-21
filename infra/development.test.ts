@@ -8,6 +8,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
 import {
   containerNameFor,
   postgresContainer,
@@ -154,7 +155,7 @@ async function developmentInterruptFixture(
   child.stderr.on("data", () => undefined);
   child.stdout.on("data", (chunk: Buffer) => {
     output += chunk.toString();
-    if (chunk.toString().includes("READY") && child.pid !== undefined) {
+    if (EffectString.includes(chunk.toString(), "READY") && child.pid !== undefined) {
       process.kill(-child.pid, "SIGINT");
     }
   });

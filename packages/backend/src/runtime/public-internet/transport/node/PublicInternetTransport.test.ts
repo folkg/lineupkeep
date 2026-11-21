@@ -6,6 +6,7 @@ import type { LookupFunction } from "node:net";
 
 import { isPublicRoutableHost } from "@better-auth/core/utils/host";
 import { assert, it } from "@effect/vitest";
+import { EffectString } from "@lineupkeep/collections";
 import { Effect, Exit, Fiber } from "effect";
 import { Array as EffectArray } from "effect";
 import { TestClock } from "effect/testing";
@@ -329,7 +330,13 @@ for (const name of ["process", "isolate"] as const) {
 
       const result = yield* Effect.exit(
         internet.request(
-          new Request(fixture.origin.replace("public-internet.test", "wrong.public-internet.test")),
+          new Request(
+            EffectString.replace(
+              fixture.origin,
+              "public-internet.test",
+              "wrong.public-internet.test",
+            ),
+          ),
         ),
       );
 
@@ -391,7 +398,7 @@ it.effect("rejects every special-use DNS answer before opening a process connect
           "192.0.2.1",
           "224.0.0.1",
         ],
-        (address) => [{ address, family: address.includes(":") ? 6 : 4 }],
+        (address) => [{ address, family: EffectString.includes(address, ":") ? 6 : 4 }],
       ),
     ];
     for (const addresses of cases) {
@@ -520,8 +527,8 @@ async function setupHTTPS(): Promise<HTTPSFixture> {
     if (url.pathname === "/redirect-target") {
       followed++;
     }
-    if (url.pathname.startsWith("/status/")) {
-      response.statusCode = Number(url.pathname.slice("/status/".length));
+    if (EffectString.startsWith(url.pathname, "/status/")) {
+      response.statusCode = Number(EffectString.slice(url.pathname, "/status/".length));
       response.end();
       return;
     }

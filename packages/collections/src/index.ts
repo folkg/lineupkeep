@@ -154,6 +154,65 @@ export const EffectArray = {
   isArray: (value: unknown): value is ReadonlyArray<unknown> => value instanceof Array,
 };
 
+export function optionalStringValue<A extends string, B>(value: A, f: (value: A) => B): B;
+export function optionalStringValue<A extends string, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+export function optionalStringValue<A extends string, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
+
+export const EffectString = {
+  includes: (self: string, search: string, position?: number): boolean =>
+    self.includes(search, position),
+  replaceAll: (
+    self: string,
+    search: string | RegExp,
+    replacement: string | ((substring: string, ...args: string[]) => string),
+  ): string => self.replaceAll(search, replacement as string),
+  slice: (self: string, start?: number, end?: number): string => self.slice(start, end),
+  trim: (self: string): string => self.trim(),
+  startsWith: (self: string, search: string, position?: number): boolean =>
+    self.startsWith(search, position),
+  split: (self: string, separator: string | RegExp, limit?: number): string[] =>
+    self.split(separator, limit),
+  localeCompare: (
+    self: string,
+    that: string,
+    locales?: string | string[],
+    options?: Intl.CollatorOptions,
+  ): number => self.localeCompare(that, locales, options),
+  replace: (
+    self: string,
+    search: string | RegExp,
+    replacement: string | ((substring: string, ...args: string[]) => string),
+  ): string => self.replace(search, replacement as string),
+  endsWith: (self: string, search: string, position?: number): boolean =>
+    self.endsWith(search, position),
+  repeat: (self: string, count: number): string => self.repeat(count),
+  lastIndexOf: (self: string, search: string, position?: number): number =>
+    self.lastIndexOf(search, position),
+  toLowerCase: (self: string): string => self.toLowerCase(),
+  indexOf: (self: string, search: string, position?: number): number =>
+    self.indexOf(search, position),
+  padStart: (self: string, length: number, fill?: string): string => self.padStart(length, fill),
+  toUpperCase: (self: string): string => self.toUpperCase(),
+  toLocaleLowerCase: (self: string, locales?: string | string[]): string =>
+    self.toLocaleLowerCase(locales),
+  charCodeAt: (self: string, index: number): number => self.charCodeAt(index),
+  trimEnd: (self: string): string => self.trimEnd(),
+  matchAll: (self: string, regexp: RegExp): IterableIterator<IndexedMatch> =>
+    self.matchAll(regexp) as IterableIterator<IndexedMatch>,
+  match: (self: string, regexp: RegExp): RegExpMatchArray | null => self.match(regexp),
+  codePointAt: (self: string, index: number): number | undefined => self.codePointAt(index),
+  charAt: (self: string, index: number): string => self.charAt(index),
+  normalize: (self: string, form?: string): string => self.normalize(form),
+};
+
 export const EffectOption = {
   getOrUndefined: <A>(option: Option<A>): A | undefined =>
     option._tag === "Some" ? option.value : undefined,
@@ -192,6 +251,7 @@ function filter<A>(self: ReadonlyArray<A>, predicate: (value: A, index: number) 
   return out;
 }
 
+type IndexedMatch = RegExpMatchArray & { readonly index: number };
 type Option<A> = { readonly _tag: "Some"; readonly value: A } | { readonly _tag: "None" };
 type Ordering = -1 | 0 | 1;
 type Order<A> = (self: A, that: A) => Ordering;

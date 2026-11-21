@@ -1,8 +1,10 @@
 import { globSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { EffectString } from "@lineupkeep/collections";
 import { Array as EffectArray } from "effect";
 import { expect, it } from "vitest";
+
 function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
   return EffectArray.isArray(value);
 }
@@ -61,7 +63,7 @@ it("keeps the removed proposal-set storage out of code, tests, and the contracts
     ],
     (file) =>
       !excluded.has(file) &&
-      !EffectArray.some(excludedPrefixes, (prefix) => file.startsWith(prefix)),
+      !EffectArray.some(excludedPrefixes, (prefix) => EffectString.startsWith(file, prefix)),
   );
   const findings: Array<string> = [];
   for (const file of files) {

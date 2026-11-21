@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { Schema } from "effect";
 
 export function mcpExchangeName(sequence: number, method: string): string {
@@ -5,7 +6,7 @@ export function mcpExchangeName(sequence: number, method: string): string {
 }
 
 export function isMcpExchangeAttachment(attachment: { readonly name: string }): boolean {
-  return attachment.name.startsWith(exchangePrefix);
+  return EffectString.startsWith(attachment.name, exchangePrefix);
 }
 
 const exchangePrefix = "MCP exchange ";

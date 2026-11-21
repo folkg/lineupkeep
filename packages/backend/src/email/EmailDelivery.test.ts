@@ -3,6 +3,7 @@ import type { Server, Socket } from "node:net";
 
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
+import { EffectString } from "@lineupkeep/collections";
 import {
   Array,
   Clock,
@@ -489,12 +490,12 @@ function serve(socket: Socket, messages: SmtpSinkMessage[], refused: ReadonlySet
   socket.on("data", (chunk) => {
     buffered += chunk.toString();
     for (;;) {
-      const end = buffered.indexOf("\r\n");
+      const end = EffectString.indexOf(buffered, "\r\n");
       if (end === -1) {
         return;
       }
-      const line = buffered.slice(0, end);
-      buffered = buffered.slice(end + 2);
+      const line = EffectString.slice(buffered, 0, end);
+      buffered = EffectString.slice(buffered, end + 2);
       if (inData) {
         if (line === ".") {
           inData = false;
@@ -504,7 +505,7 @@ function serve(socket: Socket, messages: SmtpSinkMessage[], refused: ReadonlySet
           data = [];
           socket.write("250 2.0.0 queued\r\n");
         } else {
-          data.push(line.startsWith("..") ? line.slice(1) : line);
+          data.push(EffectString.startsWith(line, "..") ? EffectString.slice(line, 1) : line);
         }
         continue;
       }
@@ -513,7 +514,7 @@ function serve(socket: Socket, messages: SmtpSinkMessage[], refused: ReadonlySet
   });
 
   function respond(line: string): void {
-    switch (line.slice(0, 4).toUpperCase()) {
+    switch (EffectString.toUpperCase(EffectString.slice(line, 0, 4))) {
       case "EHLO":
       case "HELO":
         socket.write("250 lineupkeep-smtp-sink\r\n");
@@ -574,7 +575,7 @@ function addressIn(line: string): string {
 }
 
 function lowercase(value: string): string {
-  return value.toLowerCase();
+  return EffectString.toLowerCase(value);
 }
 
 function setupEmailTransport(): ReturnType<typeof setupServer> & Disposable {

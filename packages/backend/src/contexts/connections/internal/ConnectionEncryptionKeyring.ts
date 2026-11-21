@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { Config, Effect, Option, Redacted, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 
@@ -50,14 +51,16 @@ function loadRetainedKeys(
       return [];
     }
     const entries = EffectArray.filter(
-      EffectArray.map(Redacted.value(configured.value).split(","), (entry) => entry.trim()),
+      EffectArray.map(EffectString.split(Redacted.value(configured.value), ","), (entry) =>
+        EffectString.trim(entry),
+      ),
       (entry) => entry.length > 0,
     );
     const seen = new Set<number>();
     const keys: Array<ConnectionEncryptionKeyShape> = [];
     for (const entry of entries) {
-      const separator = entry.indexOf(":");
-      const versionText = separator === -1 ? "" : entry.slice(0, separator);
+      const separator = EffectString.indexOf(entry, ":");
+      const versionText = separator === -1 ? "" : EffectString.slice(entry, 0, separator);
       if (separator === -1 || !/^\d+$/.test(versionText)) {
         return yield* Effect.fail(
           configurationRejected(
@@ -88,7 +91,7 @@ function loadRetainedKeys(
         );
       }
       const bytes = yield* Schema.decodeEffect(Schema.Uint8ArrayFromBase64)(
-        entry.slice(separator + 1),
+        EffectString.slice(entry, separator + 1),
       ).pipe(
         Effect.mapError(() =>
           configurationRejected(

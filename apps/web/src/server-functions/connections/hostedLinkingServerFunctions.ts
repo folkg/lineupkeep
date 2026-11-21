@@ -1,5 +1,7 @@
 import { HostedLinking } from "@lineupkeep/backend/connections/HostedLinking";
 import { HostedLinkingSessionInput } from "@lineupkeep/backend/connections/HostedLinking";
+import { EffectString } from "@lineupkeep/collections";
+import { optionalStringValue } from "@lineupkeep/collections";
 import { createServerFn } from "@tanstack/solid-start";
 import {
   deleteCookie,
@@ -52,8 +54,10 @@ export const startHostedLinkingServerFn = createServerFn({ method: "POST" })
           const session = toHostedLinkingSessionView(started.session);
           const streamPath = `/api/linking/session/${session.id}/stream`;
           const secure =
-            request.url.startsWith("https://") ||
-            request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() === "https";
+            EffectString.startsWith(request.url, "https://") ||
+            optionalStringValue(request.headers.get("x-forwarded-proto"), (value) =>
+              EffectString.trim(EffectString.split(value, ",")[0] ?? ""),
+            ) === "https";
           const now = DateTime.toEpochMillis(yield* DateTime.now);
           setCookie(hostedLinkingCookieName, Redacted.value(started.ticket), {
             httpOnly: true,

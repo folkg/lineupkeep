@@ -1,3 +1,5 @@
+import { EffectString } from "@lineupkeep/collections";
+import { optionalStringValue } from "@lineupkeep/collections";
 import { Context, DateTime, Deferred, Effect, Layer, Option, Redacted, Ref, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
@@ -50,6 +52,7 @@ import type {
 } from "#contexts/connections/Provider.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { ProviderRegistry, providerRegistryOf } from "#contexts/connections/ProviderRegistry.ts";
+
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
   value: A | null | undefined,
@@ -978,7 +981,9 @@ const providerFake = Effect.gen(function* () {
     }),
     searchPlayers: Effect.fn("FakeProvider.searchPlayers")(function* (input) {
       const current = yield* prepare(input, "search_players");
-      const query = input.query?.toLocaleLowerCase();
+      const query = optionalStringValue(input.query, (value) =>
+        EffectString.toLocaleLowerCase(value),
+      );
       const rows: ReadonlyArray<ProviderPlayerSearchResult["players"][number]> =
         current.searchPlayers ??
         EffectArray.flatMap(
@@ -1024,7 +1029,9 @@ const providerFake = Effect.gen(function* () {
           (input.availability === "all"
             ? player.availability !== "rostered"
             : player.availability === input.availability) &&
-          (query === undefined || query === "" || player.name.toLocaleLowerCase().includes(query)),
+          (query === undefined ||
+            query === "" ||
+            EffectString.includes(EffectString.toLocaleLowerCase(player.name), query)),
       );
       const ascending = (left: number | null, right: number | null): number =>
         (left ?? Number.POSITIVE_INFINITY) - (right ?? Number.POSITIVE_INFINITY);
@@ -1033,9 +1040,9 @@ const providerFake = Effect.gen(function* () {
       const sorted = [...filtered].sort((left, right) => {
         switch (input.sort) {
           case "name":
-            return left.name.localeCompare(right.name);
+            return EffectString.localeCompare(left.name, right.name);
           case "position":
-            return left.primaryPosition.localeCompare(right.primaryPosition);
+            return EffectString.localeCompare(left.primaryPosition, right.primaryPosition);
           case "ownership":
             return descending(left.percentOwned, right.percentOwned);
           case "actual_rank":
@@ -1091,7 +1098,7 @@ const providerFake = Effect.gen(function* () {
     readDraftResults: Effect.fn("FakeProvider.readDraftResults")(function* (input) {
       const current = yield* prepare(input, "read_draft_results");
       return EffectArray.filter(current.draftResults, (pick) =>
-        pick.providerTeamKey.startsWith(`${input.providerLeagueKey}.t.`),
+        EffectString.startsWith(pick.providerTeamKey, `${input.providerLeagueKey}.t.`),
       );
     }),
     readAvailableDraftPicks: Effect.fn("FakeProvider.readAvailableDraftPicks")(function* (input) {
@@ -1100,7 +1107,7 @@ const providerFake = Effect.gen(function* () {
       return EffectArray.filter(
         current.availableDraftPicks,
         (pick) =>
-          pick.providerTeamKey.startsWith(`${input.providerLeagueKey}.t.`) &&
+          EffectString.startsWith(pick.providerTeamKey, `${input.providerLeagueKey}.t.`) &&
           requested.has(pick.providerTeamKey),
       );
     }),

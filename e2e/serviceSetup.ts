@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
+import { optionalStringValue } from "@lineupkeep/collections";
 import { test, type Page, expect } from "@playwright/test";
 import { Effect } from "effect";
 import { Schema } from "effect";
@@ -39,7 +41,11 @@ export function serviceOperations(
               arguments: arguments_,
             }),
           });
-          if (response.headers.get("content-type")?.includes("application/json") !== true) {
+          if (
+            optionalStringValue(response.headers.get("content-type"), (value) =>
+              EffectString.includes(value, "application/json"),
+            ) !== true
+          ) {
             throw new Error(`Service invocation failed (${response.status}).`);
           }
           const text = await response.text();
@@ -106,7 +112,10 @@ export class ServiceIdentity {
       expect(verified.status, "verify the delivered sign-in code").toBe(200);
       const cookie = EffectArray.join(
         EffectArray.filter(
-          EffectArray.map(verified.headers.getSetCookie(), (value) => value.split(";")[0]),
+          EffectArray.map(
+            verified.headers.getSetCookie(),
+            (value) => EffectString.split(value, ";")[0],
+          ),
           (value): value is string => value !== undefined,
         ),
         "; ",

@@ -1,8 +1,10 @@
 import { EffectArray } from "@lineupkeep/collections";
+import { EffectString } from "@lineupkeep/collections";
 import { configureClientErrors, OBSERVE } from "solid-js";
 import { attribution } from "solid-js/attribution";
 
 import type { TelemetryHold, TelemetryReportData } from "#contracts/telemetry/telemetryContract.ts";
+
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
   value: A | null | undefined,
@@ -87,9 +89,9 @@ export function buildClientErrorReport(
   return {
     kind: "client_error",
     message: "ui.boundary_caught",
-    thrownIn: joinPath(context.ownerPath).slice(0, 300),
-    caughtBy: joinPath(context.boundaryPath).slice(0, 300),
-    pathname: location.pathname.slice(0, 200),
+    thrownIn: EffectString.slice(joinPath(context.ownerPath), 0, 300),
+    caughtBy: EffectString.slice(joinPath(context.boundaryPath), 0, 300),
+    pathname: EffectString.slice(location.pathname, 0, 200),
     ...(traceId === undefined ? {} : { clientTraceId: traceId }),
   };
 }
@@ -97,8 +99,8 @@ export function buildClientErrorReport(
 export function buildSlowInteractionReport(event: SlowInteraction): TelemetryReportData {
   return {
     kind: "slow_interaction",
-    name: event.name.slice(0, 100),
-    ...(event.target === undefined ? {} : { target: event.target.slice(0, 100) }),
+    name: EffectString.slice(event.name, 0, 100),
+    ...(event.target === undefined ? {} : { target: EffectString.slice(event.target, 0, 100) }),
     settledMs: event.settledMs,
     holds: EffectArray.map(event.holds, toTelemetryHold),
   };
@@ -140,7 +142,7 @@ export function parseTraceId(value: string | undefined): string | undefined {
   if (value === undefined) {
     return undefined;
   }
-  const segments = value.trim().split("-");
+  const segments = EffectString.split(EffectString.trim(value), "-");
   if (segments.length < 4) {
     return undefined;
   }
@@ -153,7 +155,7 @@ export function parseTraceId(value: string | undefined): string | undefined {
 
 function toTelemetryHold(hold: SlowHold): TelemetryHold {
   return {
-    blockers: EffectArray.join(hold.blockers, ", ").slice(0, 300),
+    blockers: EffectString.slice(EffectArray.join(hold.blockers, ", "), 0, 300),
     holdMs: hold.holdMs,
     acknowledged: hold.acknowledgements.length > 0,
   };

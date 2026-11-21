@@ -1,3 +1,5 @@
+import { EffectString } from "@lineupkeep/collections";
+
 import type {
   FeedbackContext,
   FeedbackContextInput,
@@ -37,7 +39,7 @@ function normalizedContext(
 function stripControlCharacters(value: string): string {
   let stripped = "";
   for (const character of value) {
-    const code = character.codePointAt(0) ?? 0;
+    const code = EffectString.codePointAt(character, 0) ?? 0;
     const allowedWhitespace = code === 0x09 || code === 0x0a || code === 0x0d;
     const control = (code < 0x20 && !allowedWhitespace) || (code >= 0x7f && code <= 0x9f);
     if (!control) {
@@ -48,9 +50,9 @@ function stripControlCharacters(value: string): string {
 }
 
 function singleLine(value: string): string {
-  return stripControlCharacters(value).replace(/\s+/gu, " ").trim();
+  return EffectString.trim(EffectString.replace(stripControlCharacters(value), /\s+/gu, " "));
 }
 
 function multiLine(value: string): string {
-  return stripControlCharacters(value.replace(/\r\n?/gu, "\n")).trim();
+  return EffectString.trim(stripControlCharacters(EffectString.replace(value, /\r\n?/gu, "\n")));
 }

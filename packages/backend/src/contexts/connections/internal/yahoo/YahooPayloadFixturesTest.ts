@@ -1,4 +1,6 @@
+import { EffectString } from "@lineupkeep/collections";
 import { Array as EffectArray } from "effect";
+
 const nflLeagueAttributes = {
   league_key: "466.l.4000",
   league_id: "4000",
@@ -756,7 +758,7 @@ export function withPlayerRankSample(
   for (const [index, values] of ranks.entries()) {
     players[String(index)] = {
       player: [
-        [{ player_key: `466.p.9${String(index).padStart(4, "0")}` }],
+        [{ player_key: `466.p.9${EffectString.padStart(String(index), 4, "0")}` }],
         {
           player_ranks: EffectArray.map(Object.entries(values), ([type, value]) => ({
             player_rank: { rank_type: type, rank_value: value },
@@ -2654,9 +2656,9 @@ function nflMatchupTeam(
   return [
     [
       { team_key: key },
-      { team_id: key.slice(key.lastIndexOf(".t.") + 3) },
+      { team_id: EffectString.slice(key, EffectString.lastIndexOf(key, ".t.") + 3) },
       { name },
-      { url: `https://football.fantasysports.yahoo.com/f1/4000/${key.slice(-1)}` },
+      { url: `https://football.fantasysports.yahoo.com/f1/4000/${EffectString.slice(key, -1)}` },
       { team_logos: [{ team_logo: { size: "large", url: "https://s.yimg.com/synthetic.png" } }] },
       { waiver_priority: 1 },
       { number_of_moves: 1 },
@@ -2989,9 +2991,9 @@ function standingsTeam(key: string, name: string, fragments: ReadonlyArray<unkno
   return [
     [
       { team_key: key },
-      { team_id: key.slice(key.lastIndexOf(".t.") + 3) },
+      { team_id: EffectString.slice(key, EffectString.lastIndexOf(key, ".t.") + 3) },
       { name },
-      { url: `https://football.fantasysports.yahoo.com/f1/4000/${key.slice(-1)}` },
+      { url: `https://football.fantasysports.yahoo.com/f1/4000/${EffectString.slice(key, -1)}` },
       { team_logos: [{ team_logo: { size: "large", url: "https://s.yimg.com/synthetic.png" } }] },
       { waiver_priority: 1 },
       { number_of_moves: 1 },
@@ -3021,7 +3023,7 @@ function standingsPayload(
       league: [
         {
           league_key: leagueKey,
-          league_id: leagueKey.slice(leagueKey.indexOf(".l.") + 3),
+          league_id: EffectString.slice(leagueKey, EffectString.indexOf(leagueKey, ".l.") + 3),
           name: leagueName,
           url: "https://football.fantasysports.yahoo.com/f1/4000",
           num_teams: 2,
@@ -3364,9 +3366,9 @@ function nhlMatchupTeam(
   return [
     [
       { team_key: key },
-      { team_id: key.slice(key.lastIndexOf(".t.") + 3) },
+      { team_id: EffectString.slice(key, EffectString.lastIndexOf(key, ".t.") + 3) },
       { name },
-      { url: `https://hockey.fantasysports.yahoo.com/hockey/4002/${key.slice(-1)}` },
+      { url: `https://hockey.fantasysports.yahoo.com/hockey/4002/${EffectString.slice(key, -1)}` },
       { team_logos: [{ team_logo: { size: "large", url: "https://s.yimg.com/synthetic.png" } }] },
       { waiver_priority: 1 },
       { number_of_moves: 1 },
@@ -3830,7 +3832,12 @@ function playerDetailsPayload(input: {
       player: [
         [
           { player_key: playerKey },
-          { player_id: playerKey.slice(playerKey.lastIndexOf(".p.") + 3) },
+          {
+            player_id: EffectString.slice(
+              playerKey,
+              EffectString.lastIndexOf(playerKey, ".p.") + 3,
+            ),
+          },
           {
             name: {
               full: `Synthetic Player ${String(index + 1)}`,
@@ -3864,7 +3871,10 @@ function playerDetailsPayload(input: {
       league: [
         {
           league_key: input.leagueKey,
-          league_id: input.leagueKey.slice(input.leagueKey.indexOf(".l.") + 3),
+          league_id: EffectString.slice(
+            input.leagueKey,
+            EffectString.indexOf(input.leagueKey, ".l.") + 3,
+          ),
           name: input.leagueName,
         },
         { players: entries },
@@ -3887,7 +3897,12 @@ export function yahooNhlDatePlayerDetails(
       player: [
         [
           { player_key: player.playerKey },
-          { player_id: player.playerKey.slice(player.playerKey.lastIndexOf(".p.") + 3) },
+          {
+            player_id: EffectString.slice(
+              player.playerKey,
+              EffectString.lastIndexOf(player.playerKey, ".p.") + 3,
+            ),
+          },
           { name: { full: player.name, first: "Synthetic", last: player.name } },
           { display_position: "C,LW" },
           { position_type: "P" },

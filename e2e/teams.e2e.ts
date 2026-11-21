@@ -1,3 +1,5 @@
+import { EffectString } from "@lineupkeep/collections";
+
 import { expect, signUp, test } from "./support";
 import { captureCheckpoint } from "./verify/capture";
 
@@ -77,7 +79,7 @@ test("saves an owner note on the team page and reads it back over MCP", async ({
   );
   await page.goto("/teams");
   await page.getByRole("link", { name: "Embedded Browser Team", exact: true }).click();
-  const teamId = new URL(page.url()).pathname.split("/").at(-1);
+  const teamId = EffectString.split(new URL(page.url()).pathname, "/").at(-1);
   expect(teamId).toBeTruthy();
 
   await test.step("Action: [owner] writes and saves a keeper note", async () => {

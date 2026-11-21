@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import {
   Array as EffectArray,
   Context,
@@ -136,6 +137,7 @@ import type {
   TransactionPlanWriteResult,
   TransactionPlanWritesShape,
 } from "./TransactionPlanWrites.ts";
+
 function optionalValue<A>(): A | undefined {
   return undefined;
 }
@@ -2618,7 +2620,7 @@ export const TransactionPlanServiceLive = Layer.effect(
         { concurrency: 1 },
       ))
         .flat()
-        .sort((left, right) => left.team.localeCompare(right.team));
+        .sort((left, right) => EffectString.localeCompare(left.team, right.team));
       return {
         status: "ok",
         team,
@@ -3195,14 +3197,14 @@ function selectRunGroups(input: {
         (left, right) =>
           runPositionOf(entryOf(input.entries, left.id), left) -
             runPositionOf(entryOf(input.entries, right.id), right) ||
-          left.id.localeCompare(right.id),
+          EffectString.localeCompare(left.id, right.id),
       ),
     });
   }
   groups.sort(
     (left, right) =>
       groupPosition(left, input.entries) - groupPosition(right, input.entries) ||
-      left.key.localeCompare(right.key),
+      EffectString.localeCompare(left.key, right.key),
   );
   return {
     selected: EffectArray.flatMap(groups, (group) => {
@@ -4293,7 +4295,7 @@ function withCure(
 }
 
 function cured(detail: string, cure: string | undefined): string {
-  return cure === undefined || detail.endsWith(cure) ? detail : `${detail} ${cure}`;
+  return cure === undefined || EffectString.endsWith(detail, cure) ? detail : `${detail} ${cure}`;
 }
 
 function fixPeers(

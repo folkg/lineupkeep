@@ -1,3 +1,5 @@
+import { EffectString } from "@lineupkeep/collections";
+import { optionalStringValue } from "@lineupkeep/collections";
 import { Effect, Layer, ManagedRuntime, Option, Tracer } from "effect";
 import { Headers, HttpTraceContext } from "effect/http";
 import * as OtlpExporter from "effect/observability/OtlpExporter";
@@ -201,19 +203,24 @@ function cloudRunTraceParent(request: Request): Tracer.ExternalSpan | undefined 
   if (header === null) {
     return undefined;
   }
-  const [ids, options] = header.trim().split(";", 2);
-  const [traceId, spanId] = ids?.split("/") ?? [];
-  if (traceId === undefined || spanId === undefined || !/^[0-9a-f]{32}$/iu.test(traceId.trim())) {
+  const [ids, options] = EffectString.split(EffectString.trim(header), ";", 2);
+  const [traceId, spanId] =
+    optionalStringValue(ids, (value) => EffectString.split(value, "/")) ?? [];
+  if (
+    traceId === undefined ||
+    spanId === undefined ||
+    !/^[0-9a-f]{32}$/iu.test(EffectString.trim(traceId))
+  ) {
     return undefined;
   }
-  const hexadecimalSpanId = decimalSpanId(spanId.trim());
+  const hexadecimalSpanId = decimalSpanId(EffectString.trim(spanId));
   if (hexadecimalSpanId === undefined) {
     return undefined;
   }
   return Tracer.externalSpan({
-    traceId: traceId.trim().toLowerCase(),
+    traceId: EffectString.toLowerCase(EffectString.trim(traceId)),
     spanId: hexadecimalSpanId,
-    sampled: options?.includes("o=1") ?? true,
+    sampled: optionalStringValue(options, (value) => EffectString.includes(value, "o=1")) ?? true,
   });
 }
 
@@ -223,7 +230,7 @@ function decimalSpanId(value: string): string | undefined {
   }
   const parsed = BigInt(value);
   return parsed > 0n && parsed <= 0xffffffffffffffffn
-    ? parsed.toString(16).padStart(16, "0")
+    ? EffectString.padStart(parsed.toString(16), 16, "0")
     : undefined;
 }
 

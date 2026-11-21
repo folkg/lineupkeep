@@ -2,6 +2,7 @@ import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
 import { chromium, expect } from "@playwright/test";
 import postgres from "postgres";
 
@@ -38,7 +39,7 @@ export default async function doctor(): Promise<void> {
             checkedAt: new Date().toISOString(),
             origin,
             emailOrigin,
-            databaseName: database.pathname.slice(1),
+            databaseName: EffectString.slice(database.pathname, 1),
             migrations: rows[0]?.applied,
             checks: [
               "Alchemy-owned production resources",

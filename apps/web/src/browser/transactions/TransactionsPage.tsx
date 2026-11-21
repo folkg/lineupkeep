@@ -1,5 +1,6 @@
 import { EffectArray } from "@lineupkeep/collections";
 import { EffectOption } from "@lineupkeep/collections";
+import { EffectString } from "@lineupkeep/collections";
 import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 
@@ -351,8 +352,12 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
     if (detail === undefined || status().kind === "waiting" || detail === nextAction()?.text) {
       return undefined;
     }
-    if (action().kind === "none" && group?.cure !== undefined && detail.endsWith(group.cure)) {
-      return detail.slice(0, -group.cure.length).trimEnd();
+    if (
+      action().kind === "none" &&
+      group?.cure !== undefined &&
+      EffectString.endsWith(detail, group.cure)
+    ) {
+      return EffectString.trimEnd(EffectString.slice(detail, 0, -group.cure.length));
     }
     return detail;
   };

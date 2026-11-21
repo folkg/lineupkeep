@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
 import type {
   FullConfig,
   FullResult,
@@ -245,10 +246,11 @@ function allSteps(steps: ReadonlyArray<TestStep>): ReadonlyArray<TestStep> {
 }
 
 function slug(name: string): string {
-  return name
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/gu, "-")
-    .replaceAll(/^-|-$/gu, "");
+  return EffectString.replaceAll(
+    EffectString.replaceAll(EffectString.toLowerCase(name), /[^a-z0-9]+/gu, "-"),
+    /^-|-$/gu,
+    "",
+  );
 }
 
 function extension(contentType: string): string {

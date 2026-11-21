@@ -1,4 +1,5 @@
 import type { FeedbackKind } from "@lineupkeep/backend/feedback/Feedback";
+import { EffectString } from "@lineupkeep/collections";
 
 import type {
   FeedbackContextView,
@@ -38,8 +39,8 @@ export function emptyFeedbackDraft(context: FeedbackContextView = {}, title = ""
 }
 
 export function checkFeedbackDraft(draft: FeedbackDraft): FeedbackDraftCheck {
-  const title = draft.title.trim();
-  const body = draft.body.trim();
+  const title = EffectString.trim(draft.title);
+  const body = EffectString.trim(draft.body);
   const errors: FeedbackDraftErrors = {
     ...(draft.kind === "" ? { kind: "Choose what kind of report this is." } : {}),
     ...(title.length === 0

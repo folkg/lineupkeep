@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { it } from "@effect/vitest";
+import { EffectString } from "@lineupkeep/collections";
 
 import type { AgentNoteCheck } from "./AgentNote.ts";
 import { agentNoteLimit, checkAgentNote } from "./AgentNote.ts";
@@ -26,16 +27,16 @@ it("refuses an empty or whitespace-only body with a plain reason", () => {
     const rejected = rejection(checkAgentNote(raw));
 
     assert.strictEqual(rejected.reason, "empty");
-    assert.ok(rejected.message.includes("needs some text"));
+    assert.ok(EffectString.includes(rejected.message, "needs some text"));
   }
 });
 
 it("accepts a body at the limit and refuses one past it", () => {
-  const atLimit = checkAgentNote("a".repeat(agentNoteLimit));
-  const pastLimit = checkAgentNote("a".repeat(agentNoteLimit + 1));
+  const atLimit = checkAgentNote(EffectString.repeat("a", agentNoteLimit));
+  const pastLimit = checkAgentNote(EffectString.repeat("a", agentNoteLimit + 1));
 
-  assert.deepStrictEqual(atLimit, { valid: true, body: "a".repeat(agentNoteLimit) });
+  assert.deepStrictEqual(atLimit, { valid: true, body: EffectString.repeat("a", agentNoteLimit) });
   const rejected = rejection(pastLimit);
   assert.strictEqual(rejected.reason, "too_long");
-  assert.ok(rejected.message.includes(String(agentNoteLimit)));
+  assert.ok(EffectString.includes(rejected.message, String(agentNoteLimit)));
 });

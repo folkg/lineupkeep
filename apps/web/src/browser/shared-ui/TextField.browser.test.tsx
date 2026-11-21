@@ -1,3 +1,5 @@
+import { optionalStringValue } from "@lineupkeep/collections";
+import { EffectString } from "@lineupkeep/collections";
 import { render } from "@solidjs/web";
 import { createSignal } from "solid-js";
 import { expect, it } from "vitest";
@@ -17,7 +19,8 @@ it("announces errors and marks the control invalid", async () => {
   await expect.element(input).toHaveAttribute("aria-invalid", "true");
   const describedBy = input.element().getAttribute("aria-describedby");
   expect(describedBy).toBeTruthy();
-  for (const id of describedBy?.split(" ") ?? []) {
+  for (const id of optionalStringValue(describedBy, (value) => EffectString.split(value, " ")) ??
+    []) {
     expect(document.getElementById(id)).not.toBeNull();
   }
   await expect

@@ -5,6 +5,7 @@ import type { YahooReadError } from "#yahoo/errors.ts";
 import { decodeScheduleByDate, decodeScoreboardGame } from "#yahoo/internal/schedule.ts";
 import type { YahooScheduleGame, YahooScoreboardGame } from "#yahoo/internal/schedule.ts";
 import { YahooDate, YahooGameKey } from "#yahoo/keys.ts";
+import { EffectString } from "#yahoo/stringTools.ts";
 
 const TimeZone = Schema.NonEmptyString;
 
@@ -38,7 +39,7 @@ export const byDate: API.OperationMethod<
       ysp_platform: "next-app-sports",
       leagues: input.sport,
       dates: input.date,
-      season: input.date.slice(0, 4),
+      season: EffectString.slice(input.date, 0, 4),
     },
   }),
   decode: (payload) => decodeScheduleByDate(payload),

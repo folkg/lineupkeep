@@ -7,6 +7,7 @@ import { join, basename } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
 import { Effect } from "effect";
 import { Schema } from "effect";
 import { Array as EffectArray } from "effect";
@@ -54,10 +55,10 @@ export async function fakeCollector(
   process.env["OTEL_EXPORTER_OTLP_ENDPOINT"] = `http://127.0.0.1:${address.port}`;
   return {
     tag: (traceparent: string) => {
-      const traceId = traceparent.split("-")[1] ?? "";
+      const traceId = EffectString.split(traceparent, "-")[1] ?? "";
       const spans = tagged.get(traceId) ?? [];
       tagged.set(traceId, spans);
-      return spans.push(traceparent.split("-")[2] ?? "");
+      return spans.push(EffectString.split(traceparent, "-")[2] ?? "");
     },
     [Symbol.asyncDispose]: async () => {
       if (previous === undefined) {

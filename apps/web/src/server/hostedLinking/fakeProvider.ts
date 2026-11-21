@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { Config, Effect } from "effect";
 
 import { runBackend } from "#server/backendEntry.ts";
@@ -134,5 +135,5 @@ const refusedIdentifierPage = `<!doctype html>
 </html>`;
 
 function gmailAddress(value: string): boolean {
-  return /@(?:gmail|googlemail)\.com$/iu.test(value.trim());
+  return /@(?:gmail|googlemail)\.com$/iu.test(EffectString.trim(value));
 }

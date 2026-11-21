@@ -3,6 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
 import type { Page } from "@playwright/test";
 import { Effect } from "effect";
 import { DateTime, Schema } from "effect";
@@ -18,6 +19,7 @@ import {
   mcpEndpoint,
 } from "./mcpClient.ts";
 import { expect, signIn, signUp, test } from "./support.ts";
+
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
   value: A | null | undefined,
@@ -440,7 +442,7 @@ test("serves read tools to a grant minted with the retired connections:read name
   const clientId = await registerRetiredScopeClient(page, origin, retiredReadScope);
   const { credentials } = await authorizeLegacy(page, origin, clientId, retiredReadScope);
 
-  expect(credentials.scope.split(" ")).toEqual([retiredReadScope]);
+  expect(EffectString.split(credentials.scope, " ")).toEqual([retiredReadScope]);
 
   const client = mcpClient(mcpEndpoint(origin), credentials.access_token);
   const connections = await client.callTool("list_connections", {});
@@ -958,7 +960,7 @@ test("authorizes a dynamically registered client through consent", async ({ page
   await expect(page).toHaveURL(callbackPattern);
 
   const credentials = await exchangeCode(page, authorization);
-  expect(credentials.scope.split(" ")).toEqual(
+  expect(EffectString.split(credentials.scope, " ")).toEqual(
     expect.arrayContaining(["fantasy:read", "lineups:write"]),
   );
 });
@@ -1198,7 +1200,7 @@ function requiredOrigin(value: string | undefined): string {
   return value;
 }
 
-const callbackPattern = new RegExp(`^${callback.replaceAll(".", "\\.")}\\?`);
+const callbackPattern = new RegExp(`^${EffectString.replaceAll(callback, ".", "\\.")}\\?`);
 const DiscoveryResponse = Schema.Struct({
   result: Schema.Record(Schema.String, Schema.Unknown),
 });
@@ -1260,7 +1262,9 @@ async function advertisedKeyIds(origin: string): Promise<ReadonlyArray<string>> 
 function jwtHeader(token: string): { readonly kid: string } {
   return Effect.runSync(
     Schema.decodeUnknownEffect(Schema.Struct({ kid: Schema.String }))(
-      jsonTools.jsonValue(Buffer.from(token.split(".")[0] ?? "", "base64url").toString()),
+      jsonTools.jsonValue(
+        Buffer.from(EffectString.split(token, ".")[0] ?? "", "base64url").toString(),
+      ),
     ),
   );
 }

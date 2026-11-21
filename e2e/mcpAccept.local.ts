@@ -5,6 +5,7 @@ import {
   retiredScopeAliases,
 } from "@lineupkeep/backend/auth/AuthorizationScopes";
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
 import type { Page } from "@playwright/test";
 import { Effect } from "effect";
 import { Schema } from "effect";
@@ -161,14 +162,16 @@ async function authorize(
         .locator("main")
         .innerText()
         .catch(() => "no page text");
-      throw new Error(`Authorization did not reach consent. Page says: ${text.slice(0, 400)}`);
+      throw new Error(
+        `Authorization did not reach consent. Page says: ${EffectString.slice(text, 0, 400)}`,
+      );
     }
     await expectConsentScopes(page, scopes);
     await page.getByRole("button", { name: "Allow access", exact: true }).click();
     await expect(page).toHaveURL(callbackPattern);
     const credentials = await exchangeCode(page, authorization);
     await page.goto("about:blank");
-    const granted = EffectArray.filter(credentials.scope.split(" "), Boolean);
+    const granted = EffectArray.filter(EffectString.split(credentials.scope, " "), Boolean);
     if (!sameSet(granted, scopes)) {
       throw new Error(
         `Authorization returned ${EffectArray.join(granted, " ")} instead of the requested ${EffectArray.join(scopes, " ")}.`,
@@ -262,4 +265,4 @@ const scopePhrases: Readonly<Record<string, RegExp>> = {
   offline_access: /Stay connected with renewable access/u,
 };
 
-const callbackPattern = new RegExp(`^${callback.replaceAll(".", "\\.")}\\?`);
+const callbackPattern = new RegExp(`^${EffectString.replaceAll(callback, ".", "\\.")}\\?`);

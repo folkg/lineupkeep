@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { PGlite } from "@electric-sql/pglite";
+import { EffectString } from "@lineupkeep/collections";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import * as PgliteDrizzle from "drizzle-orm/postgres/client/effect/pglite";
@@ -47,7 +48,7 @@ export function resetTestDatabase(database: PGlite): Promise<void> {
     .then((result) => {
       const tables = EffectArray.map(
         result.rows,
-        ({ tablename }) => `"${tablename.replaceAll('"', '""')}"`,
+        ({ tablename }) => `"${EffectString.replaceAll(tablename, '"', '""')}"`,
       );
       return tables.length === 0
         ? undefined
@@ -88,7 +89,7 @@ function migrationFingerprint(): string {
     hash.update(name);
     hash.update(readFileSync(name));
   }
-  return hash.digest("hex").slice(0, 20);
+  return EffectString.slice(hash.digest("hex"), 0, 20);
 }
 
 function writeCache(cachePath: string, image: Blob): Promise<void> {

@@ -9,6 +9,8 @@ import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 
+import { EffectString } from "#yahoo/stringTools.ts";
+
 import { Credentials } from "./credentials.ts";
 import {
   BadGateway,
@@ -271,8 +273,8 @@ function decode(
       args.write ? undefined : args.responseLimitBytes,
     );
     if (args.response.status >= 200 && args.response.status < 300) {
-      const payload = text.trim() === "" ? undefined : parseJson(text);
-      if (!args.write && text.trim() !== "" && payload === undefined) {
+      const payload = EffectString.trim(text) === "" ? undefined : parseJson(text);
+      if (!args.write && EffectString.trim(text) !== "" && payload === undefined) {
         return yield* Effect.fail(
           new YahooParseError({
             operation: args.operation,
@@ -409,7 +411,11 @@ function effectBody(
 
 function requestUrl(request: RequestSpec, crumb: string): Effect.Effect<string, YahooParseError> {
   return Effect.gen(function* () {
-    if (!request.path.startsWith("/") || request.path.includes("?") || request.path.includes("#")) {
+    if (
+      !EffectString.startsWith(request.path, "/") ||
+      EffectString.includes(request.path, "?") ||
+      EffectString.includes(request.path, "#")
+    ) {
       return yield* Effect.fail(new YahooParseError({ operation: "request", field: "path" }));
     }
     const origin = new URL(hosts[request.host]);
@@ -445,7 +451,9 @@ function crumbOf(text: string): string | undefined {
     return undefined;
   }
   const crumb = payload["service"]["crumb"];
-  return typeof crumb === "string" && crumb.trim() !== "" ? crumb.trim() : undefined;
+  return typeof crumb === "string" && EffectString.trim(crumb) !== ""
+    ? EffectString.trim(crumb)
+    : undefined;
 }
 
 function statusFailure(status: number, message: string | undefined): StatusErrors | undefined {
@@ -538,43 +546,59 @@ function jsonMessage(payload: unknown): string | undefined {
     return undefined;
   }
   const error = payload["error"];
-  if (typeof error === "string" && error.trim() !== "") {
-    return error.trim();
+  if (typeof error === "string" && EffectString.trim(error) !== "") {
+    return EffectString.trim(error);
   }
   if (isRecord(error)) {
     for (const key of ["description", "message", "detail"]) {
       const value = error[key];
-      if (typeof value === "string" && value.trim() !== "") {
-        return value.trim();
+      if (typeof value === "string" && EffectString.trim(value) !== "") {
+        return EffectString.trim(value);
       }
     }
   }
   for (const key of ["description", "message", "detail"]) {
     const value = payload[key];
-    if (typeof value === "string" && value.trim() !== "") {
-      return value.trim();
+    if (typeof value === "string" && EffectString.trim(value) !== "") {
+      return EffectString.trim(value);
     }
   }
   return undefined;
 }
 
 function statementText(value: string): string | undefined {
-  const cleaned = value
-    .replace(/<[^>]*>/gu, " ")
-    .replace(/&amp;/gu, "&")
-    .replace(/&lt;/gu, "<")
-    .replace(/&gt;/gu, ">")
-    .replace(/&quot;/gu, '"')
-    .replace(/&#39;/gu, "'")
-    .trim();
+  const cleaned = EffectString.trim(
+    EffectString.replace(
+      EffectString.replace(
+        EffectString.replace(
+          EffectString.replace(
+            EffectString.replace(EffectString.replace(value, /<[^>]*>/gu, " "), /&amp;/gu, "&"),
+            /&lt;/gu,
+            "<",
+          ),
+          /&gt;/gu,
+          ">",
+        ),
+        /&quot;/gu,
+        '"',
+      ),
+      /&#39;/gu,
+      "'",
+    ),
+  );
   return cleaned.length === 0 ? undefined : cleaned;
 }
 
 function withoutProviderSecrets(text: string): string {
-  return text
-    .replace(/\bcrumb=[^&"'\s<]*/giu, "crumb=<redacted>")
-    .replace(/("crumb"\s*:\s*")[^"]*(")/giu, "$1<redacted>$2")
-    .replace(/<crumb>[\s\S]*?<\/crumb>/giu, "<crumb><redacted></crumb>");
+  return EffectString.replace(
+    EffectString.replace(
+      EffectString.replace(text, /\bcrumb=[^&"'\s<]*/giu, "crumb=<redacted>"),
+      /("crumb"\s*:\s*")[^"]*(")/giu,
+      "$1<redacted>$2",
+    ),
+    /<crumb>[\s\S]*?<\/crumb>/giu,
+    "<crumb><redacted></crumb>",
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

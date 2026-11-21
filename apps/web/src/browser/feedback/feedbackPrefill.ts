@@ -1,5 +1,6 @@
 import type { FeedbackSurface } from "@lineupkeep/backend/feedback/Feedback";
 import { EffectArray } from "@lineupkeep/collections";
+import { EffectString } from "@lineupkeep/collections";
 
 import type { FeedbackContextView } from "#contracts/feedback/feedbackContract.ts";
 
@@ -46,7 +47,7 @@ function teamNameFrom(value: unknown): string | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
-  const name = value.trim();
+  const name = EffectString.trim(value);
   return name.length === 0 || name.length > teamNameLimit ? undefined : name;
 }
 

@@ -1,6 +1,7 @@
 import "#web/styles.css";
 import { EffectArray } from "@lineupkeep/collections";
 import { EffectOrder } from "@lineupkeep/collections";
+import { EffectString } from "@lineupkeep/collections";
 import { render } from "@solidjs/web";
 import type { JSX } from "@solidjs/web";
 import {
@@ -459,7 +460,7 @@ function textNodes(host: HTMLElement): ReadonlyArray<string> {
         }),
         (node) => node.nodeType === Node.TEXT_NODE,
       ),
-      (node) => (node.textContent ?? "").trim(),
+      (node) => EffectString.trim(node.textContent ?? ""),
     ),
     (text) => text !== "",
   );

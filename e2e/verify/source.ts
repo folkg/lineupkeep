@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { join, relative } from "node:path";
 
+import { EffectString } from "@lineupkeep/collections";
 import { Array as EffectArray } from "effect";
 import { Order as EffectOrder } from "effect";
 
@@ -47,7 +48,10 @@ export function sourceFingerprint(root: string, selected: ReadonlyArray<string>)
   });
   const hash = createHash("sha256");
   for (const path of EffectArray.sort(
-    EffectArray.filter([...new Set([...files.split("\0"), ...scratch, ...selected])], Boolean),
+    EffectArray.filter(
+      [...new Set([...EffectString.split(files, "\0"), ...scratch, ...selected])],
+      Boolean,
+    ),
     EffectOrder.String,
   )) {
     hash.update(`${path}\0`);
@@ -61,8 +65,8 @@ export function scratchTasks(selected: ReadonlyArray<string>): ReadonlyArray<str
   return [
     ...new Set(
       EffectArray.map(
-        EffectArray.filter(selected, (path) => path.startsWith("e2e/scratch/")),
-        (path) => EffectArray.join(path.split("/").slice(0, 3), "/"),
+        EffectArray.filter(selected, (path) => EffectString.startsWith(path, "e2e/scratch/")),
+        (path) => EffectArray.join(EffectString.split(path, "/").slice(0, 3), "/"),
       ),
     ),
   ];
@@ -92,12 +96,14 @@ function rootOf(
 }
 
 function command(root: string, executable: string, ...arguments_: Array<string>): string {
-  return execFileSync(executable, arguments_, {
-    cwd: root,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-    maxBuffer: 256 * 1024 * 1024,
-  }).trimEnd();
+  return EffectString.trimEnd(
+    execFileSync(executable, arguments_, {
+      cwd: root,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      maxBuffer: 256 * 1024 * 1024,
+    }),
+  );
 }
 
 export type SourceDescription = {

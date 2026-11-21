@@ -6,6 +6,9 @@ import { Effect } from "effect";
 import { Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import postgres from "postgres";
+
+import { EffectString } from "./stringTools.ts";
+
 function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
   return EffectArray.isArray(value);
 }
@@ -94,12 +97,13 @@ export async function testContainers(
   kind: "test-database" | "test-web" = "test-database",
 ): Promise<ReadonlyArray<{ readonly name: string; readonly lockDirectory: string }>> {
   const ids = EffectArray.filter(
-    (
+    EffectString.split(
       await docker(
         ["ps", "--all", "--quiet", "--filter", `label=${disposableLabel}=${kind}`],
         signal,
-      )
-    ).split("\n"),
+      ),
+      "\n",
+    ),
     Boolean,
   );
 
@@ -122,7 +126,7 @@ export async function testContainers(
     )
   ).flat();
   return EffectArray.flatMap(containers, (container) => {
-    const name = container.Name.replace(/^\//u, "");
+    const name = EffectString.replace(container.Name, /^\//u, "");
     const lockDirectory = container.Config.Labels?.[lockLabel];
     return ownedContainerName.test(name) && lockDirectory !== undefined && lockDirectory !== ""
       ? [{ name, lockDirectory }]
@@ -163,10 +167,10 @@ async function clientsFinished(name: string, signal: AbortSignal): Promise<void>
     const { stdout } = await run("ps", ["-A", "-o", "pid=,args="], { encoding: "utf8", signal });
     const clients = EffectArray.filter(
       EffectArray.filter(
-        stdout.split("\n"),
-        (line) => line.includes(name) && /\bdocker\b/u.test(line),
+        EffectString.split(stdout, "\n"),
+        (line) => EffectString.includes(line, name) && /\bdocker\b/u.test(line),
       ),
-      (line) => Number(line.trim().split(/\s+/u)[0]) !== process.pid,
+      (line) => Number(EffectString.split(EffectString.trim(line), /\s+/u)[0]) !== process.pid,
     );
     if (clients.length === 0) {
       return;
@@ -176,7 +180,7 @@ async function clientsFinished(name: string, signal: AbortSignal): Promise<void>
 }
 
 export function containerNameFor(runId: string): string {
-  return `lineupkeep-test-${runId.replaceAll("-", "")}`;
+  return `lineupkeep-test-${EffectString.replaceAll(runId, "-", "")}`;
 }
 
 export async function waitUntilReady(url: URL, signal: AbortSignal): Promise<void> {
@@ -209,14 +213,14 @@ export async function docker(
       encoding: "utf8",
       ...(signal === undefined ? { timeout: dockerCommandMs } : { signal }),
     });
-    return stdout.trim();
+    return EffectString.trim(stdout);
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       throw new Error("Docker is required for the disposable test database; install and start it.");
     }
     const stderr =
       error instanceof Error && "stderr" in error && typeof error.stderr === "string"
-        ? error.stderr.trim()
+        ? EffectString.trim(error.stderr)
         : "";
     throw new Error(`docker ${arguments_[0] ?? ""} failed: ${stderr}`, { cause: error });
   }

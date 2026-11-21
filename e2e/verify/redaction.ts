@@ -1,5 +1,7 @@
+import { EffectString } from "@lineupkeep/collections";
 import { Array as EffectArray } from "effect";
 import { Order as EffectOrder } from "effect";
+
 function sortWithComparator<A>(
   self: ReadonlyArray<A>,
   compare: (left: A, right: A) => number,
@@ -43,21 +45,26 @@ function collectStringCredentials(value: string, key: string, credentials: Set<s
     credentials.add(value);
     if (/^(cookie|set-cookie)$/iu.test(key)) {
       const cookies =
-        key.toLowerCase() === "cookie" ? value.split(";") : value.split(";").slice(0, 1);
+        EffectString.toLowerCase(key) === "cookie"
+          ? EffectString.split(value, ";")
+          : EffectString.split(value, ";").slice(0, 1);
       for (const cookie of cookies) {
-        const secret = cookie.slice(cookie.indexOf("=") + 1).trim();
+        const secret = EffectString.trim(
+          EffectString.slice(cookie, EffectString.indexOf(cookie, "=") + 1),
+        );
         if (secret !== "") {
           credentials.add(secret);
         }
       }
     } else if (/^(authorization|proxy-authorization)$/iu.test(key)) {
-      const secret = value.slice(value.indexOf(" ") + 1);
+      const secret = EffectString.slice(value, EffectString.indexOf(value, " ") + 1);
       if (secret !== "") {
         credentials.add(secret);
       }
     }
   }
-  for (const match of value.matchAll(
+  for (const match of EffectString.matchAll(
+    value,
     /(?:[?&]|^)(?:code|code_verifier|access_token|refresh_token|id_token|client_secret)=([^&\s]+)/giu,
   )) {
     const encoded = match[1];
@@ -73,7 +80,7 @@ function scrubEvidence(value: unknown, credentials: ReadonlyArray<string>, key =
     return sensitive.test(key)
       ? "[REDACTED]"
       : EffectArray.reduce(credentials, value, (text, secret) =>
-          text.replaceAll(secret, "[REDACTED]"),
+          EffectString.replaceAll(text, secret, "[REDACTED]"),
         );
   }
   if (EffectArray.isArray(value)) {

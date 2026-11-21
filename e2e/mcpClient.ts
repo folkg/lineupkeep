@@ -1,6 +1,8 @@
 import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
+import { optionalStringValue } from "@lineupkeep/collections";
 import { type Page, expect, test, type TestInfo } from "@playwright/test";
 import { Effect } from "effect";
 import { Schema } from "effect";
@@ -328,7 +330,7 @@ export function authorizedMcp(
         "mcp",
         new Headers(init?.headers).get("mcp-method") ?? init?.method ?? "GET",
         async (traceparent) => {
-          const traceId = traceparent.split("-")[1];
+          const traceId = EffectString.split(traceparent, "-")[1];
           const headers = new Headers(init?.headers);
           headers.set("traceparent", traceparent);
           const body = typeof init?.body === "string" ? init.body : init?.body?.toString();
@@ -338,7 +340,9 @@ export function authorizedMcp(
               : undefined;
           const response = await fetch(url, { ...init, headers });
           const responseBody: unknown =
-            response.headers.get("content-type")?.includes("application/json") === true
+            optionalStringValue(response.headers.get("content-type"), (value) =>
+              EffectString.includes(value, "application/json"),
+            ) === true
               ? await response.clone().json()
               : await response.clone().text();
           const exchange = redactEvidence({

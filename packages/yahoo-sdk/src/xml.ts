@@ -1,5 +1,7 @@
 import { Array as EffectArray } from "effect";
 
+import { EffectString } from "#yahoo/stringTools.ts";
+
 import type {
   YahooCoverage,
   YahooDraftPickRound,
@@ -141,12 +143,19 @@ function xml(content: string): string {
 }
 
 function xmlText(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&apos;");
+  return EffectString.replaceAll(
+    EffectString.replaceAll(
+      EffectString.replaceAll(
+        EffectString.replaceAll(EffectString.replaceAll(value, "&", "&amp;"), "<", "&lt;"),
+        ">",
+        "&gt;",
+      ),
+      '"',
+      "&quot;",
+    ),
+    "'",
+    "&apos;",
+  );
 }
 
 export type YahooLineupAssignment = {

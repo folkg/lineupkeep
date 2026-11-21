@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import {
   knownSelection,
   makeAvailabilityTier,
@@ -41,6 +42,7 @@ import type {
   RosterRule,
   RosterSlot as RuleSlot,
 } from "#contexts/connections/RosterSlots.ts";
+
 function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
   return EffectArray.isArray(value);
 }
@@ -191,7 +193,7 @@ function occupiedCount(players: ReadonlyArray<RosterPlacementPlayer>, position: 
 
 function placementSlotId(slot: RuleSlot, index: number): SlotId {
   const rank = slot.kind === "reserve" ? "0" : "1";
-  return makeSlotId(`${rank}:${String(index).padStart(4, "0")}:${slot.position}`);
+  return makeSlotId(`${rank}:${EffectString.padStart(String(index), 4, "0")}:${slot.position}`);
 }
 
 function placementPlayers(

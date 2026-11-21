@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { findTableOwnershipConflicts } from "@lineupkeep/backend/scripts/tableOwnership.ts";
+import { EffectString } from "@lineupkeep/collections";
 import { Effect } from "effect";
 import { Schema } from "effect";
 import { Array as EffectArray } from "effect";
@@ -110,7 +111,7 @@ it("keeps a concrete remedy in every dependency rule's diagnostic contract", () 
     configuration.forbidden.length,
   );
   for (const rule of configuration.forbidden) {
-    expect(rule.name.trim()).not.toBe("");
+    expect(EffectString.trim(rule.name)).not.toBe("");
     expectRemedy(rule.comment);
   }
 });
@@ -242,7 +243,7 @@ const consumedBackendFixture = {
 };
 
 function expectRemedy(message: string): void {
-  expect(message.trim().length).toBeGreaterThan(30);
+  expect(EffectString.trim(message).length).toBeGreaterThan(30);
   expect(message).toMatch(
     /; .*(?:use|keep|pass|call|compose|import|declare|define|delegate|move|receive|depend|register|read|write|yield|expose|send|start|build|fix|extract|encode|put|invoke|wait)/iu,
   );

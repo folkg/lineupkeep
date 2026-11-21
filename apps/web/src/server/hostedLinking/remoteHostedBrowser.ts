@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { signHostedBrowserDescriptor } from "@lineupkeep/hosted-browser/descriptor";
 import {
   encodeHostedBrowserInput,
@@ -27,8 +28,8 @@ export function createRemoteHostedBrowser(
   options: RemoteHostedBrowserOptions,
 ): HostedBrowserFactory {
   const live = new Set<WebSocket>();
-  const audience = options.url.replace(/\/+$/u, "");
-  const streamUrl = `${audience.replace(/^http/u, "ws")}/session`;
+  const audience = EffectString.replace(options.url, /\/+$/u, "");
+  const streamUrl = `${EffectString.replace(audience, /^http/u, "ws")}/session`;
 
   return {
     open: async (session, callbacks) => {

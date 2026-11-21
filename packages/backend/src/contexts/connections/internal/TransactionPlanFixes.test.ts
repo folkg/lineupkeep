@@ -1,4 +1,5 @@
 import { assert, it } from "@effect/vitest";
+import { EffectString } from "@lineupkeep/collections";
 import { Effect } from "effect";
 import { Schema } from "effect";
 import { Array as EffectArray } from "effect";
@@ -266,7 +267,9 @@ function teamFacts(input: {
 function fundedMove(): TransactionPlanMove {
   return {
     id: Effect.runSync(
-      Schema.decodeEffect(TransactionMoveIdSchema)(`01J${String(1).padStart(23, "0")}`),
+      Schema.decodeEffect(TransactionMoveIdSchema)(
+        `01J${EffectString.padStart(String(1), 23, "0")}`,
+      ),
     ),
     group: undefined,
     position: 0,

@@ -21,6 +21,7 @@ import {
   allYahooGameKeys,
   leagueKeyOfTeam,
 } from "#yahoo/keys.ts";
+import { EffectString } from "#yahoo/stringTools.ts";
 
 export const SettingsRequest = Schema.Struct({
   leagueKey: YahooLeagueKey,
@@ -116,7 +117,7 @@ export const felo: API.OperationMethod<
   input: FeloRequest,
   output: Schema.Unknown,
   request: (input) => {
-    const [gameKey, leagueId] = input.leagueKey.split(".l.");
+    const [gameKey, leagueId] = EffectString.split(input.leagueKey, ".l.");
     return {
       host: "service",
       method: "GET",

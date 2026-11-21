@@ -1,6 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, beforeEach, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
+import { EffectString } from "@lineupkeep/collections";
 import { and, eq } from "drizzle-orm";
 import { Array, Config, Deferred, Effect, Fiber, Layer, Option, Redacted, Schema } from "effect";
 import { DateTime } from "effect";
@@ -57,6 +58,7 @@ import type {
   ProviderTeam,
 } from "./Provider.ts";
 import { ScheduleGate } from "./ScheduleGate.ts";
+
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
   value: A | null | undefined,
@@ -1639,7 +1641,7 @@ const explicitWithExtraEdit: ProviderRoster = {
 
 function testRequestId(): string {
   requestSerial += 1;
-  return `018f79ea-7d86-4c18-9b4a-${String(requestSerial).padStart(12, "0")}`;
+  return `018f79ea-7d86-4c18-9b4a-${EffectString.padStart(String(requestSerial), 12, "0")}`;
 }
 
 it.effect("records a skipped outcome and its reason for a scheduled run", () =>

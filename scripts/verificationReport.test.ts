@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
 import { Effect } from "effect";
 import { Schema } from "effect";
 import { Array as EffectArray } from "effect";
@@ -561,7 +562,7 @@ it("round-trips produced measurements and profiles into reports, including unava
   for (const file of ["report.md", "report.html"]) {
     const report = await readFile(join(evidence.folder, file), "utf8");
     expect(report).toContain("partial save");
-    expect(report.replaceAll("&#39;", "'")).toContain(
+    expect(EffectString.replaceAll(report, "&#39;", "'")).toContain(
       "Condition: Application requests were intercepted to tag them with a trace, which disables the page's HTTP cache.",
     );
     expect(report).toContain("server activity PARTIAL");

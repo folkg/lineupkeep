@@ -4,6 +4,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
+import { optionalStringValue } from "@lineupkeep/collections";
 import { Effect } from "effect";
 import { Schema } from "effect";
 import { Array as EffectArray } from "effect";
@@ -11,6 +13,7 @@ import { Option as EffectOption, Order as EffectOrder } from "effect";
 
 import { isMcpExchangeAttachment, McpExchangeJson } from "./mcpEvidence.ts";
 import { isServiceCallAttachment, ServiceCallJson } from "./serviceEvidence.ts";
+
 function sortWithComparator<A>(
   self: ReadonlyArray<A>,
   compare: (left: A, right: A) => number,
@@ -320,7 +323,10 @@ function criterionProblems(
 ): ReadonlyArray<string> {
   const problems: Array<string> = [];
   const label = `Criterion ${criterion.id}`;
-  if (criterion.statement.trim() === "" || criterion.observation.trim() === "") {
+  if (
+    EffectString.trim(criterion.statement) === "" ||
+    EffectString.trim(criterion.observation) === ""
+  ) {
     problems.push(
       `${label} needs a statement and the actual observation to make its outcome reviewable; copy the declared statement and describe what the run showed in claims.json.`,
     );
@@ -391,9 +397,13 @@ function criterionProblems(
         if (outcome === undefined) {
           continue;
         }
-        if (outcome.step?.title.startsWith("Setup") === true) {
+        if (
+          optionalStringValue(outcome.step?.title, (value) =>
+            EffectString.startsWith(value, "Setup"),
+          ) === true
+        ) {
           problems.push(
-            `${label} cites setup step "${outcome.step.title}", which is not proof; cite a completed assertion step from a passing test in results.json instead.`,
+            `${label} cites setup step "${outcome.step?.title}", which is not proof; cite a completed assertion step from a passing test in results.json instead.`,
           );
         }
         if (
@@ -459,7 +469,7 @@ async function videoProblems(
   );
   const explained = new Set(EffectArray.map(shots.notShown ?? [], (entry) => entry.claim));
   for (const entry of shots.notShown ?? []) {
-    if (entry.reason.trim() === "") {
+    if (EffectString.trim(entry.reason) === "") {
       problems.push(
         `shots.json leaves ${entry.claim} out of the video without a reason; fill in its notShown reason so visual coverage gaps are disclosed.`,
       );
@@ -577,7 +587,7 @@ export function resolveArtifact(directory: string, path: string): string | undef
     const resolved = realpathSync(join(root, path));
     const inside = relative(root, resolved);
     return inside !== "" &&
-      !inside.startsWith("..") &&
+      !EffectString.startsWith(inside, "..") &&
       !isAbsolute(inside) &&
       statSync(resolved).isFile()
       ? resolved
@@ -726,7 +736,7 @@ export function actingPersonas(
       (attachment) =>
         isMcpExchangeAttachment(attachment) ||
         isServiceCallAttachment(attachment) ||
-        attachment.name.startsWith("Checkpoint persona: "),
+        EffectString.startsWith(attachment.name, "Checkpoint persona: "),
     ),
     (attachment) =>
       Effect.runSync(Schema.decodeUnknownEffect(PersonaJson)(attachment.body?.toString())).persona,

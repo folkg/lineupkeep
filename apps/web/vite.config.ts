@@ -2,6 +2,7 @@ import type { IncomingMessage } from "node:http";
 import { fileURLToPath } from "node:url";
 
 import cloudflare from "@alchemy.run/cloudflare-runtime/vite";
+import { EffectString } from "@lineupkeep/collections";
 import solidPlugin from "@solidjs/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/solid-start/plugin/vite";
@@ -135,7 +136,7 @@ function hostedBrowserStreamPlugin(): PluginOption {
             throw new Error("The SSR environment cannot handle the hosted browser route");
           }
           const pathname = new URL(request.url).pathname;
-          const sessionId = pathname.split("/")[4];
+          const sessionId = EffectString.split(pathname, "/")[4];
           if (sessionId === undefined) {
             return {};
           }
@@ -147,7 +148,10 @@ function hostedBrowserStreamPlugin(): PluginOption {
         "upgrade",
         (request: IncomingMessage, socket: import("node:stream").Duplex, head: Buffer) => {
           const pathname = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
-          if (!pathname.startsWith("/api/linking/session/") || !pathname.endsWith("/stream")) {
+          if (
+            !EffectString.startsWith(pathname, "/api/linking/session/") ||
+            !EffectString.endsWith(pathname, "/stream")
+          ) {
             return;
           }
           void adapter.handleUpgrade(request, socket, head, upgradeRequest(request));

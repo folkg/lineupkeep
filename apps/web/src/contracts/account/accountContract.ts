@@ -1,10 +1,12 @@
+import { EffectString } from "@lineupkeep/collections";
+
 import type { AuthenticationFailure } from "#contracts/auth/authContract.ts";
 import type { UseCaseResult } from "#contracts/useCaseContract.ts";
 
 const erasureConfirmationPhrase = "erase my account";
 
 export function isErasureConfirmation(value: string): boolean {
-  return value.trim() === erasureConfirmationPhrase;
+  return EffectString.trim(value) === erasureConfirmationPhrase;
 }
 
 export const accountExportPath = "/api/account/export";

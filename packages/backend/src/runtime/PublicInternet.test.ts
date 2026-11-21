@@ -1,4 +1,5 @@
 import { assert, it } from "@effect/vitest";
+import { EffectString } from "@lineupkeep/collections";
 import { Cause, Effect, Exit, Fiber, Option, Tracer } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
@@ -65,7 +66,7 @@ it.effect(
       },
     });
     const layer = PublicInternet.fromTransport((request) =>
-      request.url.includes("failure")
+      EffectString.includes(request.url, "failure")
         ? Promise.reject(new Error("private-query private-body private-header"))
         : Promise.resolve(
             new Response("private-response", {
@@ -290,7 +291,7 @@ it.effect("allows only empty responses with a zero-byte cap", () =>
   }).pipe(
     layerTools.provide(
       PublicInternet.fromTransport((request) =>
-        Promise.resolve(new Response(request.url.endsWith("/empty") ? "" : "x")),
+        Promise.resolve(new Response(EffectString.endsWith(request.url, "/empty") ? "" : "x")),
       ),
     ),
   ),

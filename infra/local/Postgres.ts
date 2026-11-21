@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import { EffectString } from "@lineupkeep/collections";
 import {
   postgresConnection,
   postgresContainer,
@@ -34,10 +35,13 @@ export const postgresProvider = Provider.succeed(Postgres, {
 });
 
 export function localDatabaseName(stage: string): string {
-  const checkout = createHash("sha256")
-    .update(new URL("../../", import.meta.url).pathname)
-    .digest("hex")
-    .slice(0, 10);
+  const checkout = EffectString.slice(
+    createHash("sha256")
+      .update(new URL("../../", import.meta.url).pathname)
+      .digest("hex"),
+    0,
+    10,
+  );
   return `lineupkeep-alchemy-${checkout}-${stage}`;
 }
 

@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { expect, it } from "vitest";
 
 import { checkFeedbackDraft, emptyFeedbackDraft } from "./feedbackDraft";
@@ -55,8 +56,8 @@ it("rejects a whitespace-only title and details", () => {
 it("rejects content beyond the published length limits", () => {
   const checked = checkFeedbackDraft({
     kind: "other",
-    title: "a".repeat(121),
-    body: "b".repeat(4_001),
+    title: EffectString.repeat("a", 121),
+    body: EffectString.repeat("b", 4_001),
     context: {},
   });
 

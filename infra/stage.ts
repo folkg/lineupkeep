@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import type { Config, Layer } from "effect";
 
 import { externalDatabase } from "./database/external.ts";
@@ -90,8 +91,8 @@ export function assertLocalStage(stage: StageSpec, local: boolean): void {
 
 export function assertVerificationStage(stage: string, runId: string, databaseName: string): void {
   if (
-    !stage.startsWith("verify-") ||
-    databaseName !== `lineupkeep-test-${runId.replaceAll("-", "")}`
+    !EffectString.startsWith(stage, "verify-") ||
+    databaseName !== `lineupkeep-test-${EffectString.replaceAll(runId, "-", "")}`
   ) {
     throw new Error("Verification requires a verify stage and its disposable run-owned database");
   }

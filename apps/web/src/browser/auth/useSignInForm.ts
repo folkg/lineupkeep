@@ -1,4 +1,5 @@
 import { productName } from "@lineupkeep/brand/product";
+import { EffectString } from "@lineupkeep/collections";
 import { useQuery } from "@tanstack/solid-query";
 import { untrack } from "solid-js";
 import type { Accessor } from "solid-js";
@@ -48,7 +49,7 @@ export function useSignInForm(props: SignInFormOptions): {
     onEnter: (state, send) => {
       switch (state.value) {
         case "sendingCode":
-          return props.remote.sendCode(state.context.email.trim()).then(
+          return props.remote.sendCode(EffectString.trim(state.context.email)).then(
             () => {
               resendCountdown.start(resendDelaySeconds);
               return send({ type: "codeSent" });

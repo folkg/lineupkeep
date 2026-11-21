@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
 
@@ -15,6 +16,7 @@ import type {
   StoredMoveStep,
   StoredMoveValidation,
 } from "./TransactionPlanRecord.ts";
+
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
   value: A | null | undefined,
@@ -54,7 +56,7 @@ export function planGroupReads(input: PlanGroupInput): ReadonlyArray<Transaction
     ).sort(
       (left, right) =>
         positionOf(firstMember(left.members)) - positionOf(firstMember(right.members)) ||
-        left.group.localeCompare(right.group),
+        EffectString.localeCompare(left.group, right.group),
     ),
     (entry) => groupReadOf(entry.group, entry.members, input.steps),
   );
@@ -418,7 +420,7 @@ function sortMembers(
     (left, right) =>
       positionOf(left) - positionOf(right) ||
       left.move.position - right.move.position ||
-      left.move.id.localeCompare(right.move.id),
+      EffectString.localeCompare(left.move.id, right.move.id),
   );
 }
 

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
 import { Array as EffectArray, Option as EffectOption } from "effect";
 import { chromium } from "playwright";
 
@@ -30,7 +31,7 @@ if (
 const idleMinutes = readIdleMinutes(process.env["COLD_START_IDLE_MINUTES"]);
 const output = join(
   ".artifacts/cold-start",
-  `${new Date().toISOString().replaceAll(":", "-")}-${label}`,
+  `${EffectString.replaceAll(new Date().toISOString(), ":", "-")}-${label}`,
 );
 await mkdir(output, { recursive: true });
 
@@ -187,7 +188,7 @@ async function lastServiceRequestAt(): Promise<number | undefined> {
     "--format=value(timestamp)",
     "--freshness=6h",
   ]);
-  const timestamp = stdout.trim();
+  const timestamp = EffectString.trim(stdout);
   return timestamp === "" ? undefined : new Date(timestamp).getTime();
 }
 
@@ -254,16 +255,16 @@ function readLifecycleEntry(value: unknown): LifecycleEntry[] {
     return [];
   }
   const at = new Date(timestamp).getTime();
-  if (typeof text === "string" && text.includes("Starting new instance")) {
+  if (typeof text === "string" && EffectString.includes(text, "Starting new instance")) {
     return [{ kind: "start", instance: instanceId, at, durationMs: null }];
   }
-  if (typeof text === "string" && text.includes("Listening on")) {
+  if (typeof text === "string" && EffectString.includes(text, "Listening on")) {
     return [{ kind: "listen", instance: instanceId, at, durationMs: null }];
   }
-  if (typeof text === "string" && text.includes("STARTUP HTTP probe succeeded")) {
+  if (typeof text === "string" && EffectString.includes(text, "STARTUP HTTP probe succeeded")) {
     return [{ kind: "ready", instance: instanceId, at, durationMs: null }];
   }
-  if (typeof message === "string" && message.startsWith("GET / ok")) {
+  if (typeof message === "string" && EffectString.startsWith(message, "GET / ok")) {
     const duration = /ok (\d+(?:\.\d+)?)ms/u.exec(message)?.[1];
     return [
       {
@@ -329,7 +330,9 @@ function readIdleMinutes(value: string | undefined): number {
 }
 
 function routeName(route: string): string {
-  return route === "/" ? "landing" : route.replace(/^\//u, "").replaceAll(/[^a-z0-9]+/giu, "-");
+  return route === "/"
+    ? "landing"
+    : EffectString.replaceAll(EffectString.replace(route, /^\//u, ""), /[^a-z0-9]+/giu, "-");
 }
 
 type BrowserFrame = {

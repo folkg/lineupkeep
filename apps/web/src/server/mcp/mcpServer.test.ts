@@ -56,6 +56,7 @@ import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import layerTools from "@lineupkeep/backend/runtime/ProvideLayer";
 import { ToolCallQuota, toolCallLimits } from "@lineupkeep/backend/toolCalls/ToolCallQuota";
 import type { ToolCall } from "@lineupkeep/backend/toolCalls/ToolCallQuota";
+import { EffectString } from "@lineupkeep/collections";
 import { DateTime, Duration, Effect, Layer, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
@@ -1975,7 +1976,7 @@ it("requires notes:write and attributes an agent note to the authenticated clien
   const withClient: AuthService["Service"] = {
     ...authenticationService,
     resolveAccessToken: (token, scopes) => {
-      const granted = token.startsWith("notes")
+      const granted = EffectString.startsWith(token, "notes")
         ? ["fantasy:read", "notes:write"]
         : ["fantasy:read"];
       return Effect.succeed(

@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { DateTime, Effect, Layer, Option, Schema } from "effect";
 import type { Redacted } from "effect";
 import { Array as EffectArray } from "effect";
@@ -1473,7 +1474,7 @@ function rejectionSummary(wording: string, detail: string | undefined): string {
 }
 
 function clampSummary(summary: string): string {
-  return summary.length <= 500 ? summary : `${summary.slice(0, 497)}...`;
+  return summary.length <= 500 ? summary : `${EffectString.slice(summary, 0, 497)}...`;
 }
 
 function implementationOf(plan: LineupPlan): LineupImplementation {

@@ -1,4 +1,5 @@
 import { AuthService } from "@lineupkeep/backend/auth/Auth";
+import { EffectString } from "@lineupkeep/collections";
 import { createIsomorphicFn, createServerFn } from "@tanstack/solid-start";
 import { getRequest } from "@tanstack/solid-start/server";
 import { Effect, Schema } from "effect";
@@ -6,8 +7,9 @@ import { Effect, Schema } from "effect";
 import { consentQuery } from "#browser/consent/consentLocation.ts";
 import { ConsentRequestInput, ConsentDecisionInput } from "#server/auth/authServer.ts";
 import { runBackend } from "#server/backendEntry.ts";
+
 export const currentConsentQuery = createIsomorphicFn()
-  .server(() => new URL(getRequest().url).search.slice(1))
+  .server(() => EffectString.slice(new URL(getRequest().url).search, 1))
   .client(consentQuery);
 
 export const consentRequestServerFn = createServerFn({ method: "GET" })

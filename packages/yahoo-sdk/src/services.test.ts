@@ -3,6 +3,8 @@ import { Redacted } from "effect";
 import { Array as EffectArray } from "effect";
 import * as Effect from "effect/Effect";
 
+import { EffectString } from "#yahoo/stringTools.ts";
+
 import type { YahooSession } from "./credentials.ts";
 import {
   availableDraftPicksForTwoTeamsPayload,
@@ -1226,7 +1228,9 @@ it.effect("reads pending trade offers with parties, note, and pick movement", ()
 
 it.effect("applies a native lineup action with the crumb handshake first", () => {
   const recording = recordingClient((call) =>
-    call.url.includes("getCrumb") ? jsonResponse(crumbPayload) : textResponse("{}", 200),
+    EffectString.includes(call.url, "getCrumb")
+      ? jsonResponse(crumbPayload)
+      : textResponse("{}", 200),
   );
   return Effect.gen(function* () {
     const result = yield* client.applyNativeAction({
@@ -1261,7 +1265,9 @@ it.effect("applies a native lineup action with the crumb handshake first", () =>
 
 it.effect("applies explicit assignments for a date and retains every listed player", () => {
   const recording = recordingClient((call) =>
-    call.url.includes("getCrumb") ? jsonResponse(crumbPayload) : textResponse("{}", 200),
+    EffectString.includes(call.url, "getCrumb")
+      ? jsonResponse(crumbPayload)
+      : textResponse("{}", 200),
   );
   return Effect.gen(function* () {
     const result = yield* client.applyExplicitAssignments({
@@ -1289,7 +1295,7 @@ it.effect("applies explicit assignments for a date and retains every listed play
 
 it.effect("carries the provider's own refusal sentence on a rejected transaction", () => {
   const recording = recordingClient((call) =>
-    call.url.includes("getCrumb")
+    EffectString.includes(call.url, "getCrumb")
       ? jsonResponse(crumbPayload)
       : textResponse(transactionRefusal.response.body, transactionRefusal.response.status),
   );
@@ -1351,7 +1357,7 @@ it.effect("does not send a transaction when the crumb is missing", () => {
 
 it.effect("reports an unknown write outcome after a server failure", () => {
   const recording = recordingClient((call) =>
-    call.url.includes("getCrumb")
+    EffectString.includes(call.url, "getCrumb")
       ? jsonResponse(crumbPayload)
       : textResponse("Service Unavailable", 503),
   );
@@ -1374,7 +1380,7 @@ it.effect("reports an unknown write outcome after a server failure", () => {
 
 it.effect("reports a rate-limited write as not sent", () => {
   const recording = recordingClient((call) =>
-    call.url.includes("getCrumb")
+    EffectString.includes(call.url, "getCrumb")
       ? jsonResponse(crumbPayload)
       : textResponse("Too Many Requests", 429),
   );
@@ -1399,7 +1405,7 @@ it.effect("reports a rate-limited write as not sent", () => {
 
 it.effect("proposes a two-sided trade and reads the pending key from the response", () => {
   const recording = recordingClient((call) =>
-    call.url.includes("getCrumb")
+    EffectString.includes(call.url, "getCrumb")
       ? jsonResponse(crumbPayload)
       : jsonResponse(
           {
@@ -1449,7 +1455,7 @@ it.effect("proposes a two-sided trade and reads the pending key from the respons
 
 it.effect("does not claim acceptance of a trade whose pending key is absent", () => {
   const recording = recordingClient((call) =>
-    call.url.includes("getCrumb")
+    EffectString.includes(call.url, "getCrumb")
       ? jsonResponse(crumbPayload)
       : jsonResponse({ fantasy_content: { league: [] } }, 201),
   );
@@ -1472,7 +1478,7 @@ it.effect("does not claim acceptance of a trade whose pending key is absent", ()
 
 it.effect("proposes draft picks to the app write host with a note and no players element", () => {
   const recording = recordingClient((call) =>
-    call.url.includes("getCrumb")
+    EffectString.includes(call.url, "getCrumb")
       ? jsonResponse(crumbPayload)
       : jsonResponse(
           {
@@ -1522,7 +1528,7 @@ it.effect("proposes draft picks to the app write host with a note and no players
 
 it.effect("accepts a roster write whose receipt is not JSON", () => {
   const recording = recordingClient((call) =>
-    call.url.includes("getCrumb")
+    EffectString.includes(call.url, "getCrumb")
       ? jsonResponse(crumbPayload)
       : textResponse("<fantasy_content><roster/></fantasy_content>", 200),
   );
@@ -1539,7 +1545,7 @@ it.effect("accepts a roster write whose receipt is not JSON", () => {
 
 it.effect("counts an unreadable proposal receipt as unknown rather than a refusal", () => {
   const recording = recordingClient((call) =>
-    call.url.includes("getCrumb")
+    EffectString.includes(call.url, "getCrumb")
       ? jsonResponse(crumbPayload)
       : textResponse("<html>accepted</html>", 201),
   );
@@ -1561,7 +1567,7 @@ it.effect("counts an unreadable proposal receipt as unknown rather than a refusa
 
 it.effect("counters an incoming offer back to its proposer with one new proposal", () => {
   const recording = recordingClient((call) =>
-    call.url.includes("getCrumb")
+    EffectString.includes(call.url, "getCrumb")
       ? jsonResponse(crumbPayload)
       : jsonResponse(
           {
@@ -1610,7 +1616,7 @@ it.effect("counters an incoming offer back to its proposer with one new proposal
 
 it.effect("counters with draft picks on the app write host", () => {
   const recording = recordingClient((call) =>
-    call.url.includes("getCrumb")
+    EffectString.includes(call.url, "getCrumb")
       ? jsonResponse(crumbPayload)
       : jsonResponse(
           {
@@ -1650,7 +1656,9 @@ it.effect("counters with draft picks on the app write host", () => {
 
 it.effect("rejects an incoming pending trade with a PUT action", () => {
   const recording = recordingClient((call) =>
-    call.url.includes("getCrumb") ? jsonResponse(crumbPayload) : textResponse("", 200),
+    EffectString.includes(call.url, "getCrumb")
+      ? jsonResponse(crumbPayload)
+      : textResponse("", 200),
   );
   return Effect.gen(function* () {
     const result = yield* client.respondTrade({
@@ -1679,7 +1687,9 @@ it.effect("rejects an incoming pending trade with a PUT action", () => {
 
 it.effect("withdraws a trade by its pending key", () => {
   const recording = recordingClient((call) =>
-    call.url.includes("getCrumb") ? jsonResponse(crumbPayload) : textResponse("", 200),
+    EffectString.includes(call.url, "getCrumb")
+      ? jsonResponse(crumbPayload)
+      : textResponse("", 200),
   );
   return Effect.gen(function* () {
     const result = yield* client.withdrawTrade({
@@ -1778,7 +1788,7 @@ it.effect("rejects an expired session on a read", () => {
 
 it.effect("redacts a crumb echoed in a provider refusal body", () => {
   const recording = recordingClient((call) =>
-    call.url.includes("getCrumb")
+    EffectString.includes(call.url, "getCrumb")
       ? jsonResponse(crumbPayload)
       : textResponse("refused: crumb=secret-crumb&league=466", 400),
   );
@@ -1861,7 +1871,7 @@ function leagueRostersPadded(bytes: number): unknown {
         leagueRostersPayload.fantasy_content.league[0],
         {
           ...leagueRostersPayload.fantasy_content.league[1],
-          padding: "x".repeat(bytes),
+          padding: EffectString.repeat("x", bytes),
         },
       ],
     },

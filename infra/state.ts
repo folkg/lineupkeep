@@ -1,4 +1,6 @@
 import { postgresState } from "@alchemy.run/sql/PostgresState";
+import { EffectString } from "@lineupkeep/collections";
+import { optionalStringValue } from "@lineupkeep/collections";
 import * as Alchemy from "alchemy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { Config, Effect, Layer, Redacted } from "effect";
@@ -35,8 +37,13 @@ function validateStateUrl(
     if (!["postgres:", "postgresql:"].includes(url.protocol) || url.hostname === "") {
       return yield* Effect.fail(invalid());
     }
-    const hostname = url.hostname.toLowerCase().replace(/\.$/u, "");
-    if (hostname.endsWith(".neon.tech") && hostname.split(".")[0]?.endsWith("-pooler") === true) {
+    const hostname = EffectString.replace(EffectString.toLowerCase(url.hostname), /\.$/u, "");
+    if (
+      EffectString.endsWith(hostname, ".neon.tech") &&
+      optionalStringValue(EffectString.split(hostname, ".")[0], (value) =>
+        EffectString.endsWith(value, "-pooler"),
+      ) === true
+    ) {
       return yield* Effect.fail(
         new Error(
           "ALCHEMY_STATE_DATABASE_URL cannot use Neon transaction pooling. Use a direct or session-capable endpoint with at least two connections for state lock verification.",

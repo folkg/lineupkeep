@@ -1,4 +1,5 @@
 import { EffectArray } from "@lineupkeep/collections";
+import { EffectString } from "@lineupkeep/collections";
 import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 import type { Accessor } from "solid-js";
@@ -211,10 +212,11 @@ function teamsBySportThenName(
   teams: ReadonlyArray<TeamSummaryView>,
 ): ReadonlyArray<TeamSummaryView> {
   return [...teams].sort((left, right) => {
-    const sport = sportDisplayName(left.team.sport).localeCompare(
+    const sport = EffectString.localeCompare(
+      sportDisplayName(left.team.sport),
       sportDisplayName(right.team.sport),
     );
-    return sport === 0 ? left.team.name.localeCompare(right.team.name) : sport;
+    return sport === 0 ? EffectString.localeCompare(left.team.name, right.team.name) : sport;
   });
 }
 

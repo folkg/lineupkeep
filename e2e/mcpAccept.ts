@@ -16,6 +16,7 @@ import {
   resourceScopes,
 } from "@lineupkeep/backend/runtime/ApplicationScopes";
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { EffectString } from "@lineupkeep/collections";
 import { Effect } from "effect";
 import { Option, Schema } from "effect";
 import { Array as EffectArray } from "effect";
@@ -69,7 +70,7 @@ export function requestedScopeNames(raw: string | undefined): ReadonlyArray<stri
   if (raw === undefined) {
     return advertisedScopeNames();
   }
-  const names = [...new Set(EffectArray.filter(raw.split(/[\s,]+/u), Boolean))];
+  const names = [...new Set(EffectArray.filter(EffectString.split(raw, /[\s,]+/u), Boolean))];
   if (names.length === 0) {
     throw new Error("--scopes named no scopes.");
   }
@@ -88,7 +89,7 @@ export function requestedScopeNames(raw: string | undefined): ReadonlyArray<stri
 }
 
 export function tokenGrantedScopes(token: string): ReadonlyArray<string> {
-  const payload = token.split(".")[1];
+  const payload = EffectString.split(token, ".")[1];
   if (payload === undefined) {
     throw new Error("The provided token is not a JWT; its granted scopes cannot be read.");
   }
@@ -98,7 +99,7 @@ export function tokenGrantedScopes(token: string): ReadonlyArray<string> {
   if (Option.isNone(claims) || claims.value.scope === undefined) {
     throw new Error("The provided token has no scope claim; its granted scopes cannot be read.");
   }
-  return EffectArray.filter(claims.value.scope.split(" "), Boolean);
+  return EffectArray.filter(EffectString.split(claims.value.scope, " "), Boolean);
 }
 
 export class AcceptanceReport {
@@ -222,7 +223,7 @@ export class AcceptanceReport {
     this.registrations = registrations;
     const registered = acceptedScopeNames(advertisedScopes);
     for (const registration of registrations) {
-      const granted = EffectArray.filter(registration.scope.split(" "), Boolean);
+      const granted = EffectArray.filter(EffectString.split(registration.scope, " "), Boolean);
       if (!sameSet(granted, registered)) {
         this.addFinding(
           `Dynamic client registration for the ${registration.grant} grant granted ${registration.scope === "" ? "no scopes" : registration.scope}; expected the full registrable set ${EffectArray.join(registered, " ")}.`,
@@ -332,7 +333,7 @@ export class AcceptanceReport {
       lines.push("Not inspected.", "");
     } else {
       lines.push(
-        `- Unauthenticated \`tools/list\` challenge: ${this.baselineInspection.scope === undefined ? "none" : codeList(EffectArray.filter(this.baselineInspection.scope.split(" "), Boolean))}`,
+        `- Unauthenticated \`tools/list\` challenge: ${this.baselineInspection.scope === undefined ? "none" : codeList(EffectArray.filter(EffectString.split(this.baselineInspection.scope, " "), Boolean))}`,
         `- Minimal baseline: ${codeList(this.baselineInspection.expected)}`,
         `- Matches the minimal baseline: ${this.baselineInspection.matches ? "yes" : "no"}`,
         `- Requests the full advertised set: ${this.baselineInspection.asksForFullSet ? "yes" : "no"}`,
@@ -346,7 +347,7 @@ export class AcceptanceReport {
       } else {
         for (const registration of this.registrations) {
           lines.push(
-            `- ${registration.grant}: public client registered without a secret; granted scopes: ${codeList(EffectArray.filter(registration.scope.split(" "), Boolean))}`,
+            `- ${registration.grant}: public client registered without a secret; granted scopes: ${codeList(EffectArray.filter(EffectString.split(registration.scope, " "), Boolean))}`,
           );
         }
         lines.push("");
@@ -574,7 +575,8 @@ async function inspectMetadata(origin: string): Promise<MetadataInspection> {
 async function inspectBaseline(origin: string): Promise<BaselineInspection> {
   const response = await mcpClient(mcpEndpoint(origin)).request("tools/list");
   const scope = challengeScope(response.headers.get("www-authenticate"));
-  const actual = scope === undefined ? [] : EffectArray.filter(scope.split(" "), Boolean);
+  const actual =
+    scope === undefined ? [] : EffectArray.filter(EffectString.split(scope, " "), Boolean);
   const expected = onboardingScopeNames();
   return {
     status: response.status,
@@ -612,7 +614,8 @@ async function inspectTools(
       );
       continue;
     }
-    const names = scope === undefined ? [] : EffectArray.filter(scope.split(" "), Boolean);
+    const names =
+      scope === undefined ? [] : EffectArray.filter(EffectString.split(scope, " "), Boolean);
     const required = names[0];
     if (names.length !== 1 || required === undefined) {
       report.addFinding(
@@ -697,7 +700,7 @@ async function runLocalFeedbackCase(
   const listedOk =
     listed.status === 200 &&
     listed.isError !== true &&
-    jsonTools.jsonString(listed.structuredContent).includes(submittedId);
+    EffectString.includes(jsonTools.jsonString(listed.structuredContent), submittedId);
   steps.push(
     `list_feedback: ${listedOk ? "ok, the submitted report is listed" : `failed (${listed.status}${listed.code === undefined ? "" : ` ${listed.code}`})`}`,
   );
@@ -956,9 +959,15 @@ function parseJson(text: string): unknown {
 function redactText(text: string): string {
   const redacted = redactEvidence(text);
   const withoutKnown = typeof redacted === "string" ? redacted : text;
-  return withoutKnown
-    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/gu, "[REDACTED]")
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+\b/giu, "Bearer [REDACTED]");
+  return EffectString.replace(
+    EffectString.replace(
+      withoutKnown,
+      /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/gu,
+      "[REDACTED]",
+    ),
+    /\bBearer\s+[A-Za-z0-9._~+/=-]+\b/giu,
+    "Bearer [REDACTED]",
+  );
 }
 
 function describeError(error: unknown): string {
