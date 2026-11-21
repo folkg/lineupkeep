@@ -1542,6 +1542,9 @@ it.effect("rejects a blank player search query with the remedy instead of a gene
     assert.strictEqual(listed.status, "ok");
     if (listed.status === "ok") {
       assert.strictEqual(listed.players.length, 1);
+      assert.isUndefined(listed.players[0]?.draft);
+      assert.isUndefined(listed.players[0]?.status.observedAt);
+      assert.isUndefined(listed.players[0]?.transactionTrend);
     }
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
@@ -2788,7 +2791,7 @@ it.effect(
         return;
       }
       assert.isUndefined(plain.gamesWindow);
-      assert.strictEqual((yield* fake.providerReads) - before, 3);
+      assert.strictEqual((yield* fake.providerReads) - before, 2);
 
       const search = yield* queries.searchPlayers(owner, {
         team: teamId,
@@ -3239,6 +3242,7 @@ it.effect("carries a screening status and its observation time on every search r
     const search = yield* queries.searchPlayers(owner, {
       team: Array.getUnsafe(seeded, 0).id,
       sort: "name",
+      detail: "full",
     });
 
     assert.strictEqual(search.status, "ok");
@@ -3252,7 +3256,10 @@ it.effect("carries a screening status and its observation time on every search r
         value: player.status.value,
         code: player.status.code,
         detail: player.status.detail,
-        observedAt: DateTime.toEpochMillis(player.status.observedAt),
+        observedAt:
+          player.status.observedAt === undefined
+            ? undefined
+            : DateTime.toEpochMillis(player.status.observedAt),
       })),
       [
         {
@@ -3480,6 +3487,7 @@ it.effect("carries your league's day-window transaction counts on search rows", 
     const search = yield* queries.searchPlayers(owner, {
       team: Array.getUnsafe(seeded, 0).id,
       sort: "name",
+      detail: "full",
     });
     assert.strictEqual(search.status, "ok");
     if (search.status !== "ok") {
@@ -4144,7 +4152,7 @@ it.effect(
       }
       assertDrafted(Array.getUnsafe(hydrated.players, 0).identity?.draft);
 
-      const search = yield* queries.searchPlayers(owner, { team: teamId });
+      const search = yield* queries.searchPlayers(owner, { team: teamId, detail: "full" });
       assert.strictEqual(search.status, "ok");
       if (search.status !== "ok") {
         return;
@@ -4285,7 +4293,7 @@ it.effect("reads one draft history for the whole response, not one read per play
       ),
     );
     const beforeSearch = yield* fake.readCount("read_draft_results");
-    const search = yield* queries.searchPlayers(owner, { team: teamId });
+    const search = yield* queries.searchPlayers(owner, { team: teamId, detail: "full" });
     assert.strictEqual(search.status, "ok");
     assert.strictEqual((yield* fake.readCount("read_draft_results")) - beforeSearch, 1);
   }).pipe(Effect.provide(QueriesTestLayer)),
@@ -4339,7 +4347,7 @@ it.effect("pages a large multi-byte roster inside the encoded result budget", ()
     const fake = yield* FakeProviderWorld;
     const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
       roster: rosterFixture({
-        count: 40,
+        count: 80,
         name: "Joueur Élite 名前",
       }),
     });
@@ -4351,7 +4359,7 @@ it.effect("pages a large multi-byte roster inside the encoded result budget", ()
     if (page.status !== "ok" || page.scope !== "team") {
       return;
     }
-    assert.isTrue(page.players.length < 40);
+    assert.isTrue(page.players.length < 80);
     assert.strictEqual(page.page.complete, false);
     assert.isString(page.page.next);
 
@@ -4371,7 +4379,7 @@ it.effect("pages a large multi-byte roster inside the encoded result budget", ()
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect("fits both representations a client receives inside the hard byte limit", () =>
+it.effect("fits the structured result inside the hard byte limit", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
@@ -4401,21 +4409,13 @@ function encodedKeys(value: unknown): ReadonlyArray<string> {
 
 function summarySectionBytes(summary: TeamSummaryResult): number {
   const structuredContent = Schema.encodeSync(Schema.toCodecJson(TeamSummaryResult))(summary);
-  const received = JSON.stringify({
-    content: [{ type: "text", text: JSON.stringify(structuredContent) }],
-    structuredContent,
-    isError: false,
-  });
+  const received = JSON.stringify({ structuredContent, isError: false });
   return new TextEncoder().encode(received).length;
 }
 
 function receivedToolResultBytes(page: RosterResult): number {
   const structuredContent = Schema.encodeSync(Schema.toCodecJson(RosterResult))(page);
-  const received = JSON.stringify({
-    content: [{ type: "text", text: JSON.stringify(structuredContent) }],
-    structuredContent,
-    isError: false,
-  });
+  const received = JSON.stringify({ structuredContent, isError: false });
   return new TextEncoder().encode(received).length;
 }
 
@@ -7144,7 +7144,7 @@ it.effect("names the selected sections when a summary without a roster page cann
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
     const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
-      league: { ...leagueFixture, name: "L".repeat(20_000) },
+      league: { ...leagueFixture, name: "L".repeat(40_000) },
     });
     const teamId = Array.getUnsafe(seeded, 0).id;
 
@@ -7226,7 +7226,7 @@ it.effect("documents how to narrow a summary that cannot fit a single record", (
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
     const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
-      roster: rosterFixture({ count: 1, name: "A".repeat(20_000) }),
+      roster: rosterFixture({ count: 1, name: "A".repeat(40_000) }),
     });
     const teamId = Array.getUnsafe(seeded, 0).id;
 

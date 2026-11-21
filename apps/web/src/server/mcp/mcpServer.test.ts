@@ -14,14 +14,25 @@ import type { LineupRunsShape } from "@lineupkeep/backend/connections/LineupRuns
 import { LineupRuns } from "@lineupkeep/backend/connections/LineupRuns";
 import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
 import {
+  LeagueData,
+  RosterData,
+  SearchPlayersData,
+  TeamSummaryData,
+  TransactionsData,
+} from "@lineupkeep/backend/connections/QueryResults";
+import {
   PlayerRef,
   QueryCursorInvalid,
   QuerySelectionInvalid,
+  QueryTeam,
 } from "@lineupkeep/backend/connections/QueryValues";
 import type { TeamsShape } from "@lineupkeep/backend/connections/Teams";
 import { Teams } from "@lineupkeep/backend/connections/Teams";
 import type { TransactionOffersShape } from "@lineupkeep/backend/connections/TransactionOffers";
-import { TransactionOffers } from "@lineupkeep/backend/connections/TransactionOffers";
+import {
+  TransactionOffers,
+  TransactionOffersPersistenceFailed,
+} from "@lineupkeep/backend/connections/TransactionOffers";
 import type {
   TransactionMoveList,
   TransactionMoveTeam,
@@ -497,12 +508,145 @@ it("lists only the read-only connection tool without exposing account identity",
     "list_transaction_proposals",
     "get_transaction_plan",
     "discard_transaction_move",
+    "get_team_snapshot",
     "set_lineup",
     "get_lineup_runs",
     "set_team_automation",
     "add_team_agent_note",
     "submit_feedback",
     "list_feedback",
+  ]);
+});
+
+it("composes the team snapshot from the reads in one tool call", async () => {
+  const team = decodeTeamId("018f79ea-7d86-7c18-9b4a-8b4d0c9164b5");
+  const teamView = Schema.decodeSync(QueryTeam)({
+    id: team,
+    name: "Alpha",
+    provider: "yahoo",
+    league: "nhl",
+    sport: "hockey",
+    season: 2026,
+  });
+  const page = { returned: 0, complete: true, remaining: 0 } as const;
+  const budget = { targetBytes: 28 * 1024, hardLimitBytes: 32 * 1024 } as const;
+  const queries: FantasyQueriesShape = {
+    ...unavailableQueries,
+    getTeamSummary: () =>
+      Effect.succeed(
+        Schema.decodeSync(TeamSummaryData)({
+          status: "ok",
+          team: teamView,
+          ownerNote: { status: "not_set" },
+          agentNotes: [],
+          coverage: [],
+          failures: [],
+          page,
+          budget,
+        }),
+      ),
+    getLeague: () =>
+      Effect.succeed(
+        Schema.decodeSync(LeagueData)({
+          status: "ok",
+          team: teamView,
+          coverage: [],
+          failures: [],
+          page,
+          budget,
+        }),
+      ),
+    getRosters: () =>
+      Effect.succeed(
+        Schema.decodeSync(RosterData)({
+          status: "ok",
+          scope: "team",
+          team: teamView,
+          players: [],
+          coverage: [],
+          failures: [],
+          page,
+          budget,
+        }),
+      ),
+    getTransactions: () =>
+      Effect.succeed(
+        Schema.decodeSync(TransactionsData)({
+          status: "ok",
+          team: teamView,
+          transactions: [],
+          window: { fetched: 0, truncated: false },
+          coverage: [],
+          failures: [],
+          page,
+          budget,
+        }),
+      ),
+    searchPlayers: () =>
+      Effect.succeed(
+        Schema.decodeSync(SearchPlayersData)({
+          status: "ok",
+          team: teamView,
+          players: [],
+          coverage: [],
+          failures: [],
+          page,
+          budget,
+        }),
+      ),
+  };
+  const plans = {
+    ...unavailablePlans,
+    plan: () => Effect.fail(TransactionPlanPersistenceFailed.make({ cause: new Error("plan") })),
+  };
+  const offers = {
+    readPendingOffers: () =>
+      Effect.fail(TransactionOffersPersistenceFailed.make({ cause: new Error("offers") })),
+  };
+  const services = Layer.mergeAll(
+    authentication,
+    permissiveQuota,
+    Layer.succeed(Connections)(unavailableConnections),
+    Layer.succeed(FantasyQueries)(queries),
+    Layer.succeed(TransactionOffers)(offers),
+    Layer.succeed(TransactionPlanService)(plans),
+    Layer.succeed(LineupRuns)(unavailableLineups),
+    Layer.succeed(Teams)(unavailableTeams),
+    Layer.succeed(Feedback)(unavailableFeedback),
+  );
+  const response = await handleMcpRequest(
+    request("tools/call", { name: "get_team_snapshot", arguments: { team } }, "fantasy"),
+    (_request, _operation, program) => Effect.runPromise(Effect.provide(program, services)),
+  );
+  const body = await json(response);
+
+  expect(response.status).toBe(200);
+  expect(body).toMatchObject({
+    result: {
+      isError: false,
+      content: [],
+      structuredContent: {
+        status: "ok",
+        summary: { status: "ok" },
+        league: { status: "ok" },
+        roster: { status: "ok" },
+        transactions: { status: "ok" },
+        pool: { status: "ok" },
+      },
+    },
+  });
+  const content = Schema.decodeUnknownSync(
+    Schema.Struct({
+      result: Schema.Struct({
+        structuredContent: Schema.Struct({
+          failures: Schema.Array(Schema.Struct({ section: Schema.String })),
+        }),
+      }),
+    }),
+  )(body);
+  expect(content.result.structuredContent.failures.map((failure) => failure.section)).toEqual([
+    "plan",
+    "offers",
   ]);
 });
 
@@ -535,6 +679,17 @@ it("returns a stateless tool result without initializing a session", async () =>
   expect(response.headers.has("mcp-session-id")).toBe(false);
 });
 
+it("drops the duplicate text copy from a successful tool result", async () => {
+  const response = await handle(
+    request("tools/call", { name: "list_connections", arguments: {} }, "read"),
+  );
+  const body = await json(response);
+
+  expect(body).toMatchObject({
+    result: { isError: false, structuredContent: { connections: [] }, content: [] },
+  });
+});
+
 it("scrubs unexpected persistence details from the tool response", async () => {
   const response = await handle(
     request("tools/call", { name: "list_connections", arguments: {} }, "read"),
@@ -564,7 +719,7 @@ it("enforces fantasy read scope and serves bounded query results over MCP", asyn
         status: "ok",
         teams: [],
         page: { returned: 0, complete: true, remaining: 0 },
-        budget: { targetBytes: 12_288, hardLimitBytes: 16_384 },
+        budget: { targetBytes: 28_672, hardLimitBytes: 32_768 },
       }),
   };
   const services = Layer.mergeAll(
@@ -625,7 +780,7 @@ it("accepts ISO 8601 instants for transaction and feedback filters", async () =>
         coverage: [],
         failures: [],
         page: { returned: 0, complete: true, remaining: 0 },
-        budget: { targetBytes: 12_288, hardLimitBytes: 16_384 },
+        budget: { targetBytes: 28_672, hardLimitBytes: 32_768 },
       });
     },
   };
@@ -828,7 +983,7 @@ it("publishes and serves the scoring-period schedule group over MCP", async () =
         coverage: [],
         failures: [],
         page: { returned: 0, complete: true, remaining: 0 },
-        budget: { targetBytes: 12_288, hardLimitBytes: 16_384 },
+        budget: { targetBytes: 28_672, hardLimitBytes: 32_768 },
       }),
   };
   const services = Layer.mergeAll(
@@ -2294,6 +2449,7 @@ it("keeps every published description inside its budget", async () => {
     get_players: 220,
     get_rosters: 220,
     get_team_summary: 220,
+    get_team_snapshot: 220,
     get_transaction_plan: 300,
     get_transactions: 220,
     list_connections: 220,
@@ -2314,7 +2470,7 @@ it("keeps every published description inside its budget", async () => {
   expect(overBudget).toEqual([]);
   expect(
     listed.result.tools.reduce((total, tool) => total + tool.description.length, 0),
-  ).toBeLessThanOrEqual(3_600);
+  ).toBeLessThanOrEqual(3_900);
 
   const fields = listed.result.tools.flatMap((tool) => [
     ...schemaDescriptions(tool.inputSchema, `${tool.name}.input`),

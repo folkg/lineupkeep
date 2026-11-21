@@ -59,6 +59,7 @@ it("spends a declared allowance on every shipped tool, smallest for the destruct
     "get_pending_trade_offers",
     "get_players",
     "get_rosters",
+    "get_team_snapshot",
     "get_team_summary",
     "get_transaction_plan",
     "get_transactions",

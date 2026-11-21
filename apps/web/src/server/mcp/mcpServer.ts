@@ -20,12 +20,14 @@ import { feedbackToolHandlers, feedbackTools } from "./feedbackTools";
 import { lineupToolHandlers, lineupTools } from "./lineupTools";
 import { mcpRequest } from "./mcpEndpoint";
 import { proposalToolHandlers, proposalTools } from "./proposalTools";
+import { snapshotToolHandlers, snapshotTools } from "./snapshotTools";
 import { teamToolHandlers, teamTools } from "./teamTools";
 
 export const applicationTools = Toolkit.merge(
   connectionTools,
   fantasyQueryTools,
   proposalTools,
+  snapshotTools,
   lineupTools,
   teamTools,
   feedbackTools,
@@ -48,6 +50,7 @@ const applicationHandlers = (
     connectionToolHandlers(agent),
     fantasyQueryToolHandlers(agent),
     proposalToolHandlers(agent),
+    snapshotToolHandlers(agent),
     lineupToolHandlers(agent),
     teamToolHandlers(agent),
     feedbackToolHandlers(agent),

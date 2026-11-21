@@ -944,6 +944,14 @@ export type GamesWindowInput = typeof GamesWindowInput.Type;
 
 export const SearchPlayersInput = Schema.Struct({
   team: TeamId,
+  detail: Schema.optional(
+    Schema.Literals(["compact", "full"]).pipe(
+      Schema.annotate({
+        description:
+          "`compact` returns the discovery row; `full` adds draft provenance, full injury wording, and transaction trend. Default `compact`.",
+      }),
+    ),
+  ),
   query: Schema.optional(
     Schema.String.pipe(
       Schema.check(Schema.isMaxLength(80)),
@@ -1059,7 +1067,7 @@ export type PlayerGameWeeks = typeof PlayerGameWeeks.Type;
 const SearchPlayer = Schema.Struct({
   player: PlayerRef,
   name: Schema.NonEmptyString,
-  draft: PlayerDraft,
+  draft: Schema.optional(PlayerDraft),
   primaryPosition: Schema.NonEmptyString,
   displayPosition: Schema.NonEmptyString,
   proTeam: Schema.NullOr(Schema.NonEmptyString).pipe(
@@ -1077,17 +1085,17 @@ const SearchPlayer = Schema.Struct({
     ),
     code: Schema.optional(Schema.String).pipe(
       Schema.annotate({
-        description: "The site's status code verbatim, such as `IR-LT`; absent when healthy.",
+        description: "The site's status code verbatim, such as `IR-LT`; full detail only.",
       }),
     ),
     detail: Schema.optional(Schema.String).pipe(
       Schema.annotate({
-        description: "The site's wording where it publishes one, including expected return.",
+        description: "The site's wording where it publishes one; full detail only.",
       }),
     ),
-    observedAt: Schema.DateTimeUtc.pipe(
+    observedAt: Schema.optional(Schema.DateTimeUtc).pipe(
       Schema.annotate({
-        description: "When this status was read from the site.",
+        description: "When this status was read; full detail only.",
       }),
     ),
   }),
@@ -1142,7 +1150,7 @@ const SearchPlayer = Schema.Struct({
   gameDays: Schema.optional(PlayerGameDays),
   gameWeeks: Schema.optional(PlayerGameWeeks),
   week: Schema.optional(PlayerWeek),
-  transactionTrend: PlayerTransactionTrend,
+  transactionTrend: Schema.optional(PlayerTransactionTrend),
 });
 
 const SearchGamesWindow = Schema.Union([

@@ -369,8 +369,55 @@ const serveToolkit = Effect.fnUntraced(function* <Tools extends Record<string, T
     "http.response.status_code": response.status,
     ...(response.status >= 400 ? { "app.outcome": "rejected" } : {}),
   });
-  return HttpServerResponse.toWeb(response);
+  return yield* dropDuplicateToolText(HttpServerResponse.toWeb(response));
 });
+
+function dropDuplicateToolText(response: Response): Effect.Effect<Response, never, never> {
+  return Effect.gen(function* () {
+    if (!(response.headers.get("content-type") ?? "").includes("application/json")) {
+      return response;
+    }
+    const decoded = yield* Effect.tryPromise({
+      try: () => response.clone().text(),
+      catch: () => undefined,
+    }).pipe(
+      Effect.flatMap((text) => Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text)),
+      Effect.option,
+    );
+    if (Option.isNone(decoded) || !clearStructuredCopy(decoded.value)) {
+      return response;
+    }
+    const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+      decoded.value,
+    ).pipe(Effect.option);
+    if (Option.isNone(encoded)) {
+      return response;
+    }
+    const headers = new Headers(response.headers);
+    headers.delete("content-length");
+    return new Response(encoded.value, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  });
+}
+
+function clearStructuredCopy(body: unknown): boolean {
+  if (typeof body !== "object" || body === null) {
+    return false;
+  }
+  const result = (body as { readonly result?: unknown }).result;
+  if (typeof result !== "object" || result === null) {
+    return false;
+  }
+  const entry = result as { structuredContent?: unknown; content?: unknown };
+  if (entry.structuredContent === undefined || !Array.isArray(entry.content)) {
+    return false;
+  }
+  entry.content = [];
+  return true;
+}
 
 const discoveryMethod = "server/discover";
 const supportedProtocolVersion = "2026-07-28";

@@ -23,7 +23,7 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 | Phase 2 (stages 7–8) | Complete, deployed, hourly automation verified                                                    |
 | Lineup algorithm     | Custom solver live for all five owner teams                                                       |
 | Provider boundary    | Every provider request lives in `packages/yahoo-sdk`; the adapter is policy and port mapping only |
-| MCP surface          | 21 tools; four resource scopes plus `notes:write`; descriptions budgeted and tested               |
+| MCP surface          | 22 tools; four resource scopes plus `notes:write`; descriptions budgeted and tested               |
 | Client feedback      | Round 9 client notes closed on 5 November: structure, copy, local time, action states             |
 | Connections          | Hosted browser only; local helper and device flow deleted                                         |
 | Interface            | Technical sheet, renamed to Lineupgrade; nav is Teams and Account; actions own their states       |

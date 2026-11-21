@@ -1604,6 +1604,7 @@ export const FantasyQueriesLive = Layer.effect(
       const team = queryTeam(context.owned);
       const fetchedAt = yield* DateTime.now;
       const availability = input.availability ?? "all";
+      const detail = input.detail ?? "compact";
       const sort = input.sort ?? "name";
       const requestedWindow: ProviderStatPeriod | undefined =
         input.window === undefined ? undefined : normalizeStatPeriod(input.window);
@@ -1747,13 +1748,16 @@ export const FantasyQueriesLive = Layer.effect(
         ? filtered
         : filtered.toSorted((left, right) => comparePlayers(left, right, sort));
       const failures: QueryFailure[] = [];
-      const draft = yield* draftProvenance(
-        context,
-        fetchedAt,
-        ordered.map((player) => player.providerPlayerKey),
-        "players",
-      );
-      for (const failure of draft.failures ?? []) {
+      const draft =
+        detail === "compact"
+          ? undefined
+          : yield* draftProvenance(
+              context,
+              fetchedAt,
+              ordered.map((player) => player.providerPlayerKey),
+              "players",
+            );
+      for (const failure of draft?.failures ?? []) {
         failures.push(failure);
       }
       const currentWeek =
@@ -1819,7 +1823,7 @@ export const FantasyQueriesLive = Layer.effect(
         return {
           player: playerRef,
           name: player.name,
-          draft: draft.lookup(player.providerPlayerKey),
+          ...(draft === undefined ? {} : { draft: draft.lookup(player.providerPlayerKey) }),
           primaryPosition: player.primaryPosition,
           displayPosition: player.displayPosition,
           proTeam: player.proTeam ?? null,
@@ -1840,9 +1844,13 @@ export const FantasyQueriesLive = Layer.effect(
           availability: player.availability,
           status: {
             value: player.status.value,
-            ...(player.status.code === undefined ? {} : { code: player.status.code }),
-            ...(player.status.detail === undefined ? {} : { detail: player.status.detail }),
-            observedAt: fetchedAt,
+            ...(detail === "compact" || player.status.code === undefined
+              ? {}
+              : { code: player.status.code }),
+            ...(detail === "compact" || player.status.detail === undefined
+              ? {}
+              : { detail: player.status.detail }),
+            ...(detail === "compact" ? {} : { observedAt: fetchedAt }),
           },
           percentOwned: player.percentOwned,
           percentOwnedDelta: player.percentOwnedDelta,
@@ -1853,7 +1861,7 @@ export const FantasyQueriesLive = Layer.effect(
           ...(sort === "recent_rank" && player.recentRank !== undefined
             ? { recentRank: player.recentRank }
             : {}),
-          transactionTrend: player.transactionTrend,
+          ...(detail === "compact" ? {} : { transactionTrend: player.transactionTrend }),
           ...(sort === "stat" ? { statValue: player.statValue } : {}),
         };
       });
@@ -1878,7 +1886,7 @@ export const FantasyQueriesLive = Layer.effect(
         team,
         coverage: [
           coverage("players", "player_search", fetchedAt),
-          ...(draft.coverage === undefined ? [] : [draft.coverage]),
+          ...(draft?.coverage === undefined ? [] : [draft.coverage]),
           ...(poolGames?.status === "available"
             ? [
                 coverage(

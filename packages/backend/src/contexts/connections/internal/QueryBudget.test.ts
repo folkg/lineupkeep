@@ -10,9 +10,9 @@ const NamesResult = Schema.Struct({
   page: QueryPage,
 });
 
-it.effect("refuses a record whose escaped text copy cannot fit the hard byte limit", () =>
+it.effect("refuses a record that cannot fit the hard byte limit", () =>
   Effect.gen(function* () {
-    const rows = [{ name: '"'.repeat(3_400) }];
+    const rows = [{ name: "x".repeat(40_000) }];
     const result = yield* fitPage({
       schema: NamesResult,
       rows,
@@ -32,7 +32,7 @@ it.effect("refuses a record whose escaped text copy cannot fit the hard byte lim
 
 it.effect("applies a caller-supplied budget instead of the shared default", () =>
   Effect.gen(function* () {
-    const rows = [{ name: "a".repeat(8_000) }];
+    const rows = [{ name: "a".repeat(30_000) }];
     const input = {
       schema: NamesResult,
       rows,
@@ -50,12 +50,12 @@ it.effect("applies a caller-supplied budget instead of the shared default", () =
     } as const;
 
     const shared = yield* fitPage(input);
-    assert.isTrue(Schema.is(NarrowingResult)(shared));
+    assert.isFalse(Schema.is(NarrowingResult)(shared));
 
     const summary = yield* fitPage({
       ...input,
       budget: { targetBytes: 20 * 1024, hardLimitBytes: 28 * 1024 },
     });
-    assert.isFalse(Schema.is(NarrowingResult)(summary));
+    assert.isTrue(Schema.is(NarrowingResult)(summary));
   }),
 );

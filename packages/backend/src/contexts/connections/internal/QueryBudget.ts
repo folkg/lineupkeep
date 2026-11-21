@@ -8,8 +8,8 @@ import {
   type QueryError,
 } from "#contexts/connections/QueryValues.ts";
 
-const queryResultTargetBytes = 12 * 1024;
-const queryResultHardLimitBytes = 16 * 1024;
+const queryResultTargetBytes = 28 * 1024;
+const queryResultHardLimitBytes = 32 * 1024;
 const summaryResultTargetBytes = 20 * 1024;
 const summaryResultHardLimitBytes = 28 * 1024;
 const playerListResultLimitBytes = 256 * 1024;
@@ -122,14 +122,7 @@ export function fitPage<Row, Result>(
 function clientResultBytes(schema: Schema.Codec<unknown, unknown>, value: unknown): number {
   const encoded = Schema.encodeSync(Schema.toCodecJson(schema))(value);
   const structuredContent = JSON.stringify(encoded);
-  const textContent = escapedTextContent(structuredContent);
-  return (
-    utf8.encode(structuredContent).length + utf8.encode(textContent).length + envelopeAllowanceBytes
-  );
-}
-
-function escapedTextContent(json: string): string {
-  return JSON.stringify(json).slice(1, -1);
+  return utf8.encode(structuredContent).length + envelopeAllowanceBytes;
 }
 
 function narrowing<Row, Result>(

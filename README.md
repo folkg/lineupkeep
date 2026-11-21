@@ -130,7 +130,7 @@ curl -sS https://<host>/mcp \
   --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_connections","arguments":{},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
 ```
 
-A tool result carries the payload twice: `structuredContent` for clients that read it, and the same JSON as text content for clients that only read text. Both copies count against the page budget, so a page fills about half of the 16 KiB ceiling; narrow with filters or `groups` rather than expecting more records per call.
+A successful tool result carries `structuredContent` and no duplicate JSON text copy. The page budget is measured on the structured result, with a 28 KiB target and a 32 KiB ceiling; narrow with filters or `groups` rather than expecting more records per call.
 
 ### Registration
 
