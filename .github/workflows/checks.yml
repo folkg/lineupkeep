@@ -17,8 +17,10 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    # The suite takes about ten minutes on a clean runner; the allowance covers a
-    # slow apt and browser install, which is where the job was previously cancelled.
+    # The main suite takes about five minutes on a clean runner. The two fixture
+    # suites in the parallel `fixtures` job start a separate type-aware linter
+    # process per case, so they stay out of this job instead of contending with
+    # every other test on four cores.
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
@@ -49,7 +51,28 @@ jobs:
           echo "Browser install failed after four attempts."
           exit 1
 
-      - run: bun run checks:ci
+      - run: bun run checks:ci:main
+
+  # The dependency and lint fixture suites each exercise the real toolchain in a
+  # temporary project. Running them beside the main suite makes both slower; this
+  # job gives them their own runner and runs in parallel with `checks`.
+  fixtures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun run checks:ci:fixtures
 
   # Validates production artifacts without cloud credentials: marker scans and a Worker dry run.
   targets:

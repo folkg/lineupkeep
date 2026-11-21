@@ -16,6 +16,22 @@ const chromiumTests = [
   "apps/web/src/server/hostedLinking/playwrightHostedBrowser.test.ts",
 ];
 
+const nodeExclude = [
+  "infra/local/*.safety.test.ts",
+  "infra/local/*.container-safety.test.ts",
+  "apps/web/src/browser/workflow/workflowTest.test.ts",
+  "apps/web/src/browser/auth/signInWorkflow.test.ts",
+  "node_modules/**",
+  "**/node_modules/**",
+  "**/dist/**",
+  "**/*.browser.test.ts",
+  "**/*.browser.test.tsx",
+  ...chromiumTests,
+];
+if (process.env["VITEST_NODE_MAIN"] === "1") {
+  nodeExclude.push("scripts/dependencyCruiser.test.ts", "scripts/oxlint.test.ts");
+}
+
 const nodeProject = {
   mode: "production",
   ssr: {
@@ -83,18 +99,7 @@ export default defineConfig({
             "scripts/**/*.test.ts",
             "infra/**/*.test.ts",
           ],
-          exclude: [
-            "infra/local/*.safety.test.ts",
-            "infra/local/*.container-safety.test.ts",
-            "apps/web/src/browser/workflow/workflowTest.test.ts",
-            "apps/web/src/browser/auth/signInWorkflow.test.ts",
-            "node_modules/**",
-            "**/node_modules/**",
-            "**/dist/**",
-            "**/*.browser.test.ts",
-            "**/*.browser.test.tsx",
-            ...chromiumTests,
-          ],
+          exclude: nodeExclude,
         },
       },
       {
