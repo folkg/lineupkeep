@@ -40,11 +40,13 @@ export const ConnectionIncidentWorkflow = defineMachine<
       on: {
         Resolved: {
           target: "resolved",
-          data: ({ state, event }) => ({
-            openedAt: state.openedAt,
-            resolvedAt: event.at,
-            resolution: event.resolution,
-          }),
+          data: ({ state, event }) => {
+            const decision = decideConnectionIncidentTransition(state, event);
+            if (decision._tag === "rejected") {
+              throw new Error("An open incident must accept its resolution");
+            }
+            return decision.state;
+          },
         },
       },
     },
@@ -54,6 +56,33 @@ export const ConnectionIncidentWorkflow = defineMachine<
 
 export function initialConnectionIncidentState(openedAt: DateTime.Utc): ConnectionIncidentState {
   return { _tag: "open", openedAt };
+}
+
+function decideConnectionIncidentTransition(
+  state: ConnectionIncidentState,
+  event: ConnectionIncidentEvent,
+): ConnectionIncidentDecision {
+  //@ verify
+  //@ contract A Resolved event resolves an open incident using the event timestamp and resolution while preserving its opening time; a resolved incident rejects every transition without changing or losing its resolution data.
+  //@ requires event._tag === "Resolved"
+  //@ ensures (state._tag === "open" ==> \result._tag === "accepted")
+  //@ ensures (state._tag === "resolved" ==> \result._tag === "rejected")
+  //@ ensures (\result._tag === "accepted" ==> \result.state._tag === "resolved")
+  //@ ensures (\result._tag === "accepted" ==> \result.state.openedAt === state.openedAt)
+  //@ ensures (\result._tag === "accepted" ==> \result.state.resolvedAt === event.at)
+  //@ ensures (\result._tag === "accepted" ==> \result.state.resolution === event.resolution)
+  if (state._tag === "resolved") {
+    return { _tag: "rejected" };
+  }
+  return {
+    _tag: "accepted",
+    state: {
+      _tag: "resolved",
+      openedAt: state.openedAt,
+      resolvedAt: event.at,
+      resolution: event.resolution,
+    },
+  };
 }
 
 export function connectionIncidentStatus(
@@ -112,4 +141,15 @@ type ConnectionIncidentProjection = {
   readonly openedAt: DateTime.Utc;
   readonly resolvedAt: DateTime.Utc | null;
   readonly resolution: "reconnected" | "disconnected" | null;
+};
+
+type ConnectionIncidentDecision =
+  | { readonly _tag: "accepted"; readonly state: ResolvedConnectionIncidentState }
+  | { readonly _tag: "rejected" };
+
+type ResolvedConnectionIncidentState = {
+  readonly _tag: "resolved";
+  readonly openedAt: DateTime.Utc;
+  readonly resolvedAt: DateTime.Utc;
+  readonly resolution: "reconnected" | "disconnected";
 };

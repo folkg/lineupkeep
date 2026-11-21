@@ -6,7 +6,13 @@ datatype Utc = Utc(epochMilliseconds: int)
 
 datatype ConnectionIncidentState = open(openedAt: Utc) | resolved(openedAt: Utc, resolvedAt: Utc, resolution: string)
 
+datatype ConnectionIncidentEvent = ConnectionIncidentEvent(i_tag: string, at: Utc, resolution: string)
+
 datatype ConnectionIncidentProjection = ConnectionIncidentProjection(status: string, openedAt: Utc, resolvedAt: Option<Utc>, resolution: Option<string>)
+
+datatype ConnectionIncidentDecision = accepted(state: ResolvedConnectionIncidentState) | rejected
+
+datatype ResolvedConnectionIncidentState = resolved(openedAt: Utc, resolvedAt: Utc, resolution: string)
 
 function ConnectionIncidentState__tag(t: ConnectionIncidentState): string
 {
@@ -16,6 +22,28 @@ function ConnectionIncidentState__tag(t: ConnectionIncidentState): string
     case resolved(i_0, i_1, i_2) =>
       "resolved"
   }
+}
+
+function decideConnectionIncidentTransition(state: ConnectionIncidentState, event: ConnectionIncidentEvent): ConnectionIncidentDecision
+  requires (event.i_tag == "Resolved")
+{
+  match state {
+    case resolved(i_state_openedAt, i_state_resolvedAt, i_state_resolution) =>
+      ConnectionIncidentDecision.rejected
+    case open(i_state_openedAt) =>
+      accepted(ResolvedConnectionIncidentState.resolved(i_state_openedAt, event.at, event.resolution))
+  }
+}
+
+lemma decideConnectionIncidentTransition_ensures(state: ConnectionIncidentState, event: ConnectionIncidentEvent)
+  requires (event.i_tag == "Resolved")
+  ensures (state.open? ==> decideConnectionIncidentTransition(state, event).accepted?)
+  ensures (state.resolved? ==> decideConnectionIncidentTransition(state, event).rejected?)
+  ensures (decideConnectionIncidentTransition(state, event).accepted? ==> decideConnectionIncidentTransition(state, event).state.resolved?)
+  ensures (decideConnectionIncidentTransition(state, event).accepted? ==> (decideConnectionIncidentTransition(state, event).state.openedAt == state.openedAt))
+  ensures (decideConnectionIncidentTransition(state, event).accepted? ==> (decideConnectionIncidentTransition(state, event).state.resolvedAt == event.at))
+  ensures (decideConnectionIncidentTransition(state, event).accepted? ==> (decideConnectionIncidentTransition(state, event).state.resolution == event.resolution))
+{
 }
 
 function connectionIncidentStatus(state: ConnectionIncidentState): string

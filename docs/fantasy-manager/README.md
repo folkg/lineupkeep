@@ -11,6 +11,7 @@ Planning workspace for Lineupgrade, the independent provider-neutral rewrite. Th
 - [Lineup selection policy](POLICY.md): the objective, the provider's scoring schemes, availability, and the live evidence behind them.
 - [Testing plan](TESTING.md): proposed seams, independent oracles, generated/model-based tests, and crash recovery.
 - [State machines and workflows](STATE-MACHINES.md): naming, the shared test helper, the required test pattern, and the rollout order.
+- [LemmaScript trial](LEMMASCRIPT.md): local setup, the verified incident transition, the proof boundary, and the next candidate.
 - [Lineup delivery states](LINEUP-DELIVERY-STATES.md): delivery transitions and persisted row projection.
 - [Lineup write intent states](LINEUP-WRITE-INTENT-STATES.md): write status transitions and durable audit projection.
 - [Connection notification states](CONNECTION-NOTIFICATION-STATES.md): email transitions and persisted row projection.
