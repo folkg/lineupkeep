@@ -202,6 +202,25 @@ it.concurrent.each(["ts", "tsx", "js"])("rejects comments in %s sources", async 
   expect(result.output).toContain("repository(no-comments)");
 });
 
+it.concurrent("allows LemmaScript annotations only in listed verified sources", async () => {
+  const source =
+    '//@ backend dafny\nexport function status(): string {\n  //@ verify\n  //@ contract A status is open.\n  //@ ensures \\result === "open"\n  return "open";\n}\n';
+  const listed = await checkLint({
+    "LemmaScript-files.txt": "scripts/incident.ts\n",
+    "scripts/incident.ts": source,
+  });
+  expect(listed.status, listed.output).toBe(0);
+
+  const unlisted = await checkLint({ "scripts/incident.ts": source });
+  expect(unlisted.output).toContain("repository(no-comments)");
+
+  const ordinaryComment = await checkLint({
+    "LemmaScript-files.txt": "scripts/incident.ts\n",
+    "scripts/incident.ts": `${source}// commentary\n`,
+  });
+  expect(ordinaryComment.output).toContain("repository(no-comments)");
+});
+
 it.concurrent.each([
   "export const value = /* explanation */ 1;",
 

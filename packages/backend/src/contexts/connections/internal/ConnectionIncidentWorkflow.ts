@@ -1,7 +1,10 @@
+//@ backend dafny
 import { DateTime, Schema } from "effect";
 
 import { defineMachine, final } from "#utilities/machine.ts";
 
+//@ declare-type Utc { epochMilliseconds: number }
+//@ skip
 export const ConnectionIncidentState = Schema.TaggedUnion({
   open: { openedAt: Schema.DateTimeUtc },
   resolved: {
@@ -12,6 +15,7 @@ export const ConnectionIncidentState = Schema.TaggedUnion({
 });
 export type ConnectionIncidentState = typeof ConnectionIncidentState.Type;
 
+//@ skip
 export const ConnectionIncidentEvent = Schema.TaggedUnion({
   Resolved: {
     at: Schema.DateTimeUtc,
@@ -20,6 +24,7 @@ export const ConnectionIncidentEvent = Schema.TaggedUnion({
 });
 export type ConnectionIncidentEvent = typeof ConnectionIncidentEvent.Type;
 
+//@ skip
 export const ConnectionIncidentWorkflow = defineMachine<
   ConnectionIncidentState,
   ConnectionIncidentEvent
@@ -54,6 +59,9 @@ export function initialConnectionIncidentState(openedAt: DateTime.Utc): Connecti
 export function connectionIncidentStatus(
   state: ConnectionIncidentState,
 ): ConnectionIncidentProjection["status"] {
+  //@ verify
+  //@ contract The persisted incident status equals its workflow state tag.
+  //@ ensures \result === state._tag
   return state._tag;
 }
 
@@ -78,6 +86,12 @@ export function connectionIncidentState(
 export function connectionIncidentProjection(
   state: ConnectionIncidentState,
 ): ConnectionIncidentProjection {
+  //@ verify
+  //@ contract The persisted incident row retains its state status, and open incidents never carry resolution data while resolved incidents carry both resolution fields.
+  //@ ensures \result.status === state._tag
+  //@ ensures \result.openedAt === state.openedAt
+  //@ ensures (state._tag === "open" ==> \result.resolvedAt === null && \result.resolution === null)
+  //@ ensures (state._tag === "resolved" ==> \result.resolvedAt !== null && \result.resolution !== null)
   return state._tag === "open"
     ? {
         status: connectionIncidentStatus(state),

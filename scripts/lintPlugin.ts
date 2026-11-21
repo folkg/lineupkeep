@@ -1161,6 +1161,7 @@ function forbiddenComments(path: string, source: string): ReadonlyArray<number> 
   }
   const isViteDeclaration =
     normalized === "apps/web/src/assets.d.ts" || normalized.endsWith("/apps/web/src/assets.d.ts");
+  const isVerifiedSource = source.startsWith("//@ backend dafny\n") && verifiedSource(path);
   return parsed.comments
     .filter(
       (comment) =>
@@ -1168,9 +1169,29 @@ function forbiddenComments(path: string, source: string): ReadonlyArray<number> 
           isViteDeclaration &&
           comment.type === "Line" &&
           comment.value.trim() === '/ <reference types="vite/client" />'
+        ) &&
+        !(
+          isVerifiedSource &&
+          comment.type === "Line" &&
+          /^@ (?:backend|declare-type|skip|verify|contract|requires|ensures)\b/u.test(
+            comment.value.trim(),
+          )
         ),
     )
     .map((comment) => comment.start);
+}
+
+function verifiedSource(path: string): boolean {
+  for (let directory = dirname(resolve(path)); ; directory = dirname(directory)) {
+    const manifest = resolve(directory, "LemmaScript-files.txt");
+    if (existsSync(manifest)) {
+      const source = relative(directory, resolve(path)).replaceAll("\\", "/");
+      return readFileSync(manifest, "utf8").split(/\r?\n/u).includes(source);
+    }
+    if (directory === dirname(directory)) {
+      return false;
+    }
+  }
 }
 
 function testingFacts(path: string, source: string): TestingFacts {
