@@ -4,8 +4,8 @@ The run state's `writeIntent.status` is authoritative. The `lineup_write_intents
 
 | Status              | Run states that own it                                                     | Trigger                                                                          | Terminal intent status |
 | ------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ---------------------- |
-| `intended`          | Applying, Uncertain; Blocked/Skipped/Superseded if interrupted             | Durable write intent inserted before sending                                     | No                     |
-| `accepted`          | Verifying, Uncertain; Blocked/Skipped/Superseded if interrupted            | Provider accepts request                                                         | No                     |
+| `intended`          | Applying, Uncertain; Superseded if interrupted                             | Durable write intent inserted before sending                                     | No                     |
+| `accepted`          | Verifying, Uncertain; Superseded if interrupted                            | Provider accepts request                                                         | No                     |
 | `unknown`           | Verifying, RetryWait, Uncertain; Blocked/Skipped/Superseded if interrupted | Provider response is unknown, or an applying run is recovered without a response | No                     |
 | `not_sent`          | RetryWait; Blocked/Skipped/Superseded if interrupted                       | Provider confirms request was not sent; the run may retry or resume verification | No                     |
 | `rejected`          | Failed                                                                     | Provider definitively rejects the request or the request is invalid              | Yes                    |

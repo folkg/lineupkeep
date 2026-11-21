@@ -6,7 +6,8 @@ import { LineupId } from "#contexts/connections/LineupRun.ts";
 import { plan as planTransition, snapshotOf } from "#utilities/machine.ts";
 import * as MachineTest from "#utilities/machineTest.ts";
 
-import { LineupRunState, LineupRunWorkflow } from "./LineupRunWorkflow.ts";
+import { lineupWriteIntents } from "./LineupRunTables.ts";
+import { LineupRunState, LineupRunWorkflow, LineupWriteIntentStatus } from "./LineupRunWorkflow.ts";
 import type { LineupRunEvent } from "./LineupRunWorkflow.ts";
 
 const define = MachineTest.invariants(LineupRunWorkflow);
@@ -81,6 +82,10 @@ it.effect("explores every lineup run transition and branch", () =>
     assert.strictEqual(explored.completeness._tag, "Complete");
     assert.strictEqual(explored.transitionCoverage.definitions.missing, 0);
     assert.strictEqual(explored.transitionCoverage.branches.missing, 0);
+    assert.deepStrictEqual(
+      lineupWriteIntents.status.enumValues.toSorted(),
+      [...LineupWriteIntentStatus.literals].toSorted(),
+    );
   }),
 );
 

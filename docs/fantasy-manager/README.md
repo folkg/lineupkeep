@@ -14,6 +14,7 @@ Planning workspace for Lineupgrade, the independent provider-neutral rewrite. Th
 - [Lineup delivery states](LINEUP-DELIVERY-STATES.md): delivery transitions and persisted row projection.
 - [Lineup write intent states](LINEUP-WRITE-INTENT-STATES.md): write status transitions and durable audit projection.
 - [Connection notification states](CONNECTION-NOTIFICATION-STATES.md): email transitions and persisted row projection.
+- [Connection incident states](CONNECTION-INCIDENT-STATES.md): incident resolution and persisted row projection.
 - [MCP contracts](MCP.md): generic tool families, budgets, paging, and client acceptance.
 - [Minimal UX brief](UX-BRIEF.md): functional surfaces and later design work.
 - [Grilling decisions](DECISIONS.md): all recorded rounds and corrections, including hosted browser linking.

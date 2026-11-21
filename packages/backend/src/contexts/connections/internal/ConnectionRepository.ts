@@ -36,6 +36,11 @@ import { chunked } from "#utilities/collections.ts";
 import { plan, planBatch, type Snapshot, snapshotOf } from "#utilities/machine.ts";
 
 import {
+  ConnectionIncidentWorkflow,
+  connectionIncidentProjection,
+  initialConnectionIncidentState,
+} from "./ConnectionIncidentWorkflow.ts";
+import {
   ConnectionLifecycleEvents,
   ConnectionLifecycleWorkflow,
 } from "./ConnectionLifecycleWorkflow.ts";
@@ -55,7 +60,12 @@ import {
   providerCredentials,
   providerTeams,
 } from "./ConnectionTables.ts";
-import { connectionIncidents, notifications, NotificationsRow } from "./IncidentTables.ts";
+import {
+  connectionIncidents,
+  ConnectionIncidentsRow,
+  notifications,
+  NotificationsRow,
+} from "./IncidentTables.ts";
 import { TeamAutomationState } from "./TeamAutomationWorkflow.ts";
 
 type Transaction = Parameters<Parameters<ConnectionsDatabase["Service"]["transaction"]>[0]>[0];
@@ -600,6 +610,8 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                   and(eq(providerTeams.userId, userId), anyOf(providerTeams.connectionId, ids)),
                 );
 
+              yield* resolveIncidents(transaction, ids, at, "disconnected");
+
               return orderConnections(rows, ids);
             }),
           )
@@ -685,6 +697,9 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                         state: snapshot.state,
                       })),
                     ];
+                    const incident = connectionIncidentProjection(
+                      initialConnectionIncidentState(at),
+                    );
                     const candidates = next.flatMap((record) =>
                       record.state._tag === "ReconnectRequired"
                         ? [
@@ -692,13 +707,15 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                               userId: record.userId,
                               connectionId: record.id,
                               credentialGeneration: record.state.credentialGeneration,
-                              status: "open" as const,
-                              openedAt: DateTime.toDateUtc(at),
+                              ...incident,
+                              openedAt: DateTime.toDateUtc(incident.openedAt),
+                              resolvedAt:
+                                incident.resolvedAt === null
+                                  ? null
+                                  : DateTime.toDateUtc(incident.resolvedAt),
                               operation: byId.get(record.id)?.evidence?.operation ?? null,
                               providerStatus: byId.get(record.id)?.evidence?.status ?? null,
                               providerDetail: byId.get(record.id)?.evidence?.detail ?? null,
-                              resolvedAt: null,
-                              resolution: null,
                             },
                           ]
                         : [],
@@ -997,17 +1014,30 @@ function resolveIncidents(
     return Effect.void;
   }
   return Effect.gen(function* () {
-    const resolved = yield* tx
-      .update(connectionIncidents)
-      .set({
-        status: "resolved",
-        resolvedAt: DateTime.toDateUtc(at),
-        resolution,
-      })
+    const open = yield* tx
+      .select({ id: connectionIncidents.id })
+      .from(connectionIncidents)
       .where(
         and(eq(connectionIncidents.status, "open"), anyOf(connectionIncidents.connectionId, ids)),
-      )
-      .returning({ id: connectionIncidents.id });
+      );
+    const openIds = open.map((row) => row.id);
+    if (!Array.isArrayNonEmpty(openIds)) {
+      return;
+    }
+    const resolved = yield* mutateRows(tx, connectionIncidents, {
+      where: eq(connectionIncidents.status, "open"),
+      ids: openIds,
+      codec: ConnectionIncidentsRow,
+      plan: (locked) =>
+        Effect.forEach([...locked.values()], (row) =>
+          Effect.map(
+            Effect.flatMap(snapshotOf(ConnectionIncidentWorkflow, row.state), (snapshot) =>
+              plan(ConnectionIncidentWorkflow, snapshot, { _tag: "Resolved", at, resolution }),
+            ),
+            (state) => ({ ...row, state }),
+          ),
+        ),
+    });
     const incidentIds: string[] = resolved.map((row) => row.id);
     if (!Array.isArrayNonEmpty(incidentIds)) {
       return;

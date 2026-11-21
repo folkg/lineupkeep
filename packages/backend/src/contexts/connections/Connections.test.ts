@@ -205,6 +205,11 @@ it.effect("resolves the open incident when a reconnect replaces the session", ()
     assert.strictEqual(incidents[0]?.status, "resolved");
     assert.strictEqual(incidents[0]?.resolution, "reconnected");
     assert.isDefined(incidents[0]?.resolvedAt);
+
+    yield* connections.completeReconnect(owner, [
+      { id: linked.id, provider: decodeProviderKey("yahoo"), session },
+    ]);
+    assert.deepStrictEqual(yield* database.select().from(connectionIncidents), incidents);
   }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
 
@@ -230,6 +235,27 @@ it.effect("reconnects a connection the provider marked reconnect-required", () =
     assert.strictEqual(reconnected.credentialGeneration, 2);
     assert.isDefined(reconnected.approvedAt);
     assert.isUndefined(reconnected.reconnectRequiredAt);
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
+it.effect("resolves an open incident on disconnect and leaves it resolved on retry", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const database = yield* ConnectionsDatabase;
+    const fake = yield* FakeProviderWorld;
+    const linked = Array.getUnsafe(yield* connections.link(owner, [linkInput]), 0);
+    yield* fake.rejectSession(true);
+    yield* Effect.flip(connections.discoverTeams(owner, [{ id: linked.id }]));
+
+    yield* connections.disconnect(owner, [{ id: linked.id }]);
+    const incidents = yield* database.select().from(connectionIncidents);
+    assert.strictEqual(incidents.length, 1);
+    assert.strictEqual(incidents[0]?.status, "resolved");
+    assert.strictEqual(incidents[0]?.resolution, "disconnected");
+    assert.isDefined(incidents[0]?.resolvedAt);
+
+    yield* connections.disconnect(owner, [{ id: linked.id }]);
+    assert.deepStrictEqual(yield* database.select().from(connectionIncidents), incidents);
   }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
 

@@ -3,7 +3,14 @@ import { index, integer, pgTable, text, timestamp, uniqueIndex } from "drizzle-o
 import { Effect, Schema, SchemaParser, SchemaTransformation } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
+import { ConnectionId, ConnectionCredentialGeneration } from "#contexts/connections/Connection.ts";
 
+import {
+  ConnectionIncidentState,
+  connectionIncidentProjection,
+  connectionIncidentState,
+  connectionIncidentStatus,
+} from "./ConnectionIncidentWorkflow.ts";
 import {
   ConnectionNotificationState,
   connectionNotificationProjection,
@@ -56,6 +63,81 @@ export const notifications = pgTable(
     index("notifications_status_next_attempt_at_idx").on(table.status, table.nextAttemptAt),
     index("notifications_user_id_created_at_idx").on(table.userId, table.createdAt),
   ],
+);
+
+const ConnectionIncidentsSelect = createSelectSchema(connectionIncidents, {
+  userId: UserId,
+  connectionId: ConnectionId,
+  credentialGeneration: ConnectionCredentialGeneration,
+  status: Schema.Literals(["open", "resolved"]),
+  openedAt: Schema.DateTimeUtcFromDate,
+  operation: Schema.NullOr(Schema.String),
+  providerStatus: Schema.NullOr(Schema.Int),
+  providerDetail: Schema.NullOr(Schema.String),
+  resolvedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
+  resolution: Schema.NullOr(Schema.Literals(["reconnected", "disconnected"])),
+});
+
+const ConnectionIncidentsRecord = Schema.Struct({
+  id: Schema.String,
+  userId: UserId,
+  connectionId: ConnectionId,
+  credentialGeneration: ConnectionCredentialGeneration,
+  operation: Schema.NullOr(Schema.String),
+  providerStatus: Schema.NullOr(Schema.Int),
+  providerDetail: Schema.NullOr(Schema.String),
+  state: ConnectionIncidentState,
+}).pipe(Schema.toType);
+
+const ConnectionIncidentFields = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("open"),
+    openedAt: Schema.DateTimeUtc,
+    resolvedAt: Schema.Null,
+    resolution: Schema.Null,
+  }),
+  Schema.Struct({
+    status: Schema.Literal("resolved"),
+    openedAt: Schema.DateTimeUtc,
+    resolvedAt: Schema.DateTimeUtc,
+    resolution: Schema.Literals(["reconnected", "disconnected"]),
+  }),
+]);
+
+export const ConnectionIncidentsRow = ConnectionIncidentsSelect.pipe(
+  Schema.decodeTo(
+    ConnectionIncidentsRecord,
+    SchemaTransformation.transformEffect<
+      typeof ConnectionIncidentsRecord.Type,
+      typeof ConnectionIncidentsSelect.Type
+    >({
+      decode: (row) =>
+        Effect.gen(function* () {
+          const fields = yield* SchemaParser.decodeUnknownEffect(ConnectionIncidentFields)({
+            status: row.status,
+            openedAt: row.openedAt,
+            resolvedAt: row.resolvedAt,
+            resolution: row.resolution,
+          });
+          return {
+            id: row.id,
+            userId: row.userId,
+            connectionId: row.connectionId,
+            credentialGeneration: row.credentialGeneration,
+            operation: row.operation,
+            providerStatus: row.providerStatus,
+            providerDetail: row.providerDetail,
+            state: connectionIncidentState(fields),
+          };
+        }),
+      encode: ({ state, ...identity }) =>
+        Effect.succeed({
+          ...identity,
+          ...connectionIncidentProjection(state),
+          status: connectionIncidentStatus(state),
+        }),
+    }),
+  ),
 );
 
 const NotificationsSelect = createSelectSchema(notifications, {

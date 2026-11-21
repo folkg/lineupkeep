@@ -123,6 +123,30 @@ it.effect("cancels the notification when the connection is reconnected", () =>
   }).pipe(Effect.provide(TestLayer)),
 );
 
+it.effect("cancels a pending incident notification when the connection is disconnected", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const repository = yield* ConnectionRepository;
+    const notificationRunner = yield* Notifications;
+    const outbox = yield* EmailOutbox;
+    const database = yield* ConnectionsDatabase;
+    const ready = yield* connect(connections);
+    yield* repository.markReconnectRequired(owner, [
+      { id: ready.id, expectedGeneration: credentialGeneration(ready) },
+    ]);
+
+    yield* connections.disconnect(owner, [{ id: ready.id }]);
+    const summary = yield* notificationRunner.run(10, yield* DateTime.now);
+
+    assert.strictEqual(summary.sent, 0);
+    assert.deepStrictEqual(yield* outbox.messages, []);
+    const incidents = yield* database.select().from(connectionIncidents);
+    assert.strictEqual(incidents[0]?.resolution, "disconnected");
+    const rows = yield* database.select().from(notifications);
+    assert.strictEqual(rows[0]?.status, "cancelled");
+  }).pipe(Effect.provide(TestLayer)),
+);
+
 it.effect("retries an unavailable email without creating a second notification", () =>
   Effect.gen(function* () {
     const connections = yield* Connections;

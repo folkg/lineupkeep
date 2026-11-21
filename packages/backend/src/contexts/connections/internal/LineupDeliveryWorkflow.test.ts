@@ -11,6 +11,7 @@ import {
   LineupDeliveryState,
   LineupDeliveryWorkflow,
 } from "./LineupDeliveryWorkflow.ts";
+import { lineupDeliveries } from "./LineupRunTables.ts";
 
 const at = DateTime.makeUnsafe("2026-10-25T12:00:00Z");
 const later = DateTime.makeUnsafe("2026-10-25T12:01:00Z");
@@ -47,10 +48,12 @@ it.effect("explores every delivery state and transition, including terminal reje
     assert.strictEqual(explored.completeness._tag, "Complete");
     assert.strictEqual(explored.transitionCoverage.definitions.missing, 0);
     assert.strictEqual(explored.transitionCoverage.branches.missing, 0);
+    const states = ["dispatched", "dispatching", "pending"];
     assert.deepStrictEqual(
-      [...new Set(explored.nodes.map(({ snapshot }) => snapshot.state.path))].sort(),
-      ["dispatched", "dispatching", "pending"],
+      [...new Set(explored.nodes.map(({ snapshot }) => snapshot.state.path))].toSorted(),
+      states,
     );
+    assert.deepStrictEqual(lineupDeliveries.status.enumValues.toSorted(), states);
     const final = explored.nodes.find(({ snapshot }) => snapshot.state.path === "dispatched");
     assert.isDefined(final);
     const trace = yield* MachineTest.run(LineupDeliveryWorkflow, {
