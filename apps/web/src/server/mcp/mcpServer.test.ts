@@ -60,6 +60,7 @@ import { EffectString } from "@lineupkeep/collections";
 import { DateTime, Duration, Effect, Layer, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
+import { Record as EffectRecord } from "effect";
 import { Tool, Toolkit } from "effect/ai";
 import { expect, it } from "vitest";
 
@@ -2562,7 +2563,7 @@ it("keeps every published description inside its budget", async () => {
   };
 
   expect(EffectArray.map(listed.result.tools, (tool) => tool.name).sort()).toEqual(
-    Object.keys(budgets).sort(),
+    EffectRecord.keys(budgets).sort(),
   );
   const overBudget = EffectArray.filter(
     EffectArray.map(listed.result.tools, (tool) => ({
@@ -2755,11 +2756,11 @@ function schemaDescriptions(schema: unknown, path: string): ReadonlyArray<Schema
   if (typeof schema !== "object" || schema === null) {
     return [];
   }
-  return EffectArray.flatMap(Object.entries(schema), ([key, value]) => {
+  return EffectArray.flatMap(EffectRecord.toEntries(schema), ([key, value]) => {
     const flatMapped3 =
       key === "description" && typeof value === "string"
         ? [{ path, text: value }]
-        : schemaDescriptions(value, `${path}.${key}`);
+        : schemaDescriptions(value, `${path}.${String(key)}`);
     return arrayValueIsArray(flatMapped3) ? flatMapped3 : [flatMapped3];
   });
 }
@@ -2775,7 +2776,7 @@ function schemaLiterals(schema: unknown): ReadonlyArray<string> {
     return [];
   }
   const record: Readonly<Record<string, unknown>> = { ...schema };
-  return EffectArray.flatMap(Object.entries(record), ([key, value]) => {
+  return EffectArray.flatMap(EffectRecord.toEntries(record), ([key, value]) => {
     if (key === "const" && typeof value === "string") {
       return [value];
     }
@@ -2797,9 +2798,9 @@ function schemaPropertyNames(schema: unknown): ReadonlyArray<string> {
     return [];
   }
   const record: Readonly<Record<string, unknown>> = { ...schema };
-  return EffectArray.flatMap(Object.entries(record), ([key, value]) => {
+  return EffectArray.flatMap(EffectRecord.toEntries(record), ([key, value]) => {
     if (key === "properties" && typeof value === "object" && value !== null) {
-      return [...Object.keys(value), ...schemaPropertyNames(value)];
+      return [...EffectRecord.keys(value), ...schemaPropertyNames(value)];
     }
     return schemaPropertyNames(value);
   });

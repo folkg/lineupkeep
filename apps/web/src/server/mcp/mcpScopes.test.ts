@@ -8,13 +8,14 @@ import {
 import { toolCallLimits } from "@lineupkeep/backend/toolCalls/ToolCallQuota";
 import { Context, Schema } from "effect";
 import { Array as EffectArray } from "effect";
+import { Record as EffectRecord } from "effect";
 import { Tool } from "effect/ai";
 import { expect, it } from "vitest";
 
 import { applicationTools } from "./mcpServer";
 import { RequiredScope, toolCallClass } from "./toolAuthorization";
 
-const toolScopes = EffectArray.map(Object.values(applicationTools.tools), (tool) => ({
+const toolScopes = EffectArray.map(EffectRecord.values(applicationTools.tools), (tool) => ({
   name: tool.name,
   scope: Context.getUnsafe(tool.annotations, RequiredScope).name,
   readOnly: Context.getUnsafe(tool.annotations, Tool.Readonly),
@@ -26,7 +27,7 @@ it("declares exactly the advertised resource scopes on the shipped tools", () =>
   );
 });
 
-const toolClasses = EffectArray.map(Object.values(applicationTools.tools), (tool) => ({
+const toolClasses = EffectArray.map(EffectRecord.values(applicationTools.tools), (tool) => ({
   name: tool.name,
   callClass: toolCallClass(tool),
 }));

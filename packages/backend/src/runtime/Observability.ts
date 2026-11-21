@@ -12,6 +12,7 @@ import {
   Exit,
 } from "effect";
 import { Array as EffectArray } from "effect";
+import { Record as EffectRecord } from "effect";
 import { OtlpExporter, OtlpSerialization, OtlpTracer } from "effect/observability";
 
 import { appEnvironmentConfig, type AppEnvironment } from "#config/AppEnvironment.ts";
@@ -217,9 +218,12 @@ function safeAttributes(
 ): {
   [k: string]: unknown;
 } {
-  return Object.fromEntries(
+  return EffectRecord.fromEntries(
     EffectArray.map(
-      EffectArray.filter(Object.entries(attributes), ([key]) => !isSuppressedAttribute(key, kind)),
+      EffectArray.filter(
+        EffectRecord.toEntries(attributes),
+        ([key]) => !isSuppressedAttribute(key, kind),
+      ),
       ([key, value]) => [key, key === "effect.cause" ? "operation.failed" : value],
     ),
   );

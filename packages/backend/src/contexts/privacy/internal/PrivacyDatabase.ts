@@ -8,6 +8,7 @@ import type {
 } from "drizzle-orm/postgres/effect";
 import { Context, Effect, Layer, Schema } from "effect";
 import { Array as EffectArray } from "effect";
+import { Record as EffectRecord } from "effect";
 
 type PrivacyQueryResult = {
   readonly rows: ReadonlyArray<Record<string, unknown>>;
@@ -66,5 +67,5 @@ function recordOf(row: unknown): Record<string, unknown> {
   if (typeof row !== "object" || row === null) {
     throw new Error("A database row was not an object.");
   }
-  return Object.fromEntries(Object.entries(row));
+  return EffectRecord.fromEntries(EffectRecord.toEntries(row));
 }

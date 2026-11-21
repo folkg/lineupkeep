@@ -12,6 +12,7 @@ import { EffectString } from "@lineupkeep/collections";
 import { Effect } from "effect";
 import { Schema } from "effect";
 import { Array as EffectArray } from "effect";
+import { Record as EffectRecord } from "effect";
 
 import { PublicInternet } from "#runtime/PublicInternet.ts";
 
@@ -35,7 +36,7 @@ export function makePublicInternetProcess(
     ) {
       throw new Error("Public DNS answers required");
     }
-    const headers = Object.fromEntries(webRequest.headers);
+    const headers = EffectRecord.fromEntries(webRequest.headers);
     headers["host"] = url.host;
 
     if (
@@ -106,7 +107,7 @@ export function makePublicInternetProcess(
 
 function responseHeaders(headers: IncomingHttpHeaders): Headers {
   const result = new Headers();
-  for (const [name, value] of Object.entries(headers)) {
+  for (const [name, value] of EffectRecord.toEntries(headers)) {
     if (EffectArray.isArray(value)) {
       for (const item of value) {
         result.append(name, item);

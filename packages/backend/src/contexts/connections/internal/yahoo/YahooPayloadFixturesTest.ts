@@ -1,5 +1,6 @@
 import { EffectString } from "@lineupkeep/collections";
 import { Array as EffectArray } from "effect";
+import { Record as EffectRecord } from "effect";
 
 const nflLeagueAttributes = {
   league_key: "466.l.4000",
@@ -760,7 +761,7 @@ export function withPlayerRankSample(
       player: [
         [{ player_key: `466.p.9${EffectString.padStart(String(index), 4, "0")}` }],
         {
-          player_ranks: EffectArray.map(Object.entries(values), ([type, value]) => ({
+          player_ranks: EffectArray.map(EffectRecord.toEntries(values), ([type, value]) => ({
             player_rank: { rank_type: type, rank_value: value },
           })),
         },
@@ -2398,7 +2399,7 @@ function yahooDiscoverPayload(
           user: [
             { guid: "SYNTHETICGUID" },
             {
-              games: Object.fromEntries(
+              games: EffectRecord.fromEntries(
                 EffectArray.map(games, (game, gameIndex) => [
                   String(gameIndex),
                   {
@@ -2406,7 +2407,7 @@ function yahooDiscoverPayload(
                       [{ game_key: "466" }, { code: game.code }, { season: "2026" }],
                       {
                         leagues: {
-                          ...Object.fromEntries(
+                          ...EffectRecord.fromEntries(
                             EffectArray.map(game.leagues, (league, leagueIndex) => {
                               const { attributes, settings } = leagueFragments(league.settings);
                               return [
@@ -2417,7 +2418,7 @@ function yahooDiscoverPayload(
                                     { settings: [settings] },
                                     {
                                       teams: {
-                                        ...Object.fromEntries(
+                                        ...EffectRecord.fromEntries(
                                           EffectArray.map(league.teams, (team, teamIndex) => [
                                             String(teamIndex),
                                             { team: [team, []] },
@@ -2622,7 +2623,7 @@ export function yahooAggregatePlayerSearch(
                     [{ game_key: "466" }, { code: "nfl" }, { season: "2026" }],
                     {
                       leagues: {
-                        ...Object.fromEntries(
+                        ...EffectRecord.fromEntries(
                           EffectArray.map(leagues, ({ leagueKey, players }, index) => [
                             String(index),
                             {
@@ -3392,7 +3393,7 @@ function nhlMatchupTeam(
           coverage_type: "week",
           week: "4",
           stats: {
-            ...Object.fromEntries(
+            ...EffectRecord.fromEntries(
               EffectArray.map(stats, (stat, index) => [String(index), { stat }]),
             ),
             count: stats.length,
@@ -3950,7 +3951,7 @@ export function yahooNhlDatedRoster(input: {
     readonly slot?: string;
   }>;
 }): { fantasy_content: Record<string, unknown> } {
-  const entries = Object.fromEntries(
+  const entries = EffectRecord.fromEntries(
     EffectArray.map(input.players, (player, index) => [
       String(index),
       {

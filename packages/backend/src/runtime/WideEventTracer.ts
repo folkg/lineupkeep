@@ -2,6 +2,7 @@ import { EffectString } from "@lineupkeep/collections";
 import { Exit, Option, Redacted, Tracer } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
+import { Record as EffectRecord } from "effect";
 
 import jsonTools from "#runtime/JsonText.ts";
 
@@ -332,7 +333,7 @@ function severityOf(outcome: Outcome): Severity {
 }
 
 function safeAttributeEntries(attributes: Iterable<readonly [string, unknown]>): SafeAttributes {
-  return Object.fromEntries(
+  return EffectRecord.fromEntries(
     EffectArray.flatMap(
       EffectArray.filter(
         [...attributes],

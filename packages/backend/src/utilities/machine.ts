@@ -1,6 +1,7 @@
 import { setupEffect } from "@xstate/effect";
 import { Data, Effect, Equal, Schema } from "effect";
 import { Array as EffectArray } from "effect";
+import { Record as EffectRecord } from "effect";
 import { isUnhandled, type StateSchema as XStateSchema } from "xstate";
 
 declare const machineTypes: unique symbol;
@@ -85,16 +86,19 @@ export type DefinedMachine<State extends Tagged, Event extends Tagged> = {
 export function defineMachine<State extends Tagged, Event extends Tagged>(
   definition: MachineDefinition<State, Event>,
 ): DefinedMachine<State, Event> {
-  const stateSchemas: Record<string, StateCodec<State>> = Object.fromEntries(
-    EffectArray.map(Object.entries(definition.root), ([tag, entry]) => [tag, schemaOf(entry)]),
+  const stateSchemas: Record<string, StateCodec<State>> = EffectRecord.fromEntries(
+    EffectArray.map(EffectRecord.toEntries(definition.root), ([tag, entry]) => [
+      tag,
+      schemaOf(entry),
+    ]),
   );
-  const states = Object.fromEntries(
-    EffectArray.map(Object.entries(definition.root), ([tag, entry]) => [
+  const states = EffectRecord.fromEntries(
+    EffectArray.map(EffectRecord.toEntries(definition.root), ([tag, entry]) => [
       tag,
       stateConfig(entry, transitionsOf(definition, tag)),
     ]),
   );
-  const state = Schema.Union(Object.values(stateSchemas));
+  const state = Schema.Union(EffectRecord.values(stateSchemas));
   const context = Schema.Struct({ state });
   const machine = setupEffect({
     schemas: { context, input: state },
@@ -197,8 +201,8 @@ function stateConfig<State extends Tagged>(
   entry: StateEntry<State>,
   transitions: Record<string, RuntimeTransition | ReadonlyArray<RuntimeTransition>>,
 ): XStateSchema {
-  const on = Object.fromEntries(
-    EffectArray.map(Object.entries(transitions), ([type, specification]) => [
+  const on = EffectRecord.fromEntries(
+    EffectArray.map(EffectRecord.toEntries(transitions), ([type, specification]) => [
       type,
       EffectArray.map(
         listOf(specification),
@@ -224,7 +228,7 @@ function stateConfig<State extends Tagged>(
   );
   return {
     ...(isFinal(entry) ? { type: "final" } : {}),
-    ...(Object.keys(on).length === 0 ? {} : { on }),
+    ...(EffectRecord.keys(on).length === 0 ? {} : { on }),
   };
 }
 

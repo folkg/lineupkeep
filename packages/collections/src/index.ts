@@ -166,6 +166,18 @@ export function optionalStringValue<A extends string, B>(
   return value === undefined || value === null ? undefined : f(value);
 }
 
+export function recordKeys(self: object): string[] {
+  return Object.keys(self);
+}
+
+export function recordEntries(self: object): Array<[string, unknown]> {
+  return Object.entries(self);
+}
+
+export function recordHas(self: object, key: PropertyKey): boolean {
+  return Object.hasOwn(self, key);
+}
+
 export const EffectString = {
   includes: (self: string, search: string, position?: number): boolean =>
     self.includes(search, position),

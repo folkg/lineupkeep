@@ -1,3 +1,4 @@
+import { recordHas } from "@lineupkeep/collections";
 import { and, asc, eq, getTableColumns, sql } from "drizzle-orm";
 import type { GetColumnData, InferSelectModel, SQL } from "drizzle-orm";
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
@@ -9,6 +10,7 @@ import type { PgQueryResultHKT } from "drizzle-orm/pg-core/session";
 import { Array, Effect, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
+import { Record as EffectRecord } from "effect";
 
 function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
   return EffectArray.isArray(value);
@@ -64,10 +66,13 @@ export function unnestRows<
     ScalarColumns<Table, Key>,
 ): { readonly source: SQL; readonly column: (key: Key) => SQL } {
   const first = rows[0];
-  const columns = EffectArray.flatMap(Object.entries(getTableColumns(table)), ([key, column]) => {
-    const flatMapped1 = hasOwnKey(first, key) ? [{ key, column }] : [];
-    return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
-  });
+  const columns = EffectArray.flatMap(
+    EffectRecord.toEntries(getTableColumns(table)),
+    ([key, column]) => {
+      const flatMapped1 = hasOwnKey(first, key) ? [{ key, column }] : [];
+      return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+    },
+  );
   const names = getTableColumns(table) as Record<Key, PgColumn>;
   return {
     source: sql`unnest(${sql.join(
@@ -93,14 +98,14 @@ export function excludedValues<
   Keys extends keyof InferSelectModel<Table> & string,
 >(table: Table, keys: ReadonlyArray<Keys>): Record<string, SQL> {
   const columns = getTableColumns(table) as Record<Keys, PgColumn>;
-  return Object.fromEntries(
+  return EffectRecord.fromEntries(
     EffectArray.map(keys, (key) => [key, excludedColumn(columns[key])] as const),
   );
 }
 
 export function maxInsertRows(table: PgTable): number {
   const columns = EffectArray.filter(
-    Object.values(getTableColumns(table)),
+    EffectRecord.values(getTableColumns(table)),
     (column) => column.generated === undefined && column.generatedIdentity?.type !== "always",
   );
   return Math.floor(postgresMaxBindParameters / columns.length);
@@ -124,7 +129,7 @@ export function mutateRows<Table extends PgTable, Row, E, RD, RE, R>(
     const columns = getTableColumns(table);
     const config = getTableConfig(table);
     const primary = [
-      ...EffectArray.filter(Object.values(columns), (column) => column.primary),
+      ...EffectArray.filter(EffectRecord.values(columns), (column) => column.primary),
       ...EffectArray.flatMap(config.primaryKeys, (key) => {
         const flatMapped2 = key.columns;
         return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
@@ -137,7 +142,7 @@ export function mutateRows<Table extends PgTable, Row, E, RD, RE, R>(
     }
     const id = Array.getUnsafe(primary, 0);
     const idKey = EffectOption.getOrUndefined(
-      EffectArray.findFirst(Object.keys(columns), (key) => columns[key] === id),
+      EffectArray.findFirst(EffectRecord.keys(columns), (key) => columns[key] === id),
     );
     if (idKey === undefined) {
       return yield* Effect.die("mutateRows primary key must belong to the mutated table");
@@ -189,9 +194,9 @@ export function mutateRows<Table extends PgTable, Row, E, RD, RE, R>(
       const changed = yield* tx
         .update(target)
         .set(
-          Object.fromEntries(
+          EffectRecord.fromEntries(
             EffectArray.map(
-              EffectArray.filter(Object.keys(columns), (key) => key !== idKey),
+              EffectArray.filter(EffectRecord.keys(columns), (key) => key !== idKey),
               (key) => [key, batch.column(key)],
             ),
           ),
@@ -249,5 +254,5 @@ interface MutationQueryEffect extends QueryEffectHKTBase {
 }
 
 function hasOwnKey<Value extends object>(value: Value, key: PropertyKey): key is keyof Value {
-  return Object.hasOwn(value, key);
+  return recordHas(value, key);
 }

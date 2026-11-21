@@ -508,14 +508,16 @@ const correctnessRules = {
   "effecttsgo/effect-try-without-catch": "off",
 } satisfies Rules;
 
-const pendingEffectRules = new Set([
+const disabledEffectRules = new Set([
   "effecttsgo/api-stability-leak",
+  "effecttsgo/prefer-schema-tagged-error",
+]);
+
+const pendingEffectRules = new Set([
   "effecttsgo/global-json",
   "effecttsgo/map-map-error-to-map-both",
   "effecttsgo/missed-pipeable-opportunity",
   "effecttsgo/missing-pipeable-signature",
-  "effecttsgo/prefer-effect-record",
-  "effecttsgo/prefer-schema-tagged-error",
   "effecttsgo/yield-in-call-argument",
   "effecttsgo/effect-try-without-catch",
 ]);
@@ -537,7 +539,7 @@ const effectRuleNames = EffectArray.map(
 const effectRules = Object.fromEntries(
   EffectArray.map(effectRuleNames, (rule) => [
     rule,
-    pendingEffectRules.has(rule) ? "off" : "error",
+    disabledEffectRules.has(rule) || pendingEffectRules.has(rule) ? "off" : "error",
   ]),
 ) as Rules;
 
@@ -921,6 +923,7 @@ export default defineConfig({
       rules: {
         "effecttsgo/prefer-effect-array": "off",
         "effecttsgo/prefer-effect-string": "off",
+        "effecttsgo/prefer-effect-record": "off",
         "typescript/no-unsafe-type-assertion": "off",
       },
     },
@@ -1027,4 +1030,4 @@ type ImportPolicy = {
 type GlobalRestriction = { name: string; message: string };
 type PropertyRestriction = { object?: string; property: string; message: string };
 
-export { effectRules, pendingEffectRules };
+export { disabledEffectRules, effectRules, pendingEffectRules };

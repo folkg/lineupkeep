@@ -3,10 +3,12 @@ import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { EffectString } from "@lineupkeep/collections";
 import { optionalStringValue } from "@lineupkeep/collections";
+import { recordHas } from "@lineupkeep/collections";
 import { eq } from "drizzle-orm";
 import { Array, Cause, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
+import { Record as EffectRecord } from "effect";
 import { TestClock } from "effect/testing";
 
 import { providerSessionReconnectDetail } from "#contexts/connections/Connection.ts";
@@ -4532,7 +4534,7 @@ it.effect("fits the structured result inside the hard byte limit", () =>
 
 function encodedKeys(value: unknown): ReadonlyArray<string> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? Object.keys(value)
+    ? EffectRecord.keys(value)
     : [];
 }
 
@@ -5599,8 +5601,7 @@ it.effect("surfaces the rank and stat values that each provider-ordered sort use
       EffectArray.every(
         byActualRank.players,
         (player) =>
-          !Object.hasOwn(player, "percentOwnedChange") &&
-          Object.hasOwn(player, "percentOwnedDelta"),
+          !recordHas(player, "percentOwnedChange") && recordHas(player, "percentOwnedDelta"),
       ),
       "the ownership change is reported once, under the field that carries your league delta",
     );
@@ -7151,8 +7152,12 @@ function thirteenTeamRotoLeague(): {
           providerTeamKey: `${leagueKey}.t.${String(index + 1)}`,
           name: `Synthetic Fantasy Squad ${String(index + 1)}`,
           rank: index + 1,
-          points: Object.fromEntries(EffectArray.map(statIds, (statId) => [statId, 15 - index])),
-          totals: Object.fromEntries(EffectArray.map(statIds, (statId) => [statId, 320 - index])),
+          points: EffectRecord.fromEntries(
+            EffectArray.map(statIds, (statId) => [String(statId), 15 - index]),
+          ),
+          totals: EffectRecord.fromEntries(
+            EffectArray.map(statIds, (statId) => [String(statId), 320 - index]),
+          ),
         }),
       ),
     },
@@ -8285,7 +8290,7 @@ function includesText(value: unknown, needle: string): boolean {
     return EffectArray.some(value, (item) => includesText(item, needle));
   }
   if (typeof value === "object" && value !== null) {
-    return EffectArray.some(Object.values(value), (item) => includesText(item, needle));
+    return EffectArray.some(EffectRecord.values(value), (item) => includesText(item, needle));
   }
   return false;
 }

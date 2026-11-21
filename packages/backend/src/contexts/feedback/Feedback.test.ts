@@ -2,6 +2,7 @@ import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { EffectString } from "@lineupkeep/collections";
+import { recordKeys } from "@lineupkeep/collections";
 import { Array, DateTime, Effect, Layer, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { TestClock } from "effect/testing";
@@ -45,7 +46,7 @@ it.effect("records an owner's submission with normalized text and an open status
     assert.strictEqual(report.resolutionNote, undefined);
     assert.strictEqual(report.closedAt, undefined);
     assert.deepStrictEqual(report.createdAt, report.updatedAt);
-    assert.deepStrictEqual(Object.keys(report).sort(), [
+    assert.deepStrictEqual(recordKeys(report).sort(), [
       "body",
       "context",
       "createdAt",

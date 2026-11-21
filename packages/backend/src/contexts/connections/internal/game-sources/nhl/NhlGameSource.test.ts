@@ -4,6 +4,7 @@ import { assert, it } from "@effect/vitest";
 import { DateTime, Effect, Layer } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
+import { Record as EffectRecord } from "effect";
 
 import {
   GameSourceRequestFailed,
@@ -238,7 +239,7 @@ function recordingInternet(respond: () => Response): Layer.Layer<PublicInternet>
         calls.push({
           url: new URL(request.url),
           method: request.method,
-          headers: Object.fromEntries(request.headers.entries()),
+          headers: EffectRecord.fromEntries(request.headers.entries()),
           options,
         });
         return respond();

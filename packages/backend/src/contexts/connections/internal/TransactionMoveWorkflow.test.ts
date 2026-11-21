@@ -1,6 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Arbitrary, Effect, Exit } from "effect";
 import { Array as EffectArray } from "effect";
+import { Record as EffectRecord } from "effect";
 
 import {
   TransactionMoveStatus,
@@ -149,7 +150,7 @@ it.effect("holds the graph invariants for generated event sequences", () =>
 
 it("keeps the machine states and the published statuses in step", () => {
   assert.deepStrictEqual(
-    Object.keys(TransactionMoveState.cases).sort(),
+    EffectRecord.keys(TransactionMoveState.cases).sort(),
     [...TransactionMoveStatus.literals].sort(),
   );
 });

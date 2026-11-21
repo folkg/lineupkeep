@@ -1,6 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { DateTime, Effect, Layer } from "effect";
 import { Array as EffectArray } from "effect";
+import { Record as EffectRecord } from "effect";
 
 import type { AuthorizationScope } from "#contexts/auth/AuthorizationScopes.ts";
 import layerTools from "#runtime/ProvideLayer.ts";
@@ -98,14 +99,14 @@ function registration(
 function scopesById(
   rows: ReadonlyArray<typeof oauthClient.$inferSelect>,
 ): Record<string, ReadonlyArray<string> | null> {
-  return Object.fromEntries(EffectArray.map(rows, (row) => [row.id, row.scopes]));
+  return EffectRecord.fromEntries(EffectArray.map(rows, (row) => [row.id, row.scopes]));
 }
 
 function untouchedTimestamps(
   rows: ReadonlyArray<typeof oauthClient.$inferSelect>,
   widened: ReadonlyArray<string>,
 ): Record<string, Date | null> {
-  return Object.fromEntries(
+  return EffectRecord.fromEntries(
     EffectArray.map(
       EffectArray.filter(rows, (row) => !widened.includes(row.id)),
       (row) => [row.id, row.updatedAt],

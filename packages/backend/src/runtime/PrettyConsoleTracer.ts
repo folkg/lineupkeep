@@ -2,6 +2,7 @@ import { EffectString } from "@lineupkeep/collections";
 import { Duration, Exit, Option, Redacted, Tracer } from "effect";
 import { Array as EffectArray } from "effect";
 import { Order as EffectOrder } from "effect";
+import { Record as EffectRecord } from "effect";
 
 import jsonTools from "#runtime/JsonText.ts";
 
@@ -67,12 +68,12 @@ function formatCompletedSpan(
   const events = EffectArray.map(
     span.events.slice(0, maxDetails),
     ([name, , attributes]) =>
-      `${indentation}  · ${text(name)}${formatAttributes(Object.entries(attributes))}`,
+      `${indentation}  · ${text(name)}${formatAttributes(EffectRecord.toEntries(attributes))}`,
   );
   const links = EffectArray.map(
     span.links.slice(0, maxLinks),
     (link) =>
-      `${indentation}  ↗ [${text(link.span.traceId)}/${text(link.span.spanId)}]${formatAttributes(Object.entries(link.attributes))}`,
+      `${indentation}  ↗ [${text(link.span.traceId)}/${text(link.span.spanId)}]${formatAttributes(EffectRecord.toEntries(link.attributes))}`,
   );
   if (span.events.length > maxDetails) {
     events.push(`${indentation}  … ${span.events.length - maxDetails} more events`);
@@ -168,7 +169,7 @@ function renderValue(value: unknown, depth: number): string {
     ? Array.from({ length: Math.min(value.length, maxItems) }, (_, index) => String(index))
     : optionalArrayValue(
         EffectArray.filter(
-          Object.keys(descriptors),
+          EffectRecord.keys(descriptors),
           (key) => descriptors[key]?.enumerable === true,
         ),
         (value) => EffectArray.sort(value, EffectOrder.String),
@@ -181,7 +182,7 @@ function renderValue(value: unknown, depth: number): string {
         : "[unsupported]";
     return EffectArray.isArray(value) ? rendered : `${jsonTools.jsonString(text(key))}:${rendered}`;
   });
-  const count = EffectArray.isArray(value) ? value.length : Object.keys(descriptors).length;
+  const count = EffectArray.isArray(value) ? value.length : EffectRecord.keys(descriptors).length;
   if (count > maxItems) {
     items.push(`… ${count - maxItems} more`);
   }

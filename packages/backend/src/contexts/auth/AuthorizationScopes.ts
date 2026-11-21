@@ -1,5 +1,6 @@
 import { Context } from "effect";
 import { Array as EffectArray } from "effect";
+import { Record as EffectRecord } from "effect";
 
 export class AuthorizationScopes extends Context.Service<
   AuthorizationScopes,
@@ -16,7 +17,7 @@ export const retiredScopeAliases: Readonly<Record<string, string>> = {
   "connections:read": "fantasy:read",
 };
 
-export const retiredScopeNames: ReadonlyArray<string> = Object.keys(retiredScopeAliases);
+export const retiredScopeNames: ReadonlyArray<string> = EffectRecord.keys(retiredScopeAliases);
 
 export function currentScopeName(name: string): string {
   return retiredScopeAliases[name] ?? name;

@@ -11,6 +11,7 @@ import { optionalStringValue } from "@lineupkeep/collections";
 import { Context, DateTime, Duration, Effect, Layer, Option, Result, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
+import { Record as EffectRecord } from "effect";
 import { McpProtocol, McpServer } from "effect/ai";
 import type { Tool, Toolkit } from "effect/ai";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -89,7 +90,7 @@ function readInvocation<Tools extends Record<string, Tool.Any>>(
     const tool = Option.isSome(call)
       ? EffectOption.getOrUndefined(
           EffectArray.findFirst(
-            Object.values(toolkit.tools),
+            EffectRecord.values(toolkit.tools),
             (tool) => tool.name === call.value.params.name,
           ),
         )

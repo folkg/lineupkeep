@@ -1,5 +1,6 @@
 import { Context, DateTime, Effect, Layer, Schema } from "effect";
 import { Array as EffectArray } from "effect";
+import { Record as EffectRecord } from "effect";
 import { Digest } from "effect/crypto";
 
 import { signInCodeQuotaKeyFor } from "#contexts/auth/SignInCodeQuotaKey.ts";
@@ -197,7 +198,7 @@ function exportedRow(
   hiddenFields: ReadonlySet<string>,
 ): Record<string, unknown> {
   const exported: Record<string, unknown> = {};
-  for (const [field, value] of Object.entries(row)) {
+  for (const [field, value] of EffectRecord.toEntries(row)) {
     if (hiddenFields.has(field)) {
       continue;
     }
@@ -214,8 +215,8 @@ function jsonValue(value: unknown): unknown {
     return EffectArray.map(value, jsonValue);
   }
   if (value !== null && typeof value === "object") {
-    return Object.fromEntries(
-      EffectArray.map(Object.entries(value), ([field, entry]) => [field, jsonValue(entry)]),
+    return EffectRecord.fromEntries(
+      EffectArray.map(EffectRecord.toEntries(value), ([field, entry]) => [field, jsonValue(entry)]),
     );
   }
   return value;

@@ -1,5 +1,6 @@
 import { EffectString } from "@lineupkeep/collections";
 import { optionalStringValue } from "@lineupkeep/collections";
+import { recordEntries, recordKeys } from "@lineupkeep/collections";
 import { Array as EffectArray, DateTime, Effect, Layer, Option, Ref } from "effect";
 import { Option as EffectOption, Order as EffectOrder } from "effect";
 
@@ -4125,7 +4126,7 @@ export const FantasyQueriesLive = Layer.effect(
         ),
       ];
       const sectionCandidates: Array<readonly [string, unknown]> = EffectArray.filter(
-        Object.entries(base),
+        recordEntries(base),
         ([name]) =>
           name !== "status" &&
           name !== "team" &&
@@ -5729,7 +5730,7 @@ function seasonProgressOf(
     ...(league.startDate === undefined ? {} : { startDate: league.startDate }),
     ...(league.endDate === undefined ? {} : { endDate: league.endDate }),
   };
-  return Object.keys(progress).length === 0 ? undefined : progress;
+  return recordKeys(progress).length === 0 ? undefined : progress;
 }
 
 function leagueTransactionRules(

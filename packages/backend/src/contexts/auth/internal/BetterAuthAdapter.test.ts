@@ -18,6 +18,7 @@ import {
 } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
+import { Record as EffectRecord } from "effect";
 import { vi } from "vitest";
 
 import type { AccessTokenResolution, AuthServiceShape } from "#contexts/auth/Auth.ts";
@@ -778,7 +779,7 @@ it.effect(
         ),
         ["offline_access"],
       );
-      for (const retired of Object.keys(retiredScopeAliases)) {
+      for (const retired of EffectRecord.keys(retiredScopeAliases)) {
         assert.notInclude(authorizationServer.scopes_supported, retired);
         assert.notInclude(protectedResource.scopes_supported, retired);
       }

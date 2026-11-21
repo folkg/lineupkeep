@@ -2,6 +2,7 @@ import * as Shared from "@lineupkeep/machine-test";
 import { Arbitrary, Data, Effect, Result, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
+import { Record as EffectRecord } from "effect";
 
 import { type DefinedMachine, plan, snapshotOf, type Tagged } from "#utilities/machine.ts";
 
@@ -130,9 +131,9 @@ function adapter<State extends Tagged, Event extends Tagged>(
   stateKey: (state: State) => string,
   events: (state: State) => ReadonlyArray<Event>,
 ): Shared.MachineAdapter<State, Event> {
-  const declarations = EffectArray.flatMap(Object.keys(machine.definition.states), (from) => {
+  const declarations = EffectArray.flatMap(EffectRecord.keys(machine.definition.states), (from) => {
     const flatMapped1 = EffectArray.flatMap(
-      Object.entries(machine.transitionsOf(from)),
+      EffectRecord.toEntries(machine.transitionsOf(from)),
       ([event, specification]) => {
         const flatMapped1 = EffectArray.map(listOf(specification), (_candidate, index) => ({
           id: `${from}.${event}.${index}`,

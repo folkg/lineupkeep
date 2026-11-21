@@ -6,7 +6,7 @@ import { EffectString } from "@lineupkeep/collections";
 import { Array as EffectArray } from "effect";
 import { expect, it } from "vitest";
 
-import { effectRules, pendingEffectRules } from "#repo/oxlint.config.ts";
+import { disabledEffectRules, effectRules, pendingEffectRules } from "#repo/oxlint.config.ts";
 
 import { checkLint } from "./architectureFixture.ts";
 
@@ -33,7 +33,7 @@ it("enables every Effect rule the plugin publishes", () => {
   expect(Object.keys(effectRules).sort()).toEqual(published.sort());
   for (const rule of published) {
     const expected =
-      rule === "effecttsgo/api-stability-leak" || pendingEffectRules.has(rule) ? "off" : "error";
+      disabledEffectRules.has(rule) || pendingEffectRules.has(rule) ? "off" : "error";
     expect(effectRules[rule], rule).toBe(expected);
   }
 });

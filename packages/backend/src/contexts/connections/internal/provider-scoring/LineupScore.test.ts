@@ -1,4 +1,5 @@
 import { Array as EffectArray } from "effect";
+import { Record as EffectRecord } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { parseExact } from "./Exact.ts";
@@ -12,6 +13,7 @@ import type {
   StartingLineupRule,
   ValueSource,
 } from "./types.ts";
+
 function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
   return EffectArray.isArray(value);
 }
@@ -434,7 +436,7 @@ function projection(ranks: Readonly<Record<string, number | undefined>>): ValueS
   return {
     kind: "projection",
     period: target,
-    players: EffectArray.flatMap(Object.entries(ranks), ([id, rank]) => {
+    players: EffectArray.flatMap(EffectRecord.toEntries(ranks), ([id, rank]) => {
       const flatMapped1 = rank === undefined ? [] : [{ id, rank }];
       return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
     }),

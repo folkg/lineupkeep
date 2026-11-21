@@ -14,6 +14,7 @@ import {
 } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption, Order as EffectOrder } from "effect";
+import { Record as EffectRecord } from "effect";
 import { TestClock } from "effect/testing";
 
 import yahooNflFreeAgentPoolEmpty from "#contexts/connections/fixtures/yahoo-nfl-free-agent-pool-2026-11-10.json";
@@ -303,7 +304,7 @@ it.effect("sends the native start-active action to the read-write roster endpoin
           url: new URL(request.url),
           method: request.method,
           body,
-          headers: Object.fromEntries(request.headers.entries()),
+          headers: EffectRecord.fromEntries(request.headers.entries()),
         });
         return EffectString.includes(request.url, "getCrumb")
           ? jsonResponse({
@@ -355,7 +356,7 @@ it.effect("sends explicit player assignments to the read-write roster endpoint",
           url: new URL(request.url),
           method: request.method,
           body,
-          headers: Object.fromEntries(request.headers.entries()),
+          headers: EffectRecord.fromEntries(request.headers.entries()),
         });
         return EffectString.includes(request.url, "getCrumb")
           ? jsonResponse({
@@ -442,7 +443,7 @@ it.effect("posts a swap as one transaction with the add before the drop", () => 
           url: new URL(request.url),
           method: request.method,
           body,
-          headers: Object.fromEntries(request.headers.entries()),
+          headers: EffectRecord.fromEntries(request.headers.entries()),
         });
         return EffectString.includes(request.url, "getCrumb")
           ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
@@ -770,7 +771,7 @@ it.effect("withdraws a pending trade with DELETE and no body", () => {
           url: new URL(request.url),
           method: request.method,
           body: request.body === null ? null : await request.clone().text(),
-          headers: Object.fromEntries(request.headers.entries()),
+          headers: EffectRecord.fromEntries(request.headers.entries()),
         });
         return EffectString.includes(request.url, "getCrumb")
           ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
@@ -5702,7 +5703,7 @@ it.effect("reads league team membership through the SDK transport", () => {
       "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/teams?format=json",
     );
     assert.strictEqual(call.method, "GET");
-    assert.deepStrictEqual(Object.keys(call.headers).sort(), ["accept", "cookie"]);
+    assert.deepStrictEqual(EffectRecord.keys(call.headers).sort(), ["accept", "cookie"]);
     assert.strictEqual(call.headers["accept"], "application/json");
     assert.strictEqual(call.headers["cookie"], Redacted.value(sessionInput.session));
     assert.isNull(call.body);
@@ -5847,7 +5848,7 @@ it.effect("reads a week roster through the SDK transport", () => {
       "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4000.t.1/roster;week=6/players;out=opponent,starting_status,transactions?format=json",
     );
     assert.strictEqual(call.method, "GET");
-    assert.deepStrictEqual(Object.keys(call.headers).sort(), ["accept", "cookie"]);
+    assert.deepStrictEqual(EffectRecord.keys(call.headers).sort(), ["accept", "cookie"]);
     assert.strictEqual(call.headers["accept"], "application/json");
     assert.strictEqual(call.headers["cookie"], Redacted.value(sessionInput.session));
     assert.isNull(call.body);
@@ -5968,7 +5969,7 @@ it.effect("reads player details through the SDK transport", () => {
       "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;player_keys=466.p.20001;out=stats,ownership?format=json&stats.type=week&stats.week=6",
     );
     assert.strictEqual(call.method, "GET");
-    assert.deepStrictEqual(Object.keys(call.headers).sort(), ["accept", "cookie"]);
+    assert.deepStrictEqual(EffectRecord.keys(call.headers).sort(), ["accept", "cookie"]);
     assert.strictEqual(call.headers["accept"], "application/json");
     assert.strictEqual(call.headers["cookie"], Redacted.value(sessionInput.session));
     assert.isNull(call.body);
@@ -6160,7 +6161,7 @@ it.effect("reads a week schedule through the SDK transport", () => {
       "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4000.t.1/roster;week=6/players;out=opponent,starting_status,transactions?format=json",
     );
     assert.strictEqual(call.method, "GET");
-    assert.deepStrictEqual(Object.keys(call.headers).sort(), ["accept", "cookie"]);
+    assert.deepStrictEqual(EffectRecord.keys(call.headers).sort(), ["accept", "cookie"]);
     assert.strictEqual(call.headers["accept"], "application/json");
     assert.strictEqual(call.headers["cookie"], Redacted.value(sessionInput.session));
     assert.isNull(call.body);
@@ -6315,7 +6316,7 @@ function recordingInternet(respond: (request: RecordedRequest) => Response): {
           const recorded: RecordedRequest = {
             url: new URL(request.url),
             method: request.method,
-            headers: Object.fromEntries(request.headers.entries()),
+            headers: EffectRecord.fromEntries(request.headers.entries()),
             body: null,
             options,
           };
@@ -6398,8 +6399,8 @@ function withMalformedPlayerCollection(payload: unknown): unknown {
   if ("players" in payload) {
     return { ...payload, players: "not-a-collection" };
   }
-  return Object.fromEntries(
-    EffectArray.map(Object.entries(payload), ([key, value]) => [
+  return EffectRecord.fromEntries(
+    EffectArray.map(EffectRecord.toEntries(payload), ([key, value]) => [
       key,
       withMalformedPlayerCollection(value),
     ]),

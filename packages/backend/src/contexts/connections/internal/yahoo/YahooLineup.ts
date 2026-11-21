@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
+import { Record as EffectRecord } from "effect";
 
 import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
 import { parseExact } from "#contexts/connections/internal/provider-scoring/Exact.ts";
@@ -31,6 +32,7 @@ import type {
   ProviderPeriodSupport,
 } from "#contexts/connections/Provider.ts";
 import type { ProviderReadFailure } from "#contexts/connections/Provider.ts";
+
 function optionalValue<A>(): A | undefined {
   return undefined;
 }
@@ -269,7 +271,7 @@ export function yahooPlayerStatus(injuryCode: string | undefined): ProviderPlaye
   }
 }
 
-export const yahooInjuryStatusCodes: ReadonlyArray<string> = Object.keys(yahooStatusTable);
+export const yahooInjuryStatusCodes: ReadonlyArray<string> = EffectRecord.keys(yahooStatusTable);
 
 export function yahooTargetPeriod(roster: ProviderRoster): Period {
   return roster.coverage.type === "week"

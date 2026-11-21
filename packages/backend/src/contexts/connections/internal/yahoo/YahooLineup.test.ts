@@ -1,6 +1,7 @@
 import { EffectString } from "@lineupkeep/collections";
 import { Effect, Redacted, Schema } from "effect";
 import { Array as EffectArray } from "effect";
+import { Record as EffectRecord } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { planAssignments } from "#contexts/connections/internal/LineupPlanning.ts";
@@ -44,7 +45,7 @@ describe("Yahoo declared trade proposal assets", () => {
 
 describe("Yahoo scoring translation", () => {
   it("maps every provider status code to one availability tier", () => {
-    const tiers = Object.fromEntries(
+    const tiers = EffectRecord.fromEntries(
       EffectArray.map(yahooInjuryStatusCodes, (code) => [
         code,
         assessAvailability(policyPlayerWith(yahooAvailability(code)), {

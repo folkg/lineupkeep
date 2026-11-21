@@ -1,5 +1,6 @@
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { Context, Effect, Layer, Schema } from "effect";
+import { Record as EffectRecord } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { dual } from "effect/Function";
 
@@ -42,7 +43,7 @@ export const withRequestHeaders: {
   (request: RequestParts, additions: Readonly<Record<string, string>>): Request;
 } = dual(2, (request: RequestParts, additions: Readonly<Record<string, string>>): Request => {
   const headers = new Headers(request.headers);
-  for (const [name, value] of Object.entries(additions)) {
+  for (const [name, value] of EffectRecord.toEntries(additions)) {
     headers.set(name, value);
   }
 
