@@ -28,7 +28,7 @@ export default ({ production }: { readonly production?: boolean }): KnipConfig =
         "e2e/verify/reporter.ts",
         "e2e/support.ts",
       ],
-      project: ["**/*.{ts,tsx,mjs,cjs}", "!scripts/architectureFixture.ts!"],
+      project: ["**/*.{ts,tsx,mjs,cjs}", "!.agents/**", "!scripts/architectureFixture.ts!"],
     },
     infra: {
       entry: [

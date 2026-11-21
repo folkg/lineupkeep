@@ -625,6 +625,7 @@ export default defineConfig({
     "**/.tanstack/**/*",
     "apps/web/src/routeTree.gen.ts",
     "e2e/scratch/**/*",
+    ".agents/skills/lemmascript*/**/*",
   ],
   rules: {
     ...correctnessRules,

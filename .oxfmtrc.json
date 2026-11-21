@@ -13,5 +13,10 @@
   "experimentalSortImports": {},
   "embeddedLanguageFormatting": "auto",
   "endOfLine": "lf",
-  "ignorePatterns": ["**/node_modules/**/*", "**/dist/**/*", "apps/web/src/routeTree.gen.ts"]
+  "ignorePatterns": [
+    "**/node_modules/**/*",
+    "**/dist/**/*",
+    "apps/web/src/routeTree.gen.ts",
+    ".agents/skills/lemmascript*/**/*"
+  ]
 }

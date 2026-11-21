@@ -57,3 +57,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .output
 .wrangler
 .alchemy
+
+# LemmaScript proof merge anchors and run logs
+*.dfy.base
+.lemmascript/
