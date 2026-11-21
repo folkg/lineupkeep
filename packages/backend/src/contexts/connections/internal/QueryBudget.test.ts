@@ -1,5 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { NarrowingResult, QueryPage } from "#contexts/connections/QueryValues.ts";
 
@@ -21,7 +22,7 @@ it.effect("refuses a record that cannot fit the hard byte limit", () =>
       resource: "roster",
       groups: undefined,
       remedy: "Request a smaller limit.",
-      build: (selected, page) => ({ names: selected.map((row) => row.name), page }),
+      build: (selected, page) => ({ names: EffectArray.map(selected, (row) => row.name), page }),
       makeNext: () => Effect.succeed("continuation"),
       recordLabel: () => "quoted name",
     });
@@ -42,7 +43,7 @@ it.effect("applies a caller-supplied budget instead of the shared default", () =
       groups: undefined,
       remedy: "Request fewer groups.",
       build: (selected: ReadonlyArray<{ readonly name: string }>, page: QueryPage) => ({
-        names: selected.map((row) => row.name),
+        names: EffectArray.map(selected, (row) => row.name),
         page,
       }),
       makeNext: () => Effect.succeed("continuation"),

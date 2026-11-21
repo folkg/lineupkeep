@@ -1,7 +1,19 @@
+import { EffectArray } from "@lineupkeep/collections";
 import { configureClientErrors, OBSERVE } from "solid-js";
 import { attribution } from "solid-js/attribution";
 
 import type { TelemetryHold, TelemetryReportData } from "#contracts/telemetry/telemetryContract.ts";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
 
 export function installClientTelemetry(transport: TelemetryTransport): Disposable {
   const resources = new DisposableStack();
@@ -88,7 +100,7 @@ export function buildSlowInteractionReport(event: SlowInteraction): TelemetryRep
     name: event.name.slice(0, 100),
     ...(event.target === undefined ? {} : { target: event.target.slice(0, 100) }),
     settledMs: event.settledMs,
-    holds: event.holds.map(toTelemetryHold),
+    holds: EffectArray.map(event.holds, toTelemetryHold),
   };
 }
 
@@ -141,14 +153,14 @@ export function parseTraceId(value: string | undefined): string | undefined {
 
 function toTelemetryHold(hold: SlowHold): TelemetryHold {
   return {
-    blockers: hold.blockers.join(", ").slice(0, 300),
+    blockers: EffectArray.join(hold.blockers, ", ").slice(0, 300),
     holdMs: hold.holdMs,
     acknowledged: hold.acknowledgements.length > 0,
   };
 }
 
 function joinPath(path: ReadonlyArray<string> | undefined): string {
-  return path?.join(" › ") ?? "unknown";
+  return optionalArrayValue(path, (value) => EffectArray.join(value, " › ")) ?? "unknown";
 }
 
 export type TelemetryTransport = {

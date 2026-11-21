@@ -1,5 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { chunked } from "./collections.ts";
 
@@ -14,8 +15,13 @@ it.effect("consumes iterables lazily and concatenates sequential results in orde
     }
     const program = chunked(items(), 2, (chunk) =>
       Effect.sync(() => {
-        steps.push(`run ${chunk.join(",")}`);
-        return chunk.map((n) => n * 2);
+        steps.push(
+          `run ${EffectArray.join(
+            EffectArray.map(chunk, (n) => String(n)),
+            ",",
+          )}`,
+        );
+        return EffectArray.map(chunk, (n) => n * 2);
       }),
     );
     assert.deepStrictEqual(steps, []);

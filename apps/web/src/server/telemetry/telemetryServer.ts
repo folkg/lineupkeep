@@ -1,6 +1,7 @@
 import { RequestContext } from "@lineupkeep/backend/runtime/RequestContext";
 import { getRequestEvent, configureServerErrors } from "@solidjs/web";
 import { Effect, Schema, Clock, Ref } from "effect";
+import { Array as EffectArray } from "effect";
 import { OBSERVE } from "solid-js";
 
 import type {
@@ -9,6 +10,18 @@ import type {
 } from "#contracts/telemetry/telemetryContract.ts";
 import { deploymentTarget } from "#deployment-target";
 import { runBackend } from "#server/backendEntry.ts";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
+
 export function handleTelemetryRequest(request: Request): Promise<Response> {
   return request
     .json()
@@ -130,7 +143,9 @@ function reportAttributes(report: TelemetryReportData): Record<string, string | 
         "error.type": "ui.slow_interaction",
         "ui.settled_ms": Math.round(report.settledMs),
         "ui.hold_count": report.holds.length,
-        "ui.hold_ms": Math.round(report.holds.reduce((total, hold) => total + hold.holdMs, 0)),
+        "ui.hold_ms": Math.round(
+          EffectArray.reduce(report.holds, 0, (total, hold) => total + hold.holdMs),
+        ),
       };
     case "slow_call":
       return {
@@ -218,8 +233,10 @@ export function installServerTelemetry(): void {
       reportServerError(request, {
         kind: context.kind,
         handling: context.handling,
-        ownerPath: context.ownerPath?.join(" › "),
-        boundaryPath: context.boundaryPath?.join(" › "),
+        ownerPath: optionalArrayValue(context.ownerPath, (value) => EffectArray.join(value, " › ")),
+        boundaryPath: optionalArrayValue(context.boundaryPath, (value) =>
+          EffectArray.join(value, " › "),
+        ),
         functionId: context.functionId,
         status: error instanceof Response ? error.status : undefined,
       });
@@ -235,7 +252,7 @@ export function installServerTelemetry(): void {
       return;
     }
     reportSlowBoundary(request, {
-      ownerPath: event.ownerPath?.join(" › "),
+      ownerPath: optionalArrayValue(event.ownerPath, (value) => EffectArray.join(value, " › ")),
       durationMs: event.durationMs,
       outcome: event.outcome,
       passes: event.passes,

@@ -12,6 +12,7 @@ import {
   removeOwnedContainer,
   testContainers,
 } from "@lineupkeep/tools/local-stack/postgresContainer.ts";
+import { Array as EffectArray } from "effect";
 
 import {
   isOrphaned,
@@ -26,6 +27,7 @@ import {
 import { localStack, manifest } from "./localStack.ts";
 import { scenarioFiles, selectServiceModule } from "./scenarios.ts";
 import { sourceFingerprint } from "./source.ts";
+
 export async function runTests(run: TestRun): Promise<VerificationOutcome> {
   const interruption = new AbortController();
   const urgency = new AbortController();
@@ -70,7 +72,10 @@ export async function runTests(run: TestRun): Promise<VerificationOutcome> {
           sourceFingerprint: before,
           labels: { "lineupkeep.disposable": "test-database", "lineupkeep.lock": lockDirectory },
           environment: Object.fromEntries(
-            Object.entries(environment).filter(([, value]) => typeof value === "string"),
+            EffectArray.filter(
+              Object.entries(environment),
+              ([, value]) => typeof value === "string",
+            ),
           ),
         },
         null,

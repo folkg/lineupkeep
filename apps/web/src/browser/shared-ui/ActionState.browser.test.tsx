@@ -1,4 +1,6 @@
 import "#web/styles.css";
+import { EffectArray } from "@lineupkeep/collections";
+import { EffectOrder } from "@lineupkeep/collections";
 import { render } from "@solidjs/web";
 import type { JSX } from "@solidjs/web";
 import {
@@ -18,6 +20,10 @@ import { Button } from "./Button";
 import { ButtonLink } from "./ButtonLink";
 import { IconButton } from "./IconButton";
 import { Switch } from "./Switch";
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 it("keeps a button's box and the page height through every state", async () => {
   const [state, setState] = createSignal<ActionState>("idle");
@@ -234,7 +240,8 @@ it("runs the working hairline on a transform the compositor can take", async () 
       "transform",
     );
 
-    const runs = (): ReadonlyArray<string> => starts.filter((name) => name === "action-work");
+    const runs = (): ReadonlyArray<string> =>
+      EffectArray.filter(starts, (name) => name === "action-work");
     await expect.poll(runs).toHaveLength(1);
 
     setLabel("Save note now");
@@ -378,12 +385,13 @@ function requiredMark(host: HTMLElement): HTMLElement {
 }
 
 function keyframeBlocks(name: string): ReadonlyArray<CSSKeyframeRule> {
-  return [...document.styleSheets].flatMap((sheet) =>
-    [...sheet.cssRules].flatMap((rule) => {
+  return EffectArray.flatMap([...document.styleSheets], (sheet) =>
+    EffectArray.flatMap([...sheet.cssRules], (rule) => {
       if (!(rule instanceof CSSKeyframesRule) || rule.name !== name) {
         return [];
       }
-      return [...rule.cssRules].filter(
+      return EffectArray.filter(
+        [...rule.cssRules],
         (frame): frame is CSSKeyframeRule => frame instanceof CSSKeyframeRule,
       );
     }),
@@ -391,11 +399,11 @@ function keyframeBlocks(name: string): ReadonlyArray<CSSKeyframeRule> {
 }
 
 function animatedProperties(frame: CSSKeyframeRule): ReadonlyArray<string> {
-  return [...frame.style].toSorted();
+  return EffectArray.sort([...frame.style], EffectOrder.String);
 }
 
 function animatedTransformValues(frame: CSSKeyframeRule): ReadonlyArray<string> {
-  return [...frame.style].map((property) => frame.style.getPropertyValue(property));
+  return EffectArray.map([...frame.style], (property) => frame.style.getPropertyValue(property));
 }
 
 function opacity(element: Element | null): number {
@@ -442,9 +450,17 @@ function sampleOpacity(control: Element): { stop: () => number } {
 }
 
 function textNodes(host: HTMLElement): ReadonlyArray<string> {
-  return Array.from(host.querySelectorAll("*"))
-    .flatMap((element) => Array.from(element.childNodes))
-    .filter((node) => node.nodeType === Node.TEXT_NODE)
-    .map((node) => (node.textContent ?? "").trim())
-    .filter((text) => text !== "");
+  return EffectArray.filter(
+    EffectArray.map(
+      EffectArray.filter(
+        EffectArray.flatMap(Array.from(host.querySelectorAll("*")), (element) => {
+          const flatMapped2 = Array.from(element.childNodes);
+          return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+        }),
+        (node) => node.nodeType === Node.TEXT_NODE,
+      ),
+      (node) => (node.textContent ?? "").trim(),
+    ),
+    (text) => text !== "",
+  );
 }

@@ -1,4 +1,5 @@
 import { Array, DateTime, Effect, Layer, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 import { SecureRandom } from "effect/crypto";
 
 import type { UserId } from "#contexts/auth/User.ts";
@@ -110,9 +111,9 @@ export const ConnectionsLive = Layer.effect(
       Effect.gen(function* () {
         const owned = yield* repository.loadOwned(
           userId,
-          inputs.map((input) => input.id),
+          EffectArray.map(inputs, (input) => input.id),
         );
-        const byId = new Map(owned.map((record) => [record.id, record]));
+        const byId = new Map(EffectArray.map(owned, (record) => [record.id, record]));
         const now = yield* DateTime.now;
         for (const input of inputs) {
           const record = byId.get(input.id);
@@ -134,11 +135,14 @@ export const ConnectionsLive = Layer.effect(
           { concurrency: 1 },
         );
 
-        const commands: ReadonlyArray<CompleteLinkingCommand> = inputs.map((input, index) => ({
-          id: input.id,
-          provider: input.provider,
-          envelope: Array.getUnsafe(encrypted, index),
-        }));
+        const commands: ReadonlyArray<CompleteLinkingCommand> = EffectArray.map(
+          inputs,
+          (input, index) => ({
+            id: input.id,
+            provider: input.provider,
+            envelope: Array.getUnsafe(encrypted, index),
+          }),
+        );
         return yield* repository
           .completeLinking(userId, commands)
           .pipe(Effect.tap(annotateOneConnection));
@@ -166,10 +170,10 @@ export const ConnectionsLive = Layer.effect(
           { concurrency: 1 },
         );
         const started = yield* startLinking(userId, starts);
-        const startedIds = started.map((connection) => connection.id);
+        const startedIds = EffectArray.map(started, (connection) => connection.id);
         return yield* completeLinking(
           userId,
-          inputs.map((input, index) => ({
+          EffectArray.map(inputs, (input, index) => ({
             id: Array.getUnsafe(started, index).id,
             provider: input.provider,
             session: input.session,
@@ -186,9 +190,9 @@ export const ConnectionsLive = Layer.effect(
       Effect.gen(function* () {
         const owned = yield* repository.loadOwned(
           userId,
-          inputs.map((input) => input.id),
+          EffectArray.map(inputs, (input) => input.id),
         );
-        const byId = new Map(owned.map((record) => [record.id, record]));
+        const byId = new Map(EffectArray.map(owned, (record) => [record.id, record]));
         for (const input of inputs) {
           const record = byId.get(input.id);
           if (record === undefined) {
@@ -210,18 +214,21 @@ export const ConnectionsLive = Layer.effect(
           (input) => encryptCredential(userId, input.id, input),
           { concurrency: 1 },
         );
-        const commands: ReadonlyArray<ReconnectCommand> = inputs.map((input, index) => {
-          const record = byId.get(input.id);
-          if (record?.state._tag !== "Ready" && record?.state._tag !== "ReconnectRequired") {
-            throw new Error("A reconnect target lost its generation before it was persisted");
-          }
-          return {
-            id: input.id,
-            provider: input.provider,
-            envelope: Array.getUnsafe(encrypted, index),
-            expectedGeneration: record.state.credentialGeneration,
-          };
-        });
+        const commands: ReadonlyArray<ReconnectCommand> = EffectArray.map(
+          inputs,
+          (input, index) => {
+            const record = byId.get(input.id);
+            if (record?.state._tag !== "Ready" && record?.state._tag !== "ReconnectRequired") {
+              throw new Error("A reconnect target lost its generation before it was persisted");
+            }
+            return {
+              id: input.id,
+              provider: input.provider,
+              envelope: Array.getUnsafe(encrypted, index),
+              expectedGeneration: record.state.credentialGeneration,
+            };
+          },
+        );
         return yield* repository
           .reconnect(userId, commands)
           .pipe(Effect.tap(annotateOneConnection));
@@ -241,12 +248,12 @@ export const ConnectionsLive = Layer.effect(
       inputs: ReadonlyArray<ConnectionIdInput>,
     ): Effect.Effect<ReadonlyArray<FantasyTeam>, ConnectionError> =>
       Effect.gen(function* () {
-        const ids = [...new Set(inputs.map((input) => input.id))];
+        const ids = [...new Set(EffectArray.map(inputs, (input) => input.id))];
         if (ids.length === 0) {
           return [];
         }
         const owned = yield* repository.loadOwned(userId, ids);
-        const byId = new Map(owned.map((record) => [record.id, record]));
+        const byId = new Map(EffectArray.map(owned, (record) => [record.id, record]));
         for (const id of ids) {
           const record = byId.get(id);
           if (record === undefined) {

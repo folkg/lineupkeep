@@ -3,6 +3,8 @@ import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { eq } from "drizzle-orm";
 import { Array, Cause, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 import { TestClock } from "effect/testing";
 
 import { providerSessionReconnectDetail } from "#contexts/connections/Connection.ts";
@@ -66,6 +68,21 @@ import {
   QuerySelectionInvalid,
   QueryTeamNotFound,
 } from "./QueryValues.ts";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 it.effect("lists owned teams with stable paging and owner-bound continuations", () =>
   Effect.gen(function* () {
@@ -101,7 +118,7 @@ it.effect("lists owned teams with stable paging and owner-bound continuations", 
     assert.strictEqual(filtered.status, "ok");
     if (filtered.status === "ok") {
       assert.deepStrictEqual(
-        filtered.teams.map((row) => row.name),
+        EffectArray.map(filtered.teams, (row) => row.name),
         ["Gamma"],
       );
     }
@@ -133,7 +150,10 @@ it.effect("resolves calendar periods from league settings without guessing locks
     }
     assert.strictEqual(calendar.periods.length, 17);
     assert.deepStrictEqual(
-      calendar.periods.filter((period) => period.isCurrent).map((period) => period.week),
+      EffectArray.map(
+        EffectArray.filter(calendar.periods, (period) => period.isCurrent),
+        (period) => period.week,
+      ),
       [3],
     );
     assert.deepStrictEqual(calendar.week, {
@@ -251,7 +271,8 @@ it.effect("returns league scoring, roster rules, and explicit standings coverage
     assert.strictEqual(Array.getUnsafe(league.scoring ?? [], 1).points, null);
     assert.strictEqual(league.standings?.status, "unsupported");
     assert.isTrue(
-      league.coverage.some(
+      EffectArray.some(
+        league.coverage,
         (entry) => entry.resource === "standings" && entry.status === "unsupported",
       ),
     );
@@ -689,7 +710,7 @@ it.effect("marks your league category the league does not score as informational
     }
     const scoring = league.scoring ?? [];
     assert.deepStrictEqual(
-      scoring.map((category) => ({
+      EffectArray.map(scoring, (category) => ({
         abbreviation: category.abbreviation,
         scoring: category.scoring,
         detail: category.detail,
@@ -725,11 +746,13 @@ it.effect("keeps roster, calendar, and matchup reads with degraded league covera
     if (roster.status === "ok" && roster.scope === "team") {
       assert.strictEqual(roster.players.length, 2);
       assert.strictEqual(roster.period?.week, 3);
-      const league = roster.coverage.find((entry) => entry.resource === "league");
+      const league = EffectOption.getOrUndefined(
+        EffectArray.findFirst(roster.coverage, (entry) => entry.resource === "league"),
+      );
       assert.strictEqual(league?.status, "degraded");
       assert.include(league?.detail, "league.num_teams");
       assert.deepStrictEqual(
-        roster.failures.map((failure) => [failure.code, failure.resource]),
+        EffectArray.map(roster.failures, (failure) => [failure.code, failure.resource]),
         [["provider_invalid_response", "league"]],
       );
     }
@@ -738,7 +761,9 @@ it.effect("keeps roster, calendar, and matchup reads with degraded league covera
     if (matchups.status === "ok") {
       assert.strictEqual(matchups.matchups.length, 1);
       assert.strictEqual(
-        matchups.coverage.find((entry) => entry.resource === "league")?.status,
+        EffectOption.getOrUndefined(
+          EffectArray.findFirst(matchups.coverage, (entry) => entry.resource === "league"),
+        )?.status,
         "degraded",
       );
     }
@@ -746,7 +771,8 @@ it.effect("keeps roster, calendar, and matchup reads with degraded league covera
     assert.strictEqual(calendar.status, "failed");
     if (calendar.status === "failed") {
       assert.isTrue(
-        calendar.coverage.some(
+        EffectArray.some(
+          calendar.coverage,
           (entry) => entry.resource === "league" && entry.status === "degraded",
         ),
       );
@@ -772,11 +798,13 @@ it.effect("keeps the league failure when the roster read also fails", () =>
       return;
     }
     assert.deepStrictEqual(
-      roster.failures.map((failure) => failure.code),
+      EffectArray.map(roster.failures, (failure) => failure.code),
       ["provider_invalid_response", "period_unavailable"],
     );
     assert.strictEqual(
-      roster.coverage.find((entry) => entry.resource === "league")?.status,
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(roster.coverage, (entry) => entry.resource === "league"),
+      )?.status,
       "degraded",
     );
   }).pipe(layerTools.provide(QueriesTestLayer)),
@@ -814,7 +842,8 @@ it.effect("reports a league without a scoring-week window instead of inventing p
       assert.deepStrictEqual(calendar.periods, []);
       assert.deepStrictEqual(calendar.week, { status: "unsupported", reason: "not_published" });
       assert.isTrue(
-        calendar.coverage.some(
+        EffectArray.some(
+          calendar.coverage,
           (entry) =>
             entry.resource === "calendar" &&
             entry.status === "unsupported" &&
@@ -904,7 +933,7 @@ it.effect("publishes the site's starting status on team roster rows and the summ
     const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
       roster: {
         ...roster,
-        players: roster.players.map((player, index) => ({
+        players: EffectArray.map(roster.players, (player, index) => ({
           ...player,
           startingLineup: statuses[index] ?? "unconfirmed",
         })),
@@ -920,7 +949,7 @@ it.effect("publishes the site's starting status on team roster rows and the summ
       return;
     }
     assert.deepStrictEqual(
-      teamRoster.players.map((player) => player.startingStatus),
+      EffectArray.map(teamRoster.players, (player) => player.startingStatus),
       ["confirmed_starting", "confirmed_not_starting", "unconfirmed"],
     );
 
@@ -931,7 +960,9 @@ it.effect("publishes the site's starting status on team roster rows and the summ
       return;
     }
     assert.deepStrictEqual(
-      summary.roster?.map((player) => player.startingStatus),
+      optionalArrayValue(summary.roster, (value) =>
+        EffectArray.map(value, (player) => player.startingStatus),
+      ),
       ["confirmed_starting", "confirmed_not_starting", "unconfirmed"],
     );
 
@@ -943,7 +974,10 @@ it.effect("publishes the site's starting status on team roster rows and the summ
       return;
     }
     assert.deepStrictEqual(
-      leagueRoster.teams.flatMap((entry) => entry.players.map((player) => player.startingStatus)),
+      EffectArray.flatMap(leagueRoster.teams, (entry) => {
+        const flatMapped1 = EffectArray.map(entry.players, (player) => player.startingStatus);
+        return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+      }),
       ["not_requested", "not_requested", "not_requested"],
     );
   }).pipe(layerTools.provide(QueriesTestLayer)),
@@ -966,7 +1000,7 @@ it.effect("reads every team's roster in the linked league with team identity on 
       leagueRosterFixture("461.l.1000.t.1", "Alpha", 2, 10001),
       {
         ...betaRoster,
-        players: betaRoster.players.map((player, index) =>
+        players: EffectArray.map(betaRoster.players, (player, index) =>
           index === 0 ? { ...player, scheduled: false, opponent: undefined, byeWeek: 3 } : player,
         ),
       },
@@ -995,7 +1029,7 @@ it.effect("reads every team's roster in the linked league with team identity on 
     }
     assert.deepStrictEqual(read.period, { week: 3 });
     assert.deepStrictEqual(
-      read.teams.map((row) => [row.name, row.owned, row.players.length]),
+      EffectArray.map(read.teams, (row) => [row.name, row.owned, row.players.length]),
       [
         ["Alpha", true, 2],
         ["Beta", false, 3],
@@ -1010,22 +1044,28 @@ it.effect("reads every team's roster in the linked league with team identity on 
       total: 3,
     });
     assert.deepStrictEqual(
-      read.coverage.map((entry) => [entry.resource, entry.source, entry.status, entry.period]),
+      EffectArray.map(read.coverage, (entry) => [
+        entry.resource,
+        entry.source,
+        entry.status,
+        entry.period,
+      ]),
       [["roster", "league_rosters", "available", { week: 3 }]],
     );
 
     const opened = yield* tokens.openCounterpartyRefGroups({
       userId: owner,
-      groups: read.teams.map((row) => ({ leagueKey: "461.l.1000", refs: [row.team] })),
+      groups: EffectArray.map(read.teams, (row) => ({ leagueKey: "461.l.1000", refs: [row.team] })),
     });
     assert.deepStrictEqual(
-      opened.map((group) => group[0]),
+      EffectArray.map(opened, (group) => group[0]),
       ["461.l.1000.t.1", "461.l.1000.t.2", "461.l.1000.t.3"],
     );
     assert.strictEqual(
-      Array.getUnsafe(read.teams, 1)
-        .players.map((player) => player.name)
-        .join(","),
+      EffectArray.join(
+        EffectArray.map(Array.getUnsafe(read.teams, 1).players, (player) => player.name),
+        ",",
+      ),
       "Beta Player 0,Beta Player 1,Beta Player 2",
     );
     assert.deepStrictEqual(Array.getUnsafe(Array.getUnsafe(read.teams, 1).players, 0).week, {
@@ -1070,7 +1110,7 @@ it.effect("pages league rosters by whole teams with a cursor", () =>
       return;
     }
     assert.deepStrictEqual(
-      first.teams.map((row) => [row.name, row.players.length]),
+      EffectArray.map(first.teams, (row) => [row.name, row.players.length]),
       [
         ["Alpha", 2],
         ["Beta", 3],
@@ -1102,7 +1142,10 @@ it.effect("pages league rosters by whole teams with a cursor", () =>
       return;
     }
     assert.deepStrictEqual(
-      second.teams.map((row) => [row.name, row.players.map((player) => player.name)]),
+      EffectArray.map(second.teams, (row) => [
+        row.name,
+        EffectArray.map(row.players, (player) => player.name),
+      ]),
       [["Gamma", ["Gamma Player 0"]]],
     );
     assert.deepStrictEqual(second.page, {
@@ -1227,7 +1270,7 @@ it.effect("reports a refused league roster read instead of an empty roster", () 
     }
     assert.deepStrictEqual(read.teams, []);
     assert.deepStrictEqual(
-      read.coverage.map((entry) => [entry.resource, entry.source, entry.status]),
+      EffectArray.map(read.coverage, (entry) => [entry.resource, entry.source, entry.status]),
       [["roster", "league_rosters", "unsupported"]],
     );
     assert.deepStrictEqual(read.failures, []);
@@ -1271,7 +1314,7 @@ it.effect(
       const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
         roster: {
           ...base,
-          players: base.players.map((player, index) =>
+          players: EffectArray.map(base.players, (player, index) =>
             index === 0 ? { ...player, slot: unverified } : player,
           ),
         },
@@ -1316,7 +1359,7 @@ it.effect(
         league,
         roster: {
           ...base,
-          players: base.players.map((player, index) =>
+          players: EffectArray.map(base.players, (player, index) =>
             index === 0
               ? { ...player, slot: { status: "verified", slot: "IR" }, eligiblePositions: ["QB"] }
               : player,
@@ -1334,12 +1377,14 @@ it.effect(
         return;
       }
       assert.deepStrictEqual(
-        summary.illegalSlots?.map((entry) => ({
-          name: entry.name,
-          slot: entry.slot,
-          eligiblePositions: entry.eligiblePositions,
-          detail: entry.detail,
-        })),
+        optionalArrayValue(summary.illegalSlots, (value) =>
+          EffectArray.map(value, (entry) => ({
+            name: entry.name,
+            slot: entry.slot,
+            eligiblePositions: entry.eligiblePositions,
+            detail: entry.detail,
+          })),
+        ),
         [
           {
             name: "Synthetic 0",
@@ -1351,7 +1396,9 @@ it.effect(
         ],
       );
       assert.deepStrictEqual(
-        summary.illegal?.map(({ name, slot, fact, cure }) => ({ name, slot, fact, cure })),
+        optionalArrayValue(summary.illegal, (value) =>
+          EffectArray.map(value, ({ name, slot, fact, cure }) => ({ name, slot, fact, cure })),
+        ),
         [
           {
             name: "Synthetic 0",
@@ -1368,7 +1415,7 @@ it.effect(
           ...base,
           providerTeamKey: "461.l.1001.t.1",
           providerLeagueKey: "461.l.1001",
-          players: base.players.map((player, index) =>
+          players: EffectArray.map(base.players, (player, index) =>
             index === 0
               ? {
                   ...player,
@@ -1412,7 +1459,7 @@ it.effect("publishes place accounting and each reserve list on the roster and te
       league,
       roster: {
         ...base,
-        players: base.players.map((player, index) =>
+        players: EffectArray.map(base.players, (player, index) =>
           index === 7
             ? {
                 ...player,
@@ -1451,12 +1498,18 @@ it.effect("publishes place accounting and each reserve list on the roster and te
     assert.deepStrictEqual(summary.reserve, read.reserve);
     assert.strictEqual(summary.addsPossible, 1);
     assert.deepStrictEqual(
-      summary.canFree?.map(({ name, list, place }) => ({ name, list, place })),
+      optionalArrayValue(summary.canFree, (value) =>
+        EffectArray.map(value, ({ name, list, place }) => ({ name, list, place })),
+      ),
       [{ name: "Synthetic 1", list: "IR+", place: "BN" }],
     );
     assert.strictEqual(
       summary.canFree?.[0]?.player,
-      summary.roster?.find((player) => player.name === "Synthetic 1")?.player,
+      optionalArrayValue(summary.roster, (value) =>
+        EffectOption.getOrUndefined(
+          EffectArray.findFirst(value, (player) => player.name === "Synthetic 1"),
+        ),
+      )?.player,
     );
     assert.strictEqual(summary.addsWithFixes, 2);
     assert.deepStrictEqual(summary.illegal, []);
@@ -1510,7 +1563,9 @@ it.effect("publishes each reserve move a full roster can make and the adds they 
     assert.deepStrictEqual(summary.places, { used: 7, maximum: 7, free: 0 });
     assert.strictEqual(summary.addsPossible, 2);
     assert.deepStrictEqual(
-      summary.canFree?.map(({ name, list, place }) => ({ name, list, place })),
+      optionalArrayValue(summary.canFree, (value) =>
+        EffectArray.map(value, ({ name, list, place }) => ({ name, list, place })),
+      ),
       [
         { name: "Synthetic 0", list: "IR", place: "QB" },
         { name: "Synthetic 1", list: "IR+", place: "BN" },
@@ -1604,7 +1659,8 @@ it.effect("resolves a dropped player's identity from transaction history", () =>
     });
     assert.deepStrictEqual(hydrated.failures, []);
     assert.isTrue(
-      hydrated.coverage.some(
+      EffectArray.some(
+        hydrated.coverage,
         (entry) => entry.resource === "players" && entry.source === "transactions",
       ),
     );
@@ -1656,7 +1712,7 @@ it.effect("publishes an off-roster player's injury note instead of reporting non
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
     const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
-      playerDetails: playerDetails.map((detail) =>
+      playerDetails: EffectArray.map(playerDetails, (detail) =>
         detail.providerPlayerKey === "461.p.10003"
           ? { ...detail, availabilityDetail: "Out indefinitely with a foot injury" }
           : detail,
@@ -1723,7 +1779,7 @@ it.effect("names the input position of a player reference that does not open", (
       return;
     }
     assert.deepStrictEqual(
-      hydrated.players.map((row) => row.player),
+      EffectArray.map(hydrated.players, (row) => row.player),
       [rosterRef],
     );
     assert.strictEqual(hydrated.failures.length, 1);
@@ -1760,7 +1816,10 @@ it.effect("reports a requested availability your league does not publish", () =>
     assert.strictEqual(hydrated.status, "unsupported");
     if (hydrated.status === "unsupported") {
       assert.isTrue(
-        hydrated.failures.some((failure) => failure.code === "player_availability_unavailable"),
+        EffectArray.some(
+          hydrated.failures,
+          (failure) => failure.code === "player_availability_unavailable",
+        ),
       );
     }
   }).pipe(layerTools.provide(QueriesTestLayer)),
@@ -1783,7 +1842,7 @@ it.effect("searches bounded free agents and preserves zero versus missing stats"
       return;
     }
     assert.deepStrictEqual(
-      search.players.map((player) => player.name),
+      EffectArray.map(search.players, (player) => player.name),
       ["Free Agent"],
     );
     assert.isFalse(includesText(search, "461.p.10003"));
@@ -1880,7 +1939,7 @@ it.effect("states each pool row's week, opponent, and projected rank", () =>
       return;
     }
     assert.deepStrictEqual(
-      search.players.map((player) => [player.name, player.week]),
+      EffectArray.map(search.players, (player) => [player.name, player.week]),
       [
         [
           "Bye Receiver",
@@ -1981,7 +2040,7 @@ it.effect("reads a pool's games by scoring week over several weeks", () =>
       return;
     }
     assert.deepStrictEqual(
-      current.players.map((player) => [player.name, player.gameWeeks]),
+      EffectArray.map(current.players, (player) => [player.name, player.gameWeeks]),
       [
         ["Bye Receiver", { status: "available", weeks: [] }],
         [
@@ -2006,7 +2065,7 @@ it.effect("reads a pool's games by scoring week over several weeks", () =>
       assert.isTrue(DateTime.isDateTime(search.gamesWindow.observedAt));
     }
     assert.deepStrictEqual(
-      search.players.map((player) => [player.name, player.gameWeeks]),
+      EffectArray.map(search.players, (player) => [player.name, player.gameWeeks]),
       [
         [
           "Bye Receiver",
@@ -2114,7 +2173,7 @@ it.effect("orders the pool by a recent window and states each row's rank", () =>
       return;
     }
     assert.deepStrictEqual(
-      search.players.map((player) => [player.name, player.recentRank]),
+      EffectArray.map(search.players, (player) => [player.name, player.recentRank]),
       [
         ["Season Leader", { window: { kind: "last_days", days: 14 }, rank: 16 }],
         ["In Form Goalie", { window: { kind: "last_days", days: 14 }, rank: 29 }],
@@ -2123,7 +2182,7 @@ it.effect("orders the pool by a recent window and states each row's rank", () =>
       ],
     );
     assert.isTrue(
-      search.players.every((player) => player.statValue === undefined),
+      EffectArray.every(search.players, (player) => player.statValue === undefined),
       "a recent-rank ordering carries no season stat value",
     );
     assert.deepStrictEqual(search.failures, []);
@@ -2144,8 +2203,12 @@ it.effect(
       if (listed.status !== "ok") {
         return;
       }
-      const hockeyTeam = listed.teams.find((entry) => entry.name === "Gamma")?.team;
-      const footballTeam = listed.teams.find((entry) => entry.name === "Alpha")?.team;
+      const hockeyTeam = EffectOption.getOrUndefined(
+        EffectArray.findFirst(listed.teams, (entry) => entry.name === "Gamma"),
+      )?.team;
+      const footballTeam = EffectOption.getOrUndefined(
+        EffectArray.findFirst(listed.teams, (entry) => entry.name === "Alpha"),
+      )?.team;
       assert.isDefined(hockeyTeam);
       assert.isDefined(footballTeam);
 
@@ -2192,7 +2255,7 @@ it.effect(
         return;
       }
       assert.deepStrictEqual(
-        hockey.players.map((player) => [player.name, player.recentRank]),
+        EffectArray.map(hockey.players, (player) => [player.name, player.recentRank]),
         [
           ["Hockey First", { window: { kind: "last_days", days: 14 }, rank: 16 }],
           ["Hockey Second", { window: { kind: "last_days", days: 14 }, rank: 29 }],
@@ -2239,7 +2302,7 @@ it.effect(
         return;
       }
       assert.deepStrictEqual(
-        football.players.map((player) => [player.name, player.recentRank]),
+        EffectArray.map(football.players, (player) => [player.name, player.recentRank]),
         [
           ["Football First", { window: { kind: "last_weeks", weeks: 4 }, rank: 25 }],
           ["Football Second", { window: { kind: "last_weeks", weeks: 4 }, rank: 66 }],
@@ -2248,7 +2311,8 @@ it.effect(
 
       for (const search of [hockey, football]) {
         assert.isTrue(
-          search.players.every(
+          EffectArray.every(
+            search.players,
             (player) => player.recentRank !== undefined && player.statValue === undefined,
           ),
           "both sports publish the same row shape and the value that ordered it",
@@ -2412,11 +2476,11 @@ it.effect("stops a summary at its first refused read and names the layer to reco
       return;
     }
     assert.deepStrictEqual(
-      [...new Set(summary.failures.map((failure) => failure.code))],
+      [...new Set(EffectArray.map(summary.failures, (failure) => failure.code))],
       ["provider_session_rejected"],
     );
     assert.deepStrictEqual(
-      [...new Set(summary.failures.map((failure) => failure.message))],
+      [...new Set(EffectArray.map(summary.failures, (failure) => failure.message))],
       [providerSessionReconnectDetail],
     );
 
@@ -2508,7 +2572,10 @@ it.effect("returns every explicitly requested player reference in one response",
         rosterStatus: "rostered" as const,
         actual: {
           basis: { type: "week" as const, week: 3 },
-          stats: categories.map((category) => ({ statId: category.statId, value: index })),
+          stats: EffectArray.map(categories, (category) => ({
+            statId: category.statId,
+            value: index,
+          })),
           notAggregated: [],
         },
         projected: undefined,
@@ -2575,11 +2642,11 @@ it.effect("answers a batch when one player's details fail verification", () =>
       return;
     }
     assert.deepStrictEqual(
-      hydrated.players.map((row) => row.identity?.name),
+      EffectArray.map(hydrated.players, (row) => row.identity?.name),
       ["Pool Player 1", "Pool Player 2", undefined, "Pool Player 4"],
     );
     assert.deepStrictEqual(
-      hydrated.failures.map((failure) => failure.code),
+      EffectArray.map(hydrated.failures, (failure) => failure.code),
       ["player_details_unavailable"],
     );
     const [failure] = hydrated.failures;
@@ -2609,7 +2676,7 @@ it.effect("answers a repeated player reference from one detail read", () =>
       return;
     }
     assert.deepStrictEqual(
-      hydrated.players.map((row) => row.identity?.name),
+      EffectArray.map(hydrated.players, (row) => row.identity?.name),
       ["Pool Player 1", "Pool Player 2", "Pool Player 1"],
     );
     assert.deepStrictEqual(hydrated.failures, []);
@@ -2813,7 +2880,7 @@ it.effect(
         assert.isTrue(DateTime.isDateTime(search.gamesWindow.observedAt));
       }
       assert.deepStrictEqual(
-        search.players.map((player) => [player.name, player.gameDays]),
+        EffectArray.map(search.players, (player) => [player.name, player.gameDays]),
         [
           ["Keyed Skater", { status: "available", dates: ["2026-10-19", "2026-10-21"] }],
           [
@@ -2838,7 +2905,7 @@ it.effect(
 
       const hydrated = yield* queries.getPlayers(owner, {
         team: teamId,
-        players: search.players.map((player) => player.player),
+        players: EffectArray.map(search.players, (player) => player.player),
         groups: ["schedule"],
         gamesWindow: { kind: "current" },
       });
@@ -2959,7 +3026,7 @@ it.effect("counts a pool window's game days instead of the scoring window", () =
       assert.isTrue(DateTime.isDateTime(search.gamesWindow.observedAt));
     }
     assert.deepStrictEqual(
-      search.players.map((player) => [player.name, player.gameDays]),
+      EffectArray.map(search.players, (player) => [player.name, player.gameDays]),
       [
         ["Keyed Skater", { status: "available", dates: ["2026-10-19", "2026-10-22"] }],
         ["Keyless Skater", { status: "available", dates: ["2026-10-19", "2026-10-22"] }],
@@ -3175,7 +3242,8 @@ it.effect(
       );
       assert.deepStrictEqual(hydrated.failures, []);
       assert.isTrue(
-        hydrated.coverage.some(
+        EffectArray.some(
+          hydrated.coverage,
           (entry) =>
             entry.resource === "players" &&
             entry.detail === "Actual statistics use the season basis.",
@@ -3253,7 +3321,7 @@ it.effect("carries a screening status and its observation time on every search r
     }
     const observedAt = DateTime.toEpochMillis(Array.getUnsafe(search.coverage, 0).fetchedAt);
     assert.deepStrictEqual(
-      search.players.map((player) => ({
+      EffectArray.map(search.players, (player) => ({
         name: player.name,
         value: player.status.value,
         code: player.status.code,
@@ -3332,7 +3400,7 @@ it.effect("publishes the professional team on search rows", () =>
       return;
     }
     assert.deepStrictEqual(
-      search.players.map((player) => [player.name, player.proTeam]),
+      EffectArray.map(search.players, (player) => [player.name, player.proTeam]),
       [
         ["Available Skater", "SYN"],
         ["Unsigned Skater", null],
@@ -3392,7 +3460,9 @@ it.effect("returns distinct free-agent, waiver, and all pools with all as their 
       queries.searchPlayers(owner, { team: teamId, availability, sort: "name" }).pipe(
         Effect.map((result) => {
           assert.strictEqual(result.status, "ok");
-          return result.status === "ok" ? result.players.map((player) => player.name) : [];
+          return result.status === "ok"
+            ? EffectArray.map(result.players, (player) => player.name)
+            : [];
         }),
       );
 
@@ -3442,7 +3512,10 @@ it.effect("answers a league with no waiver players honestly", () =>
     assert.deepStrictEqual(empty.page, { returned: 0, complete: true, remaining: 0 });
     assert.deepStrictEqual(empty.failures, []);
     assert.isTrue(
-      empty.coverage.some((entry) => entry.resource === "players" && entry.status === "available"),
+      EffectArray.some(
+        empty.coverage,
+        (entry) => entry.resource === "players" && entry.status === "available",
+      ),
     );
   }).pipe(layerTools.provide(QueriesTestLayer)),
 );
@@ -3496,7 +3569,7 @@ it.effect("carries your league's day-window transaction counts on search rows", 
       return;
     }
     assert.deepStrictEqual(
-      search.players.map((player) => [player.name, player.transactionTrend]),
+      EffectArray.map(search.players, (player) => [player.name, player.transactionTrend]),
       [
         [
           "Moving Skater",
@@ -3515,7 +3588,7 @@ it.effect("carries the transaction counts on roster rows", () =>
     const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
       roster: {
         ...rosterFixture({ count: 2 }),
-        players: rosterFixture({ count: 2 }).players.map((player, index) => ({
+        players: EffectArray.map(rosterFixture({ count: 2 }).players, (player, index) => ({
           ...player,
           transactionTrend:
             index === 0
@@ -3536,7 +3609,7 @@ it.effect("carries the transaction counts on roster rows", () =>
       return;
     }
     assert.deepStrictEqual(
-      roster.players.map((player) => [player.name, player.transactionTrend]),
+      EffectArray.map(roster.players, (player) => [player.name, player.transactionTrend]),
       [
         [
           "Synthetic 0",
@@ -3566,8 +3639,12 @@ it.effect("refuses a period your league cannot honour instead of ignoring it", (
     if (listed.status !== "ok") {
       return;
     }
-    const hockeyId = listed.teams.find((entry) => entry.name === "Gamma")?.team;
-    const footballId = listed.teams.find((entry) => entry.name === "Alpha")?.team;
+    const hockeyId = EffectOption.getOrUndefined(
+      EffectArray.findFirst(listed.teams, (entry) => entry.name === "Gamma"),
+    )?.team;
+    const footballId = EffectOption.getOrUndefined(
+      EffectArray.findFirst(listed.teams, (entry) => entry.name === "Alpha"),
+    )?.team;
     assert.isDefined(hockeyId);
     assert.isDefined(footballId);
     const roster = yield* queries.getRosters(owner, { team: hockeyId });
@@ -3697,7 +3774,8 @@ it.effect(
       assert.include(stats.aggregation?.detail, "7 daily reads");
       assert.include(stats.aggregation?.detail, "notAggregated");
       assert.isTrue(
-        hydrated.coverage.some(
+        EffectArray.some(
+          hydrated.coverage,
           (entry) =>
             entry.resource === "players" &&
             entry.detail ===
@@ -3752,8 +3830,11 @@ it.effect("never pairs an unsupported stat group with a period failure", () =>
       rank: null,
     });
     assert.deepStrictEqual(hydrated.failures, []);
-    const detailsCoverage = hydrated.coverage.find(
-      (entry) => entry.resource === "players" && entry.status === "degraded",
+    const detailsCoverage = EffectOption.getOrUndefined(
+      EffectArray.findFirst(
+        hydrated.coverage,
+        (entry) => entry.resource === "players" && entry.status === "degraded",
+      ),
     );
     assert.include(detailsCoverage?.detail, "did not report the requested week 3");
   }).pipe(layerTools.provide(QueriesTestLayer)),
@@ -3777,7 +3858,10 @@ it.effect("reads a date-scoped roster without inventing a week", () =>
     assert.strictEqual(roster.period, undefined);
     assert.strictEqual(roster.players.length, 2);
     assert.isTrue(
-      roster.coverage.some((entry) => entry.resource === "roster" && entry.status === "available"),
+      EffectArray.some(
+        roster.coverage,
+        (entry) => entry.resource === "roster" && entry.status === "available",
+      ),
     );
   }).pipe(layerTools.provide(QueriesTestLayer)),
 );
@@ -3876,7 +3960,9 @@ it.effect("reports both sides of a trade with the team each player left and join
     assert.strictEqual(trade.type, "trade");
     assert.deepStrictEqual(trade.completeness, { status: "complete" });
     assert.deepStrictEqual(
-      trade.parties?.entries.map((party) => [party.role, party.name]),
+      optionalArrayValue(trade.parties?.entries, (value) =>
+        EffectArray.map(value, (party) => [party.role, party.name]),
+      ),
       [
         ["proposer", "Alpha"],
         ["receiver", "Beta"],
@@ -3982,7 +4068,12 @@ it.effect("reports a pick-only trade with both sides and no players", () =>
     assert.deepStrictEqual(trade.completeness, { status: "complete" });
     assert.deepStrictEqual(trade.players, []);
     assert.deepStrictEqual(
-      trade.picks.map((pick) => [pick.round, pick.from?.name, pick.to?.name, pick.original?.name]),
+      EffectArray.map(trade.picks, (pick) => [
+        pick.round,
+        pick.from?.name,
+        pick.to?.name,
+        pick.original?.name,
+      ]),
       [
         [2, "Alpha", "Beta", "Alpha"],
         [12, "Beta", "Alpha", "Beta"],
@@ -4049,7 +4140,8 @@ it.effect("returns draft history with round, pick, team, and player for the leag
     assert.strictEqual(first.name, "Synthetic 0");
     assert.isUndefined(Array.getUnsafe(draft.picks, 1).name);
     assert.isTrue(
-      league.coverage.some(
+      EffectArray.some(
+        league.coverage,
         (entry) => entry.resource === "draft_history" && entry.status === "available",
       ),
     );
@@ -4139,7 +4231,11 @@ it.effect(
       if (summary.status !== "ok") {
         return;
       }
-      const rosterRow = summary.roster?.find((row) => row.name === "Synthetic 1");
+      const rosterRow = optionalArrayValue(summary.roster, (value) =>
+        EffectOption.getOrUndefined(
+          EffectArray.findFirst(value, (row) => row.name === "Synthetic 1"),
+        ),
+      );
       assertDrafted(rosterRow?.draft);
 
       assert.isDefined(rosterRow);
@@ -4159,10 +4255,19 @@ it.effect(
       if (search.status !== "ok") {
         return;
       }
-      assertDrafted(search.players.find((row) => row.name === "Synthetic 1")?.draft);
-      assert.deepStrictEqual(search.players.find((row) => row.name === "Undrafted")?.draft, {
-        status: "undrafted",
-      });
+      assertDrafted(
+        EffectOption.getOrUndefined(
+          EffectArray.findFirst(search.players, (row) => row.name === "Synthetic 1"),
+        )?.draft,
+      );
+      assert.deepStrictEqual(
+        EffectOption.getOrUndefined(
+          EffectArray.findFirst(search.players, (row) => row.name === "Undrafted"),
+        )?.draft,
+        {
+          status: "undrafted",
+        },
+      );
     }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
@@ -4182,9 +4287,16 @@ it.effect(
       if (summary.status !== "ok") {
         return;
       }
-      assert.isTrue(summary.roster?.every((row) => row.draft.status === "not_published"));
-      const coverage = summary.coverage.find(
-        (entry) => entry.resource === "roster" && entry.source === "draft_results",
+      assert.isTrue(
+        optionalArrayValue(summary.roster, (value) =>
+          EffectArray.every(value, (row) => row.draft.status === "not_published"),
+        ),
+      );
+      const coverage = EffectOption.getOrUndefined(
+        EffectArray.findFirst(
+          summary.coverage,
+          (entry) => entry.resource === "roster" && entry.source === "draft_results",
+        ),
       );
       assert.strictEqual(coverage?.status, "unsupported");
       assert.include(coverage?.detail ?? "", "published no draft picks");
@@ -4206,9 +4318,16 @@ it.effect("states that draft history was unreadable instead of calling players u
     if (summary.status !== "ok") {
       return;
     }
-    assert.isTrue(summary.roster?.every((row) => row.draft.status === "not_published"));
-    const coverage = summary.coverage.find(
-      (entry) => entry.resource === "roster" && entry.source === "draft_results",
+    assert.isTrue(
+      optionalArrayValue(summary.roster, (value) =>
+        EffectArray.every(value, (row) => row.draft.status === "not_published"),
+      ),
+    );
+    const coverage = EffectOption.getOrUndefined(
+      EffectArray.findFirst(
+        summary.coverage,
+        (entry) => entry.resource === "roster" && entry.source === "draft_results",
+      ),
     );
     assert.strictEqual(coverage?.status, "unsupported");
     assert.include(coverage?.detail ?? "", "does not support read_draft_results");
@@ -4263,12 +4382,15 @@ it.effect("reads one draft history for the whole response, not one read per play
     }
     assert.strictEqual(summary.roster?.length, 5);
     assert.strictEqual((yield* fake.readCount("read_draft_results")) - beforeSummary, 1);
-    const rosterCoverage = summary.coverage.find(
-      (entry) => entry.resource === "roster" && entry.source === "draft_results",
+    const rosterCoverage = EffectOption.getOrUndefined(
+      EffectArray.findFirst(
+        summary.coverage,
+        (entry) => entry.resource === "roster" && entry.source === "draft_results",
+      ),
     );
     assert.include(rosterCoverage?.detail ?? "", "not one read per player");
 
-    const refs = (summary.roster ?? []).map((row) => row.player);
+    const refs = EffectArray.map(summary.roster ?? [], (row) => row.player);
     const beforePlayers = yield* fake.readCount("read_draft_results");
     const hydrated = yield* queries.getPlayers(owner, {
       team: teamId,
@@ -4279,7 +4401,7 @@ it.effect("reads one draft history for the whole response, not one read per play
     assert.strictEqual((yield* fake.readCount("read_draft_results")) - beforePlayers, 1);
 
     yield* fake.setSearchPlayers(
-      refs.map((_, index) =>
+      EffectArray.map(refs, (_, index) =>
         searchFixture({
           providerPlayerKey: `461.p.${String(10001 + index)}`,
           name: `Pool ${String(index)}`,
@@ -4337,7 +4459,7 @@ it.effect("returns explicit unsupported coverage instead of empty success", () =
     for (const result of [roster, search, players, matchups, transactions]) {
       assert.strictEqual(result.status, "unsupported");
       if (result.status === "unsupported") {
-        assert.isTrue(result.coverage.some((entry) => entry.status === "unsupported"));
+        assert.isTrue(EffectArray.some(result.coverage, (entry) => entry.status === "unsupported"));
       }
     }
   }).pipe(layerTools.provide(QueriesTestLayer)),
@@ -4443,11 +4565,11 @@ const thirteenTeamStandings = (providerLeagueKey: string): ProviderStandings => 
       seasonMoves: index,
       weeklyAdds: { used: index % 7, coverage: { type: "week", week: 5 } },
     },
-    categoryTotals: [1, 2, 3, 8, 14, 31, 32, 19, 22, 23, 25, 24, 26].map((statId) => ({
+    categoryTotals: EffectArray.map([1, 2, 3, 8, 14, 31, 32, 19, 22, 23, 25, 24, 26], (statId) => ({
       statId,
       value: 100 - index,
     })),
-    categoryPoints: [1, 2, 3, 8, 14, 31, 32, 19, 22, 23, 25, 24, 26].map((statId) => ({
+    categoryPoints: EffectArray.map([1, 2, 3, 8, 14, 31, 32, 19, 22, 23, 25, 24, 26], (statId) => ({
       statId,
       value: 13 - index,
     })),
@@ -4484,11 +4606,12 @@ it.effect("returns a thirteen-team compact standings table in one result", () =>
     assert.strictEqual(compact.page.complete, true);
     assert.isUndefined(compact.page.next);
     assert.deepStrictEqual(
-      compact.standings.teams.map((row) => row.rank),
+      EffectArray.map(compact.standings.teams, (row) => row.rank),
       [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
     );
     assert.isTrue(
-      compact.standings.teams.every(
+      EffectArray.every(
+        compact.standings.teams,
         (row) =>
           row.categories === undefined &&
           row.categoryPoints === undefined &&
@@ -4497,7 +4620,7 @@ it.effect("returns a thirteen-team compact standings table in one result", () =>
       ),
       "the compact form carries rank, points, and record only",
     );
-    assert.isTrue(compact.standings.teams.some((row) => row.current));
+    assert.isTrue(EffectArray.some(compact.standings.teams, (row) => row.current));
 
     const detailed = yield* queries.getLeague(owner, {
       team: Array.getUnsafe(seeded, 0).id,
@@ -4613,7 +4736,8 @@ it.effect("reads standings with category totals and marks the linked team", () =
     assert.strictEqual(league.standings.categoryPoints?.status, "unsupported");
     assert.strictEqual(league.page.complete, true);
     assert.isTrue(
-      league.coverage.some(
+      EffectArray.some(
+        league.coverage,
         (entry) => entry.resource === "standings" && entry.status === "available",
       ),
     );
@@ -4716,26 +4840,30 @@ it.effect("reports rotisserie standings without inventing a record or weekly mat
     assert.strictEqual(league.standings.omittedCategories?.count, 2);
 
     const scoring = dictionary.status === "ok" ? (dictionary.scoring ?? []) : [];
-    const scoringRefs = new Set(scoring.map((category) => category.stat));
+    const scoringRefs = new Set(EffectArray.map(scoring, (category) => category.stat));
     const named = [...(row.categories ?? []), ...(row.categoryPoints ?? [])];
-    assert.isTrue(named.every((entry) => scoringRefs.has(entry.stat)));
+    assert.isTrue(EffectArray.every(named, (entry) => scoringRefs.has(entry.stat)));
     assert.isTrue(
-      named.every((entry) => entry.name.length > 0),
+      EffectArray.every(named, (entry) => entry.name.length > 0),
       "every category value carries the league's name for the stat",
     );
 
-    const pointStats = new Map((row.categoryPoints ?? []).map((entry) => [entry.stat, entry]));
-    const totalStats = new Map((row.categories ?? []).map((entry) => [entry.stat, entry]));
+    const pointStats = new Map(
+      EffectArray.map(row.categoryPoints ?? [], (entry) => [entry.stat, entry]),
+    );
+    const totalStats = new Map(
+      EffectArray.map(row.categories ?? [], (entry) => [entry.stat, entry]),
+    );
     const gaaRef = Array.getUnsafe(
-      scoring.filter((category) => category.abbreviation === "GAA"),
+      EffectArray.filter(scoring, (category) => category.abbreviation === "GAA"),
       0,
     ).stat;
     const gaRef = Array.getUnsafe(
-      scoring.filter((category) => category.abbreviation === "GA"),
+      EffectArray.filter(scoring, (category) => category.abbreviation === "GA"),
       0,
     ).stat;
     const savesRef = Array.getUnsafe(
-      scoring.filter((category) => category.abbreviation === "SV"),
+      EffectArray.filter(scoring, (category) => category.abbreviation === "SV"),
       0,
     ).stat;
     assert.deepStrictEqual(pointStats.get(gaaRef), {
@@ -4756,7 +4884,7 @@ it.effect("reports rotisserie standings without inventing a record or weekly mat
       value: 51,
     });
     assert.strictEqual(
-      (row.categoryPoints ?? []).filter((entry) => entry.value !== null).length,
+      EffectArray.filter(row.categoryPoints ?? [], (entry) => entry.value !== null).length,
       10,
     );
 
@@ -4764,7 +4892,8 @@ it.effect("reports rotisserie standings without inventing a record or weekly mat
     assert.strictEqual(matchups.status, "unsupported");
     if (matchups.status === "unsupported") {
       assert.isTrue(
-        matchups.coverage.some(
+        EffectArray.some(
+          matchups.coverage,
           (entry) => entry.resource === "matchups" && entry.status === "unsupported",
         ),
       );
@@ -4786,7 +4915,8 @@ it.effect("reports rotisserie standings without inventing a record or weekly mat
       assert.strictEqual(summary.categoryPoints.values.length, 13);
       assert.strictEqual(summary.categoryPoints.omittedCategories.count, 2);
       assert.isTrue(
-        summary.categoryPoints.values.every(
+        EffectArray.every(
+          summary.categoryPoints.values,
           (entry) => entry.name.length > 0 && entry.name !== entry.stat,
         ),
         "category totals carry the league's stat name beside the reference",
@@ -4794,8 +4924,11 @@ it.effect("reports rotisserie standings without inventing a record or weekly mat
     }
     assert.strictEqual(summary.categoryTotals?.status, "available");
     if (summary.categoryTotals?.status === "available") {
-      const gaa = summary.categoryTotals.values.find(
-        (entry) => entry.name === "Goals Against Average",
+      const gaa = EffectOption.getOrUndefined(
+        EffectArray.findFirst(
+          summary.categoryTotals.values,
+          (entry) => entry.name === "Goals Against Average",
+        ),
       );
       assert.strictEqual(
         gaa?.value,
@@ -4803,7 +4936,8 @@ it.effect("reports rotisserie standings without inventing a record or weekly mat
         "the season total is inlined beside the league's name for the category",
       );
       assert.isTrue(
-        summary.categoryTotals.values.some(
+        EffectArray.some(
+          summary.categoryTotals.values,
           (entry) => entry.name === "Save Percentage" && entry.value !== null,
         ),
       );
@@ -4838,7 +4972,10 @@ it.effect("states the rotisserie categories whose points your league does not pu
       teams: [
         {
           ...standing,
-          categoryPoints: standing.categoryPoints.filter((entry) => entry.statId !== 26),
+          categoryPoints: EffectArray.filter(
+            standing.categoryPoints,
+            (entry) => entry.statId !== 26,
+          ),
         },
       ],
     });
@@ -4856,10 +4993,12 @@ it.effect("states the rotisserie categories whose points your league does not pu
     }
     const row = Array.getUnsafe(league.standings.teams, 0);
     const savePercentage = Array.getUnsafe(
-      (row.categoryPoints ?? []).filter((entry) => entry.name === "Save Percentage"),
+      EffectArray.filter(row.categoryPoints ?? [], (entry) => entry.name === "Save Percentage"),
       0,
     ).stat;
-    const points = new Map((row.categoryPoints ?? []).map((entry) => [entry.stat, entry]));
+    const points = new Map(
+      EffectArray.map(row.categoryPoints ?? [], (entry) => [entry.stat, entry]),
+    );
 
     assert.strictEqual(row.categoryPoints?.length, 13);
     assert.deepStrictEqual(points.get(savePercentage), {
@@ -4870,7 +5009,8 @@ it.effect("states the rotisserie categories whose points your league does not pu
     });
     assert.strictEqual(points.get(savePercentage)?.value, null);
     assert.isTrue(
-      (row.categoryPoints ?? []).every(
+      EffectArray.every(
+        row.categoryPoints ?? [],
         (entry) => entry.value !== null || (entry.detail?.length ?? 0) > 0,
       ),
       "every unpublished category states why instead of returning a bare null",
@@ -4907,11 +5047,14 @@ it.effect("degrades one team summary section without failing the snapshot", () =
       byeWeek: 7,
     });
     assert.isTrue(
-      summary.coverage.some(
+      EffectArray.some(
+        summary.coverage,
         (entry) => entry.resource === "standings" && entry.status === "degraded",
       ),
     );
-    assert.isTrue(summary.failures.some((failure) => failure.code === "provider_invalid_response"));
+    assert.isTrue(
+      EffectArray.some(summary.failures, (failure) => failure.code === "provider_invalid_response"),
+    );
     assert.strictEqual(summary.remainingPlayerGames?.status, "unsupported");
     if (summary.remainingPlayerGames?.status === "unsupported") {
       assert.include(summary.remainingPlayerGames.detail, "bye week");
@@ -5211,12 +5354,16 @@ it.effect("reports a transaction range that starts before your league's history"
     assert.isFalse(ranged.window.truncated);
     assert.strictEqual(ranged.window.fetched, 50);
     assert.isTrue(
-      ranged.coverage.some(
+      EffectArray.some(
+        ranged.coverage,
         (entry) => entry.resource === "transactions" && entry.status === "degraded",
       ),
     );
     assert.isTrue(
-      ranged.failures.some((failure) => failure.code === "transaction_history_starts_after_range"),
+      EffectArray.some(
+        ranged.failures,
+        (failure) => failure.code === "transaction_history_starts_after_range",
+      ),
     );
   }).pipe(layerTools.provide(QueriesTestLayer)),
 );
@@ -5318,7 +5465,10 @@ it.effect("reports truncation when the transaction read reaches its page cap", (
     assert.isTrue(ranged.window.truncated);
     assert.strictEqual(ranged.window.fetched, 500);
     assert.isTrue(
-      ranged.failures.some((failure) => failure.code === "transaction_window_truncated"),
+      EffectArray.some(
+        ranged.failures,
+        (failure) => failure.code === "transaction_window_truncated",
+      ),
     );
   }).pipe(layerTools.provide(QueriesTestLayer)),
 );
@@ -5433,15 +5583,16 @@ it.effect("surfaces the rank and stat values that each provider-ordered sort use
       return;
     }
     assert.deepStrictEqual(
-      byActualRank.players.map((player) => player.actualRank),
+      EffectArray.map(byActualRank.players, (player) => player.actualRank),
       [4, 11],
     );
     assert.deepStrictEqual(
-      byActualRank.players.map((player) => player.percentOwnedDelta),
+      EffectArray.map(byActualRank.players, (player) => player.percentOwnedDelta),
       [2, 0],
     );
     assert.isTrue(
-      byActualRank.players.every(
+      EffectArray.every(
+        byActualRank.players,
         (player) =>
           !Object.hasOwn(player, "percentOwnedChange") &&
           Object.hasOwn(player, "percentOwnedDelta"),
@@ -5449,11 +5600,13 @@ it.effect("surfaces the rank and stat values that each provider-ordered sort use
       "the ownership change is reported once, under the field that carries your league delta",
     );
     assert.deepStrictEqual(
-      byActualRank.players.map((player) => player.percentStartedChange),
+      EffectArray.map(byActualRank.players, (player) => player.percentStartedChange),
       [null, 1],
       "a started change your league did not publish stays null instead of being invented",
     );
-    assert.isTrue(byActualRank.players.every((player) => player.statValue === undefined));
+    assert.isTrue(
+      EffectArray.every(byActualRank.players, (player) => player.statValue === undefined),
+    );
 
     const byOverallRank = yield* queries.searchPlayers(owner, {
       team: teamId,
@@ -5465,7 +5618,7 @@ it.effect("surfaces the rank and stat values that each provider-ordered sort use
       return;
     }
     assert.deepStrictEqual(
-      byOverallRank.players.map((player) => player.overallRank),
+      EffectArray.map(byOverallRank.players, (player) => player.overallRank),
       [3, 9],
     );
 
@@ -5486,7 +5639,7 @@ it.effect("surfaces the rank and stat values that each provider-ordered sort use
       return;
     }
     assert.deepStrictEqual(
-      byStat.players.map((player) => player.statValue),
+      EffectArray.map(byStat.players, (player) => player.statValue),
       [240, 120],
     );
   }).pipe(layerTools.provide(QueriesTestLayer)),
@@ -5576,7 +5729,8 @@ it.effect("reports this week's and next week's remaining player-games for hockey
       remaining: 46,
     });
     assert.isTrue(
-      summary.coverage.some(
+      EffectArray.some(
+        summary.coverage,
         (entry) => entry.resource === "remaining_player_games" && entry.status === "available",
       ),
     );
@@ -5665,7 +5819,7 @@ it.effect("reports each rostered player's scheduled games and the roster count p
       { date: "2026-10-25", rosterGames: 0 },
     ]);
     assert.deepStrictEqual(
-      schedule.players.map((player) => [
+      EffectArray.map(schedule.players, (player) => [
         player.name,
         player.status,
         player.gameCount,
@@ -5699,7 +5853,8 @@ it.effect("reports each rostered player's scheduled games and the roster count p
     assert.include(schedule.detail, "2026-10-19 to 2026-10-25");
     assert.include(schedule.detail, "no start time");
     assert.isTrue(
-      summary.coverage.some(
+      EffectArray.some(
+        summary.coverage,
         (entry) => entry.resource === "schedule" && entry.status === "available",
       ),
     );
@@ -5722,7 +5877,7 @@ it.effect(
       });
       const roster: ProviderRoster = {
         ...baseRoster,
-        players: baseRoster.players.map((player, index) => ({
+        players: EffectArray.map(baseRoster.players, (player, index) => ({
           ...player,
           proTeamAbbreviation: ["TOR", "BOS", "NYR", "ZZZ"][index],
           ...(index === 0 ? { proTeamKey: "nhl.t.21" } : {}),
@@ -5791,7 +5946,7 @@ it.effect(
         { date: "2026-10-22", rosterGames: 2, leagueGames: 1, teamsPlaying: 2, offNight: true },
       ]);
       assert.deepStrictEqual(
-        schedule.players.map((player) => [
+        EffectArray.map(schedule.players, (player) => [
           player.name,
           player.proTeam,
           player.status,
@@ -5865,7 +6020,8 @@ it.effect(
         "1 roster row has no professional team that could be identified, so its games are unknown.",
       );
       assert.isTrue(
-        summary.coverage.some(
+        EffectArray.some(
+          summary.coverage,
           (entry) => entry.resource === "schedule" && entry.source === "professional_games",
         ),
       );
@@ -5889,7 +6045,7 @@ it.effect(
         league: { ...hockeyLeagueFixture, rosterCoverage: "week" },
         roster: {
           ...roster,
-          players: roster.players.map((player) => ({
+          players: EffectArray.map(roster.players, (player) => ({
             ...player,
             proTeamKey: "nhl.t.21",
             proTeamAbbreviation: "TOR",
@@ -6067,8 +6223,16 @@ it.effect("serves a repeated schedule window from stored opponent facts", () =>
     }
     assert.strictEqual(DateTime.formatIso(secondSchedule.observedAt), "2026-10-19T12:00:00.000Z");
     assert.deepStrictEqual(
-      secondSchedule.players.map((player) => [player.name, player.gameCount, player.games]),
-      firstSchedule.players.map((player) => [player.name, player.gameCount, player.games]),
+      EffectArray.map(secondSchedule.players, (player) => [
+        player.name,
+        player.gameCount,
+        player.games,
+      ]),
+      EffectArray.map(firstSchedule.players, (player) => [
+        player.name,
+        player.gameCount,
+        player.games,
+      ]),
     );
     assert.deepStrictEqual(secondSchedule.dates, firstSchedule.dates);
 
@@ -6078,7 +6242,10 @@ it.effect("serves a repeated schedule window from stored opponent facts", () =>
       source: "yahoo",
     });
     assert.deepStrictEqual(
-      identities.map((identity) => [identity.sourceTeamIdentifier, identity.providerTeamKey]),
+      EffectArray.map(identities, (identity) => [
+        identity.sourceTeamIdentifier,
+        identity.providerTeamKey,
+      ]),
       [
         ["BOS", "fixture.t.2"],
         ["TOR", "fixture.t.1"],
@@ -6182,7 +6349,7 @@ it.effect("keeps a stale opponent's previous observation when the re-read fails"
       return;
     }
     assert.deepStrictEqual(
-      refused.failures.map((failure) => failure.code),
+      EffectArray.map(refused.failures, (failure) => failure.code),
       ["schedule_fact_stale"],
     );
     assert.strictEqual(refused.schedule?.status, "unsupported");
@@ -6302,7 +6469,7 @@ it.effect("serves a day of hourly sweeps with one newly covered date per team", 
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
     const seeded = yield* seedOpponentTeams(fake, ownerTeamKeys, { periodWindow: undefined });
-    const teamIds = seeded.map((row) => row.id);
+    const teamIds = EffectArray.map(seeded, (row) => row.id);
     const tickReads: Array<number> = [];
     const dailyReads: Array<number> = [];
 
@@ -6340,7 +6507,7 @@ it.effect("serves a day of hourly sweeps with one newly covered date per team", 
     assert.deepStrictEqual(tickReads.slice(0, 3), [15, 0, 0]);
     assert.deepStrictEqual(tickReads.slice(24, 27), [5, 0, 0]);
     assert.strictEqual(
-      tickReads.slice(48, 51).reduce((total, reads) => total + reads, 0),
+      EffectArray.reduce(tickReads.slice(48, 51), 0, (total, reads) => total + reads),
       5,
     );
   }).pipe(layerTools.provide(QueriesTestLayer)),
@@ -6388,7 +6555,11 @@ it.effect("uses the scoring week's opponent for a league whose coverage is a wee
     assert.strictEqual(schedule.coverage, "week");
     assert.isUndefined(schedule.dates);
     assert.deepStrictEqual(
-      schedule.players.map((player) => [player.status, player.gameCount, player.games]),
+      EffectArray.map(schedule.players, (player) => [
+        player.status,
+        player.gameCount,
+        player.games,
+      ]),
       [
         ["scheduled", 1, [{ opponent: "SEA", home: true }]],
         ["no_games", 0, []],
@@ -6429,7 +6600,8 @@ it.effect("refuses a date window it cannot establish instead of inventing one", 
     assert.include(schedule.detail, "`days`");
     assert.deepStrictEqual(yield* fake.schedulePeriods, []);
     assert.isTrue(
-      summary.coverage.some(
+      EffectArray.some(
+        summary.coverage,
         (entry) => entry.resource === "schedule" && entry.status === "unsupported",
       ),
     );
@@ -6504,7 +6676,7 @@ it.effect("reads the rest of your league's week for a league with no scoring per
       { date: "2026-11-01", rosterGames: 0 },
     ]);
     assert.deepStrictEqual(
-      schedule.players.map((player) => [player.name, player.status, player.gameCount]),
+      EffectArray.map(schedule.players, (player) => [player.name, player.status, player.gameCount]),
       [
         ["Synthetic Tonight", "scheduled", 1],
         ["Synthetic Back To Back", "scheduled", 2],
@@ -6840,12 +7012,16 @@ it.effect("shares one player reference between the roster and schedule sections"
       return;
     }
     assert.deepStrictEqual(
-      schedule.players.map((player) => player.player),
-      summary.roster?.map((player) => player.player),
+      EffectArray.map(schedule.players, (player) => player.player),
+      optionalArrayValue(summary.roster, (value) =>
+        EffectArray.map(value, (player) => player.player),
+      ),
     );
     assert.deepStrictEqual(
-      schedule.players.map((player) => player.name),
-      summary.roster?.map((player) => player.name),
+      EffectArray.map(schedule.players, (player) => player.name),
+      optionalArrayValue(summary.roster, (value) =>
+        EffectArray.map(value, (player) => player.name),
+      ),
     );
   }).pipe(layerTools.provide(QueriesTestLayer)),
 );
@@ -6905,7 +7081,7 @@ it.effect("fits a multi-section team summary inside the result budget", () =>
       assert.strictEqual(summary.standings.teams.length, 14);
     }
 
-    const names = new Set((summary.roster ?? []).map((player) => player.name));
+    const names = new Set(EffectArray.map(summary.roster ?? [], (player) => player.name));
     let next = summary.page.next;
     while (next !== undefined) {
       const page = yield* queries.getTeamSummary(owner, { team: teamId, cursor: next });
@@ -6939,16 +7115,19 @@ function thirteenTeamRotoLeague(): {
   readonly standings: ProviderStandings;
 } {
   const leagueKey = "477.l.31027";
-  const displayOnly = [
-    { statId: 29, name: "Saves Percentage", displayName: "SV%", abbreviation: "SV%" },
-    { statId: 30, name: "Minutes Played", displayName: "MIN", abbreviation: "MIN" },
-  ].map((category) => ({
-    ...category,
-    group: "goaltending",
-    enabled: true,
-    displayOnly: true,
-    positionTypes: ["P", "G"],
-  }));
+  const displayOnly = EffectArray.map(
+    [
+      { statId: 29, name: "Saves Percentage", displayName: "SV%", abbreviation: "SV%" },
+      { statId: 30, name: "Minutes Played", displayName: "MIN", abbreviation: "MIN" },
+    ],
+    (category) => ({
+      ...category,
+      group: "goaltending",
+      enabled: true,
+      displayOnly: true,
+      positionTypes: ["P", "G"],
+    }),
+  );
   const statIds = [1, 2, 3, 8, 14, 31, 32, 19, 22, 23, 25, 24, 26, 29, 30];
   return {
     league: {
@@ -6967,8 +7146,8 @@ function thirteenTeamRotoLeague(): {
           providerTeamKey: `${leagueKey}.t.${String(index + 1)}`,
           name: `Synthetic Fantasy Squad ${String(index + 1)}`,
           rank: index + 1,
-          points: Object.fromEntries(statIds.map((statId) => [statId, 15 - index])),
-          totals: Object.fromEntries(statIds.map((statId) => [statId, 320 - index])),
+          points: Object.fromEntries(EffectArray.map(statIds, (statId) => [statId, 15 - index])),
+          totals: Object.fromEntries(EffectArray.map(statIds, (statId) => [statId, 320 - index])),
         }),
       ),
     },
@@ -7377,7 +7556,7 @@ function seed(
       0,
     );
     const discovered = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
-    return discovered.map((row) => ({ id: row.id }));
+    return EffectArray.map(discovered, (row) => ({ id: row.id }));
   }).pipe(Effect.orDie);
 }
 
@@ -7403,7 +7582,7 @@ function seedOpponentTeams(
   return Effect.gen(function* () {
     const seeded = yield* seed(
       fake,
-      teamKeys.map((key, index) => team(key, `Hockey ${String(index + 1)}`, "nhl")),
+      EffectArray.map(teamKeys, (key, index) => team(key, `Hockey ${String(index + 1)}`, "nhl")),
       {
         league: { ...hockeyLeagueFixture, periodWindow: options.periodWindow },
         roster: rosterFixture({
@@ -7453,7 +7632,7 @@ function opponentSchedule(providerTeamKey: string): import("./Provider.ts").Prov
 }
 
 function scheduleDateReads(periods: ReadonlyArray<ProviderSchedulePeriod>): number {
-  return periods.reduce((total, period) => {
+  return EffectArray.reduce(periods, 0, (total, period) => {
     if (period.type === "week") {
       return total;
     }
@@ -7465,7 +7644,7 @@ function scheduleDateReads(periods: ReadonlyArray<ProviderSchedulePeriod>): numb
       ) +
       1
     );
-  }, 0);
+  });
 }
 
 function scheduleFixture(input: {
@@ -7487,7 +7666,7 @@ function scheduleFixture(input: {
     providerTeamKey: input.providerTeamKey,
     period: { type: "date", start: input.dates[0] ?? "", end: input.dates.at(-1) ?? "" },
     dates: input.dates,
-    players: input.players.map((player) => ({
+    players: EffectArray.map(input.players, (player) => ({
       providerPlayerKey: player.key,
       name: player.name,
       proTeamKey: player.proTeamKey,
@@ -7705,42 +7884,45 @@ const rotoLeagueFixture: ProviderLeagueSettings = {
     startingSlotsMayStandEmpty: true,
     reserveEligibility: { kind: "published_positions" },
   },
-  statCategories: [
-    { statId: 1, name: "Goals", displayName: "Goals", abbreviation: "G" },
-    { statId: 2, name: "Assists", displayName: "Assists", abbreviation: "A" },
-    { statId: 3, name: "Points", displayName: "Points", abbreviation: "P" },
-    {
-      statId: 8,
-      name: "Powerplay Points",
-      displayName: "Powerplay Points",
-      abbreviation: "PPP",
-    },
-    { statId: 14, name: "Shots on Goal", displayName: "Shots on Goal", abbreviation: "SOG" },
-    { statId: 31, name: "Hits", displayName: "Hits", abbreviation: "HIT" },
-    { statId: 32, name: "Blocks", displayName: "Blocks", abbreviation: "BLK" },
-    { statId: 19, name: "Wins", displayName: "Wins", abbreviation: "W" },
-    { statId: 22, name: "Goals Against", displayName: "Goals Against", abbreviation: "GA" },
-    {
-      statId: 23,
-      name: "Goals Against Average",
-      displayName: "Goals Against Average",
-      abbreviation: "GAA",
-    },
-    { statId: 25, name: "Saves", displayName: "Saves", abbreviation: "SV" },
-    { statId: 24, name: "Shots Against", displayName: "Shots Against", abbreviation: "SA" },
-    {
-      statId: 26,
-      name: "Save Percentage",
-      displayName: "Save Percentage",
-      abbreviation: "SV%",
-    },
-  ].map((category) => ({
-    ...category,
-    group: "offense",
-    enabled: true,
-    displayOnly: false,
-    positionTypes: ["P"],
-  })),
+  statCategories: EffectArray.map(
+    [
+      { statId: 1, name: "Goals", displayName: "Goals", abbreviation: "G" },
+      { statId: 2, name: "Assists", displayName: "Assists", abbreviation: "A" },
+      { statId: 3, name: "Points", displayName: "Points", abbreviation: "P" },
+      {
+        statId: 8,
+        name: "Powerplay Points",
+        displayName: "Powerplay Points",
+        abbreviation: "PPP",
+      },
+      { statId: 14, name: "Shots on Goal", displayName: "Shots on Goal", abbreviation: "SOG" },
+      { statId: 31, name: "Hits", displayName: "Hits", abbreviation: "HIT" },
+      { statId: 32, name: "Blocks", displayName: "Blocks", abbreviation: "BLK" },
+      { statId: 19, name: "Wins", displayName: "Wins", abbreviation: "W" },
+      { statId: 22, name: "Goals Against", displayName: "Goals Against", abbreviation: "GA" },
+      {
+        statId: 23,
+        name: "Goals Against Average",
+        displayName: "Goals Against Average",
+        abbreviation: "GAA",
+      },
+      { statId: 25, name: "Saves", displayName: "Saves", abbreviation: "SV" },
+      { statId: 24, name: "Shots Against", displayName: "Shots Against", abbreviation: "SA" },
+      {
+        statId: 26,
+        name: "Save Percentage",
+        displayName: "Save Percentage",
+        abbreviation: "SV%",
+      },
+    ],
+    (category) => ({
+      ...category,
+      group: "offense",
+      enabled: true,
+      displayOnly: false,
+      positionTypes: ["P"],
+    }),
+  ),
   statModifiers: [],
 };
 
@@ -7766,14 +7948,20 @@ const rotoStanding = (values: {
     seasonMoves: 6,
     weeklyAdds: { used: 1, coverage: { type: "week", week: 5 } },
   },
-  categoryTotals: [1, 2, 3, 8, 14, 31, 32, 19, 22, 23, 25, 24, 26, 29, 30].map((statId) => ({
-    statId,
-    value: values.totals[statId] ?? null,
-  })),
-  categoryPoints: [1, 2, 3, 8, 14, 31, 32, 19, 22, 23, 25, 24, 26, 29, 30].map((statId) => ({
-    statId,
-    value: values.points[statId] ?? null,
-  })),
+  categoryTotals: EffectArray.map(
+    [1, 2, 3, 8, 14, 31, 32, 19, 22, 23, 25, 24, 26, 29, 30],
+    (statId) => ({
+      statId,
+      value: values.totals[statId] ?? null,
+    }),
+  ),
+  categoryPoints: EffectArray.map(
+    [1, 2, 3, 8, 14, 31, 32, 19, 22, 23, 25, 24, 26, 29, 30],
+    (statId) => ({
+      statId,
+      value: values.points[statId] ?? null,
+    }),
+  ),
 });
 
 const leagueFixture: ProviderLeagueSettings = {
@@ -7851,13 +8039,14 @@ function playerSearchWith(
     detail:
       windows.length === 0
         ? "This league publishes no recent-form player rank, so its pool cannot be ordered by recent form."
-        : `This league publishes a recent-form player rank for ${windows
-            .map((window) =>
+        : `This league publishes a recent-form player rank for ${EffectArray.join(
+            EffectArray.map(windows, (window) =>
               window.kind === "last_days"
                 ? `the last ${String(window.days)} days`
                 : `the last ${String(window.weeks)} weeks`,
-            )
-            .join(", ")}.`,
+            ),
+            ", ",
+          )}.`,
   };
 }
 
@@ -7984,7 +8173,7 @@ function leagueRosterFixture(
   return {
     ...roster,
     name,
-    players: roster.players.map((player, index) => ({
+    players: EffectArray.map(roster.players, (player, index) => ({
       ...player,
       providerPlayerKey: `461.p.${String(playerKeyStart + index)}`,
       name: `${name} Player ${String(index)}`,
@@ -8047,7 +8236,7 @@ const playerDetails = [
 ];
 
 function poolPlayerDetails(playerKeys: ReadonlyArray<string>): ReadonlyArray<ProviderPlayerDetail> {
-  return playerKeys.map((providerPlayerKey, index) => ({
+  return EffectArray.map(playerKeys, (providerPlayerKey, index) => ({
     providerPlayerKey,
     name: `Pool Player ${String(index + 1)}`,
     primaryPosition: "RB",
@@ -8080,11 +8269,11 @@ function includesText(value: unknown, needle: string): boolean {
   if (typeof value === "string") {
     return value.includes(needle);
   }
-  if (globalThis.Array.isArray(value)) {
-    return value.some((item) => includesText(item, needle));
+  if (EffectArray.isArray(value)) {
+    return EffectArray.some(value, (item) => includesText(item, needle));
   }
   if (typeof value === "object" && value !== null) {
-    return Object.values(value).some((item) => includesText(item, needle));
+    return EffectArray.some(Object.values(value), (item) => includesText(item, needle));
   }
   return false;
 }

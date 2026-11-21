@@ -1,3 +1,4 @@
+import { EffectArray } from "@lineupkeep/collections";
 export const hostedBrowserViewports = {
   desktop: { width: 1100, height: 720 },
   phone: { width: 390, height: 844 },
@@ -276,5 +277,5 @@ function isHostedBrowserFailure(value: unknown): value is HostedBrowserFailure {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !EffectArray.isArray(value);
 }

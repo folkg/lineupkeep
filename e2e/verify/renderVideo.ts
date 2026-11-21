@@ -7,6 +7,7 @@ import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { chromium } from "@playwright/test";
 import { Effect } from "effect";
 import { Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import {
   artifactExists,
@@ -18,6 +19,9 @@ import {
   ShotsJson,
 } from "./evidence.ts";
 import type { Shots } from "./evidence.ts";
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 export function videoDirection(
   direction: Shots,
@@ -39,7 +43,7 @@ export function videoDirection(
     ) {
       throw new Error("Scene timing must fit the raw video and remain ordered without overlaps.");
     }
-    if ([scene.title, scene.text].some((value) => value.trim() === "")) {
+    if (EffectArray.some([scene.title, scene.text], (value) => value.trim() === "")) {
       throw new Error("Each scene needs a title and directing text.");
     }
     if (scene.claims.length + scene.artifacts.length === 0) {
@@ -73,7 +77,9 @@ async function renderVideo(directory: string): Promise<void> {
   const claims = Effect.runSync(
     Schema.decodeEffect(ClaimsJson)(await readFile(join(root, "claims.json"), "utf8")),
   );
-  const status = new Map(claims.criteria.map((criterion) => [criterion.id, criterion.status]));
+  const status = new Map(
+    EffectArray.map(claims.criteria, (criterion) => [criterion.id, criterion.status]),
+  );
 
   await rm(join(root, "media-check.json"), { force: true });
   const inputs = await renderInputs(root, direction.rawVideo);
@@ -88,7 +94,9 @@ async function renderVideo(directory: string): Promise<void> {
   );
   const misaligned = sceneAlignmentProblems(direction, claims, results);
   if (misaligned.length > 0) {
-    throw new Error(`Scenes do not match the recorded steps:\n- ${misaligned.join("\n- ")}`);
+    throw new Error(
+      `Scenes do not match the recorded steps:\n- ${EffectArray.join(misaligned, "\n- ")}`,
+    );
   }
   const cards = join(root, "direction");
   await mkdir(cards, { recursive: true });
@@ -135,9 +143,12 @@ async function renderVideo(directory: string): Promise<void> {
     "-y",
     "-i",
     rawVideo,
-    ...paths.flatMap((path) => ["-loop", "1", "-i", path]),
+    ...EffectArray.flatMap(paths, (path) => {
+      const flatMapped1 = ["-loop", "1", "-i", path];
+      return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+    }),
     "-filter_complex",
-    filters.join(";"),
+    EffectArray.join(filters, ";"),
     "-map",
     `[scene${paths.length}]`,
     "-t",
@@ -153,7 +164,7 @@ async function renderVideo(directory: string): Promise<void> {
   ]);
   await ffmpeg(root, "decode.log", ["-v", "error", "-i", output, "-f", "null", "-"]);
   const frames = await Promise.all(
-    (await extractReviewFrames(root, output, direction)).map(async (name) => ({
+    EffectArray.map(await extractReviewFrames(root, output, direction), async (name) => ({
       name,
       sha256: await sha256(join(root, "review-frames", name)),
     })),
@@ -187,7 +198,10 @@ function sceneStatus(
 ): string {
   return claims.length === 0
     ? `TEST RUN: ${verdict.toUpperCase()}`
-    : claims.map((claim) => `${claim} ${String(status.get(claim)).toUpperCase()}`).join(" · ");
+    : EffectArray.join(
+        EffectArray.map(claims, (claim) => `${claim} ${String(status.get(claim)).toUpperCase()}`),
+        " · ",
+      );
 }
 
 async function extractReviewFrames(

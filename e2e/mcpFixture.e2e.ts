@@ -1,6 +1,7 @@
 import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
 import { Effect } from "effect";
 import { Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { expect, signUp, test } from "./support";
 import { isMcpExchangeAttachment, McpExchangeJson } from "./verify/mcpEvidence";
@@ -31,12 +32,11 @@ test("authorizes named browser personas independently through the fixture", asyn
     connections: [{ provider: decodeProviderKey("yahoo"), status: "ready" }],
   });
   expect(isolated.structuredContent).toEqual({ connections: [] });
-  const calls = test
-    .info()
-    .attachments.filter(isMcpExchangeAttachment)
-    .map((attachment) =>
+  const calls = EffectArray.map(
+    EffectArray.filter(test.info().attachments, isMcpExchangeAttachment),
+    (attachment) =>
       Effect.runSync(Schema.decodeUnknownEffect(McpExchangeJson)(attachment.body?.toString())),
-    );
+  );
   expect(calls.at(-2)?.persona).toBe("owner");
   expect(calls.at(-1)?.persona).toBe("other");
 });

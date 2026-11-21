@@ -1,3 +1,6 @@
+import { EffectArray } from "@lineupkeep/collections";
+import { EffectOption } from "@lineupkeep/collections";
+
 import type {
   TransactionMoveDayView,
   TransactionMoveView,
@@ -5,9 +8,24 @@ import type {
 } from "#contracts/connections/transactionContract.ts";
 
 import { moveCount, moveSummary } from "./transactionCopy";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 function groupCards(input: GroupCardsInput): ReadonlyArray<GroupCard> {
-  const byGroup = new Map(input.groups.map((group) => [group.group, group] as const));
+  const byGroup = new Map(EffectArray.map(input.groups, (group) => [group.group, group] as const));
   const fixesByFunded = new Map<string, Array<TransactionMoveView>>();
   const leads = new Map<string, Array<TransactionMoveView>>();
   for (const move of input.moves) {
@@ -35,13 +53,20 @@ function groupCards(input: GroupCardsInput): ReadonlyArray<GroupCard> {
       key,
       lead,
       moves: ordered,
-      fixes: ordered.flatMap((move) => fixesByFunded.get(move.move) ?? []),
+      fixes: EffectArray.flatMap(ordered, (move) => {
+        const flatMapped1 = fixesByFunded.get(move.move) ?? [];
+        return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+      }),
       today: input.today,
       ...(group === undefined ? {} : { group }),
     });
   }
   for (const [funded, fixes] of fixesByFunded) {
-    if (cards.some((card) => card.moves.some((move) => move.move === funded))) {
+    if (
+      EffectArray.some(cards, (card) =>
+        EffectArray.some(card.moves, (move) => move.move === funded),
+      )
+    ) {
       continue;
     }
     const ordered = [...fixes].sort((left, right) => left.position - right.position);
@@ -67,43 +92,58 @@ export function dayTeamCards(
   day: TransactionMoveDayView | undefined,
   groups: ReadonlyArray<TransactionPlanGroupView>,
 ): ReadonlyArray<DayTeamCards> {
-  return (day?.teams ?? []).map((team) => ({
-    team: team.team,
-    cards: groupCards({ moves: team.moves, groups, today: day?.today === true }),
-  }));
+  return optionalArrayValue(day?.teams ?? [], (value) =>
+    EffectArray.map(value, (team) => ({
+      team: team.team,
+      cards: groupCards({ moves: team.moves, groups, today: day?.today === true }),
+    })),
+  );
 }
 
 export function cardMembers(card: GroupCard): ReadonlyArray<TransactionMoveView> {
-  return [...card.moves, ...card.fixes].filter((move) => move.decision !== "discarded");
+  return EffectArray.filter(
+    [...card.moves, ...card.fixes],
+    (move) => move.decision !== "discarded",
+  );
 }
 
 export function cardStatus(card: GroupCard): CardStatus {
   const members = cardMembers(card);
-  const statuses = members.map((move) => move.status);
-  if (statuses.every((status) => status === "claim_waiting")) {
+  const statuses = EffectArray.map(members, (move) => move.status);
+  if (EffectArray.every(statuses, (status) => status === "claim_waiting")) {
     return { kind: "waiting", label: "With the league" };
   }
-  if (statuses.every((status) => status === "offer_sent")) {
+  if (EffectArray.every(statuses, (status) => status === "offer_sent")) {
     return { kind: "waiting", label: "Offer sent" };
   }
-  if (statuses.every((status) => status === "claim_lost_retrying")) {
+  if (EffectArray.every(statuses, (status) => status === "claim_lost_retrying")) {
     return { kind: "waiting", label: "Claim lost, retrying" };
   }
   if (
-    statuses.every(
+    EffectArray.every(
+      statuses,
       (status) =>
         status === "claim_waiting" || status === "claim_lost_retrying" || status === "offer_sent",
     )
   ) {
     return { kind: "waiting", label: "Waiting" };
   }
-  if (statuses.some((status) => status === "ran_immediately" || status === "ran_on_schedule")) {
-    return statuses.every((status) => status === "ran_immediately" || status === "ran_on_schedule")
+  if (
+    EffectArray.some(
+      statuses,
+      (status) => status === "ran_immediately" || status === "ran_on_schedule",
+    )
+  ) {
+    return EffectArray.every(
+      statuses,
+      (status) => status === "ran_immediately" || status === "ran_on_schedule",
+    )
       ? { kind: "ran" }
       : { kind: "partly-ran" };
   }
   if (
-    statuses.some(
+    EffectArray.some(
+      statuses,
       (status) =>
         status === "failed" ||
         status === "unknown" ||
@@ -116,15 +156,17 @@ export function cardStatus(card: GroupCard): CardStatus {
   }
   if (
     card.group?.status === "blocked" ||
-    statuses.some((status) => status === "skipped") ||
-    members.some((move) => move.validation.status !== "current")
+    EffectArray.some(statuses, (status) => status === "skipped") ||
+    EffectArray.some(members, (move) => move.validation.status !== "current")
   ) {
     return { kind: "blocked" };
   }
-  if (statuses.every((status) => status === "open_now")) {
+  if (EffectArray.every(statuses, (status) => status === "open_now")) {
     return { kind: "running" };
   }
-  if (statuses.every((status) => status === "open_confirmed" || status === "open_now")) {
+  if (
+    EffectArray.every(statuses, (status) => status === "open_confirmed" || status === "open_now")
+  ) {
     return {
       kind: "scheduled",
       ...(card.lead.sendsAt === undefined ? {} : { sendsAt: card.lead.sendsAt }),
@@ -135,7 +177,7 @@ export function cardStatus(card: GroupCard): CardStatus {
 
 function failedLabel(statuses: ReadonlyArray<TransactionMoveView["status"]>): string {
   const first = statuses[0];
-  if (first === undefined || statuses.some((status) => status !== first)) {
+  if (first === undefined || EffectArray.some(statuses, (status) => status !== first)) {
     return "Failed";
   }
   if (first === "claim_lost") {
@@ -214,11 +256,15 @@ export function cardTitle(card: GroupCard): string {
 function blockedAction(card: GroupCard): CardAction {
   const members = cardMembers(card);
   const remaining = discardableMoves(card);
-  const roster = members.find((move) => rosterReason(move) !== undefined);
+  const roster = EffectOption.getOrUndefined(
+    EffectArray.findFirst(members, (move) => rosterReason(move) !== undefined),
+  );
   if (roster !== undefined && card.fixes.length === 0) {
     return { kind: "cure", text: reasonText(members, roster) };
   }
-  const dependency = members.find((move) => dependencyReason(move) !== undefined);
+  const dependency = EffectOption.getOrUndefined(
+    EffectArray.findFirst(members, (move) => dependencyReason(move) !== undefined),
+  );
   if (dependency !== undefined) {
     return { kind: "dependency", text: reasonText(members, dependency), moves: remaining };
   }
@@ -262,16 +308,20 @@ function retriable(card: GroupCard): boolean {
   if (members.length === 0) {
     return false;
   }
-  if (members.some((move) => move.phase !== undefined)) {
+  if (EffectArray.some(members, (move) => move.phase !== undefined)) {
     return false;
   }
-  if (members.some((move) => move.validation.status !== "current")) {
+  if (EffectArray.some(members, (move) => move.validation.status !== "current")) {
     return false;
   }
-  if (!members.every((move) => move.result === "failed" || move.result === "skipped")) {
+  if (
+    !EffectArray.every(members, (move) => move.result === "failed" || move.result === "skipped")
+  ) {
     return false;
   }
-  return (card.group?.actions ?? []).every((action) => action.outcome !== "executed");
+  return optionalArrayValue(card.group?.actions ?? [], (value) =>
+    EffectArray.every(value, (action) => action.outcome !== "executed"),
+  );
 }
 
 function moveIsDiscardable(move: TransactionMoveView): boolean {
@@ -286,22 +336,28 @@ function moveIsDiscardable(move: TransactionMoveView): boolean {
 }
 
 function discardableMoves(card: GroupCard): ReadonlyArray<TransactionMoveView> {
-  return cardMembers(card).filter(moveIsDiscardable);
+  return EffectArray.filter(cardMembers(card), moveIsDiscardable);
 }
 
 function rosterReason(
   move: TransactionMoveView,
 ): TransactionMoveView["validation"]["reasons"][number] | undefined {
-  return move.validation.reasons.find(
-    (reason) => reason.code === "roster_full" || reason.code === "slot_illegal",
+  return EffectOption.getOrUndefined(
+    EffectArray.findFirst(
+      move.validation.reasons,
+      (reason) => reason.code === "roster_full" || reason.code === "slot_illegal",
+    ),
   );
 }
 
 function dependencyReason(
   move: TransactionMoveView,
 ): TransactionMoveView["validation"]["reasons"][number] | undefined {
-  return move.validation.reasons.find(
-    (reason) => reason.code === "pending_outcome" || reason.code === "blocked_by_move",
+  return EffectOption.getOrUndefined(
+    EffectArray.findFirst(
+      move.validation.reasons,
+      (reason) => reason.code === "pending_outcome" || reason.code === "blocked_by_move",
+    ),
   );
 }
 
@@ -315,7 +371,9 @@ function reasonText(
 }
 
 function invalidReasonText(members: ReadonlyArray<TransactionMoveView>): string | undefined {
-  const invalid = members.find((move) => move.validation.status !== "current");
+  const invalid = EffectOption.getOrUndefined(
+    EffectArray.findFirst(members, (move) => move.validation.status !== "current"),
+  );
   const reason = invalid?.validation.reasons[0];
   if (invalid === undefined || reason === undefined) {
     return undefined;
@@ -324,18 +382,21 @@ function invalidReasonText(members: ReadonlyArray<TransactionMoveView>): string 
 }
 
 function firstResultDetail(members: ReadonlyArray<TransactionMoveView>): string | undefined {
-  const refused = members.find(
-    (move) =>
-      move.resultDetail !== undefined &&
-      (move.result === "failed" || move.result === "unknown" || move.result === "skipped"),
+  const refused = EffectOption.getOrUndefined(
+    EffectArray.findFirst(
+      members,
+      (move) =>
+        move.resultDetail !== undefined &&
+        (move.result === "failed" || move.result === "unknown" || move.result === "skipped"),
+    ),
   );
   return refused?.resultDetail;
 }
 
 function cardPosition(card: GroupCard): number {
   return Math.min(
-    ...card.moves.map((move) => move.position),
-    ...card.fixes.map((move) => move.position),
+    ...EffectArray.map(card.moves, (move) => move.position),
+    ...EffectArray.map(card.fixes, (move) => move.position),
   );
 }
 

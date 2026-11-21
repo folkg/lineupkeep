@@ -1,4 +1,5 @@
 import { DateTime } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type { LineupRun } from "#contexts/connections/LineupRun.ts";
 import type { ProfessionalGame } from "#contexts/connections/ProfessionalGame.ts";
@@ -17,7 +18,8 @@ export function nextLineupTick(now: DateTime.Utc): DateTime.Utc {
 }
 
 export function todayRunOf(runs: ReadonlyArray<LineupRun>): TodayLineupRun {
-  const verified = runs.some(
+  const verified = EffectArray.some(
+    runs,
     (run) =>
       run.outcome?.verified === true &&
       (run.outcome.kind === "changed" || run.outcome.kind === "no_op"),
@@ -45,14 +47,16 @@ export function decideScheduleGate(input: {
   readonly todayRun: TodayLineupRun;
 }): ScheduleGateDecision {
   for (const key of input.providerGameKeys) {
-    const games = input.games.filter(
+    const games = EffectArray.filter(
+      input.games,
       (game) => gameCanBePlayed(game) && gameInvolvesTeam(game, new Set([key])),
     );
-    if (games.some((game) => game.startTime === null)) {
+    if (EffectArray.some(games, (game) => game.startTime === null)) {
       return run("game_start_unknown");
     }
     if (
-      !games.some(
+      !EffectArray.some(
+        games,
         (game) =>
           game.startTime !== null &&
           DateTime.toEpochMillis(game.startTime.instant) >=

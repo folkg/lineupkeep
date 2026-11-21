@@ -12,11 +12,30 @@ import type {
   TestResult,
   TestStep,
 } from "@playwright/test/reporter";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 
 import { hasCheckpoint } from "./capture.ts";
 import { actingPersonas } from "./evidence.ts";
 import { isMcpExchangeAttachment } from "./mcpEvidence.ts";
 import { isServiceCallAttachment } from "./serviceEvidence.ts";
+
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
+
 export default class VerificationReporter implements Reporter {
   constructor(options: { readonly directory: string }) {
     this.directory = options.directory;
@@ -39,7 +58,7 @@ export default class VerificationReporter implements Reporter {
         result.startTime,
         recordingVideo ? videoStart(result) : undefined,
       ),
-      attachments: result.attachments.flatMap((attachment) => {
+      attachments: EffectArray.flatMap(result.attachments, (attachment) => {
         if (attachment.path !== undefined) {
           return [{ name: attachment.name, path: relative(this.directory, attachment.path) }];
         }
@@ -83,40 +102,57 @@ export default class VerificationReporter implements Reporter {
     );
     await writeFile(
       join(this.directory, "summary.md"),
-      [
-        "# Application verification run",
-        "",
-        `Automated assertions: **${verdict}**. Selected tests: ${this.planned}.`,
-        "",
-        "This is scoped test evidence, not a claim that every feature or deployment is verified.",
-        recordingVideo
-          ? "Raw videos are unreviewed capture. Steps carry `videoSeconds`, an estimate of their position in the test's page video; it is absent when unknown, and a test with several page videos has no known positions. Confirm every caption against the extracted review frames."
-          : "No video was recorded.",
-        "",
-        "Next: write claims.json citing the test and step titles below (or a whole test), then run `bun run verify:review` on this directory. See run.json for source and environment, doctor.json for readiness, results.json for steps and errors, and report/index.html for traces.",
-        "",
-        ...this.attempts.flatMap((attempt) => [
-          `## ${attempt.status}: ${attempt.title}`,
+      optionalArrayValue(
+        [
+          "# Application verification run",
           "",
-          `Source: ${attempt.source}`,
+          `Automated assertions: **${verdict}**. Selected tests: ${this.planned}.`,
           "",
-          "Steps:",
-          ...attempt.steps.flatMap((step) => [
-            `- ${step.status}: ${step.title}`,
-            ...(step.personas.length === 0
-              ? []
-              : [`  - Acting personas: ${step.personas.join(", ")}`]),
-            ...[...step.mcpExchanges, ...step.serviceCalls].map((name) => {
-              const path = attempt.attachments.find((attachment) => attachment.name === name)?.path;
-              return `  - ${name}: [transcript](${path})`;
-            }),
-          ]),
+          "This is scoped test evidence, not a claim that every feature or deployment is verified.",
+          recordingVideo
+            ? "Raw videos are unreviewed capture. Steps carry `videoSeconds`, an estimate of their position in the test's page video; it is absent when unknown, and a test with several page videos has no known positions. Confirm every caption against the extracted review frames."
+            : "No video was recorded.",
           "",
-          "Attachments (cite these exact paths):",
-          ...attempt.attachments.map((attachment) => `- ${attachment.name}: ${attachment.path}`),
+          "Next: write claims.json citing the test and step titles below (or a whole test), then run `bun run verify:review` on this directory. See run.json for source and environment, doctor.json for readiness, results.json for steps and errors, and report/index.html for traces.",
           "",
-        ]),
-      ].join("\n"),
+          ...EffectArray.flatMap(this.attempts, (attempt) => {
+            const flatMapped1 = [
+              `## ${attempt.status}: ${attempt.title}`,
+              "",
+              `Source: ${attempt.source}`,
+              "",
+              "Steps:",
+              ...EffectArray.flatMap(attempt.steps, (step) => {
+                const flatMapped1 = [
+                  `- ${step.status}: ${step.title}`,
+                  ...(step.personas.length === 0
+                    ? []
+                    : [`  - Acting personas: ${EffectArray.join(step.personas, ", ")}`]),
+                  ...EffectArray.map([...step.mcpExchanges, ...step.serviceCalls], (name) => {
+                    const path = EffectOption.getOrUndefined(
+                      EffectArray.findFirst(
+                        attempt.attachments,
+                        (attachment) => attachment.name === name,
+                      ),
+                    )?.path;
+                    return `  - ${name}: [transcript](${path})`;
+                  }),
+                ];
+                return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+              }),
+              "",
+              "Attachments (cite these exact paths):",
+              ...EffectArray.map(
+                attempt.attachments,
+                (attachment) => `- ${attachment.name}: ${attachment.path}`,
+              ),
+              "",
+            ];
+            return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+          }),
+        ],
+        (value) => EffectArray.join(value, "\n"),
+      ),
     );
     if (verdict !== "passed") {
       return { status: "failed" };
@@ -139,49 +175,73 @@ function reviewSteps(
   start: Date,
   video: number | undefined,
 ): Array<ReviewStep> {
-  return steps.flatMap((step) => [
-    ...(step.category === "test.step"
-      ? [
-          {
-            title: step.title,
-            personas: actingPersonas(allSteps([step]).flatMap((entry) => entry.attachments)),
-            mcpExchanges: allSteps([step]).flatMap((entry) =>
-              entry.attachments
-                .filter(isMcpExchangeAttachment)
-                .map((attachment) => attachment.name),
-            ),
-            serviceCalls: allSteps([step]).flatMap((entry) =>
-              entry.attachments
-                .filter(isServiceCallAttachment)
-                .map((attachment) => attachment.name),
-            ),
-            hasCheckpoint: hasCheckpoint(allSteps([step]).flatMap((entry) => entry.attachments)),
-            testElapsedMs: step.startTime.getTime() - start.getTime(),
-            durationMs: step.duration,
-            videoSeconds:
-              video === undefined
-                ? undefined
-                : {
-                    start: hundredths((step.startTime.getTime() - video) / 1000),
-                    end: hundredths((step.startTime.getTime() + step.duration - video) / 1000),
-                  },
-            status: step.error === undefined ? "completed" : "failed",
-          },
-        ]
-      : []),
-    ...reviewSteps(step.steps, start, video),
-  ]);
+  return EffectArray.flatMap(steps, (step) => {
+    const flatMapped2 = [
+      ...(step.category === "test.step"
+        ? [
+            {
+              title: step.title,
+              personas: actingPersonas(
+                EffectArray.flatMap(allSteps([step]), (entry) => {
+                  const flatMapped2 = entry.attachments;
+                  return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+                }),
+              ),
+              mcpExchanges: EffectArray.flatMap(allSteps([step]), (entry) => {
+                const flatMapped3 = EffectArray.map(
+                  EffectArray.filter(entry.attachments, isMcpExchangeAttachment),
+                  (attachment) => attachment.name,
+                );
+                return arrayValueIsArray(flatMapped3) ? flatMapped3 : [flatMapped3];
+              }),
+              serviceCalls: EffectArray.flatMap(allSteps([step]), (entry) => {
+                const flatMapped4 = EffectArray.map(
+                  EffectArray.filter(entry.attachments, isServiceCallAttachment),
+                  (attachment) => attachment.name,
+                );
+                return arrayValueIsArray(flatMapped4) ? flatMapped4 : [flatMapped4];
+              }),
+              hasCheckpoint: hasCheckpoint(
+                EffectArray.flatMap(allSteps([step]), (entry) => {
+                  const flatMapped5 = entry.attachments;
+                  return arrayValueIsArray(flatMapped5) ? flatMapped5 : [flatMapped5];
+                }),
+              ),
+              testElapsedMs: step.startTime.getTime() - start.getTime(),
+              durationMs: step.duration,
+              videoSeconds:
+                video === undefined
+                  ? undefined
+                  : {
+                      start: hundredths((step.startTime.getTime() - video) / 1000),
+                      end: hundredths((step.startTime.getTime() + step.duration - video) / 1000),
+                    },
+              status: step.error === undefined ? "completed" : "failed",
+            },
+          ]
+        : []),
+      ...reviewSteps(step.steps, start, video),
+    ];
+    return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+  });
 }
 
 function videoStart(result: TestResult): number | undefined {
-  const starts = allSteps(result.steps)
-    .filter((step) => step.category === "fixture" && step.title === 'Fixture "page"')
-    .map((step) => step.startTime.getTime());
+  const starts = EffectArray.map(
+    EffectArray.filter(
+      allSteps(result.steps),
+      (step) => step.category === "fixture" && step.title === 'Fixture "page"',
+    ),
+    (step) => step.startTime.getTime(),
+  );
   return starts.length === 0 ? undefined : Math.min(...starts);
 }
 
 function allSteps(steps: ReadonlyArray<TestStep>): ReadonlyArray<TestStep> {
-  return steps.flatMap((step) => [step, ...allSteps(step.steps)]);
+  return EffectArray.flatMap(steps, (step) => {
+    const flatMapped3 = [step, ...allSteps(step.steps)];
+    return arrayValueIsArray(flatMapped3) ? flatMapped3 : [flatMapped3];
+  });
 }
 
 function slug(name: string): string {
@@ -219,7 +279,10 @@ export function verificationVerdict(
   if (
     runnerStatus === "failed" ||
     runnerStatus === "timedout" ||
-    attempts.some((attempt) => attempt.status === "failed" || attempt.status === "timedOut")
+    EffectArray.some(
+      attempts,
+      (attempt) => attempt.status === "failed" || attempt.status === "timedOut",
+    )
   ) {
     return "failed";
   }
@@ -227,7 +290,10 @@ export function verificationVerdict(
     runnerStatus !== "passed" ||
     planned === 0 ||
     attempts.length !== planned ||
-    attempts.some((attempt) => attempt.status !== "passed" || attempt.expectedStatus !== "passed")
+    EffectArray.some(
+      attempts,
+      (attempt) => attempt.status !== "passed" || attempt.expectedStatus !== "passed",
+    )
   ) {
     return "blocked";
   }

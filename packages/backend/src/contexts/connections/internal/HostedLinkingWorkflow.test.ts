@@ -1,5 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { Arbitrary, DateTime, Effect, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
 import { decodeConnectionId } from "#contexts/connections/Connection.ts";
@@ -44,23 +45,19 @@ const invariants = [
       "reason" in snapshot.state.value === (snapshot.state.path === "Failed"),
   ),
   define.state("terminal states own exactly their outcome fields", ({ snapshot }) => {
-    const fields = [
-      "completedAt",
-      "connectionId",
-      "cancelledAt",
-      "expiredAt",
-      "failedAt",
-      "reason",
-    ].filter((field) => field in snapshot.state.value);
+    const fields = EffectArray.filter(
+      ["completedAt", "connectionId", "cancelledAt", "expiredAt", "failedAt", "reason"],
+      (field) => field in snapshot.state.value,
+    );
     switch (snapshot.state.path) {
       case "Completed":
-        return fields.join(",") === "completedAt,connectionId";
+        return EffectArray.join(fields, ",") === "completedAt,connectionId";
       case "Cancelled":
-        return fields.join(",") === "cancelledAt";
+        return EffectArray.join(fields, ",") === "cancelledAt";
       case "Expired":
-        return fields.join(",") === "expiredAt";
+        return EffectArray.join(fields, ",") === "expiredAt";
       case "Failed":
-        return fields.join(",") === "failedAt,reason";
+        return EffectArray.join(fields, ",") === "failedAt,reason";
       default:
         return true;
     }

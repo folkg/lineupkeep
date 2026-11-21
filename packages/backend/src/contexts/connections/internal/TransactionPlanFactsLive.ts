@@ -1,4 +1,6 @@
 import { DateTime, Effect, Layer, Result } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import { fantasyDayLabel } from "#contexts/connections/FantasyDay.ts";
@@ -97,7 +99,7 @@ export const TransactionPlanFactsLive = Layer.effect(
             ? { kind: "published" as const, balance: budget }
             : { kind: "bidless" as const },
         pool: poolPlayers(details),
-        slots: league.rosterPositions.map((slot) => ({
+        slots: EffectArray.map(league.rosterPositions, (slot) => ({
           position: slot.position,
           kind: slot.kind,
           count: slot.count,
@@ -242,8 +244,12 @@ function budgetOf(input: {
   }).pipe(
     Effect.map(
       (teams) =>
-        teams.find((team) => team.providerTeamKey === input.context.owned.team.providerTeamKey)
-          ?.remainingBudget,
+        EffectOption.getOrUndefined(
+          EffectArray.findFirst(
+            teams,
+            (team) => team.providerTeamKey === input.context.owned.team.providerTeamKey,
+          ),
+        )?.remainingBudget,
     ),
   );
 }
@@ -266,7 +272,7 @@ function rosterPlayers(roster: ProviderRoster): ReadonlyArray<{
   readonly injured: boolean;
   readonly editable: boolean;
 }> {
-  return roster.players.map((player) => ({
+  return EffectArray.map(roster.players, (player) => ({
     key: player.providerPlayerKey,
     name: player.name,
     positions: player.eligiblePositions,
@@ -319,7 +325,9 @@ function poolPlayers(details: ReadonlyArray<ProviderPlayerDetail>): ReadonlyMap<
 function poolStatuses(
   details: ReadonlyArray<ProviderPlayerDetail>,
 ): ReadonlyMap<string, ProviderPlayerDetail["rosterStatus"]> {
-  return new Map(details.map((detail) => [detail.providerPlayerKey, detail.rosterStatus]));
+  return new Map(
+    EffectArray.map(details, (detail) => [detail.providerPlayerKey, detail.rosterStatus]),
+  );
 }
 
 function publishedPeriodStart(input: {
@@ -344,8 +352,8 @@ function publishedPeriodStart(input: {
       if (result._tag !== "Success") {
         return undefined;
       }
-      const weekStart = result.success.find(
-        (matchup) => matchup.weekStart !== undefined,
+      const weekStart = EffectOption.getOrUndefined(
+        EffectArray.findFirst(result.success, (matchup) => matchup.weekStart !== undefined),
       )?.weekStart;
       return weekStart !== undefined && /^\d{4}-\d{2}-\d{2}$/u.test(weekStart)
         ? weekStart

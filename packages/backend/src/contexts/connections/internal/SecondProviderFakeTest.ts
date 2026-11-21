@@ -1,4 +1,5 @@
 import { DateTime, Effect } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { fantasyDayLabel } from "#contexts/connections/FantasyDay.ts";
 import { ProviderOperationUnsupported } from "#contexts/connections/Provider.ts";
@@ -229,7 +230,7 @@ function schedule(period: ProviderRosterSchedule["period"]): ProviderRosterSched
     providerTeamKey: secondProviderRoster.providerTeamKey,
     period,
     dates,
-    players: secondProviderRoster.players.map((player) => ({
+    players: EffectArray.map(secondProviderRoster.players, (player) => ({
       providerPlayerKey: player.providerPlayerKey,
       name: player.name,
       proTeamKey: undefined,
@@ -237,7 +238,7 @@ function schedule(period: ProviderRosterSchedule["period"]): ProviderRosterSched
       games:
         dates.length === 0
           ? [{ date: undefined, opponent: "BOS", home: true }]
-          : dates.map((date) => ({ date, opponent: "BOS", home: true })),
+          : EffectArray.map(dates, (date) => ({ date, opponent: "BOS", home: true })),
     })),
   };
 }
@@ -258,7 +259,7 @@ function scores(roster: ProviderRoster): ProviderScoreOutcome {
     kind: "scored",
     provenance: "atlas/league-rules",
     gamesPlayed: [],
-    players: roster.players.map((player) => ({
+    players: EffectArray.map(roster.players, (player) => ({
       providerPlayerKey: player.providerPlayerKey,
       score: player.providerPlayerKey === "atlas.p.3" ? 2400 : 1200,
       availability: "will-play",

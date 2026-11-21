@@ -2,6 +2,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { EffectArray } from "@lineupkeep/collections";
+import { EffectOption } from "@lineupkeep/collections";
 import { chromium } from "playwright";
 import type { BrowserContext, Page } from "playwright";
 
@@ -75,7 +77,9 @@ export function createHostedBrowser(options: HostedBrowserOptions = {}): HostedB
       }
     },
     closeAll: async () => {
-      await Promise.all([...live.values()].map((close) => close().catch(() => undefined)));
+      await Promise.all(
+        EffectArray.map([...live.values()], (close) => close().catch(() => undefined)),
+      );
       live.clear();
     },
   };
@@ -202,8 +206,12 @@ async function openBrowser(
       return;
     }
     const cookies = await context.cookies([session.loginUrl]);
-    const token = cookies.find((cookie) => cookie.name === "T" && cookie.value !== "");
-    const user = cookies.find((cookie) => cookie.name === "Y" && cookie.value !== "");
+    const token = EffectOption.getOrUndefined(
+      EffectArray.findFirst(cookies, (cookie) => cookie.name === "T" && cookie.value !== ""),
+    );
+    const user = EffectOption.getOrUndefined(
+      EffectArray.findFirst(cookies, (cookie) => cookie.name === "Y" && cookie.value !== ""),
+    );
     if (token === undefined || user === undefined) {
       return;
     }
@@ -323,7 +331,9 @@ async function openBrowser(
       return;
     }
     active = undefined;
-    const fallback = [...activationOrder].reverse().find((candidate) => targets.has(candidate));
+    const fallback = EffectOption.getOrUndefined(
+      EffectArray.findFirst([...activationOrder].reverse(), (candidate) => targets.has(candidate)),
+    );
     if (fallback !== undefined) {
       activate(fallback);
     } else if (!settled) {

@@ -2,6 +2,7 @@ import { Feedback, FeedbackSubmission } from "@lineupkeep/backend/feedback/Feedb
 import { createServerFn } from "@tanstack/solid-start";
 import { getRequest } from "@tanstack/solid-start/server";
 import { Effect, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type {
   FeedbackDraftData,
@@ -21,7 +22,9 @@ export const listFeedbackServerFn = createServerFn({ method: "GET" }).handler(()
     "feedback.list",
     (userId) =>
       Feedback.use((feedback) => feedback.list(userId, { limit: 50 })).pipe(
-        Effect.map((reports): FeedbackListData => ({ reports: reports.map(toFeedbackReportView) })),
+        Effect.map((reports): FeedbackListData => ({
+          reports: EffectArray.map(reports, toFeedbackReportView),
+        })),
       ),
     mapFeedbackError,
   ),
@@ -50,7 +53,7 @@ export const submitFeedbackServerFn = createServerFn({ method: "POST" })
           const all = yield* Feedback.use((feedback) => feedback.list(userId, { limit: 50 }));
           return {
             report: toFeedbackReportView(report),
-            reports: all.map(toFeedbackReportView),
+            reports: EffectArray.map(all, toFeedbackReportView),
           } satisfies FeedbackSubmissionData;
         }),
       (error) =>

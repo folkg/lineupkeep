@@ -1,0 +1,8 @@
+{
+  "name": "@lineupkeep/collections",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

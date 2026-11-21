@@ -1,5 +1,7 @@
 import { Effect } from "effect";
 import { Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 
 import { rosterOccupancy, slotPlacement } from "#contexts/connections/RosterSlots.ts";
 import type { RosterRule } from "#contexts/connections/RosterSlots.ts";
@@ -14,6 +16,10 @@ import type {
 } from "./TransactionPlanEvaluation.ts";
 import { TransactionMoveId } from "./TransactionPlanRecord.ts";
 import type { StoredMoveValidationReason } from "./TransactionPlanRecord.ts";
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 const rosterFixGroupPrefix = "roster-fixes:";
 
@@ -43,18 +49,24 @@ export function searchRosterFixes(input: {
   readonly reasons: ReadonlyArray<StoredMoveValidationReason>;
 }): RosterFixSearch {
   if (
-    !input.reasons.some((reason) => reason.code === "roster_full" || reason.code === "slot_illegal")
+    !EffectArray.some(
+      input.reasons,
+      (reason) => reason.code === "roster_full" || reason.code === "slot_illegal",
+    )
   ) {
     return { fixes: [], detail: undefined };
   }
-  const roster = input.facts.roster.filter(
-    (player) => !input.funded.drops.some((drop) => drop.key === player.key),
+  const roster = EffectArray.filter(
+    input.facts.roster,
+    (player) => !EffectArray.some(input.funded.drops, (drop) => drop.key === player.key),
   );
   const occupancy = rosterOccupancy({ rule: input.rule, players: roster });
-  const needsPlace = input.reasons.some(
+  const needsPlace = EffectArray.some(
+    input.reasons,
     (reason) =>
       reason.code === "roster_full" ||
-      (reason.code === "slot_illegal" && !roster.some((player) => player.key === reason.playerKey)),
+      (reason.code === "slot_illegal" &&
+        !EffectArray.some(roster, (player) => player.key === reason.playerKey)),
   );
   const illegalDetail = illegalDetailOf(input.reasons, occupancy.illegal);
   const placement = planRosterPlacement({ rule: input.rule, players: roster });
@@ -64,13 +76,17 @@ export function searchRosterFixes(input: {
   if (!curesIllegalOccupants(input.reasons, roster, placement.placements, input.rule)) {
     return { fixes: [], detail: illegalDetail ?? noPlaceCure(input.funded) };
   }
-  const fixes = orderPlacementMoves(input.rule, roster, placement.moves).flatMap((move) =>
-    fixOf(input.rule, move),
+  const fixes = EffectArray.flatMap(
+    orderPlacementMoves(input.rule, roster, placement.moves),
+    (move) => {
+      const flatMapped1 = fixOf(input.rule, move);
+      return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+    },
   );
   if (fixes.length === 0) {
     return { fixes: [], detail: illegalDetail ?? noPlaceCure(input.funded) };
   }
-  if (needsPlace && !fixes.some(freesPlace)) {
+  if (needsPlace && !EffectArray.some(fixes, freesPlace)) {
     return { fixes: [], detail: noPlaceCure(input.funded) };
   }
   return { fixes, detail: undefined };
@@ -84,7 +100,9 @@ function illegalDetailOf(
     if (reason.code !== "slot_illegal") {
       continue;
     }
-    const blocker = illegal.find((entry) => entry.key === reason.playerKey);
+    const blocker = EffectOption.getOrUndefined(
+      EffectArray.findFirst(illegal, (entry) => entry.key === reason.playerKey),
+    );
     if (blocker !== undefined) {
       return blocker.detail;
     }
@@ -98,11 +116,13 @@ function curesIllegalOccupants(
   placements: ReadonlyMap<string, string>,
   rule: RosterRule,
 ): boolean {
-  return reasons.every((reason) => {
+  return EffectArray.every(reasons, (reason) => {
     if (reason.code !== "slot_illegal") {
       return true;
     }
-    const occupant = roster.find((player) => player.key === reason.playerKey);
+    const occupant = EffectOption.getOrUndefined(
+      EffectArray.findFirst(roster, (player) => player.key === reason.playerKey),
+    );
     if (occupant === undefined) {
       return true;
     }
@@ -150,11 +170,16 @@ function orderPlacementMoves(
 ): ReadonlyArray<RosterPlacementMove> {
   const occupancy = rosterOccupancy({ rule, players: roster });
   let freeActive = Math.max(0, rule.rosterMaximum - occupancy.occupied);
-  const freeReserve = new Map(occupancy.reserve.map((list) => [list.name, list.free] as const));
+  const freeReserve = new Map(
+    EffectArray.map(occupancy.reserve, (list) => [list.name, list.free] as const),
+  );
   const pending = [...moves];
   const ordered: Array<RosterPlacementMove> = [];
   while (pending.length > 0) {
-    const index = pending.findIndex((move) => fits(move, freeActive, freeReserve, rule));
+    const index = EffectOption.getOrElse(
+      EffectArray.findFirstIndex(pending, (move) => fits(move, freeActive, freeReserve, rule)),
+      () => -1,
+    );
     if (index < 0) {
       return [...ordered, ...pending];
     }

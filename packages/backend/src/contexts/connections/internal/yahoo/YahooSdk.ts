@@ -1,5 +1,7 @@
 import * as Yahoo from "@lineupkeep/yahoo-sdk";
 import { Context, Effect, Layer, Option, Schema, Tracer } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -233,7 +235,7 @@ export const readLeagueTeamsThroughSdk = (
       Effect.provideService(Tracer.DisablePropagation, true),
       Effect.mapError((error) => providerReadFailureOf(operation, error)),
     );
-    return teams.map(providerLeagueTeamOf);
+    return EffectArray.map(teams, providerLeagueTeamOf);
   });
 
 export const readTeamGamesPlayedThroughSdk = (
@@ -294,7 +296,7 @@ export const readRosterScheduleThroughSdk = (
       Effect.provideService(Tracer.DisablePropagation, true),
       Effect.mapError((error) => providerReadFailureOf(operation, error)),
     );
-    return roster.players.map((player) => providerSchedulePlayerOf(player, coverage));
+    return EffectArray.map(roster.players, (player) => providerSchedulePlayerOf(player, coverage));
   });
 
 function providerSchedulePlayerOf(
@@ -330,12 +332,12 @@ export const readLeagueRostersThroughSdk = (
       Effect.provideService(Tracer.DisablePropagation, true),
       Effect.mapError((error) => providerReadFailureOf(operation, error)),
     );
-    return rosters.teams.map((team) => ({
+    return EffectArray.map(rosters.teams, (team) => ({
       providerTeamKey: team.teamKey,
       providerLeagueKey: rosters.leagueKey,
       name: team.name,
       coverage: rosters.coverage,
-      players: team.players.map(providerRosterPlayerOf),
+      players: EffectArray.map(team.players, providerRosterPlayerOf),
     }));
   });
 
@@ -373,7 +375,7 @@ export const readPlayerDetailsThroughSdk = (
       playerKeys: input.playerKeys,
       stats: input.stats,
     });
-    return details.map((player) => providerPlayerDetailOf(player, input.stats));
+    return EffectArray.map(details, (player) => providerPlayerDetailOf(player, input.stats));
   });
 
 export const validateSessionThroughSdk = (
@@ -409,7 +411,7 @@ export const discoverLeaguesThroughSdk = <GameKey extends Yahoo.YahooGameKey>(
       Effect.provideService(Tracer.DisablePropagation, true),
       Effect.mapError((error) => providerFailureOf(operation, error)),
     );
-    return leagues.map((league) => ({
+    return EffectArray.map(leagues, (league) => ({
       ...league,
       gameKey: requestedGameKeyOf(league, gameKeys),
     }));
@@ -419,7 +421,9 @@ function requestedGameKeyOf<GameKey extends Yahoo.YahooGameKey>(
   league: Yahoo.YahooDiscoveredLeague,
   gameKeys: ReadonlyArray<GameKey>,
 ): GameKey {
-  const gameKey = gameKeys.find((key) => key === league.gameKey);
+  const gameKey = EffectOption.getOrUndefined(
+    EffectArray.findFirst(gameKeys, (key) => key === league.gameKey),
+  );
   if (gameKey === undefined) {
     throw new Error("Yahoo discovered a game key that was not requested.");
   }
@@ -467,7 +471,9 @@ export const searchPlayersThroughSdk = (
         ...(input.query === undefined ? {} : { query: input.query }),
         ...(input.statId === undefined ? {} : { statId: input.statId }),
         ...(input.window === undefined ? {} : { recentWindow: input.window }),
-        ...(input.positions === undefined ? {} : { position: input.positions.join(",") }),
+        ...(input.positions === undefined
+          ? {}
+          : { position: EffectArray.join(input.positions, ",") }),
       })
       .pipe(
         Yahoo.Retry.none,
@@ -475,11 +481,13 @@ export const searchPlayersThroughSdk = (
         Effect.provideService(Tracer.DisablePropagation, true),
         Effect.mapError((error) => providerReadFailureOf(operation, error)),
       );
-    const players = groups.find((group) => group.leagueKey === input.leagueKey)?.players;
+    const players = EffectOption.getOrUndefined(
+      EffectArray.findFirst(groups, (group) => group.leagueKey === input.leagueKey),
+    )?.players;
     if (players === undefined) {
       return yield* ProviderResponseInvalid.make({ operation, field: "league.league_key" });
     }
-    const rows = players.map((player) => providerSearchPlayerOf(player, input.season));
+    const rows = EffectArray.map(players, (player) => providerSearchPlayerOf(player, input.season));
     const window = input.window;
     if (window === undefined) {
       return rows;
@@ -489,10 +497,10 @@ export const searchPlayersThroughSdk = (
       operation,
       cookie,
       input.leagueKey,
-      rows.map((row) => row.providerPlayerKey),
+      EffectArray.map(rows, (row) => row.providerPlayerKey),
       window,
     );
-    return rows.map((row) => ({
+    return EffectArray.map(rows, (row) => ({
       ...row,
       recentRank: {
         window: providerRecentFormWindow(window),
@@ -533,18 +541,21 @@ export function yahooPlayerSearchCapability(
   if (sample === undefined) {
     return {
       status: "unverified",
-      sorts: sorts.filter((sort) => sort !== "recent_rank"),
+      sorts: EffectArray.filter(sorts, (sort) => sort !== "recent_rank"),
       windows: [],
       detail:
         "This league published no player ranks to sample, so its recent-form windows could not be verified.",
     };
   }
-  const windows = Yahoo.players
-    .publishedRecentFormWindows(sample)
-    .map((window) => providerRecentFormWindow(window));
+  const windows = EffectArray.map(Yahoo.players.publishedRecentFormWindows(sample), (window) =>
+    providerRecentFormWindow(window),
+  );
   return {
     status: "published",
-    sorts: windows.length === 0 ? sorts.filter((sort) => sort !== "recent_rank") : [...sorts],
+    sorts:
+      windows.length === 0
+        ? EffectArray.filter(sorts, (sort) => sort !== "recent_rank")
+        : [...sorts],
     windows,
     detail:
       windows.length === 0
@@ -554,10 +565,10 @@ export function yahooPlayerSearchCapability(
 }
 
 function listWindows(windows: ReadonlyArray<RecentFormWindow>): string {
-  const labels = windows.map((window) => describeStatWindow(window));
+  const labels = EffectArray.map(windows, (window) => describeStatWindow(window));
   return labels.length === 1
     ? (labels[0] ?? "")
-    : `${labels.slice(0, -1).join(", ")} and ${labels.at(-1) ?? ""}`;
+    : `${EffectArray.join(labels.slice(0, -1), ", ")} and ${labels.at(-1) ?? ""}`;
 }
 
 function recentRankIndex(
@@ -701,10 +712,10 @@ export const proposeTradeThroughSdk = (
       ...(input.receive.length === 0 ? {} : { receive: input.receive }),
       ...(input.sendPicks.length === 0
         ? {}
-        : { sendPicks: input.sendPicks.map((round) => ({ round })) }),
+        : { sendPicks: EffectArray.map(input.sendPicks, (round) => ({ round })) }),
       ...(input.receivePicks.length === 0
         ? {}
-        : { receivePicks: input.receivePicks.map((round) => ({ round })) }),
+        : { receivePicks: EffectArray.map(input.receivePicks, (round) => ({ round })) }),
       note: input.note,
     }),
     (receipt): { readonly status: "accepted"; readonly transactionKey: string } => ({
@@ -845,7 +856,7 @@ function providerAvailabilityOf(
 function providerStandingsOf(standings: Yahoo.YahooStandings): ProviderStandings {
   return {
     providerLeagueKey: standings.leagueKey,
-    teams: standings.teams.map((team): ProviderStanding => ({
+    teams: EffectArray.map(standings.teams, (team): ProviderStanding => ({
       providerTeamKey: team.teamKey,
       name: team.name,
       rank: team.rank ?? null,
@@ -894,7 +905,7 @@ function providerRosterOf(teamKey: string, roster: Yahoo.YahooRoster): ProviderR
     providerTeamKey: teamKey,
     providerLeagueKey: roster.leagueKey,
     coverage: roster.coverage,
-    players: roster.players.map(providerRosterPlayerOf),
+    players: EffectArray.map(roster.players, providerRosterPlayerOf),
   };
 }
 
@@ -961,7 +972,7 @@ type TransactionCounts = {
 };
 
 function isReadonlyArray<A>(value: ReadonlyArray<A> | A): value is ReadonlyArray<A> {
-  return Array.isArray(value);
+  return EffectArray.isArray(value);
 }
 
 function transactionTrendOf(

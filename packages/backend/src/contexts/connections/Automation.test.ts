@@ -4,6 +4,8 @@ import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { eq } from "drizzle-orm";
 import { Array, Config, Effect, Layer, Option, Redacted, Ref, Schema } from "effect";
 import { DateTime, Duration } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 import { TestClock } from "effect/testing";
 
 import { AccountRetention } from "#contexts/auth/AccountRetention.ts";
@@ -57,6 +59,22 @@ import type {
 } from "./Provider.ts";
 import { Teams } from "./Teams.ts";
 import { TransactionPlanService } from "./TransactionPlans.ts";
+
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 it.effect("runs one current-period automation per team per hour", () =>
   Effect.gen(function* () {
@@ -119,7 +137,7 @@ it.effect("checks all five owner teams at minute 55 without repeating an hour's 
     yield* refuseCustomPlanning(fake);
     yield* teams.control(
       owner,
-      seeded.map((team) => ({ team, action: "enable" as const })),
+      EffectArray.map(seeded, (team) => ({ team, action: "enable" as const })),
     );
 
     const scheduled: Array<number> = [];
@@ -135,9 +153,14 @@ it.effect("checks all five owner teams at minute 55 without repeating an hour's 
     assert.deepStrictEqual(scheduled, [5, 5, 5]);
     assert.strictEqual(retried.scheduledRuns, 0);
     assert.strictEqual(activity.runs.length, 15);
-    assert.deepStrictEqual([...new Set(activity.runs.map((run) => run.trigger))], ["scheduled"]);
     assert.deepStrictEqual(
-      [...new Set(activity.runs.map((run) => DateTime.formatIso(run.createdAt)))].sort(),
+      [...new Set(EffectArray.map(activity.runs, (run) => run.trigger))],
+      ["scheduled"],
+    );
+    assert.deepStrictEqual(
+      [
+        ...new Set(EffectArray.map(activity.runs, (run) => DateTime.formatIso(run.createdAt))),
+      ].sort(),
       ["2026-10-26T13:55:00.000Z", "2026-10-26T14:55:00.000Z", "2026-10-26T15:55:00.000Z"],
     );
 
@@ -251,7 +274,7 @@ it.effect("runs a confirmed move when its date arrives on the hourly tick", () =
       DateTime.formatIso(runAt),
     );
     assert.deepStrictEqual(
-      (yield* fake.transactionRequests).map((request) => request.drops),
+      EffectArray.map(yield* fake.transactionRequests, (request) => request.drops),
       [["461.p.10002"]],
     );
   }).pipe(layerTools.provide(AutomationTestLayer)),
@@ -298,7 +321,9 @@ it.effect("sends the funding drop before the activate and leaves the roster lega
     assert.deepStrictEqual(yield* fake.writeSequence, ["transaction", "reserve_move"]);
     assert.deepStrictEqual(plan.illegal, []);
     assert.deepStrictEqual(
-      state.roster?.players.map((player) => [player.providerPlayerKey, player.slot]),
+      optionalArrayValue(state.roster?.players, (value) =>
+        EffectArray.map(value, (player) => [player.providerPlayerKey, player.slot]),
+      ),
       [
         ["461.p.10003", { status: "verified", slot: "BN" }],
         ["461.p.10004", { status: "verified", slot: "BN" }],
@@ -326,13 +351,16 @@ it.effect("runs a drop and an activate group so the paperwork ends legal", () =>
         { kind: "drop", drops: ["461.p.10002"], reason: "Drop the bench quarterback." },
       ],
     });
-    const moves = proposed.plan.moves.flatMap((move) => (move.group === undefined ? [] : [move]));
+    const moves = EffectArray.flatMap(proposed.plan.moves, (move) => {
+      const flatMapped1 = move.group === undefined ? [] : [move];
+      return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+    });
     const groups = proposed.plan.groups;
 
     assert.deepStrictEqual(proposed.refused, []);
     assert.strictEqual(groups.length, 1);
     assert.deepStrictEqual(
-      moves.map((move) => [move.kind, move.runPosition, move.validation.status]),
+      EffectArray.map(moves, (move) => [move.kind, move.runPosition, move.validation.status]),
       [
         ["drop", 0, "current"],
         ["activate", 1, "current"],
@@ -340,13 +368,21 @@ it.effect("runs a drop and an activate group so the paperwork ends legal", () =>
     );
     const read = yield* plans.plan(owner, { team });
     assert.deepStrictEqual(
-      read.groups[0]?.moves.map((move) => read.moves.find((entry) => entry.move === move)?.kind),
+      optionalArrayValue(read.groups[0]?.moves, (value) =>
+        EffectArray.map(
+          value,
+          (move) =>
+            EffectOption.getOrUndefined(
+              EffectArray.findFirst(read.moves, (entry) => entry.move === move),
+            )?.kind,
+        ),
+      ),
       ["drop", "activate"],
     );
 
     const confirmed = yield* plans.confirm(owner, {
       team,
-      moves: moves.map((move) => move.move),
+      moves: EffectArray.map(moves, (move) => move.move),
       key: "confirm-drop-activate-group",
     });
     const plan = yield* plans.plan(owner, { team });
@@ -357,7 +393,9 @@ it.effect("runs a drop and an activate group so the paperwork ends legal", () =>
     assert.deepStrictEqual(plan.illegal, []);
     assert.strictEqual(plan.groups[0]?.status, "done");
     assert.deepStrictEqual(
-      state.roster?.players.map((player) => [player.providerPlayerKey, player.slot]),
+      optionalArrayValue(state.roster?.players, (value) =>
+        EffectArray.map(value, (player) => [player.providerPlayerKey, player.slot]),
+      ),
       [
         ["461.p.10003", { status: "verified", slot: "BN" }],
         ["461.p.10004", { status: "verified", slot: "BN" }],
@@ -562,7 +600,11 @@ it.effect("recovers a queued run whose delivery was dispatched but never claimed
     });
     const deliveries = yield* repository.claimDeliveries(at, 10);
     yield* repository.finishDeliveries(
-      deliveries.map((record) => ({ deliveryId: record.id, at, outcome: "dispatched" as const })),
+      EffectArray.map(deliveries, (record) => ({
+        deliveryId: record.id,
+        at,
+        outcome: "dispatched" as const,
+      })),
     );
     yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.addDuration(at, Duration.minutes(3))));
 
@@ -773,7 +815,7 @@ function seedOwnerTeams(
   return Effect.gen(function* () {
     const connections = yield* Connections;
     yield* fake.setTeams(
-      Array.range(1, count).map((index) => ({
+      EffectArray.map(Array.range(1, count), (index) => ({
         ...teamFixture,
         providerTeamKey: `461.l.1000.t.${String(index)}`,
         name: `Team ${String(index)}`,
@@ -787,7 +829,7 @@ function seedOwnerTeams(
       0,
     );
     const found = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
-    return found.map((team) => team.id);
+    return EffectArray.map(found, (team) => team.id);
   }).pipe(Effect.orDie);
 }
 
@@ -1003,7 +1045,7 @@ const reserveRoster: ProviderRoster = {
 
 const nativeAfter: ProviderRoster = {
   ...roster,
-  players: roster.players.map((player, index) => ({
+  players: EffectArray.map(roster.players, (player, index) => ({
     ...player,
     slot: { status: "verified", slot: index === 0 ? "BN" : "QB" },
   })),
@@ -1113,7 +1155,7 @@ const hockeyRoster: ProviderRoster = {
 
 const hockeyNativeAfter: ProviderRoster = {
   ...hockeyRoster,
-  players: hockeyRoster.players.map((player, index) => ({
+  players: EffectArray.map(hockeyRoster.players, (player, index) => ({
     ...player,
     slot: { status: "verified", slot: index === 0 ? "BN" : "C" },
   })),

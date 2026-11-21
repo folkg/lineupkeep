@@ -1,7 +1,13 @@
 import * as Shared from "@lineupkeep/machine-test";
 import { Arbitrary, Data, Effect, Result, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 
 import { type DefinedMachine, plan, snapshotOf, type Tagged } from "#utilities/machine.ts";
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 export type TestSnapshot<State extends Tagged> = Shared.TestSnapshot<State>;
 export type Invariant<State extends Tagged, Event extends Tagged> = Shared.Invariant<State, Event>;
@@ -124,22 +130,31 @@ function adapter<State extends Tagged, Event extends Tagged>(
   stateKey: (state: State) => string,
   events: (state: State) => ReadonlyArray<Event>,
 ): Shared.MachineAdapter<State, Event> {
-  const declarations = Object.keys(machine.definition.states).flatMap((from) =>
-    Object.entries(machine.transitionsOf(from)).flatMap(([event, specification]) =>
-      listOf(specification).map((_candidate, index) => ({
-        id: `${from}.${event}.${index}`,
-        from,
-        event,
-      })),
-    ),
-  );
+  const declarations = EffectArray.flatMap(Object.keys(machine.definition.states), (from) => {
+    const flatMapped1 = EffectArray.flatMap(
+      Object.entries(machine.transitionsOf(from)),
+      ([event, specification]) => {
+        const flatMapped1 = EffectArray.map(listOf(specification), (_candidate, index) => ({
+          id: `${from}.${event}.${index}`,
+          from,
+          event,
+        }));
+        return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+      },
+    );
+    return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+  });
   const candidate = (
     state: State,
     event: Event,
   ): { readonly id: string; readonly target: string } | undefined => {
     const candidates = listOf(machine.transitionsOf(state._tag)[event._tag]);
-    const index = candidates.findIndex(
-      (entry) => entry.guard === undefined || entry.guard({ state, event }),
+    const index = EffectOption.getOrElse(
+      EffectArray.findFirstIndex(
+        candidates,
+        (entry) => entry.guard === undefined || entry.guard({ state, event }),
+      ),
+      () => -1,
     );
     const entry = candidates[index];
     return entry === undefined
@@ -209,5 +224,5 @@ function listOf<Value>(value: Value | ReadonlyArray<Value> | undefined): Readonl
 }
 
 function isList<Value>(value: Value | ReadonlyArray<Value>): value is ReadonlyArray<Value> {
-  return Array.isArray(value);
+  return EffectArray.isArray(value);
 }

@@ -1,3 +1,5 @@
+import { EffectArray } from "@lineupkeep/collections";
+import { EffectOption } from "@lineupkeep/collections";
 import { useMutation } from "@tanstack/solid-query";
 import type { MutationFunctionContext } from "@tanstack/solid-query";
 import { createSignal } from "solid-js";
@@ -45,19 +47,28 @@ export function useGroupConfirmation(input: {
   }));
 
   const start = (moves: ReadonlyArray<TransactionMoveView>): void => {
-    if (confirm.isPending || !moves.every(canConfirm)) {
+    if (confirm.isPending || !EffectArray.every(moves, canConfirm)) {
       return;
     }
     const held = key() ?? crypto.randomUUID();
     setKey(held);
     void confirm.mutate({
-      moves: moves.map((move) => move.move),
+      moves: EffectArray.map(moves, (move) => move.move),
       key: held,
-      runDay: moves.find((move) => move.runDay !== undefined)?.runDay,
-      sendsAt: moves.find((move) => move.sendsAt !== undefined)?.sendsAt,
-      effectiveDate: moves.find((move) => move.effectiveDate !== undefined)?.effectiveDate,
+      runDay: EffectOption.getOrUndefined(
+        EffectArray.findFirst(moves, (move) => move.runDay !== undefined),
+      )?.runDay,
+      sendsAt: EffectOption.getOrUndefined(
+        EffectArray.findFirst(moves, (move) => move.sendsAt !== undefined),
+      )?.sendsAt,
+      effectiveDate: EffectOption.getOrUndefined(
+        EffectArray.findFirst(moves, (move) => move.effectiveDate !== undefined),
+      )?.effectiveDate,
       today: input.today(),
-      claim: moves.some((move) => move.kind === "waiver_claim" || move.phase !== undefined),
+      claim: EffectArray.some(
+        moves,
+        (move) => move.kind === "waiver_claim" || move.phase !== undefined,
+      ),
     });
   };
 

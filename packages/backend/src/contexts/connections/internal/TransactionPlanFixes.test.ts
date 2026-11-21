@@ -1,6 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { rosterRuleOf } from "#contexts/connections/RosterSlots.ts";
 
@@ -29,7 +30,7 @@ it("finds the stash that frees a place for an add", () => {
   });
 
   assert.deepStrictEqual(
-    search.fixes.map((fix) => [fix.kind, fix.playerKey]),
+    EffectArray.map(search.fixes, (fix) => [fix.kind, fix.playerKey]),
     [["stash", "a1"]],
   );
   assert.include(search.fixes[0]?.detail ?? "", "to free a place");
@@ -55,7 +56,7 @@ it("finds the activate that cures an illegal reserve place", () => {
   });
 
   assert.deepStrictEqual(
-    search.fixes.map((fix) => [fix.kind, fix.playerKey]),
+    EffectArray.map(search.fixes, (fix) => [fix.kind, fix.playerKey]),
     [["activate", "a2"]],
   );
 });
@@ -80,7 +81,7 @@ it("adds the stash that frees the place an activate needs", () => {
   });
 
   assert.deepStrictEqual(
-    search.fixes.map((fix) => [fix.kind, fix.playerKey]),
+    EffectArray.map(search.fixes, (fix) => [fix.kind, fix.playerKey]),
     [
       ["stash", "a3"],
       ["activate", "a2"],
@@ -113,7 +114,7 @@ it("stashes an injured player only to the reserve list the roster row names", ()
   });
 
   assert.deepStrictEqual(
-    search.fixes.map((fix) => [fix.kind, fix.playerKey]),
+    EffectArray.map(search.fixes, (fix) => [fix.kind, fix.playerKey]),
     [["stash", "a1"]],
   );
   assert.include(search.fixes[0]?.detail ?? "", "to the IR+ reserve list");
@@ -178,7 +179,7 @@ it("stashes to a reserve list that has room before the activate that frees anoth
   });
 
   assert.deepStrictEqual(
-    search.fixes.map((fix) => [fix.kind, fix.playerKey]),
+    EffectArray.map(search.fixes, (fix) => [fix.kind, fix.playerKey]),
     [
       ["stash", "a3"],
       ["activate", "a2"],
@@ -212,12 +213,12 @@ it("plans a reserve move through the same rule for another sport's slot names", 
   });
 
   assert.deepStrictEqual(
-    search.fixes.map((fix) => [fix.kind, fix.playerKey]),
+    EffectArray.map(search.fixes, (fix) => [fix.kind, fix.playerKey]),
     [["stash", "b1"]],
   );
   assert.include(search.fixes[0]?.detail ?? "", "IL reserve list");
   assert.deepStrictEqual(
-    planReserveMoves({ rule, players: facts.roster }).map((move) => [
+    EffectArray.map(planReserveMoves({ rule, players: facts.roster }), (move) => [
       move.playerKey,
       move.fromSlot,
       move.toSlot,

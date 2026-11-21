@@ -16,6 +16,7 @@ import {
 } from "@lineupkeep/tools/local-stack/postgresContainer.ts";
 import { Effect } from "effect";
 import { Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type { OwnedInfrastructure } from "./lifecycle.ts";
 
@@ -138,7 +139,9 @@ export function localStack(name: string, lockDirectory: string): OwnedInfrastruc
         ),
       );
       if (remainingResources.length > 0) {
-        throw new Error(`Alchemy still owns resources: ${remainingResources.join(", ")}`);
+        throw new Error(
+          `Alchemy still owns resources: ${EffectArray.join(remainingResources, ", ")}`,
+        );
       }
     },
   };

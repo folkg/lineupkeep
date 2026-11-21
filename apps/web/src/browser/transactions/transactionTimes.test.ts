@@ -1,3 +1,4 @@
+import { EffectArray } from "@lineupkeep/collections";
 import { expect, it } from "vitest";
 
 import { formatCalendarDate } from "#browser/shared-ui/formatTime.ts";
@@ -262,7 +263,7 @@ function fixtureStatus(move: Omit<TransactionMoveView, "status">): TransactionMo
         case "unknown":
           return "fallback_unknown";
         case "failed":
-          return move.attempts.some((attempt) => attempt.kind === "fallback")
+          return EffectArray.some(move.attempts, (attempt) => attempt.kind === "fallback")
             ? "all_choices_failed"
             : "claim_lost";
         case "skipped":

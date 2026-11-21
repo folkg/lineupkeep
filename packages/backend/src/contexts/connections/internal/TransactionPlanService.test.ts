@@ -4,6 +4,8 @@ import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import type { UserId } from "@lineupkeep/backend/auth/User";
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
 import { DateTime, Effect, Fiber, Layer, Option, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 import { TestClock } from "effect/testing";
 
 import { decodeTeamId } from "#contexts/connections/FantasyTeam.ts";
@@ -59,6 +61,21 @@ import type {
   TransactionPlanWriteRequest,
   TransactionPlanWritesShape,
 } from "./TransactionPlanWrites.ts";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 const owner = decodeUserId("owner");
 const otherOwner = decodeUserId("other-owner");
@@ -96,7 +113,9 @@ it.effect("proposes into an empty team and leaves a move for today undecided", (
     assert.strictEqual(move?.runPosition, 0);
     assert.deepStrictEqual(move?.dependsOn, []);
     assert.deepStrictEqual(
-      move?.projection.map((player) => player.key),
+      optionalArrayValue(move?.projection, (value) =>
+        EffectArray.map(value, (player) => player.key),
+      ),
       ["fa1"],
     );
 
@@ -130,14 +149,14 @@ it.effect("proposes into an existing queue and keeps one plan", () =>
 
     assert.deepStrictEqual(second.refused, []);
     assert.deepStrictEqual(
-      second.plan.moves.map((move) => [move.adds[0]?.key, move.decision]),
+      EffectArray.map(second.plan.moves, (move) => [move.adds[0]?.key, move.decision]),
       [
         ["fa1", "undecided"],
         ["fa2", "saved"],
       ],
     );
     assert.deepStrictEqual(
-      second.plan.moves.map((move) => move.runPosition),
+      EffectArray.map(second.plan.moves, (move) => move.runPosition),
       [0, 1],
     );
     assert.strictEqual((yield* database.select().from(transactionPlans)).length, 1);
@@ -169,7 +188,7 @@ it.effect("orders the plan by what each move needs, not by proposal order", () =
 
     assert.deepStrictEqual(result.refused, []);
     assert.deepStrictEqual(
-      result.plan.moves.map((move) => [move.kind, move.runPosition]),
+      EffectArray.map(result.plan.moves, (move) => [move.kind, move.runPosition]),
       [
         ["drop", 0],
         ["free_agent_add", 1],
@@ -207,7 +226,12 @@ it.effect("refuses a group whole when one of its moves cannot run", () =>
     });
 
     assert.deepStrictEqual(
-      result.refused.map((refusal) => [refusal.code, refusal.team, refusal.group, refusal.moves]),
+      EffectArray.map(result.refused, (refusal) => [
+        refusal.code,
+        refusal.team,
+        refusal.group,
+        refusal.moves,
+      ]),
       [["player_unavailable", team, "pair", [0, 1]]],
     );
     assert.include(
@@ -240,7 +264,11 @@ it.effect("orders a stash before the add that uses the place it frees", () =>
 
     assert.deepStrictEqual(result.refused, []);
     assert.deepStrictEqual(
-      result.plan.moves.map((move) => [move.kind, move.runPosition, move.validation.status]),
+      EffectArray.map(result.plan.moves, (move) => [
+        move.kind,
+        move.runPosition,
+        move.validation.status,
+      ]),
       [
         ["stash", 0, "current"],
         ["free_agent_add", 1, "current"],
@@ -276,7 +304,7 @@ it.effect("accepts and validates a standalone activate", () => {
 
     assert.deepStrictEqual(result.refused, []);
     assert.deepStrictEqual(
-      result.plan.moves.map((move) => [
+      EffectArray.map(result.plan.moves, (move) => [
         move.kind,
         move.intent?.player?.key,
         move.placement?.toSlot,
@@ -288,7 +316,7 @@ it.effect("accepts and validates a standalone activate", () => {
     const confirmed = yield* confirmDue(service, team);
     assert.strictEqual(confirmed.counts.executed, 1);
     assert.deepStrictEqual(
-      writes.requests.map((request) => request.kind),
+      EffectArray.map(writes.requests, (request) => request.kind),
       ["activate"],
     );
   }).pipe(
@@ -324,11 +352,11 @@ it.effect("refuses a second stash that claims the same reserve place", () =>
     });
 
     assert.deepStrictEqual(
-      result.refused.map((refusal) => [refusal.code, refusal.moves]),
+      EffectArray.map(result.refused, (refusal) => [refusal.code, refusal.moves]),
       [["place_claimed", [1]]],
     );
     assert.deepStrictEqual(
-      result.plan.moves.map((move) => [move.intent?.player?.key, move.claims]),
+      EffectArray.map(result.plan.moves, (move) => [move.intent?.player?.key, move.claims]),
       [["a1", [{ kind: "place", key: "IR" }]]],
     );
   }).pipe(
@@ -358,7 +386,11 @@ it.effect("refuses a proposed move for a player who has already played today", (
     });
 
     assert.deepStrictEqual(
-      result.refused.map(({ code, team: refusedTeam, moves }) => [code, refusedTeam, moves]),
+      EffectArray.map(result.refused, ({ code, team: refusedTeam, moves }) => [
+        code,
+        refusedTeam,
+        moves,
+      ]),
       [["player_locked", team, [0]]],
     );
     assert.include(result.refused[0]?.detail ?? "", "Locked One");
@@ -387,12 +419,12 @@ it.effect("refuses a second drop of the same player in one plan", () =>
     });
 
     assert.deepStrictEqual(
-      result.refused.map((refusal) => [refusal.code, refusal.team, refusal.moves]),
+      EffectArray.map(result.refused, (refusal) => [refusal.code, refusal.team, refusal.moves]),
       [["player_claimed", team, [1]]],
     );
     assert.include(result.refused[0]?.detail ?? "", "already claimed in this plan");
     assert.deepStrictEqual(
-      result.plan.moves.map((move) => move.drops[0]?.key),
+      EffectArray.map(result.plan.moves, (move) => move.drops[0]?.key),
       ["a1"],
     );
     assert.strictEqual((yield* database.select().from(transactionMoves)).length, 1);
@@ -422,12 +454,12 @@ it.effect("refuses a second move to the same place in one plan", () =>
     });
 
     assert.deepStrictEqual(
-      result.refused.map((refusal) => [refusal.code, refusal.team, refusal.moves]),
+      EffectArray.map(result.refused, (refusal) => [refusal.code, refusal.team, refusal.moves]),
       [["place_claimed", team, [1]]],
     );
     assert.include(result.refused[0]?.detail ?? "", "IR place");
     assert.deepStrictEqual(
-      result.plan.moves.map((move) => move.slotMove?.playerKey),
+      EffectArray.map(result.plan.moves, (move) => move.slotMove?.playerKey),
       ["a1"],
     );
     assert.strictEqual((yield* database.select().from(transactionMoves)).length, 1);
@@ -459,7 +491,9 @@ it.effect("saves one move of a group for one day and revalidates the plan", () =
         { ...drop("a2", "Roster Two"), group: "pair" },
       ],
     });
-    const first = proposed.plan.moves.find((move) => move.drops[0]?.key === "a1");
+    const first = EffectOption.getOrUndefined(
+      EffectArray.findFirst(proposed.plan.moves, (move) => move.drops[0]?.key === "a1"),
+    );
     assert.isDefined(first);
 
     const saved = yield* service.save(owner, {
@@ -470,14 +504,17 @@ it.effect("saves one move of a group for one day and revalidates the plan", () =
 
     assert.deepStrictEqual(saved.refused, []);
     assert.deepStrictEqual(
-      saved.plan.moves.map((move) => [move.decision, move.runDay, move.effectiveDate]),
+      EffectArray.map(saved.plan.moves, (move) => [move.decision, move.runDay, move.effectiveDate]),
       [
         ["saved", "2026-11-16", "2026-11-16"],
         ["saved", "2026-11-16", "2026-11-16"],
       ],
     );
     assert.deepStrictEqual(
-      (yield* database.select().from(transactionMoves)).map((move) => [move.runDay, move.decision]),
+      EffectArray.map(yield* database.select().from(transactionMoves), (move) => [
+        move.runDay,
+        move.decision,
+      ]),
       [
         ["2026-11-16", "saved"],
         ["2026-11-16", "saved"],
@@ -511,8 +548,12 @@ it.effect("edits a saved move in place and revalidates the moves after it", () =
       ],
     });
     assert.deepStrictEqual(proposed.refused, []);
-    const edited = proposed.plan.moves.find((move) => move.kind === "free_agent_add");
-    const downstream = proposed.plan.moves.find((move) => move.kind === "drop");
+    const edited = EffectOption.getOrUndefined(
+      EffectArray.findFirst(proposed.plan.moves, (move) => move.kind === "free_agent_add"),
+    );
+    const downstream = EffectOption.getOrUndefined(
+      EffectArray.findFirst(proposed.plan.moves, (move) => move.kind === "drop"),
+    );
     assert.isDefined(edited);
     assert.isDefined(downstream);
 
@@ -528,18 +569,18 @@ it.effect("edits a saved move in place and revalidates the moves after it", () =
 
     assert.deepStrictEqual(result.refused, []);
     assert.deepStrictEqual(
-      result.plan.moves.map((move) => [move.move, move.kind, move.adds[0]?.key]),
+      EffectArray.map(result.plan.moves, (move) => [move.move, move.kind, move.adds[0]?.key]),
       [
         [requireMoveId(downstream), "drop", undefined],
         [requireMoveId(edited), "free_agent_add", "fa2"],
       ],
     );
     assert.deepStrictEqual(
-      result.plan.moves.map((move) => move.validation.status),
+      EffectArray.map(result.plan.moves, (move) => move.validation.status),
       ["current", "current"],
     );
     assert.deepStrictEqual(
-      result.plan.moves.map((move) => move.runPosition),
+      EffectArray.map(result.plan.moves, (move) => move.runPosition),
       [0, 1],
     );
     assert.strictEqual(result.plan.moves[1]?.reason, "Add the other free agent instead.");
@@ -572,7 +613,9 @@ it.effect("refuses an edit that would make a later move impossible", () =>
         { ...add("fa1", "Free Agent One"), runDay: "2026-11-16" },
       ],
     });
-    const edited = proposed.plan.moves.find((move) => move.kind === "drop");
+    const edited = EffectOption.getOrUndefined(
+      EffectArray.findFirst(proposed.plan.moves, (move) => move.kind === "drop"),
+    );
     assert.isDefined(edited);
 
     const result = yield* service.edit(owner, {
@@ -585,13 +628,13 @@ it.effect("refuses an edit that would make a later move impossible", () =>
     });
 
     assert.deepStrictEqual(
-      result.refused.map((refusal) => [refusal.code, refusal.team]),
+      EffectArray.map(result.refused, (refusal) => [refusal.code, refusal.team]),
       [["roster_full", team]],
     );
     assert.include(result.refused[0]?.detail ?? "", "Add Free Agent One");
     const stored = yield* database.select().from(transactionMoves);
     assert.deepStrictEqual(
-      stored.map((move) => move.reason),
+      EffectArray.map(stored, (move) => move.reason),
       ["Drop Roster One.", "Add Free Agent One."],
     );
   }).pipe(
@@ -652,7 +695,9 @@ it.effect("amends a saved move's reason and fallbacks in place and revalidates t
     assert.strictEqual(changed?.move, requireMoveId(amended));
     assert.strictEqual(changed?.reason, "Prefer the third fallback.");
     assert.deepStrictEqual(
-      changed?.fallbacks.map((player) => player.key),
+      optionalArrayValue(changed?.fallbacks, (value) =>
+        EffectArray.map(value, (player) => player.key),
+      ),
       ["fa3"],
     );
     assert.strictEqual(changed?.runDay, "2026-11-16");
@@ -664,7 +709,10 @@ it.effect("amends a saved move's reason and fallbacks in place and revalidates t
     assert.strictEqual(storedAfter.length, 1);
     assert.strictEqual(storedAfter[0]?.position, positionBefore);
     assert.deepStrictEqual(
-      (yield* database.select().from(transactionMoveClaims)).map((claim) => claim.claimKey).sort(),
+      EffectArray.map(
+        yield* database.select().from(transactionMoveClaims),
+        (claim) => claim.claimKey,
+      ).sort(),
       ["fa1", "fa3"],
     );
   }).pipe(
@@ -702,14 +750,15 @@ it.effect("changes a saved move's run day and reorders the plan", () =>
     assert.deepStrictEqual(proposed.refused, []);
     const before = yield* service.list(owner, { team, state: "saved" });
     assert.deepStrictEqual(
-      before.days.map((day) => day.day),
+      EffectArray.map(before.days, (day) => day.day),
       ["2026-11-16", "2026-11-17"],
     );
     const first = droppedMoveId(proposed.plan, "a1");
     const downstream = droppedMoveId(proposed.plan, "a2");
     const storedBefore = yield* database.select().from(transactionMoves);
     const positionBefore = (move: TransactionMoveId): number | undefined =>
-      storedBefore.find((row) => row.id === move)?.position;
+      EffectOption.getOrUndefined(EffectArray.findFirst(storedBefore, (row) => row.id === move))
+        ?.position;
 
     yield* TestClock.adjust(60_000);
     const refs = yield* tokens.sealPlayerRefs({
@@ -733,7 +782,7 @@ it.effect("changes a saved move's run day and reorders the plan", () =>
 
     assert.deepStrictEqual(result.refused, []);
     assert.deepStrictEqual(
-      result.plan.moves.map((move) => [move.move, move.validation.status]),
+      EffectArray.map(result.plan.moves, (move) => [move.move, move.validation.status]),
       [
         [first, "current"],
         [downstream, "current"],
@@ -741,7 +790,12 @@ it.effect("changes a saved move's run day and reorders the plan", () =>
     );
     const after = yield* service.list(owner, { team, state: "saved" });
     assert.deepStrictEqual(
-      after.days.map((day) => [day.day, day.teams[0]?.moves.map((move) => move.move)]),
+      EffectArray.map(after.days, (day) => [
+        day.day,
+        optionalArrayValue(day.teams[0]?.moves, (value) =>
+          EffectArray.map(value, (move) => move.move),
+        ),
+      ]),
       [
         ["2026-11-17", [downstream]],
         ["2026-11-18", [first]],
@@ -753,11 +807,14 @@ it.effect("changes a saved move's run day and reorders the plan", () =>
     );
     const storedAfter = yield* database.select().from(transactionMoves);
     assert.strictEqual(
-      storedAfter.find((row) => row.id === first)?.position,
+      EffectOption.getOrUndefined(EffectArray.findFirst(storedAfter, (row) => row.id === first))
+        ?.position,
       positionBefore(first),
     );
     assert.strictEqual(
-      storedAfter.find((row) => row.id === downstream)?.position,
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(storedAfter, (row) => row.id === downstream),
+      )?.position,
       positionBefore(downstream),
     );
   }).pipe(
@@ -907,7 +964,7 @@ it.effect("discards a saved move and leaves the plan open", () =>
 
     assert.deepStrictEqual(result.refused, []);
     assert.deepStrictEqual(
-      result.plan.moves.map((move) => [move.drops[0]?.key, move.decision]),
+      EffectArray.map(result.plan.moves, (move) => [move.drops[0]?.key, move.decision]),
       [
         ["a2", "saved"],
         ["a1", "discarded"],
@@ -915,7 +972,7 @@ it.effect("discards a saved move and leaves the plan open", () =>
     );
     const open = yield* service.list(owner, { team, state: "saved" });
     assert.deepStrictEqual(
-      open.moves.map((move) => move.move),
+      EffectArray.map(open.moves, (move) => move.move),
       [droppedMoveId(result.plan, "a2")],
     );
     assert.strictEqual((yield* database.select().from(transactionPlans)).length, 1);
@@ -945,24 +1002,32 @@ it.effect("rechecks the queue after discarding the move that funds an add", () =
     });
     assert.deepStrictEqual(proposed.refused, []);
     assert.deepStrictEqual(
-      proposed.plan.moves.map((move) => [move.kind, move.runPosition]),
+      EffectArray.map(proposed.plan.moves, (move) => [move.kind, move.runPosition]),
       [
         ["drop", 0],
         ["free_agent_add", 1],
       ],
     );
-    const funder = proposed.plan.moves.find((move) => move.kind === "drop");
-    const funded = proposed.plan.moves.find((move) => move.kind === "free_agent_add");
+    const funder = EffectOption.getOrUndefined(
+      EffectArray.findFirst(proposed.plan.moves, (move) => move.kind === "drop"),
+    );
+    const funded = EffectOption.getOrUndefined(
+      EffectArray.findFirst(proposed.plan.moves, (move) => move.kind === "free_agent_add"),
+    );
 
     const result = yield* service.discard(owner, {
       team,
       move: requireMoveId(funder),
     });
 
-    const remaining = result.plan.moves.find((move) => move.move === requireMoveId(funded));
+    const remaining = EffectOption.getOrUndefined(
+      EffectArray.findFirst(result.plan.moves, (move) => move.move === requireMoveId(funded)),
+    );
     assert.strictEqual(remaining?.validation.status, "stale");
     assert.deepStrictEqual(
-      remaining?.validation.reasons.map((reason) => reason.code),
+      optionalArrayValue(remaining?.validation.reasons, (value) =>
+        EffectArray.map(value, (reason) => reason.code),
+      ),
       ["roster_full"],
     );
     assert.strictEqual(remaining?.runPosition, undefined);
@@ -1006,7 +1071,7 @@ it.effect("refuses to discard a move that has already run", () =>
     const result = yield* service.discard(owner, { team, move });
 
     assert.deepStrictEqual(
-      result.refused.map((refusal) => [refusal.code, refusal.team]),
+      EffectArray.map(result.refused, (refusal) => [refusal.code, refusal.team]),
       [["move_not_open", team]],
     );
     assert.include(result.refused[0]?.detail ?? "", "has ended");
@@ -1029,7 +1094,9 @@ it.effect("discards one move and leaves the plan's other moves", () =>
       proposedBy: proposer,
       moves: [drop("a1", "Roster One"), drop("a2", "Roster Two")],
     });
-    const discarded = proposed.plan.moves.find((move) => move.drops[0]?.key === "a1");
+    const discarded = EffectOption.getOrUndefined(
+      EffectArray.findFirst(proposed.plan.moves, (move) => move.drops[0]?.key === "a1"),
+    );
     assert.isDefined(discarded);
 
     const result = yield* service.discard(owner, {
@@ -1039,7 +1106,7 @@ it.effect("discards one move and leaves the plan's other moves", () =>
 
     assert.deepStrictEqual(result.refused, []);
     assert.deepStrictEqual(
-      result.plan.moves.map((move) => [move.drops[0]?.key, move.decision]),
+      EffectArray.map(result.plan.moves, (move) => [move.drops[0]?.key, move.decision]),
       [
         ["a2", "undecided"],
         ["a1", "discarded"],
@@ -1102,16 +1169,21 @@ it.effect("discards a failed move and a stale move out of the open list", () => 
       }).facts,
     );
     const before = yield* service.plan(owner, { team });
-    assert.strictEqual(before.moves.find(({ move }) => move === stale)?.validation.status, "stale");
+    assert.strictEqual(
+      EffectOption.getOrUndefined(EffectArray.findFirst(before.moves, ({ move }) => move === stale))
+        ?.validation.status,
+      "stale",
+    );
 
     yield* service.discard(owner, { team, move: failed });
     yield* service.discard(owner, { team, move: stale });
 
     const after = yield* service.plan(owner, { team });
     assert.deepStrictEqual(
-      after.moves
-        .filter(({ move }) => move === failed || move === stale)
-        .map(({ decision }) => decision),
+      EffectArray.map(
+        EffectArray.filter(after.moves, ({ move }) => move === failed || move === stale),
+        ({ decision }) => decision,
+      ),
       ["discarded", "discarded"],
     );
     const open = yield* service.list(owner, { team });
@@ -1146,12 +1218,18 @@ it.effect("resolves concurrent proposals to one plan without losing a move", () 
     );
 
     assert.deepStrictEqual(
-      results.flatMap((result) => result.refused),
+      EffectArray.flatMap(results, (result) => {
+        const flatMapped1 = result.refused;
+        return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+      }),
       [],
     );
     assert.strictEqual((yield* database.select().from(transactionPlans)).length, 1);
     assert.deepStrictEqual(
-      (yield* database.select().from(transactionMoveClaims)).map((claim) => claim.claimKey).sort(),
+      EffectArray.map(
+        yield* database.select().from(transactionMoveClaims),
+        (claim) => claim.claimKey,
+      ).sort(),
       ["fa1", "fa2"],
     );
   }).pipe(
@@ -1199,7 +1277,9 @@ it.effect("rechecks a saved drop when the league no longer rosters the player", 
     assert.strictEqual(move?.runDay, "2026-11-16");
     assert.strictEqual(move?.validation.status, "stale");
     assert.deepStrictEqual(
-      move?.validation.reasons.map((reason) => reason.code),
+      optionalArrayValue(move?.validation.reasons, (value) =>
+        EffectArray.map(value, (reason) => reason.code),
+      ),
       ["drop_not_rostered"],
     );
     assert.deepStrictEqual(move?.check, { status: "checked" });
@@ -1362,7 +1442,9 @@ it.effect("flags a saved free-agent add when the league moves the player to waiv
     const waivedRead = yield* service.plan(owner, { team });
     assert.strictEqual(waivedRead.moves[0]?.validation.status, "stale");
     assert.deepStrictEqual(
-      waivedRead.moves[0]?.validation.reasons.map(({ code, detail }) => [code, detail]),
+      optionalArrayValue(waivedRead.moves[0]?.validation.reasons, (value) =>
+        EffectArray.map(value, ({ code, detail }) => [code, detail]),
+      ),
       [
         [
           "player_unavailable",
@@ -1375,7 +1457,9 @@ it.effect("flags a saved free-agent add when the league moves the player to waiv
     const taken = yield* service.plan(owner, { team });
     assert.strictEqual(taken.moves[0]?.validation.status, "stale");
     assert.deepStrictEqual(
-      taken.moves[0]?.validation.reasons.map(({ code, detail }) => [code, detail]),
+      optionalArrayValue(taken.moves[0]?.validation.reasons, (value) =>
+        EffectArray.map(value, ({ code, detail }) => [code, detail]),
+      ),
       [["player_unavailable", "Free Agent One is not in the league's available player pool."]],
     );
   }).pipe(layerTools.provide(mutableFactsLayer(facts)));
@@ -1403,7 +1487,9 @@ it.effect("flags an open move when its player becomes locked before the read", (
     const read = yield* service.plan(owner, { team });
     assert.strictEqual(read.moves[0]?.validation.status, "stale");
     assert.deepStrictEqual(
-      read.moves[0]?.validation.reasons.map(({ code, detail }) => [code, detail]),
+      optionalArrayValue(read.moves[0]?.validation.reasons, (value) =>
+        EffectArray.map(value, ({ code, detail }) => [code, detail]),
+      ),
       [
         [
           "player_locked",
@@ -1449,7 +1535,9 @@ it.effect("reads a healthy player in an injury reserve place as illegal", () => 
 
     assert.strictEqual(move?.validation.status, "illegal");
     assert.deepStrictEqual(
-      move?.validation.reasons.map((reason) => reason.code),
+      optionalArrayValue(move?.validation.reasons, (value) =>
+        EffectArray.map(value, (reason) => reason.code),
+      ),
       ["slot_illegal"],
     );
     assert.include(
@@ -1457,7 +1545,9 @@ it.effect("reads a healthy player in an injury reserve place as illegal", () => 
       "Healthy Reserve is no longer injured but sits in IR.",
     );
     assert.deepStrictEqual(
-      read.illegal?.map(({ name, slot, fact, cure }) => ({ name, slot, fact, cure })),
+      optionalArrayValue(read.illegal, (value) =>
+        EffectArray.map(value, ({ name, slot, fact, cure }) => ({ name, slot, fact, cure })),
+      ),
       [
         {
           name: "Healthy Reserve",
@@ -1471,7 +1561,10 @@ it.effect("reads a healthy player in an injury reserve place as illegal", () => 
     const refs = yield* tokens.openPlayerRefs({
       userId: owner,
       leagueKey: `league-${team}`,
-      refs: read.illegal?.map((entry) => entry.player) ?? [],
+      refs:
+        optionalArrayValue(read.illegal, (value) =>
+          EffectArray.map(value, (entry) => entry.player),
+        ) ?? [],
     });
     assert.deepStrictEqual(refs, ["h1"]);
     assert.deepStrictEqual(read.canFree, []);
@@ -1504,7 +1597,9 @@ it.effect("publishes both reserve moves and the adds a full roster gains from th
     assert.deepStrictEqual(read.places, { used: 2, maximum: 2, free: 0 });
     assert.strictEqual(read.addsPossible, 2);
     assert.deepStrictEqual(
-      read.canFree?.map(({ name, list, place }) => ({ name, list, place })),
+      optionalArrayValue(read.canFree, (value) =>
+        EffectArray.map(value, ({ name, list, place }) => ({ name, list, place })),
+      ),
       [
         { name: "Roster One", list: "IR", place: "BN" },
         { name: "Roster Two", list: "IR+", place: "BN" },
@@ -1515,7 +1610,10 @@ it.effect("publishes both reserve moves and the adds a full roster gains from th
     const refs = yield* tokens.openPlayerRefs({
       userId: owner,
       leagueKey: `league-${team}`,
-      refs: read.canFree?.map((entry) => entry.player) ?? [],
+      refs:
+        optionalArrayValue(read.canFree, (value) =>
+          EffectArray.map(value, (entry) => entry.player),
+        ) ?? [],
     });
     assert.deepStrictEqual(refs, ["a1", "a2"]);
   }).pipe(layerTools.provide(mutableFactsLayer(facts)));
@@ -1569,7 +1667,11 @@ it.effect("groups the timeline by run day and team with today first", () => {
     const timeline = yield* service.timeline(owner, {});
 
     assert.deepStrictEqual(
-      timeline.days.map((day) => [day.day, day.today, day.teams.map(({ team }) => team.id)]),
+      EffectArray.map(timeline.days, (day) => [
+        day.day,
+        day.today,
+        EffectArray.map(day.teams, ({ team }) => team.id),
+      ]),
       [
         ["2026-11-14", true, [team, secondTeam]],
         ["2026-11-15", false, [team, secondTeam]],
@@ -1577,7 +1679,7 @@ it.effect("groups the timeline by run day and team with today first", () => {
       ],
     );
     assert.deepStrictEqual(
-      timeline.moves.map(({ team, position }) => [team.id, position]),
+      EffectArray.map(timeline.moves, ({ team, position }) => [team.id, position]),
       [
         [team, 0],
         [secondTeam, 1],
@@ -1587,9 +1689,12 @@ it.effect("groups the timeline by run day and team with today first", () => {
       ],
     );
     assert.deepStrictEqual(
-      timeline.days[0]?.teams
-        .map(({ moves }) => moves.map(({ move }) => move))
-        .map((ids) => ids.length),
+      optionalArrayValue(
+        optionalArrayValue(timeline.days[0]?.teams, (value) =>
+          EffectArray.map(value, ({ moves }) => EffectArray.map(moves, ({ move }) => move)),
+        ),
+        (value) => EffectArray.map(value, (ids) => ids.length),
+      ),
       [1, 1],
     );
 
@@ -1597,7 +1702,7 @@ it.effect("groups the timeline by run day and team with today first", () => {
 
     assert.strictEqual(plan.today, "2026-11-14");
     assert.deepStrictEqual(
-      plan.moves.map(({ decision, runDay }) => [decision, runDay]),
+      EffectArray.map(plan.moves, ({ decision, runDay }) => [decision, runDay]),
       [
         ["undecided", "2026-11-14"],
         ["saved", "2026-11-16"],
@@ -1605,7 +1710,7 @@ it.effect("groups the timeline by run day and team with today first", () => {
       ],
     );
     assert.deepStrictEqual(
-      plan.days.map(({ day, today, moves }) => [day, today, moves.length]),
+      EffectArray.map(plan.days, ({ day, today, moves }) => [day, today, moves.length]),
       [
         ["2026-11-14", true, 1],
         ["2026-11-16", false, 1],
@@ -1632,14 +1737,14 @@ it.effect("keeps a team's ended moves in its plan read", () =>
     const plan = yield* service.plan(owner, { team });
 
     assert.deepStrictEqual(
-      plan.moves.map(({ decision, check }) => [decision, check.status]),
+      EffectArray.map(plan.moves, ({ decision, check }) => [decision, check.status]),
       [
         ["undecided", "checked"],
         ["discarded", "stored"],
       ],
     );
     assert.deepStrictEqual(
-      plan.days.map(({ day, moves }) => [day, moves.length]),
+      EffectArray.map(plan.days, ({ day, moves }) => [day, moves.length]),
       [
         [today, 1],
         [undefined, 1],
@@ -1769,7 +1874,7 @@ it.effect("pages the timeline by run day, team, position, and move", () =>
     } while (after !== undefined);
 
     assert.deepStrictEqual(
-      pages.map((page) => [page.page.returned, page.page.complete]),
+      EffectArray.map(pages, (page) => [page.page.returned, page.page.complete]),
       [
         [2, false],
         [2, false],
@@ -1777,11 +1882,16 @@ it.effect("pages the timeline by run day, team, position, and move", () =>
       ],
     );
     assert.deepStrictEqual(
-      pages.flatMap((page) => page.moves.map(({ move }) => move)),
-      full.moves.map(({ move }) => move),
+      EffectArray.flatMap(pages, (page) => {
+        const flatMapped2 = EffectArray.map(page.moves, ({ move }) => move);
+        return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+      }),
+      EffectArray.map(full.moves, ({ move }) => move),
     );
     assert.deepStrictEqual(
-      pages[0]?.days.map((day) => [day.day, day.today]),
+      optionalArrayValue(pages[0]?.days, (value) =>
+        EffectArray.map(value, (day) => [day.day, day.today]),
+      ),
       [["2026-11-14", true]],
     );
   }).pipe(
@@ -1834,7 +1944,7 @@ it.effect("lists earlier moves newest first and resumes with the next older page
 
     const first = yield* service.list(owner, { team, state: "ended", limit: 2 });
     assert.deepStrictEqual(
-      first.moves.map(({ runDay }) => runDay),
+      EffectArray.map(first.moves, ({ runDay }) => runDay),
       ["2026-11-16", "2026-11-15"],
     );
     assert.isFalse(first.page.complete);
@@ -1848,7 +1958,7 @@ it.effect("lists earlier moves newest first and resumes with the next older page
       limit: 2,
     });
     assert.deepStrictEqual(
-      second.moves.map(({ runDay }) => runDay),
+      EffectArray.map(second.moves, ({ runDay }) => runDay),
       ["2026-11-14"],
     );
     assert.isTrue(second.page.complete);
@@ -1966,36 +2076,36 @@ it.effect("lists one team's moves by today, saved, and ended", () => {
     const now = yield* service.list(owner, { team, state: "today" });
     assert.strictEqual(now.team?.id, team);
     assert.deepStrictEqual(
-      now.moves.map(({ move }) => move),
+      EffectArray.map(now.moves, ({ move }) => move),
       [droppedMoveId(proposed.plan, "a1")],
     );
     assert.deepStrictEqual(
-      now.moves.map(({ decision }) => decision),
+      EffectArray.map(now.moves, ({ decision }) => decision),
       ["undecided"],
     );
 
     const defaulted = yield* service.list(owner, { team });
     assert.deepStrictEqual(
-      defaulted.moves.map(({ move }) => move),
-      now.moves.map(({ move }) => move),
+      EffectArray.map(defaulted.moves, ({ move }) => move),
+      EffectArray.map(now.moves, ({ move }) => move),
     );
 
     const saved = yield* service.list(owner, { team, state: "saved" });
     assert.deepStrictEqual(
-      saved.moves.map(({ runDay }) => runDay),
+      EffectArray.map(saved.moves, ({ runDay }) => runDay),
       ["2026-11-16"],
     );
     assert.deepStrictEqual(
-      saved.days.map((day) => [day.day, day.today]),
+      EffectArray.map(saved.days, (day) => [day.day, day.today]),
       [["2026-11-16", false]],
     );
 
     const ended = yield* service.list(owner, { team, state: "ended" });
     assert.deepStrictEqual(
-      ended.moves.map(({ result, decision }) => result ?? decision),
+      EffectArray.map(ended.moves, ({ result, decision }) => result ?? decision),
       ["executed"],
     );
-    assert.isTrue(ended.moves.every(({ check }) => check.status === "stored"));
+    assert.isTrue(EffectArray.every(ended.moves, ({ check }) => check.status === "stored"));
 
     const everyTeam = yield* service.list(owner, { state: "today" });
     assert.strictEqual(everyTeam.team, undefined);
@@ -2040,7 +2150,9 @@ it.effect("submits today's chosen move and records its result, steps, and check 
     assert.deepStrictEqual(writes.requests[0]?.adds, ["fa1"]);
 
     const stored = yield* repository.readPlanMoves({ userId: owner, team });
-    const submitted = stored.find((move) => move.adds[0]?.key === "fa1");
+    const submitted = EffectOption.getOrUndefined(
+      EffectArray.findFirst(stored, (move) => move.adds[0]?.key === "fa1"),
+    );
     assert.strictEqual(submitted?.result, "executed");
     assert.strictEqual(submitted?.decision, "now");
     assert.strictEqual(submitted?.runDay, today);
@@ -2051,11 +2163,16 @@ it.effect("submits today's chosen move and records its result, steps, and check 
       throw new Error("The submitted move did not record a result time");
     }
     assert.strictEqual(DateTime.formatIso(resultAt), DateTime.formatIso(at));
-    assert.strictEqual(stored.find((move) => move.adds[0]?.key === "fa2")?.result, undefined);
+    assert.strictEqual(
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(stored, (move) => move.adds[0]?.key === "fa2"),
+      )?.result,
+      undefined,
+    );
 
     const steps = yield* database.select().from(transactionMoveSteps);
     assert.deepStrictEqual(
-      steps.map((step) => [step.kind, step.playerKey, step.outcome]),
+      EffectArray.map(steps, (step) => [step.kind, step.playerKey, step.outcome]),
       [["add", "fa1", "executed"]],
     );
 
@@ -2063,7 +2180,12 @@ it.effect("submits today's chosen move and records its result, steps, and check 
     assert.strictEqual(plans[0]?.runClaim, null);
 
     const read = yield* service.plan(owner, { team });
-    assert.strictEqual(read.moves.find((move) => move.move === submitted?.id)?.result, "executed");
+    assert.strictEqual(
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(read.moves, (move) => move.move === submitted?.id),
+      )?.result,
+      "executed",
+    );
   }).pipe(
     layerTools.provide(
       serviceLayer(
@@ -2117,8 +2239,16 @@ it.effect("confirms today's move, runs only it, and discards another", () => {
     assert.deepStrictEqual(writes.requests[0]?.adds, ["fa1"]);
 
     const stored = yield* repository.readPlanMoves({ userId: owner, team });
-    assert.strictEqual(stored.find((move) => move.id === first.move)?.result, "executed");
-    assert.strictEqual(stored.find((move) => move.id === second.move)?.decision, "discarded");
+    assert.strictEqual(
+      EffectOption.getOrUndefined(EffectArray.findFirst(stored, (move) => move.id === first.move))
+        ?.result,
+      "executed",
+    );
+    assert.strictEqual(
+      EffectOption.getOrUndefined(EffectArray.findFirst(stored, (move) => move.id === second.move))
+        ?.decision,
+      "discarded",
+    );
   }).pipe(
     layerTools.provide(
       serviceLayer(
@@ -2351,7 +2481,7 @@ it.effect("names the bidless shape and accepts a claim with no bid", () => {
       moves: [{ kind: "waiver_claim", adds: ["w1"], bid: 0, reason: "Claim a running back." }],
     });
     assert.deepStrictEqual(
-      refused.refused.map((entry) => [entry.code, entry.detail]),
+      EffectArray.map(refused.refused, (entry) => [entry.code, entry.detail]),
       [["bid_not_available", "This league takes no FAAB bid: name the claim without a bid."]],
     );
 
@@ -2413,7 +2543,7 @@ it.effect("refuses a bidless claim at save when the league publishes a balance",
       moves: [{ kind: "waiver_claim", adds: ["w1"], reason: "Claim a running back." }],
     });
     assert.deepStrictEqual(
-      refused.refused.map((entry) => [entry.code, entry.moves]),
+      EffectArray.map(refused.refused, (entry) => [entry.code, entry.moves]),
       [["bid_required", [0]]],
     );
     assert.include(refused.refused[0]?.detail ?? "", "name a bid from 0 to 100");
@@ -2442,7 +2572,7 @@ it.effect("refuses a bidless claim at save when the league publishes a balance",
       change: { kind: "waiver_claim", adds: ["w1"], reason: "Amend the claim." },
     });
     assert.deepStrictEqual(
-      removedBid.refused.map((entry) => entry.code),
+      EffectArray.map(removedBid.refused, (entry) => entry.code),
       ["bid_required"],
     );
 
@@ -2479,7 +2609,7 @@ it.effect("refuses a bid at save when the league takes bidless claims", () => {
       moves: [{ kind: "waiver_claim", adds: ["w1"], bid: 0, reason: "Claim a running back." }],
     });
     assert.deepStrictEqual(
-      refused.refused.map((entry) => [entry.code, entry.moves]),
+      EffectArray.map(refused.refused, (entry) => [entry.code, entry.moves]),
       [["bid_not_available", [0]]],
     );
     assert.include(refused.refused[0]?.detail ?? "", "name the claim without a bid");
@@ -2507,7 +2637,7 @@ it.effect("refuses a bid at save when the league takes bidless claims", () => {
       change: { kind: "waiver_claim", adds: ["w1"], bid: 0, reason: "Amend the claim." },
     });
     assert.deepStrictEqual(
-      addedBid.refused.map((entry) => entry.code),
+      EffectArray.map(addedBid.refused, (entry) => entry.code),
       ["bid_not_available"],
     );
 
@@ -2549,14 +2679,16 @@ it.effect("refuses a bidless claim at save after the league starts publishing a 
 
     const saved = yield* service.save(owner, { team, move, runDay: "2026-11-16" });
     assert.deepStrictEqual(
-      saved.refused.map((entry) => entry.code),
+      EffectArray.map(saved.refused, (entry) => entry.code),
       ["bid_required"],
     );
     assert.include(saved.refused[0]?.detail ?? "", "name a bid from 0 to 100");
     const read = yield* service.plan(owner, { team });
     assert.strictEqual(read.moves[0]?.validation.status, "stale");
     assert.deepStrictEqual(
-      read.moves[0]?.validation.reasons.map((reason) => reason.code),
+      optionalArrayValue(read.moves[0]?.validation.reasons, (value) =>
+        EffectArray.map(value, (reason) => reason.code),
+      ),
       ["bid_required"],
     );
   }).pipe(layerTools.provide(mutableFactsLayer(facts)));
@@ -2636,7 +2768,7 @@ it.effect("confirms a whole group from one member", () => {
     assert.strictEqual(result.counts.moves, 2);
     assert.strictEqual(result.counts.executed, 2);
     assert.strictEqual(writes.requests.length, 2);
-    const decisions = result.plan.moves.map((move) => move.decision);
+    const decisions = EffectArray.map(result.plan.moves, (move) => move.decision);
     assert.deepStrictEqual(decisions.sort(), ["now", "now"]);
   }).pipe(
     layerTools.provide(
@@ -2678,14 +2810,14 @@ it.effect("submits a two move group in the evaluated order", () => {
     assert.strictEqual(result.counts.moves, 2);
     assert.strictEqual(result.counts.executed, 2);
     assert.deepStrictEqual(
-      writes.requests.map((request) => request.adds[0]),
+      EffectArray.map(writes.requests, (request) => request.adds[0]),
       ["fa1", "fa2"],
     );
     const steps = yield* database.select().from(transactionMoveSteps);
     assert.deepStrictEqual(
-      steps
-        .map((step) => [step.playerKey, step.outcome])
-        .sort((left, right) => String(left[0]).localeCompare(String(right[0]))),
+      EffectArray.map(steps, (step) => [step.playerKey, step.outcome]).sort((left, right) =>
+        String(left[0]).localeCompare(String(right[0])),
+      ),
       [
         ["fa1", "executed"],
         ["fa2", "executed"],
@@ -2750,18 +2882,27 @@ it.effect("refuses a group whole when one of its moves fails, and runs an indepe
     assert.strictEqual(result.counts.skipped, 1);
     assert.strictEqual(result.counts.executed, 1);
     assert.deepStrictEqual(
-      writes.requests.map((request) => request.kind),
+      EffectArray.map(writes.requests, (request) => request.kind),
       ["drop"],
     );
 
     const stored = yield* repository.readPlanMoves({ userId: owner, team });
-    const unavailable = stored.find((move) => move.adds[0]?.key === "fa2");
-    const peer = stored.find((move) => move.adds[0]?.key === "fa1");
+    const unavailable = EffectOption.getOrUndefined(
+      EffectArray.findFirst(stored, (move) => move.adds[0]?.key === "fa2"),
+    );
+    const peer = EffectOption.getOrUndefined(
+      EffectArray.findFirst(stored, (move) => move.adds[0]?.key === "fa1"),
+    );
     assert.strictEqual(unavailable?.result, "failed");
     assert.include(unavailable?.resultDetail ?? "", "not in the league's available player pool");
     assert.strictEqual(peer?.result, "skipped");
     assert.include(peer?.resultDetail ?? "", "The group did not run");
-    assert.strictEqual(stored.find((move) => move.drops[0]?.key === "a1")?.result, "executed");
+    assert.strictEqual(
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(stored, (move) => move.drops[0]?.key === "a1"),
+      )?.result,
+      "executed",
+    );
   }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
 });
 
@@ -3030,7 +3171,10 @@ it.effect("blocks a dependent when its move fails and runs an independent move",
     assert.strictEqual(result.counts.skipped, 1);
     assert.strictEqual(result.counts.executed, 1);
     assert.deepStrictEqual(
-      writes.requests.map((request) => [request.kind, request.drops[0] ?? request.adds[0]]),
+      EffectArray.map(writes.requests, (request) => [
+        request.kind,
+        request.drops[0] ?? request.adds[0],
+      ]),
       [
         ["drop", "a1"],
         ["drop", "a2"],
@@ -3038,13 +3182,30 @@ it.effect("blocks a dependent when its move fails and runs an independent move",
     );
 
     const stored = yield* repository.readPlanMoves({ userId: owner, team });
-    assert.strictEqual(stored.find((move) => move.drops[0]?.key === "a1")?.result, "failed");
-    assert.strictEqual(stored.find((move) => move.adds[0]?.key === "fa1")?.result, "skipped");
+    assert.strictEqual(
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(stored, (move) => move.drops[0]?.key === "a1"),
+      )?.result,
+      "failed",
+    );
+    assert.strictEqual(
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(stored, (move) => move.adds[0]?.key === "fa1"),
+      )?.result,
+      "skipped",
+    );
     assert.include(
-      stored.find((move) => move.adds[0]?.key === "fa1")?.resultDetail ?? "",
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(stored, (move) => move.adds[0]?.key === "fa1"),
+      )?.resultDetail ?? "",
       "Drop Roster One did not pass its check",
     );
-    assert.strictEqual(stored.find((move) => move.drops[0]?.key === "a2")?.result, "executed");
+    assert.strictEqual(
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(stored, (move) => move.drops[0]?.key === "a2"),
+      )?.result,
+      "executed",
+    );
   }).pipe(
     layerTools.provide(
       serviceLayer(
@@ -3179,7 +3340,9 @@ it.effect(
       const stored = yield* repository.readPlanMoves({ userId: owner, team });
       assert.strictEqual(stored[0]?.phase, "with_league");
       assert.deepStrictEqual(
-        stored[0]?.attempts.map((attempt) => [attempt.kind, attempt.outcome]),
+        optionalArrayValue(stored[0]?.attempts, (value) =>
+          EffectArray.map(value, (attempt) => [attempt.kind, attempt.outcome]),
+        ),
         [["claim", "pending"]],
       );
 
@@ -3254,7 +3417,9 @@ it.effect("reconciles a won claim to done and runs no fallback", () => {
     assert.strictEqual(stored[0]?.phase, "won");
     assert.strictEqual(stored[0]?.result, "executed");
     assert.deepStrictEqual(
-      stored[0]?.attempts.map((attempt) => [attempt.kind, attempt.outcome]),
+      optionalArrayValue(stored[0]?.attempts, (value) =>
+        EffectArray.map(value, (attempt) => [attempt.kind, attempt.outcome]),
+      ),
       [["claim", "won"]],
     );
     const read = yield* service.plan(owner, { team });
@@ -3311,7 +3476,7 @@ it.effect("runs the first fallback when a claim is lost and never repeats it", (
     const run = yield* service.runDue(10, at);
     assert.strictEqual(run.counts.executed, 1);
     assert.deepStrictEqual(
-      writes.requests.map((request) => [request.kind, request.adds[0]]),
+      EffectArray.map(writes.requests, (request) => [request.kind, request.adds[0]]),
       [
         ["waiver_claim", "w1"],
         ["free_agent_add", "fa1"],
@@ -3324,7 +3489,9 @@ it.effect("runs the first fallback when a claim is lost and never repeats it", (
     assert.strictEqual(stored[0]?.result, "executed");
     assert.include(stored[0]?.resultDetail ?? "", "The claim was lost");
     assert.deepStrictEqual(
-      stored[0]?.attempts.map((attempt) => [attempt.kind, attempt.outcome]),
+      optionalArrayValue(stored[0]?.attempts, (value) =>
+        EffectArray.map(value, (attempt) => [attempt.kind, attempt.outcome]),
+      ),
       [
         ["claim", "lost"],
         ["fallback", "executed"],
@@ -3389,7 +3556,11 @@ it.effect("dates a lost claim's fallback from the day the fallback is sent", () 
     assert.strictEqual(stored[0]?.runDay, later);
     assert.strictEqual(stored[0]?.effectiveDate, later);
     assert.strictEqual(
-      stored[0]?.attempts.find((attempt) => attempt.kind === "fallback")?.effectiveDate,
+      optionalArrayValue(stored[0]?.attempts, (value) =>
+        EffectOption.getOrUndefined(
+          EffectArray.findFirst(value, (attempt) => attempt.kind === "fallback"),
+        ),
+      )?.effectiveDate,
       later,
     );
   }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
@@ -3451,7 +3622,7 @@ it.effect("tries each fallback in turn and ends failed when all choices fail", (
     const run = yield* service.runDue(10, at);
     assert.strictEqual(run.counts.failed, 1);
     assert.deepStrictEqual(
-      writes.requests.map((request) => [request.kind, request.adds[0]]),
+      EffectArray.map(writes.requests, (request) => [request.kind, request.adds[0]]),
       [
         ["waiver_claim", "w1"],
         ["free_agent_add", "fa1"],
@@ -3463,7 +3634,9 @@ it.effect("tries each fallback in turn and ends failed when all choices fail", (
     assert.strictEqual(stored[0]?.result, "failed");
     assert.include(stored[0]?.resultDetail ?? "", "All choices failed. Nothing is waiting.");
     assert.deepStrictEqual(
-      stored[0]?.attempts.map((attempt) => [attempt.kind, attempt.outcome]),
+      optionalArrayValue(stored[0]?.attempts, (value) =>
+        EffectArray.map(value, (attempt) => [attempt.kind, attempt.outcome]),
+      ),
       [
         ["claim", "lost"],
         ["fallback", "failed"],
@@ -3547,13 +3720,15 @@ for (const timing of [
       setDay("2026-11-15");
       yield* service.confirm(owner, {
         team,
-        moves: (yield* service.plan(owner, { team })).moves.map((move) => move.move),
+        moves: EffectArray.map((yield* service.plan(owner, { team })).moves, (move) => move.move),
         key: `confirm-timing-${timing.rule}`,
       });
 
       assert.strictEqual(writes.requests.length, 1);
       const stored = yield* repository.readPlanMoves({ userId: owner, team });
-      const run = stored.find((move) => move.drops[0]?.key === "a1");
+      const run = EffectOption.getOrUndefined(
+        EffectArray.findFirst(stored, (move) => move.drops[0]?.key === "a1"),
+      );
       assert.strictEqual(run?.result, "executed");
       assert.strictEqual(run?.runDay, "2026-11-15");
       assert.strictEqual(run?.effectiveDate, timing.effectiveDate);
@@ -3575,7 +3750,7 @@ it.effect("stores the locked week's start as a weekly-lock move's effective date
     });
 
     assert.deepStrictEqual(
-      proposed.plan.moves.map(({ runDay, effectiveDate }) => [runDay, effectiveDate]),
+      EffectArray.map(proposed.plan.moves, ({ runDay, effectiveDate }) => [runDay, effectiveDate]),
       [
         ["2026-11-14", "2026-11-09"],
         ["2026-11-21", "2026-11-16"],
@@ -3637,7 +3812,10 @@ it.effect("runs a drop, a stash, and an add group in the order its effects need"
 
     assert.strictEqual(result.counts.executed, 3);
     assert.deepStrictEqual(
-      writes.requests.map((request) => [request.kind, request.drops[0] ?? request.adds[0]]),
+      EffectArray.map(writes.requests, (request) => [
+        request.kind,
+        request.drops[0] ?? request.adds[0],
+      ]),
       [
         ["stash", undefined],
         ["drop", "a1"],
@@ -3647,7 +3825,7 @@ it.effect("runs a drop, a stash, and an add group in the order its effects need"
 
     const read = yield* service.plan(owner, { team });
     assert.deepStrictEqual(
-      read.groups.map((group) => [group.status, group.actions.length]),
+      EffectArray.map(read.groups, (group) => [group.status, group.actions.length]),
       [["done", 3]],
     );
     assert.include(read.groups[0]?.detail ?? "", "This group ran whole.");
@@ -3696,7 +3874,7 @@ it.effect("stops a whole group when one member is stale and sends nothing", () =
     assert.strictEqual(result.counts.skipped, 1);
     const read = yield* service.plan(owner, { team });
     assert.deepStrictEqual(
-      read.moves.map((move) => [move.kind, move.result]),
+      EffectArray.map(read.moves, (move) => [move.kind, move.result]),
       [
         ["drop", "failed"],
         ["drop", "skipped"],
@@ -3818,7 +3996,9 @@ it.effect(
       const group = read.groups[0];
       assert.strictEqual(group?.status, "partly_done");
       assert.deepStrictEqual(
-        group?.actions.map((action) => [action.action, action.player, action.outcome]),
+        optionalArrayValue(group?.actions, (value) =>
+          EffectArray.map(value, (action) => [action.action, action.player, action.outcome]),
+        ),
         [
           ["drop", "Roster One", "executed"],
           ["reserve_move", "Roster Two", "failed"],
@@ -3826,7 +4006,15 @@ it.effect(
       );
       assert.strictEqual(group?.failed?.detail, "The player was already there.");
       assert.deepStrictEqual(
-        group?.notRun.map((move) => read.moves.find((entry) => entry.move === move)?.kind),
+        optionalArrayValue(group?.notRun, (value) =>
+          EffectArray.map(
+            value,
+            (move) =>
+              EffectOption.getOrUndefined(
+                EffectArray.findFirst(read.moves, (entry) => entry.move === move),
+              )?.kind,
+          ),
+        ),
         ["free_agent_add"],
       );
       assert.strictEqual(
@@ -3857,7 +4045,7 @@ it.effect("adds a visible Roster fixes group before the add it funds", () => {
 
     assert.deepStrictEqual(result.refused, []);
     assert.deepStrictEqual(
-      result.plan.moves.map((move) => [move.kind, move.runPosition]),
+      EffectArray.map(result.plan.moves, (move) => [move.kind, move.runPosition]),
       [
         ["stash", 0],
         ["free_agent_add", 1],
@@ -3866,18 +4054,25 @@ it.effect("adds a visible Roster fixes group before the add it funds", () => {
 
     const read = yield* service.plan(owner, { team });
     const group = read.groups[0];
-    const funded = read.moves.find((move) => move.kind === "free_agent_add");
+    const funded = EffectOption.getOrUndefined(
+      EffectArray.findFirst(read.moves, (move) => move.kind === "free_agent_add"),
+    );
     assert.strictEqual(group?.label, "Roster fixes");
     assert.strictEqual(group?.status, "ready");
     assert.strictEqual(group?.moves.length, 1);
     assert.strictEqual(group?.fixesFor, funded?.move);
-    assert.strictEqual(read.moves.find((move) => move.move === group?.moves[0])?.kind, "stash");
+    assert.strictEqual(
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(read.moves, (move) => move.move === group?.moves[0]),
+      )?.kind,
+      "stash",
+    );
     assert.include(read.moves[0]?.reason ?? "", "to free a place");
 
     const confirmed = yield* confirmDue(service, team);
     assert.strictEqual(confirmed.counts.executed, 2);
     assert.deepStrictEqual(
-      writes.requests.map((request) => request.kind),
+      EffectArray.map(writes.requests, (request) => request.kind),
       ["stash", "free_agent_add"],
     );
   }).pipe(
@@ -3913,7 +4108,7 @@ it.effect("adds no Roster fixes group when the add already fits", () =>
     const read = yield* service.plan(owner, { team });
     assert.deepStrictEqual(read.groups, []);
     assert.deepStrictEqual(
-      read.moves.map((move) => move.kind),
+      EffectArray.map(read.moves, (move) => move.kind),
       ["free_agent_add"],
     );
   }).pipe(
@@ -3945,16 +4140,23 @@ it.effect("stashes an injured player to the reserve list their roster row names"
     assert.deepStrictEqual(result.refused, []);
     const read = yield* service.plan(owner, { team });
     assert.deepStrictEqual(
-      read.canFree?.map((entry) => [entry.name, entry.list, entry.place]),
+      optionalArrayValue(read.canFree, (value) =>
+        EffectArray.map(value, (entry) => [entry.name, entry.list, entry.place]),
+      ),
       [["Day To Day", "IR+", "BN"]],
     );
-    const fix = read.moves.find((move) => move.kind === "stash");
+    const fix = EffectOption.getOrUndefined(
+      EffectArray.findFirst(read.moves, (move) => move.kind === "stash"),
+    );
     assert.isDefined(fix);
     assert.strictEqual(fix.placement?.toSlot, "IR+");
     assert.include(fix.reason, "IR+ reserve list");
     assert.strictEqual(fix.validation.status, "current");
     assert.deepStrictEqual(
-      read.moves.filter((move) => move.placement?.toSlot === "IR").map((move) => move.kind),
+      optionalArrayValue(
+        EffectArray.filter(read.moves, (move) => move.placement?.toSlot === "IR"),
+        (value) => EffectArray.map(value, (move) => move.kind),
+      ),
       [],
     );
   }).pipe(
@@ -3989,7 +4191,7 @@ it.effect("activates a healthy player off a reserve list so an add can run", () 
     assert.deepStrictEqual(result.refused, []);
     const read = yield* service.plan(owner, { team });
     assert.deepStrictEqual(
-      read.moves.map((move) => [move.kind, move.validation.status]),
+      EffectArray.map(read.moves, (move) => [move.kind, move.validation.status]),
       [
         ["activate", "current"],
         ["free_agent_add", "current"],
@@ -3997,7 +4199,15 @@ it.effect("activates a healthy player off a reserve list so an add can run", () 
     );
     assert.strictEqual(read.groups[0]?.label, "Roster fixes");
     assert.deepStrictEqual(
-      read.groups[0]?.moves.map((move) => read.moves.find((entry) => entry.move === move)?.kind),
+      optionalArrayValue(read.groups[0]?.moves, (value) =>
+        EffectArray.map(
+          value,
+          (move) =>
+            EffectOption.getOrUndefined(
+              EffectArray.findFirst(read.moves, (entry) => entry.move === move),
+            )?.kind,
+        ),
+      ),
       ["activate"],
     );
   }).pipe(
@@ -4096,14 +4306,18 @@ it.effect("runs an activate with the funding drop and leaves the roster legal", 
 
     assert.deepStrictEqual(proposed.refused, []);
     assert.deepStrictEqual(
-      proposed.plan.moves.map((move) => [move.kind, move.drops[0]?.key, move.validation.status]),
+      EffectArray.map(proposed.plan.moves, (move) => [
+        move.kind,
+        move.drops[0]?.key,
+        move.validation.status,
+      ]),
       [["activate", "a1", "current"]],
     );
 
     const confirmed = yield* confirmDue(service, team);
     assert.strictEqual(confirmed.counts.executed, 1);
     assert.deepStrictEqual(
-      writes.requests.map((request) => [request.kind, request.drops]),
+      EffectArray.map(writes.requests, (request) => [request.kind, request.drops]),
       [["activate", ["a1"]]],
     );
 
@@ -4155,8 +4369,12 @@ it.effect("accepts a drop and an activate as one group when that is the legal cu
     });
 
     assert.deepStrictEqual(proposed.refused, []);
-    const activates = proposed.plan.moves.find((move) => move.kind === "activate");
-    const drops = proposed.plan.moves.find((move) => move.kind === "drop");
+    const activates = EffectOption.getOrUndefined(
+      EffectArray.findFirst(proposed.plan.moves, (move) => move.kind === "activate"),
+    );
+    const drops = EffectOption.getOrUndefined(
+      EffectArray.findFirst(proposed.plan.moves, (move) => move.kind === "drop"),
+    );
     if (activates === undefined || drops === undefined || activates.group === undefined) {
       throw new Error("The plan did not group the drop with the activate");
     }
@@ -4171,14 +4389,22 @@ it.effect("accepts a drop and an activate as one group when that is the legal cu
     assert.strictEqual(read.groups.length, 1);
     assert.strictEqual(read.groups[0]?.status, "ready");
     assert.deepStrictEqual(
-      read.groups[0]?.moves.map((move) => read.moves.find((entry) => entry.move === move)?.kind),
+      optionalArrayValue(read.groups[0]?.moves, (value) =>
+        EffectArray.map(
+          value,
+          (move) =>
+            EffectOption.getOrUndefined(
+              EffectArray.findFirst(read.moves, (entry) => entry.move === move),
+            )?.kind,
+        ),
+      ),
       ["drop", "activate"],
     );
 
     const confirmed = yield* confirmDue(service, team);
     assert.strictEqual(confirmed.counts.executed, 2);
     assert.deepStrictEqual(
-      writes.requests.map((request) => request.kind),
+      EffectArray.map(writes.requests, (request) => request.kind),
       ["drop", "activate"],
     );
 
@@ -4205,7 +4431,7 @@ it.effect("runs a next-day group on its submission day and records tomorrow's ef
 
     assert.deepStrictEqual(proposed.refused, []);
     assert.deepStrictEqual(
-      proposed.plan.moves.map((move) => [
+      EffectArray.map(proposed.plan.moves, (move) => [
         move.kind,
         move.decision,
         move.runDay,
@@ -4217,7 +4443,9 @@ it.effect("runs a next-day group on its submission day and records tomorrow's ef
         ["activate", "undecided", today, "2026-11-15", "current"],
       ],
     );
-    const activation = proposed.plan.moves.find((move) => move.kind === "activate");
+    const activation = EffectOption.getOrUndefined(
+      EffectArray.findFirst(proposed.plan.moves, (move) => move.kind === "activate"),
+    );
     if (activation?.placement === undefined) {
       throw new Error("The plan did not place the activation");
     }
@@ -4225,17 +4453,22 @@ it.effect("runs a next-day group on its submission day and records tomorrow's ef
     const confirmed = yield* confirmDue(service, team);
     assert.deepStrictEqual(
       confirmed.confirmed,
-      proposed.plan.moves.map((move) => move.move),
+      EffectArray.map(proposed.plan.moves, (move) => move.move),
     );
     assert.strictEqual(confirmed.counts.executed, 2);
     assert.deepStrictEqual(
-      writes.requests.map((request) => request.kind),
+      EffectArray.map(writes.requests, (request) => request.kind),
       ["drop", "activate"],
     );
     assert.deepStrictEqual(writes.requests[1]?.placement, activation.placement);
     const held = yield* service.plan(owner, { team });
     assert.deepStrictEqual(
-      held.moves.map((move) => [move.decision, move.runDay, move.effectiveDate, move.result]),
+      EffectArray.map(held.moves, (move) => [
+        move.decision,
+        move.runDay,
+        move.effectiveDate,
+        move.result,
+      ]),
       [
         ["now", today, "2026-11-15", "executed"],
         ["now", today, "2026-11-15", "executed"],
@@ -4244,10 +4477,12 @@ it.effect("runs a next-day group on its submission day and records tomorrow's ef
 
     const read = yield* service.plan(owner, { team });
     assert.deepStrictEqual(
-      read.groups.map((group) => group.status),
+      EffectArray.map(read.groups, (group) => group.status),
       ["done"],
     );
-    const ran = read.moves.find((move) => move.kind === "activate");
+    const ran = EffectOption.getOrUndefined(
+      EffectArray.findFirst(read.moves, (move) => move.kind === "activate"),
+    );
     assert.strictEqual(ran?.result, "executed");
     assert.strictEqual(ran?.validation.status, "current");
     assert.deepStrictEqual(ran?.validation.reasons, []);
@@ -4286,7 +4521,7 @@ it.effect("runs a same-day group as soon as the owner confirms it", () => {
     });
 
     assert.deepStrictEqual(
-      proposed.plan.moves.map((move) => move.effectiveDate),
+      EffectArray.map(proposed.plan.moves, (move) => move.effectiveDate),
       [today, today],
     );
 
@@ -4294,7 +4529,7 @@ it.effect("runs a same-day group as soon as the owner confirms it", () => {
 
     assert.strictEqual(result.counts.executed, 2);
     assert.deepStrictEqual(
-      writes.requests.map((request) => request.kind),
+      EffectArray.map(writes.requests, (request) => request.kind),
       ["drop", "activate"],
     );
   }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
@@ -4320,7 +4555,7 @@ it.effect("refuses an impossible next-day group at propose and sends nothing", (
     });
 
     assert.deepStrictEqual(
-      proposed.refused.map((refusal) => refusal.code),
+      EffectArray.map(proposed.refused, (refusal) => refusal.code),
       ["slot_illegal"],
     );
     assert.include(
@@ -4354,7 +4589,7 @@ it.effect("refuses a group at propose when the league cannot accept its slot mov
     });
 
     assert.deepStrictEqual(
-      proposed.refused.map((refusal) => refusal.code),
+      EffectArray.map(proposed.refused, (refusal) => refusal.code),
       ["provider_write_unavailable"],
     );
     assert.include(proposed.refused[0]?.detail ?? "", "no roster date for a slot move");
@@ -4381,12 +4616,16 @@ it.effect("keeps a refused dependent leg valid after its group's drop landed for
     yield* confirmDue(service, team);
 
     assert.deepStrictEqual(
-      writes.requests.map((request) => request.kind),
+      EffectArray.map(writes.requests, (request) => request.kind),
       ["drop", "activate"],
     );
     const read = yield* service.plan(owner, { team });
-    const landed = read.moves.find((move) => move.kind === "drop");
-    const refused = read.moves.find((move) => move.kind === "activate");
+    const landed = EffectOption.getOrUndefined(
+      EffectArray.findFirst(read.moves, (move) => move.kind === "drop"),
+    );
+    const refused = EffectOption.getOrUndefined(
+      EffectArray.findFirst(read.moves, (move) => move.kind === "activate"),
+    );
     assert.strictEqual(landed?.result, "executed");
     assert.strictEqual(refused?.result, "failed");
     assert.include(refused?.resultDetail ?? "", "refused the slot move");
@@ -4403,7 +4642,9 @@ it.effect("keeps a refused dependent leg valid after its group's drop landed for
     assert.deepStrictEqual(amended.refused, []);
     const amendedRead = yield* service.plan(owner, { team });
     assert.strictEqual(
-      amendedRead.moves.find((move) => move.kind === "activate")?.validation.status,
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(amendedRead.moves, (move) => move.kind === "activate"),
+      )?.validation.status,
       "current",
     );
   }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
@@ -4502,7 +4743,9 @@ it.effect("regenerates a move's Roster fixes when it is edited", () =>
       proposedBy: proposer,
       moves: [add("fa1", "Free Agent One")],
     });
-    const funded = proposed.plan.moves.find((move) => move.kind === "free_agent_add");
+    const funded = EffectOption.getOrUndefined(
+      EffectArray.findFirst(proposed.plan.moves, (move) => move.kind === "free_agent_add"),
+    );
     assert.isDefined(funded);
 
     const edited = yield* service.edit(owner, {
@@ -4513,17 +4756,37 @@ it.effect("regenerates a move's Roster fixes when it is edited", () =>
     assert.deepStrictEqual(edited.refused, []);
 
     const stored = yield* database.select().from(transactionMoves);
-    const fixes = stored.filter((move) => move.groupId?.startsWith("roster-fixes:") === true);
-    assert.strictEqual(fixes.filter((move) => move.decision !== "discarded").length, 1);
-    assert.strictEqual(fixes.filter((move) => move.decision === "discarded").length, 1);
+    const fixes = EffectArray.filter(
+      stored,
+      (move) => move.groupId?.startsWith("roster-fixes:") === true,
+    );
+    assert.strictEqual(
+      EffectArray.filter(fixes, (move) => move.decision !== "discarded").length,
+      1,
+    );
+    assert.strictEqual(
+      EffectArray.filter(fixes, (move) => move.decision === "discarded").length,
+      1,
+    );
 
     const read = yield* service.plan(owner, { team });
     assert.deepStrictEqual(
-      read.moves.filter((move) => move.decision !== "discarded").map((move) => move.kind),
+      EffectArray.map(
+        EffectArray.filter(read.moves, (move) => move.decision !== "discarded"),
+        (move) => move.kind,
+      ),
       ["free_agent_add", "stash"],
     );
     assert.deepStrictEqual(
-      read.groups[0]?.moves.map((move) => read.moves.find((entry) => entry.move === move)?.kind),
+      optionalArrayValue(read.groups[0]?.moves, (value) =>
+        EffectArray.map(
+          value,
+          (move) =>
+            EffectOption.getOrUndefined(
+              EffectArray.findFirst(read.moves, (entry) => entry.move === move),
+            )?.kind,
+        ),
+      ),
       ["stash"],
     );
     assert.strictEqual(read.groups[0]?.status, "ready");
@@ -4552,7 +4815,9 @@ it.effect("discards a move's Roster fixes with it", () =>
       proposedBy: proposer,
       moves: [add("fa1", "Free Agent One")],
     });
-    const funded = proposed.plan.moves.find((move) => move.kind === "free_agent_add");
+    const funded = EffectOption.getOrUndefined(
+      EffectArray.findFirst(proposed.plan.moves, (move) => move.kind === "free_agent_add"),
+    );
     assert.isDefined(funded);
 
     const discarded = yield* service.discard(owner, {
@@ -4563,7 +4828,7 @@ it.effect("discards a move's Roster fixes with it", () =>
 
     const read = yield* service.plan(owner, { team });
     assert.deepStrictEqual(
-      read.moves.map((move) => [move.kind, move.decision]),
+      EffectArray.map(read.moves, (move) => [move.kind, move.decision]),
       [
         ["stash", "discarded"],
         ["free_agent_add", "discarded"],
@@ -4611,7 +4876,9 @@ it.effect("adds the Roster fixes that make a stored add fit", () => {
       moves: [add("fa1", "Free Agent One")],
     });
     assert.deepStrictEqual(proposed.refused, []);
-    const funded = proposed.plan.moves.find((move) => move.kind === "free_agent_add");
+    const funded = EffectOption.getOrUndefined(
+      EffectArray.findFirst(proposed.plan.moves, (move) => move.kind === "free_agent_add"),
+    );
     assert.isDefined(funded);
 
     const current = facts.get(team);
@@ -4621,7 +4888,9 @@ it.effect("adds the Roster fixes that make a stored add fit", () => {
     facts.set(team, { ...current, constraints: constraints(2) });
     const blocked = yield* service.plan(owner, { team });
     assert.notStrictEqual(
-      blocked.moves.find((move) => move.move === requireMoveId(funded))?.validation.status,
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(blocked.moves, (move) => move.move === requireMoveId(funded)),
+      )?.validation.status,
       "current",
     );
 
@@ -4633,10 +4902,12 @@ it.effect("adds the Roster fixes that make a stored add fit", () => {
     assert.strictEqual(group?.label, "Roster fixes");
     assert.strictEqual(group?.fixesFor, requireMoveId(funded));
     assert.strictEqual(
-      read.moves.find((move) => move.move === requireMoveId(funded))?.validation.status,
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(read.moves, (move) => move.move === requireMoveId(funded)),
+      )?.validation.status,
       "current",
     );
-    assert.strictEqual(read.moves.filter((move) => move.kind === "stash").length, 1);
+    assert.strictEqual(EffectArray.filter(read.moves, (move) => move.kind === "stash").length, 1);
   }).pipe(layerTools.provide(mutableFactsLayer(facts)));
 });
 
@@ -4728,14 +4999,18 @@ it.effect("refuses to retry a group that ran in part and discards what is left",
       ],
     });
     assert.deepStrictEqual(proposed.refused, []);
-    const remaining = proposed.plan.moves.find((move) => move.drops[0]?.key === "a2");
+    const remaining = EffectOption.getOrUndefined(
+      EffectArray.findFirst(proposed.plan.moves, (move) => move.drops[0]?.key === "a2"),
+    );
     assert.isDefined(remaining);
     yield* confirmDue(service, team);
 
     const partly = yield* service.plan(owner, { team });
     assert.strictEqual(partly.groups[0]?.status, "partly_done");
     assert.strictEqual(
-      partly.moves.find((move) => move.move === requireMoveId(remaining))?.result,
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(partly.moves, (move) => move.move === requireMoveId(remaining)),
+      )?.result,
       "failed",
     );
 
@@ -4754,12 +5029,22 @@ it.effect("refuses to retry a group that ran in part and discards what is left",
     assert.deepStrictEqual(discarded.refused, []);
     const stored = yield* repository.readPlanMoves({ userId: owner, team });
     assert.strictEqual(
-      stored.find((move) => move.id === requireMoveId(remaining))?.decision,
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(stored, (move) => move.id === requireMoveId(remaining)),
+      )?.decision,
       "discarded",
     );
-    assert.strictEqual(stored.find((move) => move.drops[0]?.key === "a1")?.result, "executed");
+    assert.strictEqual(
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(stored, (move) => move.drops[0]?.key === "a1"),
+      )?.result,
+      "executed",
+    );
     const read = yield* service.plan(owner, { team });
-    assert.strictEqual(read.moves.filter((move) => move.decision !== "discarded").length, 1);
+    assert.strictEqual(
+      EffectArray.filter(read.moves, (move) => move.decision !== "discarded").length,
+      1,
+    );
   }).pipe(
     layerTools.provide(
       serviceLayer(
@@ -4785,13 +5070,15 @@ function confirmDue(
 ): ReturnType<TransactionPlanServiceShape["confirm"]> {
   return Effect.gen(function* () {
     const plan = yield* service.plan(owner, { team: teamId });
-    const moves = plan.moves.flatMap((move) =>
-      move.result === undefined &&
-      move.runDay === plan.today &&
-      (move.decision === "undecided" || move.decision === "now" || move.decision === "confirmed")
-        ? [move.move]
-        : [],
-    );
+    const moves = EffectArray.flatMap(plan.moves, (move) => {
+      const flatMapped3 =
+        move.result === undefined &&
+        move.runDay === plan.today &&
+        (move.decision === "undecided" || move.decision === "now" || move.decision === "confirmed")
+          ? [move.move]
+          : [];
+      return arrayValueIsArray(flatMapped3) ? flatMapped3 : [flatMapped3];
+    });
     return yield* service.confirm(owner, {
       team: teamId,
       moves,
@@ -4808,7 +5095,7 @@ function serviceLayer(
 ): Layer.Layer<
   TransactionPlanService | TransactionPlanRepository | ConnectionsDatabase | QueryTokens
 > {
-  const byTeam = new Map(leagues.map((entry) => [entry.team, entry.facts] as const));
+  const byTeam = new Map(EffectArray.map(leagues, (entry) => [entry.team, entry.facts] as const));
   return layerWith(
     (input) => {
       const facts = byTeam.get(input.team);
@@ -4906,13 +5193,16 @@ function appliedWrite(
   if (current === undefined) {
     return;
   }
-  const roster = current.roster.filter((player) => !request.drops.includes(player.key));
+  const roster = EffectArray.filter(
+    current.roster,
+    (player) => !request.drops.includes(player.key),
+  );
   const moving = request.intent?.player?.key ?? request.slotMove?.playerKey;
   const destination = request.slotMove?.toSlot ?? request.placement?.toSlot;
-  const moved = roster.map((player) =>
+  const moved = EffectArray.map(roster, (player) =>
     player.key === moving && destination !== undefined ? { ...player, slot: destination } : player,
   );
-  const added = request.adds.map((key) => ({
+  const added = EffectArray.map(request.adds, (key) => ({
     key,
     name: key,
     positions: [],
@@ -4941,7 +5231,7 @@ function writeLayer(
         ? decided
         : {
             ...decided,
-            actions: plannedActions(request, decided.status).map((action) => ({
+            actions: EffectArray.map(plannedActions(request, decided.status), (action) => ({
               ...action,
               ...(decided.status === "executed" ? {} : { detail: decided.detail }),
             })),
@@ -4954,7 +5244,7 @@ function plannedActions(
   request: TransactionPlanWriteRequest,
   outcome: TransactionPlanAction["outcome"],
 ): ReadonlyArray<TransactionPlanAction> {
-  return planActions(request).map((action) => ({ ...action, outcome }));
+  return EffectArray.map(planActions(request), (action) => ({ ...action, outcome }));
 }
 
 function planActions(request: TransactionPlanWriteRequest): ReadonlyArray<TransactionPlanAction> {
@@ -4964,7 +5254,7 @@ function planActions(request: TransactionPlanWriteRequest): ReadonlyArray<Transa
   if (request.kind === "activate" || request.kind === "stash" || request.kind === "slot_move") {
     const playerKey = request.slotMove?.playerKey ?? request.placement?.playerKey;
     const toSlot = request.slotMove?.toSlot ?? request.placement?.toSlot;
-    const drops: ReadonlyArray<TransactionPlanAction> = request.drops.map((key) => ({
+    const drops: ReadonlyArray<TransactionPlanAction> = EffectArray.map(request.drops, (key) => ({
       kind: "drop",
       playerKey: key,
       outcome: "skipped",
@@ -4983,12 +5273,12 @@ function planActions(request: TransactionPlanWriteRequest): ReadonlyArray<Transa
     return [...drops, ...reserve];
   }
   const actions: Array<TransactionPlanAction> = [
-    ...request.adds.map((playerKey): TransactionPlanAction => ({
+    ...EffectArray.map(request.adds, (playerKey): TransactionPlanAction => ({
       kind: "add",
       playerKey,
       outcome: "skipped",
     })),
-    ...request.drops.map((playerKey): TransactionPlanAction => ({
+    ...EffectArray.map(request.drops, (playerKey): TransactionPlanAction => ({
       kind: "drop",
       playerKey,
       outcome: "skipped",
@@ -5065,7 +5355,9 @@ function requireRef(refs: ReadonlyArray<PlayerRef>, index: number): PlayerRef {
 }
 
 function droppedMoveId(plan: TransactionPlanView, key: string): TransactionMoveId {
-  const move = plan.moves.find((entry) => entry.drops[0]?.key === key);
+  const move = EffectOption.getOrUndefined(
+    EffectArray.findFirst(plan.moves, (entry) => entry.drops[0]?.key === key),
+  );
   if (move === undefined) {
     throw new Error(`The plan did not carry a drop of ${key}`);
   }
@@ -5194,10 +5486,10 @@ function leagueFor(
     team: teamId,
     facts: {
       roster,
-      pool: new Map(pool.map((player) => [player.key, player] as const)),
+      pool: new Map(EffectArray.map(pool, (player) => [player.key, player] as const)),
       poolStatus:
         overrides.poolStatus ??
-        new Map(pool.map((player) => [player.key, player.availability] as const)),
+        new Map(EffectArray.map(pool, (player) => [player.key, player.availability] as const)),
       waiver: overrides.waiver ?? { rule: undefined, type: undefined, days: undefined },
       slots: overrides.slots ?? [bench("BN", 4)],
       constraints: overrides.constraints ?? constraints(4),

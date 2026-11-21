@@ -6,6 +6,7 @@ import {
   requestContextLayer,
 } from "@lineupkeep/backend/runtime/RequestContext";
 import { Effect, Exit, Layer, Tracer, Logger } from "effect";
+import { Array as EffectArray } from "effect";
 import { TestClock } from "effect/testing";
 
 import {
@@ -15,6 +16,7 @@ import {
   isExpectedHttpOutcome,
   makeReportBudget,
 } from "./telemetryServer.ts";
+
 const request = new Request("http://localhost/telemetry", {
   method: "POST",
   headers: { "x-request-id": "request-telemetry-1" },
@@ -186,11 +188,11 @@ it.effect("exports client reports without any caller-controlled text", () =>
 
     assert.isTrue(Exit.isSuccess(exit));
     assert.strictEqual(spans.length, 3);
-    assert.include(payloads.join(""), "ui.boundary_caught");
-    assert.include(payloads.join(""), "ui.slow_interaction");
-    assert.include(payloads.join(""), "ui.slow_call");
-    assert.include(payloads.join(""), "ui.wait_ms");
-    assert.notInclude(payloads.join(""), "private-");
+    assert.include(EffectArray.join(payloads, ""), "ui.boundary_caught");
+    assert.include(EffectArray.join(payloads, ""), "ui.slow_interaction");
+    assert.include(EffectArray.join(payloads, ""), "ui.slow_call");
+    assert.include(EffectArray.join(payloads, ""), "ui.wait_ms");
+    assert.notInclude(EffectArray.join(payloads, ""), "private-");
   }),
 );
 

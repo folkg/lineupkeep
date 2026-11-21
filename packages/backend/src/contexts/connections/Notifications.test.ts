@@ -2,6 +2,7 @@ import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { Array, DateTime, Effect, Layer, Redacted, Ref } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { UserDirectory } from "#contexts/auth/UserDirectory.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
@@ -28,7 +29,7 @@ const session = Redacted.make("A1=test-session-cookie");
 
 const UserDirectoryTest = Layer.succeed(UserDirectory)({
   emailsFor: (userIds) =>
-    Effect.succeed(userIds.map((userId) => ({ userId, email: "owner@example.com" }))),
+    Effect.succeed(EffectArray.map(userIds, (userId) => ({ userId, email: "owner@example.com" }))),
 });
 
 const EncryptionTestLayer = ConnectionCredentialEncryption.forKey(

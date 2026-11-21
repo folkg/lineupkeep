@@ -1,5 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import {
   type DefinedMachine,
@@ -65,7 +66,7 @@ it.effect("returns changed snapshots, omits handled no-ops, and preserves batch 
     const empty = yield* planBatch(counter, [], { _tag: "Increment" });
 
     assert.deepStrictEqual(
-      changed.map(({ id, snapshot }) => [
+      EffectArray.map(changed, ({ id, snapshot }) => [
         id,
         snapshot.state._tag === "Counting" && snapshot.state.count,
       ]),

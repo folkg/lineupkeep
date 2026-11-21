@@ -1,5 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { Redacted } from "effect";
+import { Array as EffectArray } from "effect";
 import * as Effect from "effect/Effect";
 
 import type { YahooSession } from "./credentials.ts";
@@ -220,7 +221,7 @@ it.effect("reads head-to-head standings with record, points, usage, and streak",
     );
     assert.strictEqual(standings.leagueKey, "466.l.4000");
     assert.deepStrictEqual(
-      standings.teams.map((team) => team.teamKey),
+      EffectArray.map(standings.teams, (team) => team.teamKey),
       ["466.l.4000.t.1", "466.l.4000.t.2"],
     );
     assert.deepStrictEqual(standings.teams[0], {
@@ -428,10 +429,10 @@ it.effect("reads every team's roster in one league with the team roster's player
     assert.strictEqual(rosters.leagueKey, "466.l.4000");
     assert.deepStrictEqual(rosters.coverage, { type: "week", week: 6 });
     assert.deepStrictEqual(
-      rosters.teams.map((team) => ({
+      EffectArray.map(rosters.teams, (team) => ({
         teamKey: team.teamKey,
         name: team.name,
-        players: team.players.map((player) => player.playerKey),
+        players: EffectArray.map(team.players, (player) => player.playerKey),
       })),
       [
         {
@@ -945,9 +946,12 @@ it.effect("reads available draft picks from the app read host, per team", () => 
     assert.deepStrictEqual(teams, [
       {
         teamKey: "466.l.4001.t.1",
-        picks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19].map((round) => ({
-          round,
-        })),
+        picks: EffectArray.map(
+          [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+          (round) => ({
+            round,
+          }),
+        ),
       },
     ]);
   }).pipe(Effect.provide(testLayer(recording.client)));
@@ -1126,10 +1130,10 @@ it.effect("filters transactions to trades and keeps the provider's order", () =>
       "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/transactions;type=trade;team_key=466.l.4000.t.1;count=10;start=20?format=json",
     );
     assert.deepStrictEqual(
-      transactions.map((transaction) => transaction.transactionKey),
+      EffectArray.map(transactions, (transaction) => transaction.transactionKey),
       ["466.l.4000.tr.7", "466.l.4000.tr.6"],
     );
-    assert.isTrue(transactions.every((transaction) => transaction.type === "trade"));
+    assert.isTrue(EffectArray.every(transactions, (transaction) => transaction.type === "trade"));
     assert.strictEqual(transactions[0]?.picks.length, 2);
     assert.strictEqual(transactions[0]?.players.length, 2);
   }).pipe(Effect.provide(testLayer(recording.client)));
@@ -1154,7 +1158,7 @@ it.effect("filters transactions by another type with its provider token", () => 
       "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/transactions;type=add/drop;count=50?format=json",
     );
     assert.deepStrictEqual(
-      transactions.map((transaction) => transaction.type),
+      EffectArray.map(transactions, (transaction) => transaction.type),
       ["add_drop"],
     );
   }).pipe(Effect.provide(testLayer(recording.client)));
@@ -1804,7 +1808,9 @@ function leagueRostersWithTeams(teams: ReadonlyArray<unknown>, leagueKey = "466.
       league: [
         { league_key: leagueKey, name: "Synthetic NFL League" },
         {
-          teams: Object.fromEntries(teams.map((team, index) => [String(index), { team }])),
+          teams: Object.fromEntries(
+            EffectArray.map(teams, (team, index) => [String(index), { team }]),
+          ),
         },
       ],
     },
@@ -1823,7 +1829,7 @@ function rosterTeam(
       roster: {
         "0": {
           players: Object.fromEntries(
-            playerKeys.map((playerKey, index) => [
+            EffectArray.map(playerKeys, (playerKey, index) => [
               String(index),
               { player: rosterPlayer(playerKey, week) },
             ]),

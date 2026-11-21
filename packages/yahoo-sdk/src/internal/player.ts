@@ -1,4 +1,6 @@
 import { Effect, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 
 import {
   IntFromStringOrNumber,
@@ -11,6 +13,17 @@ import {
 import { YahooCoverageMismatch, YahooParseError } from "#yahoo/errors.ts";
 import { YahooDate, YahooPlayerKey } from "#yahoo/keys.ts";
 import type { YahooCoverage, YahooLeagueKey } from "#yahoo/keys.ts";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
 
 export function decodePlayerSearch(
   payload: unknown,
@@ -89,7 +102,10 @@ function summariesOf(
         name: player.name.full,
         primaryPosition: player.primary_position,
         displayPosition: player.display_position,
-        eligiblePositions: (player.eligible_positions ?? []).map(({ position }) => position),
+        eligiblePositions: EffectArray.map(
+          player.eligible_positions ?? [],
+          ({ position }) => position,
+        ),
         proTeamAbbreviation: optionalNonEmpty(player.editorial_team_abbr),
         proTeamKey: optionalNonEmpty(player.editorial_team_key),
         ownershipType: player.ownership?.ownership_type,
@@ -138,7 +154,7 @@ export function decodePlayerDetails(
         eligiblePositions:
           player.eligible_positions === undefined
             ? undefined
-            : player.eligible_positions.map(({ position }) => position),
+            : EffectArray.map(player.eligible_positions, ({ position }) => position),
         ownershipType: player.ownership?.ownership_type,
         percentOwned: yield* percentOf(
           player.percent_owned,
@@ -169,13 +185,18 @@ function startingStatusOf(
   if (status === undefined) {
     return undefined;
   }
-  const starting = status.find((entry) => entry.is_starting === 0 || entry.is_starting === 1);
+  const starting = EffectOption.getOrUndefined(
+    EffectArray.findFirst(status, (entry) => entry.is_starting === 0 || entry.is_starting === 1),
+  );
   if (starting === undefined) {
     return undefined;
   }
-  const coverageEntry = status.find(
-    (entry) =>
-      entry.coverage_type !== undefined || entry.week !== undefined || entry.date !== undefined,
+  const coverageEntry = EffectOption.getOrUndefined(
+    EffectArray.findFirst(
+      status,
+      (entry) =>
+        entry.coverage_type !== undefined || entry.week !== undefined || entry.date !== undefined,
+    ),
   );
   const coverage =
     coverageEntry?.coverage_type === "week" && coverageEntry.week !== undefined
@@ -222,7 +243,7 @@ function statSeriesOf(
     }
     return {
       coverage,
-      values: stats.stats.map(({ stat }) => ({
+      values: EffectArray.map(stats.stats, ({ stat }) => ({
         statId: stat.stat_id,
         value: numberOrNull(stat.value),
       })),
@@ -273,8 +294,14 @@ function percentCutsOf(
 ): Effect.Effect<ReadonlyArray<YahooPercentCut>, YahooParseError> {
   return Effect.gen(function* () {
     const entries = [
-      ...(payload.percent_started_cut_types ?? []).map((entry) => entry.percent_started_cut_type),
-      ...(payload.percent_owned_cut_types ?? []).map((entry) => entry.percent_owned_cut_type),
+      ...EffectArray.map(
+        payload.percent_started_cut_types ?? [],
+        (entry) => entry.percent_started_cut_type,
+      ),
+      ...EffectArray.map(
+        payload.percent_owned_cut_types ?? [],
+        (entry) => entry.percent_owned_cut_type,
+      ),
     ];
     const cuts: Array<YahooPercentCut> = [];
     for (const [index, cut] of entries.entries()) {
@@ -325,7 +352,11 @@ function singleEntryOf(
 }
 
 function statValueOf(stats: typeof PlayerStats.Type | undefined, statId: number): number | null {
-  const match = stats?.stats.find(({ stat }) => stat.stat_id === statId);
+  const match = optionalArrayValue(stats?.stats, (value) =>
+    EffectOption.getOrUndefined(
+      EffectArray.findFirst(value, ({ stat }) => stat.stat_id === statId),
+    ),
+  );
   return match === undefined ? null : numberOrNull(match.stat.value);
 }
 
@@ -512,7 +543,7 @@ export const PlayerRankPayload = Schema.Struct({
 export function playerRanksOf(
   ranks: ReadonlyArray<typeof PlayerRankPayload.Type> | undefined,
 ): ReadonlyArray<YahooPlayerRank> {
-  return (ranks ?? []).map(({ player_rank }) => ({
+  return EffectArray.map(ranks ?? [], ({ player_rank }) => ({
     type: player_rank.rank_type,
     value: numberOrNull(player_rank.rank_value),
     season: player_rank.rank_season,

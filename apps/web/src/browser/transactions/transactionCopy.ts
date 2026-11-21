@@ -1,7 +1,14 @@
+import { EffectArray } from "@lineupkeep/collections";
+import { EffectOption } from "@lineupkeep/collections";
+
 import type {
   TransactionMovePlayerView,
   TransactionMoveView,
 } from "#contracts/connections/transactionContract.ts";
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 export function moveSummary(move: TransactionMoveView): string {
   if (move.kind === "slot_move") {
@@ -20,18 +27,20 @@ export function moveSummary(move: TransactionMoveView): string {
   if (move.kind === "trade") {
     const outgoing = [
       ...(drops === undefined ? [] : [drops]),
-      ...move.picks
-        .filter((pick) => pick.sourceName !== "the other team")
-        .map((pick) => `a round ${String(pick.round)} pick`),
+      ...EffectArray.map(
+        EffectArray.filter(move.picks, (pick) => pick.sourceName !== "the other team"),
+        (pick) => `a round ${String(pick.round)} pick`,
+      ),
     ];
     const incoming = [
       ...(adds === undefined ? [] : [adds]),
-      ...move.picks
-        .filter((pick) => pick.sourceName === "the other team")
-        .map((pick) => `a round ${String(pick.round)} pick`),
+      ...EffectArray.map(
+        EffectArray.filter(move.picks, (pick) => pick.sourceName === "the other team"),
+        (pick) => `a round ${String(pick.round)} pick`,
+      ),
     ];
     if (outgoing.length > 0 && incoming.length > 0) {
-      return `Send ${outgoing.join(", ")} for ${incoming.join(", ")}`;
+      return `Send ${EffectArray.join(outgoing, ", ")} for ${EffectArray.join(incoming, ", ")}`;
     }
   }
   const verb = move.kind === "waiver_claim" ? "Claim" : "Add";
@@ -55,7 +64,9 @@ export function originalClaimLine(move: TransactionMoveView): string | undefined
   if (move.status !== "claim_lost_fallback_ran") {
     return undefined;
   }
-  const name = move.attempts.find((attempt) => attempt.kind === "claim")?.player.name;
+  const name = EffectOption.getOrUndefined(
+    EffectArray.findFirst(move.attempts, (attempt) => attempt.kind === "claim"),
+  )?.player.name;
   return name === undefined ? undefined : `The claim for ${name} did not run.`;
 }
 
@@ -81,14 +92,15 @@ export function fallbackPlanDetail(move: TransactionMoveView): ReadonlyArray<str
 }
 
 function fallbackSequence(move: TransactionMoveView): string | undefined {
-  const names = move.fallbacks.flatMap((player) =>
-    player.name === undefined ? [] : [player.name],
-  );
-  return names.length === 0 ? undefined : names.join(", then ");
+  const names = EffectArray.flatMap(move.fallbacks, (player) => {
+    const flatMapped1 = player.name === undefined ? [] : [player.name];
+    return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+  });
+  return names.length === 0 ? undefined : EffectArray.join(names, ", then ");
 }
 
 function fallbackRecord(move: TransactionMoveView): ReadonlyArray<string> {
-  const lines = move.attempts.flatMap((attempt) => {
+  const lines = EffectArray.flatMap(move.attempts, (attempt) => {
     if (attempt.kind === "claim") {
       switch (attempt.outcome) {
         case "lost":
@@ -130,7 +142,9 @@ function fallbackRecord(move: TransactionMoveView): ReadonlyArray<string> {
   const left = remainingFallbacks(move);
   return [
     ...lines,
-    left.length > 0 ? `Still to try: ${left.join(", then ")}.` : "No choices are left.",
+    left.length > 0
+      ? `Still to try: ${EffectArray.join(left, ", then ")}.`
+      : "No choices are left.",
   ];
 }
 
@@ -148,22 +162,30 @@ export function readableReason(reason: string): string {
 
 function remainingFallbacks(move: TransactionMoveView): ReadonlyArray<string> {
   const tried = new Set(
-    move.attempts.flatMap((attempt) =>
-      attempt.kind === "fallback" && attempt.player.name !== undefined ? [attempt.player.name] : [],
-    ),
+    EffectArray.flatMap(move.attempts, (attempt) => {
+      const flatMapped2 =
+        attempt.kind === "fallback" && attempt.player.name !== undefined
+          ? [attempt.player.name]
+          : [];
+      return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+    }),
   );
-  return move.fallbacks.flatMap((player) =>
-    player.name === undefined || tried.has(player.name) ? [] : [player.name],
-  );
+  return EffectArray.flatMap(move.fallbacks, (player) => {
+    const flatMapped3 = player.name === undefined || tried.has(player.name) ? [] : [player.name];
+    return arrayValueIsArray(flatMapped3) ? flatMapped3 : [flatMapped3];
+  });
 }
 
 function playerNames(players: ReadonlyArray<TransactionMovePlayerView>): string | undefined {
-  const names = players.flatMap((player) => (player.name === undefined ? [] : [player.name]));
+  const names = EffectArray.flatMap(players, (player) => {
+    const flatMapped4 = player.name === undefined ? [] : [player.name];
+    return arrayValueIsArray(flatMapped4) ? flatMapped4 : [flatMapped4];
+  });
   if (names.length === 0) {
     return undefined;
   }
   if (names.length === 1) {
     return names[0];
   }
-  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return `${EffectArray.join(names.slice(0, -1), ", ")} and ${names[names.length - 1]}`;
 }

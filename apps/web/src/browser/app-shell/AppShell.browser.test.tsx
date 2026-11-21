@@ -1,3 +1,4 @@
+import { EffectArray } from "@lineupkeep/collections";
 import type { JSX } from "@solidjs/web";
 import { render } from "@solidjs/web";
 import { QueryClientProvider } from "@tanstack/solid-query";
@@ -31,10 +32,7 @@ it("shows Teams, Transactions, and Account in the navigation and links Feedback 
   const navigation = page.getByRole("navigation", { name: "Primary navigation" });
   await expect.element(navigation).toBeVisible();
   expect(
-    navigation
-      .getByRole("link")
-      .elements()
-      .map((link) => link.textContent),
+    EffectArray.map(navigation.getByRole("link").elements(), (link) => link.textContent),
   ).toEqual(["Teams", "Transactions", "Account"]);
   expect(navigation.getByRole("link", { name: "Connections" }).elements()).toHaveLength(0);
   expect(navigation.getByRole("link", { name: "Feedback" }).elements()).toHaveLength(0);

@@ -1,3 +1,5 @@
+import { EffectArray } from "@lineupkeep/collections";
+import { EffectOption } from "@lineupkeep/collections";
 import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 
@@ -69,6 +71,10 @@ import { useGroupConfirmation } from "./useGroupConfirmation";
 import { useTransactionsPage } from "./useTransactionsPage";
 import type { TransactionsPageController } from "./useTransactionsPage";
 
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
+
 export function TransactionsPage(props: TransactionsPageProps): JSX.Element {
   const page = useTransactionsPage({ remote: () => props.remote });
 
@@ -119,13 +125,24 @@ export function TransactionsPage(props: TransactionsPageProps): JSX.Element {
 
 function SummaryKicker(props: SectionProps): JSX.Element {
   const todayMoves = (): number =>
-    dayTeamCards(
-      props.page.days().find((day) => day.today),
-      props.page.groups(),
-    )
-      .flatMap((entry) => entry.cards)
-      .filter(cardNeedsDecision)
-      .flatMap(cardMembers).length;
+    EffectArray.flatMap(
+      EffectArray.filter(
+        EffectArray.flatMap(
+          dayTeamCards(
+            EffectOption.getOrUndefined(
+              EffectArray.findFirst(props.page.days(), (day) => day.today),
+            ),
+            props.page.groups(),
+          ),
+          (entry) => {
+            const flatMapped1 = entry.cards;
+            return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+          },
+        ),
+        cardNeedsDecision,
+      ),
+      cardMembers,
+    ).length;
   return (
     <Inline gap="sm">
       <Text as="span" numeric type="label">
@@ -140,9 +157,9 @@ function SummaryKicker(props: SectionProps): JSX.Element {
 
 function OpenDays(props: RemoteSectionProps): JSX.Element {
   const today = (): TransactionMoveDayView | undefined =>
-    props.page.days().find((day) => day.today);
+    EffectOption.getOrUndefined(EffectArray.findFirst(props.page.days(), (day) => day.today));
   const later = (): ReadonlyArray<TransactionMoveDayView> =>
-    props.page.days().filter((day) => !day.today);
+    EffectArray.filter(props.page.days(), (day) => !day.today);
   return (
     <>
       <DaySection day={today()} page={props.page} remote={props.remote} today />
@@ -161,20 +178,35 @@ function OpenDays(props: RemoteSectionProps): JSX.Element {
 function DaySection(props: DaySectionProps): JSX.Element {
   const titleId = (): string =>
     `transactions-day-${props.today ? "today" : (props.day?.day ?? "none")}`;
-  const teams = (): ReadonlyArray<TeamCardsView> =>
-    dayTeamCards(props.day, props.page.groups())
-      .map((entry) => ({
+  const teams = (): ReadonlyArray<TeamCardsView> => {
+    const groups = props.page.groups();
+    const today = props.today;
+    return EffectArray.filter(
+      EffectArray.map(dayTeamCards(props.day, groups), (entry) => ({
         team: entry.team,
-        cards: props.today ? entry.cards.filter((card) => !cardIsSettled(card)) : entry.cards,
-      }))
-      .filter((entry) => entry.cards.length > 0);
+        cards: today
+          ? EffectArray.filter(entry.cards, (card) => !cardIsSettled(card))
+          : entry.cards,
+      })),
+      (entry) => entry.cards.length > 0,
+    );
+  };
   const moves = (): ReadonlyArray<TransactionMoveView> =>
-    teams().flatMap((entry) => entry.cards.flatMap(cardMembers));
+    EffectArray.flatMap(teams(), (entry) => {
+      const flatMapped2 = EffectArray.flatMap(entry.cards, cardMembers);
+      return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+    });
   const decisionMoves = (): ReadonlyArray<TransactionMoveView> =>
-    teams()
-      .flatMap((entry) => entry.cards)
-      .filter(cardNeedsDecision)
-      .flatMap(cardMembers);
+    EffectArray.flatMap(
+      EffectArray.filter(
+        EffectArray.flatMap(teams(), (entry) => {
+          const flatMapped3 = entry.cards;
+          return arrayValueIsArray(flatMapped3) ? flatMapped3 : [flatMapped3];
+        }),
+        cardNeedsDecision,
+      ),
+      cardMembers,
+    );
   const title = (): string => {
     if (props.today) {
       return "Today";
@@ -273,7 +305,10 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
   const headingId = (): string => `transactions-panel-${props.card.lead.team.id}-${props.card.key}`;
   const working = (): boolean => confirmation.pending();
   const confirmable = (): boolean =>
-    members().every((move) => move.validation.status === "current" && move.result === undefined);
+    EffectArray.every(
+      members(),
+      (move) => move.validation.status === "current" && move.result === undefined,
+    );
   const opened = (): boolean =>
     props.card.group === undefined || props.card.group.status === "ready";
   const runsNow = (): boolean => props.card.today;
@@ -305,7 +340,9 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
   };
   const nextAction = (): ReturnType<typeof cardNextAction> => cardNextAction(props.card);
   const submitted = (): string | undefined => {
-    const member = members().find((move) => move.confirmation !== undefined);
+    const member = EffectOption.getOrUndefined(
+      EffectArray.findFirst(members(), (move) => move.confirmation !== undefined),
+    );
     return member === undefined ? undefined : submittedLine(member);
   };
   const explanation = (): string | undefined => {
@@ -321,7 +358,7 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
   };
   const reasons = (): ReadonlyArray<string> => reasonLines(props.card);
   const fallbackMoves = (): ReadonlyArray<TransactionMoveView> =>
-    members().filter((move) => move.fallbacks.length > 0);
+    EffectArray.filter(members(), (move) => move.fallbacks.length > 0);
   const facts = (): TransactionTeamFactsView | undefined => {
     const kind = status().kind;
     return props.facts !== undefined &&
@@ -391,7 +428,7 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
       case "discard":
         return held.moves.length > 1 ||
           status().kind !== "blocked" ||
-          held.moves.some((move) => move.result !== undefined) ? (
+          EffectArray.some(held.moves, (move) => move.result !== undefined) ? (
           <Button
             variant="secondary"
             disabled={props.page.discardingGroup() !== undefined}
@@ -674,19 +711,25 @@ function MoveCheckNote(props: { readonly move: TransactionMoveView }): JSX.Eleme
 
 function EarlierSection(props: RemoteSectionProps): JSX.Element {
   const settled = (): ReadonlyArray<TeamCardsView> => {
-    const today = props.page.days().find((day) => day.today);
-    return dayTeamCards(today, props.page.groups())
-      .map((entry) => ({
+    const today = EffectOption.getOrUndefined(
+      EffectArray.findFirst(props.page.days(), (day) => day.today),
+    );
+    return EffectArray.filter(
+      EffectArray.map(dayTeamCards(today, props.page.groups()), (entry) => ({
         team: entry.team,
-        cards: entry.cards
-          .filter(cardIsSettled)
-          .filter((card) => cardMembers(card).some((move) => move.decision !== "discarded")),
-      }))
-      .filter((entry) => entry.cards.length > 0);
+        cards: EffectArray.filter(EffectArray.filter(entry.cards, cardIsSettled), (card) =>
+          EffectArray.some(cardMembers(card), (move) => move.decision !== "discarded"),
+        ),
+      })),
+      (entry) => entry.cards.length > 0,
+    );
   };
   const count = (): number =>
     props.page.earlierCount() +
-    settled().flatMap((entry) => entry.cards.flatMap(cardMembers)).length;
+    EffectArray.flatMap(settled(), (entry) => {
+      const flatMapped4 = EffectArray.flatMap(entry.cards, cardMembers);
+      return arrayValueIsArray(flatMapped4) ? flatMapped4 : [flatMapped4];
+    }).length;
   return (
     <Stack as="section" gap="md" labelledBy="earlier-title">
       <SectionTitle
@@ -929,7 +972,7 @@ function ranLabel(card: GroupCard): string {
 
 function reasonLines(card: GroupCard): ReadonlyArray<string> {
   const members = cardMembers(card);
-  return members.flatMap((move) => {
+  return EffectArray.flatMap(members, (move) => {
     const reason = readableReason(move.reason);
     if (reason.length === 0) {
       return [];

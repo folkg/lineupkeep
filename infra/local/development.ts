@@ -8,6 +8,8 @@ import * as Alchemy from "alchemy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Command from "alchemy/Command";
 import { Effect, Exit, Layer, Scope } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 
 import { developmentApplicationConfig, developmentEnvironmentNames } from "#infra/config.ts";
 import { migrate as migrateDatabase } from "#infra/migrations.ts";
@@ -92,9 +94,11 @@ async function studio(): Promise<void> {
 }
 
 function parseCommand(name: string | undefined): DevelopmentCommand {
-  const command = Object.entries(commands).find(([key]) => key === name)?.[1];
+  const command = EffectOption.getOrUndefined(
+    EffectArray.findFirst(Object.entries(commands), ([key]) => key === name),
+  )?.[1];
   if (command === undefined) {
-    throw new Error(`Expected ${Object.keys(commands).join(", ")}`);
+    throw new Error(`Expected ${EffectArray.join(Object.keys(commands), ", ")}`);
   }
   return command;
 }

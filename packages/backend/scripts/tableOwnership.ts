@@ -1,3 +1,4 @@
+import { Array as EffectArray } from "effect";
 export function findTableOwnershipConflicts(
   declarations: ReadonlyArray<TableDeclaration>,
 ): ReadonlyArray<TableOwnershipConflict> {
@@ -7,10 +8,13 @@ export function findTableOwnershipConflicts(
     owners.add(declaration.owner);
     ownership.set(declaration.name, owners);
   }
-  return Array.from(ownership, ([name, owners]) => ({
-    name,
-    owners: Array.from(owners).sort(),
-  })).filter(({ owners }) => owners.length > 1);
+  return EffectArray.filter(
+    Array.from(ownership, ([name, owners]) => ({
+      name,
+      owners: Array.from(owners).sort(),
+    })),
+    ({ owners }) => owners.length > 1,
+  );
 }
 
 type TableDeclaration = {

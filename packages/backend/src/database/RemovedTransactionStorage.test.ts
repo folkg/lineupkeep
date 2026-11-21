@@ -1,7 +1,11 @@
 import { globSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { Array as EffectArray } from "effect";
 import { expect, it } from "vitest";
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 const sourceRoots = [
   "apps/web/src",
@@ -46,12 +50,18 @@ const removedTerms: ReadonlyArray<RegExp> = [
 ];
 
 it("keeps the removed proposal-set storage out of code, tests, and the contracts", () => {
-  const files = [
-    ...sourceRoots.flatMap((root) => globSync(`${root}/**/*.{ts,tsx}`, { cwd: process.cwd() })),
-    ...globSync("*.ts", { cwd: process.cwd() }),
-    ...documents,
-  ].filter(
-    (file) => !excluded.has(file) && !excludedPrefixes.some((prefix) => file.startsWith(prefix)),
+  const files = EffectArray.filter(
+    [
+      ...EffectArray.flatMap(sourceRoots, (root) => {
+        const flatMapped1 = globSync(`${root}/**/*.{ts,tsx}`, { cwd: process.cwd() });
+        return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+      }),
+      ...globSync("*.ts", { cwd: process.cwd() }),
+      ...documents,
+    ],
+    (file) =>
+      !excluded.has(file) &&
+      !EffectArray.some(excludedPrefixes, (prefix) => file.startsWith(prefix)),
   );
   const findings: Array<string> = [];
   for (const file of files) {

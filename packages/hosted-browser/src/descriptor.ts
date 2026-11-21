@@ -1,5 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
+import { EffectArray } from "@lineupkeep/collections";
+
 import { isHostedBrowserViewportProfile } from "./protocol.ts";
 import type { HostedBrowserViewportProfile } from "./protocol.ts";
 import { hostedBrowserProvider } from "./provider.ts";
@@ -112,5 +114,5 @@ function parseJson(value: string): unknown {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !EffectArray.isArray(value);
 }

@@ -1,4 +1,6 @@
 import { DateTime, Effect, Option, Redacted, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption, Order as EffectOrder } from "effect";
 
 import { fantasyDayLabel } from "#contexts/connections/FantasyDay.ts";
 import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
@@ -115,6 +117,34 @@ import {
   type YahooRecentWindow,
   yahooSdkContext,
 } from "./YahooSdk.ts";
+function sortWithComparator<A>(
+  self: ReadonlyArray<A>,
+  compare: (left: A, right: A) => number,
+): ReadonlyArray<A> {
+  return EffectArray.sort(
+    self,
+    EffectOrder.make<A>((left, right) => {
+      const result = compare(left, right);
+      return result < 0 ? -1 : result > 0 ? 1 : 0;
+    }),
+  );
+}
+
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 const supportedLeagues = ["nfl", "nhl"] as const;
 const leagueSport = {
@@ -165,13 +195,13 @@ export const yahooProvider = Effect.gen(function* () {
       cookie,
       supportedLeagues,
     );
-    const teams = [...leagues]
-      .sort(
+    const teams = EffectArray.flatMap(
+      [...leagues].sort(
         (left, right) =>
           supportedLeagues.indexOf(left.gameKey) - supportedLeagues.indexOf(right.gameKey),
-      )
-      .flatMap((league) =>
-        league.teams.map((team): ProviderTeam => {
+      ),
+      (league) => {
+        const flatMapped1 = EffectArray.map(league.teams, (team): ProviderTeam => {
           const providerUrl = teamProviderUrl(team, league.gameKey);
           return {
             provider: key,
@@ -184,8 +214,10 @@ export const yahooProvider = Effect.gen(function* () {
             leagueName: league.name,
             ...(providerUrl === undefined ? {} : { providerUrl }),
           };
-        }),
-      );
+        });
+        return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+      },
+    );
     yield* Effect.annotateCurrentSpan("provider.team_count", teams.length);
     return teams;
   });
@@ -250,7 +282,11 @@ export const yahooProvider = Effect.gen(function* () {
     );
     yield* Effect.annotateCurrentSpan({
       "provider.team_count": rosters.length,
-      "provider.player_count": rosters.reduce((total, roster) => total + roster.players.length, 0),
+      "provider.player_count": EffectArray.reduce(
+        rosters,
+        0,
+        (total, roster) => total + roster.players.length,
+      ),
     });
     return rosters;
   });
@@ -348,7 +384,7 @@ export const yahooProvider = Effect.gen(function* () {
       return yield* applyExplicitAssignmentsThroughSdk(sdk, "apply_explicit_assignments", cookie, {
         teamKey: input.providerTeamKey,
         coverage: input.target,
-        assignments: input.assignments.map((assignment) => ({
+        assignments: EffectArray.map(input.assignments, (assignment) => ({
           playerKey: assignment.providerPlayerKey,
           slot: assignment.slot,
         })),
@@ -720,7 +756,7 @@ export const yahooProvider = Effect.gen(function* () {
       limit,
       offset,
     });
-    const transactions = decoded.map(providerTransactionOf);
+    const transactions = EffectArray.map(decoded, providerTransactionOf);
     yield* Effect.annotateCurrentSpan("provider.transaction_count", transactions.length);
     return transactions;
   });
@@ -748,7 +784,7 @@ export const yahooProvider = Effect.gen(function* () {
       offset: 0,
       type: "trade",
     });
-    const trades = decoded.map(providerTransactionOf);
+    const trades = EffectArray.map(decoded, providerTransactionOf);
     yield* Effect.annotateCurrentSpan("provider.completed_trade_count", trades.length);
     return trades;
   });
@@ -770,7 +806,7 @@ export const yahooProvider = Effect.gen(function* () {
       leagueKey,
       input.providerTeamKey,
     );
-    const offers = decoded.map(providerPendingTradeOf);
+    const offers = EffectArray.map(decoded, providerPendingTradeOf);
     yield* Effect.annotateCurrentSpan("provider.pending_trade_count", offers.length);
     return offers;
   });
@@ -782,7 +818,7 @@ export const yahooProvider = Effect.gen(function* () {
     const cookie = yield* sessionCookie(input, "read_draft_results");
     const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_draft_results");
     const decoded = yield* readDraftResultsThroughSdk(sdk, "read_draft_results", cookie, leagueKey);
-    const picks = decoded.map(providerDraftPickOf);
+    const picks = EffectArray.map(decoded, providerDraftPickOf);
     yield* Effect.annotateCurrentSpan("provider.draft_pick_count", picks.length);
     return picks;
   });
@@ -813,9 +849,13 @@ export const yahooProvider = Effect.gen(function* () {
       input.providerTeamKeys,
     );
     yield* Effect.annotateCurrentSpan("provider.draft_pick_team_count", teams.length);
-    return teams.flatMap((team) =>
-      team.picks.map(({ round }) => ({ providerTeamKey: team.teamKey, round })),
-    );
+    return EffectArray.flatMap(teams, (team) => {
+      const flatMapped2 = EffectArray.map(team.picks, ({ round }) => ({
+        providerTeamKey: team.teamKey,
+        round,
+      }));
+      return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+    });
   });
 
   return {
@@ -853,7 +893,8 @@ export const yahooProvider = Effect.gen(function* () {
             provider: input.provider,
             session: input.session,
             providerLeagueKey: input.providerLeagueKey,
-            providerPlayerKeys: input.roster.players.map(
+            providerPlayerKeys: EffectArray.map(
+              input.roster.players,
               (player: ProviderRosterPlayer) => player.providerPlayerKey,
             ),
             coverage: input.roster.coverage,
@@ -987,7 +1028,8 @@ function leagueSettings(
   return Effect.gen(function* () {
     const periodWindow = yield* weekWindow(settings);
     const rosterCoverage = yield* declaredRosterCoverage(settings);
-    const rosterPositions = settings.settings.rosterPositions.map(
+    const rosterPositions = EffectArray.map(
+      settings.settings.rosterPositions,
       ({ position, positionType, count, isStartingPosition }) => {
         const kind = rosterSlotKind(position, isStartingPosition);
         return {
@@ -1035,7 +1077,7 @@ function leagueSettings(
       rosterConstraints: yahooRosterConstraints(rosterPositions),
       rosterPositions,
       statCategories: settings.settings.statCategories,
-      statModifiers: settings.settings.statModifiers.map(({ statId, value }) => ({
+      statModifiers: EffectArray.map(settings.settings.statModifiers, ({ statId, value }) => ({
         statId,
         points: String(value),
       })),
@@ -1206,9 +1248,11 @@ const yahooInjuryReservePositions: ReadonlySet<string> = new Set([
 function yahooReserveEligibility(
   positions: ReadonlyArray<ProviderRosterPosition>,
 ): ProviderReserveEligibility {
-  const reservePositions = positions.filter((position) => position.kind === "reserve");
+  const reservePositions = EffectArray.filter(positions, (position) => position.kind === "reserve");
   return reservePositions.length > 0 &&
-    reservePositions.every((position) => yahooInjuryReservePositions.has(position.position))
+    EffectArray.every(reservePositions, (position) =>
+      yahooInjuryReservePositions.has(position.position),
+    )
     ? { kind: "injury_status" }
     : { kind: "published_positions" };
 }
@@ -1217,9 +1261,11 @@ function yahooRosterConstraints(
   positions: ReadonlyArray<ProviderRosterPosition>,
 ): ProviderRosterConstraints {
   return {
-    rosterMaximum: positions
-      .filter((position) => position.kind !== "reserve")
-      .reduce((total, position) => total + position.count, 0),
+    rosterMaximum: EffectArray.reduce(
+      EffectArray.filter(positions, (position) => position.kind !== "reserve"),
+      0,
+      (total, position) => total + position.count,
+    ),
     benchCapacity: "generic",
     startingSlotsMayStandEmpty: true,
     reserveEligibility: yahooReserveEligibility(positions),
@@ -1285,9 +1331,12 @@ function scheduleDates(period: {
 }
 
 function pitcherSlotOf(league: ProviderLeagueSettings): string | undefined {
-  return ["P", "RP", "SP"].find((name) =>
-    league.rosterPositions.some(
-      (position) => position.kind === "starting" && position.position === name,
+  return EffectOption.getOrUndefined(
+    EffectArray.findFirst(["P", "RP", "SP"], (name) =>
+      EffectArray.some(
+        league.rosterPositions,
+        (position) => position.kind === "starting" && position.position === name,
+      ),
     ),
   );
 }
@@ -1486,7 +1535,7 @@ function unsupportedPeriod(
     remedy:
       alternatives.length === 0
         ? "Your league serves no player-statistics period for this sport."
-        : `Ask for one of: ${alternatives.join(", ")}.`,
+        : `Ask for one of: ${EffectArray.join(alternatives, ", ")}.`,
   });
 }
 
@@ -1548,23 +1597,27 @@ function aggregateDailyDetails(
       players.set(detail.providerPlayerKey, entry);
     }
   }
-  return [...players.values()].map(({ head, sums }) => ({
+  return EffectArray.map([...players.values()], ({ head, sums }) => ({
     ...head,
     actual:
       sums.size === 0
         ? undefined
         : {
             basis,
-            stats: [...sums]
-              .filter(([statId]) => !rateStatIds.has(statId))
-              .map(([statId, value]) => ({ statId, value })),
-            notAggregated: [...rateStatIds]
-              .filter((statId) => sums.has(statId))
-              .toSorted((left, right) => left - right)
-              .map((statId): ProviderStatOmission => ({
+            stats: EffectArray.map(
+              EffectArray.filter([...sums], ([statId]) => !rateStatIds.has(statId)),
+              ([statId, value]) => ({ statId, value }),
+            ),
+            notAggregated: EffectArray.map(
+              sortWithComparator(
+                EffectArray.filter([...rateStatIds], (statId) => sums.has(statId)),
+                (left, right) => left - right,
+              ),
+              (statId): ProviderStatOmission => ({
                 statId,
                 detail: rateStatNotAggregated,
-              })),
+              }),
+            ),
           },
   }));
 }
@@ -1624,7 +1677,9 @@ function playerFactsOf(
 
 function playerWeekOf(player: YahooPlayerDetail, week: number): ProviderPlayerWeekFact {
   const opponent = scheduledOpponent(player.opponent);
-  const projected = playerRanksOf(player.ranks).find((entry) => entry.type === "PW");
+  const projected = EffectOption.getOrUndefined(
+    EffectArray.findFirst(playerRanksOf(player.ranks), (entry) => entry.type === "PW"),
+  );
   return {
     providerPlayerKey: player.playerKey,
     week,
@@ -1654,10 +1709,13 @@ function communityStartRateOf(
     }
     return {
       percent: percentStarted.value,
-      cuts: (percentStarted.cuts ?? []).map((cut: YahooPercentCut): YahooStartRateCut => ({
-        cut: cut.cut,
-        percent: cut.value,
-      })),
+      cuts: EffectArray.map(
+        percentStarted.cuts ?? [],
+        (cut: YahooPercentCut): YahooStartRateCut => ({
+          cut: cut.cut,
+          percent: cut.value,
+        }),
+      ),
     };
   });
 }
@@ -1686,7 +1744,7 @@ function providerMatchupsOf(
   matchups: ReadonlyArray<YahooMatchup>,
   period: ProviderScoringWeek,
 ): ReadonlyArray<ProviderMatchup> {
-  return matchups.map((matchup) => ({
+  return EffectArray.map(matchups, (matchup) => ({
     period,
     home: providerTeamScoreOf(matchup.home),
     away: providerTeamScoreOf(matchup.away),
@@ -1696,7 +1754,7 @@ function providerMatchupsOf(
     isTied: matchup.isTied,
     weekStart: matchup.weekStart,
     weekEnd: matchup.weekEnd,
-    categoryWinners: matchup.categoryWinners.map((winner): ProviderCategoryWinner => ({
+    categoryWinners: EffectArray.map(matchup.categoryWinners, (winner): ProviderCategoryWinner => ({
       statId: winner.statId,
       winnerProviderTeamKey: winner.winnerTeamKey,
       isTied: winner.isTied,
@@ -1717,14 +1775,14 @@ function providerTeamScoreOf(team: YahooMatchup["home"]): ProviderTeamScore {
 }
 
 function providerTransactionOf(transaction: YahooTransaction): ProviderTransaction {
-  const players = transaction.players.map(providerTransactionPlayerOf);
+  const players = EffectArray.map(transaction.players, providerTransactionPlayerOf);
   const parties = transactionParties(
     transaction.type,
     providerTransactionTeamOf(transaction.proposer),
     providerTransactionTeamOf(transaction.receiver),
     players,
   );
-  const picks = transaction.picks.map(providerTransactionPickOf);
+  const picks = EffectArray.map(transaction.picks, providerTransactionPickOf);
   return {
     transactionKey: transaction.transactionKey,
     occurredAt: transaction.occurredAt,
@@ -1739,8 +1797,8 @@ function providerTransactionOf(transaction: YahooTransaction): ProviderTransacti
 }
 
 function providerPendingTradeOf(offer: YahooPendingTrade): ProviderPendingTrade {
-  const players = offer.players.map(providerTransactionPlayerOf);
-  const picks = offer.picks.map(providerTransactionPickOf);
+  const players = EffectArray.map(offer.players, providerTransactionPlayerOf);
+  const picks = EffectArray.map(offer.picks, providerTransactionPickOf);
   return {
     transactionKey: offer.transactionKey,
     proposedAt: offer.proposedAt,
@@ -1873,7 +1931,7 @@ function transactionParties(
     for (const team of [player.movement.from, player.movement.to]) {
       if (
         team !== undefined &&
-        !entries.some((entry) => entry.team.providerTeamKey === team.providerTeamKey)
+        !EffectArray.some(entries, (entry) => entry.team.providerTeamKey === team.providerTeamKey)
       ) {
         entries.push({ role: "participant", team });
       }
@@ -1971,10 +2029,17 @@ function incompleteTransaction(
     }
   }
   const sendingTeams = new Set(
-    [
-      ...players.map((player) => player.movement.from?.providerTeamKey),
-      ...picks.map((pick) => pick.from?.providerTeamKey),
-    ].filter((providerTeamKey): providerTeamKey is string => providerTeamKey !== undefined),
+    optionalArrayValue(
+      [
+        ...EffectArray.map(players, (player) => player.movement.from?.providerTeamKey),
+        ...EffectArray.map(picks, (pick) => pick.from?.providerTeamKey),
+      ],
+      (value) =>
+        EffectArray.filter(
+          value,
+          (providerTeamKey): providerTeamKey is string => providerTeamKey !== undefined,
+        ),
+    ),
   );
   if ((type === "trade" || type === "pending_trade") && sendingTeams.size === 1) {
     return {
@@ -2001,7 +2066,7 @@ function reviewBase(url: string, sport: FantasySport, leagueId: string): URL {
   ) {
     throw new Error("Yahoo review base escaped its fixed host");
   }
-  const segments = parsed.pathname.split("/").filter((segment) => segment !== "");
+  const segments = EffectArray.filter(parsed.pathname.split("/"), (segment) => segment !== "");
   if (
     segments.length !== 2 ||
     segments[1] !== leagueId ||
@@ -2045,7 +2110,7 @@ function ValidPlayerKeys(
   if (
     value.length === 0 ||
     value.length > maximumSelectedPlayers ||
-    !value.every((key) => /^[0-9]+\.p\.[0-9]+$/u.test(key))
+    !EffectArray.every(value, (key) => /^[0-9]+\.p\.[0-9]+$/u.test(key))
   ) {
     return ProviderResponseInvalid.make({ operation });
   }
@@ -2055,11 +2120,11 @@ function ValidPlayerKeys(
 function ValidPlayerPeriods(
   periods: ReadonlyArray<ProviderScoringWeek>,
 ): Effect.Effect<ReadonlyArray<ProviderScoringWeek>, ProviderResponseInvalid> {
-  const weeks = new Set(periods.map((period) => period.week));
+  const weeks = new Set(EffectArray.map(periods, (period) => period.week));
   if (
     periods.length === 0 ||
     weeks.size !== periods.length ||
-    !periods.every((period) => Number.isSafeInteger(period.week) && period.week >= 1)
+    !EffectArray.every(periods, (period) => Number.isSafeInteger(period.week) && period.week >= 1)
   ) {
     return ProviderResponseInvalid.make({ operation: "read_player_history" });
   }
@@ -2072,7 +2137,7 @@ function ValidBatchPlayerKeys(
 ): Effect.Effect<ReadonlyArray<string>, ProviderResponseInvalid> {
   if (
     value.length > maximumHistoryPlayers ||
-    !value.every((key) => /^[0-9]+\.p\.[0-9]+$/u.test(key))
+    !EffectArray.every(value, (key) => /^[0-9]+\.p\.[0-9]+$/u.test(key))
   ) {
     return ProviderResponseInvalid.make({ operation });
   }
@@ -2146,7 +2211,7 @@ function ValidSearchPositions(
   const valid =
     positions.length > 0 &&
     new Set(positions).size === positions.length &&
-    positions.every((position) => /^[A-Za-z]{1,3}$/u.test(position));
+    EffectArray.every(positions, (position) => /^[A-Za-z]{1,3}$/u.test(position));
   return valid
     ? Effect.succeedSome(positions)
     : ProviderResponseInvalid.make({ operation: "search_players", field: "positions" });

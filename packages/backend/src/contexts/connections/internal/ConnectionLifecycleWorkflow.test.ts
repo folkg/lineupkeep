@@ -1,5 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { Arbitrary, DateTime, Effect, Exit, Schema, SchemaParser } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { ConnectionCredentialGeneration } from "#contexts/connections/Connection.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
@@ -79,7 +80,7 @@ const invariants = [
     if (snapshot.state.path !== "Disconnected") {
       return true;
     }
-    return events.every((event) =>
+    return EffectArray.every(events, (event) =>
       Exit.isFailure(
         Effect.runSync(
           Effect.exit(plan(ConnectionLifecycleWorkflow, { state: snapshot.state.value }, event)),

@@ -1,3 +1,4 @@
+import { EffectArray } from "@lineupkeep/collections";
 import { expect, it } from "vitest";
 import { createFSM, setup, types } from "xstate/fsm";
 
@@ -25,7 +26,7 @@ it("explores context changes and declared self transitions", () => {
   });
 
   expect(paths.nodes).toHaveLength(4);
-  expect(paths.nodes.map(({ snapshot }) => snapshot.state.path)).toContain("done");
+  expect(EffectArray.map(paths.nodes, ({ snapshot }) => snapshot.state.path)).toContain("done");
 });
 
 it("reports a failing state with its shortest event path", () => {

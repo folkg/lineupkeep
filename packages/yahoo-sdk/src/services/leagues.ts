@@ -1,3 +1,4 @@
+import { Array as EffectArray } from "effect";
 import * as Schema from "effect/Schema";
 
 import * as API from "#yahoo/api.ts";
@@ -40,7 +41,7 @@ export const settings: API.OperationMethod<
   request: (input) => ({
     host: "read",
     method: "GET",
-    path: `/fantasy/v2/league/${input.leagueKey};out=settings/players;status=A;sort=AR;sort_type=season;count=5;out=ranks;ranks=${recentFormRankNames().join(",")}`,
+    path: `/fantasy/v2/league/${input.leagueKey};out=settings/players;status=A;sort=AR;sort_type=season;count=5;out=ranks;ranks=${EffectArray.join(recentFormRankNames(), ",")}`,
   }),
   decode: (payload, input) => decodeLeagueSettings(payload, input.leagueKey),
 });
@@ -92,7 +93,7 @@ export const discover: API.OperationMethod<
     return {
       host: "read",
       method: "GET",
-      path: `/fantasy/v2/users;use_login=1/games;game_keys=${gameKeys.join(",")}/leagues;out=settings/teams;out=standings`,
+      path: `/fantasy/v2/users;use_login=1/games;game_keys=${EffectArray.join(gameKeys, ",")}/leagues;out=settings/teams;out=standings`,
     };
   },
   decode: (payload, input) => decodeDiscoveredLeagues(payload, input.gameKeys ?? allYahooGameKeys),
@@ -163,7 +164,7 @@ const TeamAnalysisShape = Schema.Struct({
 export const TeamAnalysisRequest = TeamAnalysisShape.pipe(
   Schema.check(
     Schema.makeFilter((input: typeof TeamAnalysisShape.Type) =>
-      input.teamKeys.every((key) => leagueKeyOfTeam(key) === input.leagueKey),
+      EffectArray.every(input.teamKeys, (key) => leagueKeyOfTeam(key) === input.leagueKey),
     ),
   ),
 );
@@ -183,7 +184,7 @@ export const teamAnalysis: API.OperationMethod<
   request: (input) => ({
     host: "read",
     method: "GET",
-    path: `/fantasy/v2/league/${input.leagueKey}/teams;team_keys=${input.teamKeys.join(",")};out=available_draft_picks,positional_ranks,standings;positional_ranks.starters_only=1`,
+    path: `/fantasy/v2/league/${input.leagueKey}/teams;team_keys=${EffectArray.join(input.teamKeys, ",")};out=available_draft_picks,positional_ranks,standings;positional_ranks.starters_only=1`,
   }),
   decode: (payload, input) => decodeTeamAnalysis(payload, input.leagueKey),
 });
@@ -202,7 +203,7 @@ const AvailableDraftPicksShape = Schema.Struct({
 export const AvailableDraftPicksRequest = AvailableDraftPicksShape.pipe(
   Schema.check(
     Schema.makeFilter((input: typeof AvailableDraftPicksShape.Type) =>
-      input.teamKeys.every((key) => leagueKeyOfTeam(key) === input.leagueKey),
+      EffectArray.every(input.teamKeys, (key) => leagueKeyOfTeam(key) === input.leagueKey),
     ),
   ),
 );
@@ -222,7 +223,7 @@ export const availableDraftPicks: API.OperationMethod<
   request: (input) => ({
     host: "androidRead",
     method: "GET",
-    path: `/fantasy/v2/league/${input.leagueKey}/teams;team_keys=${input.teamKeys.join(",")};out=available_draft_picks`,
+    path: `/fantasy/v2/league/${input.leagueKey}/teams;team_keys=${EffectArray.join(input.teamKeys, ",")};out=available_draft_picks`,
   }),
   decode: (payload, input) => decodeAvailableDraftPicks(payload, input.leagueKey, input.teamKeys),
 });

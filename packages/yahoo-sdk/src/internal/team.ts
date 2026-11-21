@@ -1,4 +1,6 @@
 import { Effect, Schema, SchemaTransformation } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 
 import {
   Flag,
@@ -38,7 +40,8 @@ export function decodeLeagueTeams(
     const decoded = yield* decodePayload(LeagueTeamsPayload, payload, "read_league_teams");
     if (
       decoded.league.league_key !== requestedLeagueKey ||
-      decoded.league.teams.some(
+      EffectArray.some(
+        decoded.league.teams,
         (team) => team.team_key.slice(0, team.team_key.lastIndexOf(".t.")) !== requestedLeagueKey,
       )
     ) {
@@ -47,7 +50,7 @@ export function decodeLeagueTeams(
         field: "league.teams.team_key",
       });
     }
-    return decoded.league.teams.map(teamOf);
+    return EffectArray.map(decoded.league.teams, teamOf);
   });
 }
 
@@ -64,7 +67,9 @@ export function decodeTeamGamesPlayed(
         field: "league.league_key",
       });
     }
-    const team = decoded.league.teams.find((entry) => entry.team_key === requestedTeamKey);
+    const team = EffectOption.getOrUndefined(
+      EffectArray.findFirst(decoded.league.teams, (entry) => entry.team_key === requestedTeamKey),
+    );
     if (team === undefined || team.games_played === undefined) {
       return yield* new YahooParseError({
         operation: "read_team_games_played",
@@ -82,7 +87,7 @@ export function gamesPlayedOf(
     return undefined;
   }
   const groups = isReadonlyArray(value) ? value : [value];
-  const played = groups.flatMap((group) => {
+  const played = EffectArray.flatMap(groups, (group) => {
     const detail = group.games_played_by_position_type;
     if (detail === undefined) {
       return [];
@@ -90,17 +95,19 @@ export function gamesPlayedOf(
     return [
       {
         positionType: detail.position_type,
-        positions: (isReadonlyArray(detail.games_played)
-          ? detail.games_played
-          : detail.games_played === undefined
-            ? []
-            : [detail.games_played]
-        ).map(({ games_played_by_position }) => ({
-          position: games_played_by_position.position,
-          played: games_played_by_position.games_played.played,
-          max: games_played_by_position.games_played.max,
-          projected: games_played_by_position.games_played.projected,
-        })),
+        positions: EffectArray.map(
+          isReadonlyArray(detail.games_played)
+            ? detail.games_played
+            : detail.games_played === undefined
+              ? []
+              : [detail.games_played],
+          ({ games_played_by_position }) => ({
+            position: games_played_by_position.position,
+            played: games_played_by_position.games_played.played,
+            max: games_played_by_position.games_played.max,
+            projected: games_played_by_position.games_played.projected,
+          }),
+        ),
         ...(detail.innings_pitched === undefined ? {} : { inningsPitched: detail.innings_pitched }),
       },
     ];
@@ -115,12 +122,12 @@ function teamOf(team: typeof TeamPayload.Type): YahooLeagueTeam {
     name: team.name,
     url: team.url,
     isOwnedByCurrentLogin: team.is_owned_by_current_login,
-    managers: (team.managers ?? []).map(({ manager }) => ({
+    managers: EffectArray.map(team.managers ?? [], ({ manager }) => ({
       managerId: manager.manager_id,
       nickname: optionalNonEmpty(manager.nickname),
       isCurrentLogin: manager.is_current_login,
     })),
-    teamLogos: (team.team_logos ?? []).map(({ team_logo }) => ({
+    teamLogos: EffectArray.map(team.team_logos ?? [], ({ team_logo }) => ({
       size: optionalNonEmpty(team_logo.size),
       url: team_logo.url,
     })),
@@ -374,7 +381,7 @@ export function decodeDiscoveredLeagues(
             scoringLabel: optionalNonEmpty(league.scoring_label),
             settings,
             tradeDraftPicks: settings.settings.canTradeDraftPicks,
-            teams: league.teams.map((team) => ({
+            teams: EffectArray.map(league.teams, (team) => ({
               ...teamOf(team),
               gameKey: game.code,
               season: game.season,

@@ -1,3 +1,18 @@
+import { Array as EffectArray } from "effect";
+import { Order as EffectOrder } from "effect";
+function sortWithComparator<A>(
+  self: ReadonlyArray<A>,
+  compare: (left: A, right: A) => number,
+): ReadonlyArray<A> {
+  return EffectArray.sort(
+    self,
+    EffectOrder.make<A>((left, right) => {
+      const result = compare(left, right);
+      return result < 0 ? -1 : result > 0 ? 1 : 0;
+    }),
+  );
+}
+
 const attributeFragmentKeys = new Set([
   "user",
   "game",
@@ -21,7 +36,7 @@ export function normalizeYahooJson(payload: unknown): unknown {
 }
 
 function normalizeValue(value: unknown, key: string): unknown {
-  if (Array.isArray(value)) {
+  if (EffectArray.isArray(value)) {
     return normalizeFragments(value, key);
   }
   return isRecord(value) ? normalizeRecord(value) : value;
@@ -29,19 +44,22 @@ function normalizeValue(value: unknown, key: string): unknown {
 
 function normalizeRecord(record: Record<string, unknown>): unknown {
   const keys = Object.keys(record);
-  const numericKeys = keys.filter(isNumericKey);
-  const metadataKeys = keys.filter((key) => !isNumericKey(key) && key !== "count");
+  const numericKeys = EffectArray.filter(keys, isNumericKey);
+  const metadataKeys = EffectArray.filter(keys, (key) => !isNumericKey(key) && key !== "count");
   if (numericKeys.length === 0 && metadataKeys.length === 0) {
     return Object.hasOwn(record, "count") ? [] : {};
   }
   if (numericKeys.length === 0) {
-    return Object.fromEntries(keys.map((key) => [key, normalizeValue(record[key], key)]));
+    return Object.fromEntries(
+      EffectArray.map(keys, (key) => [key, normalizeValue(record[key], key)]),
+    );
   }
-  const entries = numericKeys
-    .toSorted((left, right) => Number(left) - Number(right))
-    .map((key) => normalizeCollectionItem(record[key]));
+  const entries = EffectArray.map(
+    sortWithComparator(numericKeys, (left, right) => Number(left) - Number(right)),
+    (key) => normalizeCollectionItem(record[key]),
+  );
   const metadata = Object.fromEntries(
-    metadataKeys.map((key) => [key, normalizeValue(record[key], key)]),
+    EffectArray.map(metadataKeys, (key) => [key, normalizeValue(record[key], key)]),
   );
   return Object.keys(metadata).length === 0 ? entries : { ...metadata, entries };
 }
@@ -58,19 +76,23 @@ function normalizeCollectionItem(value: unknown): unknown {
 }
 
 function normalizeFragments(fragments: ReadonlyArray<unknown>, key: string): unknown {
-  const attributeFragments = fragments
-    .flatMap((fragment): ReadonlyArray<unknown> =>
-      Array.isArray(fragment) ? fragment : [fragment],
-    )
-    .filter((fragment) => !(Array.isArray(fragment) && fragment.length === 0));
+  const attributeFragments = EffectArray.filter(
+    EffectArray.flatMap(fragments, (fragment) =>
+      EffectArray.isArray(fragment) ? fragment : [fragment],
+    ),
+    (fragment) => !(EffectArray.isArray(fragment) && fragment.length === 0),
+  );
   if (
     (key.endsWith("s") && !attributeFragmentKeys.has(key)) ||
-    !attributeFragments.every(isRecord) ||
+    !EffectArray.every(attributeFragments, isRecord) ||
     !hasOnlyDistinctFields(attributeFragments)
   ) {
-    return attributeFragments.map((fragment) => normalizeValue(fragment, ""));
+    return EffectArray.map(attributeFragments, (fragment) => normalizeValue(fragment, ""));
   }
-  return Object.assign({}, ...attributeFragments.map((fragment) => normalizeValue(fragment, "")));
+  return Object.assign(
+    {},
+    ...EffectArray.map(attributeFragments, (fragment) => normalizeValue(fragment, "")),
+  );
 }
 
 function hasOnlyDistinctFields(records: ReadonlyArray<Record<string, unknown>>): boolean {
@@ -87,7 +109,7 @@ function hasOnlyDistinctFields(records: ReadonlyArray<Record<string, unknown>>):
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !EffectArray.isArray(value);
 }
 
 function isNumericKey(key: string): boolean {
@@ -95,7 +117,7 @@ function isNumericKey(key: string): boolean {
 }
 
 export function findPendingTradeKey(value: unknown): string | undefined {
-  if (Array.isArray(value)) {
+  if (EffectArray.isArray(value)) {
     for (const entry of value) {
       const found = findPendingTradeKey(entry);
       if (found !== undefined) {

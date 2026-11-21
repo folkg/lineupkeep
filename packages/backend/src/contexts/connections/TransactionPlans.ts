@@ -1,5 +1,6 @@
 import { Context, Effect, Schema } from "effect";
 import type { DateTime } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
 
@@ -268,7 +269,7 @@ export function transactionMoveStatus(move: {
         case "unknown":
           return "fallback_unknown";
         case "failed":
-          return move.attempts.some((attempt) => attempt.kind === "fallback")
+          return EffectArray.some(move.attempts, (attempt) => attempt.kind === "fallback")
             ? "all_choices_failed"
             : "claim_lost";
         case "skipped":

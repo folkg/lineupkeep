@@ -7,6 +7,7 @@ import { AccountExport } from "@lineupkeep/backend/privacy/AccountExport";
 import { createServerFn } from "@tanstack/solid-start";
 import { getRequest } from "@tanstack/solid-start/server";
 import { Effect, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type {
   AccountErasureErrorType,
@@ -40,9 +41,10 @@ export const eraseAccountServerFn = createServerFn({ method: "POST" })
           const summary = yield* AccountErasure.use((erasure) => erasure.erase(userId));
           yield* Effect.annotateCurrentSpan({
             "account_erasure.classes": summary.removed.length,
-            "account_erasure.rows": summary.removed.reduce(
-              (total, entry) => total + entry.count,
+            "account_erasure.rows": EffectArray.reduce(
+              summary.removed,
               0,
+              (total, entry) => total + entry.count,
             ),
           });
           return summary;

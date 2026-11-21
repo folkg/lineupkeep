@@ -1,4 +1,5 @@
 import { DateTime, Effect, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type { FantasySport, TeamId } from "#contexts/connections/FantasyTeam.ts";
 import {
@@ -159,7 +160,7 @@ function observedTeamIdentities(
       key: player.proTeamKey,
     });
   }
-  return [...pairs.values()].map((pair) => ({
+  return EffectArray.map([...pairs.values()], (pair) => ({
     sport: input.sport,
     source: input.material.provider,
     sourceTeamIdentifier: pair.abbreviation,
@@ -250,7 +251,7 @@ function observationsFor(
   providerTeamKey: string,
   observedAt: DateTime.Utc,
 ): ReadonlyArray<ProviderOpponentObservationWrite> {
-  return datesBetween(range.from, range.to).map((date) => ({
+  return EffectArray.map(datesBetween(range.from, range.to), (date) => ({
     window: { from: date, to: date },
     value: valueForDate(schedule, date),
     observedAt,
@@ -260,14 +261,15 @@ function observationsFor(
 
 function valueForDate(schedule: ProviderRosterSchedule, date: string): ProviderOpponentValue {
   return {
-    players: schedule.players.map((player) => ({
+    players: EffectArray.map(schedule.players, (player) => ({
       providerPlayerKey: player.providerPlayerKey,
       name: player.name,
       proTeamKey: player.proTeamKey ?? null,
       proTeamAbbreviation: player.proTeamAbbreviation ?? null,
-      games: player.games
-        .filter((game) => game.date === date)
-        .map((game) => ({ opponent: game.opponent, home: game.home })),
+      games: EffectArray.map(
+        EffectArray.filter(player.games, (game) => game.date === date),
+        (game) => ({ opponent: game.opponent, home: game.home }),
+      ),
     })),
   };
 }
@@ -285,7 +287,7 @@ function rebuildSchedule(input: {
       throw new Error("Every served schedule date must have an observation");
     }
     for (const player of observation.value.players) {
-      const games = player.games.map((game) => ({
+      const games = EffectArray.map(player.games, (game) => ({
         date,
         opponent: game.opponent,
         home: game.home,

@@ -1,4 +1,5 @@
 import type { FeedbackSurface } from "@lineupkeep/backend/feedback/Feedback";
+import { EffectArray } from "@lineupkeep/collections";
 
 import type { FeedbackContextView } from "#contracts/feedback/feedbackContract.ts";
 
@@ -50,7 +51,7 @@ function teamNameFrom(value: unknown): string | undefined {
 }
 
 function isSurface(value: string): value is FeedbackSurface {
-  return surfaces.some((surface) => surface === value);
+  return EffectArray.some(surfaces, (surface) => surface === value);
 }
 
 function isUuid(value: string): boolean {

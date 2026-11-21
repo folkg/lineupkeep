@@ -11,6 +11,7 @@ import {
 import { createServerFn } from "@tanstack/solid-start";
 import { getRequest } from "@tanstack/solid-start/server";
 import { Array, Effect, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type {
   TeamChangeView,
@@ -36,7 +37,7 @@ export const listTeamsServerFn = createServerFn({ method: "GET" }).handler(() =>
     "teams.list",
     (userId) =>
       Teams.use((teams) => teams.list(userId)).pipe(
-        Effect.map((rows) => rows.map(toTeamSummaryView)),
+        Effect.map((rows) => EffectArray.map(rows, toTeamSummaryView)),
       ),
     mapTeamError,
   ),
@@ -50,17 +51,18 @@ export const refreshTeamsServerFn = createServerFn({ method: "POST" }).handler((
     (userId) =>
       Effect.gen(function* () {
         const connections = yield* Connections;
-        const ready = (yield* connections.list(userId)).filter(
+        const ready = EffectArray.filter(
+          yield* connections.list(userId),
           (connection) => connection.status === "ready",
         );
         if (ready.length > 0) {
           yield* connections.discoverTeams(
             userId,
-            ready.map((connection) => ({ id: connection.id })),
+            EffectArray.map(ready, (connection) => ({ id: connection.id })),
           );
         }
         const all = yield* Teams.use((teams) => teams.list(userId));
-        return { teams: all.map(toTeamSummaryView) } satisfies TeamRefreshView;
+        return { teams: EffectArray.map(all, toTeamSummaryView) } satisfies TeamRefreshView;
       }),
     mapTeamRefreshError,
   );
@@ -99,9 +101,12 @@ export const controlTeamServerFn = createServerFn({ method: "POST" })
           return {
             changed:
               result.outcome === "changed"
-                ? all.filter((team) => team.team.id === input.team).map(toTeamSummaryView)
+                ? EffectArray.map(
+                    EffectArray.filter(all, (team) => team.team.id === input.team),
+                    toTeamSummaryView,
+                  )
                 : [],
-            teams: all.map(toTeamSummaryView),
+            teams: EffectArray.map(all, toTeamSummaryView),
           } satisfies TeamChangeView;
         }),
       (error) =>

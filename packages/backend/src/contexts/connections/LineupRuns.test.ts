@@ -4,6 +4,9 @@ import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { and, eq } from "drizzle-orm";
 import { Array, Config, Deferred, Effect, Fiber, Layer, Option, Redacted, Schema } from "effect";
 import { DateTime } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
+import { Order as EffectOrder } from "effect";
 
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { DatabaseConnection } from "#database/DatabaseConnection.ts";
@@ -54,6 +57,17 @@ import type {
   ProviderTeam,
 } from "./Provider.ts";
 import { ScheduleGate } from "./ScheduleGate.ts";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
 
 const lineupgradeUlid = /^[0-9A-HJKMNP-TV-Z]{26}$/u;
 
@@ -86,8 +100,8 @@ it.effect(
 
       const replay = yield* runs.submit(owner, lineupRequest(team.id, requestId));
       assert.deepStrictEqual(
-        replay.runs.map((run) => run.run),
-        submitted.runs.map((run) => run.run),
+        EffectArray.map(replay.runs, (run) => run.run),
+        EffectArray.map(submitted.runs, (run) => run.run),
       );
       assert.strictEqual(yield* fake.nativeCallCount, 1);
 
@@ -102,7 +116,7 @@ it.effect(
       assert.strictEqual(listed.page.complete, true);
 
       const foreign = yield* Effect.flip(
-        runs.get(other, { runs: submitted.runs.map((run) => run.run) }),
+        runs.get(other, { runs: EffectArray.map(submitted.runs, (run) => run.run) }),
       );
       assert.instanceOf(foreign, LineupRunNotFound);
     }).pipe(layerTools.provide(LineupTestLayer)),
@@ -122,8 +136,12 @@ it.effect("emits one run span carrying the run, request, team and verified outco
 
     const record = yield* loadRun(repository, runId);
     const spans = telemetry.read().spans;
-    const runSpan = spans.find((span) => span.name === "LineupWorker.run");
-    const deliverySpan = spans.find((span) => span.name === "LineupWorker.deliver");
+    const runSpan = EffectOption.getOrUndefined(
+      EffectArray.findFirst(spans, (span) => span.name === "LineupWorker.run"),
+    );
+    const deliverySpan = EffectOption.getOrUndefined(
+      EffectArray.findFirst(spans, (span) => span.name === "LineupWorker.deliver"),
+    );
 
     assert.isDefined(runSpan);
     assert.isDefined(deliverySpan);
@@ -134,7 +152,9 @@ it.effect("emits one run span carrying the run, request, team and verified outco
     assert.strictEqual(stringAttribute(runSpan, "app.outcome"), "success");
     assert.strictEqual(stringAttribute(runSpan, "lineup.outcome"), "changed");
 
-    const providerSpan = spans.find((span) => span.name === "FakeProvider.readRoster");
+    const providerSpan = EffectOption.getOrUndefined(
+      EffectArray.findFirst(spans, (span) => span.name === "FakeProvider.readRoster"),
+    );
     assert.isDefined(providerSpan);
     assert.strictEqual(providerSpan.parentSpanId, runSpan.spanId);
   }).pipe(layerTools.provide(Layer.merge(LineupTestLayer, telemetry.layer)));
@@ -151,8 +171,12 @@ it.effect("links a domain request to the run spans it created", () => {
     const submitted = yield* runs.submit(owner, lineupRequest(team.id, requestId));
 
     const spans = telemetry.read().spans;
-    const submitSpan = spans.find((span) => span.name === "LineupRuns.submit");
-    const runSpan = spans.find((span) => span.name === "LineupWorker.run");
+    const submitSpan = EffectOption.getOrUndefined(
+      EffectArray.findFirst(spans, (span) => span.name === "LineupRuns.submit"),
+    );
+    const runSpan = EffectOption.getOrUndefined(
+      EffectArray.findFirst(spans, (span) => span.name === "LineupWorker.run"),
+    );
 
     assert.isDefined(submitSpan);
     assert.isDefined(runSpan);
@@ -176,7 +200,9 @@ it.effect("marks a failed run span so failed and uncertain runs can be alerted",
 
     yield* worker.deliver([runId]);
 
-    const runSpan = telemetry.read().spans.find((span) => span.name === "LineupWorker.run");
+    const runSpan = EffectOption.getOrUndefined(
+      EffectArray.findFirst(telemetry.read().spans, (span) => span.name === "LineupWorker.run"),
+    );
 
     assert.isDefined(runSpan);
     assert.strictEqual(stringAttribute(runSpan, "app.outcome"), "failure");
@@ -191,7 +217,9 @@ function stringAttribute(
     | undefined,
   key: string,
 ): string | undefined {
-  const value = span?.attributes.find((attribute) => attribute.key === key)?.value;
+  const value = optionalArrayValue(span?.attributes, (value) =>
+    EffectOption.getOrUndefined(EffectArray.findFirst(value, (attribute) => attribute.key === key)),
+  )?.value;
   return isStringValue(value) ? value.stringValue : undefined;
 }
 
@@ -318,7 +346,15 @@ it.effect("writes a reserve transit instead of blocking the team", () =>
     assert.strictEqual(run.state.outcome.verified, true);
     const requests = yield* fake.explicitRequests;
     assert.strictEqual(yield* fake.explicitCallCount, 1);
-    assert.deepStrictEqual(requests[0]?.map((assignment) => assignment.slot).sort(), ["IR", "QB"]);
+    assert.deepStrictEqual(
+      optionalArrayValue(
+        optionalArrayValue(requests[0], (value) =>
+          EffectArray.map(value, (assignment) => assignment.slot),
+        ),
+        (value) => EffectArray.sort(value, EffectOrder.String),
+      ),
+      ["IR", "QB"],
+    );
   }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -353,7 +389,9 @@ it.effect("leaves a reserve player in place and writes only the rest of the line
     const requests = yield* fake.explicitRequests;
     assert.strictEqual(yield* fake.explicitCallCount, 1);
     assert.deepStrictEqual(
-      requests[0]?.map((assignment) => assignment.providerPlayerKey),
+      optionalArrayValue(requests[0], (value) =>
+        EffectArray.map(value, (assignment) => assignment.providerPlayerKey),
+      ),
       ["461.p.20002", "461.p.20003"],
     );
   }).pipe(layerTools.provide(LineupTestLayer)),
@@ -382,7 +420,9 @@ it.effect("reports your league's own words when it refuses the lineup and never 
     assert.strictEqual(run.state.outcome.kind, "failed");
     assert.match(run.state.outcome.summary, /There is no room on the roster\./u);
     assert.deepStrictEqual(
-      run.state.outcome.leftInPlace?.map((player) => player.name),
+      optionalArrayValue(run.state.outcome.leftInPlace, (value) =>
+        EffectArray.map(value, (player) => player.name),
+      ),
       ["Healthy Skater"],
     );
     assert.strictEqual(yield* fake.explicitCallCount, 1);
@@ -431,7 +471,7 @@ it.effect("never writes a player whose slot is unverified and does not mismatch 
     assert.strictEqual(run.state.outcome.kind, "changed");
     assert.strictEqual(run.state.outcome.verified, true);
     assert.deepStrictEqual(
-      run.state.outcome.changes.map((change) => [change.name, change.from, change.to]),
+      EffectArray.map(run.state.outcome.changes, (change) => [change.name, change.from, change.to]),
       [
         ["QB One", "QB", "BN"],
         ["QB Two", "BN", "QB"],
@@ -439,7 +479,12 @@ it.effect("never writes a player whose slot is unverified and does not mismatch 
     );
     const requests = yield* fake.explicitRequests;
     assert.deepStrictEqual(
-      requests[0]?.map((assignment) => assignment.providerPlayerKey).toSorted(),
+      optionalArrayValue(
+        optionalArrayValue(requests[0], (value) =>
+          EffectArray.map(value, (assignment) => assignment.providerPlayerKey),
+        ),
+        (value) => EffectArray.sort(value, EffectOrder.String),
+      ),
       ["461.p.20001", "461.p.20004"],
     );
   }).pipe(layerTools.provide(LineupTestLayer)),
@@ -467,7 +512,7 @@ it.effect("benches a player once a games-limited position's projection fills it"
     }
     assert.strictEqual(run.state.outcome.kind, "changed");
     assert.deepStrictEqual(
-      run.state.outcome.changes.map((change) => [change.name, change.from, change.to]),
+      EffectArray.map(run.state.outcome.changes, (change) => [change.name, change.from, change.to]),
       [["QB Two", "QB", "BN"]],
     );
     const requests = yield* fake.explicitRequests;
@@ -484,7 +529,7 @@ it.effect("records each player's scheduled and starting-lineup facts in the run 
     const team = yield* seedCustom(fake);
     yield* fake.setRoster({
       ...customRoster,
-      players: customRoster.players.map((player) =>
+      players: EffectArray.map(customRoster.players, (player) =>
         player.providerPlayerKey === "461.p.20003"
           ? { ...player, scheduled: false }
           : player.providerPlayerKey === "461.p.20004"
@@ -510,7 +555,11 @@ it.effect("records each player's scheduled and starting-lineup facts in the run 
     );
 
     assert.deepStrictEqual(
-      observation.players.map((player) => [player.name, player.scheduled, player.startingLineup]),
+      EffectArray.map(observation.players, (player) => [
+        player.name,
+        player.scheduled,
+        player.startingLineup,
+      ]),
       [
         ["QB One", true, "unconfirmed"],
         ["RB One", true, "unconfirmed"],
@@ -600,7 +649,9 @@ it.effect("reports unplanned readback changes as a mismatch after acceptance", (
     assert.strictEqual(run.state.outcome.verified, true);
     assert.strictEqual(run.state.outcome.differences?.length, 2);
     assert.deepStrictEqual(
-      run.state.outcome.differences?.map((difference) => difference.expected),
+      optionalArrayValue(run.state.outcome.differences, (value) =>
+        EffectArray.map(value, (difference) => difference.expected),
+      ),
       ["QB", "BN"],
     );
     assert.strictEqual(run.state.outcome.implementation, "custom_policy");
@@ -1000,7 +1051,9 @@ it.effect(
         .select({ leaseToken: lineupRunAttempts.leaseToken })
         .from(lineupRunAttempts)
         .where(eq(lineupRunAttempts.runId, runId));
-      assert.isTrue(attempts.some((attempt) => attempt.leaseToken !== updatedIntent?.leaseToken));
+      assert.isTrue(
+        EffectArray.some(attempts, (attempt) => attempt.leaseToken !== updatedIntent?.leaseToken),
+      );
       assert.strictEqual(yield* fake.nativeCallCount, 1);
       assert.strictEqual(yield* fake.explicitCallCount, 0);
     }).pipe(layerTools.provide(LineupTestLayer)),
@@ -1251,17 +1304,17 @@ it.effect("keeps a partial multi-team batch honest and never replays a completed
       ],
     });
 
-    yield* worker.deliver(created.runs.map((run) => run.id));
+    yield* worker.deliver(EffectArray.map(created.runs, (run) => run.id));
 
     assert.strictEqual(yield* fake.nativeCallCount, 1);
     const loaded = yield* repository.loadRuns(owner, {
       request: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a5",
       limit: 10,
     });
-    const statusByTeam = new Map(loaded.runs.map((run) => [run.teamId, run.status]));
+    const statusByTeam = new Map(EffectArray.map(loaded.runs, (run) => [run.teamId, run.status]));
     assert.strictEqual(statusByTeam.get(first.id), "completed");
     assert.strictEqual(statusByTeam.get(second.id), "blocked");
-    yield* worker.deliver(created.runs.map((run) => run.id));
+    yield* worker.deliver(EffectArray.map(created.runs, (run) => run.id));
     assert.strictEqual(yield* fake.nativeCallCount, 1);
   }).pipe(layerTools.provide(LineupTestLayer)),
 );
@@ -1717,8 +1770,12 @@ it.effect(
       assert.strictEqual(healthy.status, "completed");
 
       const listed = yield* connections.list(owner);
-      const dead = listed.find((row) => row.id === first.connectionId);
-      const alive = listed.find((row) => row.id === second.connectionId);
+      const dead = EffectOption.getOrUndefined(
+        EffectArray.findFirst(listed, (row) => row.id === first.connectionId),
+      );
+      const alive = EffectOption.getOrUndefined(
+        EffectArray.findFirst(listed, (row) => row.id === second.connectionId),
+      );
       assert.strictEqual(dead?.status, "reconnect-required");
       assert.strictEqual(dead?.session.usable, false);
       assert.strictEqual(dead?.session.action, "reconnect-provider-connection");
@@ -1813,7 +1870,7 @@ function seedConnection(
     const discovered = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
     return {
       connectionId: linked.id,
-      teams: discovered.map((row) => ({ id: row.id, connectionId: row.connectionId })),
+      teams: EffectArray.map(discovered, (row) => ({ id: row.id, connectionId: row.connectionId })),
     };
   }).pipe(Effect.orDie);
 }
@@ -1840,7 +1897,7 @@ function seed(
       0,
     );
     const discovered = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
-    return discovered.map((row) => ({ id: row.id, connectionId: row.connectionId }));
+    return EffectArray.map(discovered, (row) => ({ id: row.id, connectionId: row.connectionId }));
   }).pipe(Effect.orDie);
 }
 
@@ -1961,7 +2018,7 @@ const roster: ProviderRoster = {
 
 const nativeAfter: ProviderRoster = {
   ...roster,
-  players: roster.players.map((player, index) => ({
+  players: EffectArray.map(roster.players, (player, index) => ({
     ...player,
     slot: { status: "verified", slot: index === 0 ? "BN" : "QB" },
   })),

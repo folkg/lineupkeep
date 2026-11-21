@@ -9,6 +9,7 @@ import {
   Redacted,
   Schema,
 } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import {
@@ -184,21 +185,23 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
       sealPlayerRefs: ({ userId, leagueKey, playerKeys }) =>
         Effect.promise(() =>
           Promise.all(
-            playerKeys.map((playerKey) =>
+            EffectArray.map(playerKeys, (playerKey) =>
               sealReference(keys.aes, "player", userId, leagueKey, playerKey),
             ),
           ),
         ).pipe(
           Effect.map((values) =>
-            values.map((value) => Effect.runSync(Schema.decodeEffect(PlayerRef)(value))),
+            EffectArray.map(values, (value) =>
+              Effect.runSync(Schema.decodeEffect(PlayerRef)(value)),
+            ),
           ),
         ),
       sealPlayerRefGroups: ({ userId, groups }) =>
         Effect.promise(() =>
           Promise.all(
-            groups.map((group) =>
+            EffectArray.map(groups, (group) =>
               Promise.all(
-                group.playerKeys.map((playerKey) =>
+                EffectArray.map(group.playerKeys, (playerKey) =>
                   sealReference(keys.aes, "player", userId, group.leagueKey, playerKey),
                 ),
               ),
@@ -206,8 +209,10 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
           ),
         ).pipe(
           Effect.map((groupValues) =>
-            groupValues.map((values) =>
-              values.map((value) => Effect.runSync(Schema.decodeEffect(PlayerRef)(value))),
+            EffectArray.map(groupValues, (values) =>
+              EffectArray.map(values, (value) =>
+                Effect.runSync(Schema.decodeEffect(PlayerRef)(value)),
+              ),
             ),
           ),
         ),
@@ -219,7 +224,7 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
       openPlayerRefs: ({ userId, leagueKey, refs }) =>
         Effect.promise(() =>
           Promise.all(
-            refs.map((ref) =>
+            EffectArray.map(refs, (ref) =>
               openReference(keys.aes, "player", userId, leagueKey, ref).catch(() => undefined),
             ),
           ),
@@ -227,9 +232,9 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
       openPlayerRefGroups: ({ userId, groups }) =>
         Effect.promise(() =>
           Promise.all(
-            groups.map((group) =>
+            EffectArray.map(groups, (group) =>
               Promise.all(
-                group.refs.map((ref) =>
+                EffectArray.map(group.refs, (ref) =>
                   openReference(keys.aes, "player", userId, group.leagueKey, ref).catch(
                     () => undefined,
                   ),
@@ -245,21 +250,23 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
       sealCounterpartyRefs: ({ userId, leagueKey, teamKeys }) =>
         Effect.promise(() =>
           Promise.all(
-            teamKeys.map((teamKey) =>
+            EffectArray.map(teamKeys, (teamKey) =>
               sealReference(keys.aes, "counterparty", userId, leagueKey, teamKey),
             ),
           ),
         ).pipe(
           Effect.map((values) =>
-            values.map((value) => Effect.runSync(Schema.decodeEffect(CounterpartyRef)(value))),
+            EffectArray.map(values, (value) =>
+              Effect.runSync(Schema.decodeEffect(CounterpartyRef)(value)),
+            ),
           ),
         ),
       sealCounterpartyRefGroups: ({ userId, groups }) =>
         Effect.promise(() =>
           Promise.all(
-            groups.map((group) =>
+            EffectArray.map(groups, (group) =>
               Promise.all(
-                group.teamKeys.map((teamKey) =>
+                EffectArray.map(group.teamKeys, (teamKey) =>
                   sealReference(keys.aes, "counterparty", userId, group.leagueKey, teamKey),
                 ),
               ),
@@ -267,8 +274,10 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
           ),
         ).pipe(
           Effect.map((groupValues) =>
-            groupValues.map((values) =>
-              values.map((value) => Effect.runSync(Schema.decodeEffect(CounterpartyRef)(value))),
+            EffectArray.map(groupValues, (values) =>
+              EffectArray.map(values, (value) =>
+                Effect.runSync(Schema.decodeEffect(CounterpartyRef)(value)),
+              ),
             ),
           ),
         ),
@@ -280,9 +289,9 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
       openCounterpartyRefGroups: ({ userId, groups }) =>
         Effect.promise(() =>
           Promise.all(
-            groups.map((group) =>
+            EffectArray.map(groups, (group) =>
               Promise.all(
-                group.refs.map((ref) =>
+                EffectArray.map(group.refs, (ref) =>
                   openReference(keys.aes, "counterparty", userId, group.leagueKey, ref).catch(
                     () => undefined,
                   ),
@@ -294,9 +303,9 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
       sealTradeOfferRefGroups: ({ userId, groups }) =>
         Effect.promise(() =>
           Promise.all(
-            groups.map((group) =>
+            EffectArray.map(groups, (group) =>
               Promise.all(
-                group.transactionKeys.map((transactionKey) =>
+                EffectArray.map(group.transactionKeys, (transactionKey) =>
                   sealReference(keys.aes, "trade_offer", userId, group.leagueKey, transactionKey),
                 ),
               ),
@@ -304,8 +313,10 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
           ),
         ).pipe(
           Effect.map((groupValues) =>
-            groupValues.map((values) =>
-              values.map((value) => Effect.runSync(Schema.decodeEffect(TradeOfferRef)(value))),
+            EffectArray.map(groupValues, (values) =>
+              EffectArray.map(values, (value) =>
+                Effect.runSync(Schema.decodeEffect(TradeOfferRef)(value)),
+              ),
             ),
           ),
         ),

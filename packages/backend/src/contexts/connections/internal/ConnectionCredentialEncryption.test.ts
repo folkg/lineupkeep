@@ -2,6 +2,7 @@ import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import type { Tracer } from "effect";
 import { Context, Effect, Layer, Redacted, Schema, Tracer as EffectTracer } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { decodeUserId } from "#contexts/auth/User.ts";
 import { decodeConnectionId } from "#contexts/connections/Connection.ts";
@@ -257,7 +258,8 @@ it.effect("refuses a key version the ring does not hold by name", () => {
     }
     assert.strictEqual(error.keyVersion, 7);
     assert.include(error.message, "CONNECTION_ENCRYPTION_RETAINED_KEYS");
-    const refusals = spans.filter(
+    const refusals = EffectArray.filter(
+      spans,
       (span) => span.attributes.get("connection.credential_failure") === "key_version_unavailable",
     );
     assert.isNotEmpty(refusals);

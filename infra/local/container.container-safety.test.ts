@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { docker, removeOwnedContainer } from "@lineupkeep/tools/local-stack/postgresContainer.ts";
 import { Effect, Schema, Schedule } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { readSafetyRun } from "./safety.ts";
 
@@ -19,9 +20,9 @@ it.live("retains image safety settings, rejects foreign ownership and stops grac
     assert.equal(container.Config.StopSignal, "SIGTERM");
     assert.equal(container.Config.Labels["lineupkeep.disposable"], "test-web");
     assert.equal(container.Config.StopTimeout, 30);
-    assert.match(container.Config.Healthcheck.Test.join(" "), /fetch/);
+    assert.match(EffectArray.join(container.Config.Healthcheck.Test, " "), /fetch/);
     assert.ok(
-      container.Config.Env.some((value) =>
+      EffectArray.some(container.Config.Env, (value) =>
         value.startsWith("OTEL_EXPORTER_OTLP_ENDPOINT=http://host.docker.internal:"),
       ),
     );

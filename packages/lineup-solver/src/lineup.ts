@@ -1,3 +1,5 @@
+import { Array as EffectArray } from "effect";
+
 import type {
   LineupAssignment,
   LineupComparison,
@@ -36,9 +38,9 @@ export function compareWithCurrentLineup(
   assignments: ReadonlyArray<LineupAssignment>,
   leftInPlace: ReadonlyArray<PlayerId> = [],
 ): LineupComparison {
-  const slotsById = new Map(problem.slots.map((slot) => [slot.id, slot]));
+  const slotsById = new Map(EffectArray.map(problem.slots, (slot) => [slot.id, slot]));
   const assignedSlotByPlayer = new Map(
-    assignments.map((assignment) => [assignment.playerId, assignment.slotId]),
+    EffectArray.map(assignments, (assignment) => [assignment.playerId, assignment.slotId]),
   );
   const left = new Set(leftInPlace);
   const addedStarters: Array<PlayerId> = [];
@@ -74,8 +76,8 @@ export function startingSelectionValue(
   problem: LineupProblem,
   assignments: ReadonlyArray<LineupAssignment>,
 ): number | undefined {
-  const playersById = new Map(problem.players.map((player) => [player.id, player]));
-  const slotsById = new Map(problem.slots.map((slot) => [slot.id, slot]));
+  const playersById = new Map(EffectArray.map(problem.players, (player) => [player.id, player]));
+  const slotsById = new Map(EffectArray.map(problem.slots, (slot) => [slot.id, slot]));
   let total = 0;
 
   for (const assignment of assignments) {
@@ -127,7 +129,7 @@ export function planViolations(
   problem: LineupProblem,
   plan: LineupPlan,
 ): ReadonlyArray<PlanViolation> {
-  const playersById = new Map(problem.players.map((player) => [player.id, player]));
+  const playersById = new Map(EffectArray.map(problem.players, (player) => [player.id, player]));
   const leftInPlace = new Map<PlayerId, number>();
   const occupiedElsewhere = new Map<string, number>();
   const violations: Array<PlanViolation> = [];
@@ -186,8 +188,9 @@ export function planViolations(
     });
   }
 
-  const slotsById = new Map(problem.slots.map((slot) => [slot.id, slot]));
-  const filledStartingPositions = plan.assignments.filter(
+  const slotsById = new Map(EffectArray.map(problem.slots, (slot) => [slot.id, slot]));
+  const filledStartingPositions = EffectArray.filter(
+    plan.assignments,
     (assignment) => slotsById.get(assignment.slotId)?.kind === "starting",
   ).length;
 
@@ -210,16 +213,20 @@ function assignmentViolations(
   readonly violations: ReadonlyArray<PlanViolation>;
   readonly assignmentsByPlayer: ReadonlyMap<PlayerId, number>;
 } {
-  const playersById = new Map(problem.players.map((player) => [player.id, player]));
-  const slotsById = new Map(problem.slots.map((slot) => [slot.id, slot]));
+  const playersById = new Map(EffectArray.map(problem.players, (player) => [player.id, player]));
+  const slotsById = new Map(EffectArray.map(problem.slots, (slot) => [slot.id, slot]));
   const orderedAssignments = [...assignments].sort(compareAssignments);
   const assignmentsByPlayer = new Map<PlayerId, number>();
   const assignmentsBySlot = new Map<string, number>();
   const violations: Array<PlanViolation> = [];
 
-  const mismatchedBasisPlayerIds = sortedPlayers(problem.players)
-    .filter((player) => player.selection.basis !== problem.selectionBasis)
-    .map((player) => player.id);
+  const mismatchedBasisPlayerIds = EffectArray.map(
+    EffectArray.filter(
+      sortedPlayers(problem.players),
+      (player) => player.selection.basis !== problem.selectionBasis,
+    ),
+    (player) => player.id,
+  );
   if (mismatchedBasisPlayerIds.length > 0) {
     violations.push({
       reason: "selection-basis-mismatch",
@@ -309,7 +316,7 @@ function eligibilityAcceptsPositions(
   if (eligibility.kind === "any") {
     return true;
   }
-  return positions.some((position) => eligibility.positions.includes(position));
+  return EffectArray.some(positions, (position) => eligibility.positions.includes(position));
 }
 
 function compareAssignments(left: LineupAssignment, right: LineupAssignment): number {

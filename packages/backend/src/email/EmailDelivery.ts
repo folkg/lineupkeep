@@ -1,4 +1,5 @@
 import {
+  Array as EffectArray,
   Config,
   ConfigProvider,
   Console,
@@ -144,7 +145,10 @@ export class EmailDelivery extends Context.Service<EmailDelivery, EmailDeliveryS
           "email.purpose": message.purpose,
         });
         yield* Console.log(
-          [`✉ To: ${message.to}`, `  Subject: ${message.subject}`, "", message.text].join("\n"),
+          EffectArray.join(
+            [`✉ To: ${message.to}`, `  Subject: ${message.subject}`, "", message.text],
+            "\n",
+          ),
         );
       });
       return { send, sendMany: sendManyOf(send) };

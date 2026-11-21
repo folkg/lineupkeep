@@ -5,11 +5,17 @@ import * as Command from "alchemy/Command";
 import * as Output from "alchemy/Output";
 import { Stage } from "alchemy/Stage";
 import { Effect, Layer, Redacted, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 
 import { buildNodeImage } from "#infra/build/node.ts";
 import { localDatabaseName } from "#infra/local/Postgres.ts";
 import { HostDeployment } from "#infra/services/HostDeployment.ts";
 import type { HostEnvironment, LocalHostOptions } from "#infra/services/HostDeployment.ts";
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 export function localContainerHost(
   environment: HostEnvironment,
@@ -30,9 +36,10 @@ export function localContainerHost(
       const bridge = yield* Schema.decodeUnknownEffect(BridgeNetwork)(inspectedBridge).pipe(
         Effect.orDie,
       );
-      const gateways = bridge.IPAM.Config.flatMap(({ Gateway }) =>
-        Gateway === undefined || Gateway === "" ? [] : [Gateway],
-      );
+      const gateways = EffectArray.flatMap(bridge.IPAM.Config, ({ Gateway }) => {
+        const flatMapped1 = Gateway === undefined || Gateway === "" ? [] : [Gateway];
+        return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+      });
       const ownedAddresses = yield* Effect.promise(() => bindableAddresses(gateways));
       const relayNetwork = containerRelayNetwork(process.platform, gateways, ownedAddresses);
       const image = yield* buildNodeImage(options.programs);
@@ -133,8 +140,11 @@ export function containerRelayNetwork(
   if (platform === "darwin") {
     return { bind: "127.0.0.1", host: "host-gateway" };
   }
-  const gateway = gateways.find(
-    (address) => isIP(address) === 4 && address !== "0.0.0.0" && ownedAddresses.includes(address),
+  const gateway = EffectOption.getOrUndefined(
+    EffectArray.findFirst(
+      gateways,
+      (address) => isIP(address) === 4 && address !== "0.0.0.0" && ownedAddresses.includes(address),
+    ),
   );
   if (platform !== "linux" || gateway === undefined) {
     throw new Error(
@@ -146,9 +156,11 @@ export function containerRelayNetwork(
 
 async function bindableAddresses(addresses: ReadonlyArray<string>): Promise<ReadonlyArray<string>> {
   const attempts = await Promise.all(
-    addresses.map(async (address) => ((await canListenOn(address)) ? address : undefined)),
+    EffectArray.map(addresses, async (address) =>
+      (await canListenOn(address)) ? address : undefined,
+    ),
   );
-  return attempts.filter((address): address is string => address !== undefined);
+  return EffectArray.filter(attempts, (address): address is string => address !== undefined);
 }
 
 function canListenOn(address: string): Promise<boolean> {
@@ -162,7 +174,7 @@ function canListenOn(address: string): Promise<boolean> {
 }
 
 function describeAddresses(addresses: ReadonlyArray<string>): string {
-  return addresses.length === 0 ? "none" : addresses.join(", ");
+  return addresses.length === 0 ? "none" : EffectArray.join(addresses, ", ");
 }
 
 const BridgeNetwork = Schema.Struct({

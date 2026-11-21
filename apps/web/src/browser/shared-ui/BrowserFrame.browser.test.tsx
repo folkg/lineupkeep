@@ -1,3 +1,4 @@
+import { EffectArray } from "@lineupkeep/collections";
 import { render } from "@solidjs/web";
 import { expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
@@ -25,7 +26,7 @@ it("forwards typed characters to the remote page and keeps the local field empty
   await surface.click();
   await userEvent.keyboard("user@example.test");
 
-  await expect.poll(() => events.text.join("")).toBe("user@example.test");
+  await expect.poll(() => EffectArray.join(events.text, "")).toBe("user@example.test");
   await expect.element(surface).toHaveValue("");
   expect(document.activeElement).toBe(surface.element());
 });

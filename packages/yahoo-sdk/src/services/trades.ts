@@ -1,3 +1,4 @@
+import { Array as EffectArray } from "effect";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
@@ -29,7 +30,7 @@ const Picks = Schema.Array(YahooDraftPickRound).pipe(
   Schema.check(
     Schema.makeFilter(
       (picks: ReadonlyArray<YahooDraftPickRound>) =>
-        new Set(picks.map((pick) => pick.round)).size === picks.length,
+        new Set(EffectArray.map(picks, (pick) => pick.round)).size === picks.length,
     ),
   ),
 );

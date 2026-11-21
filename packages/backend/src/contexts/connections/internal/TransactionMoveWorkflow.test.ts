@@ -1,5 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { Arbitrary, Effect, Exit } from "effect";
+import { Array as EffectArray } from "effect";
 
 import {
   TransactionMoveStatus,
@@ -58,7 +59,7 @@ const invariants = [
     if (!finalStates.includes(snapshot.state.path)) {
       return true;
     }
-    return events.every((event) =>
+    return EffectArray.every(events, (event) =>
       Exit.isFailure(
         Effect.runSync(
           Effect.exit(plan(TransactionMoveWorkflow, { state: snapshot.state.value }, event)),
@@ -116,7 +117,7 @@ it.effect("explores every transaction status and transition", () =>
     assert.strictEqual(explored.transitionCoverage.definitions.missing, 0);
     assert.strictEqual(explored.transitionCoverage.branches.missing, 0);
     assert.deepStrictEqual(
-      explored.nodes.map((node) => node.snapshot.state.path).sort(),
+      EffectArray.map(explored.nodes, (node) => node.snapshot.state.path).sort(),
       [...TransactionMoveStatus.literals].sort(),
     );
   }),
@@ -238,7 +239,7 @@ it("derives every status from the move facts", () => {
   ];
 
   assert.deepStrictEqual(
-    cases.map((entry) => entry.status).sort(),
+    EffectArray.map(cases, (entry) => entry.status).sort(),
     [...TransactionMoveStatus.literals].sort(),
   );
   for (const entry of cases) {

@@ -57,6 +57,9 @@
     "update-latest": "bun update -i --recursive --latest",
     "targets:verify": "bun run build:node && bun --filter @lineupkeep/web verify:node && bun run build:cloudflare && bun --filter @lineupkeep/web verify:cloudflare"
   },
+  "dependencies": {
+    "effect": "4.1.4"
+  },
   "devDependencies": {
     "@effect/tsgo": "catalog:",
     "@effect/vitest": "catalog:",

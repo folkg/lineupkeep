@@ -1,3 +1,5 @@
+import { Array as EffectArray } from "effect";
+
 import { periodKey, periodsEqual } from "./Period.ts";
 import type {
   AvailabilityTier,
@@ -40,14 +42,14 @@ export function scoreLineup(input: LineupScoreInput): LineupScoreResult {
   const sources = orderedSources(input.sources);
   for (const source of sources) {
     const resolved = resolveValueSource({ source, period: input.period });
-    const units = input.players.map((player) => resolved.unitsOf(player));
-    if (units.every((unit) => unit === undefined)) {
+    const units = EffectArray.map(input.players, (player) => resolved.unitsOf(player));
+    if (EffectArray.every(units, (unit) => unit === undefined)) {
       continue;
     }
     return {
       kind: "scored",
       label: resolved.label,
-      players: input.players.map((player, index) => ({
+      players: EffectArray.map(input.players, (player, index) => ({
         id: player.id,
         availability: assessAvailability(player, input.period),
         units: units[index],
@@ -74,7 +76,7 @@ function orderedSources(sources: ReadonlyArray<ValueSource>): ReadonlyArray<Valu
 }
 
 function requireConsistentInput(input: LineupScoreInput): void {
-  const playerIds = new Set(input.players.map((player) => player.id));
+  const playerIds = new Set(EffectArray.map(input.players, (player) => player.id));
   if (playerIds.size !== input.players.length) {
     throw new Error("A policy roster must not contain the same player twice.");
   }
@@ -92,7 +94,7 @@ function requireConsistentSource(source: ValueSource, period: Period): void {
         );
       }
       requireUniqueIds(
-        source.players.map((entry) => entry.id),
+        EffectArray.map(source.players, (entry) => entry.id),
         "projection",
       );
       for (const player of source.players) {
@@ -106,14 +108,14 @@ function requireConsistentSource(source: ValueSource, period: Period): void {
     }
     case "community-start-rate": {
       requireUniqueIds(
-        source.started.map((entry) => entry.id),
+        EffectArray.map(source.started, (entry) => entry.id),
         "started percentage",
       );
       return;
     }
     case "ownership-composite": {
       requireUniqueIds(
-        source.players.map((entry) => entry.id),
+        EffectArray.map(source.players, (entry) => entry.id),
         "ownership facts",
       );
       return;

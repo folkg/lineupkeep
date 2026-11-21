@@ -6,12 +6,14 @@ import solidPlugin from "@solidjs/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/solid-start/plugin/vite";
 import nodeAdapter from "crossws/adapters/node";
+import { Array as EffectArray } from "effect";
 import { nitro } from "nitro/vite";
 import Icons from "unplugin-icons/vite";
 import { defineConfig, type PluginOption } from "vite";
 
 import { cloudflareCompatibility, workerConfiguration } from "./deploy/cloudflare/settings.ts";
 import { clientBoundary } from "./deploy/verifyComposition.ts";
+
 const deploymentTargets = {
   cloudflare: {
     module: "./src/server/targets/cloudflare.ts",
@@ -182,7 +184,7 @@ function upgradeRequest(request: IncomingMessage): Request {
   const headers = new Headers();
   for (const [name, value] of Object.entries(request.headers)) {
     if (value !== undefined) {
-      headers.set(name, Array.isArray(value) ? value.join(", ") : value);
+      headers.set(name, EffectArray.isArray(value) ? EffectArray.join(value, ", ") : value);
     }
   }
   return new Request(new URL(request.url ?? "/", `http://${request.headers.host ?? "127.0.0.1"}`), {
@@ -210,7 +212,7 @@ function isDeploymentTargetName(name: string): name is keyof typeof deploymentTa
 }
 
 function targetNames(): string {
-  return Object.keys(deploymentTargets).join(", ");
+  return EffectArray.join(Object.keys(deploymentTargets), ", ");
 }
 
 type DeploymentTargetBuild = {

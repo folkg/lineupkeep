@@ -1,4 +1,6 @@
-import { DateTime, Effect } from "effect";
+import { DateTime, Effect, Option } from "effect";
+import { Array as EffectArray } from "effect";
+import { Order as EffectOrder } from "effect";
 
 import type { FantasyLeague } from "#contexts/connections/FantasyTeam.ts";
 import type {
@@ -31,6 +33,22 @@ import type {
   ProfessionalGameObservation,
   ProfessionalGameObservationWrite,
 } from "./ScheduleObservationRepository.ts";
+function sortWithComparator<A>(
+  self: ReadonlyArray<A>,
+  compare: (left: A, right: A) => number,
+): ReadonlyArray<A> {
+  return EffectArray.sort(
+    self,
+    EffectOrder.make<A>((left, right) => {
+      const result = compare(left, right);
+      return result < 0 ? -1 : result > 0 ? 1 : 0;
+    }),
+  );
+}
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 export function readProfessionalGameWeek(input: {
   readonly store: ScheduleObservationRepository["Service"];
@@ -46,10 +64,11 @@ export function readProfessionalGameWeek(input: {
   const weekEnd = addDays(input.weekStart, input.source.capabilities.weekDays - 1);
   const read = Effect.fn("ProfessionalGameFacts.readLeagueWeek")(function* () {
     const now = yield* DateTime.now;
-    const stored = (yield* input.store.readProfessionalGames({
-      from: input.weekStart,
-      to: weekEnd,
-    })).filter(
+    const stored = EffectArray.filter(
+      yield* input.store.readProfessionalGames({
+        from: input.weekStart,
+        to: weekEnd,
+      }),
       (row) =>
         row.value.league === input.league &&
         row.window.from === input.weekStart &&
@@ -58,7 +77,7 @@ export function readProfessionalGameWeek(input: {
     const current = newestObservation(stored);
     const settled =
       current.length > 0 &&
-      current.every((row) =>
+      EffectArray.every(current, (row) =>
         professionalGameIsFresh({
           game: row.value,
           observedAt: row.observedAt,
@@ -94,7 +113,7 @@ export function readProfessionalGameWeek(input: {
     yield* assertWeek(week, input.weekStart, weekEnd, input.source.key);
 
     const observedAt = yield* DateTime.now;
-    const observations = week.games.map((game) =>
+    const observations = EffectArray.map(week.games, (game) =>
       observationOf({
         game,
         league: week.league,
@@ -160,21 +179,25 @@ function servedWeek(input: {
   readonly weekEnd: string;
   readonly source: GameSourceKey;
 }): ProfessionalGameWeek {
-  const served = input.observations
-    .map((observation) => servedGame({ league: input.league, source: input.source, observation }))
-    .toSorted(
-      (left, right) =>
-        left.fact.game.date.localeCompare(right.fact.game.date) ||
-        left.fact.sourceReference.localeCompare(right.fact.sourceReference),
-    );
+  const served = sortWithComparator(
+    EffectArray.map(input.observations, (observation) =>
+      servedGame({ league: input.league, source: input.source, observation }),
+    ),
+    (left, right) =>
+      left.fact.game.date.localeCompare(right.fact.game.date) ||
+      left.fact.sourceReference.localeCompare(right.fact.sourceReference),
+  );
   return {
     league: input.league,
     weekStart: input.weekStart,
     weekEnd: input.weekEnd,
     source: input.source,
     observedAt: input.observedAt,
-    games: served.map((entry) => entry.fact),
-    unresolvedTeams: served.flatMap((entry) => entry.unresolvedTeams),
+    games: EffectArray.map(served, (entry) => entry.fact),
+    unresolvedTeams: EffectArray.flatMap(served, (entry) => {
+      const flatMapped1 = entry.unresolvedTeams;
+      return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+    }),
   };
 }
 
@@ -271,23 +294,21 @@ function newestObservation(
     return [];
   }
   const newest = DateTime.toEpochMillis(newestObservedAt(observations));
-  return observations.filter(
+  return EffectArray.filter(
+    observations,
     (observation) => DateTime.toEpochMillis(observation.observedAt) === newest,
   );
 }
 
 function newestObservedAt(observations: ReadonlyArray<ProfessionalGameObservation>): DateTime.Utc {
-  const newest = observations.reduce<DateTime.Utc | undefined>(
+  const newest = EffectArray.reduce(
+    observations,
+    Option.getOrThrow(EffectArray.head(observations)).observedAt,
     (latest, observation) =>
-      latest === undefined ||
       DateTime.toEpochMillis(observation.observedAt) > DateTime.toEpochMillis(latest)
         ? observation.observedAt
         : latest,
-    undefined,
   );
-  if (newest === undefined) {
-    throw new Error("A served game week must cover at least one observation");
-  }
   return newest;
 }
 

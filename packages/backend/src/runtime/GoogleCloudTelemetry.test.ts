@@ -1,5 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, Exit } from "effect";
+import { Array as EffectArray } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 
 import { googleCloudTelemetryClient } from "./GoogleCloudTelemetry.ts";
@@ -14,7 +15,7 @@ it.effect("mints one runtime service account token and reuses it for exports", (
     yield* client.post("https://telemetry.googleapis.com/v1/traces");
 
     assert.deepStrictEqual(
-      requests.map(({ url, authorization }) => [url, authorization]),
+      EffectArray.map(requests, ({ url, authorization }) => [url, authorization]),
       [
         [
           "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
@@ -43,7 +44,7 @@ it.effect("fails the export instead of the caller when the metadata server is un
 
     assert.isTrue(Exit.isFailure(exit));
     if (Exit.isFailure(exit)) {
-      assert.isFalse(exit.cause.reasons.some((reason) => reason._tag === "Die"));
+      assert.isFalse(EffectArray.some(exit.cause.reasons, (reason) => reason._tag === "Die"));
     }
     assert.deepStrictEqual(requests, []);
   }),

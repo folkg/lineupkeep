@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { Array as EffectArray } from "effect";
+
 import { writeDeliveryVerdict } from "./evidence.ts";
 import { writeReport } from "./report.ts";
 
@@ -13,7 +15,7 @@ if (problems.length === 0) {
     "Delivery gate passed: evidence is consistent and complete. Share report.html; see delivery.json.",
   );
 } else {
-  console.error(`Delivery gate failed:\n- ${problems.join("\n- ")}`);
+  console.error(`Delivery gate failed:\n- ${EffectArray.join(problems, "\n- ")}`);
   console.error("report.html is marked NOT READY until these are resolved.");
   process.exitCode = 1;
 }

@@ -1,3 +1,4 @@
+import { Array as EffectArray, Option as EffectOption } from "effect";
 const browsers: ReadonlyArray<readonly [RegExp, string]> = [
   [/\bEdg(?:iOS|A)?\//u, "Edge"],
   [/\bOPR\//u, "Opera"],
@@ -36,7 +37,9 @@ function match(
   candidates: ReadonlyArray<readonly [RegExp, string]>,
   userAgent: string,
 ): string | undefined {
-  return candidates.find(([pattern]) => pattern.test(userAgent))?.[1];
+  return EffectOption.getOrUndefined(
+    EffectArray.findFirst(candidates, ([pattern]) => pattern.test(userAgent)),
+  )?.[1];
 }
 
 const unknownClient = "An unrecognised client";

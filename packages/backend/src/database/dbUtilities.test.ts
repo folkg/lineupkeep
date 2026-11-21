@@ -13,11 +13,24 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { Array as EffectArray, Data, Effect, Exit, Schema } from "effect";
+import { Order as EffectOrder } from "effect";
 import { expect, expectTypeOf } from "vitest";
 
 import layerTools from "#runtime/ProvideLayer.ts";
 
 import { maxInsertRows, mutateRows, unnestRows } from "./dbUtilities.ts";
+function sortWithComparator<A>(
+  self: ReadonlyArray<A>,
+  compare: (left: A, right: A) => number,
+): ReadonlyArray<A> {
+  return EffectArray.sort(
+    self,
+    EffectOrder.make<A>((left, right) => {
+      const result = compare(left, right);
+      return result < 0 ? -1 : result > 0 ? 1 : 0;
+    }),
+  );
+}
 
 it("requires table-matched scalar unnest rows", () => {
   expectTypeOf<EffectArray.NonEmptyReadonlyArray<{ tags: string[] }>>().not.toExtend<
@@ -72,9 +85,10 @@ it.effect(
           codec,
           plan: (locked) =>
             Effect.succeed(
-              [...locked.values()]
-                .toReversed()
-                .map((row) => ({ ...row, count: row.key === "b" ? 20 : row.count })),
+              EffectArray.map(EffectArray.reverse([...locked.values()]), (row) => ({
+                ...row,
+                count: row.key === "b" ? 20 : row.count,
+              })),
             ),
         }),
       );
@@ -89,7 +103,8 @@ it.effect(
           where,
           ids: ["b", "a"],
           codec,
-          plan: (locked) => Effect.succeed([...locked.values()].map((row) => ({ ...row }))),
+          plan: (locked) =>
+            Effect.succeed(EffectArray.map([...locked.values()], (row) => ({ ...row }))),
         }),
       );
 
@@ -106,7 +121,7 @@ it.effect(
       );
       expect(rejected).toBeInstanceOf(PlanRejected);
       expect(
-        (yield* db.select().from(entities)).toSorted((a, b) => a.key.localeCompare(b.key)),
+        sortWithComparator(yield* db.select().from(entities), (a, b) => a.key.localeCompare(b.key)),
       ).toEqual([
         { key: "a", count: "1", owner: "mine" },
         { key: "b", count: "20", owner: "mine" },
@@ -132,7 +147,10 @@ it.effect(
             codec,
             plan: (locked) =>
               Effect.succeed(
-                [...locked.values()].map((row) => ({ ...row, key: `${row.key}-changed` })),
+                EffectArray.map([...locked.values()], (row) => ({
+                  ...row,
+                  key: `${row.key}-changed`,
+                })),
               ),
           }),
         ),

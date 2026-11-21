@@ -11,6 +11,7 @@ import {
   Stream,
   Tracer,
 } from "effect";
+import { Array as EffectArray } from "effect";
 import { Tool, Toolkit } from "effect/ai";
 import { HttpClient, HttpClientError } from "effect/http";
 
@@ -42,7 +43,7 @@ it.effect("exports failed SQL children without bind values or nested causes", ()
     assert.strictEqual(spans[0]?.parentSpanId, spans[1]?.spanId);
     assert.strictEqual(spans[0]?.status.message, "operation.failed");
     assert.strictEqual(spans[0]?.events[0]?.name, "exception");
-    assert.notInclude(payloads.join(""), "private-");
+    assert.notInclude(EffectArray.join(payloads, ""), "private-");
     if (Exit.isFailure(exit)) {
       const failure = Cause.findErrorOption(exit.cause);
       assert.isTrue(failure._tag === "Some");
@@ -82,9 +83,9 @@ it.effect("exports real Toolkit calls without raw MCP parameters", () =>
 
     assert.isTrue(Exit.isSuccess(exit));
     assert.isAtLeast(spans.length, 2);
-    assert.include(payloads.join(""), "list_connections");
-    assert.notInclude(payloads.join(""), "parameters");
-    assert.notInclude(payloads.join(""), "private-");
+    assert.include(EffectArray.join(payloads, ""), "list_connections");
+    assert.notInclude(EffectArray.join(payloads, ""), "parameters");
+    assert.notInclude(EffectArray.join(payloads, ""), "private-");
   }),
 );
 
@@ -115,8 +116,8 @@ it.effect("exports failed automatic HTTP children without provider causes or URL
     assert.strictEqual(spans[0]?.name, "GET");
     assert.strictEqual(spans[0]?.status.code, 2);
     assert.strictEqual(spans[0]?.status.message, "operation.failed");
-    assert.include(payloads.join(""), "provider.test");
-    assert.notInclude(payloads.join(""), "private-");
+    assert.include(EffectArray.join(payloads, ""), "provider.test");
+    assert.notInclude(EffectArray.join(payloads, ""), "private-");
   }),
 );
 
@@ -148,8 +149,8 @@ it.effect("exports defects and interruptions without changing their control sema
     assert.deepStrictEqual(spans[1]?.attributes, [
       { key: "effect.fiber.interrupted", value: { boolValue: true } },
     ]);
-    assert.include(payloads.join(""), "operation.defect");
-    assert.notInclude(payloads.join(""), "private-");
+    assert.include(EffectArray.join(payloads, ""), "operation.defect");
+    assert.notInclude(EffectArray.join(payloads, ""), "private-");
   }),
 );
 
@@ -194,11 +195,11 @@ it.effect(
       const { payloads, spans } = telemetry.read();
 
       assert.strictEqual(spans.length, 1);
-      assert.include(payloads.join(""), "orders.changed_count");
-      assert.include(payloads.join(""), "attempt");
-      assert.include(payloads.join(""), "link.type");
-      assert.include(payloads.join(""), "operation.failed");
-      assert.notInclude(payloads.join(""), "private-");
+      assert.include(EffectArray.join(payloads, ""), "orders.changed_count");
+      assert.include(EffectArray.join(payloads, ""), "attempt");
+      assert.include(EffectArray.join(payloads, ""), "link.type");
+      assert.include(EffectArray.join(payloads, ""), "operation.failed");
+      assert.notInclude(EffectArray.join(payloads, ""), "private-");
     }),
 );
 
@@ -242,14 +243,14 @@ it.effect("keeps an exceptional error as its own entry outside a unit", () =>
         dir: console.dir.bind(console),
         dirxml: console.dirxml.bind(console),
         error: (...values) => {
-          lines.push(values.map(String).join(" "));
+          lines.push(EffectArray.join(EffectArray.map(values, String), " "));
         },
         group: console.group.bind(console),
         groupCollapsed: console.groupCollapsed.bind(console),
         groupEnd: console.groupEnd.bind(console),
         info: console.info.bind(console),
         log: (...values) => {
-          lines.push(values.map(String).join(" "));
+          lines.push(EffectArray.join(EffectArray.map(values, String), " "));
         },
         table: console.table.bind(console),
         time: console.time.bind(console),
@@ -261,7 +262,7 @@ it.effect("keeps an exceptional error as its own entry outside a unit", () =>
     );
 
     assert.strictEqual(lines.length, 1);
-    assert.include(lines.join(""), "Background operation failed");
+    assert.include(EffectArray.join(lines, ""), "Background operation failed");
   }),
 );
 
@@ -292,7 +293,7 @@ it.effect("composes development output behind the safety boundary", () =>
           trace: console.trace.bind(console),
           warn: console.warn.bind(console),
           log: (...values) => {
-            lines.push(values.join(" "));
+            lines.push(EffectArray.join(values, " "));
           },
         }),
       ]),
@@ -305,8 +306,11 @@ it.effect("composes development output behind the safety boundary", () =>
       layerTools.provide(layer),
     );
 
-    assert.include(lines.join(""), "operation.failed");
-    assert.include(lines.join(""), 'dependency failed effect.cause="operation.failed"');
-    assert.notInclude(lines.join(""), "private-");
+    assert.include(EffectArray.join(lines, ""), "operation.failed");
+    assert.include(
+      EffectArray.join(lines, ""),
+      'dependency failed effect.cause="operation.failed"',
+    );
+    assert.notInclude(EffectArray.join(lines, ""), "private-");
   }),
 );

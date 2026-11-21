@@ -1,3 +1,5 @@
+import { EffectArray } from "@lineupkeep/collections";
+
 import {
   formatClockTime,
   formatDateTime,
@@ -77,7 +79,7 @@ export function checkTallyLabel(runs: ReadonlyArray<LineupRunView>): string | un
   if (runs.length < 2) {
     return undefined;
   }
-  const changed = runs.filter((run) => (run.outcome?.changes.length ?? 0) > 0).length;
+  const changed = EffectArray.filter(runs, (run) => (run.outcome?.changes.length ?? 0) > 0).length;
   if (changed === 0) {
     return undefined;
   }

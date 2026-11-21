@@ -8,6 +8,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import * as PgliteDrizzle from "drizzle-orm/postgres/client/effect/pglite";
 import { Effect, Layer } from "effect";
+import { Array as EffectArray } from "effect";
 
 const migrationsFolderPath = fileURLToPath(new URL("../../../migrations", import.meta.url));
 const cacheDirectoryPath = fileURLToPath(
@@ -44,10 +45,15 @@ export function resetTestDatabase(database: PGlite): Promise<void> {
       "select tablename from pg_tables where schemaname = 'public'",
     )
     .then((result) => {
-      const tables = result.rows.map(({ tablename }) => `"${tablename.replaceAll('"', '""')}"`);
+      const tables = EffectArray.map(
+        result.rows,
+        ({ tablename }) => `"${tablename.replaceAll('"', '""')}"`,
+      );
       return tables.length === 0
         ? undefined
-        : database.exec(`TRUNCATE TABLE ${tables.join(", ")} RESTART IDENTITY CASCADE`);
+        : database.exec(
+            `TRUNCATE TABLE ${EffectArray.join(tables, ", ")} RESTART IDENTITY CASCADE`,
+          );
     })
     .then(() => undefined);
 }
@@ -71,10 +77,13 @@ function loadOrBuildDatabaseImage(): Promise<Blob> {
 
 function migrationFingerprint(): string {
   const hash = createHash("sha256");
-  const names = readdirSync(migrationsFolderPath, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile())
-    .map((entry) => join(entry.parentPath, entry.name))
-    .sort();
+  const names = EffectArray.map(
+    EffectArray.filter(
+      readdirSync(migrationsFolderPath, { recursive: true, withFileTypes: true }),
+      (entry) => entry.isFile(),
+    ),
+    (entry) => join(entry.parentPath, entry.name),
+  ).sort();
   for (const name of names) {
     hash.update(name);
     hash.update(readFileSync(name));

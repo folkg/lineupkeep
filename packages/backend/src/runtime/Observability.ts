@@ -10,6 +10,7 @@ import {
   Cause,
   Exit,
 } from "effect";
+import { Array as EffectArray } from "effect";
 import { OtlpExporter, OtlpSerialization, OtlpTracer } from "effect/observability";
 
 import { appEnvironmentConfig, type AppEnvironment } from "#config/AppEnvironment.ts";
@@ -17,6 +18,7 @@ import { appEnvironmentConfig, type AppEnvironment } from "#config/AppEnvironmen
 import { telemetryHttpClientLayer } from "./GoogleCloudTelemetry.ts";
 import { makePrettyConsoleTracer } from "./PrettyConsoleTracer.ts";
 import { makeWideEventTracer } from "./WideEventTracer.ts";
+
 export const safeTracerLayer = Layer.effect(
   Tracer.Tracer,
   Effect.map(Tracer.Tracer, makeSafeTracer),
@@ -148,7 +150,7 @@ function makeSafeTracer(tracer: Tracer.Tracer): Tracer.Tracer {
   return Tracer.make({
     context: tracer.context?.bind(tracer),
     span(options) {
-      const span = tracer.span({ ...options, links: options.links.map(safeLink) });
+      const span = tracer.span({ ...options, links: EffectArray.map(options.links, safeLink) });
       const attribute = span.attribute.bind(span);
       const event = span.event.bind(span);
       const addLinks = span.addLinks.bind(span);
@@ -168,7 +170,7 @@ function makeSafeTracer(tracer: Tracer.Tracer): Tracer.Tracer {
             ? { "exception.type": "operation.failed", "exception.message": "operation.failed" }
             : safeAttributes(attributes ?? {}, span.kind),
         );
-      span.addLinks = (links) => addLinks(links.map(safeLink));
+      span.addLinks = (links) => addLinks(EffectArray.map(links, safeLink));
       span.end = (time, exit) => end(time, safeExit(exit));
       return span;
     },
@@ -181,7 +183,7 @@ function safeExit(exit: Exit.Exit<unknown, unknown>): Exit.Exit<void, unknown> {
   }
   return Exit.failCause(
     Cause.fromReasons(
-      exit.cause.reasons.map((reason) => {
+      EffectArray.map(exit.cause.reasons, (reason) => {
         switch (reason._tag) {
           case "Fail":
             return Cause.makeFailReason(safeError("operation.failed"));
@@ -215,9 +217,10 @@ function safeAttributes(
   [k: string]: unknown;
 } {
   return Object.fromEntries(
-    Object.entries(attributes)
-      .filter(([key]) => !isSuppressedAttribute(key, kind))
-      .map(([key, value]) => [key, key === "effect.cause" ? "operation.failed" : value]),
+    EffectArray.map(
+      EffectArray.filter(Object.entries(attributes), ([key]) => !isSuppressedAttribute(key, kind)),
+      ([key, value]) => [key, key === "effect.cause" ? "operation.failed" : value],
+    ),
   );
 }
 

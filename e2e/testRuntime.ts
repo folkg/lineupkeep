@@ -1,6 +1,7 @@
 import type { BackendPlatform } from "@lineupkeep/backend/runtime/BackendPlatform";
 import { BackendRuntime as Runtime } from "@lineupkeep/backend/runtime/BackendRuntime";
 import { PublicInternet } from "@lineupkeep/backend/runtime/PublicInternet";
+import { Array as EffectArray } from "effect";
 
 import transactionRefusal from "#repo/packages/backend/src/contexts/connections/fixtures/yahoo-transaction-refusal-2026-11-03.json";
 
@@ -396,7 +397,7 @@ function leagueSettingsPayload(leagueKey: string): unknown {
               player: [
                 [{ player_key: playerKey }],
                 {
-                  player_ranks: ranks.map((rank) => ({ player_rank: rank })),
+                  player_ranks: EffectArray.map(ranks, (rank) => ({ player_rank: rank })),
                 },
               ],
             },

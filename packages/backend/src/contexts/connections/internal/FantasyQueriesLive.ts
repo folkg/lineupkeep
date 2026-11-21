@@ -1,4 +1,5 @@
 import { Array as EffectArray, DateTime, Effect, Layer, Option, Ref } from "effect";
+import { Option as EffectOption, Order as EffectOrder } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import { providerSessionReconnectDetail } from "#contexts/connections/Connection.ts";
@@ -152,6 +153,34 @@ import { QueryRepository } from "./QueryRepository.ts";
 import type { OwnedTeam } from "./QueryRepository.ts";
 import { QueryTokens } from "./QueryTokens.ts";
 import { ScheduleObservationRepository } from "./ScheduleObservationRepository.ts";
+function sortWithComparator<A>(
+  self: ReadonlyArray<A>,
+  compare: (left: A, right: A) => number,
+): ReadonlyArray<A> {
+  return EffectArray.sort(
+    self,
+    EffectOrder.make<A>((left, right) => {
+      const result = compare(left, right);
+      return result < 0 ? -1 : result > 0 ? 1 : 0;
+    }),
+  );
+}
+
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 const defaultLeagueGroups: ReadonlyArray<LeagueGroup> = ["overview", "scoring", "roster_rules"];
 const defaultPlayerGroups: ReadonlyArray<PlayerGroup> = ["identity", "availability", "eligibility"];
@@ -304,7 +333,7 @@ export const FantasyQueriesLive = Layer.effect(
           failure: {
             code: "schedule_fact_stale",
             resource,
-            message: `Your league opponents for ${error.dates.join(", ")} are past their maximum age and were not served; ${previous}. The re-read failed: ${reason}`,
+            message: `Your league opponents for ${EffectArray.join(error.dates, ", ")} are past their maximum age and were not served; ${previous}. The re-read failed: ${reason}`,
           },
         };
       });
@@ -617,13 +646,19 @@ export const FantasyQueriesLive = Layer.effect(
         }
         const categoryCache = new Map<number, StatRef>();
         const configured = configuredCategories(outcome.value);
-        for (const category of configured.filter((entry) => entry.scoring === "scoring")) {
+        for (const category of EffectArray.filter(
+          configured,
+          (entry) => entry.scoring === "scoring",
+        )) {
           const ref = yield* statRefFor(context, tokens, categoryCache, category.statId);
           if (ref === stat) {
             return { _tag: "resolved" as const, statId: category.statId };
           }
         }
-        for (const category of configured.filter((entry) => entry.scoring === "informational")) {
+        for (const category of EffectArray.filter(
+          configured,
+          (entry) => entry.scoring === "informational",
+        )) {
           const ref = yield* statRefFor(context, tokens, categoryCache, category.statId);
           if (ref === stat) {
             return { _tag: "informational" as const, name: category.name };
@@ -689,19 +724,29 @@ export const FantasyQueriesLive = Layer.effect(
         );
         const teamNameByKey = new Map(
           teamsOutcome._tag === "ok"
-            ? teamsOutcome.value.map((team) => [team.providerTeamKey, team.name] as const)
+            ? EffectArray.map(
+                teamsOutcome.value,
+                (team) => [team.providerTeamKey, team.name] as const,
+              )
             : [],
         );
-        const teamKeys = [...new Set(outcome.value.map((pick) => pick.providerTeamKey))];
+        const teamKeys = [
+          ...new Set(EffectArray.map(outcome.value, (pick) => pick.providerTeamKey)),
+        ];
         const teamRefs = yield* tokens.sealCounterpartyRefs({
           userId: context.userId,
           leagueKey: context.owned.team.providerLeagueKey,
           teamKeys,
         });
         const teamRefByKey = new Map(
-          teamKeys.map((key, index) => [key, EffectArray.getUnsafe(teamRefs, index)] as const),
+          EffectArray.map(
+            teamKeys,
+            (key, index) => [key, EffectArray.getUnsafe(teamRefs, index)] as const,
+          ),
         );
-        const picks = new Map(outcome.value.map((pick) => [pick.providerPlayerKey, pick] as const));
+        const picks = new Map(
+          EffectArray.map(outcome.value, (pick) => [pick.providerPlayerKey, pick] as const),
+        );
         const draftSeason = context.owned.team.season;
         return {
           lookup: (providerPlayerKey: string) => {
@@ -881,39 +926,44 @@ export const FantasyQueriesLive = Layer.effect(
       const teams = yield* connections
         .listTeams(userId)
         .pipe(Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })));
-      const rows = teams
-        .filter(
-          (team) =>
-            (input.sport === undefined || team.sport === input.sport) &&
-            (input.season === undefined || team.season === input.season) &&
-            (input.connection === undefined || team.connectionId === input.connection),
-        )
-        .map((team) => ({
-          team: team.id,
-          connection: team.connectionId,
-          provider: team.provider,
-          league: team.league,
-          sport: team.sport,
-          season: team.season,
-          name: team.name,
-          availability: team.availability,
-          automation: team.automation,
-          lastSeenAt: team.lastSeenAt,
-        }))
-        .toSorted(
-          (left, right) =>
-            left.league.localeCompare(right.league) ||
-            left.name.localeCompare(right.name) ||
-            left.team.localeCompare(right.team),
-        );
+      const rows = sortWithComparator(
+        EffectArray.map(
+          EffectArray.filter(
+            teams,
+            (team) =>
+              (input.sport === undefined || team.sport === input.sport) &&
+              (input.season === undefined || team.season === input.season) &&
+              (input.connection === undefined || team.connectionId === input.connection),
+          ),
+          (team) => ({
+            team: team.id,
+            connection: team.connectionId,
+            provider: team.provider,
+            league: team.league,
+            sport: team.sport,
+            season: team.season,
+            name: team.name,
+            availability: team.availability,
+            automation: team.automation,
+            lastSeenAt: team.lastSeenAt,
+          }),
+        ),
+        (left, right) =>
+          left.league.localeCompare(right.league) ||
+          left.name.localeCompare(right.name) ||
+          left.team.localeCompare(right.team),
+      );
       const fingerprintValue = yield* queryFingerprint(
-        [
-          "list_teams",
-          `sport=${input.sport ?? ""}`,
-          `season=${input.season === undefined ? "" : String(input.season)}`,
-          `connection=${input.connection ?? ""}`,
-          "order=league,name,id",
-        ].join("|"),
+        EffectArray.join(
+          [
+            "list_teams",
+            `sport=${input.sport ?? ""}`,
+            `season=${input.season === undefined ? "" : String(input.season)}`,
+            `connection=${input.connection ?? ""}`,
+            "order=league,name,id",
+          ],
+          "|",
+        ),
       );
       const now = yield* DateTime.now;
       const offset = yield* openOffset(userId, fingerprintValue, input.cursor, now);
@@ -978,13 +1028,16 @@ export const FantasyQueriesLive = Layer.effect(
           ? undefined
           : yield* calendarGames(context, league, input, failures);
       const fingerprintValue = yield* queryFingerprint(
-        [
-          "calendar",
-          `team=${input.team}`,
-          `period=${input.period === undefined ? "" : String(input.period.week)}`,
-          `proTeams=${[...(input.proTeams ?? [])].sort().join(",")}`,
-          "order=week",
-        ].join("|"),
+        EffectArray.join(
+          [
+            "calendar",
+            `team=${input.team}`,
+            `period=${input.period === undefined ? "" : String(input.period.week)}`,
+            `proTeams=${EffectArray.join([...(input.proTeams ?? [])].sort(), ",")}`,
+            "order=week",
+          ],
+          "|",
+        ),
       );
       const now = yield* DateTime.now;
       const offset = yield* openOffset(userId, fingerprintValue, input.cursor, now);
@@ -1100,7 +1153,7 @@ export const FantasyQueriesLive = Layer.effect(
       const standingsPaged = groups.includes("standings") && !draftPaged;
       const pagedResource = draftPaged ? "draft_history" : standingsPaged ? "standings" : "scoring";
       const fingerprintValue = yield* queryFingerprint(
-        `league|team=${input.team}|groups=${[...groups].sort().join(",")}|standings=${standingsPaged ? presentation : "none"}|paged=${pagedResource}|order=${draftPaged ? "draft_pick" : standingsPaged ? "rank" : "stat_id"}`,
+        `league|team=${input.team}|groups=${EffectArray.join([...groups].sort(), ",")}|standings=${standingsPaged ? presentation : "none"}|paged=${pagedResource}|order=${draftPaged ? "draft_pick" : standingsPaged ? "rank" : "stat_id"}`,
       );
       const now = yield* DateTime.now;
       const offset = yield* openOffset(userId, fingerprintValue, input.cursor, now);
@@ -1336,14 +1389,18 @@ export const FantasyQueriesLive = Layer.effect(
         const teamRefs = yield* tokens.sealCounterpartyRefs({
           userId,
           leagueKey,
-          teamKeys: rosters.map((roster) => roster.providerTeamKey),
+          teamKeys: EffectArray.map(rosters, (roster) => roster.providerTeamKey),
         });
         const playerRefs = yield* tokens.sealPlayerRefs({
           userId,
           leagueKey,
-          playerKeys: rosters.flatMap((roster) =>
-            roster.players.map((player) => player.providerPlayerKey),
-          ),
+          playerKeys: EffectArray.flatMap(rosters, (roster) => {
+            const flatMapped1 = EffectArray.map(
+              roster.players,
+              (player) => player.providerPlayerKey,
+            );
+            return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+          }),
         });
         const owned = new Set(ownedKeys);
         const batchCoverage = rosters[0]?.coverage;
@@ -1362,9 +1419,13 @@ export const FantasyQueriesLive = Layer.effect(
             context.provider.readPlayerWeeks({
               ...providerIdentity(context),
               providerLeagueKey: leagueKey,
-              providerPlayerKeys: rosters.flatMap((roster) =>
-                roster.players.map((player) => player.providerPlayerKey),
-              ),
+              providerPlayerKeys: EffectArray.flatMap(rosters, (roster) => {
+                const flatMapped2 = EffectArray.map(
+                  roster.players,
+                  (player) => player.providerPlayerKey,
+                );
+                return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+              }),
               week: { week: batchCoverage.week },
             }),
           );
@@ -1377,11 +1438,11 @@ export const FantasyQueriesLive = Layer.effect(
           }
         }
         let playerIndex = 0;
-        const teams = rosters.map((roster, index) => ({
+        const teams = EffectArray.map(rosters, (roster, index) => ({
           team: EffectArray.getUnsafe(teamRefs, index),
           name: roster.name,
           owned: owned.has(roster.providerTeamKey),
-          players: roster.players.map((player) => {
+          players: EffectArray.map(roster.players, (player) => {
             const ref = EffectArray.getUnsafe(playerRefs, playerIndex);
             playerIndex += 1;
             return rosterRow(
@@ -1522,7 +1583,10 @@ export const FantasyQueriesLive = Layer.effect(
           context.provider.readPlayerWeeks({
             ...providerIdentity(context),
             providerLeagueKey: context.owned.team.providerLeagueKey,
-            providerPlayerKeys: roster.players.map((player) => player.providerPlayerKey),
+            providerPlayerKeys: EffectArray.map(
+              roster.players,
+              (player) => player.providerPlayerKey,
+            ),
             week: { week: roster.coverage.week },
           }),
         );
@@ -1612,7 +1676,7 @@ export const FantasyQueriesLive = Layer.effect(
       const playerSearch = context.provider.capabilities.playerSearch;
       if (!playerSearch.sorts.includes(sort)) {
         return yield* QuerySelectionInvalid.make({
-          detail: `Your league does not accept the \`${sort}\` player sort. Choose one of: ${playerSearch.sorts.join(", ")}.`,
+          detail: `Your league does not accept the \`${sort}\` player sort. Choose one of: ${EffectArray.join(playerSearch.sorts, ", ")}.`,
         });
       }
       if (requestedWindow?.kind === "week" && !playerSearch.weeklyOrderingValues) {
@@ -1651,7 +1715,11 @@ export const FantasyQueriesLive = Layer.effect(
             detail: `Recent form is ordered over the last N days or weeks, not ${describeStatWindow(requestedWindow)}. ${leagueSearch.detail} The season rank order is \`actual_rank\`.`,
           });
         }
-        formWindow = leagueSearch.windows.find((window) => sameStatWindow(window, requestedWindow));
+        formWindow = EffectOption.getOrUndefined(
+          EffectArray.findFirst(leagueSearch.windows, (window) =>
+            sameStatWindow(window, requestedWindow),
+          ),
+        );
         if (formWindow === undefined) {
           const nearest = nearestStatWindow(requestedWindow, leagueSearch.windows);
           return yield* QuerySelectionInvalid.make({
@@ -1737,17 +1805,18 @@ export const FantasyQueriesLive = Layer.effect(
       leagueOutcome = leagueOutcome ?? (yield* readLeague(context));
       const league = leagueOutcome._tag === "ok" ? leagueOutcome.value : undefined;
       const requestedGamesWindow = input.gamesWindow;
-      const filtered = outcome.value.players.filter(
+      const filtered = EffectArray.filter(
+        outcome.value.players,
         (player) =>
           (availability === "all" || player.availability === availability) &&
           (positions.size === 0 ||
             positions.has(player.primaryPosition) ||
             positions.has(player.displayPosition) ||
-            player.eligiblePositions.some((position) => positions.has(position))),
+            EffectArray.some(player.eligiblePositions, (position) => positions.has(position))),
       );
       const ordered = providerOrdered(context.provider, sort)
         ? filtered
-        : filtered.toSorted((left, right) => comparePlayers(left, right, sort));
+        : sortWithComparator(filtered, (left, right) => comparePlayers(left, right, sort));
       const failures: QueryFailure[] = [];
       const draft =
         detail === "compact"
@@ -1755,7 +1824,7 @@ export const FantasyQueriesLive = Layer.effect(
           : yield* draftProvenance(
               context,
               fetchedAt,
-              ordered.map((player) => player.providerPlayerKey),
+              EffectArray.map(ordered, (player) => player.providerPlayerKey),
               "players",
             );
       for (const failure of draft?.failures ?? []) {
@@ -1772,7 +1841,7 @@ export const FantasyQueriesLive = Layer.effect(
           context.provider.readPlayerWeeks({
             ...providerIdentity(context),
             providerLeagueKey: context.owned.team.providerLeagueKey,
-            providerPlayerKeys: ordered.map((player) => player.providerPlayerKey),
+            providerPlayerKeys: EffectArray.map(ordered, (player) => player.providerPlayerKey),
             week: currentWeek,
           }),
         );
@@ -1792,16 +1861,18 @@ export const FantasyQueriesLive = Layer.effect(
               context,
               requestedGamesWindow,
               leagueOutcome,
-              ordered.map((player) => player.providerPlayerKey),
+              EffectArray.map(ordered, (player) => player.providerPlayerKey),
               weekFacts,
               weekFactsWeek,
             );
       const publishesProjections = context.provider.capabilities.projections.sports.includes(
         context.owned.team.sport,
       );
-      const missingProTeamKeys = ordered.flatMap((player) =>
-        player.proTeamKey === undefined && player.proTeam !== undefined ? [player.proTeam] : [],
-      );
+      const missingProTeamKeys = EffectArray.flatMap(ordered, (player) => {
+        const flatMapped3 =
+          player.proTeamKey === undefined && player.proTeam !== undefined ? [player.proTeam] : [];
+        return arrayValueIsArray(flatMapped3) ? flatMapped3 : [flatMapped3];
+      });
       const proTeamIdentities =
         missingProTeamKeys.length === 0
           ? []
@@ -1816,7 +1887,7 @@ export const FantasyQueriesLive = Layer.effect(
       const refs = yield* tokens.sealPlayerRefs({
         userId,
         leagueKey: context.owned.team.providerLeagueKey,
-        playerKeys: ordered.map((player) => player.providerPlayerKey),
+        playerKeys: EffectArray.map(ordered, (player) => player.providerPlayerKey),
       });
       const players = EffectArray.map(EffectArray.zip(ordered, refs), ([player, playerRef]) => {
         const proTeamKey = poolProTeamKey(player);
@@ -1867,18 +1938,21 @@ export const FantasyQueriesLive = Layer.effect(
         };
       });
       const fingerprintValue = yield* queryFingerprint(
-        [
-          "search_players",
-          `team=${input.team}`,
-          `query=${query ?? ""}`,
-          `positions=${[...positions].sort().join(",")}`,
-          `availability=${availability}`,
-          `sort=${sort}`,
-          `stat=${input.stat ?? ""}`,
-          `window=${requestedWindow === undefined ? "season" : statWindowKey(requestedWindow)}`,
-          `gamesWindow=${gamesWindowKey(requestedGamesWindow)}`,
-          "order=provider",
-        ].join("|"),
+        EffectArray.join(
+          [
+            "search_players",
+            `team=${input.team}`,
+            `query=${query ?? ""}`,
+            `positions=${EffectArray.join([...positions].sort(), ",")}`,
+            `availability=${availability}`,
+            `sort=${sort}`,
+            `stat=${input.stat ?? ""}`,
+            `window=${requestedWindow === undefined ? "season" : statWindowKey(requestedWindow)}`,
+            `gamesWindow=${gamesWindowKey(requestedGamesWindow)}`,
+            "order=provider",
+          ],
+          "|",
+        ),
       );
       const now = yield* DateTime.now;
       const offset = yield* openOffset(userId, fingerprintValue, input.cursor, now);
@@ -1969,7 +2043,8 @@ export const FantasyQueriesLive = Layer.effect(
           providerPlayerKey,
         }),
       );
-      const valid = resolved.filter(
+      const valid = EffectArray.filter(
+        resolved,
         (
           row,
         ): row is {
@@ -1977,17 +2052,19 @@ export const FantasyQueriesLive = Layer.effect(
           readonly providerPlayerKey: string;
         } => row.providerPlayerKey !== undefined,
       );
-      const failures: QueryFailure[] = resolved.flatMap((row, index) =>
-        row.providerPlayerKey === undefined
-          ? [
-              {
-                code: "invalid_player_reference",
-                resource: row.ref,
-                message: `The player reference at input position ${String(index + 1)} is invalid for this team and owner.`,
-              },
-            ]
-          : [],
-      );
+      const failures: QueryFailure[] = EffectArray.flatMap(resolved, (row, index) => {
+        const flatMapped4 =
+          row.providerPlayerKey === undefined
+            ? [
+                {
+                  code: "invalid_player_reference",
+                  resource: row.ref,
+                  message: `The player reference at input position ${String(index + 1)} is invalid for this team and owner.`,
+                },
+              ]
+            : [];
+        return arrayValueIsArray(flatMapped4) ? flatMapped4 : [flatMapped4];
+      });
       const coverageEntries: QueryCoverage[] = [];
       const draft = yield* draftProvenance(
         context,
@@ -2059,7 +2136,9 @@ export const FantasyQueriesLive = Layer.effect(
         }
       }
       const rosterByKey = new Map(
-        (roster?.players ?? []).map((player) => [player.providerPlayerKey, player]),
+        optionalArrayValue(roster?.players ?? [], (value) =>
+          EffectArray.map(value, (player) => [player.providerPlayerKey, player]),
+        ),
       );
       const requestedPeriod = normalizeStatPeriod(input.period);
       const includesActualStats = groups.includes("actual_stats");
@@ -2067,7 +2146,7 @@ export const FantasyQueriesLive = Layer.effect(
       const detailKeys = includesActualStats
         ? validKeys
         : groups.includes("availability") || groups.includes("schedule")
-          ? validKeys.filter((key) => !rosterByKey.has(key))
+          ? EffectArray.filter(validKeys, (key) => !rosterByKey.has(key))
           : [];
       const readDetails = (
         providerPlayerKeys: ReadonlyArray<string>,
@@ -2094,7 +2173,9 @@ export const FantasyQueriesLive = Layer.effect(
         if (detailsOutcome._tag === "ok") {
           details = detailsOutcome.value;
           const basis = includesActualStats
-            ? details.find((player) => player.actual !== undefined)?.actual?.basis
+            ? EffectOption.getOrUndefined(
+                EffectArray.findFirst(details, (player) => player.actual !== undefined),
+              )?.actual?.basis
             : undefined;
           coverageEntries.push(
             coverage(
@@ -2117,9 +2198,10 @@ export const FantasyQueriesLive = Layer.effect(
               ),
             { concurrency: 1 },
           );
-          details = isolated.flatMap(({ outcome }) =>
-            outcome._tag === "ok" ? [...outcome.value] : [],
-          );
+          details = EffectArray.flatMap(isolated, ({ outcome }) => {
+            const flatMapped5 = outcome._tag === "ok" ? [...outcome.value] : [];
+            return arrayValueIsArray(flatMapped5) ? flatMapped5 : [flatMapped5];
+          });
           for (const { providerPlayerKey, outcome } of isolated) {
             if (outcome._tag !== "ok") {
               unverifiedPlayers.add(providerPlayerKey);
@@ -2167,7 +2249,9 @@ export const FantasyQueriesLive = Layer.effect(
           }
         }
       }
-      const detailsByKey = new Map(details.map((player) => [player.providerPlayerKey, player]));
+      const detailsByKey = new Map(
+        EffectArray.map(details, (player) => [player.providerPlayerKey, player]),
+      );
       const currentWeek =
         league?.rosterCoverage === "week" ? currentPeriod(league.periodWindow) : undefined;
       const scheduleWeekFacts = new Map<string, ProviderPlayerWeekFact>();
@@ -2203,7 +2287,7 @@ export const FantasyQueriesLive = Layer.effect(
               scheduleWeekFactsWeek,
             )
           : undefined;
-      const missingProTeamKeys = validKeys.flatMap((key) => {
+      const missingProTeamKeys = EffectArray.flatMap(validKeys, (key) => {
         const rosterPlayer = rosterByKey.get(key);
         const abbreviation =
           rosterPlayer?.proTeamAbbreviation ?? detailsByKey.get(key)?.proTeam ?? undefined;
@@ -2233,7 +2317,8 @@ export const FantasyQueriesLive = Layer.effect(
         context,
         fetchedAt,
         coverageEntries,
-        validKeys.filter(
+        EffectArray.filter(
+          validKeys,
           (key) =>
             playerIdentity(rosterByKey.get(key)) === undefined &&
             playerIdentity(detailsByKey.get(key)) === undefined,
@@ -2304,7 +2389,8 @@ export const FantasyQueriesLive = Layer.effect(
             };
           }
           const positionType = player?.positionType;
-          const relevant = configuredCategories(league).filter(
+          const relevant = EffectArray.filter(
+            configuredCategories(league),
             (category) =>
               category.scoring === "scoring" &&
               (positionType === undefined ||
@@ -2463,7 +2549,8 @@ export const FantasyQueriesLive = Layer.effect(
       );
       const hasData =
         (poolGames?.status === "available" && valid.length > 0) ||
-        playerRows.some(
+        EffectArray.some(
+          playerRows,
           (row) =>
             row.identity !== undefined ||
             row.actualStats?.status === "available" ||
@@ -2477,15 +2564,18 @@ export const FantasyQueriesLive = Layer.effect(
       }
       const status: QueryStatus = valid.length === 0 ? "failed" : hasData ? "ok" : "unsupported";
       const fingerprintValue = yield* queryFingerprint(
-        [
-          "players",
-          `team=${input.team}`,
-          `period=${statWindowKey(requestedPeriod)}`,
-          `groups=${[...groups].sort().join(",")}`,
-          `gamesWindow=${gamesWindowKey(input.gamesWindow)}`,
-          `players=${requested.join(",")}`,
-          "order=request",
-        ].join("|"),
+        EffectArray.join(
+          [
+            "players",
+            `team=${input.team}`,
+            `period=${statWindowKey(requestedPeriod)}`,
+            `groups=${EffectArray.join([...groups].sort(), ",")}`,
+            `gamesWindow=${gamesWindowKey(input.gamesWindow)}`,
+            `players=${EffectArray.join(requested, ",")}`,
+            "order=request",
+          ],
+          "|",
+        ),
       );
       const now = yield* DateTime.now;
       const offset = yield* openOffset(userId, fingerprintValue, input.cursor, now);
@@ -2772,7 +2862,8 @@ export const FantasyQueriesLive = Layer.effect(
         }
         pageOffset += page.length;
       }
-      const filtered = fetchedTransactions.filter(
+      const filtered = EffectArray.filter(
+        fetchedTransactions,
         (transaction) =>
           (since === undefined || transaction.occurredAt >= since) &&
           (until === undefined || transaction.occurredAt <= until),
@@ -2839,29 +2930,55 @@ export const FantasyQueriesLive = Layer.effect(
       const leagueKey = context.owned.team.providerLeagueKey;
       const teamKeys = [
         ...new Set(
-          filtered.flatMap((transaction) => [
-            ...transaction.teams.map((transactionTeam) => transactionTeam.providerTeamKey),
-            ...transaction.players.flatMap((player) =>
-              [player.movement.from, player.movement.to].flatMap((movementTeam) =>
-                movementTeam === undefined ? [] : [movementTeam.providerTeamKey],
+          EffectArray.flatMap(filtered, (transaction) => {
+            const flatMapped6 = [
+              ...EffectArray.map(
+                transaction.teams,
+                (transactionTeam) => transactionTeam.providerTeamKey,
               ),
-            ),
-            ...transaction.picks.flatMap((pick) =>
-              [pick.from, pick.to, pick.original].flatMap((pickTeam) =>
-                pickTeam === undefined ? [] : [pickTeam.providerTeamKey],
+              ...EffectArray.flatMap(transaction.players, (player) => {
+                const flatMapped1 = EffectArray.flatMap(
+                  [player.movement.from, player.movement.to],
+                  (movementTeam) => {
+                    const flatMapped1 =
+                      movementTeam === undefined ? [] : [movementTeam.providerTeamKey];
+                    return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+                  },
+                );
+                return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+              }),
+              ...EffectArray.flatMap(transaction.picks, (pick) => {
+                const flatMapped2 = EffectArray.flatMap(
+                  [pick.from, pick.to, pick.original],
+                  (pickTeam) => {
+                    const flatMapped2 = pickTeam === undefined ? [] : [pickTeam.providerTeamKey];
+                    return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+                  },
+                );
+                return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+              }),
+              ...optionalArrayValue(transaction.parties?.entries ?? [], (value) =>
+                EffectArray.map(value, (party) => party.team.providerTeamKey),
               ),
-            ),
-            ...(transaction.parties?.entries ?? []).map((party) => party.team.providerTeamKey),
-          ]),
+            ];
+            return arrayValueIsArray(flatMapped6) ? flatMapped6 : [flatMapped6];
+          }),
         ),
       ];
-      const playerKeys = filtered.flatMap((transaction) =>
-        transaction.players.map((player) => player.providerPlayerKey),
-      );
+      const playerKeys = EffectArray.flatMap(filtered, (transaction) => {
+        const flatMapped7 = EffectArray.map(
+          transaction.players,
+          (player) => player.providerPlayerKey,
+        );
+        return arrayValueIsArray(flatMapped7) ? flatMapped7 : [flatMapped7];
+      });
       const teamRefs = yield* tokens.sealCounterpartyRefs({ userId, leagueKey, teamKeys });
       const playerRefs = yield* tokens.sealPlayerRefs({ userId, leagueKey, playerKeys });
       const teamRefByKey = new Map(
-        teamKeys.map((key, index) => [key, EffectArray.getUnsafe(teamRefs, index)] as const),
+        EffectArray.map(
+          teamKeys,
+          (key, index) => [key, EffectArray.getUnsafe(teamRefs, index)] as const,
+        ),
       );
       const teamRef = (providerTeamKey: string): CounterpartyRef => {
         const ref = teamRefByKey.get(providerTeamKey);
@@ -2877,7 +2994,7 @@ export const FantasyQueriesLive = Layer.effect(
         ...(transactionTeam.name === undefined ? {} : { name: transactionTeam.name }),
       });
       let playerOffset = 0;
-      const transactions = filtered.map((transaction) => {
+      const transactions = EffectArray.map(filtered, (transaction) => {
         const players = EffectArray.map(
           EffectArray.zip(
             transaction.players,
@@ -2924,14 +3041,14 @@ export const FantasyQueriesLive = Layer.effect(
             : {
                 parties: {
                   source: transaction.parties.source,
-                  entries: transaction.parties.entries.map((party) => ({
+                  entries: EffectArray.map(transaction.parties.entries, (party) => ({
                     role: party.role,
                     ...transactionTeamView(party.team),
                   })),
                 },
               }),
-          teams: transaction.teams.map(transactionTeamView),
-          picks: transaction.picks.map((pick) => ({
+          teams: EffectArray.map(transaction.teams, transactionTeamView),
+          picks: EffectArray.map(transaction.picks, (pick) => ({
             round: pick.round,
             from: pick.from === undefined ? null : transactionTeamView(pick.from),
             to: pick.to === undefined ? null : transactionTeamView(pick.to),
@@ -3105,7 +3222,9 @@ export const FantasyQueriesLive = Layer.effect(
             )
           : { rows: [] as ReadonlyArray<StandingRow>, omittedCategoryCount: 0 };
       const rows = standingTable.rows;
-      const current = rows.find((row) => row.current);
+      const current = EffectOption.getOrUndefined(
+        EffectArray.findFirst(rows, (row) => row.current),
+      );
       if (standingsOutcome !== undefined) {
         coverageEntries.push(
           standingsOutcome._tag === "ok"
@@ -3201,7 +3320,7 @@ export const FantasyQueriesLive = Layer.effect(
           ? {
               status: "available",
               format: league === undefined ? "unknown" : league.format,
-              teams: rows.map((row) => ({
+              teams: EffectArray.map(rows, (row) => ({
                 team: row.team,
                 name: row.name,
                 current: row.current,
@@ -3294,7 +3413,9 @@ export const FantasyQueriesLive = Layer.effect(
       const draft = yield* draftProvenance(
         context,
         fetchedAt,
-        includes("roster") ? rosterPlayers.map((player) => player.providerPlayerKey) : [],
+        includes("roster")
+          ? EffectArray.map(rosterPlayers, (player) => player.providerPlayerKey)
+          : [],
         "roster",
       );
       if (draft.coverage !== undefined) {
@@ -3306,7 +3427,7 @@ export const FantasyQueriesLive = Layer.effect(
       const rosterRefs = yield* tokens.sealPlayerRefs({
         userId,
         leagueKey: context.owned.team.providerLeagueKey,
-        playerKeys: rosterPlayers.map((player) => player.providerPlayerKey),
+        playerKeys: EffectArray.map(rosterPlayers, (player) => player.providerPlayerKey),
       });
       const rosterCoverage =
         rosterOutcome?._tag === "ok" ? rosterOutcome.value.coverage : undefined;
@@ -3328,7 +3449,10 @@ export const FantasyQueriesLive = Layer.effect(
           context.provider.readPlayerWeeks({
             ...providerIdentity(context),
             providerLeagueKey: context.owned.team.providerLeagueKey,
-            providerPlayerKeys: rosterPlayers.map((player) => player.providerPlayerKey),
+            providerPlayerKeys: EffectArray.map(
+              rosterPlayers,
+              (player) => player.providerPlayerKey,
+            ),
             week: rosterPeriod,
           }),
         );
@@ -3382,10 +3506,15 @@ export const FantasyQueriesLive = Layer.effect(
       const findOwnMatchup = (
         entries: ReadonlyArray<ProviderMatchup> | undefined,
       ): ProviderMatchup | undefined =>
-        entries?.find(
-          (entry) =>
-            entry.home.providerTeamKey === context.owned.team.providerTeamKey ||
-            entry.away.providerTeamKey === context.owned.team.providerTeamKey,
+        optionalArrayValue(entries, (value) =>
+          EffectOption.getOrUndefined(
+            EffectArray.findFirst(
+              value,
+              (entry) =>
+                entry.home.providerTeamKey === context.owned.team.providerTeamKey ||
+                entry.away.providerTeamKey === context.owned.team.providerTeamKey,
+            ),
+          ),
         );
       const ownSide = (matchup: ProviderMatchup): ProviderTeamScore =>
         matchup.home.providerTeamKey === context.owned.team.providerTeamKey
@@ -3621,7 +3750,7 @@ export const FantasyQueriesLive = Layer.effect(
         const scheduleRefs = yield* tokens.sealPlayerRefs({
           userId,
           leagueKey: context.owned.team.providerLeagueKey,
-          playerKeys: schedule.players.map((player) => player.providerPlayerKey),
+          playerKeys: EffectArray.map(schedule.players, (player) => player.providerPlayerKey),
         });
         for (const [player, sealedRef] of EffectArray.zip(schedule.players, scheduleRefs)) {
           const rosterRow = rosterRowByKey.get(player.providerPlayerKey);
@@ -3681,7 +3810,7 @@ export const FantasyQueriesLive = Layer.effect(
           ...(scheduleDates === undefined
             ? {}
             : {
-                dates: scheduleDates.map((entry) => {
+                dates: EffectArray.map(scheduleDates, (entry) => {
                   const league = leagueByDate?.get(entry.date);
                   const offNight = offNightByDate.get(entry.date);
                   return {
@@ -3743,7 +3872,7 @@ export const FantasyQueriesLive = Layer.effect(
                 "roster_schedule",
                 fetchedAt,
                 undefined,
-                `Dated roster reads for ${schedule.dates.join(", ")}`,
+                `Dated roster reads for ${EffectArray.join(schedule.dates, ", ")}`,
               ),
         );
         if (professionalGames.status === "available") {
@@ -3852,15 +3981,18 @@ export const FantasyQueriesLive = Layer.effect(
         (includes("matchup") && matchupSection?.status === "available");
       const status: QueryStatus = available ? "ok" : failures.length > 0 ? "failed" : "unsupported";
       const fingerprintValue = yield* queryFingerprint(
-        [
-          "team_summary",
-          `team=${input.team}`,
-          `groups=${[...groups].sort().join(",")}`,
-          `period=${rosterPeriod === undefined ? "date" : String(rosterPeriod.week)}`,
-          `window=${input.window === undefined ? "period" : `${input.window.start}..${input.window.end}`}`,
-          `days=${input.days === undefined ? "default" : String(input.days)}`,
-          "order=slot,player,rank",
-        ].join("|"),
+        EffectArray.join(
+          [
+            "team_summary",
+            `team=${input.team}`,
+            `groups=${EffectArray.join([...groups].sort(), ",")}`,
+            `period=${rosterPeriod === undefined ? "date" : String(rosterPeriod.week)}`,
+            `window=${input.window === undefined ? "period" : `${input.window.start}..${input.window.end}`}`,
+            `days=${input.days === undefined ? "default" : String(input.days)}`,
+            "order=slot,player,rank",
+          ],
+          "|",
+        ),
       );
       const now = yield* DateTime.now;
       const offset = yield* openOffset(userId, fingerprintValue, input.cursor, now);
@@ -3878,23 +4010,25 @@ export const FantasyQueriesLive = Layer.effect(
               rule: rosterRuleOf(league.rosterConstraints, league.rosterPositions),
               players: rosterPlacementPlayers(rosterPlayers),
             });
-      const illegalSlots: ReadonlyArray<SummaryIllegalSlot> = (
-        rosterSummary?.illegal ?? []
-      ).flatMap((occupant) => {
-        const row = rosterRowByKey.get(occupant.key);
-        return row === undefined
-          ? []
-          : [
-              {
-                player: row.player,
-                name: occupant.name,
-                slot: occupant.slot,
-                eligiblePositions: occupant.positions,
-                detail: occupant.detail,
-              },
-            ];
-      });
-      const canFree: ReadonlyArray<RosterFreeablePlace> = freeable.flatMap((move) => {
+      const illegalSlots: ReadonlyArray<SummaryIllegalSlot> = optionalArrayValue(
+        rosterSummary?.illegal ?? [],
+        (value) =>
+          EffectArray.flatMap(value, (occupant) => {
+            const row = rosterRowByKey.get(occupant.key);
+            return row === undefined
+              ? []
+              : [
+                  {
+                    player: row.player,
+                    name: occupant.name,
+                    slot: occupant.slot,
+                    eligiblePositions: occupant.positions,
+                    detail: occupant.detail,
+                  },
+                ];
+          }),
+      );
+      const canFree: ReadonlyArray<RosterFreeablePlace> = EffectArray.flatMap(freeable, (move) => {
         const row = rosterRowByKey.get(move.playerKey);
         return row === undefined
           ? []
@@ -3907,27 +4041,29 @@ export const FantasyQueriesLive = Layer.effect(
               },
             ];
       });
-      const illegal: ReadonlyArray<RosterBlocker> = (rosterSummary?.illegal ?? []).flatMap(
-        (blocker) => {
-          const row = rosterRowByKey.get(blocker.key);
-          return row === undefined
-            ? []
-            : [
-                {
-                  player: row.player,
-                  name: blocker.name,
-                  slot: blocker.slot,
-                  fact: blocker.fact,
-                  cure: blocker.cure,
-                },
-              ];
-        },
+      const illegal: ReadonlyArray<RosterBlocker> = optionalArrayValue(
+        rosterSummary?.illegal ?? [],
+        (value) =>
+          EffectArray.flatMap(value, (blocker) => {
+            const row = rosterRowByKey.get(blocker.key);
+            return row === undefined
+              ? []
+              : [
+                  {
+                    player: row.player,
+                    name: blocker.name,
+                    slot: blocker.slot,
+                    fact: blocker.fact,
+                    cure: blocker.cure,
+                  },
+                ];
+          }),
       );
       const possibleAdds =
         rosterSummary === undefined
           ? undefined
           : rosterSummary.places.free +
-            rosterSummary.reserve.reduce((total, list) => total + list.free, 0);
+            EffectArray.reduce(rosterSummary.reserve, 0, (total, list) => total + list.free);
       const seasonProgress = seasonProgressOf(league);
       const base: Omit<TeamSummaryData, "roster" | "page" | "schedule"> = {
         status,
@@ -3973,15 +4109,20 @@ export const FantasyQueriesLive = Layer.effect(
         readonly roster: SummaryRosterPlayer | undefined;
         readonly schedule: SummarySchedulePlayer | undefined;
       }> = [
-        ...rosterPlayers.map((player) => ({
+        ...EffectArray.map(rosterPlayers, (player) => ({
           roster: rosterRowByKey.get(player.providerPlayerKey),
           schedule: schedulePlayerByKey.get(player.providerPlayerKey),
         })),
-        ...[...schedulePlayerByKey]
-          .filter(([providerPlayerKey]) => !rosterRowByKey.has(providerPlayerKey))
-          .map(([, row]) => ({ roster: undefined, schedule: row })),
+        ...EffectArray.map(
+          EffectArray.filter(
+            [...schedulePlayerByKey],
+            ([providerPlayerKey]) => !rosterRowByKey.has(providerPlayerKey),
+          ),
+          ([, row]) => ({ roster: undefined, schedule: row }),
+        ),
       ];
-      const sectionCandidates: Array<readonly [string, unknown]> = Object.entries(base).filter(
+      const sectionCandidates: Array<readonly [string, unknown]> = EffectArray.filter(
+        Object.entries(base),
         ([name]) =>
           name !== "status" &&
           name !== "team" &&
@@ -4011,13 +4152,16 @@ export const FantasyQueriesLive = Layer.effect(
           : {
               resource: "team_summary",
               groups: summaryGroups,
-              remedy: `No roster page was requested, so the selected sections alone exceed the result budget. ${largestSection} Request fewer groups (currently ${groups.join(", ")}); available groups are league, standings, categories, matchup, schedule, and roster.`,
+              remedy: `No roster page was requested, so the selected sections alone exceed the result budget. ${largestSection} Request fewer groups (currently ${EffectArray.join(groups, ", ")}); available groups are league, standings, categories, matchup, schedule, and roster.`,
             }),
         build: (pageRows, page) => ({
           ...base,
           ...(includes("roster")
             ? {
-                roster: pageRows.flatMap((row) => (row.roster === undefined ? [] : [row.roster])),
+                roster: EffectArray.flatMap(pageRows, (row) => {
+                  const flatMapped8 = row.roster === undefined ? [] : [row.roster];
+                  return arrayValueIsArray(flatMapped8) ? flatMapped8 : [flatMapped8];
+                }),
               }
             : {}),
           ...(scheduleSection === undefined
@@ -4027,9 +4171,10 @@ export const FantasyQueriesLive = Layer.effect(
                   scheduleSection.status === "available"
                     ? {
                         ...scheduleSection,
-                        players: pageRows.flatMap((row) =>
-                          row.schedule === undefined ? [] : [row.schedule],
-                        ),
+                        players: EffectArray.flatMap(pageRows, (row) => {
+                          const flatMapped9 = row.schedule === undefined ? [] : [row.schedule];
+                          return arrayValueIsArray(flatMapped9) ? flatMapped9 : [flatMapped9];
+                        }),
                       }
                     : scheduleSection,
               }),
@@ -4093,7 +4238,8 @@ type CategoryLabels = ReadonlyMap<
 
 function categoryLabels(league: ProviderLeagueSettings | undefined): CategoryLabels {
   return new Map(
-    (league === undefined ? [] : configuredCategories(league)).map(
+    EffectArray.map(
+      league === undefined ? [] : configuredCategories(league),
       (category): [number, { readonly name: string; readonly scoring: CategoryRole }] => [
         category.statId,
         { name: category.name, scoring: category.scoring },
@@ -4137,10 +4283,16 @@ function summaryMatchupCategories(
 ): Effect.Effect<ReadonlyArray<SummaryMatchupCategory>> {
   const omitted = new Set<number>();
   const ownByStat = new Map(
-    labelledCategories(own, labels, omitted).map((entry) => [entry.statId, entry] as const),
+    EffectArray.map(
+      labelledCategories(own, labels, omitted),
+      (entry) => [entry.statId, entry] as const,
+    ),
   );
   const opponentByStat = new Map(
-    labelledCategories(opponent, labels, omitted).map((entry) => [entry.statId, entry] as const),
+    EffectArray.map(
+      labelledCategories(opponent, labels, omitted),
+      (entry) => [entry.statId, entry] as const,
+    ),
   );
   const statIds = [...new Set([...ownByStat.keys(), ...opponentByStat.keys()])];
   return Effect.forEach(
@@ -4171,13 +4323,15 @@ function categoryAvailability(
   select: (row: StandingRow) => ReadonlyArray<CategoryValue>,
   detail: string,
 ): { readonly status: "available" } | { readonly status: "unsupported"; readonly detail: string } {
-  return rows.some((row) => select(row).some((entry) => entry.value !== null))
+  return EffectArray.some(rows, (row) =>
+    EffectArray.some(select(row), (entry) => entry.value !== null),
+  )
     ? { status: "available" }
     : { status: "unsupported", detail };
 }
 
 function hasPublishedCategoryValue(values: ReadonlyArray<CategoryValue>): boolean {
-  return values.some((entry) => entry.value !== null);
+  return EffectArray.some(values, (entry) => entry.value !== null);
 }
 
 function omittedCategories(count: number): { readonly count: number; readonly detail: string } {
@@ -4255,7 +4409,7 @@ function standingRows(
     const refs = yield* tokens.sealCounterpartyRefs({
       userId: context.userId,
       leagueKey: context.owned.team.providerLeagueKey,
-      teamKeys: standings.teams.map((standing) => standing.providerTeamKey),
+      teamKeys: EffectArray.map(standings.teams, (standing) => standing.providerTeamKey),
     });
     const statRefs = new Map<number, StatRef>();
     const omitted = new Set<number>();
@@ -4340,7 +4494,7 @@ function draftPickRows(
 ): Effect.Effect<ReadonlyArray<DraftPick>> {
   return Effect.gen(function* () {
     const leagueKey = context.owned.team.providerLeagueKey;
-    const teamKeys = [...new Set(picks.map((pick) => pick.providerTeamKey))];
+    const teamKeys = [...new Set(EffectArray.map(picks, (pick) => pick.providerTeamKey))];
     const teamRefs = yield* tokens.sealCounterpartyRefs({
       userId: context.userId,
       leagueKey,
@@ -4349,13 +4503,18 @@ function draftPickRows(
     const playerRefs = yield* tokens.sealPlayerRefs({
       userId: context.userId,
       leagueKey,
-      playerKeys: picks.map((pick) => pick.providerPlayerKey),
+      playerKeys: EffectArray.map(picks, (pick) => pick.providerPlayerKey),
     });
     const teamRefByKey = new Map(
-      teamKeys.map((key, index) => [key, EffectArray.getUnsafe(teamRefs, index)] as const),
+      EffectArray.map(
+        teamKeys,
+        (key, index) => [key, EffectArray.getUnsafe(teamRefs, index)] as const,
+      ),
     );
-    const teamNameByKey = new Map(leagueTeams.map((team) => [team.providerTeamKey, team.name]));
-    return picks.map((pick, index) => {
+    const teamNameByKey = new Map(
+      EffectArray.map(leagueTeams, (team) => [team.providerTeamKey, team.name]),
+    );
+    return EffectArray.map(picks, (pick, index) => {
       const team = teamRefByKey.get(pick.providerTeamKey);
       if (team === undefined) {
         throw new Error("Every draft pick team key must seal a counterparty reference.");
@@ -4408,7 +4567,7 @@ function queryTeam(owned: OwnedTeam): QueryTeam {
 function playerKeysOf(
   rows: ReadonlyArray<{ readonly providerPlayerKey: string }>,
 ): ReadonlyArray<string> {
-  return [...new Set(rows.map((row) => row.providerPlayerKey))];
+  return [...new Set(EffectArray.map(rows, (row) => row.providerPlayerKey))];
 }
 
 function coverage(
@@ -4684,7 +4843,7 @@ function calendarTeams(
   }
   const wanted = requested === undefined ? undefined : [...new Set(requested)];
   const covered = wanted ?? [...gamesByTeam.keys()].sort();
-  const teams = covered.flatMap((proTeam) => {
+  const teams = EffectArray.flatMap(covered, (proTeam) => {
     const games = gamesByTeam.get(proTeam);
     return games === undefined
       ? []
@@ -4692,7 +4851,7 @@ function calendarTeams(
           {
             proTeam,
             plays: games.size > 0,
-            games: [...games.values()].map((game) => ({
+            games: EffectArray.map([...games.values()], (game) => ({
               ...(game.date === undefined ? {} : { date: game.date }),
               opponent: game.opponent,
               home: game.home,
@@ -4700,7 +4859,10 @@ function calendarTeams(
           },
         ];
   });
-  const notCovered = wanted?.filter((proTeam) => !gamesByTeam.has(proTeam)) ?? [];
+  const notCovered =
+    optionalArrayValue(wanted, (value) =>
+      EffectArray.filter(value, (proTeam) => !gamesByTeam.has(proTeam)),
+    ) ?? [];
   return { teams, ...(notCovered.length === 0 ? {} : { notCovered }) };
 }
 
@@ -4886,22 +5048,22 @@ function schedulePeriodDetail(input: {
 }
 
 function largestSectionBytes(entries: ReadonlyArray<readonly [string, unknown]>): string {
-  const measured = entries
-    .flatMap(([name, value]) => {
-      if (value === undefined) {
-        return [];
-      }
-      const serialized = jsonTools.jsonString(value);
-      return [{ name, bytes: serialized.length }];
-    })
+  const measured = EffectArray.flatMap(entries, ([name, value]) => {
+    if (value === undefined) {
+      return [];
+    }
+    const serialized = jsonTools.jsonString(value);
+    return [{ name, bytes: serialized.length }];
+  })
     .sort((left, right) => right.bytes - left.bytes)
     .slice(0, 3);
   if (measured.length === 0) {
     return "No single section could be measured.";
   }
-  const listed = measured
-    .map(({ name, bytes }) => `\`${name}\` (about ${String(bytes)} bytes)`)
-    .join(", ");
+  const listed = EffectArray.join(
+    EffectArray.map(measured, ({ name, bytes }) => `\`${name}\` (about ${String(bytes)} bytes)`),
+    ", ",
+  );
   return `The largest sections are ${listed} of this result, so dropping one of those frees the most space.`;
 }
 
@@ -4949,13 +5111,14 @@ function poolGameWeeks(
     weeks:
       byWeek === undefined
         ? []
-        : [...byWeek.entries()]
-            .toSorted(([left], [right]) => left - right)
-            .map(([week, opponent]) => ({
+        : EffectArray.map(
+            sortWithComparator([...byWeek.entries()], ([left], [right]) => left - right),
+            ([week, opponent]) => ({
               week,
               opponent: opponent.opponent,
               home: opponent.home,
-            })),
+            }),
+          ),
   };
 }
 
@@ -4985,7 +5148,7 @@ function readProfessionalScheduleGames(input: {
     .pipe(
       Effect.map((window) => ({
         status: "available" as const,
-        games: window.games.map((fact) => fact.game),
+        games: EffectArray.map(window.games, (fact) => fact.game),
         observedAt: window.observedAt,
         teamCount: window.teamCount,
         unresolvedTeamCount: window.unresolvedTeams.length,
@@ -5067,11 +5230,13 @@ function professionalScheduleSection(input: {
     if (dates === undefined) {
       return unsupportedProfessionalSchedule("The schedule window is not a valid date range.");
     }
-    const abbreviations = input.rosterPlayers.flatMap((player) =>
-      player.proTeamKey === undefined && player.proTeamAbbreviation !== undefined
-        ? [player.proTeamAbbreviation]
-        : [],
-    );
+    const abbreviations = EffectArray.flatMap(input.rosterPlayers, (player) => {
+      const flatMapped10 =
+        player.proTeamKey === undefined && player.proTeamAbbreviation !== undefined
+          ? [player.proTeamAbbreviation]
+          : [];
+      return arrayValueIsArray(flatMapped10) ? flatMapped10 : [flatMapped10];
+    });
     const identities =
       abbreviations.length === 0
         ? []
@@ -5082,7 +5247,7 @@ function professionalScheduleSection(input: {
     const keyByAbbreviation = uniqueProviderTeamKeys(identities);
     const leagueByDate = leagueGamesByDate(games.games);
     const offNightByDate = new Map(
-      dates.map((date): readonly [string, boolean] => [
+      EffectArray.map(dates, (date): readonly [string, boolean] => [
         date,
         isLeagueOffNight({
           teamsPlaying: leagueByDate.get(date)?.teamsPlaying ?? 0,
@@ -5128,7 +5293,7 @@ function professionalScheduleSection(input: {
         ...(input.period === undefined ? {} : { period: input.period }),
         window: input.window,
         observedAt: games.observedAt,
-        dates: dates.map((date) => {
+        dates: EffectArray.map(dates, (date) => {
           const leagueDay = leagueByDate.get(date);
           return {
             date,
@@ -5196,7 +5361,7 @@ function professionalScheduleRow(input: {
   const teamGames = gamesForTeam(input.games, proTeamKey);
   return {
     status: teamGames.length === 0 ? "no_games" : "scheduled",
-    games: teamGames.map((game) => {
+    games: EffectArray.map(teamGames, (game) => {
       const home = game.home.providerTeamKey === proTeamKey;
       const opponent = home ? game.away : game.home;
       const offNight = input.offNightByDate.get(game.date);
@@ -5250,7 +5415,8 @@ function providerGamesInWindow(
 ): ReadonlyArray<ProviderScheduledGame> {
   return window === undefined
     ? games
-    : games.filter(
+    : EffectArray.filter(
+        games,
         (game) => game.date === undefined || (game.date >= window.start && game.date <= window.end),
       );
 }
@@ -5314,16 +5480,12 @@ function gamesRemainingState(input: {
 }
 
 function oldestInstant(instants: ReadonlyArray<DateTime.Utc>): DateTime.Utc {
-  const oldest = instants.reduce<DateTime.Utc | undefined>(
+  const oldest = EffectArray.reduce(
+    instants,
+    Option.getOrThrow(EffectArray.head(instants)),
     (current, instant) =>
-      current === undefined || DateTime.toEpochMillis(instant) < DateTime.toEpochMillis(current)
-        ? instant
-        : current,
-    undefined,
+      DateTime.toEpochMillis(instant) < DateTime.toEpochMillis(current) ? instant : current,
   );
-  if (oldest === undefined) {
-    throw new Error("A games-remaining answer must observe at least one source");
-  }
   return oldest;
 }
 
@@ -5336,7 +5498,7 @@ function scheduledGames(
   readonly home: boolean;
   readonly offNight?: boolean;
 }> {
-  return games.map((game) => {
+  return EffectArray.map(games, (game) => {
     const offNight = game.date === undefined ? undefined : offNightByDate.get(game.date);
     return {
       ...(game.date === undefined ? {} : { date: game.date }),
@@ -5350,7 +5512,7 @@ function scheduledGames(
 function scheduleDateCounts(
   schedule: ProviderRosterSchedule,
 ): ReadonlyArray<{ readonly date: string; readonly rosterGames: number }> {
-  const counts = new Map<string, number>(schedule.dates.map((date) => [date, 0]));
+  const counts = new Map<string, number>(EffectArray.map(schedule.dates, (date) => [date, 0]));
   for (const player of schedule.players) {
     for (const game of player.games) {
       if (game.date === undefined) {
@@ -5359,14 +5521,15 @@ function scheduleDateCounts(
       counts.set(game.date, (counts.get(game.date) ?? 0) + 1);
     }
   }
-  return schedule.dates.map((date) => ({ date, rosterGames: counts.get(date) ?? 0 }));
+  return EffectArray.map(schedule.dates, (date) => ({ date, rosterGames: counts.get(date) ?? 0 }));
 }
 
 function matchupSchedule(
   provider: TeamContext["provider"],
   entries: ReadonlyArray<ProviderMatchup>,
 ): MatchupsData["schedule"] {
-  const supported = entries.some(
+  const supported = EffectArray.some(
+    entries,
     (matchup) =>
       matchup.home.remainingGames !== undefined || matchup.away.remainingGames !== undefined,
   );
@@ -5525,8 +5688,8 @@ function waiverBidOf(
   if (outcome?._tag !== "ok") {
     return undefined;
   }
-  const balance = outcome.value.find(
-    (team) => team.providerTeamKey === providerTeamKey,
+  const balance = EffectOption.getOrUndefined(
+    EffectArray.findFirst(outcome.value, (team) => team.providerTeamKey === providerTeamKey),
   )?.remainingBudget;
   return balance === undefined ? { kind: "bidless" } : { kind: "published", balance };
 }
@@ -5681,7 +5844,7 @@ function scoringCategories(
 ): Effect.Effect<ReadonlyArray<NonNullable<LeagueData["scoring"]>[number]>> {
   return Effect.gen(function* () {
     const modifiers = new Map(
-      league.statModifiers.map((modifier) => [modifier.statId, modifier.points]),
+      EffectArray.map(league.statModifiers, (modifier) => [modifier.statId, modifier.points]),
     );
     const result: Array<NonNullable<LeagueData["scoring"]>[number]> = [];
     for (const category of configuredCategories(league)) {
@@ -5714,7 +5877,7 @@ type ConfiguredCategory = {
 };
 
 function configuredCategories(league: ProviderLeagueSettings): ReadonlyArray<ConfiguredCategory> {
-  return league.statCategories.map((category): ConfiguredCategory => {
+  return EffectArray.map(league.statCategories, (category): ConfiguredCategory => {
     const informational = category.displayOnly
       ? "Your league marks this stat display-only for this league, so it appears for information and does not score."
       : category.enabled
@@ -5733,22 +5896,28 @@ function configuredCategories(league: ProviderLeagueSettings): ReadonlyArray<Con
 }
 
 function rosterRules(league: ProviderLeagueSettings): NonNullable<LeagueData["rosterRules"]> {
-  const positions = league.rosterPositions.map((position) => ({
+  const positions = EffectArray.map(league.rosterPositions, (position) => ({
     position: position.position,
     kind: position.kind === "starting" ? ("starter" as const) : position.kind,
     count: position.count,
   }));
   return {
     positions,
-    starterCount: positions
-      .filter((position) => position.kind === "starter")
-      .reduce((total, position) => total + position.count, 0),
-    benchCount: positions
-      .filter((position) => position.kind === "bench")
-      .reduce((total, position) => total + position.count, 0),
-    reserveCount: positions
-      .filter((position) => position.kind === "reserve")
-      .reduce((total, position) => total + position.count, 0),
+    starterCount: EffectArray.reduce(
+      EffectArray.filter(positions, (position) => position.kind === "starter"),
+      0,
+      (total, position) => total + position.count,
+    ),
+    benchCount: EffectArray.reduce(
+      EffectArray.filter(positions, (position) => position.kind === "bench"),
+      0,
+      (total, position) => total + position.count,
+    ),
+    reserveCount: EffectArray.reduce(
+      EffectArray.filter(positions, (position) => position.kind === "reserve"),
+      0,
+      (total, position) => total + position.count,
+    ),
   };
 }
 
@@ -5820,7 +5989,7 @@ function injuryOfDetail(detail: ProviderPlayerDetail): {
 function rosterPlacePlayers(
   players: ReadonlyArray<ProviderRosterPlayer>,
 ): ReadonlyArray<RosterPlayerPlace> {
-  return players.map((player) => ({
+  return EffectArray.map(players, (player) => ({
     key: player.providerPlayerKey,
     name: player.name,
     slot: player.slot.status === "verified" ? player.slot.slot : undefined,
@@ -5832,7 +6001,7 @@ function rosterPlacePlayers(
 function rosterPlacementPlayers(
   players: ReadonlyArray<ProviderRosterPlayer>,
 ): ReadonlyArray<RosterPlacementPlayer> {
-  return players.map((player) => ({
+  return EffectArray.map(players, (player) => ({
     key: player.providerPlayerKey,
     name: player.name,
     slot: player.slot.status === "verified" ? player.slot.slot : undefined,
@@ -5971,15 +6140,19 @@ function providerOrdered(
 
 function providerPositionCodes(positions: ReadonlySet<string>): ReadonlyArray<string> | undefined {
   const codes = [...positions];
-  return codes.length > 0 && codes.every((code) => /^[A-Za-z]{1,3}$/u.test(code))
+  return codes.length > 0 && EffectArray.every(codes, (code) => /^[A-Za-z]{1,3}$/u.test(code))
     ? codes
     : undefined;
 }
 
 function limitation(provider: TeamContext["provider"], subject: ProviderLimitationSubject): string {
   return (
-    provider.capabilities.limitations.find((entry) => entry.subject === subject)?.detail ??
-    "Your league does not publish data for this field."
+    EffectOption.getOrUndefined(
+      EffectArray.findFirst(
+        provider.capabilities.limitations,
+        (entry) => entry.subject === subject,
+      ),
+    )?.detail ?? "Your league does not publish data for this field."
   );
 }
 
@@ -6036,7 +6209,11 @@ function dictionaryEntry(
   stat: StatRef,
   league: ProviderLeagueSettings | undefined,
 ): PlayersData["dictionary"][number] {
-  const category = league?.statCategories.find((candidate) => candidate.statId === statId);
+  const category = optionalArrayValue(league?.statCategories, (value) =>
+    EffectOption.getOrUndefined(
+      EffectArray.findFirst(value, (candidate) => candidate.statId === statId),
+    ),
+  );
   return {
     stat,
     name: category?.name ?? null,
@@ -6048,10 +6225,11 @@ function dictionaryEntry(
 
 function queryFingerprint(value: string): Effect.Effect<string> {
   return Effect.promise(() =>
-    crypto.subtle
-      .digest("SHA-256", new TextEncoder().encode(value))
-      .then((digest) =>
-        [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join(""),
+    crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)).then((digest) =>
+      EffectArray.join(
+        EffectArray.map([...new Uint8Array(digest)], (byte) => byte.toString(16).padStart(2, "0")),
+        "",
       ),
+    ),
   );
 }

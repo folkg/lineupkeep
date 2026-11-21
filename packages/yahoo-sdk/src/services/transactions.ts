@@ -1,3 +1,4 @@
+import { Array as EffectArray } from "effect";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
@@ -61,7 +62,7 @@ export const list: API.OperationMethod<
       Effect.map((transactions) =>
         input.type === undefined
           ? transactions
-          : transactions.filter((transaction) => transaction.type === input.type),
+          : EffectArray.filter(transactions, (transaction) => transaction.type === input.type),
       ),
     ),
 });

@@ -1,3 +1,4 @@
+import { Array as EffectArray } from "effect";
 import { expect, it } from "vitest";
 
 import {
@@ -39,7 +40,10 @@ it("explores reachable states and counts declared branches", () => {
   const result = explore(adapter, { input: { path: "ready", count: 0 } });
 
   expect(
-    result.nodes.map(({ snapshot }) => `${snapshot.state.path}.${snapshot.state.value.count}`),
+    EffectArray.map(
+      result.nodes,
+      ({ snapshot }) => `${snapshot.state.path}.${snapshot.state.value.count}`,
+    ),
   ).toEqual(["ready.0", "ready.1", "done.0", "done.1"]);
   expect(result.transitionCoverage).toEqual({
     definitions: { missing: 0 },
@@ -94,7 +98,7 @@ it("records accepted no-ops and checks rejected steps too", () => {
   });
   const checks = invariants<State, Event>();
 
-  expect(trace.steps.map(({ accepted }) => accepted)).toEqual([true, false]);
+  expect(EffectArray.map(trace.steps, ({ accepted }) => accepted)).toEqual([true, false]);
   expect(trace.final.state.value).toEqual({ path: "ready", count: 0 });
   expect(() =>
     checkInvariants(adapter, trace, [
@@ -113,7 +117,7 @@ it("rejects a trace whose accepted target differs from its declaration", () => {
   expect(() =>
     verify(adapter, {
       ...trace,
-      steps: trace.steps.map((step) => ({
+      steps: EffectArray.map(trace.steps, (step) => ({
         ...step,
         after: { state: { path: "ready", value: step.after.state.value } },
       })),

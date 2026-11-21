@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import {
   TransactionDecisionActor,
@@ -306,7 +307,10 @@ function settlementEvent(
         return {
           _tag: "ClaimLost",
           result: claimLostResult(settlement.result),
-          attemptedFallback: settlement.attempts.some((attempt) => attempt.kind === "fallback"),
+          attemptedFallback: EffectArray.some(
+            settlement.attempts,
+            (attempt) => attempt.kind === "fallback",
+          ),
         };
       }
       return undefined;

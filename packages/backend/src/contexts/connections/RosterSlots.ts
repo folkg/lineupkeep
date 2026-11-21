@@ -1,3 +1,5 @@
+import { Array as EffectArray } from "effect";
+
 import type { ProviderReserveEligibility, ProviderRosterConstraints } from "./Provider.ts";
 import type { ReserveEligibility, ReserveList, RosterPlaces } from "./QueryValues.ts";
 
@@ -20,7 +22,7 @@ export function rosterRuleOf(
   return {
     ...constraints,
     slots,
-    byPosition: new Map(slots.map((slot) => [slot.position, slot] as const)),
+    byPosition: new Map(EffectArray.map(slots, (slot) => [slot.position, slot] as const)),
   };
 }
 
@@ -73,10 +75,13 @@ function reserveLegality(
       if (!player.injured) {
         return false;
       }
-      const named = rule.slots.filter(
+      const named = EffectArray.filter(
+        rule.slots,
         (held) => held.kind === "reserve" && player.positions.includes(held.position),
       );
-      return named.length === 0 || named.some((held) => held.position === slot.position);
+      return (
+        named.length === 0 || EffectArray.some(named, (held) => held.position === slot.position)
+      );
     }
     case "not_published":
       return "unknown";
@@ -87,7 +92,10 @@ function acceptsPositions(
   eligibility: ReadonlyArray<string>,
   positions: ReadonlyArray<string>,
 ): boolean {
-  return eligibility.length === 0 || eligibility.some((position) => positions.includes(position));
+  return (
+    eligibility.length === 0 ||
+    EffectArray.some(eligibility, (position) => positions.includes(position))
+  );
 }
 
 export function slotCapacity(rule: RosterRule, slot: RosterSlot): number | undefined {
@@ -129,7 +137,7 @@ export function rosterOccupancy(input: {
       });
     }
   }
-  const illegal = mismatched.map((player) => {
+  const illegal = EffectArray.map(mismatched, (player) => {
     const blocker = rosterBlocker({
       name: player.name,
       slot: player.slot,
@@ -158,9 +166,9 @@ export function rosterOccupancy(input: {
       maximum: input.rule.rosterMaximum,
       free: Math.max(0, input.rule.rosterMaximum - occupied),
     },
-    reserve: input.rule.slots
-      .filter((slot) => slot.kind === "reserve")
-      .map((slot): ReserveList => {
+    reserve: EffectArray.map(
+      EffectArray.filter(input.rule.slots, (slot) => slot.kind === "reserve"),
+      (slot): ReserveList => {
         const occupants = occupancy.get(slot.position) ?? 0;
         return {
           name: slot.position,
@@ -169,7 +177,8 @@ export function rosterOccupancy(input: {
           occupied: occupants,
           free: Math.max(0, slot.count - occupants),
         };
-      }),
+      },
+    ),
     illegal,
     overflow,
   };
@@ -211,7 +220,7 @@ export function slotMismatchDetail(input: {
   if (input.kind === "reserve" && input.reserveEligibility.kind === "injury_status") {
     return `${input.name} is not injured, so they cannot move to ${input.slot}: it only accepts an injured player.`;
   }
-  return `${input.name} cannot move to ${input.slot}: it does not accept their positions (${input.positions.join(", ")}).`;
+  return `${input.name} cannot move to ${input.slot}: it does not accept their positions (${EffectArray.join(input.positions, ", ")}).`;
 }
 
 function rosterBlocker(input: {
@@ -230,7 +239,7 @@ function rosterBlocker(input: {
     };
   }
   return {
-    fact: `${input.name} sits in ${input.slot}, but ${input.slot} does not accept their positions (${input.positions.join(", ")}).`,
+    fact: `${input.name} sits in ${input.slot}, but ${input.slot} does not accept their positions (${EffectArray.join(input.positions, ", ")}).`,
     cure:
       input.kind === "reserve"
         ? reserveCure(input.name, input.occupied, input.maximum)

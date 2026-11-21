@@ -19,6 +19,7 @@ import {
 import type { SQL } from "drizzle-orm";
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
 import { Array, Context, DateTime, Effect, Layer, Option, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 import { SecureRandom } from "effect/crypto";
 
 import { UserId } from "#contexts/auth/User.ts";
@@ -73,6 +74,13 @@ import {
   transactionPlans,
   transactionRuns,
 } from "./TransactionPlanTables.ts";
+function optionalValue<A>(): A | undefined {
+  return undefined;
+}
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 export type TransactionMoveContent = {
   readonly group: string | undefined;
@@ -189,7 +197,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
         readonly moves: Array.NonEmptyReadonlyArray<TransactionMoveAppend>;
         readonly at: DateTime.Utc;
       }) {
-        const ids = input.moves.map((move) => ({ move, id: move.id }));
+        const ids = EffectArray.map(input.moves, (move) => ({ move, id: move.id }));
         const at = DateTime.toDateUtc(input.at);
         return yield* database
           .transaction((tx) =>
@@ -208,7 +216,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
               const inserted = yield* tx
                 .insert(transactionMoves)
                 .values(
-                  ids.map(({ move, id }, index) => ({
+                  EffectArray.map(ids, ({ move, id }, index) => ({
                     id,
                     userId: input.userId,
                     teamId: input.team,
@@ -221,16 +229,17 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                   })),
                 )
                 .returning();
-              const claims = ids.flatMap(({ move, id }) =>
-                move.claims.map((claim) => ({
+              const claims = EffectArray.flatMap(ids, ({ move, id }) => {
+                const flatMapped1 = EffectArray.map(move.claims, (claim) => ({
                   userId: input.userId,
                   teamId: input.team,
                   claimKind: claim.kind,
                   claimKey: claim.key,
                   moveId: id,
                   createdAt: at,
-                })),
-              );
+                }));
+                return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+              });
               if (claims.length > 0) {
                 yield* tx.insert(transactionMoveClaims).values(claims);
               }
@@ -244,12 +253,12 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                   ),
                 );
               const byId = new Map(
-                (yield* Effect.forEach(inserted, decodeMove, { concurrency: 1 })).map((move) => [
-                  move.id,
-                  move,
-                ]),
+                EffectArray.map(
+                  yield* Effect.forEach(inserted, decodeMove, { concurrency: 1 }),
+                  (move) => [move.id, move],
+                ),
               );
-              return ids.map(({ move, id }) => {
+              return EffectArray.map(ids, ({ move, id }) => {
                 const stored = byId.get(id);
                 if (stored === undefined) {
                   throw new Error("An appended move was not returned");
@@ -296,7 +305,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                 .where(eq(transactionMoveClaims.moveId, input.move));
               if (input.edit.claims.length > 0) {
                 yield* tx.insert(transactionMoveClaims).values(
-                  input.edit.claims.map((claim) => ({
+                  EffectArray.map(input.edit.claims, (claim) => ({
                     userId: input.userId,
                     teamId: input.team,
                     claimKind: claim.kind,
@@ -746,7 +755,9 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                   new Error("A run settled moves on a plan that no longer exists"),
                 );
               }
-              const ids = input.settlements.map((settlement) => String(settlement.move));
+              const ids = EffectArray.map(input.settlements, (settlement) =>
+                String(settlement.move),
+              );
               if (!Array.isArrayNonEmpty(ids)) {
                 return yield* Effect.die(new Error("A run settled no moves"));
               }
@@ -799,9 +810,10 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                     ),
                   );
               }
-              const ended = input.settlements.flatMap((settlement) =>
-                endsMove(settlement.result) ? [String(settlement.move)] : [],
-              );
+              const ended = EffectArray.flatMap(input.settlements, (settlement) => {
+                const flatMapped2 = endsMove(settlement.result) ? [String(settlement.move)] : [];
+                return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+              });
               if (Array.isArrayNonEmpty(ended)) {
                 yield* tx
                   .delete(transactionMoveClaims)
@@ -1234,7 +1246,10 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
               }
               byTeam.set(team, held);
             }
-            return [...byTeam.entries()].map(([team, counts]) => ({ team, ...counts }));
+            return EffectArray.map([...byTeam.entries()], ([team, counts]) => ({
+              team,
+              ...counts,
+            }));
           }).pipe(Effect.mapError(persistenceFailure));
         },
       );
@@ -1398,7 +1413,7 @@ function withClaims(
     const byMove = yield* claimsByMove(
       reader,
       input.userId,
-      rows.map((row) => row.id),
+      EffectArray.map(rows, (row) => row.id),
     );
     return yield* Effect.forEach(
       rows,
@@ -1420,7 +1435,7 @@ function withClaimsAndTeams(
     const byMove = yield* claimsByMove(
       reader,
       input.userId,
-      rows.map((row) => row.id),
+      EffectArray.map(rows, (row) => row.id),
     );
     return yield* Effect.forEach(
       rows,
@@ -1482,7 +1497,7 @@ function readMoveClaims(
     .orderBy(asc(transactionMoveClaims.claimKind), asc(transactionMoveClaims.claimKey))
     .pipe(
       Effect.map((claims) =>
-        claims.map((claim) => ({ kind: claim.claimKind, key: claim.claimKey })),
+        EffectArray.map(claims, (claim) => ({ kind: claim.claimKind, key: claim.claimKey })),
       ),
     );
 }
@@ -1572,15 +1587,17 @@ function endsMove(result: TransactionMoveResult): boolean {
 }
 
 function planScope(plans: ReadonlyArray<TransactionPlanRef>): SQL | undefined {
-  const unique = new Map(plans.map((plan) => [`${plan.userId}:${plan.team}`, plan] as const));
-  return [...unique.values()]
-    .map((plan) =>
+  const unique = new Map(
+    EffectArray.map(plans, (plan) => [`${plan.userId}:${plan.team}`, plan] as const),
+  );
+  const initial = optionalValue<SQL>();
+  return EffectArray.reduce(
+    EffectArray.map([...unique.values()], (plan) =>
       and(eq(transactionMoves.userId, plan.userId), eq(transactionMoves.teamId, plan.team)),
-    )
-    .reduce<SQL | undefined>(
-      (scope, next) => (scope === undefined ? next : or(scope, next)),
-      undefined,
-    );
+    ),
+    initial,
+    (scope, next) => (scope === undefined ? next : or(scope, next)),
+  );
 }
 
 function readStatePredicate(state: TransactionMoveReadState): SQL | undefined {

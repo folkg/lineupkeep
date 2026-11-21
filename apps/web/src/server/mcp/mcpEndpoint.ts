@@ -7,6 +7,8 @@ import type {
   ToolCallQuotaUnavailable,
 } from "@lineupkeep/backend/toolCalls/ToolCallQuota";
 import { Context, DateTime, Duration, Effect, Layer, Option, Result, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 import { McpProtocol, McpServer } from "effect/ai";
 import type { Tool, Toolkit } from "effect/ai";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -83,7 +85,12 @@ function readInvocation<Tools extends Record<string, Tool.Any>>(
       ? Schema.decodeUnknownOption(ToolCall)(rpc.value)
       : Option.none();
     const tool = Option.isSome(call)
-      ? Object.values(toolkit.tools).find((tool) => tool.name === call.value.params.name)
+      ? EffectOption.getOrUndefined(
+          EffectArray.findFirst(
+            Object.values(toolkit.tools),
+            (tool) => tool.name === call.value.params.name,
+          ),
+        )
       : undefined;
     return { rpc, call, tool };
   });
@@ -104,7 +111,10 @@ function challengeScope(
   if (invocation.tool !== undefined) {
     return requiredScope(invocation.tool);
   }
-  return onboardingScopes.map((scope) => scope.name).join(" ");
+  return EffectArray.join(
+    EffectArray.map(onboardingScopes, (scope) => scope.name),
+    " ",
+  );
 }
 
 function bearerToken(headers: Headers): string | undefined {
@@ -182,11 +192,14 @@ function challengeResponse(
     const error = insufficient ? "insufficient_scope" : rejected ? "invalid_token" : undefined;
     const metadata = new URL(`/.well-known/oauth-protected-resource${resource.pathname}`, resource)
       .href;
-    const challenge = [
-      `Bearer resource_metadata="${metadata}"`,
-      ...(error === undefined ? [] : [`error="${error}"`]),
-      `scope="${scope}"`,
-    ].join(", ");
+    const challenge = EffectArray.join(
+      [
+        `Bearer resource_metadata="${metadata}"`,
+        ...(error === undefined ? [] : [`error="${error}"`]),
+        `scope="${scope}"`,
+      ],
+      ", ",
+    );
     yield* Effect.annotateCurrentSpan({
       "app.outcome": "rejected",
       "auth.state": status,
@@ -412,7 +425,7 @@ function clearStructuredCopy(body: unknown): boolean {
     return false;
   }
   const entry = result as { structuredContent?: unknown; content?: unknown };
-  if (entry.structuredContent === undefined || !Array.isArray(entry.content)) {
+  if (entry.structuredContent === undefined || !EffectArray.isArray(entry.content)) {
     return false;
   }
   entry.content = [];

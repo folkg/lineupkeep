@@ -1,4 +1,5 @@
 import { Config, Effect, Option, Redacted, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import {
   ConnectionEncryptionKey,
@@ -32,9 +33,11 @@ export function keyringOf(
     current,
     keysByVersion: new Map([
       [current.keyVersion, current.key],
-      ...retained.map((key) => [key.keyVersion, key.key] as const),
+      ...EffectArray.map(retained, (key) => [key.keyVersion, key.key] as const),
     ]),
-    retainedKeyVersions: retained.map((key) => key.keyVersion).sort((left, right) => left - right),
+    retainedKeyVersions: EffectArray.map(retained, (key) => key.keyVersion).sort(
+      (left, right) => left - right,
+    ),
   };
 }
 
@@ -46,10 +49,10 @@ function loadRetainedKeys(
     if (Option.isNone(configured)) {
       return [];
     }
-    const entries = Redacted.value(configured.value)
-      .split(",")
-      .map((entry) => entry.trim())
-      .filter((entry) => entry.length > 0);
+    const entries = EffectArray.filter(
+      EffectArray.map(Redacted.value(configured.value).split(","), (entry) => entry.trim()),
+      (entry) => entry.length > 0,
+    );
     const seen = new Set<number>();
     const keys: Array<ConnectionEncryptionKeyShape> = [];
     for (const entry of entries) {

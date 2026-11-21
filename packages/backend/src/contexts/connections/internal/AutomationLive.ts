@@ -1,4 +1,5 @@
 import { DateTime, Effect, Layer } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import { Automation, AutomationFailed } from "#contexts/connections/Automation.ts";
@@ -27,20 +28,26 @@ export const AutomationLive = Layer.effect(
       const now = yield* DateTime.now;
       const pausesExpired = yield* teams.expirePauses(limit, now);
       const eligible = yield* teams.eligible(limit);
-      const busy = yield* runs.scheduledTeamIds(eligible.map((entry) => entry.team.id));
-      const available = eligible.filter((entry) => !busy.has(entry.team.id));
+      const busy = yield* runs.scheduledTeamIds(
+        EffectArray.map(eligible, (entry) => entry.team.id),
+      );
+      const available = EffectArray.filter(eligible, (entry) => !busy.has(entry.team.id));
       const grouped = groupByOwner(available);
       const scheduled = yield* runs.createScheduledRunsForOwners(
-        grouped.map((entries, index) => ({
+        EffectArray.map(grouped, (entries, index) => ({
           userId: ownerOf(entries, index),
           at: now,
-          runs: entries.map(({ team }): NewScheduledLineupRun => ({
+          runs: EffectArray.map(entries, ({ team }): NewScheduledLineupRun => ({
             team: team.id,
             connectionId: team.connectionId,
           })),
         })),
       );
-      const scheduledRuns = scheduled.reduce((total, result) => total + result.runs.length, 0);
+      const scheduledRuns = EffectArray.reduce(
+        scheduled,
+        0,
+        (total, result) => total + result.runs.length,
+      );
       const repaired = yield* dispatcher.repair(limit);
       const due = yield* plans.runDue(limit, now);
       const retained = yield* retention.run(limit, now);

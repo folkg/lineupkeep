@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 
 import { assert, it } from "@effect/vitest";
 import { Array, DateTime, Effect, Layer, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption, Order as EffectOrder } from "effect";
 import { TestClock } from "effect/testing";
 
 import { GameSourceRegistry, gameSourceRegistryOf } from "#contexts/connections/GameSource.ts";
@@ -22,6 +24,18 @@ import { countGamesForTeam, isLeagueOffNight, leagueGamesByDate } from "./League
 import { ProfessionalCalendarLive } from "./ProfessionalCalendarLive.ts";
 import { ScheduleObservationRepository } from "./ScheduleObservationRepository.ts";
 import { scheduleObservations } from "./ScheduleObservationTables.ts";
+function sortWithComparator<A>(
+  self: ReadonlyArray<A>,
+  compare: (left: A, right: A) => number,
+): ReadonlyArray<A> {
+  return EffectArray.sort(
+    self,
+    EffectOrder.make<A>((left, right) => {
+      const result = compare(left, right);
+      return result < 0 ? -1 : result > 0 ? 1 : 0;
+    }),
+  );
+}
 
 const leagueWeek = fixture("league-week.json");
 const relocatedWeek = fixture("relocated-week.json");
@@ -51,9 +65,9 @@ it.effect("counts a real hockey week's games and marks its off nights", () => {
     });
 
     assert.strictEqual(window.teamCount, 32);
-    const byDate = leagueGamesByDate(window.games.map((fact) => fact.game));
+    const byDate = leagueGamesByDate(EffectArray.map(window.games, (fact) => fact.game));
     assert.deepStrictEqual(
-      [...byDate.keys()].map((date) => [date, byDate.get(date)?.games]),
+      EffectArray.map([...byDate.keys()], (date) => [date, byDate.get(date)?.games]),
       [
         ["2026-11-01", 5],
         ["2026-11-02", 4],
@@ -65,7 +79,7 @@ it.effect("counts a real hockey week's games and marks its off nights", () => {
       ],
     );
     assert.deepStrictEqual(
-      [...byDate.values()].map((entry) =>
+      EffectArray.map([...byDate.values()], (entry) =>
         isLeagueOffNight({ teamsPlaying: entry.teamsPlaying, teamCount: window.teamCount }),
       ),
       [true, true, false, true, false, true, false],
@@ -73,7 +87,7 @@ it.effect("counts a real hockey week's games and marks its off nights", () => {
 
     assert.strictEqual(
       countGamesForTeam(
-        window.games.map((fact) => fact.game),
+        EffectArray.map(window.games, (fact) => fact.game),
         edmontonKey,
       ),
       4,
@@ -118,7 +132,9 @@ it.effect("produces a fact for every game of one league-week request with teams 
 
     const stored = yield* store.readProfessionalGames({ from: "2026-11-01", to: "2026-11-07" });
     assert.strictEqual(stored.length, 50);
-    const storedOpener = stored.find((row) => row.sourceReference === openerId);
+    const storedOpener = EffectOption.getOrUndefined(
+      EffectArray.findFirst(stored, (row) => row.sourceReference === openerId),
+    );
     assert.strictEqual(storedOpener?.value.home.sourceTeamIdentifier, "12");
     assert.strictEqual(storedOpener?.value.home.sourceTeamName, "Carolina Hurricanes");
   }).pipe(layerTools.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
@@ -149,7 +165,10 @@ it.effect("keeps one row per game and window and never replaces a newer observat
     const stored = yield* store.readProfessionalGames({ from: "2026-11-01", to: "2026-11-07" });
     assert.strictEqual(stored.length, 50);
     assert.isTrue(
-      stored.every((row) => DateTime.formatIso(row.observedAt) === "2026-11-01T13:00:00.000Z"),
+      EffectArray.every(
+        stored,
+        (row) => DateTime.formatIso(row.observedAt) === "2026-11-01T13:00:00.000Z",
+      ),
     );
 
     const base = stored[0];
@@ -178,7 +197,9 @@ it.effect("keeps one row per game and window and never replaces a newer observat
     });
 
     const after = yield* store.readProfessionalGames({ from: "2026-11-01", to: "2026-11-07" });
-    const row = after.find((candidate) => candidate.subjectKey === base.subjectKey);
+    const row = EffectOption.getOrUndefined(
+      EffectArray.findFirst(after, (candidate) => candidate.subjectKey === base.subjectKey),
+    );
     assert.strictEqual(
       row === undefined ? undefined : DateTime.formatIso(row.observedAt),
       "2026-11-01T14:00:00.000Z",
@@ -384,7 +405,7 @@ it.effect("stores a postponed game with its status and serves it with it", () =>
     });
 
     assert.deepStrictEqual(
-      week.games.map((fact) => [fact.sourceReference, fact.game.status]),
+      EffectArray.map(week.games, (fact) => [fact.sourceReference, fact.game.status]),
       [
         ["2026020301", "postponed"],
         ["2026020302", "cancelled"],
@@ -394,15 +415,20 @@ it.effect("stores a postponed game with its status and serves it with it", () =>
     );
     const stored = yield* store.readProfessionalGames({ from: "2026-11-01", to: "2026-11-07" });
     assert.deepStrictEqual(
-      stored.map((row) => [row.sourceReference, row.value.status, row.value.date]),
-      [
-        ["2026020302", "cancelled", "2026-11-01"],
-        ["2026020303", "scheduled", "2026-11-01"],
-        ["2026020301", "postponed", "2026-11-01"],
-        ["2026020304", "final", "2026-11-02"],
-      ].toSorted((left, right) => String(left[0]).localeCompare(String(right[0]))),
+      EffectArray.map(stored, (row) => [row.sourceReference, row.value.status, row.value.date]),
+      sortWithComparator(
+        [
+          ["2026020302", "cancelled", "2026-11-01"],
+          ["2026020303", "scheduled", "2026-11-01"],
+          ["2026020301", "postponed", "2026-11-01"],
+          ["2026020304", "final", "2026-11-02"],
+        ],
+        (left, right) => String(left[0]).localeCompare(String(right[0])),
+      ),
     );
-    const postponed = stored.find((row) => row.sourceReference === "2026020301");
+    const postponed = EffectOption.getOrUndefined(
+      EffectArray.findFirst(stored, (row) => row.sourceReference === "2026020301"),
+    );
     assert.strictEqual(
       postponed === undefined ? undefined : postponed.value.startTime?.timeZone,
       "America/Toronto",
@@ -490,7 +516,7 @@ it.effect("reads a shifted week instead of serving another week's slate", () => 
     assert.strictEqual(shifted.weekStart, "2026-11-02");
     assert.strictEqual(shifted.weekEnd, "2026-11-08");
     assert.strictEqual(shifted.games.length, 50);
-    assert.strictEqual(new Set(shifted.games.map((fact) => fact.game.date)).size, 7);
+    assert.strictEqual(new Set(EffectArray.map(shifted.games, (fact) => fact.game.date)).size, 7);
 
     yield* calendar.readLeagueWeek({
       league: "nhl",
@@ -501,10 +527,16 @@ it.effect("reads a shifted week instead of serving another week's slate", () => 
 
     const stored = yield* store.readProfessionalGames({ from: "2026-11-02", to: "2026-11-08" });
     assert.isTrue(
-      stored.some((row) => row.window.from === "2026-11-02" && row.window.to === "2026-11-08"),
+      EffectArray.some(
+        stored,
+        (row) => row.window.from === "2026-11-02" && row.window.to === "2026-11-08",
+      ),
     );
     assert.isTrue(
-      stored.some((row) => row.window.from === "2026-11-01" && row.window.to === "2026-11-07"),
+      EffectArray.some(
+        stored,
+        (row) => row.window.from === "2026-11-01" && row.window.to === "2026-11-07",
+      ),
     );
   }).pipe(
     layerTools.provide(
@@ -686,7 +718,7 @@ const WeekPayload = Schema.Struct({
 function shiftWeek(payload: unknown, weekStart: string): unknown {
   const decoded = Effect.runSync(Schema.decodeUnknownEffect(WeekPayload)(payload));
   return {
-    gameWeek: decoded.gameWeek.map((day, index) => ({
+    gameWeek: EffectArray.map(decoded.gameWeek, (day, index) => ({
       ...day,
       date: addDays(weekStart, index),
     })),
@@ -735,7 +767,7 @@ function weekPayload(
       ),
       games:
         index === 0
-          ? games.map((entry, gameIndex) => ({
+          ? EffectArray.map(games, (entry, gameIndex) => ({
               id: 2026020300 + gameIndex,
               startTimeUTC: "2026-11-01T23:00:00Z",
               venueTimezone: "US/Eastern",
@@ -818,7 +850,9 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 function factOf(games: ReadonlyArray<ProfessionalGameFact>, id: string): ProfessionalGameFact {
-  const found = games.find((fact) => fact.sourceReference === id);
+  const found = EffectOption.getOrUndefined(
+    EffectArray.findFirst(games, (fact) => fact.sourceReference === id),
+  );
   if (found === undefined) {
     throw new Error(`The served week has no game ${id}`);
   }

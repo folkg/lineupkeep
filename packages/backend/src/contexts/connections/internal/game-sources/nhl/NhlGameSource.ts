@@ -1,4 +1,5 @@
 import { DateTime, Effect, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type {
   GameSourceGame,
@@ -71,7 +72,7 @@ export const nhlGameSource: Effect.Effect<GameSourceShape, never, PublicInternet
         ),
       );
       const games = yield* Effect.forEach(
-        decoded.gameWeek.flatMap(gameDayEntries),
+        EffectArray.flatMap(decoded.gameWeek, gameDayEntries),
         (entry) => gameOf(entry.date, entry.game),
         { concurrency: 1 },
       );
@@ -139,7 +140,7 @@ function gameDayEntries(day: typeof ScheduleDay.Type): ReadonlyArray<{
   readonly date: string;
   readonly game: ScheduleGame;
 }> {
-  return day.games.map((game) => ({ date: day.date, game }));
+  return EffectArray.map(day.games, (game) => ({ date: day.date, game }));
 }
 
 function gameOf(

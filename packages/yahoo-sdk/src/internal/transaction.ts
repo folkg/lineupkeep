@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import {
   IntFromStringOrNumber,
@@ -34,8 +35,8 @@ export function decodeTransactions(
         status: optionalNonEmpty(transaction.status),
         proposer: teamOf(transaction.trader_team_key, transaction.trader_team_name),
         receiver: teamOf(transaction.tradee_team_key, transaction.tradee_team_name),
-        players: (transaction.players ?? []).map(playerOf),
-        picks: (transaction.picks ?? []).map(pickOf),
+        players: EffectArray.map(transaction.players ?? [], playerOf),
+        picks: EffectArray.map(transaction.picks ?? [], pickOf),
       });
     }
     return transactions;
@@ -87,8 +88,8 @@ export function decodePendingTrades(
         proposer,
         receiver,
         unusedRosterSpots: transaction.tradee_unused_roster_spots,
-        players: (transaction.players ?? []).map(playerOf),
-        picks: (transaction.picks ?? []).map(pickOf),
+        players: EffectArray.map(transaction.players ?? [], playerOf),
+        picks: EffectArray.map(transaction.picks ?? [], pickOf),
       });
     }
     return offers;
@@ -105,7 +106,7 @@ function playerOf(player: typeof TransactionPlayerPayload.Type): YahooTransactio
     eligiblePositions:
       player.eligible_positions === undefined
         ? undefined
-        : player.eligible_positions.map(({ position }) => position),
+        : EffectArray.map(player.eligible_positions, ({ position }) => position),
     movement: {
       kind: movementKindOf(player.transaction_data.type),
       from: teamOf(

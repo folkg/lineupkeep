@@ -1,3 +1,4 @@
+import { EffectArray } from "@lineupkeep/collections";
 import { render } from "@solidjs/web";
 import { QueryClientProvider } from "@tanstack/solid-query";
 import {
@@ -9,9 +10,10 @@ import {
   createRouter,
 } from "@tanstack/solid-router";
 import { expect, it } from "vitest";
-import { page } from "vitest/browser";
 
 import "#web/styles.css";
+
+import { page } from "vitest/browser";
 
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { TransactionsNavContext } from "#browser/app-shell/transactionsNav.ts";
@@ -1338,7 +1340,10 @@ it("runs groups on two teams at the same time with per team progress", async () 
   await expect.element(alphaButton).toHaveAttribute("aria-busy", "true");
   await expect.element(betaButton).toHaveAttribute("aria-busy", "true");
   await expect.poll(() => page.getByText("Running", { exact: true }).elements().length).toBe(2);
-  expect(confirmed.map((entry) => entry.team).sort()).toStrictEqual([alpha.id, beta.id]);
+  expect(EffectArray.map(confirmed, (entry) => entry.team).sort()).toStrictEqual([
+    alpha.id,
+    beta.id,
+  ]);
 
   alphaConfirm.resolve({
     status: "confirmed",
@@ -1996,12 +2001,14 @@ function listData(
   teamFacts: TransactionMoveListData["teamFacts"] = [],
   groups: ReadonlyArray<TransactionPlanGroupView> = [],
 ): TransactionMoveListData {
-  const todayMoves = moves.filter(
+  const todayMoves = EffectArray.filter(
+    moves,
     (move) =>
       (move.decision === "now" || move.decision === "undecided") &&
       (move.runDay === undefined || move.runDay === today),
   );
-  const savedMoves = moves.filter(
+  const savedMoves = EffectArray.filter(
+    moves,
     (move) => (move.decision === "saved" || move.decision === "confirmed") && move.runDay !== today,
   );
   const days: Array<TransactionMoveListData["days"][number]> = [];
@@ -2048,7 +2055,7 @@ function group(
 }
 
 function uniqueTeams(moves: ReadonlyArray<TransactionMoveView>): number {
-  return new Set(moves.map((move) => move.team.id)).size;
+  return new Set(EffectArray.map(moves, (move) => move.team.id)).size;
 }
 
 function fixtureStatus(move: Omit<TransactionMoveView, "status">): TransactionMoveView["status"] {
@@ -2069,7 +2076,7 @@ function fixtureStatus(move: Omit<TransactionMoveView, "status">): TransactionMo
         case "unknown":
           return "fallback_unknown";
         case "failed":
-          return move.attempts.some((attempt) => attempt.kind === "fallback")
+          return EffectArray.some(move.attempts, (attempt) => attempt.kind === "fallback")
             ? "all_choices_failed"
             : "claim_lost";
         case "skipped":

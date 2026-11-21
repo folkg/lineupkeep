@@ -1,7 +1,20 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, extname, relative, resolve } from "node:path";
 
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 import { parseSync } from "oxc-parser";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
 
 const plugin = {
   meta: { name: "repository" },
@@ -221,7 +234,9 @@ const plugin = {
             return;
           }
           if (
-            providerIdentityOwners.some((owner) => normalizedPath(context.filename).includes(owner))
+            EffectArray.some(providerIdentityOwners, (owner) =>
+              normalizedPath(context.filename).includes(owner),
+            )
           ) {
             return;
           }
@@ -376,7 +391,9 @@ const plugin = {
               /effect\/(?:Layer|Context|ManagedRuntime|Runtime|testing)(?:\/|$)/u.test(source) ||
               /(?:runtime\/BackendRuntime|auth\/User)(?:\.ts)?$/u.test(source)
             ) {
-              if (node.specifiers.some((specifier) => specifier.importKind !== "type")) {
+              if (
+                EffectArray.some(node.specifiers, (specifier) => specifier.importKind !== "type")
+              ) {
                 report(node);
               }
             }
@@ -430,7 +447,9 @@ const plugin = {
                 : verificationScenarioIdentifier(callee.property);
             if (
               (name === "brand" || brandNames.has(name)) &&
-              node.arguments?.some((argument) => argument.value === "UserId") === true
+              optionalArrayValue(node.arguments, (value) =>
+                EffectArray.some(value, (argument) => argument.value === "UserId"),
+              ) === true
             ) {
               report(node);
             }
@@ -445,7 +464,9 @@ const plugin = {
           if (
             callee?.type === "MemberExpression" &&
             batchFirstIdentifier(callee.property) === "push" &&
-            node.arguments?.some((argument) => argument.type === "SpreadElement") === true
+            optionalArrayValue(node.arguments, (value) =>
+              EffectArray.some(value, (argument) => argument.type === "SpreadElement"),
+            ) === true
           ) {
             context.report({
               node,
@@ -506,10 +527,13 @@ const plugin = {
               if (
                 statement.type !== "ExportNamedDeclaration" ||
                 declaration?.kind !== "const" ||
-                declaration.declarations?.every(
-                  (item) =>
-                    item.init?.type === "Literal" &&
-                    ["number", "string", "boolean"].includes(typeof item.init.value),
+                optionalArrayValue(declaration.declarations, (value) =>
+                  EffectArray.every(
+                    value,
+                    (item) =>
+                      item.init?.type === "Literal" &&
+                      ["number", "string", "boolean"].includes(typeof item.init.value),
+                  ),
                 ) !== true
               ) {
                 context.report({
@@ -616,7 +640,9 @@ function packageImport(filename: string, specifier: string): string | undefined 
   const importer = importPackage(dirname(filename));
   let target = resolve(dirname(filename), specifier);
   if (!extname(target)) {
-    const extension = [".ts", ".tsx", ".js"].find((extension) => existsSync(target + extension));
+    const extension = EffectOption.getOrUndefined(
+      EffectArray.findFirst([".ts", ".tsx", ".js"], (extension) => existsSync(target + extension)),
+    );
     if (extension !== undefined) {
       target += extension;
     }
@@ -631,7 +657,8 @@ function packageImport(filename: string, specifier: string): string | undefined 
     return undefined;
   }
   const path = `./${relative(owner.directory, target)}`;
-  const entries = Object.entries(mappings).filter(
+  const entries = EffectArray.filter(
+    Object.entries(mappings),
     (entry): entry is [string, string] => typeof entry[1] === "string",
   );
   for (const [alias, destination] of entries.sort(([, a], [, b]) => b.length - a.length)) {
@@ -653,7 +680,7 @@ function packageImport(filename: string, specifier: string): string | undefined 
 }
 
 function importRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !EffectArray.isArray(value);
 }
 
 function importPackage(directory: string): ImportPackage | undefined {
@@ -683,7 +710,7 @@ const designSystemTokenProperty =
   /^(?:color|background(?:-color)?|font(?:-[a-z]+)?|line-height|letter-spacing|text-[a-z-]+|border(?:-[a-z]+)?-(?:radius|color)|border-radius|box-shadow|transition(?:-[a-z]+)?|animation(?:-[a-z]+)?|fill|stroke|outline-color|caret-color|accent-color)$/;
 
 function designSystemUntokenizedUtilities(text: string): ReadonlyArray<string> {
-  return text.split(/\s+/).filter((token) => {
+  return EffectArray.filter(text.split(/\s+/), (token) => {
     const utility = designSystemWithoutVariants(token).replace(/^[!-]+|!$/g, "");
     const property = /^\[([a-z-]+):/.exec(utility)?.[1];
     return property === undefined
@@ -1115,7 +1142,7 @@ function isGenericSourceModule(filename: string): boolean {
   ) {
     return false;
   }
-  return !providerImplementationOwners.some((owner) => normalized.includes(owner));
+  return !EffectArray.some(providerImplementationOwners, (owner) => normalized.includes(owner));
 }
 
 function normalizedPath(filename: string): string {
@@ -1161,16 +1188,18 @@ function forbiddenComments(path: string, source: string): ReadonlyArray<number> 
   }
   const isViteDeclaration =
     normalized === "apps/web/src/assets.d.ts" || normalized.endsWith("/apps/web/src/assets.d.ts");
-  return parsed.comments
-    .filter(
+  return EffectArray.map(
+    EffectArray.filter(
+      parsed.comments,
       (comment) =>
         !(
           isViteDeclaration &&
           comment.type === "Line" &&
           comment.value.trim() === '/ <reference types="vite/client" />'
         ),
-    )
-    .map((comment) => comment.start);
+    ),
+    (comment) => comment.start,
+  );
 }
 
 function testingFacts(path: string, source: string): TestingFacts {
@@ -1186,9 +1215,10 @@ function testingFacts(path: string, source: string): TestingFacts {
       node["type"] === "ImportDeclaration" &&
       node["importKind"] !== "type" &&
       /Tables(?:\.ts)?$/u.test(literal(node["source"]) ?? "") &&
-      Array.isArray(node["specifiers"])
+      EffectArray.isArray(node["specifiers"])
     ) {
-      rowCodecImport ||= node["specifiers"].some(
+      rowCodecImport ||= EffectArray.some(
+        node["specifiers"],
         (specifier: unknown) =>
           isRecord(specifier) &&
           specifier["type"] === "ImportSpecifier" &&
@@ -1203,7 +1233,7 @@ function testingFacts(path: string, source: string): TestingFacts {
     calls.add(called);
     if (called === "it" || called === "it.effect") {
       const args = node["arguments"];
-      if (Array.isArray(args) && /round.trips?/iu.test(literal(args[0]) ?? "")) {
+      if (EffectArray.isArray(args) && /round.trips?/iu.test(literal(args[0]) ?? "")) {
         const roundTripCalls = new Set<string>();
         visit(args[1], (child) => {
           if (child["type"] === "CallExpression") {
@@ -1229,7 +1259,7 @@ function callName(value: unknown): string {
 }
 
 function visit(value: unknown, inspect: (node: Record<string, unknown>) => void): void {
-  if (Array.isArray(value)) {
+  if (EffectArray.isArray(value)) {
     for (const item of value) {
       visit(item, inspect);
     }
@@ -1250,7 +1280,7 @@ function literal(value: unknown): string | undefined {
   }
   if (
     value["type"] === "TemplateLiteral" &&
-    Array.isArray(value["quasis"]) &&
+    EffectArray.isArray(value["quasis"]) &&
     value["quasis"].length === 1
   ) {
     const quasi: unknown = value["quasis"][0];
@@ -1270,7 +1300,7 @@ function name(value: unknown): string | undefined {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !EffectArray.isArray(value);
 }
 
 const commentPolicyMessage =

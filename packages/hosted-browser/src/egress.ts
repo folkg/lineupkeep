@@ -5,6 +5,9 @@ import { BlockList, connect as openSocket, isIP } from "node:net";
 import type { Socket } from "node:net";
 import type { Duplex } from "node:stream";
 
+import { EffectArray } from "@lineupkeep/collections";
+import { EffectOption } from "@lineupkeep/collections";
+
 export type EgressRefusalReason = "non_public_address" | "unresolvable" | "invalid_destination";
 
 export type EgressRefusal = {
@@ -49,17 +52,22 @@ export function choosePublicAddress(
   if (addresses.length === 0) {
     return { _tag: "Refused", reason: "unresolvable" };
   }
-  if (!addresses.every(isPublicAddress)) {
+  if (!EffectArray.every(addresses, isPublicAddress)) {
     return { _tag: "Refused", reason: "non_public_address" };
   }
-  const address = addresses.find((candidate) => isIP(candidate) === 4) ?? addresses[0];
+  const address =
+    EffectOption.getOrUndefined(
+      EffectArray.findFirst(addresses, (candidate) => isIP(candidate) === 4),
+    ) ?? addresses[0];
   return address === undefined
     ? { _tag: "Refused", reason: "unresolvable" }
     : { _tag: "Allowed", address };
 }
 
 export async function createEgressProxy(options: EgressProxyOptions = {}): Promise<EgressProxy> {
-  const fixtureAuthorities = new Set((options.fixtureOrigins ?? []).map(fixtureAuthority));
+  const fixtureAuthorities = new Set(
+    EffectArray.map(options.fixtureOrigins ?? [], fixtureAuthority),
+  );
   const refusals: EgressRefusal[] = [];
   const refusedKeys = new Set<string>();
   const sockets = new Set<Duplex>();
@@ -417,7 +425,7 @@ async function addressesOf(
 
 async function resolveHostname(hostname: string): Promise<ReadonlyArray<string>> {
   const addresses = await lookup(hostname, { all: true, verbatim: true });
-  return addresses.map((entry) => entry.address);
+  return EffectArray.map(addresses, (entry) => entry.address);
 }
 
 function dialAddress(address: string, port: number): Promise<Socket> {

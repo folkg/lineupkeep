@@ -1,10 +1,26 @@
 import { DateTime, Effect, Option, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { IntFromStringOrNumber, decodePayload, numberOrNull } from "#yahoo/decode.ts";
 import { YahooParseError } from "#yahoo/errors.ts";
 import type { YahooLeagueKey } from "#yahoo/keys.ts";
 
 import type { YahooStatValue } from "./player.ts";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 export function decodeStandings(
   payload: unknown,
@@ -18,13 +34,16 @@ export function decodeStandings(
         field: "league.league_key",
       });
     }
-    const teams = decoded.league.standings.flatMap((group) => group.teams);
+    const teams = EffectArray.flatMap(decoded.league.standings, (group) => {
+      const flatMapped1 = group.teams;
+      return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+    });
     if (teams.length === 0) {
       return yield* new YahooParseError({ operation: "read_standings" });
     }
     return {
       leagueKey: requestedLeagueKey,
-      teams: teams.map(standingOf),
+      teams: EffectArray.map(teams, standingOf),
     };
   });
 }
@@ -56,8 +75,12 @@ function standingOf(team: typeof StandingsTeamPayload.Type): YahooStanding {
         ? undefined
         : { type: standings.streak.type, value: standings.streak.value },
     acquisitionUsage: acquisitionUsageOf(team.number_of_moves, team.roster_adds),
-    categoryTotals: (team.team_stats?.stats ?? []).map(statValueOf),
-    categoryPoints: (team.team_points?.stats ?? []).map(statValueOf),
+    categoryTotals: optionalArrayValue(team.team_stats?.stats ?? [], (value) =>
+      EffectArray.map(value, statValueOf),
+    ),
+    categoryPoints: optionalArrayValue(team.team_points?.stats ?? [], (value) =>
+      EffectArray.map(value, statValueOf),
+    ),
   };
 }
 

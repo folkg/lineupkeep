@@ -1,5 +1,6 @@
 import { setupEffect } from "@xstate/effect";
 import { Data, Effect, Equal, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 import { isUnhandled, type StateSchema as XStateSchema } from "xstate";
 
 declare const machineTypes: unique symbol;
@@ -85,10 +86,10 @@ export function defineMachine<State extends Tagged, Event extends Tagged>(
   definition: MachineDefinition<State, Event>,
 ): DefinedMachine<State, Event> {
   const stateSchemas: Record<string, StateCodec<State>> = Object.fromEntries(
-    Object.entries(definition.root).map(([tag, entry]) => [tag, schemaOf(entry)]),
+    EffectArray.map(Object.entries(definition.root), ([tag, entry]) => [tag, schemaOf(entry)]),
   );
   const states = Object.fromEntries(
-    Object.entries(definition.root).map(([tag, entry]) => [
+    EffectArray.map(Object.entries(definition.root), ([tag, entry]) => [
       tag,
       stateConfig(entry, transitionsOf(definition, tag)),
     ]),
@@ -197,9 +198,10 @@ function stateConfig<State extends Tagged>(
   transitions: Record<string, RuntimeTransition | ReadonlyArray<RuntimeTransition>>,
 ): XStateSchema {
   const on = Object.fromEntries(
-    Object.entries(transitions).map(([type, specification]) => [
+    EffectArray.map(Object.entries(transitions), ([type, specification]) => [
       type,
-      listOf(specification).map(
+      EffectArray.map(
+        listOf(specification),
         (transition) =>
           (args: {
             readonly context: { readonly state: State };
@@ -291,5 +293,5 @@ function listOf<Value>(value: Value | ReadonlyArray<Value> | undefined): Readonl
 }
 
 function isList<Value>(value: Value | ReadonlyArray<Value>): value is ReadonlyArray<Value> {
-  return Array.isArray(value);
+  return EffectArray.isArray(value);
 }

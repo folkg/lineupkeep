@@ -2,10 +2,12 @@ import { writeFile } from "node:fs/promises";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import type { Page, TestInfo } from "@playwright/test";
+import { Array as EffectArray } from "effect";
 
 import { pagePersona } from "#e2e/persona.ts";
 
 import { checkpointPersonaName } from "./evidence.ts";
+
 export async function captureCheckpoint(page: Page, info: TestInfo, name: string): Promise<void> {
   if (process.env["VERIFICATION_DIR"] === undefined) {
     return;
@@ -32,10 +34,12 @@ export async function captureCheckpoint(page: Page, info: TestInfo, name: string
 export function hasCheckpoint(
   attachments: ReadonlyArray<{ readonly name: string; readonly contentType: string }>,
 ): boolean {
-  return attachments.some(
+  return EffectArray.some(
+    attachments,
     (image) =>
       image.contentType === "image/png" &&
-      attachments.some(
+      EffectArray.some(
+        attachments,
         (snapshot) =>
           snapshot.name === `${image.name.replace(/ \(screen still changing\)$/u, "")}-aria` &&
           snapshot.contentType === "text/plain",

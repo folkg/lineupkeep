@@ -8,6 +8,7 @@ import { parseArgs } from "node:util";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { Option, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { testEnvironment, verificationEnvironment } from "#e2e/verify/environment.ts";
 import { LockHeld } from "#e2e/verify/lifecycle.ts";
@@ -60,7 +61,7 @@ function parseOptions(): Options {
   }
   return {
     origin: values.origin,
-    scopes: values.scopes === undefined ? undefined : values.scopes.join(" "),
+    scopes: values.scopes === undefined ? undefined : EffectArray.join(values.scopes, " "),
     tokenEnvironment,
     timeoutMs: duration(values.timeout),
     help: values.help === true,

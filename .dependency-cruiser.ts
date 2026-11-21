@@ -1,4 +1,5 @@
 import type { IConfiguration, IRegularForbiddenRuleType } from "dependency-cruiser";
+import { Array as EffectArray } from "effect";
 
 const permittedContextImports = {
   auth: [],
@@ -46,7 +47,8 @@ const databaseConstruction = [
   `${backendRoot}contexts/auth/internal/BetterAuthAdapter\\.ts$`,
 ];
 const persistenceModules = `${backendRoot}contexts/[^/]+/.*internal/[^/]*(?:Repository|Adapter|Schema|Table|Tables|Database|DatabaseLive|DatabaseTest)\\.ts$`;
-const declaredContexts = Object.keys(permittedContextImports).map(
+const declaredContexts = EffectArray.map(
+  Object.keys(permittedContextImports),
   (context) => `${backendRoot}contexts/${context}/`,
 );
 
@@ -287,7 +289,7 @@ export default {
         pathNot: `${backendRoot}contexts/$1/`,
       },
     ),
-    ...Object.entries(permittedContextImports).map(([context, imports]) =>
+    ...EffectArray.map(Object.entries(permittedContextImports), ([context, imports]) =>
       forbid(
         `context-dependencies-${context}`,
         "This context import has no declared permission; declare only the needed public contract in permittedContextImports and add acceptance/rejection fixtures.",
@@ -296,7 +298,7 @@ export default {
           path: `${backendRoot}(?:contexts|shared-kernels)/`,
           pathNot: [
             `${backendRoot}contexts/${context}/`,
-            ...imports.map((path) => `${backendRoot}${path.replaceAll(".", "\\.")}$`),
+            ...EffectArray.map(imports, (path) => `${backendRoot}${path.replaceAll(".", "\\.")}$`),
           ],
         },
       ),
@@ -411,7 +413,10 @@ export default {
       { path: `${browserRoot}([^/]+)/` },
       {
         path: browserRoot,
-        pathNot: [`${browserRoot}$1/`, `${browserRoot}(?:${browserPlatform.join("|")})/`],
+        pathNot: [
+          `${browserRoot}$1/`,
+          `${browserRoot}(?:${EffectArray.join(browserPlatform, "|")})/`,
+        ],
       },
     ),
     forbid(

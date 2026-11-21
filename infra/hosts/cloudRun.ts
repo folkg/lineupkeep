@@ -8,6 +8,7 @@ import * as Output from "alchemy/Output";
 import { Stage } from "alchemy/Stage";
 import { Config, Effect, Layer, Option } from "effect";
 import type { Redacted } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { buildHostedBrowserImage } from "#infra/build/hostedBrowser.ts";
 import { buildNodeImage } from "#infra/build/node.ts";
@@ -60,7 +61,7 @@ export function cloudRunHost(
         { name: "OTEL_EXPORTER_OTLP_PROTOCOL", value: "http/protobuf" },
         { name: "OTEL_RESOURCE_ATTRIBUTES", value: `gcp.project_id=${project}` },
       ];
-      const telemetryNames = new Set(telemetryEnvironment.map((entry) => entry.name));
+      const telemetryNames = new Set(EffectArray.map(telemetryEnvironment, (entry) => entry.name));
       yield* Effect.forEach(
         [
           { id: "WebTelemetryWriter", account },
@@ -123,18 +124,21 @@ export function cloudRunHost(
         registryUri,
         region,
       );
-      const runtimeEnv = [
-        ...plain.map(([name, value]) => ({ name, value })),
-        ...secretEntries.map(({ name, secret, version }) => ({
-          name,
-          valueSource: {
-            secretKeyRef: {
-              secret: secret.name,
-              version,
+      const runtimeEnv = EffectArray.filter(
+        [
+          ...EffectArray.map(plain, ([name, value]) => ({ name, value })),
+          ...EffectArray.map(secretEntries, ({ name, secret, version }) => ({
+            name,
+            valueSource: {
+              secretKeyRef: {
+                secret: secret.name,
+                version,
+              },
             },
-          },
-        })),
-      ].filter((entry) => !telemetryNames.has(entry.name));
+          })),
+        ],
+        (entry) => !telemetryNames.has(entry.name),
+      );
       const queueEnqueuer = yield* GCP.IAM.ServiceAccount("QueueEnqueuer", {
         displayName: "Lineupkeep queue enqueuer and scheduler invoker",
       });
@@ -453,18 +457,21 @@ function pruneSecretVersions(
 ): Effect.Effect<void, never, import("alchemy").Provider<Command.Exec>> {
   return Command.Exec(`Retain-${entry.name}-Version`, {
     cwd: new URL("../../", import.meta.url).pathname,
-    command: [
-      "set -e",
-      'echo "retaining the newest $RETAINED_VERSIONS version(s) of $SECRET_NAME behind $DEPLOYED_REVISION"',
-      'versions=$(gcloud secrets versions list "$SECRET_NAME" --filter="state!=DESTROYED" --format="value(name)" --sort-by=~createTime)',
-      "count=0",
-      "for version in $versions; do",
-      "  count=$((count + 1))",
-      '  if [ "$count" -gt "$RETAINED_VERSIONS" ]; then',
-      '    gcloud secrets versions destroy "$SECRET_NAME/versions/$version" --quiet',
-      "  fi",
-      "done",
-    ].join("\n"),
+    command: EffectArray.join(
+      [
+        "set -e",
+        'echo "retaining the newest $RETAINED_VERSIONS version(s) of $SECRET_NAME behind $DEPLOYED_REVISION"',
+        'versions=$(gcloud secrets versions list "$SECRET_NAME" --filter="state!=DESTROYED" --format="value(name)" --sort-by=~createTime)',
+        "count=0",
+        "for version in $versions; do",
+        "  count=$((count + 1))",
+        '  if [ "$count" -gt "$RETAINED_VERSIONS" ]; then',
+        '    gcloud secrets versions destroy "$SECRET_NAME/versions/$version" --quiet',
+        "  fi",
+        "done",
+      ],
+      "\n",
+    ),
     shell: true,
     env: {
       SECRET_NAME: entry.secret.name,
@@ -514,7 +521,10 @@ function runtimeSecret(
       memo: { include: [] },
       timeout: "1 minute",
     });
-    const version = Output.all(published.outdir, ...accesses.map((access) => access.member)).pipe(
+    const version = Output.all(
+      published.outdir,
+      ...EffectArray.map(accesses, (access) => access.member),
+    ).pipe(
       Output.mapEffect(() =>
         Effect.promise(async () => {
           const resourceName = await readFile(new URL("version", directory), "utf8");

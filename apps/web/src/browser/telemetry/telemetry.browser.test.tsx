@@ -1,3 +1,4 @@
+import { EffectArray } from "@lineupkeep/collections";
 import { render } from "@solidjs/web";
 import { createServerReference } from "@solidjs/web/server-functions/client";
 import { Errored, OBSERVE, createSignal, flush } from "solid-js";
@@ -17,7 +18,9 @@ it("collects private-safe reactive records without verbose console logs", async 
 
   expect(fixture.records.length).toBeGreaterThan(0);
   expect(JSON.stringify([...fixture.records, ...fixture.events])).not.toContain("Private draft");
-  expect(fixture.consoleOutput.filter((line) => line.includes("[why-run]"))).toEqual([]);
+  expect(EffectArray.filter(fixture.consoleOutput, (line) => line.includes("[why-run]"))).toEqual(
+    [],
+  );
 
   fixture.telemetry[Symbol.dispose]();
   await page.getByRole("button", { name: "Private draft after", exact: true }).click();
@@ -34,7 +37,7 @@ it("stops reporting real calls and interactions after disposal without retaining
   await first.call();
 
   await expect
-    .poll(() => first.reports.map((report) => report.kind).sort())
+    .poll(() => EffectArray.map(first.reports, (report) => report.kind).sort())
     .toEqual(["slow_call", "slow_interaction"]);
   first.telemetry[Symbol.dispose]();
   const reported = [...first.reports];
@@ -53,7 +56,7 @@ it("stops reporting real calls and interactions after disposal without retaining
   await later.call();
 
   await expect
-    .poll(() => later.reports.map((report) => report.kind).sort())
+    .poll(() => EffectArray.map(later.reports, (report) => report.kind).sort())
     .toEqual(["slow_call", "slow_interaction"]);
   expect(first.reports).toEqual(reported);
   expect(first.records).toEqual(records);
@@ -63,18 +66,18 @@ it("clears its exclusive client error registration when disposed", () => {
   using first = setup();
   first.fail();
 
-  expect(first.reports.map((report) => report.kind)).toEqual(["client_error"]);
+  expect(EffectArray.map(first.reports, (report) => report.kind)).toEqual(["client_error"]);
   first.telemetry[Symbol.dispose]();
   first.fail();
 
-  expect(first.reports.map((report) => report.kind)).toEqual(["client_error"]);
+  expect(EffectArray.map(first.reports, (report) => report.kind)).toEqual(["client_error"]);
   first[Symbol.dispose]();
 
   using later = setup();
   later.fail();
 
-  expect(later.reports.map((report) => report.kind)).toEqual(["client_error"]);
-  expect(first.reports.map((report) => report.kind)).toEqual(["client_error"]);
+  expect(EffectArray.map(later.reports, (report) => report.kind)).toEqual(["client_error"]);
+  expect(EffectArray.map(first.reports, (report) => report.kind)).toEqual(["client_error"]);
 });
 
 function setup(): TelemetryFixture {
@@ -86,7 +89,7 @@ function setup(): TelemetryFixture {
   for (const method of ["groupCollapsed", "log"] as const) {
     resources.use(
       vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {
-        consoleOutput.push(args.map(String).join(" "));
+        consoleOutput.push(EffectArray.join(EffectArray.map(args, String), " "));
       }),
     );
   }

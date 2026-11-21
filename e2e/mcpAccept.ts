@@ -18,6 +18,8 @@ import {
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { Effect } from "effect";
 import { Option, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 
 import { mcpClient, mcpEndpoint } from "./mcpClient.ts";
 import { redactEvidence } from "./verify/redaction.ts";
@@ -67,17 +69,19 @@ export function requestedScopeNames(raw: string | undefined): ReadonlyArray<stri
   if (raw === undefined) {
     return advertisedScopeNames();
   }
-  const names = [...new Set(raw.split(/[\s,]+/u).filter(Boolean))];
+  const names = [...new Set(EffectArray.filter(raw.split(/[\s,]+/u), Boolean))];
   if (names.length === 0) {
     throw new Error("--scopes named no scopes.");
   }
-  const unknown = names.filter(
+  const unknown = EffectArray.filter(
+    names,
     (name) =>
-      !advertisedScopes.some((scope) => scope.name === name) && !retiredScopeNames.includes(name),
+      !EffectArray.some(advertisedScopes, (scope) => scope.name === name) &&
+      !retiredScopeNames.includes(name),
   );
   if (unknown.length > 0) {
     throw new Error(
-      `Unknown scopes: ${unknown.join(", ")}. Advertised: ${advertisedScopeNames().join(" ")}. Retired names accepted: ${retiredScopeNames.join(" ")}.`,
+      `Unknown scopes: ${EffectArray.join(unknown, ", ")}. Advertised: ${EffectArray.join(advertisedScopeNames(), " ")}. Retired names accepted: ${EffectArray.join(retiredScopeNames, " ")}.`,
     );
   }
   return names;
@@ -94,7 +98,7 @@ export function tokenGrantedScopes(token: string): ReadonlyArray<string> {
   if (Option.isNone(claims) || claims.value.scope === undefined) {
     throw new Error("The provided token has no scope claim; its granted scopes cannot be read.");
   }
-  return claims.value.scope.split(" ").filter(Boolean);
+  return EffectArray.filter(claims.value.scope.split(" "), Boolean);
 }
 
 export class AcceptanceReport {
@@ -170,14 +174,14 @@ export class AcceptanceReport {
         `Protected-resource metadata advertises ${offlineAccess.name}; the documented contract omits it there.`,
       );
     }
-    for (const scope of authorization.filter((name) => !resource.includes(name))) {
+    for (const scope of EffectArray.filter(authorization, (name) => !resource.includes(name))) {
       if (scope !== offlineAccess.name) {
         this.addFinding(
           `Authorization-server metadata alone advertises ${scope}; only ${offlineAccess.name} may differ.`,
         );
       }
     }
-    for (const scope of resource.filter((name) => !authorization.includes(name))) {
+    for (const scope of EffectArray.filter(resource, (name) => !authorization.includes(name))) {
       this.addFinding(
         `Protected-resource metadata alone advertises ${scope}; it is missing from authorization-server metadata.`,
       );
@@ -206,7 +210,7 @@ export class AcceptanceReport {
     }
     if (!inspection.matches) {
       this.addFinding(
-        `An unauthenticated tools/list asked for ${inspection.scope ?? "no scope"}; the minimal baseline is ${inspection.expected.join(" ")}.`,
+        `An unauthenticated tools/list asked for ${inspection.scope ?? "no scope"}; the minimal baseline is ${EffectArray.join(inspection.expected, " ")}.`,
       );
     }
     if (inspection.asksForFullSet) {
@@ -218,10 +222,10 @@ export class AcceptanceReport {
     this.registrations = registrations;
     const registered = acceptedScopeNames(advertisedScopes);
     for (const registration of registrations) {
-      const granted = registration.scope.split(" ").filter(Boolean);
+      const granted = EffectArray.filter(registration.scope.split(" "), Boolean);
       if (!sameSet(granted, registered)) {
         this.addFinding(
-          `Dynamic client registration for the ${registration.grant} grant granted ${registration.scope === "" ? "no scopes" : registration.scope}; expected the full registrable set ${registered.join(" ")}.`,
+          `Dynamic client registration for the ${registration.grant} grant granted ${registration.scope === "" ? "no scopes" : registration.scope}; expected the full registrable set ${EffectArray.join(registered, " ")}.`,
         );
       }
     }
@@ -230,20 +234,23 @@ export class AcceptanceReport {
   providedToken(environment: string, granted: ReadonlyArray<string>): void {
     this.tokenEnvironment = environment;
     this.providedGrant = granted;
-    const current = granted.map(currentScopeName);
-    for (const scope of current.filter((name) => !advertisedScopeNames().includes(name))) {
+    const current = EffectArray.map(granted, currentScopeName);
+    for (const scope of EffectArray.filter(
+      current,
+      (name) => !advertisedScopeNames().includes(name),
+    )) {
       this.addFinding(`The provided token holds ${scope}, which this checkout does not advertise.`);
     }
-    const missing = advertisedScopeNames().filter((name) => !current.includes(name));
+    const missing = EffectArray.filter(advertisedScopeNames(), (name) => !current.includes(name));
     if (missing.length === 0) {
       this.note("The provided token holds the full advertised set.");
     } else {
-      this.note(`The provided token does not hold ${missing.join(", ")}.`);
+      this.note(`The provided token does not hold ${EffectArray.join(missing, ", ")}.`);
     }
-    const retired = granted.filter((name) => retiredScopeNames.includes(name));
+    const retired = EffectArray.filter(granted, (name) => retiredScopeNames.includes(name));
     if (retired.length > 0) {
       this.note(
-        `The provided token was minted with retired ${retired.join(", ")}; each is accepted as ${retired.map(currentScopeName).join(", ")}.`,
+        `The provided token was minted with retired ${EffectArray.join(retired, ", ")}; each is accepted as ${EffectArray.join(EffectArray.map(retired, currentScopeName), ", ")}.`,
       );
     }
   }
@@ -278,7 +285,7 @@ export class AcceptanceReport {
   }
 
   summary(): ReportSummary {
-    const findings = this.findings.map(redactText);
+    const findings = EffectArray.map(this.findings, redactText);
     return {
       ok: findings.length === 0,
       mode: this.mode,
@@ -289,8 +296,8 @@ export class AcceptanceReport {
   }
 
   failureMessage(): string {
-    const findings = this.findings.map(redactText);
-    return findings.length === 0 ? "No findings." : findings.join("\n");
+    const findings = EffectArray.map(this.findings, redactText);
+    return findings.length === 0 ? "No findings." : EffectArray.join(findings, "\n");
   }
 
   markdown(): string {
@@ -315,8 +322,8 @@ export class AcceptanceReport {
         `- Authorization-server metadata: ${this.metadataInspection.authorizationUrl}`,
         `- Authorization-server scopes: ${codeList(authorizationScopes)}`,
         `- Protected-resource scopes: ${codeList(resourceScopes)}`,
-        `- Only authorization server: ${codeList(authorizationScopes.filter((scope) => !resourceScopes.includes(scope)))}`,
-        `- Only protected resource: ${codeList(resourceScopes.filter((scope) => !authorizationScopes.includes(scope)))}`,
+        `- Only authorization server: ${codeList(EffectArray.filter(authorizationScopes, (scope) => !resourceScopes.includes(scope)))}`,
+        `- Only protected resource: ${codeList(EffectArray.filter(resourceScopes, (scope) => !authorizationScopes.includes(scope)))}`,
         "",
       );
     }
@@ -325,7 +332,7 @@ export class AcceptanceReport {
       lines.push("Not inspected.", "");
     } else {
       lines.push(
-        `- Unauthenticated \`tools/list\` challenge: ${this.baselineInspection.scope === undefined ? "none" : codeList(this.baselineInspection.scope.split(" ").filter(Boolean))}`,
+        `- Unauthenticated \`tools/list\` challenge: ${this.baselineInspection.scope === undefined ? "none" : codeList(EffectArray.filter(this.baselineInspection.scope.split(" "), Boolean))}`,
         `- Minimal baseline: ${codeList(this.baselineInspection.expected)}`,
         `- Matches the minimal baseline: ${this.baselineInspection.matches ? "yes" : "no"}`,
         `- Requests the full advertised set: ${this.baselineInspection.asksForFullSet ? "yes" : "no"}`,
@@ -339,7 +346,7 @@ export class AcceptanceReport {
       } else {
         for (const registration of this.registrations) {
           lines.push(
-            `- ${registration.grant}: public client registered without a secret; granted scopes: ${codeList(registration.scope.split(" ").filter(Boolean))}`,
+            `- ${registration.grant}: public client registered without a secret; granted scopes: ${codeList(EffectArray.filter(registration.scope.split(" "), Boolean))}`,
           );
         }
         lines.push("");
@@ -364,15 +371,21 @@ export class AcceptanceReport {
         `| Tool | Required scope | ${header} | Restricted grant |`,
         "| --- | --- | --- | --- |",
       );
-      const restricted = new Map(this.restrictedRows.map((row) => [row.tool, row.result]));
-      const requested = new Map(this.requestedRows.map((row) => [row.tool, row]));
+      const restricted = new Map(
+        EffectArray.map(this.restrictedRows, (row) => [row.tool, row.result]),
+      );
+      const requested = new Map(EffectArray.map(this.requestedRows, (row) => [row.tool, row]));
       const names = new Set([
-        ...this.requestedRows.map((row) => row.tool),
-        ...this.restrictedRows.map((row) => row.tool),
+        ...EffectArray.map(this.requestedRows, (row) => row.tool),
+        ...EffectArray.map(this.restrictedRows, (row) => row.tool),
       ]);
       for (const name of names) {
         const row = requested.get(name);
-        const scope = row?.scope ?? this.restrictedRows.find((entry) => entry.tool === name)?.scope;
+        const scope =
+          row?.scope ??
+          EffectOption.getOrUndefined(
+            EffectArray.findFirst(this.restrictedRows, (entry) => entry.tool === name),
+          )?.scope;
         lines.push(
           `| \`${name}\` | \`${scope ?? "unknown"}\` | ${row?.result ?? "not inspected"} | ${restricted.get(name) ?? "not inspected"} |`,
         );
@@ -406,7 +419,7 @@ export class AcceptanceReport {
       } else {
         lines.push(
           `Grant in the minted token: ${codeList(this.legacyGranted)}`,
-          `Accepted as: ${codeList(this.legacyGranted.map(currentScopeName))}`,
+          `Accepted as: ${codeList(EffectArray.map(this.legacyGranted, currentScopeName))}`,
           "",
           "| Tool | Required scope | Legacy grant |",
           "| --- | --- | --- |",
@@ -453,7 +466,7 @@ export class AcceptanceReport {
       "- It cannot prove a client's own registration metadata or the `scope` it requested. If a client fails after consent, capture its authorization `error` and `error_description` and its client metadata document.",
       "",
     );
-    return `${lines.join("\n")}\n`;
+    return `${EffectArray.join(lines, "\n")}\n`;
   }
 }
 
@@ -561,7 +574,7 @@ async function inspectMetadata(origin: string): Promise<MetadataInspection> {
 async function inspectBaseline(origin: string): Promise<BaselineInspection> {
   const response = await mcpClient(mcpEndpoint(origin)).request("tools/list");
   const scope = challengeScope(response.headers.get("www-authenticate"));
-  const actual = scope === undefined ? [] : scope.split(" ").filter(Boolean);
+  const actual = scope === undefined ? [] : EffectArray.filter(scope.split(" "), Boolean);
   const expected = onboardingScopeNames();
   return {
     status: response.status,
@@ -599,7 +612,7 @@ async function inspectTools(
       );
       continue;
     }
-    const names = scope === undefined ? [] : scope.split(" ").filter(Boolean);
+    const names = scope === undefined ? [] : EffectArray.filter(scope.split(" "), Boolean);
     const required = names[0];
     if (names.length !== 1 || required === undefined) {
       report.addFinding(
@@ -607,7 +620,7 @@ async function inspectTools(
       );
       continue;
     }
-    if (!resourceScopes.some((candidate) => candidate.name === required)) {
+    if (!EffectArray.some(resourceScopes, (candidate) => candidate.name === required)) {
       report.addFinding(
         `Tool ${tool.name}: required scope ${required} is not in the advertised resource set.`,
       );
@@ -618,7 +631,7 @@ async function inspectTools(
       readOnly: tool.annotations?.readOnlyHint ?? false,
     });
   }
-  const declared = new Set(tools.map((tool) => tool.scope));
+  const declared = new Set(EffectArray.map(tools, (tool) => tool.scope));
   for (const scope of resourceScopeNames()) {
     if (!declared.has(scope)) {
       report.addFinding(
@@ -638,7 +651,7 @@ async function runToolTable(
   report: AcceptanceReport,
 ): Promise<ReadonlyArray<ToolRow>> {
   const rows: Array<ToolRow> = [];
-  const accepted = granted.map(currentScopeName);
+  const accepted = EffectArray.map(granted, currentScopeName);
   for (const tool of tools) {
     const held = accepted.includes(tool.scope);
     const writeSuppressed = mode === "token" && !tool.readOnly;
@@ -701,7 +714,7 @@ async function runTokenFeedbackCase(
   granted: ReadonlyArray<string>,
 ): Promise<FeedbackCase> {
   const read = fantasyQueryScopes.read.name;
-  if (!granted.map(currentScopeName).includes(read)) {
+  if (!EffectArray.map(granted, currentScopeName).includes(read)) {
     return {
       status: "not-tested",
       steps: [`The provided token does not hold ${read}, so list_feedback cannot run.`],
@@ -903,25 +916,33 @@ function resourceMetadataUrl(header: string | null): string | undefined {
 }
 
 function advertisedScopeNames(): ReadonlyArray<string> {
-  return advertisedScopes.map((scope) => scope.name);
+  return EffectArray.map(advertisedScopes, (scope) => scope.name);
 }
 
 function resourceScopeNames(): ReadonlyArray<string> {
-  return resourceScopes.map((scope) => scope.name);
+  return EffectArray.map(resourceScopes, (scope) => scope.name);
 }
 
 function onboardingScopeNames(): ReadonlyArray<string> {
-  return onboardingScopes.map((scope) => scope.name);
+  return EffectArray.map(onboardingScopes, (scope) => scope.name);
 }
 
 function sameSet(left: ReadonlyArray<string>, right: ReadonlyArray<string>): boolean {
   const leftSet = new Set(left);
   const rightSet = new Set(right);
-  return leftSet.size === rightSet.size && [...leftSet].every((value) => rightSet.has(value));
+  return (
+    leftSet.size === rightSet.size &&
+    EffectArray.every([...leftSet], (value) => rightSet.has(value))
+  );
 }
 
 function codeList(values: ReadonlyArray<string>): string {
-  return values.length === 0 ? "none" : values.map((value) => `\`${value}\``).join(", ");
+  return values.length === 0
+    ? "none"
+    : EffectArray.join(
+        EffectArray.map(values, (value) => `\`${value}\``),
+        ", ",
+      );
 }
 
 function parseJson(text: string): unknown {

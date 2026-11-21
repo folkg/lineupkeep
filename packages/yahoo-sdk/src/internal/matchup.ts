@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import {
   Flag,
@@ -12,6 +13,21 @@ import { YahooCoverageMismatch, YahooParseError } from "#yahoo/errors.ts";
 import type { YahooLeagueKey } from "#yahoo/keys.ts";
 
 import type { YahooStatValue } from "./player.ts";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 export function decodeMatchups(
   payload: unknown,
@@ -44,7 +60,10 @@ export function decodeMatchups(
             covered: { type: "week", week: matchup.week },
           });
         }
-        const teams = matchup.entries.flatMap((entry) => entry.teams);
+        const teams = EffectArray.flatMap(matchup.entries, (entry) => {
+          const flatMapped1 = entry.teams;
+          return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+        });
         const home = teams[0];
         const away = teams[1];
         if (teams.length !== 2 || home === undefined || away === undefined) {
@@ -63,7 +82,7 @@ export function decodeMatchups(
           isTied: matchup.is_tied,
           home: yield* teamScoreOf(home, requestedWeek),
           away: yield* teamScoreOf(away, requestedWeek),
-          categoryWinners: (matchup.stat_winners ?? []).map(({ stat_winner }) => ({
+          categoryWinners: EffectArray.map(matchup.stat_winners ?? [], ({ stat_winner }) => ({
             statId: stat_winner.stat_id,
             winnerTeamKey: stat_winner.winner_team_key,
             isTied: stat_winner.is_tied ?? false,
@@ -122,10 +141,12 @@ function teamScoreOf(
               live: remaining.live_games,
               remaining: remaining.remaining_games,
             },
-      stats: (team.team_stats?.stats ?? []).map(({ stat }) => ({
-        statId: stat.stat_id,
-        value: numberOrNull(stat.value),
-      })),
+      stats: optionalArrayValue(team.team_stats?.stats ?? [], (value) =>
+        EffectArray.map(value, ({ stat }) => ({
+          statId: stat.stat_id,
+          value: numberOrNull(stat.value),
+        })),
+      ),
     };
   });
 }

@@ -1,4 +1,5 @@
 import { Context, Effect } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { ProviderUnregistered } from "./Provider.ts";
 import type { Provider, ProviderCapabilities } from "./Provider.ts";
@@ -24,7 +25,7 @@ export type ProviderRegistryShape = {
 };
 
 export function providerRegistryOf(providers: ReadonlyArray<Provider>): ProviderRegistryShape {
-  const byKey = new Map(providers.map((provider) => [provider.key, provider]));
+  const byKey = new Map(EffectArray.map(providers, (provider) => [provider.key, provider]));
   return {
     get: (key) => byKey.get(key),
     requireProvider: (key) => {
@@ -34,7 +35,7 @@ export function providerRegistryOf(providers: ReadonlyArray<Provider>): Provider
         : Effect.succeed(provider);
     },
     capabilitiesOf: (keys) =>
-      [...new Set(keys)].flatMap((key) => {
+      EffectArray.flatMap([...new Set(keys)], (key) => {
         const provider = byKey.get(key);
         return provider === undefined ? [] : [{ key, capabilities: provider.capabilities }];
       }),

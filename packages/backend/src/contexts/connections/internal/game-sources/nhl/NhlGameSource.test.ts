@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 
 import { assert, it } from "@effect/vitest";
 import { DateTime, Effect, Layer } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 
 import {
   GameSourceRequestFailed,
@@ -12,6 +14,10 @@ import layerTools from "#runtime/ProvideLayer.ts";
 import { PublicInternet } from "#runtime/PublicInternet.ts";
 
 import { nhlGameSource } from "./NhlGameSource.ts";
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 const leagueWeek = fixture("league-week.json");
 const relocatedWeek = fixture("relocated-week.json");
@@ -25,13 +31,23 @@ it.effect("reads a whole league week as games with identifiers, times, venues an
     assert.strictEqual(week.weekStart, "2026-11-01");
     assert.strictEqual(week.weekEnd, "2026-11-07");
     assert.strictEqual(week.games.length, 50);
-    assert.strictEqual(new Set(week.games.map((game) => game.date)).size, 7);
+    assert.strictEqual(new Set(EffectArray.map(week.games, (game) => game.date)).size, 7);
     assert.isTrue(
-      week.games.every((game) => game.date >= week.weekStart && game.date <= week.weekEnd),
+      EffectArray.every(
+        week.games,
+        (game) => game.date >= week.weekStart && game.date <= week.weekEnd,
+      ),
     );
-    assert.isTrue(week.games.every((game) => game.home.identifier !== game.away.identifier));
+    assert.isTrue(
+      EffectArray.every(week.games, (game) => game.home.identifier !== game.away.identifier),
+    );
     assert.strictEqual(
-      new Set(week.games.flatMap((game) => [game.home.abbreviation, game.away.abbreviation])).size,
+      new Set(
+        EffectArray.flatMap(week.games, (game) => {
+          const flatMapped1 = [game.home.abbreviation, game.away.abbreviation];
+          return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+        }),
+      ).size,
       32,
     );
 
@@ -76,7 +92,7 @@ it.effect("serves a postponed and a cancelled game with their own statuses", () 
     const week = yield* source.readLeagueWeek({ league: "nhl", weekStart: "2026-11-01" });
 
     assert.deepStrictEqual(
-      week.games.map((game) => [game.id, game.date, game.status]),
+      EffectArray.map(week.games, (game) => [game.id, game.date, game.status]),
       [
         ["2026020301", "2026-11-01", "postponed"],
         ["2026020302", "2026-11-01", "cancelled"],
@@ -107,7 +123,7 @@ it.effect("reports an unrecognised schedule state as unknown rather than on", ()
     const week = yield* source.readLeagueWeek({ league: "nhl", weekStart: "2026-11-01" });
 
     assert.deepStrictEqual(
-      week.games.map((game) => game.status),
+      EffectArray.map(week.games, (game) => game.status),
       ["unknown", "unknown", "unknown", "unknown"],
     );
   }).pipe(layerTools.provide(internet));
@@ -129,15 +145,18 @@ it.effect("fails the read when a day publishes no games key", () => {
 it.effect("reads an empty league week as a fact with no games", () => {
   const internet = recordingInternet(() =>
     jsonResponse({
-      gameWeek: [
-        "2026-11-01",
-        "2026-11-02",
-        "2026-11-03",
-        "2026-11-04",
-        "2026-11-05",
-        "2026-11-06",
-        "2026-11-07",
-      ].map((date) => ({ date, games: [] })),
+      gameWeek: EffectArray.map(
+        [
+          "2026-11-01",
+          "2026-11-02",
+          "2026-11-03",
+          "2026-11-04",
+          "2026-11-05",
+          "2026-11-06",
+          "2026-11-07",
+        ],
+        (date) => ({ date, games: [] }),
+      ),
     }),
   );
   return Effect.gen(function* () {
@@ -185,7 +204,7 @@ function gameOf<Game extends { readonly id: string }>(
   games: ReadonlyArray<Game>,
   id: string,
 ): Game {
-  const found = games.find((game) => game.id === id);
+  const found = EffectOption.getOrUndefined(EffectArray.findFirst(games, (game) => game.id === id));
   if (found === undefined) {
     throw new Error(`The league week has no game ${id}`);
   }
@@ -259,7 +278,7 @@ function weekPayload(games: ReadonlyArray<unknown>): unknown {
     "2026-11-07",
   ];
   return {
-    gameWeek: dates.map((date, index) => ({ date, games: index === 0 ? games : [] })),
+    gameWeek: EffectArray.map(dates, (date, index) => ({ date, games: index === 0 ? games : [] })),
   };
 }
 

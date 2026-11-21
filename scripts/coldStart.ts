@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { Array as EffectArray, Option as EffectOption } from "effect";
 import { chromium } from "playwright";
 
 const run = promisify(execFile);
@@ -123,7 +124,7 @@ async function measure(route: string): Promise<Measurement> {
       startedAt,
       ttfbMs,
       ...timings,
-      frameTimes: frames.map(({ at }) => at),
+      frameTimes: EffectArray.map(frames, ({ at }) => at),
     };
   } finally {
     await session.send("Page.stopScreencast").catch(() => undefined);
@@ -144,8 +145,12 @@ async function saveFrameAt(
     }
   }
   const frame =
-    frames.findLast((candidate) => at === Number.POSITIVE_INFINITY || candidate.at <= at) ??
-    frames[0];
+    EffectOption.getOrUndefined(
+      EffectArray.findLast(
+        frames,
+        (candidate) => at === Number.POSITIVE_INFINITY || candidate.at <= at,
+      ),
+    ) ?? frames[0];
   if (frame === undefined) {
     return;
   }
@@ -188,18 +193,26 @@ async function lastServiceRequestAt(): Promise<number | undefined> {
 
 async function instanceTimeline(startedAt: number): Promise<InstanceTimeline | undefined> {
   const entries = await lifecycleEntries();
-  const start = entries
-    .filter((entry) => entry.kind === "start" && Math.abs(entry.at - startedAt) < 60_000)
-    .at(0);
+  const start = EffectArray.filter(
+    entries,
+    (entry) => entry.kind === "start" && Math.abs(entry.at - startedAt) < 60_000,
+  ).at(0);
   if (start === undefined) {
     return undefined;
   }
-  const instance = entries.filter(
+  const instance = EffectArray.filter(
+    entries,
     (entry) => entry.instance === start.instance && entry.at >= start.at,
   );
-  const listen = instance.find((entry) => entry.kind === "listen");
-  const ready = instance.find((entry) => entry.kind === "ready");
-  const render = instance.find((entry) => entry.kind === "render");
+  const listen = EffectOption.getOrUndefined(
+    EffectArray.findFirst(instance, (entry) => entry.kind === "listen"),
+  );
+  const ready = EffectOption.getOrUndefined(
+    EffectArray.findFirst(instance, (entry) => entry.kind === "ready"),
+  );
+  const render = EffectOption.getOrUndefined(
+    EffectArray.findFirst(instance, (entry) => entry.kind === "render"),
+  );
   return {
     instance: start.instance,
     startToListenMs: listen === undefined ? null : listen.at - start.at,
@@ -219,10 +232,10 @@ async function lifecycleEntries(): Promise<ReadonlyArray<LifecycleEntry>> {
     "--freshness=1h",
   ]);
   const parsed: unknown = jsonTools.jsonValue(stdout === "" ? "[]" : stdout);
-  if (!Array.isArray(parsed)) {
+  if (!EffectArray.isArray(parsed)) {
     return [];
   }
-  return parsed.flatMap(readLifecycleEntry);
+  return EffectArray.flatMap(parsed, readLifecycleEntry);
 }
 
 function readLifecycleEntry(value: unknown): LifecycleEntry[] {
@@ -266,15 +279,20 @@ function readLifecycleEntry(value: unknown): LifecycleEntry[] {
 
 function readTimings(): Timings {
   const round = (value: number): number => Math.round(value * 10) / 10;
-  const navigation = performance
-    .getEntriesByType("navigation")
-    .find((entry): entry is PerformanceNavigationTiming => entry.entryType === "navigation");
+  const navigation = EffectOption.getOrUndefined(
+    EffectArray.findFirst(
+      performance.getEntriesByType("navigation"),
+      (entry): entry is PerformanceNavigationTiming => entry.entryType === "navigation",
+    ),
+  );
   if (navigation === undefined) {
     throw new Error("The document has no navigation timing entry");
   }
   const paints = performance.getEntriesByType("paint");
   const paint = (name: string): number | null => {
-    const entry = paints.find((candidate) => candidate.name === name);
+    const entry = EffectOption.getOrUndefined(
+      EffectArray.findFirst(paints, (candidate) => candidate.name === name),
+    );
     return entry === undefined ? null : round(entry.startTime);
   };
   const largestContentfulPaint: unknown = Reflect.get(globalThis, "__lcp");

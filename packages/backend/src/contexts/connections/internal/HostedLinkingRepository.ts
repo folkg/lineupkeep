@@ -1,5 +1,6 @@
 import { and, count, eq, gte, lte, or } from "drizzle-orm";
 import { Array, Context, DateTime, Effect, Layer, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import type { ConnectionId, ProviderKey } from "#contexts/connections/Connection.ts";
@@ -310,7 +311,7 @@ export class HostedLinkingRepository extends Context.Service<
             .for("update")
             .pipe(Effect.mapError((cause) => HostedLinkingPersistenceFailed.make({ cause })));
           const records = yield* Effect.forEach(rows, decodeRow, { concurrency: 1 });
-          const locked = new Map(records.map((record) => [record.id, record]));
+          const locked = new Map(EffectArray.map(records, (record) => [record.id, record]));
           const planned = yield* Effect.forEach(ids, (id) => plan(locked, id), { concurrency: 1 });
           return yield* Effect.forEach(planned, (record) => persistRecord(tx, record), {
             concurrency: 1,

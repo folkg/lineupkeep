@@ -1,4 +1,5 @@
 import { DateTime, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { FantasyLeague } from "./FantasyTeam.ts";
 
@@ -97,7 +98,8 @@ export function professionalGameIsFresh(input: {
   }
   const now = DateTime.toEpochMillis(input.now);
   const required = Math.min(
-    ...refreshAspects[input.freshness].map(
+    ...EffectArray.map(
+      refreshAspects[input.freshness],
       (aspect) => maximumAgeMinutes(aspect, input.game, now) * 60_000,
     ),
   );

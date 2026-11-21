@@ -1,3 +1,4 @@
+import { EffectArray } from "@lineupkeep/collections";
 import type { JSX } from "@solidjs/web";
 
 import { Button } from "#browser/shared-ui/Button.tsx";
@@ -20,7 +21,10 @@ export function FeedbackForm(props: FeedbackFormProps): JSX.Element {
         error={props.errors.kind}
         label="Kind"
         onChange={(event) => props.onKind(event.currentTarget.value)}
-        options={feedbackKinds.map((kind) => ({ value: kind, label: feedbackKindLabel(kind) }))}
+        options={EffectArray.map(feedbackKinds, (kind) => ({
+          value: kind,
+          label: feedbackKindLabel(kind),
+        }))}
         placeholder="Choose a kind"
         value={props.draft.kind}
       />

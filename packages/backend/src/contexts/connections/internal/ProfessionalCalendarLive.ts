@@ -1,4 +1,6 @@
 import { DateTime, Effect, Layer, Option, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Order as EffectOrder } from "effect";
 
 import { FantasyLeague } from "#contexts/connections/FantasyTeam.ts";
 import { GameSourceRegistry } from "#contexts/connections/GameSource.ts";
@@ -8,6 +10,22 @@ import { professionalGameFreshness } from "#contexts/connections/ProfessionalGam
 
 import { readProfessionalGameWeek } from "./ProfessionalGameFacts.ts";
 import { ScheduleObservationRepository } from "./ScheduleObservationRepository.ts";
+function sortWithComparator<A>(
+  self: ReadonlyArray<A>,
+  compare: (left: A, right: A) => number,
+): ReadonlyArray<A> {
+  return EffectArray.sort(
+    self,
+    EffectOrder.make<A>((left, right) => {
+      const result = compare(left, right);
+      return result < 0 ? -1 : result > 0 ? 1 : 0;
+    }),
+  );
+}
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 const CalendarDate = Schema.String.pipe(Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)));
 
@@ -116,9 +134,12 @@ export const ProfessionalCalendarLive = Layer.effect(
           }),
         { concurrency: maximumWeekReadConcurrency },
       );
-      const served = weeks.map((week) => ({
+      const served = EffectArray.map(weeks, (week) => ({
         ...week,
-        games: week.games.filter((fact) => fact.game.date >= from && fact.game.date <= to),
+        games: EffectArray.filter(
+          week.games,
+          (fact) => fact.game.date >= from && fact.game.date <= to,
+        ),
       }));
       return {
         league: input.league,
@@ -127,14 +148,19 @@ export const ProfessionalCalendarLive = Layer.effect(
         source: covered.source.key,
         teamCount: covered.coverage.teamCount,
         observedAt: oldestObservedAt(served),
-        games: served
-          .flatMap((week) => week.games)
-          .toSorted(
-            (left, right) =>
-              left.game.date.localeCompare(right.game.date) ||
-              left.sourceReference.localeCompare(right.sourceReference),
-          ),
-        unresolvedTeams: served.flatMap((week) => week.unresolvedTeams),
+        games: sortWithComparator(
+          EffectArray.flatMap(served, (week) => {
+            const flatMapped1 = week.games;
+            return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+          }),
+          (left, right) =>
+            left.game.date.localeCompare(right.game.date) ||
+            left.sourceReference.localeCompare(right.sourceReference),
+        ),
+        unresolvedTeams: EffectArray.flatMap(served, (week) => {
+          const flatMapped2 = week.unresolvedTeams;
+          return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+        }),
       };
     });
 

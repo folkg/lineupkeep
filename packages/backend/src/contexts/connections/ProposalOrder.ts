@@ -8,6 +8,8 @@ import {
   unusableSelection,
 } from "@lineupkeep/lineup-solver";
 import type { RosterPlayer, RosterSlot } from "@lineupkeep/lineup-solver";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 
 import type { ProviderRosterConstraints } from "./Provider.ts";
 import { rosterRuleOf, slotCapacity, slotPlacement } from "./RosterSlots.ts";
@@ -228,10 +230,11 @@ function activeDestinations(
   if (intents.length === 0) {
     return { destinations: new Map(), refused: new Map() };
   }
-  const intentKeys = new Set(intents.map((intent) => intent.player.key));
+  const intentKeys = new Set(EffectArray.map(intents, (intent) => intent.player.key));
   const preferBench =
-    constraints.startingSlotsMayStandEmpty && league.slots.some((slot) => slot.kind === "bench");
-  const players = [...state.values()].map((player) =>
+    constraints.startingSlotsMayStandEmpty &&
+    EffectArray.some(league.slots, (slot) => slot.kind === "bench");
+  const players = EffectArray.map([...state.values()], (player) =>
     intentKeys.has(player.key)
       ? activeSolverPlayer(player, preferBench)
       : solverPlayer(player, league, true),
@@ -239,18 +242,19 @@ function activeDestinations(
   const solved = solveLineup({
     selectionBasis: neutralBasis,
     availabilityTiers: [neutralTier],
-    slots: league.slots.map((slot) => slot.solver),
+    slots: EffectArray.map(league.slots, (slot) => slot.solver),
     players,
   });
   if (solved.kind === "plan") {
     const byPlayer = new Map(
-      solved.plan.assignments.map(
+      EffectArray.map(
+        solved.plan.assignments,
         (assignment) => [String(assignment.playerId), String(assignment.slotId)] as const,
       ),
     );
     return {
       destinations: new Map(
-        intents.flatMap((intent) => {
+        EffectArray.flatMap(intents, (intent) => {
           const slot = byPlayer.get(intent.player.key);
           return slot === undefined ? [] : [[intent.player.key, slot] as const];
         }),
@@ -260,7 +264,7 @@ function activeDestinations(
   }
   const stranded =
     solved.refusal.reason === "player-has-no-legal-slot"
-      ? new Set(solved.refusal.playerIds.map(String))
+      ? new Set(EffectArray.map(solved.refusal.playerIds, String))
       : new Set<string>();
   const destinations = new Map<string, string>();
   const refused = new Map<string, string>();
@@ -305,14 +309,20 @@ function fallbackActiveSlot(
   league: League,
   player: RosterMember,
 ): string | undefined {
-  const bench = league.slots.find(
-    (slot) => slot.kind === "bench" && openSlot(state, league, slot, player),
+  const bench = EffectOption.getOrUndefined(
+    EffectArray.findFirst(
+      league.slots,
+      (slot) => slot.kind === "bench" && openSlot(state, league, slot, player),
+    ),
   );
   if (bench !== undefined) {
     return bench.position;
   }
-  return league.slots.find(
-    (slot) => slot.kind === "starting" && openSlot(state, league, slot, player),
+  return EffectOption.getOrUndefined(
+    EffectArray.findFirst(
+      league.slots,
+      (slot) => slot.kind === "starting" && openSlot(state, league, slot, player),
+    ),
   )?.position;
 }
 
@@ -328,25 +338,29 @@ function reserveDestination(
   player: RosterMember,
   leaving: ReadonlySet<string>,
 ): ReserveDestination {
-  const placements = league.slots
-    .filter((slot) => slot.kind === "reserve")
-    .map((slot) => ({ slot, legal: slotPlacement(league.rule, slot.position, player) }));
-  const eligible = placements.filter((entry) => entry.legal.legal === true);
+  const placements = EffectArray.map(
+    EffectArray.filter(league.slots, (slot) => slot.kind === "reserve"),
+    (slot) => ({ slot, legal: slotPlacement(league.rule, slot.position, player) }),
+  );
+  const eligible = EffectArray.filter(placements, (entry) => entry.legal.legal === true);
   if (eligible.length === 0) {
-    return placements.some((entry) => entry.legal.legal === "unknown")
+    return EffectArray.some(placements, (entry) => entry.legal.legal === "unknown")
       ? { status: "unknown" }
       : { status: "none" };
   }
-  const open = eligible.find((entry) => {
-    const occupants = [...state.values()].filter(
-      (occupant) => occupant.slot === entry.slot.position && !leaving.has(occupant.key),
-    );
-    return occupants.length < entry.slot.count;
-  });
+  const open = EffectOption.getOrUndefined(
+    EffectArray.findFirst(eligible, (entry) => {
+      const occupants = EffectArray.filter(
+        [...state.values()],
+        (occupant) => occupant.slot === entry.slot.position && !leaving.has(occupant.key),
+      );
+      return occupants.length < entry.slot.count;
+    }),
+  );
   if (open !== undefined) {
     return { status: "open", slot: open.slot };
   }
-  return { status: "full", lists: eligible.map((entry) => entry.slot.position) };
+  return { status: "full", lists: EffectArray.map(eligible, (entry) => entry.slot.position) };
 }
 
 function reserveRefusalDetail(
@@ -425,7 +439,7 @@ function nameList(names: ReadonlyArray<string>): string {
   if (names.length === 1) {
     return first;
   }
-  return `${names.slice(0, -1).join(", ")} and ${String(names[names.length - 1])}`;
+  return `${EffectArray.join(names.slice(0, -1), ", ")} and ${String(names[names.length - 1])}`;
 }
 
 function solverPlayer(player: RosterMember, league: League, pin: boolean): RosterPlayer {
@@ -443,7 +457,8 @@ function solverPlayer(player: RosterMember, league: League, pin: boolean): Roste
 }
 
 function reserveEligible(player: RosterMember, league: League): boolean {
-  return league.slots.some(
+  return EffectArray.some(
+    league.slots,
     (slot) =>
       slot.kind === "reserve" && slotPlacement(league.rule, slot.position, player).legal === true,
   );
@@ -479,7 +494,7 @@ function solverSlot(slot: ProposalOrderSlot, rule: RosterRule): RosterSlot {
 
 function initialState(players: ReadonlyArray<ProposalOrderPlayer>): RosterState {
   return new Map(
-    players.map((player) => [
+    EffectArray.map(players, (player) => [
       player.key,
       {
         key: player.key,
@@ -508,11 +523,14 @@ function leagueOf(
   constraints: ProviderRosterConstraints,
 ): League {
   const rule = rosterRuleOf(constraints, slots);
-  const leagueSlots = slots.map((slot) => ({ ...slot, solver: solverSlot(slot, rule) }));
+  const leagueSlots = EffectArray.map(slots, (slot) => ({
+    ...slot,
+    solver: solverSlot(slot, rule),
+  }));
   return {
     rule,
     slots: leagueSlots,
-    byPosition: new Map(leagueSlots.map((slot) => [slot.position, slot] as const)),
+    byPosition: new Map(EffectArray.map(leagueSlots, (slot) => [slot.position, slot] as const)),
   };
 }
 

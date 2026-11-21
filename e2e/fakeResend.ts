@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { Effect } from "effect";
 import { Option, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 const port = Number(readRequired("FAKE_RESEND_PORT"));
 const apiKey = readRequired("RESEND_API_KEY");
@@ -46,7 +47,7 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
     respond(
       response,
       200,
-      inbox.filter((message) => to === null || message.to.includes(to)),
+      EffectArray.filter(inbox, (message) => to === null || message.to.includes(to)),
     );
     return;
   }

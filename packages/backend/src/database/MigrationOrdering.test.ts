@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { PgliteClient } from "@effect/sql-pglite";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Exit } from "effect";
+import { Array as EffectArray } from "effect";
 
 import layerTools from "#runtime/ProvideLayer.ts";
 
@@ -39,7 +40,7 @@ describe("hosted linking connection migration", () => {
       const connections = yield* sql.unsafe<{ readonly id: string }>(
         "select id from provider_connections order by id",
       );
-      expect(connections.map((row) => row.id)).toEqual(["kept"]);
+      expect(EffectArray.map(connections, (row) => row.id)).toEqual(["kept"]);
 
       const sessions = yield* sql.unsafe<{
         readonly id: string;
@@ -92,10 +93,14 @@ describe("local linking helper removal migration", () => {
       const columns = yield* sql.unsafe<{ readonly column_name: string }>(
         "select column_name from information_schema.columns where table_name = 'provider_connections'",
       );
-      expect(columns.map((row) => row.column_name)).not.toContain("pairing_code");
-      expect(columns.map((row) => row.column_name)).not.toContain("reconnect_code");
-      expect(columns.map((row) => row.column_name)).not.toContain("reconnect_expires_at");
-      expect(columns.map((row) => row.column_name)).not.toContain("reconnect_request_id");
+      expect(EffectArray.map(columns, (row) => row.column_name)).not.toContain("pairing_code");
+      expect(EffectArray.map(columns, (row) => row.column_name)).not.toContain("reconnect_code");
+      expect(EffectArray.map(columns, (row) => row.column_name)).not.toContain(
+        "reconnect_expires_at",
+      );
+      expect(EffectArray.map(columns, (row) => row.column_name)).not.toContain(
+        "reconnect_request_id",
+      );
 
       const kept = yield* sql.unsafe<{ readonly id: string }>(
         "select id from provider_connections order by id",
@@ -467,7 +472,7 @@ describe("transaction proposal storage removal migration", () => {
 
 function migrationStatements(select: (name: string) => boolean): ReadonlyArray<string> {
   const statements: string[] = [];
-  for (const name of readdirSync(migrationsFolder).filter(select).sort()) {
+  for (const name of EffectArray.filter(readdirSync(migrationsFolder), select).sort()) {
     const contents = readFileSync(join(migrationsFolder, name, "migration.sql"), "utf8");
     for (const statement of contents.split("--> statement-breakpoint")) {
       const trimmed = statement.trim();

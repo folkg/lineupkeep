@@ -9,6 +9,7 @@ import type { LocalRun } from "@lineupkeep/tools/local-stack/contract.ts";
 import * as Alchemy from "alchemy";
 import { State } from "alchemy/State";
 import { Effect, Exit, Schema, Scope } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { cleanSafetyResources } from "./safety.ts";
 import {
@@ -84,7 +85,7 @@ async function destroyStack(driver: Driver): Promise<void> {
   );
   await publish(run.directory, "alchemy-destroy.json", { remainingResources });
   if (remainingResources.length > 0) {
-    throw new Error(`Alchemy still owns resources: ${remainingResources.join(", ")}`);
+    throw new Error(`Alchemy still owns resources: ${EffectArray.join(remainingResources, ", ")}`);
   }
 }
 

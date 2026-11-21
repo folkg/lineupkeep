@@ -1,6 +1,7 @@
 import { and, eq, lte } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { Array, DateTime, Effect, Layer, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
 import { UserDirectory } from "#contexts/auth/UserDirectory.ts";
@@ -85,7 +86,7 @@ export const NotificationsLive = Layer.effect(
         .from(notifications)
         .where(stalePredicate);
       yield* applyEvents(
-        new Map(stale.map((row) => [row.id, { _tag: "Reclaimed", at } as const])),
+        new Map(EffectArray.map(stale, (row) => [row.id, { _tag: "Reclaimed", at } as const])),
         stalePredicate,
       );
 
@@ -112,7 +113,7 @@ export const NotificationsLive = Layer.effect(
         .limit(limit);
 
       const userIds = yield* Effect.forEach(
-        [...new Set(rows.map((row) => row.userId))],
+        [...new Set(EffectArray.map(rows, (row) => row.userId))],
         (id) =>
           Schema.decodeEffect(UserId)(id).pipe(
             Effect.mapError((cause) => NotificationsFailed.make({ cause })),
@@ -120,10 +121,13 @@ export const NotificationsLive = Layer.effect(
         { concurrency: 1 },
       );
       const emails = new Map(
-        (yield* directory.emailsFor(userIds)).map((entry) => [entry.userId, entry.email]),
+        EffectArray.map(yield* directory.emailsFor(userIds), (entry) => [
+          entry.userId,
+          entry.email,
+        ]),
       );
 
-      const notificationIds = rows.map((row) => row.notificationId);
+      const notificationIds = EffectArray.map(rows, (row) => row.notificationId);
       if (!Array.isArrayNonEmpty(notificationIds)) {
         return { sent: 0, retried: 0, cancelled: 0, failed: 0 };
       }
@@ -148,8 +152,8 @@ export const NotificationsLive = Layer.effect(
             ),
         }),
       );
-      const claimedIds = new Set(claimed.map((row) => row.id));
-      const claimedRows = rows.filter((row) => claimedIds.has(row.notificationId));
+      const claimedIds = new Set(EffectArray.map(claimed, (row) => row.id));
+      const claimedRows = EffectArray.filter(rows, (row) => claimedIds.has(row.notificationId));
 
       const cancelledIds: string[] = [];
       const missingEmailIds: string[] = [];
@@ -241,13 +245,16 @@ function reconnectEmail(incidentId: string, to: string): EmailMessage {
   return {
     to,
     subject: "Action required: reconnect your fantasy provider for Lineupgrade",
-    text: [
-      "Lineupgrade cannot run your lineups because your provider connection needs to be reconnected.",
-      "",
-      "Open Lineupgrade and go to Connections to reconnect your provider. Your team automation settings are unchanged.",
-      "",
-      "You will not receive another reminder for this connection until it is reconnected.",
-    ].join("\n"),
+    text: EffectArray.join(
+      [
+        "Lineupgrade cannot run your lineups because your provider connection needs to be reconnected.",
+        "",
+        "Open Lineupgrade and go to Connections to reconnect your provider. Your team automation settings are unchanged.",
+        "",
+        "You will not receive another reminder for this connection until it is reconnected.",
+      ],
+      "\n",
+    ),
     purpose: "connection-reconnect-required",
     idempotencyKey: `connection-reconnect:${incidentId}`,
   };

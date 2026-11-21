@@ -4,11 +4,13 @@ import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { type Page, expect, test, type TestInfo } from "@playwright/test";
 import { Effect } from "effect";
 import { Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { namePage, pagePersona } from "./persona.ts";
 import { mcpExchangeName } from "./verify/mcpEvidence.ts";
 import { CallObserver } from "./verify/performance.ts";
 import { redactEvidence } from "./verify/redaction.ts";
+
 export function mcpClient(
   endpoint: string | URL,
   token?: string,
@@ -367,8 +369,13 @@ export function authorizedMcp(
           return response;
         },
       );
-    return test.step(`Setup (mcp) [${persona}]: authorize ${scopes.join(" ")}`, async () => {
-      const authorization = await beginAuthorization(page, endpoint, scopes.join(" "), transport);
+    return test.step(`Setup (mcp) [${persona}]: authorize ${EffectArray.join(scopes, " ")}`, async () => {
+      const authorization = await beginAuthorization(
+        page,
+        endpoint,
+        EffectArray.join(scopes, " "),
+        transport,
+      );
       if (new URL(page.url()).pathname === "/auth") {
         await signIn(page, { email: `mcp-${randomUUID()}@example.com` });
       }

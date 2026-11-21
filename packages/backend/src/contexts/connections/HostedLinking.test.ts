@@ -2,6 +2,7 @@ import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { Duration, Effect, Layer, Redacted, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 import { TestClock } from "effect/testing";
 
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
@@ -110,7 +111,7 @@ it.effect("completes once, stores the validated connection, and discovers teams"
     assert.instanceOf(replayedStream, HostedLinkingNotActive);
     assert.deepStrictEqual(yield* connections.list(owner), [completed.connection]);
     assert.deepStrictEqual(
-      (yield* connections.listTeams(owner)).map((team) => team.name),
+      EffectArray.map(yield* connections.listTeams(owner), (team) => team.name),
       ["Hosted Team"],
     );
   }).pipe(layerTools.provide(HostedLinkingTestLayer)),
@@ -151,7 +152,7 @@ it.effect("reconnects an expired connection in place instead of creating another
     assert.strictEqual(completed.connection.id, first.connection.id);
     assert.strictEqual(completed.connection.status, "ready");
     assert.deepStrictEqual(
-      (yield* connections.list(owner)).map((connection) => connection.id),
+      EffectArray.map(yield* connections.list(owner), (connection) => connection.id),
       [first.connection.id],
     );
   }).pipe(layerTools.provide(HostedLinkingTestLayer)),

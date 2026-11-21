@@ -1,4 +1,5 @@
 import { Config, Context, Effect, Layer, Redacted, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 import { SecureRandom } from "effect/crypto";
 
 import type { UserId } from "#contexts/auth/User.ts";
@@ -267,23 +268,29 @@ function additionalData(input: {
   readonly keyVersion: number;
 }): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(
-    [
-      "lineupkeep.connection-credential",
-      String(credentialEnvelopeVersion),
-      String(input.keyVersion),
-      input.userId,
-      input.connectionId,
-      input.provider,
-    ].join("\u0000"),
+    EffectArray.join(
+      [
+        "lineupkeep.connection-credential",
+        String(credentialEnvelopeVersion),
+        String(input.keyVersion),
+        input.userId,
+        input.connectionId,
+        input.provider,
+      ],
+      "\u0000",
+    ),
   );
 }
 
 function keyVersionUnavailableMessage(keyVersion: number): string {
-  return [
-    `Connection credential key version ${String(keyVersion)} is not in this deployment's keyring.`,
-    "Add its material to CONNECTION_ENCRYPTION_RETAINED_KEYS under that version and redeploy,",
-    "or have the owner disconnect and re-link the connection.",
-  ].join(" ");
+  return EffectArray.join(
+    [
+      `Connection credential key version ${String(keyVersion)} is not in this deployment's keyring.`,
+      "Add its material to CONNECTION_ENCRYPTION_RETAINED_KEYS under that version and redeploy,",
+      "or have the owner disconnect and re-link the connection.",
+    ],
+    " ",
+  );
 }
 
 type CredentialCipher = {

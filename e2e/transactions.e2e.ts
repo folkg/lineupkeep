@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { Schema } from "effect";
+import { Array as EffectArray, Option as EffectOption } from "effect";
 
 import { expect, signUp, test } from "./support";
 import { captureCheckpoint } from "./verify/capture";
@@ -27,8 +28,12 @@ test("proposes a move into one team queue and runs it from the transactions page
       ),
     ),
   );
-  const football = discovered.find((team) => team.name === "Embedded Browser Team");
-  const hockey = discovered.find((team) => team.name === "Hosted Hockey Team");
+  const football = EffectOption.getOrUndefined(
+    EffectArray.findFirst(discovered, (team) => team.name === "Embedded Browser Team"),
+  );
+  const hockey = EffectOption.getOrUndefined(
+    EffectArray.findFirst(discovered, (team) => team.name === "Hosted Hockey Team"),
+  );
   expect(football, "a football team").toBeDefined();
   expect(hockey, "a hockey team").toBeDefined();
   if (football === undefined || hockey === undefined) {
@@ -156,7 +161,9 @@ test("discards a move today and keeps it out of earlier", async ({ page, service
       ),
     ),
   );
-  const football = discovered.find((team) => team.name === "Embedded Browser Team");
+  const football = EffectOption.getOrUndefined(
+    EffectArray.findFirst(discovered, (team) => team.name === "Embedded Browser Team"),
+  );
   expect(football, "a football team").toBeDefined();
   if (football === undefined) {
     return;
@@ -220,7 +227,9 @@ test("names a refused move without storing it or returning an identifier", async
       ),
     ),
   );
-  const football = discovered.find((team) => team.name === "Embedded Browser Team");
+  const football = EffectOption.getOrUndefined(
+    EffectArray.findFirst(discovered, (team) => team.name === "Embedded Browser Team"),
+  );
   expect(football, "a football team").toBeDefined();
   if (football === undefined) {
     return;

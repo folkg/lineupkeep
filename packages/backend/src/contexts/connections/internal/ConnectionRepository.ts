@@ -1,5 +1,7 @@
 import { and, asc, eq, getTableColumns, notInArray, or } from "drizzle-orm";
 import { Array, Context, DateTime, Effect, Layer, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Order as EffectOrder } from "effect";
 import { SecureRandom } from "effect/crypto";
 
 import { UserId } from "#contexts/auth/User.ts";
@@ -67,6 +69,22 @@ import {
   NotificationsRow,
 } from "./IncidentTables.ts";
 import { TeamAutomationState } from "./TeamAutomationWorkflow.ts";
+function sortWithComparator<A>(
+  self: ReadonlyArray<A>,
+  compare: (left: A, right: A) => number,
+): ReadonlyArray<A> {
+  return EffectArray.sort(
+    self,
+    EffectOrder.make<A>((left, right) => {
+      const result = compare(left, right);
+      return result < 0 ? -1 : result > 0 ? 1 : 0;
+    }),
+  );
+}
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 type Transaction = Parameters<Parameters<ConnectionsDatabase["Service"]["transaction"]>[0]>[0];
 
@@ -137,7 +155,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
           readonly ids: ReadonlyArray<ConnectionId>;
         }>,
       ) {
-        const filters = inputs.flatMap((input) => {
+        const filters = EffectArray.flatMap(inputs, (input) => {
           const ids = [...new Set(input.ids)];
           return Array.isArrayNonEmpty(ids)
             ? [
@@ -287,7 +305,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
         return yield* database
           .transaction((tx) =>
             Effect.gen(function* () {
-              const sortedRows = rows.toSorted((left, right) =>
+              const sortedRows = sortWithComparator(rows, (left, right) =>
                 left.requestId.localeCompare(right.requestId),
               );
               const inserted = yield* chunked(
@@ -302,10 +320,11 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                     })
                     .returning(),
               );
-              const results = new Map(inserted.map((row) => [row.requestId, row]));
-              const skipped = inputs
-                .filter((input) => !results.has(input.requestId))
-                .map((input) => input.requestId);
+              const results = new Map(EffectArray.map(inserted, (row) => [row.requestId, row]));
+              const skipped = EffectArray.map(
+                EffectArray.filter(inputs, (input) => !results.has(input.requestId)),
+                (input) => input.requestId,
+              );
               if (Array.isArrayNonEmpty(skipped)) {
                 const existing = yield* tx
                   .select()
@@ -369,7 +388,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
         if (commands.length === 0) {
           return [];
         }
-        const byId = new Map(commands.map((command) => [command.id, command]));
+        const byId = new Map(EffectArray.map(commands, (command) => [command.id, command]));
         const ids = [...byId.keys()];
         if (!Array.isArrayNonEmpty(ids)) {
           return [];
@@ -421,7 +440,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                       targets,
                       (_target) => completed,
                     ).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
-                    return planned.map(({ row, snapshot }) => ({
+                    return EffectArray.map(planned, ({ row, snapshot }) => ({
                       ...row.record,
                       state: snapshot.state,
                     }));
@@ -448,7 +467,9 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
               cause._tag === "SchemaError" ? ConnectionPersistenceFailed.make({ cause }) : cause,
             ),
             mapTransactionError,
-            Effect.map((rows) => rows.map((row) => recordToConnection(row, row.state))),
+            Effect.map((rows) =>
+              EffectArray.map(rows, (row) => recordToConnection(row, row.state)),
+            ),
           );
       });
 
@@ -459,7 +480,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
         if (commands.length === 0) {
           return [];
         }
-        const byId = new Map(commands.map((command) => [command.id, command]));
+        const byId = new Map(EffectArray.map(commands, (command) => [command.id, command]));
         const ids = [...byId.keys()];
         if (!Array.isArrayNonEmpty(ids)) {
           return [];
@@ -524,7 +545,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                         });
                       },
                     ).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
-                    return planned.map(({ row, snapshot }) => ({
+                    return EffectArray.map(planned, ({ row, snapshot }) => ({
                       ...row.record,
                       state: snapshot.state,
                     }));
@@ -552,7 +573,9 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
               cause._tag === "SchemaError" ? ConnectionPersistenceFailed.make({ cause }) : cause,
             ),
             mapTransactionError,
-            Effect.map((rows) => rows.map((row) => recordToConnection(row, row.state))),
+            Effect.map((rows) =>
+              EffectArray.map(rows, (row) => recordToConnection(row, row.state)),
+            ),
           );
       });
 
@@ -560,7 +583,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
         userId: UserId,
         inputs: ReadonlyArray<ConnectionIdInput>,
       ) {
-        const ids = [...new Set(inputs.map((input) => input.id))];
+        const ids = [...new Set(EffectArray.map(inputs, (input) => input.id))];
         if (!Array.isArrayNonEmpty(ids)) {
           return [];
         }
@@ -605,7 +628,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                     ).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
                     return [
                       ...unchanged,
-                      ...planned.map(({ row, snapshot }) => ({
+                      ...EffectArray.map(planned, ({ row, snapshot }) => ({
                         ...row.record,
                         state: snapshot.state,
                       })),
@@ -637,7 +660,9 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
               cause._tag === "SchemaError" ? ConnectionPersistenceFailed.make({ cause }) : cause,
             ),
             mapTransactionError,
-            Effect.map((rows) => rows.map((row) => recordToConnection(row, row.state))),
+            Effect.map((rows) =>
+              EffectArray.map(rows, (row) => recordToConnection(row, row.state)),
+            ),
           );
       });
 
@@ -646,7 +671,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
           if (commands.length === 0) {
             return [];
           }
-          const byId = new Map(commands.map((command) => [command.id, command]));
+          const byId = new Map(EffectArray.map(commands, (command) => [command.id, command]));
           const ids = [...byId.keys()];
           if (!Array.isArrayNonEmpty(ids)) {
             return [];
@@ -709,7 +734,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                     ).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
                     const next = [
                       ...unchanged,
-                      ...planned.map(({ row, snapshot }) => ({
+                      ...EffectArray.map(planned, ({ row, snapshot }) => ({
                         ...row.record,
                         state: snapshot.state,
                       })),
@@ -717,26 +742,28 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                     const incident = connectionIncidentProjection(
                       initialConnectionIncidentState(at),
                     );
-                    const candidates = next.flatMap((record) =>
-                      record.state._tag === "ReconnectRequired"
-                        ? [
-                            {
-                              userId: record.userId,
-                              connectionId: record.id,
-                              credentialGeneration: record.state.credentialGeneration,
-                              ...incident,
-                              openedAt: DateTime.toDateUtc(incident.openedAt),
-                              resolvedAt:
-                                incident.resolvedAt === null
-                                  ? null
-                                  : DateTime.toDateUtc(incident.resolvedAt),
-                              operation: byId.get(record.id)?.evidence?.operation ?? null,
-                              providerStatus: byId.get(record.id)?.evidence?.status ?? null,
-                              providerDetail: byId.get(record.id)?.evidence?.detail ?? null,
-                            },
-                          ]
-                        : [],
-                    );
+                    const candidates = EffectArray.flatMap(next, (record) => {
+                      const flatMapped1 =
+                        record.state._tag === "ReconnectRequired"
+                          ? [
+                              {
+                                userId: record.userId,
+                                connectionId: record.id,
+                                credentialGeneration: record.state.credentialGeneration,
+                                ...incident,
+                                openedAt: DateTime.toDateUtc(incident.openedAt),
+                                resolvedAt:
+                                  incident.resolvedAt === null
+                                    ? null
+                                    : DateTime.toDateUtc(incident.resolvedAt),
+                                operation: byId.get(record.id)?.evidence?.operation ?? null,
+                                providerStatus: byId.get(record.id)?.evidence?.status ?? null,
+                                providerDetail: byId.get(record.id)?.evidence?.detail ?? null,
+                              },
+                            ]
+                          : [];
+                      return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+                    });
                     if (candidates.length > 0) {
                       const incidentIds = yield* Effect.replicateEffect(candidates.length)(
                         random.ulid,
@@ -757,7 +784,9 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                         });
                     }
                     const incidentConnectionIds: string[] = [
-                      ...new Set(candidates.map((candidate) => candidate.connectionId)),
+                      ...new Set(
+                        EffectArray.map(candidates, (candidate) => candidate.connectionId),
+                      ),
                     ];
                     if (Array.isArrayNonEmpty(incidentConnectionIds)) {
                       const open = yield* transaction
@@ -810,7 +839,9 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                 cause._tag === "SchemaError" ? ConnectionPersistenceFailed.make({ cause }) : cause,
               ),
               mapTransactionError,
-              Effect.map((rows) => rows.map((row) => recordToConnection(row, row.state))),
+              Effect.map((rows) =>
+                EffectArray.map(rows, (row) => recordToConnection(row, row.state)),
+              ),
             );
         },
       );
@@ -878,7 +909,9 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
         if (discoveries.length === 0) {
           return;
         }
-        const ids = [...new Set(discoveries.map((discovery) => discovery.connectionId))];
+        const ids = [
+          ...new Set(EffectArray.map(discoveries, (discovery) => discovery.connectionId)),
+        ];
         if (!Array.isArrayNonEmpty(ids)) {
           return;
         }
@@ -930,7 +963,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                 .where(
                   and(eq(providerConnections.userId, userId), anyOf(providerConnections.id, ids)),
                 );
-              const ownedIds = new Set(owned.map((row) => row.id));
+              const ownedIds = new Set(EffectArray.map(owned, (row) => row.id));
               for (const id of ids) {
                 if (!ownedIds.has(id)) {
                   return yield* ConnectionNotFound.make({ id });
@@ -960,7 +993,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                 );
               }
               for (const { connectionId, teams } of discoveries) {
-                const keys = teams.map((team) => team.providerTeamKey);
+                const keys = EffectArray.map(teams, (team) => team.providerTeamKey);
                 yield* tx
                   .update(providerTeams)
                   .set({ availability: "unavailable", updatedAt: atDate })
@@ -1050,7 +1083,7 @@ function resolveIncidents(
       .where(
         and(eq(connectionIncidents.status, "open"), anyOf(connectionIncidents.connectionId, ids)),
       );
-    const openIds = open.map((row) => row.id);
+    const openIds = EffectArray.map(open, (row) => row.id);
     if (!Array.isArrayNonEmpty(openIds)) {
       return;
     }
@@ -1071,7 +1104,7 @@ function resolveIncidents(
           { concurrency: 1 },
         ),
     });
-    const incidentIds: string[] = resolved.map((row) => row.id);
+    const incidentIds: string[] = EffectArray.map(resolved, (row) => row.id);
     if (!Array.isArrayNonEmpty(incidentIds)) {
       return;
     }
@@ -1081,7 +1114,7 @@ function resolveIncidents(
       .where(
         and(eq(notifications.status, "pending"), anyOf(notifications.incidentId, incidentIds)),
       );
-    const notificationIds = pending.map((row) => row.id);
+    const notificationIds = EffectArray.map(pending, (row) => row.id);
     if (Array.isArrayNonEmpty(notificationIds)) {
       yield* mutateRows(tx, notifications, {
         where: and(
@@ -1135,7 +1168,7 @@ function credentialRows(
   readonly updatedAt: Date;
 }> {
   const at = DateTime.toDateUtc(now);
-  return rows.map((row) => {
+  return EffectArray.map(rows, (row) => {
     const command = commands.get(row.id);
     if (command === undefined || row.state._tag !== "Ready") {
       throw new Error("completed connection is missing its credential");
@@ -1157,8 +1190,8 @@ function orderConnections(
   rows: ReadonlyArray<typeof ConnectionRow.Type>,
   ids: ReadonlyArray<ConnectionId>,
 ): ReadonlyArray<typeof ConnectionRow.Type> {
-  const byId = new Map(rows.map((row) => [row.id, row]));
-  return ids.flatMap((id) => {
+  const byId = new Map(EffectArray.map(rows, (row) => [row.id, row]));
+  return EffectArray.flatMap(ids, (id) => {
     const row = byId.get(id);
     return row === undefined ? [] : [row];
   });

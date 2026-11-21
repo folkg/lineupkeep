@@ -1,6 +1,10 @@
 import { Array } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type { TeamIdentity } from "./ScheduleObservationRepository.ts";
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 export function uniqueProviderTeamKeys(
   rows: ReadonlyArray<TeamIdentity>,
@@ -11,9 +15,11 @@ export function uniqueProviderTeamKeys(
     (row) => row.providerTeamKey,
   );
   return new Map(
-    [...grouped.entries()].flatMap(([identifier, keys]) =>
-      keys.size === 1 ? [[identifier, Array.getUnsafe([...keys], 0)] as const] : [],
-    ),
+    EffectArray.flatMap([...grouped.entries()], ([identifier, keys]) => {
+      const flatMapped1 =
+        keys.size === 1 ? [[identifier, Array.getUnsafe([...keys], 0)] as const] : [];
+      return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+    }),
   );
 }
 

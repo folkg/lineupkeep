@@ -1,6 +1,7 @@
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { Effect } from "effect";
 import { Cause, Exit, Predicate, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { redactEvidence } from "./redaction.ts";
 
@@ -14,7 +15,7 @@ export function serviceCallEvidence(
 ): unknown {
   const credentials = [
     cookie,
-    ...cookie.split(";").map((part) => part.slice(part.indexOf("=") + 1).trim()),
+    ...EffectArray.map(cookie.split(";"), (part) => part.slice(part.indexOf("=") + 1).trim()),
   ];
   return redactEvidence(
     {
@@ -53,9 +54,9 @@ function isJsonData(value: unknown, seen = new Set<object>()): boolean {
     return false;
   }
   seen.add(value);
-  return Array.isArray(value)
-    ? value.every((entry) => isJsonData(entry, seen))
-    : Object.values(value).every((entry) => isJsonData(entry, seen));
+  return EffectArray.isArray(value)
+    ? EffectArray.every(value, (entry) => isJsonData(entry, seen))
+    : EffectArray.every(Object.values(value), (entry) => isJsonData(entry, seen));
 }
 
 function encodeResult(value: unknown): { readonly result: unknown } | { readonly note: string } {

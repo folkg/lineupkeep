@@ -1,3 +1,5 @@
+import { EffectArray, EffectOption } from "@lineupkeep/collections";
+
 import { formatCalendarDate } from "#browser/shared-ui/formatTime.ts";
 import type { ClockReader } from "#browser/shared-ui/formatTime.ts";
 import type {
@@ -242,7 +244,8 @@ function localDay(
 ): { readonly key: string; readonly year: string } {
   const parts = dayKeyFormat(reader).formatToParts(value);
   const part = (type: Intl.DateTimeFormatPartTypes): string =>
-    parts.find((held) => held.type === type)?.value ?? "";
+    EffectOption.getOrUndefined(EffectArray.findFirst(parts, (held) => held.type === type))
+      ?.value ?? "";
   const year = part("year");
   return { key: `${year}-${part("month")}-${part("day")}`, year };
 }

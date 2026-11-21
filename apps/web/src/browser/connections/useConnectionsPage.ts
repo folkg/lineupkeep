@@ -1,3 +1,4 @@
+import { EffectArray } from "@lineupkeep/collections";
 import { useMutation, useQuery } from "@tanstack/solid-query";
 import { createSignal } from "solid-js";
 import type { Accessor } from "solid-js";
@@ -46,7 +47,7 @@ export function useConnectionsPage(props: ConnectionsOptions): ConnectionsContro
 
   return {
     connections: () =>
-      connections.data.filter((connection) => connection.status !== "disconnected"),
+      EffectArray.filter(connections.data, (connection) => connection.status !== "disconnected"),
     isLoading: () => connections.isPending,
     loadFailure: () => connections.error,
     feedback,

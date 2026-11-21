@@ -3,6 +3,8 @@ import { assert, it } from "@effect/vitest";
 import { AccountErasure } from "@lineupkeep/backend/privacy/AccountErasure";
 import { AccountExport, AccountExportDocument } from "@lineupkeep/backend/privacy/AccountExport";
 import { DateTime, Duration, Effect, Layer, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Order as EffectOrder } from "effect";
 import { TestClock } from "effect/testing";
 
 import layerTools from "#runtime/ProvideLayer.ts";
@@ -13,6 +15,17 @@ import { AccountErasureLive } from "./internal/AccountErasureLive.ts";
 import { AccountExportLive } from "./internal/AccountExportLive.ts";
 import { otherOwner, owner, seedOwnedAccount } from "./internal/OwnedAccountSeedRepository.ts";
 import { PrivacyDatabaseTest } from "./internal/PrivacyDatabaseTest.ts";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
 
 it.effect(
   "exports every class, round-trips through its schema, and withholds credentials explicitly",
@@ -32,10 +45,10 @@ it.effect(
 
       assert.deepStrictEqual(decoded, document);
       assert.deepStrictEqual(
-        document.tables.map((table) => table.table),
-        ownedDataInventory.map((entry) => entry.table),
+        EffectArray.map(document.tables, (table) => table.table),
+        EffectArray.map(ownedDataInventory, (entry) => entry.table),
       );
-      assert.deepStrictEqual(document.tables.map((table) => table.label).sort(), [
+      assert.deepStrictEqual(EffectArray.map(document.tables, (table) => table.label).sort(), [
         "Account",
         "Agent access tokens",
         "Agent client registrations",
@@ -73,14 +86,20 @@ it.effect(
       ]);
 
       const summary = yield* erasure.erase(owner.id);
-      const exportedClasses = document.tables
-        .filter((table) => table.rows.length > 0)
-        .map((table) => table.label)
-        .sort();
-      assert.deepStrictEqual(summary.removed.map((entry) => entry.class).sort(), exportedClasses);
+      const exportedClasses = EffectArray.map(
+        EffectArray.filter(document.tables, (table) => table.rows.length > 0),
+        (table) => table.label,
+      ).sort();
+      assert.deepStrictEqual(
+        EffectArray.map(summary.removed, (entry) => entry.class).sort(),
+        exportedClasses,
+      );
 
       const withheld = new Map(
-        document.withheld.map((entry) => [`${entry.table}.${entry.field}`, entry.reason]),
+        EffectArray.map(document.withheld, (entry) => [
+          `${entry.table}.${entry.field}`,
+          entry.reason,
+        ]),
       );
       for (const key of [
         "provider_credentials.envelope",
@@ -100,7 +119,7 @@ it.effect(
       ]) {
         assert.isString(withheld.get(key), `${key} was not named as withheld`);
       }
-      assert.isTrue([...withheld.values()].every((reason) => reason.length > 0));
+      assert.isTrue(EffectArray.every([...withheld.values()], (reason) => reason.length > 0));
 
       const exported = encoded;
       for (const secret of [
@@ -167,14 +186,19 @@ it.effect(
       assert.isTrue(held.usable);
       assert.strictEqual(
         held.latest?.records,
-        document.tables.reduce((total, table) => total + table.rows.length, 0),
+        EffectArray.reduce(document.tables, 0, (total, table) => total + table.rows.length),
       );
       assert.deepStrictEqual(
-        held.latest?.areas.map((area) => area.label).sort(),
-        document.tables
-          .filter((table) => table.rows.length > 0)
-          .map((table) => table.label)
-          .sort(),
+        optionalArrayValue(
+          optionalArrayValue(held.latest?.areas, (value) =>
+            EffectArray.map(value, (area) => area.label),
+          ),
+          (value) => EffectArray.sort(value, EffectOrder.String),
+        ),
+        EffectArray.map(
+          EffectArray.filter(document.tables, (table) => table.rows.length > 0),
+          (table) => table.label,
+        ).sort(),
       );
 
       yield* TestClock.adjust(Duration.hours(2));

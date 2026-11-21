@@ -8,6 +8,7 @@ import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { findTableOwnershipConflicts } from "@lineupkeep/backend/scripts/tableOwnership.ts";
 import { Effect } from "effect";
 import { Schema } from "effect";
+import { Array as EffectArray } from "effect";
 import { expect, it } from "vitest";
 
 import dependencyConfiguration from "#repo/.dependency-cruiser.ts";
@@ -18,6 +19,7 @@ import {
   checkMigrationDiscovery,
   checkTableOwnership,
 } from "./architectureFixture.ts";
+
 it.each([false, true])(
   "permits consumed backend exports with production=%s",
   async (production) => {
@@ -104,7 +106,7 @@ it("keeps a concrete remedy in every dependency rule's diagnostic contract", () 
   );
 
   expect(configuration.forbidden.length).toBeGreaterThan(0);
-  expect(new Set(configuration.forbidden.map((rule) => rule.name)).size).toBe(
+  expect(new Set(EffectArray.map(configuration.forbidden, (rule) => rule.name)).size).toBe(
     configuration.forbidden.length,
   );
   for (const rule of configuration.forbidden) {
@@ -218,7 +220,9 @@ it("includes root tooling without generated TypeScript or scratch scenarios", as
     )(output),
   );
 
-  expect(config.files).toEqual(expect.arrayContaining(expected.map((path) => `./${path}`)));
+  expect(config.files).toEqual(
+    expect.arrayContaining(EffectArray.map(expected, (path) => `./${path}`)),
+  );
   for (const path of excluded) {
     expect(config.files).not.toContain(`./${path}`);
   }
@@ -249,7 +253,7 @@ function configuredMessages(value: unknown, path = ""): Readonly<Record<string, 
     return {};
   }
   return Object.fromEntries(
-    Object.entries(value).flatMap(([key, entry]) => {
+    EffectArray.flatMap(Object.entries(value), ([key, entry]) => {
       const location = path === "" ? key : `${path}.${key}`;
       if (key === "message") {
         expect(typeof entry, location).toBe("string");

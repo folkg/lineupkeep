@@ -1,3 +1,4 @@
+import { EffectArray } from "@lineupkeep/collections";
 import { render } from "@solidjs/web";
 import { QueryClientProvider } from "@tanstack/solid-query";
 import {
@@ -83,7 +84,10 @@ it("puts appearance, connections, sessions, and data in order", async () => {
   await expect.element(page.getByRole("heading", { name: "Connections" })).toBeVisible();
   await expect.element(page.getByText("Chrome on macOS")).toBeVisible();
 
-  const headings = [...document.querySelectorAll("h2")].map((heading) => heading.textContent);
+  const headings = EffectArray.map(
+    [...document.querySelectorAll("h2")],
+    (heading) => heading.textContent,
+  );
   expect(headings).toEqual(["Appearance", "Connections", "Sign-in sessions", "Your data"]);
 
   const copy = document.body.textContent.replace(/\s+/g, " ");

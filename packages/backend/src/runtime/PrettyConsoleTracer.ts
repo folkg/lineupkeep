@@ -1,6 +1,32 @@
 import { Duration, Exit, Option, Redacted, Tracer } from "effect";
+import { Array as EffectArray } from "effect";
+import { Order as EffectOrder } from "effect";
 
 import jsonTools from "#runtime/JsonText.ts";
+function sortWithComparator<A>(
+  self: ReadonlyArray<A>,
+  compare: (left: A, right: A) => number,
+): ReadonlyArray<A> {
+  return EffectArray.sort(
+    self,
+    EffectOrder.make<A>((left, right) => {
+      const result = compare(left, right);
+      return result < 0 ? -1 : result > 0 ? 1 : 0;
+    }),
+  );
+}
+
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
 
 export function makePrettyConsoleTracer(options: PrettyConsoleTracerOptions): Tracer.Tracer {
   return Tracer.make({
@@ -36,36 +62,37 @@ function formatCompletedSpan(
   const parent = Option.getOrUndefined(span.parent);
   const identity = `[${text(span.traceId)}/${text(span.spanId)}${parent !== undefined ? ` parent=${text(parent.spanId)}` : ""}]`;
   const summary = `${indentation}${clipped ? "… " : ""}${status} ${identity} ${text(span.name)} kind=${span.kind} ${millis.toFixed(1)}ms${formatAttributes([...span.attributes])}`;
-  const events = span.events
-    .slice(0, maxDetails)
-    .map(
-      ([name, , attributes]) =>
-        `${indentation}  · ${text(name)}${formatAttributes(Object.entries(attributes))}`,
-    );
-  const links = span.links
-    .slice(0, maxLinks)
-    .map(
-      (link) =>
-        `${indentation}  ↗ [${text(link.span.traceId)}/${text(link.span.spanId)}]${formatAttributes(Object.entries(link.attributes))}`,
-    );
+  const events = EffectArray.map(
+    span.events.slice(0, maxDetails),
+    ([name, , attributes]) =>
+      `${indentation}  · ${text(name)}${formatAttributes(Object.entries(attributes))}`,
+  );
+  const links = EffectArray.map(
+    span.links.slice(0, maxLinks),
+    (link) =>
+      `${indentation}  ↗ [${text(link.span.traceId)}/${text(link.span.spanId)}]${formatAttributes(Object.entries(link.attributes))}`,
+  );
   if (span.events.length > maxDetails) {
     events.push(`${indentation}  … ${span.events.length - maxDetails} more events`);
   }
   if (span.links.length > maxLinks) {
     links.push(`${indentation}  … ${span.links.length - maxLinks} more links`);
   }
-  return [summary, ...events, ...links].map((line) => truncate(line, maxLineLength)).join("\n");
+  return EffectArray.join(
+    EffectArray.map([summary, ...events, ...links], (line) => truncate(line, maxLineLength)),
+    "\n",
+  );
 }
 
 function formatStatus(span: Tracer.Span, exit: Exit.Exit<unknown, unknown>, slow: boolean): string {
   if (Exit.isFailure(exit)) {
-    const kinds = new Set(exit.cause.reasons.map((reason) => reason._tag));
+    const kinds = new Set(EffectArray.map(exit.cause.reasons, (reason) => reason._tag));
     const diagnostics = [
       ...(kinds.has("Fail") ? ["operation.failed"] : []),
       ...(kinds.has("Die") ? ["operation.defect"] : []),
       ...(kinds.has("Interrupt") ? ["interrupted"] : []),
     ];
-    return `${kinds.size === 1 && kinds.has("Interrupt") ? "⊘" : "✗"} ${diagnostics.join("+")}`;
+    return `${kinds.size === 1 && kinds.has("Interrupt") ? "⊘" : "✗"} ${EffectArray.join(diagnostics, "+")}`;
   }
   const outcome = span.attributes.get("app.outcome");
   if (outcome === "failure") {
@@ -91,10 +118,11 @@ function spanIndentation(span: Tracer.Span): {
 }
 
 function formatAttributes(entries: ReadonlyArray<readonly [string, unknown]>): string {
-  const sorted = entries
-    .filter(([key]) => key !== "effect.fiberId" && key !== "effect.logLevel")
-    .toSorted(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
-  const rendered = sorted.slice(0, maxDetails).map(([key, value]) => {
+  const sorted = sortWithComparator(
+    EffectArray.filter(entries, ([key]) => key !== "effect.fiberId" && key !== "effect.logLevel"),
+    ([left], [right]) => (left < right ? -1 : left > right ? 1 : 0),
+  );
+  const rendered = EffectArray.map(sorted.slice(0, maxDetails), ([key, value]) => {
     const normalized =
       key === "db.query.text" && typeof value === "string"
         ? value.replaceAll(/\s+/gu, " ").trim()
@@ -104,7 +132,7 @@ function formatAttributes(entries: ReadonlyArray<readonly [string, unknown]>): s
   if (sorted.length > maxDetails) {
     rendered.push(`… ${sorted.length - maxDetails} more attributes`);
   }
-  return rendered.length === 0 ? "" : ` ${rendered.join(" ")}`;
+  return rendered.length === 0 ? "" : ` ${EffectArray.join(rendered, " ")}`;
 }
 
 function renderValue(value: unknown, depth: number): string {
@@ -127,32 +155,37 @@ function renderValue(value: unknown, depth: number): string {
     return "…";
   }
   if (
-    !Array.isArray(value) &&
+    !EffectArray.isArray(value) &&
     Object.getPrototypeOf(value) !== Object.prototype &&
     Object.getPrototypeOf(value) !== null
   ) {
     return "[unsupported]";
   }
   const descriptors = Object.getOwnPropertyDescriptors(value);
-  const keys = Array.isArray(value)
+  const keys = EffectArray.isArray(value)
     ? Array.from({ length: Math.min(value.length, maxItems) }, (_, index) => String(index))
-    : Object.keys(descriptors)
-        .filter((key) => descriptors[key]?.enumerable === true)
-        .sort()
-        .slice(0, maxItems);
-  const items = keys.map((key) => {
+    : optionalArrayValue(
+        EffectArray.filter(
+          Object.keys(descriptors),
+          (key) => descriptors[key]?.enumerable === true,
+        ),
+        (value) => EffectArray.sort(value, EffectOrder.String),
+      ).slice(0, maxItems);
+  const items = EffectArray.map(keys, (key) => {
     const descriptor = descriptors[key];
     const rendered =
       descriptor !== undefined && "value" in descriptor
         ? renderValue(descriptor.value, depth + 1)
         : "[unsupported]";
-    return Array.isArray(value) ? rendered : `${jsonTools.jsonString(text(key))}:${rendered}`;
+    return EffectArray.isArray(value) ? rendered : `${jsonTools.jsonString(text(key))}:${rendered}`;
   });
-  const count = Array.isArray(value) ? value.length : Object.keys(descriptors).length;
+  const count = EffectArray.isArray(value) ? value.length : Object.keys(descriptors).length;
   if (count > maxItems) {
     items.push(`… ${count - maxItems} more`);
   }
-  return Array.isArray(value) ? `[${items.join(",")}]` : `{${items.join(",")}}`;
+  return EffectArray.isArray(value)
+    ? `[${EffectArray.join(items, ",")}]`
+    : `{${EffectArray.join(items, ",")}}`;
 }
 
 function text(value: string): string {

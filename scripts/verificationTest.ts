@@ -9,6 +9,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { Effect } from "effect";
 import { Schema } from "effect";
+import { Array as EffectArray } from "effect";
 import { assert } from "vitest";
 
 import type { DatabaseActivity, DatabaseProbe } from "#e2e/verify/databaseActivity.ts";
@@ -138,10 +139,11 @@ export async function evidenceSink(): Promise<{
   return {
     sink,
     folder,
-    attachments: () => [...byName].map(([name, path]) => ({ name, path: basename(path) })),
+    attachments: () =>
+      EffectArray.map([...byName], ([name, path]) => ({ name, path: basename(path) })),
     results: () =>
       Promise.all(
-        attached.map(async (path) =>
+        EffectArray.map(attached, async (path) =>
           Effect.runSync(Schema.decodeUnknownEffect(Result)(await readFile(path, "utf8"))),
         ),
       ),
@@ -239,7 +241,7 @@ export function declare(matrix: Claims): {
 } {
   return {
     request: matrix.request,
-    criteria: matrix.criteria.map(({ id, statement }) => ({ id, statement })),
+    criteria: EffectArray.map(matrix.criteria, ({ id, statement }) => ({ id, statement })),
   };
 }
 
@@ -335,7 +337,11 @@ export function shots(
 } {
   return {
     rawVideo: "test-results/video.webm",
-    scenes: scenes.map((scene) => ({ ...scene, title: "Action", text: "Submit the form" })),
+    scenes: EffectArray.map(scenes, (scene) => ({
+      ...scene,
+      title: "Action",
+      text: "Submit the form",
+    })),
   };
 }
 

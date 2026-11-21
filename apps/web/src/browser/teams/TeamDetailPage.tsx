@@ -1,3 +1,4 @@
+import { EffectArray, EffectOption } from "@lineupkeep/collections";
 import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
 import type { Accessor } from "solid-js";
@@ -38,8 +39,13 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
     remote: () => props.remote,
     onRefresh: () => props.onRefresh(),
   });
-  const team = (): TeamSummaryView | undefined =>
-    page.teams().find((candidate) => candidate.team.id === props.teamId);
+  const team = (): TeamSummaryView | undefined => {
+    const teams = page.teams();
+    const teamId = props.teamId;
+    return EffectOption.getOrUndefined(
+      EffectArray.findFirst(teams, (candidate) => candidate.team.id === teamId),
+    );
+  };
   const titleAside = (): JSX.Element | undefined => {
     const summary = team();
     return summary === undefined ? undefined : <TeamProviderLink team={summary.team} />;

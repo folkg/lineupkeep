@@ -1,5 +1,6 @@
 import { DateTime, Effect, Layer, Option, Schema } from "effect";
 import type { Redacted } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import {
@@ -82,11 +83,11 @@ export const LineupWorkerLive = Layer.effect(
       runIds: ReadonlyArray<LineupRunId>,
     ): Effect.fn.Return<LineupDeliveryReport, LineupPersistenceFailed> {
       const starts = yield* repository.loadRunConnections(runIds);
-      const byRun = new Map(starts.map((start) => [start.run, start]));
+      const byRun = new Map(EffectArray.map(starts, (start) => [start.run, start]));
       const statuses = new Map<ConnectionId, ConnectionStatus>();
       const health = yield* queries
         .loadConnectionHealth(
-          groupByUser(starts).map((group) => ({
+          EffectArray.map(groupByUser(starts), (group) => ({
             userId: group.userId,
             ids: group.connectionIds,
           })),
@@ -131,7 +132,10 @@ export const LineupWorkerLive = Layer.effect(
         return yield* failure;
       }
       return {
-        stopped: [...stopped].map(([connectionId, detail]) => ({ connectionId, detail })),
+        stopped: EffectArray.map([...stopped], ([connectionId, detail]) => ({
+          connectionId,
+          detail,
+        })),
       };
     });
 
@@ -410,7 +414,10 @@ export const LineupWorkerLive = Layer.effect(
         "lineup.left_in_place",
         placed.leftInPlace.length === 0
           ? "none"
-          : placed.leftInPlace.map((player) => `${player.name} (${player.slot})`).join(", "),
+          : EffectArray.join(
+              EffectArray.map(placed.leftInPlace, (player) => `${player.name} (${player.slot})`),
+              ", ",
+            ),
       );
       return {
         kind: "prepared" as const,
@@ -506,7 +513,7 @@ export const LineupWorkerLive = Layer.effect(
           session,
           providerTeamKey: context.team.providerTeamKey,
           target: providerTarget(intent.target),
-          assignments: plan.assignments.map((assignment) => ({
+          assignments: EffectArray.map(plan.assignments, (assignment) => ({
             providerPlayerKey: assignment.playerKey,
             slot: assignment.slot,
           })),
@@ -608,8 +615,8 @@ export const LineupWorkerLive = Layer.effect(
           changes: [],
           differences: [],
           ...provenance,
-          lockedPlayers: intent.before.filter((player) => !player.editable).length,
-          editablePlayers: intent.before.filter((player) => player.editable).length,
+          lockedPlayers: EffectArray.filter(intent.before, (player) => !player.editable).length,
+          editablePlayers: EffectArray.filter(intent.before, (player) => player.editable).length,
         },
         at,
       });
@@ -1274,7 +1281,7 @@ function describeCoverage(coverage: ProviderRosterCoverage | null): string {
 }
 
 function observe(roster: ProviderRoster, target: LineupTargetPeriod): LineupObservation {
-  const players = roster.players.map((player) => ({
+  const players = EffectArray.map(roster.players, (player) => ({
     key: player.providerPlayerKey,
     name: player.name,
     slot: player.slot,
@@ -1285,8 +1292,8 @@ function observe(roster: ProviderRoster, target: LineupTargetPeriod): LineupObse
   return {
     target,
     players,
-    lockedPlayers: players.filter((player) => !player.editable).length,
-    editablePlayers: players.filter((player) => player.editable).length,
+    lockedPlayers: EffectArray.filter(players, (player) => !player.editable).length,
+    editablePlayers: EffectArray.filter(players, (player) => player.editable).length,
   };
 }
 
@@ -1310,7 +1317,7 @@ function compare(
       readonly editablePlayers: number;
     }
   | undefined {
-  const previous = new Map(before.map((player) => [player.key, player]));
+  const previous = new Map(EffectArray.map(before, (player) => [player.key, player]));
   if (roster.players.length !== before.length) {
     return undefined;
   }
@@ -1330,8 +1337,10 @@ function compare(
   }
   return {
     changes,
-    lockedPlayers: roster.players.filter((player) => player.isEditable !== true).length,
-    editablePlayers: roster.players.filter((player) => player.isEditable === true).length,
+    lockedPlayers: EffectArray.filter(roster.players, (player) => player.isEditable !== true)
+      .length,
+    editablePlayers: EffectArray.filter(roster.players, (player) => player.isEditable === true)
+      .length,
   };
 }
 
@@ -1397,7 +1406,7 @@ function explicitPlan(
     lockedPlayers: observation.lockedPlayers,
     editablePlayers: observation.editablePlayers,
     provenance: { kind: "planned", label: provenance },
-    assignments: assignments.map((assignment) => ({
+    assignments: EffectArray.map(assignments, (assignment) => ({
       playerKey: assignment.providerPlayerKey,
       slot: assignment.slot,
     })),
@@ -1452,7 +1461,10 @@ function explicitSummary(plan: LineupPlan | undefined, verified: string): string
   const note =
     leftInPlace.length === 0
       ? undefined
-      : `${leftInPlace.map((player) => `${player.name} (${player.slot})`).join(", ")} ${leftInPlace.length === 1 ? "was" : "were"} left in place.`;
+      : `${EffectArray.join(
+          EffectArray.map(leftInPlace, (player) => `${player.name} (${player.slot})`),
+          ", ",
+        )} ${leftInPlace.length === 1 ? "was" : "were"} left in place.`;
   return clampSummary(note === undefined ? verified : `${note} ${verified}`);
 }
 
@@ -1481,10 +1493,10 @@ function sameTarget(left: LineupTargetPeriod, right: LineupTargetPeriod): boolea
 }
 
 function sameMembership(observed: LineupObservation["players"], roster: ProviderRoster): boolean {
-  const keys = new Set(observed.map((player) => player.key));
+  const keys = new Set(EffectArray.map(observed, (player) => player.key));
   return (
     roster.players.length === observed.length &&
-    roster.players.every((player) => keys.has(player.providerPlayerKey))
+    EffectArray.every(roster.players, (player) => keys.has(player.providerPlayerKey))
   );
 }
 
@@ -1492,8 +1504,8 @@ function sameLineup(observed: LineupObservation["players"], roster: ProviderRost
   if (!sameMembership(observed, roster)) {
     return false;
   }
-  const slots = new Map(observed.map((player) => [player.key, player]));
-  return roster.players.every((player) => {
+  const slots = new Map(EffectArray.map(observed, (player) => [player.key, player]));
+  return EffectArray.every(roster.players, (player) => {
     const previous = slots.get(player.providerPlayerKey);
     return (
       previous !== undefined &&
@@ -1509,12 +1521,12 @@ function assignmentDifferences(
   roster: ProviderRoster,
 ): ReadonlyArray<LineupRunDifference> {
   const expected = new Map<string, ProviderRosterSlot>(
-    before.map((player) => [player.key, player.slot]),
+    EffectArray.map(before, (player) => [player.key, player.slot]),
   );
   for (const assignment of assignments) {
     expected.set(assignment.playerKey, { status: "verified", slot: assignment.slot });
   }
-  return roster.players.flatMap((player) => {
+  return EffectArray.flatMap(roster.players, (player) => {
     const expectedSlot = expected.get(player.providerPlayerKey);
     return expectedSlot === undefined || sameSlot(expectedSlot, player.slot)
       ? []
@@ -1578,7 +1590,7 @@ function groupByUser(
     ids.add(start.connectionId);
     grouped.set(start.userId, ids);
   }
-  return [...grouped].map(([userId, connectionIds]) => ({
+  return EffectArray.map([...grouped], ([userId, connectionIds]) => ({
     userId,
     connectionIds: [...connectionIds],
   }));

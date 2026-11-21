@@ -1,3 +1,5 @@
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
@@ -60,7 +62,7 @@ describe("exhaustive oracle agreement", () => {
 
         const increased: LineupProblem = {
           ...problem,
-          players: problem.players.map((player, playerIndex) =>
+          players: EffectArray.map(problem.players, (player, playerIndex) =>
             playerIndex === index && player.selection.kind === "known"
               ? { ...player, selection: knownSelection(basis, player.selection.units + 1) }
               : player,
@@ -116,8 +118,8 @@ function oracleLineupViolations(
   problem: LineupProblem,
   assignments: ReadonlyArray<LineupAssignment>,
 ): ReadonlyArray<string> {
-  const playersById = new Map(problem.players.map((player) => [player.id, player]));
-  const slotsById = new Map(problem.slots.map((slot) => [slot.id, slot]));
+  const playersById = new Map(EffectArray.map(problem.players, (player) => [player.id, player]));
+  const slotsById = new Map(EffectArray.map(problem.slots, (slot) => [slot.id, slot]));
   const assignmentsByPlayer = new Map<PlayerId, number>();
   const assignmentsBySlot = new Map<SlotId, number>();
   const violations: Array<string> = [];
@@ -228,11 +230,14 @@ function adversarialCases(): ReadonlyArray<{
     {
       name: "players eligible for every position",
       problem: lineupProblem(
-        [
-          startingSlot("QB", 1, "required", []),
-          startingSlot("FLEX", 1, "optional", []),
-          benchSlot("BN", 2),
-        ].map((slot) => ({ ...slot, eligibility: { kind: "any" as const } })),
+        EffectArray.map(
+          [
+            startingSlot("QB", 1, "required", []),
+            startingSlot("FLEX", 1, "optional", []),
+            benchSlot("BN", 2),
+          ],
+          (slot) => ({ ...slot, eligibility: { kind: "any" as const } }),
+        ),
         [
           player("a", 3, { positions: ["QB", "RB", "WR"] }),
           player("b", 2, { positions: ["QB", "RB", "WR"] }),
@@ -393,9 +398,9 @@ function generatedRetentionProblemArbitrary(): fc.Arbitrary<LineupProblem> {
       fc.array(playerArbitrary, { minLength: 1, maxLength: 3 }),
     )
     .map(([slotSpecs, playerSpecs]) => {
-      const slots = slotSpecs.map((spec, index) => slotFromSpec(spec, index, "mixed"));
-      const slotIds = slots.map((slot) => slot.id);
-      const players: ReadonlyArray<RosterPlayer> = playerSpecs.map((spec, index) => ({
+      const slots = EffectArray.map(slotSpecs, (spec, index) => slotFromSpec(spec, index, "mixed"));
+      const slotIds = EffectArray.map(slots, (slot) => slot.id);
+      const players: ReadonlyArray<RosterPlayer> = EffectArray.map(playerSpecs, (spec, index) => ({
         id: playerId(`P${index}`),
         eligiblePositions: positionsFromSpec(spec.positions),
         availabilityTier: tiers[spec.tierOffset % 3] ?? willPlay,
@@ -461,7 +466,7 @@ type RetentionCandidate = {
 
 function solveTinyWithRetention(problem: LineupProblem): RetentionOracleResult {
   const players = [...problem.players].sort((left, right) => compareText(left.id, right.id));
-  if (players.some((player) => player.selection.kind !== "known")) {
+  if (EffectArray.some(players, (player) => player.selection.kind !== "known")) {
     throw new Error("The exhaustive oracle requires known selection values.");
   }
 
@@ -472,14 +477,14 @@ function solveTinyWithRetention(problem: LineupProblem): RetentionOracleResult {
     }
   }
 
-  const unassigned = new Set(players.map((player) => player.id));
+  const unassigned = new Set(EffectArray.map(players, (player) => player.id));
   const assignment = new Map<PlayerId, SlotId>();
   const empty = new Map<SlotId, number>();
   let best: RetentionCandidate | undefined;
 
   const search = (unitIndex: number): void => {
     if (unitIndex === units.length) {
-      const left = players.filter((player) => unassigned.has(player.id));
+      const left = EffectArray.filter(players, (player) => unassigned.has(player.id));
       if (!retentionLeavesPossible(problem, left, empty)) {
         return;
       }
@@ -540,7 +545,9 @@ function retentionLeavesPossible(
     if (player.currentSlotId === undefined) {
       continue;
     }
-    const slot = problem.slots.find((candidate) => candidate.id === player.currentSlotId);
+    const slot = EffectOption.getOrUndefined(
+      EffectArray.findFirst(problem.slots, (candidate) => candidate.id === player.currentSlotId),
+    );
     if (
       slot === undefined ||
       oracleMayOccupy(player, slot) ||
@@ -566,8 +573,8 @@ function evaluateRetentionAssignment(
   assignment: ReadonlyMap<PlayerId, SlotId>,
   leftCount: number,
 ): RetentionCandidate {
-  const slotsById = new Map(problem.slots.map((slot) => [slot.id, slot]));
-  const tierCounts = problem.availabilityTiers.map(() => 0);
+  const slotsById = new Map(EffectArray.map(problem.slots, (slot) => [slot.id, slot]));
+  const tierCounts = EffectArray.map(problem.availabilityTiers, () => 0);
   let value = 0;
   let zeroStarters = 0;
   let changes = 0;
@@ -645,9 +652,9 @@ function buildGeneratedProblem(
 ): LineupProblem {
   const effectivePlayerSpecs =
     shape === "capacity-over-roster" ? playerSpecs.slice(0, 1) : playerSpecs;
-  const slots = slotSpecs.map((spec, index) => slotFromSpec(spec, index, shape));
-  const slotIds = slots.map((slot) => slot.id);
-  const players = effectivePlayerSpecs.map((spec, index) =>
+  const slots = EffectArray.map(slotSpecs, (spec, index) => slotFromSpec(spec, index, shape));
+  const slotIds = EffectArray.map(slots, (slot) => slot.id);
+  const players = EffectArray.map(effectivePlayerSpecs, (spec, index) =>
     playerFromSpec(spec, index, shape, slotIds),
   );
   const lockedPlayers = shape === "locked" ? applyLockedShape(slots, players) : players;
@@ -740,7 +747,9 @@ function applyLockedShape(
   slots: ReadonlyArray<RosterSlot>,
   players: ReadonlyArray<RosterPlayer>,
 ): ReadonlyArray<RosterPlayer> {
-  const startingSlot = slots.find((slot) => slot.kind === "starting");
+  const startingSlot = EffectOption.getOrUndefined(
+    EffectArray.findFirst(slots, (slot) => slot.kind === "starting"),
+  );
   const firstPlayer = players[0];
   if (startingSlot === undefined || firstPlayer === undefined) {
     return players;
@@ -756,7 +765,7 @@ function applyLockedShape(
     return players;
   }
 
-  return players.map((player, index) =>
+  return EffectArray.map(players, (player, index) =>
     index === 0
       ? {
           ...player,
@@ -818,10 +827,10 @@ type OracleCandidate = {
 
 function solveTinyProblem(problem: LineupProblem): OracleResult {
   const players = [...problem.players].sort((left, right) => compareText(left.id, right.id));
-  if (players.some((player) => player.selection.kind !== "known")) {
+  if (EffectArray.some(players, (player) => player.selection.kind !== "known")) {
     throw new Error("The exhaustive oracle requires known selection values.");
   }
-  const slotsById = new Map(problem.slots.map((slot) => [slot.id, slot]));
+  const slotsById = new Map(EffectArray.map(problem.slots, (slot) => [slot.id, slot]));
   for (const player of players) {
     if (player.lockedSlotId !== undefined && !slotsById.has(player.lockedSlotId)) {
       return { kind: "infeasible" };
@@ -834,10 +843,16 @@ function solveTinyProblem(problem: LineupProblem): OracleResult {
   }
 
   const lockedPlayerIds = new Set(
-    players.filter((player) => player.lockedSlotId !== undefined).map((player) => player.id),
+    EffectArray.map(
+      EffectArray.filter(players, (player) => player.lockedSlotId !== undefined),
+      (player) => player.id,
+    ),
   );
   const unassigned = new Set(
-    players.filter((player) => !lockedPlayerIds.has(player.id)).map((player) => player.id),
+    EffectArray.map(
+      EffectArray.filter(players, (player) => !lockedPlayerIds.has(player.id)),
+      (player) => player.id,
+    ),
   );
   const assignment = new Map<PlayerId, SlotId>();
   for (const unit of units) {
@@ -951,7 +966,9 @@ function oracleMayOccupy(player: RosterPlayer, slot: RosterSlot): boolean {
   if (eligibility.kind === "any") {
     return true;
   }
-  return player.eligiblePositions.some((position) => eligibility.positions.includes(position));
+  return EffectArray.some(player.eligiblePositions, (position) =>
+    eligibility.positions.includes(position),
+  );
 }
 
 function oracleMayStayEmpty(slot: RosterSlot): boolean {
@@ -963,8 +980,8 @@ function evaluateOracleAssignment(
   players: ReadonlyArray<RosterPlayer>,
   assignment: ReadonlyMap<PlayerId, SlotId>,
 ): OracleCandidate {
-  const slotsById = new Map(problem.slots.map((slot) => [slot.id, slot]));
-  const tierCounts = problem.availabilityTiers.map(() => 0);
+  const slotsById = new Map(EffectArray.map(problem.slots, (slot) => [slot.id, slot]));
+  const tierCounts = EffectArray.map(problem.availabilityTiers, () => 0);
   let value = 0;
   let zeroStarters = 0;
   let changes = 0;
@@ -1053,9 +1070,9 @@ function zeroStartingPlayers(
   problem: LineupProblem,
   assignments: ReadonlyArray<LineupAssignment>,
 ): number {
-  const playersById = new Map(problem.players.map((player) => [player.id, player]));
-  const slotsById = new Map(problem.slots.map((slot) => [slot.id, slot]));
-  return assignments.filter((assignment) => {
+  const playersById = new Map(EffectArray.map(problem.players, (player) => [player.id, player]));
+  const slotsById = new Map(EffectArray.map(problem.slots, (slot) => [slot.id, slot]));
+  return EffectArray.filter(assignments, (assignment) => {
     const player = playersById.get(assignment.playerId);
     const slot = slotsById.get(assignment.slotId);
     return (
@@ -1080,7 +1097,7 @@ function compareObjectives(left: ReadonlyArray<number>, right: ReadonlyArray<num
 
 function objectiveOf(problem: LineupProblem, plan: LineupPlan): ReadonlyArray<number> {
   return [
-    ...startingTierCounts(problem, plan.assignments).map((count) => -count),
+    ...EffectArray.map(startingTierCounts(problem, plan.assignments), (count) => -count),
     -plan.totalSelectionValue,
   ];
 }
@@ -1089,9 +1106,9 @@ function startingTierCounts(
   problem: LineupProblem,
   assignments: ReadonlyArray<LineupAssignment>,
 ): ReadonlyArray<number> {
-  const playersById = new Map(problem.players.map((player) => [player.id, player]));
-  const slotsById = new Map(problem.slots.map((slot) => [slot.id, slot]));
-  const counts = problem.availabilityTiers.map(() => 0);
+  const playersById = new Map(EffectArray.map(problem.players, (player) => [player.id, player]));
+  const slotsById = new Map(EffectArray.map(problem.slots, (slot) => [slot.id, slot]));
+  const counts = EffectArray.map(problem.availabilityTiers, () => 0);
 
   for (const assignment of assignments) {
     const player = playersById.get(assignment.playerId);

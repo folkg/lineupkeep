@@ -14,6 +14,7 @@ import { lineupScopes } from "@lineupkeep/backend/connections/LineupScopes";
 import { fantasyQueryScopes } from "@lineupkeep/backend/connections/QueryScopes";
 import { Effect, Schema } from "effect";
 import type { Layer } from "effect";
+import { Array as EffectArray } from "effect";
 import { Tool, Toolkit } from "effect/ai";
 
 import { RequiredScope } from "./toolAuthorization";
@@ -77,7 +78,9 @@ export function lineupToolHandlers(
               .submit(agent.userId, { requestId: input.requestId, teams: input.teams })
               .pipe(mapOutcome);
             const timeoutMs = input.waitMs ?? 0;
-            const settledBeforeWait = submitted.runs.every((run) => isSettled(run.status));
+            const settledBeforeWait = EffectArray.every(submitted.runs, (run) =>
+              isSettled(run.status),
+            );
             const waited =
               timeoutMs === 0 || settledBeforeWait
                 ? submitted
@@ -88,7 +91,7 @@ export function lineupToolHandlers(
               runs: waited.runs,
               wait: {
                 timeoutMs,
-                settled: waited.runs.every((run) => isSettled(run.status)),
+                settled: EffectArray.every(waited.runs, (run) => isSettled(run.status)),
               },
             } satisfies SetLineupResult;
           }),
@@ -107,7 +110,7 @@ function waitBounded(
   return runs
     .wait(
       userId,
-      submitted.runs.map((run) => run.run),
+      EffectArray.map(submitted.runs, (run) => run.run),
       timeoutMs,
     )
     .pipe(

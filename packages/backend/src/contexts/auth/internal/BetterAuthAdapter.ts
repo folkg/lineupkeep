@@ -25,6 +25,7 @@ import {
   Schema,
 } from "effect";
 import type { Scope } from "effect";
+import { Array as EffectArray } from "effect";
 import { Digest } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 
@@ -70,7 +71,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
       const clientAddress = yield* clientAddressConfig;
       const google = yield* googleConfig;
       const scopes = yield* AuthorizationScopes;
-      const advertisedScopeNames = scopes.map((scope) => scope.name);
+      const advertisedScopeNames = EffectArray.map(scopes, (scope) => scope.name);
       const acceptedNames = acceptedScopeNames(scopes);
       const currentScope = (name: string): string => {
         const target = currentScopeName(name);
@@ -275,8 +276,15 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
         if (storedUser.length === 0) {
           return { status: "invalid" };
         }
-        const granted = claims.value.scope.split(" ").filter(Boolean).map(currentScope);
-        if (!requiredScopes.map(currentScope).every((scope) => granted.includes(scope))) {
+        const granted = EffectArray.map(
+          EffectArray.filter(claims.value.scope.split(" "), Boolean),
+          currentScope,
+        );
+        if (
+          !EffectArray.every(EffectArray.map(requiredScopes, currentScope), (scope) =>
+            granted.includes(scope),
+          )
+        ) {
           return { status: "insufficient_scope" };
         }
         const clientId = claims.value.client_id;
@@ -353,9 +361,17 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
           Effect.mapError((cause) => AuthenticationInvalidResponse.make({ cause })),
         );
         const requested = new Set(
-          (params.get("scope") ?? "").split(" ").filter(Boolean).map(currentScope),
+          EffectArray.map(
+            EffectArray.filter((params.get("scope") ?? "").split(" "), Boolean),
+            currentScope,
+          ),
         );
-        if ([...requested].some((name) => !scopes.some((scope) => scope.name === name))) {
+        if (
+          EffectArray.some(
+            [...requested],
+            (name) => !EffectArray.some(scopes, (scope) => scope.name === name),
+          )
+        ) {
           return { status: "invalid" } as const;
         }
         return {
@@ -365,7 +381,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
             name: client.client_name ?? null,
             host: metadataHost ?? "an unverified client",
           },
-          scopes: scopes.filter((scope) => requested.has(scope.name)),
+          scopes: EffectArray.filter(scopes, (scope) => requested.has(scope.name)),
         } as const;
       });
       const consent = Effect.fn("AuthService.consent")(function* (
@@ -725,9 +741,11 @@ function createAuth(options: AuthFactoryOptions): ApplicationAuth {
         resource: options.oauthResource,
         resourceSeedMode: "insertOnly",
         scopes: [...options.acceptedScopeNames],
-        clientRegistrationDefaultScopes: options.scopes.map((scope) => scope.name),
+        clientRegistrationDefaultScopes: EffectArray.map(options.scopes, (scope) => scope.name),
         clientRegistrationAllowedScopes: [...options.acceptedScopeNames],
-        advertisedMetadata: { scopes_supported: options.scopes.map((scope) => scope.name) },
+        advertisedMetadata: {
+          scopes_supported: EffectArray.map(options.scopes, (scope) => scope.name),
+        },
         grantTypes: ["authorization_code", "refresh_token"],
         allowDynamicClientRegistration: true,
         allowUnauthenticatedClientRegistration: true,
@@ -790,13 +808,16 @@ function signInCodeEmail(code: SignInCode): EmailMessage {
   return {
     to: code.email,
     subject: `${code.code} is your ${productName} sign-in code`,
-    text: [
-      `Your ${productName} sign-in code is ${code.code}.`,
-      "",
-      `Enter it where you asked to sign in. It works once and expires in ${minutes} minutes.`,
-      "",
-      "If you didn't ask for this code, you can ignore this email. Nobody can sign in without it.",
-    ].join("\n"),
+    text: EffectArray.join(
+      [
+        `Your ${productName} sign-in code is ${code.code}.`,
+        "",
+        `Enter it where you asked to sign in. It works once and expires in ${minutes} minutes.`,
+        "",
+        "If you didn't ask for this code, you can ignore this email. Nobody can sign in without it.",
+      ],
+      "\n",
+    ),
     purpose: "auth.sign_in_code",
   };
 }
@@ -964,10 +985,10 @@ const clientAddressConfig = Config.all({
 );
 
 function splitList(value: string): Array<string> {
-  return value
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
+  return EffectArray.filter(
+    EffectArray.map(value.split(","), (entry) => entry.trim()),
+    (entry) => entry.length > 0,
+  );
 }
 
 function isNonEmpty(values: ReadonlyArray<string>): boolean {

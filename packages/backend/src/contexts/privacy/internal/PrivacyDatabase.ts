@@ -7,6 +7,7 @@ import type {
   EffectPostgresQueryResultHKT,
 } from "drizzle-orm/postgres/effect";
 import { Context, Effect, Layer, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 type PrivacyQueryResult = {
   readonly rows: ReadonlyArray<Record<string, unknown>>;
@@ -53,12 +54,12 @@ function privacyQueryResult(result: unknown): PrivacyQueryResult {
     throw new Error("A database query did not return rows.");
   }
   const rows = result.rows;
-  if (!Array.isArray(rows)) {
+  if (!EffectArray.isArray(rows)) {
     throw new Error("A database query did not return an array of rows.");
   }
   const rowCount =
     "rowCount" in result && typeof result.rowCount === "number" ? result.rowCount : rows.length;
-  return { rows: rows.map(recordOf), rowCount };
+  return { rows: EffectArray.map(rows, recordOf), rowCount };
 }
 
 function recordOf(row: unknown): Record<string, unknown> {

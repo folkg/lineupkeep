@@ -1,4 +1,6 @@
 import { Effect } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 
 import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
 import { parseExact } from "#contexts/connections/internal/provider-scoring/Exact.ts";
@@ -29,13 +31,28 @@ import type {
   ProviderPeriodSupport,
 } from "#contexts/connections/Provider.ts";
 import type { ProviderReadFailure } from "#contexts/connections/Provider.ts";
+function optionalValue<A>(): A | undefined {
+  return undefined;
+}
+
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
 
 const supportedSports = ["football", "hockey"] as const;
 
 type SupportedSport = (typeof supportedSports)[number];
 
 function isSupportedSport(sport: FantasySport): sport is SupportedSport {
-  return supportedSports.some((supported) => supported === sport);
+  return EffectArray.some(supportedSports, (supported) => supported === sport);
 }
 
 function unsupportedSportPeriods(detail: string): ProviderPeriodSupport {
@@ -165,7 +182,7 @@ export function scoreYahooRoster(
     return {
       kind: "scored",
       provenance: `yahoo/${scored.label}`,
-      players: scored.players.map(providerValue),
+      players: EffectArray.map(scored.players, providerValue),
       gamesPlayed,
     };
   });
@@ -273,8 +290,8 @@ function policyPlayers(
   period: Period,
   gamesPlayed: ReadonlyArray<ProviderGamesPlayed>,
 ): ReadonlyArray<PolicyPlayer> {
-  const limits = new Map(gamesPlayed.map((entry) => [entry.position, entry]));
-  return input.roster.players.map((player) => ({
+  const limits = new Map(EffectArray.map(gamesPlayed, (entry) => [entry.position, entry]));
+  return EffectArray.map(input.roster.players, (player) => ({
     id: player.providerPlayerKey,
     availability: yahooAvailability(player.injuryCode),
     scheduled: participationCounts(player, limits) ? player.scheduled : true,
@@ -300,22 +317,26 @@ function limitOf(
   if (current !== undefined) {
     return current;
   }
-  return player.eligiblePositions
-    .map((position) => limits.get(position))
-    .filter((entry): entry is ProviderGamesPlayed => entry !== undefined && entry.max > 0)
-    .reduce<ProviderGamesPlayed | undefined>(
-      (lowest, entry) =>
-        lowest === undefined || entry.projected / entry.max < lowest.projected / lowest.max
-          ? entry
-          : lowest,
-      undefined,
-    );
+  const initial = optionalValue<ProviderGamesPlayed>();
+  return EffectArray.reduce(
+    EffectArray.filter(
+      EffectArray.map(player.eligiblePositions, (position) => limits.get(position)),
+      (entry): entry is ProviderGamesPlayed => entry !== undefined && entry.max > 0,
+    ),
+    initial,
+    (lowest, entry) =>
+      lowest === undefined || entry.projected / entry.max < lowest.projected / lowest.max
+        ? entry
+        : lowest,
+  );
 }
 
 function standardRosterSpots(league: ProviderLeagueSettings): number {
-  return league.rosterPositions
-    .filter((position) => position.kind !== "reserve")
-    .reduce((total, position) => total + position.count, 0);
+  return EffectArray.reduce(
+    EffectArray.filter(league.rosterPositions, (position) => position.kind !== "reserve"),
+    0,
+    (total, position) => total + position.count,
+  );
 }
 
 function nonGamePeriods(player: ProviderRosterPlayer, period: Period): ReadonlyArray<Period> {
@@ -329,8 +350,8 @@ function ownershipFactsOf(
   players: ReadonlyArray<PolicyPlayer>,
   facts: ReadonlyArray<YahooPlayerFacts>,
 ): ReadonlyArray<PlayerOwnership> {
-  const byKey = new Map(facts.map((fact) => [fact.providerPlayerKey, fact]));
-  return players.map((player) => {
+  const byKey = new Map(EffectArray.map(facts, (fact) => [fact.providerPlayerKey, fact]));
+  return EffectArray.map(players, (player) => {
     const fact = byKey.get(player.id);
     return {
       id: player.id,
@@ -348,16 +369,18 @@ function startRatesOf(
   players: ReadonlyArray<PolicyPlayer>,
   rates: ReadonlyArray<YahooPlayerFacts>,
 ): ReadonlyArray<PlayerCommunityStartRate> {
-  const byKey = new Map(rates.map((rate) => [rate.providerPlayerKey, rate]));
-  return players.map((player) => {
+  const byKey = new Map(EffectArray.map(rates, (rate) => [rate.providerPlayerKey, rate]));
+  return EffectArray.map(players, (player) => {
     const rate = byKey.get(player.id);
     return {
       id: player.id,
       percent: exactPercent(rate?.percent ?? null),
-      cuts: (rate?.cuts ?? []).flatMap((cut) => {
-        const percent = exactPercent(cut.percent);
-        return percent === undefined ? [] : [{ cut: cut.cut, percent }];
-      }),
+      cuts: optionalArrayValue(rate?.cuts ?? [], (value) =>
+        EffectArray.flatMap(value, (cut) => {
+          const percent = exactPercent(cut.percent);
+          return percent === undefined ? [] : [{ cut: cut.cut, percent }];
+        }),
+      ),
     };
   });
 }
@@ -378,8 +401,10 @@ function projectedRankSource(
   return {
     kind: "projection",
     period,
-    players: facts.flatMap((fact) => {
-      const rank = fact.ranks.find((entry) => entry.type === "PW");
+    players: EffectArray.flatMap(facts, (fact) => {
+      const rank = EffectOption.getOrUndefined(
+        EffectArray.findFirst(fact.ranks, (entry) => entry.type === "PW"),
+      );
       return rank === undefined ? [] : [{ id: fact.providerPlayerKey, rank: rank.rank }];
     }),
   };

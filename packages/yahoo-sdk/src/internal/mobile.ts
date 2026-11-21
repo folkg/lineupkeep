@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { IntFromStringOrNumber, decodePayload } from "#yahoo/decode.ts";
 import { YahooParseError } from "#yahoo/errors.ts";
@@ -8,7 +9,7 @@ export function decodePlayerCards(
 ): Effect.Effect<ReadonlyArray<YahooPlayerCard>, YahooParseError> {
   return Effect.gen(function* () {
     const decoded = yield* decodePayload(PlayerCardsPayload, payload, "read_player_cards");
-    return decoded.data.fantasyPlayerCardsView.playerCards.map((card) => ({
+    return EffectArray.map(decoded.data.fantasyPlayerCardsView.playerCards, (card) => ({
       playerKey: card.playerKey,
       displayName: card.player.displayName,
       shortDisplayName: optionalText(card.player.shortDisplayName),
@@ -19,8 +20,11 @@ export function decodePlayerCards(
       headshotUrl: optionalText(card.player.headshotUrl),
       availabilityNote: optionalText(card.player.availabilityNote),
       ownerTeamKey: optionalText(card.player.ownerTeamKey),
-      stats: (card.playerStats ?? []).map((stat) => ({ label: stat.label, value: stat.value })),
-      availableSubViews: (card.availableSubViews ?? []).map((view) => ({
+      stats: EffectArray.map(card.playerStats ?? [], (stat) => ({
+        label: stat.label,
+        value: stat.value,
+      })),
+      availableSubViews: EffectArray.map(card.availableSubViews ?? [], (view) => ({
         key: view.key,
         label: view.label,
       })),
@@ -52,15 +56,18 @@ export function decodePlayerGameLog(
       return yield* new YahooParseError({ operation: "read_player_game_log" });
     }
     return {
-      headers: content.headers.map((header) => ({
+      headers: EffectArray.map(content.headers, (header) => ({
         value: header.value,
         format: optionalText(header.format),
       })),
-      games: content.games.map((game) => ({
+      games: EffectArray.map(content.games, (game) => ({
         id: game.id,
         date: optionalText(game.date),
         opponentAbbr: optionalText(game.opponentAbbr),
-        cells: game.cells.map((cell) => ({ value: cell.value, format: optionalText(cell.format) })),
+        cells: EffectArray.map(game.cells, (cell) => ({
+          value: cell.value,
+          format: optionalText(cell.format),
+        })),
       })),
       legend:
         content.statLegend === undefined
@@ -89,22 +96,28 @@ export function decodePlayerSeasonStats(
       return yield* new YahooParseError({ operation: "read_player_season_stats" });
     }
     return {
-      headers: content.headers.map((header) => ({
+      headers: EffectArray.map(content.headers, (header) => ({
         value: header.value,
         format: optionalText(header.format),
       })),
-      rows: content.rows.map((row) => ({
+      rows: EffectArray.map(content.rows, (row) => ({
         subtitle: optionalText(row.subtitle),
-        cells: row.cells.map((cell) => ({ value: cell.value, format: optionalText(cell.format) })),
+        cells: EffectArray.map(row.cells, (cell) => ({
+          value: cell.value,
+          format: optionalText(cell.format),
+        })),
       })),
-      seasons: (content.seasons ?? []).map((season) => ({
+      seasons: EffectArray.map(content.seasons ?? [], (season) => ({
         title: season.title,
-        headers: season.headers.map((header) => ({
+        headers: EffectArray.map(season.headers, (header) => ({
           value: header.value,
           format: optionalText(header.format),
         })),
-        values: season.values.map((cells) =>
-          cells.map((cell) => ({ value: cell.value, format: optionalText(cell.format) })),
+        values: EffectArray.map(season.values, (cells) =>
+          EffectArray.map(cells, (cell) => ({
+            value: cell.value,
+            format: optionalText(cell.format),
+          })),
         ),
       })),
     };
@@ -122,7 +135,7 @@ export function decodeGames(
         continue;
       }
       for (const [key, value] of Object.entries(league)) {
-        if (!key.endsWith("Games") || !Array.isArray(value)) {
+        if (!key.endsWith("Games") || !EffectArray.isArray(value)) {
           continue;
         }
         const decodedGames = yield* decodePayload(Schema.Array(GamePayload), value, "read_games");
@@ -449,5 +462,5 @@ const GamePayload = Schema.Struct({
 });
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !EffectArray.isArray(value);
 }

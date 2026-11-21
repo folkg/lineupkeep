@@ -1,3 +1,4 @@
+import { EffectArray } from "@lineupkeep/collections";
 import type { JSX } from "@solidjs/web";
 import { Show, createUniqueId, untrack } from "solid-js";
 import type { Accessor } from "solid-js";
@@ -10,12 +11,13 @@ export function Field(props: FieldProps): JSX.Element {
   const errorId = `${id}-error`;
 
   const describedBy = (): string | undefined => {
-    const ids = [
-      props.description !== undefined && descriptionId,
-      props.error !== undefined && errorId,
-    ]
-      .filter((value) => typeof value === "string")
-      .join(" ");
+    const ids = EffectArray.join(
+      EffectArray.filter(
+        [props.description !== undefined && descriptionId, props.error !== undefined && errorId],
+        (value) => typeof value === "string",
+      ),
+      " ",
+    );
     return ids.length > 0 ? ids : undefined;
   };
 

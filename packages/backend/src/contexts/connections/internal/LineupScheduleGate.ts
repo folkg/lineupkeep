@@ -1,5 +1,6 @@
 import { DateTime, Effect } from "effect";
 import type { Redacted } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import {
@@ -147,7 +148,7 @@ function evaluate(input: {
       today,
       nextTickAt,
       nextTickDate: DateTime.formatIsoDate(DateTime.toUtc(nextTickAt)),
-      games: calendarRead.success.games.map((fact) => fact.game),
+      games: EffectArray.map(calendarRead.success.games, (fact) => fact.game),
       providerGameKeys,
       teamKeys,
       todayRun: todayRunOf(todayRuns.success),

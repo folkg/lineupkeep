@@ -1,3 +1,5 @@
+import { Array as EffectArray } from "effect";
+
 import { exactToUnits } from "./Exact.ts";
 import type { Exact } from "./Exact.ts";
 import { periodsEqual } from "./Period.ts";
@@ -26,7 +28,8 @@ export function selectionUnits(points: Exact, scale: number): number {
 
 function hasGame(player: PolicyPlayer, period: Period): boolean {
   return (
-    player.scheduled && !player.nonGamePeriods.some((candidate) => periodsEqual(candidate, period))
+    player.scheduled &&
+    !EffectArray.some(player.nonGamePeriods, (candidate) => periodsEqual(candidate, period))
   );
 }
 

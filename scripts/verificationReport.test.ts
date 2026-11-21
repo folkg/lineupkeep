@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { Effect } from "effect";
 import { Schema } from "effect";
+import { Array as EffectArray } from "effect";
 import { expect, it } from "vitest";
 
 import { deliveryProblems, type Results } from "#e2e/verify/evidence.ts";
@@ -111,7 +112,7 @@ it("labels service citations and correlates their application runtime spans in b
     join(run.directory, "service.json"),
     jsonTools.jsonString({ ...call, persona: "other" }),
   );
-  expect((await deliveryProblems(run.directory)).join(" ")).toContain(
+  expect(EffectArray.join(await deliveryProblems(run.directory), " ")).toContain(
     "not attached to its service phase step",
   );
 
@@ -119,12 +120,12 @@ it("labels service citations and correlates their application runtime spans in b
     join(run.directory, "results.json"),
     jsonTools.jsonString({ ...results, attempts: [{ ...results.attempts[0], steps: [] }] }),
   );
-  expect((await deliveryProblems(run.directory)).join(" ")).toContain(
+  expect(EffectArray.join(await deliveryProblems(run.directory), " ")).toContain(
     "not attached to its service phase step",
   );
 
   await writeFile(join(run.directory, "service.json"), "{}");
-  expect((await deliveryProblems(run.directory)).join(" ")).toContain("service.json");
+  expect(EffectArray.join(await deliveryProblems(run.directory), " ")).toContain("service.json");
 });
 
 it("renders step-linked MCP transcripts in both reports", async () => {
@@ -311,15 +312,19 @@ it("tabulates database statements, query plans, server logs, and the application
   );
   await writeFile(
     join(run.directory, "server-spans.jsonl"),
-    [
-      {
-        name: "telemetry.client_report",
-        attributes: { "app.outcome": "failure", "error.type": "ui.slow_interaction" },
-      },
-      { name: "notes.update", attributes: {}, error: "NoteNotFound" },
-    ]
-      .map((span) => jsonTools.jsonString(span))
-      .join("\n"),
+    EffectArray.join(
+      EffectArray.map(
+        [
+          {
+            name: "telemetry.client_report",
+            attributes: { "app.outcome": "failure", "error.type": "ui.slow_interaction" },
+          },
+          { name: "notes.update", attributes: {}, error: "NoteNotFound" },
+        ],
+        (span) => jsonTools.jsonString(span),
+      ),
+      "\n",
+    ),
   );
 
   await writeReport(run.directory, []);
@@ -397,7 +402,7 @@ it("counts samples where an operation did not run as zero in its median", async 
     attempts: [
       {
         ...passingAttempt,
-        attachments: files.map((_, index) => ({
+        attachments: EffectArray.map(files, (_, index) => ({
           name: `measurement: open #${index + 1}`,
           path: `measurement-${index + 1}.json`,
         })),
@@ -456,7 +461,7 @@ it("leads repeated samples with their median, and keeps different budgets apart"
     attempts: [
       {
         ...passingAttempt,
-        attachments: files.map((_, index) => ({
+        attachments: EffectArray.map(files, (_, index) => ({
           name: `measurement: save #${index + 1}`,
           path: `measurement-${index + 1}.json`,
         })),

@@ -8,6 +8,8 @@ import { setTimeout as delay } from "node:timers/promises";
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { Effect } from "effect";
 import { Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 
 export async function runVerification(plan: VerificationPlan): Promise<VerificationOutcome> {
   plan.signal.throwIfAborted();
@@ -32,7 +34,10 @@ export async function runVerification(plan: VerificationPlan): Promise<Verificat
     const stack = await acquireInfrastructure(plan, owner, resources, steps, (pid) =>
       processes.adopt(pid),
     );
-    origins = Object.values(stack.ports).map((port) => new URL(`http://127.0.0.1:${port}`));
+    origins = EffectArray.map(
+      Object.values(stack.ports),
+      (port) => new URL(`http://127.0.0.1:${port}`),
+    );
     await owner.setPorts(origins);
     for (const command of plan.commands(stack)) {
       await runCommand(command, plan, processes, commands);
@@ -79,9 +84,9 @@ export async function recoverVerification(
     releaseJournaledInfrastructure(owner.infrastructure.state, database, signal),
   );
   await cleanupStep(steps, "release owned ports", () =>
-    portsReleased(owner.ports.map((port) => new URL(port))),
+    portsReleased(EffectArray.map(owner.ports, (port) => new URL(port))),
   );
-  const complete = steps.every((step) => step.status === "done");
+  const complete = EffectArray.every(steps, (step) => step.status === "done");
   await writeFile(
     join(owner.directory, "recovery.json"),
     jsonTools.jsonString({ runId: owner.runId, complete, steps, recoveredAt: now() }, null, 2),
@@ -151,7 +156,7 @@ async function finish(
   },
   failure: unknown,
 ): Promise<VerificationOutcome> {
-  const complete = record.steps.every((step) => step.status === "done");
+  const complete = EffectArray.every(record.steps, (step) => step.status === "done");
   const outcome = {
     status: failure === undefined ? "completed" : plan.signal.aborted ? "interrupted" : "failed",
     failure: failure === undefined ? undefined : describe(failure),
@@ -243,7 +248,8 @@ async function runCommand(
 
     await Promise.race([
       Promise.all(
-        [child.stdout, child.stderr].map(
+        EffectArray.map(
+          [child.stdout, child.stderr],
           (stream) =>
             new Promise((resolve) => {
               if (stream === null || stream.readableEnded) {
@@ -288,7 +294,9 @@ class OwnedProcesses {
 
   adopt(pid: number): void {
     const table = processTable();
-    const root = table.find((entry) => entry.pid === pid);
+    const root = EffectOption.getOrUndefined(
+      EffectArray.findFirst(table, (entry) => entry.pid === pid),
+    );
     if (root !== undefined) {
       this.known.set(identity(root), root);
       this.persist();
@@ -324,9 +332,9 @@ class OwnedProcesses {
 
     let survivors = this.alive();
     let frozen = new Set<string>();
-    while (survivors.some((entry) => !frozen.has(identity(entry)))) {
+    while (EffectArray.some(survivors, (entry) => !frozen.has(identity(entry)))) {
       send(survivors, "SIGSTOP");
-      frozen = new Set(survivors.map(identity));
+      frozen = new Set(EffectArray.map(survivors, identity));
       survivors = this.alive();
     }
     send(survivors, "SIGKILL");
@@ -337,17 +345,17 @@ class OwnedProcesses {
     const remaining = this.alive();
     if (remaining.length > 0) {
       throw new Error(
-        `Owned processes survived SIGKILL: ${remaining.map(describeProcess).join("; ")}`,
+        `Owned processes survived SIGKILL: ${EffectArray.join(EffectArray.map(remaining, describeProcess), "; ")}`,
       );
     }
-    return `Stopped processes that outlived their command: ${[...signalled.values()].map(describeProcess).join("; ")}`;
+    return `Stopped processes that outlived their command: ${EffectArray.join(EffectArray.map([...signalled.values()], describeProcess), "; ")}`;
   }
 
   private alive(): ReadonlyArray<OwnedProcess> {
     const table = processTable();
     this.observe(table);
-    const running = new Set(table.map(identity));
-    return [...this.known.values()].filter((entry) => running.has(identity(entry)));
+    const running = new Set(EffectArray.map(table, identity));
+    return EffectArray.filter([...this.known.values()], (entry) => running.has(identity(entry)));
   }
 
   private observe(table: ReadonlyArray<OwnedProcess>): void {
@@ -358,13 +366,14 @@ class OwnedProcesses {
       readonly pgid: number;
       readonly started: string;
       readonly command: string;
-    }[] => table.filter((entry) => this.known.has(identity(entry)));
+    }[] => EffectArray.filter(table, (entry) => this.known.has(identity(entry)));
     let grew = true;
     while (grew) {
       const owned = live();
-      const parents = new Set(owned.map((entry) => entry.pid));
-      const groups = new Set(owned.map((entry) => entry.pgid));
-      const joined = table.filter(
+      const parents = new Set(EffectArray.map(owned, (entry) => entry.pid));
+      const groups = new Set(EffectArray.map(owned, (entry) => entry.pgid));
+      const joined = EffectArray.filter(
+        table,
         (entry) =>
           !this.known.has(identity(entry)) && (parents.has(entry.ppid) || groups.has(entry.pgid)),
       );
@@ -441,7 +450,9 @@ async function acquireLock(plan: VerificationPlan): Promise<RecoveryOutcome | un
 }
 
 async function claimRecovery(lockDirectory: string): Promise<RecoveryClaim> {
-  const claims = (await readdir(lockDirectory)).filter((name) => recoveryClaim.test(name));
+  const claims = EffectArray.filter(await readdir(lockDirectory), (name) =>
+    recoveryClaim.test(name),
+  );
   for (const name of claims) {
     const holder = await readFile(join(lockDirectory, name, "holder.json"), "utf8")
       .then((text) => Effect.runSync(Schema.decodeEffect(OwnedProcessJson)(text)))
@@ -454,7 +465,8 @@ async function claimRecovery(lockDirectory: string): Promise<RecoveryClaim> {
       return { kind: "in-progress" };
     }
   }
-  const next = Math.max(0, ...claims.map((name) => Number(name.slice("recovery-".length)))) + 1;
+  const next =
+    Math.max(0, ...EffectArray.map(claims, (name) => Number(name.slice("recovery-".length)))) + 1;
   const claim = join(lockDirectory, `recovery-${next}`);
 
   const staging = join(lockDirectory, `staging-${process.pid}-${Date.now()}`);
@@ -491,7 +503,10 @@ class OwnerJournal {
   }
 
   async setPorts(ports: ReadonlyArray<URL>): Promise<void> {
-    await this.write({ ...(await this.read()), ports: ports.map((port) => port.href) });
+    await this.write({
+      ...(await this.read()),
+      ports: EffectArray.map(ports, (port) => port.href),
+    });
   }
 
   async markCleanupIncomplete(): Promise<void> {
@@ -591,7 +606,7 @@ function processTable(): ReadonlyArray<OwnedProcess> {
   if (result.status !== 0) {
     throw new Error(`ps failed: ${result.stderr}`);
   }
-  return result.stdout.split("\n").flatMap((line) => {
+  return EffectArray.flatMap(result.stdout.split("\n"), (line) => {
     const match =
       /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\w{3}\s+\w{3}\s+\d+\s+[\d:]+\s+\d{4})\s+(.*)$/u.exec(line);
     return match === null
@@ -609,7 +624,9 @@ function processTable(): ReadonlyArray<OwnedProcess> {
 }
 
 function ownProcess(): OwnedProcess {
-  const self = processTable().find((entry) => entry.pid === process.pid);
+  const self = EffectOption.getOrUndefined(
+    EffectArray.findFirst(processTable(), (entry) => entry.pid === process.pid),
+  );
   if (self === undefined) {
     throw new Error("Cannot identify the application verification process in the process table.");
   }
@@ -617,7 +634,7 @@ function ownProcess(): OwnedProcess {
 }
 
 function isAlive(entry: OwnedProcess): boolean {
-  return processTable().some((candidate) => identity(candidate) === identity(entry));
+  return EffectArray.some(processTable(), (candidate) => identity(candidate) === identity(entry));
 }
 
 function identity(entry: OwnedProcess): string {

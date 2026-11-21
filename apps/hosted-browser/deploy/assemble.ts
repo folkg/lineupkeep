@@ -1,6 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 
+import { Array as EffectArray } from "effect";
+
 const output = new URL("../.output/", import.meta.url);
 const catalog = await readCatalog(new URL("../../../package.json", import.meta.url));
 
@@ -71,5 +73,5 @@ function version(catalog: Readonly<Record<string, string>>, name: string): strin
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !EffectArray.isArray(value);
 }

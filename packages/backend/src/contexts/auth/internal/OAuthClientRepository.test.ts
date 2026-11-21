@@ -1,5 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { DateTime, Effect, Layer } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type { AuthorizationScope } from "#contexts/auth/AuthorizationScopes.ts";
 import layerTools from "#runtime/ProvideLayer.ts";
@@ -17,7 +18,7 @@ const advertised: ReadonlyArray<AuthorizationScope> = [
   { name: "offline_access", description: "Stay connected." },
 ];
 
-const advertisedNames = advertised.map((scope) => scope.name);
+const advertisedNames = EffectArray.map(advertised, (scope) => scope.name);
 const registrableNames = [...advertisedNames, "connections:read"];
 
 it.effect(
@@ -97,7 +98,7 @@ function registration(
 function scopesById(
   rows: ReadonlyArray<typeof oauthClient.$inferSelect>,
 ): Record<string, ReadonlyArray<string> | null> {
-  return Object.fromEntries(rows.map((row) => [row.id, row.scopes]));
+  return Object.fromEntries(EffectArray.map(rows, (row) => [row.id, row.scopes]));
 }
 
 function untouchedTimestamps(
@@ -105,6 +106,9 @@ function untouchedTimestamps(
   widened: ReadonlyArray<string>,
 ): Record<string, Date | null> {
   return Object.fromEntries(
-    rows.filter((row) => !widened.includes(row.id)).map((row) => [row.id, row.updatedAt]),
+    EffectArray.map(
+      EffectArray.filter(rows, (row) => !widened.includes(row.id)),
+      (row) => [row.id, row.updatedAt],
+    ),
   );
 }

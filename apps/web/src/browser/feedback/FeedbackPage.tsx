@@ -1,3 +1,4 @@
+import { EffectArray, EffectOption } from "@lineupkeep/collections";
 import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
 import type { Accessor } from "solid-js";
@@ -44,7 +45,13 @@ export function FeedbackPage(props: FeedbackPageProps): JSX.Element {
               errors={page.errors()}
               submitting={page.submitting()}
               onBody={page.setBody}
-              onKind={(value) => page.setKind(feedbackKinds.find((kind) => kind === value) ?? "")}
+              onKind={(value) =>
+                page.setKind(
+                  EffectOption.getOrUndefined(
+                    EffectArray.findFirst(feedbackKinds, (kind) => kind === value),
+                  ) ?? "",
+                )
+              }
               onSubmit={page.send}
               onTitle={page.setTitle}
             />

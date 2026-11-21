@@ -1,3 +1,4 @@
+import { EffectArray } from "@lineupkeep/collections";
 import { useBlocker } from "@tanstack/solid-router";
 import type { ShouldBlockFn } from "@tanstack/solid-router";
 import { createContext, onSettled, useContext } from "solid-js";
@@ -14,7 +15,7 @@ export function createUnsavedChanges(): UnsavedChanges {
         sources.delete(read);
       });
     },
-    hasUnsavedChanges: () => Array.from(sources).some((read) => read()),
+    hasUnsavedChanges: () => EffectArray.some(Array.from(sources), (read) => read()),
   };
 }
 

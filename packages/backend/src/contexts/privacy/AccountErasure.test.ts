@@ -2,6 +2,7 @@ import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { signInCodeQuotaKeyFor } from "@lineupkeep/backend/auth/SignInCodeQuotaKey";
 import { Duration, Effect, Exit, Layer } from "effect";
+import { Array as EffectArray } from "effect";
 import { Digest } from "effect/crypto";
 import { TestClock } from "effect/testing";
 
@@ -32,8 +33,10 @@ it.effect(
       const database = yield* PrivacyDatabase;
       const catalog = yield* database.execute(catalogTablesQuery());
       const columns = yield* database.execute(catalogOwnerColumnsQuery());
-      const catalogTables = new Set(catalog.rows.map((row) => String(row["table_name"])));
-      const inventoryTables = new Set(ownedDataInventory.map((entry) => entry.table));
+      const catalogTables = new Set(
+        EffectArray.map(catalog.rows, (row) => String(row["table_name"])),
+      );
+      const inventoryTables = new Set(EffectArray.map(ownedDataInventory, (entry) => entry.table));
 
       assert.isAbove(columns.rows.length, 0, "the catalog query found no owner columns");
       for (const row of columns.rows) {
@@ -102,11 +105,11 @@ it.effect(
       const summary = yield* erasure.erase(owner.id);
 
       assert.isAbove(
-        summary.removed.reduce((total, entry) => total + entry.count, 0),
+        EffectArray.reduce(summary.removed, 0, (total, entry) => total + entry.count),
         0,
       );
       assert.deepStrictEqual(
-        [...(yield* countClasses(account))].filter(([, count]) => count > 0),
+        EffectArray.filter([...(yield* countClasses(account))], ([, count]) => count > 0),
         [],
       );
       const refused = yield* Effect.flip(erasure.erase(owner.id));
@@ -176,13 +179,16 @@ it.effect(
       const afterOther = yield* countClasses(other);
       assert.deepStrictEqual(afterOther, beforeOther);
 
-      const expectedClasses = [...beforeOwner]
-        .filter(([, count]) => count > 0)
-        .map(([table]) => table)
-        .sort();
-      assert.deepStrictEqual(summary.removed.map((entry) => entry.class).sort(), expectedClasses);
+      const expectedClasses = EffectArray.map(
+        EffectArray.filter([...beforeOwner], ([, count]) => count > 0),
+        ([table]) => table,
+      ).sort();
+      assert.deepStrictEqual(
+        EffectArray.map(summary.removed, (entry) => entry.class).sort(),
+        expectedClasses,
+      );
       assert.isAbove(
-        summary.removed.reduce((total, entry) => total + entry.count, 0),
+        EffectArray.reduce(summary.removed, 0, (total, entry) => total + entry.count),
         0,
       );
     }).pipe(layerTools.provide(ErasureTestLayer)),

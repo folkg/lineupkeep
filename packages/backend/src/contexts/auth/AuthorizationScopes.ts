@@ -1,4 +1,5 @@
 import { Context } from "effect";
+import { Array as EffectArray } from "effect";
 
 export class AuthorizationScopes extends Context.Service<
   AuthorizationScopes,
@@ -24,10 +25,10 @@ export function currentScopeName(name: string): string {
 export function acceptedScopeNames(
   scopes: ReadonlyArray<AuthorizationScope>,
 ): ReadonlyArray<string> {
-  const advertised = scopes.map((scope) => scope.name);
+  const advertised = EffectArray.map(scopes, (scope) => scope.name);
   return [
     ...advertised,
-    ...retiredScopeNames.filter((name) => advertised.includes(currentScopeName(name))),
+    ...EffectArray.filter(retiredScopeNames, (name) => advertised.includes(currentScopeName(name))),
   ];
 }
 

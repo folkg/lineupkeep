@@ -1,5 +1,8 @@
 import { assert, it } from "@effect/vitest";
 import { Arbitrary, DateTime, Effect, Schema, SchemaParser } from "effect";
+import { Array as EffectArray } from "effect";
+import { Order as EffectOrder } from "effect";
+import { Option as EffectOption } from "effect";
 
 import { decodeTeamId } from "#contexts/connections/FantasyTeam.ts";
 import { LineupId } from "#contexts/connections/LineupRun.ts";
@@ -83,8 +86,8 @@ it.effect("explores every lineup run transition and branch", () =>
     assert.strictEqual(explored.transitionCoverage.definitions.missing, 0);
     assert.strictEqual(explored.transitionCoverage.branches.missing, 0);
     assert.deepStrictEqual(
-      lineupWriteIntents.status.enumValues.toSorted(),
-      [...LineupWriteIntentStatus.literals].toSorted(),
+      EffectArray.sort(lineupWriteIntents.status.enumValues, EffectOrder.String),
+      EffectArray.sort([...LineupWriteIntentStatus.literals], EffectOrder.String),
     );
   }),
 );
@@ -250,7 +253,9 @@ it.effect("rehydrates and round-trips active and terminal intent states", () =>
       input,
       events: [claimed, observation, plan, applyStarted, applyRespondedUnknown, verified],
     });
-    const active = trace.steps.find((step) => step.after.state.path === "Verifying")?.after;
+    const active = EffectOption.getOrUndefined(
+      EffectArray.findFirst(trace.steps, (step) => step.after.state.path === "Verifying"),
+    )?.after;
     const terminal = trace.final;
     assert.isDefined(active);
     assert.isDefined(terminal);
@@ -509,7 +514,7 @@ const retry = {
   retryAt,
   writeIntent: { ...writeIntent, status: "unknown" as const },
 };
-const events = eventKinds.map(eventFor);
+const events = EffectArray.map(eventKinds, eventFor);
 const input = {
   _tag: "Queued" as const,
   team,

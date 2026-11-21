@@ -1,5 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { DateTime, Effect, Layer } from "effect";
+import { Array as EffectArray } from "effect";
 import { TestClock } from "effect/testing";
 
 import layerTools from "#runtime/ProvideLayer.ts";
@@ -52,7 +53,7 @@ it.effect(
       const listed = yield* sessions.list(owner);
 
       assert.deepStrictEqual(
-        listed.map((entry) => ({
+        EffectArray.map(listed, (entry) => ({
           id: entry.id,
           device: entry.device,
           startedAt: DateTime.formatIso(entry.startedAt),
@@ -101,7 +102,7 @@ it.effect(
         SignInSessionId.make("session-stranger"),
       ]);
 
-      assert.deepStrictEqual(ended.map(String), ["session-laptop"]);
+      assert.deepStrictEqual(EffectArray.map(ended, String), ["session-laptop"]);
       assert.deepStrictEqual(sessionIds(yield* sessions.list(owner)), ["session-phone"]);
       assert.deepStrictEqual(sessionIds(yield* sessions.list(other)), ["session-stranger"]);
     }).pipe(layerTools.provide(layer)),
@@ -130,7 +131,10 @@ it.effect(
 
       const ended = yield* sessions.endOthers(owner, SignInSessionId.make("session-laptop"));
 
-      assert.deepStrictEqual(ended.map(String).sort(), ["session-phone", "session-tablet"]);
+      assert.deepStrictEqual(EffectArray.map(ended, String).sort(), [
+        "session-phone",
+        "session-tablet",
+      ]);
       assert.deepStrictEqual(sessionIds(yield* sessions.list(owner)), ["session-laptop"]);
       assert.deepStrictEqual(sessionIds(yield* sessions.list(other)), ["session-stranger"]);
     }).pipe(layerTools.provide(layer)),
@@ -181,5 +185,5 @@ function ago(millis: number): Date {
 }
 
 function sessionIds(listed: ReadonlyArray<{ readonly id: string }>): ReadonlyArray<string> {
-  return listed.map((entry) => entry.id);
+  return EffectArray.map(listed, (entry) => entry.id);
 }

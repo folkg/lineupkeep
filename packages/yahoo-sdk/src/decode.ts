@@ -1,4 +1,5 @@
 import { DateTime, Effect, Schema, SchemaIssue, SchemaTransformation } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { YahooParseError } from "./errors.ts";
 
@@ -52,7 +53,7 @@ export function singleEntry<A>(value: ReadonlyArray<A> | A): A | undefined {
 }
 
 export function isReadonlyArray<A>(value: ReadonlyArray<A> | A): value is ReadonlyArray<A> {
-  return Array.isArray(value);
+  return EffectArray.isArray(value);
 }
 
 export function optionalNonEmpty(value: string | undefined): string | undefined {
@@ -115,7 +116,7 @@ export function decodePayload<A, E>(
 
 export function invalidField(issue: SchemaIssue.Issue): string | undefined {
   const path = issuePath(issue);
-  return path.length === 0 ? undefined : path.map(String).join(".");
+  return path.length === 0 ? undefined : EffectArray.join(EffectArray.map(path, String), ".");
 }
 
 function issuePath(root: SchemaIssue.Issue): ReadonlyArray<PropertyKey> {

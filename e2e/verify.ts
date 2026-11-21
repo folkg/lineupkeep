@@ -7,6 +7,7 @@ import { parseArgs } from "node:util";
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { Effect } from "effect";
 import { Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { testEnvironment, verificationEnvironment } from "./verify/environment.ts";
 import { DeclaredCriteriaJson } from "./verify/evidence.ts";
@@ -17,7 +18,10 @@ import { duration, recoverAbandonedRun, reportOutcome, root, runTests } from "./
 
 async function main(): Promise<void> {
   const { values, positionals } = parseArgs({
-    args: process.argv.slice(2).filter((argument, index) => index !== 0 || argument !== "--"),
+    args: EffectArray.filter(
+      process.argv.slice(2),
+      (argument, index) => index !== 0 || argument !== "--",
+    ),
     options: {
       target: { type: "string", default: "node" },
       grep: { type: "string" },
@@ -53,7 +57,9 @@ async function main(): Promise<void> {
       : Effect.runSync(
           Schema.decodeEffect(DeclaredCriteriaJson)(await readFile(values.criteria, "utf8")),
         );
-  for (const path of positionals.filter((selected) => selected.startsWith("e2e/scratch/"))) {
+  for (const path of EffectArray.filter(positionals, (selected) =>
+    selected.startsWith("e2e/scratch/"),
+  )) {
     if (path.split("/").length < 4) {
       throw new Error(
         `${path} must be inside a task directory, such as e2e/scratch/<task>/${path.slice("e2e/scratch/".length)}.`,
@@ -118,7 +124,9 @@ async function main(): Promise<void> {
           directory,
         ),
         E2E_TEST_COMPOSITION: "true",
-        VERIFICATION_SCRATCH: positionals.some((path) => path.startsWith("e2e/scratch/"))
+        VERIFICATION_SCRATCH: EffectArray.some(positionals, (path) =>
+          path.startsWith("e2e/scratch/"),
+        )
           ? "true"
           : "false",
         VERIFICATION_VIDEO: values.video ? "true" : "false",

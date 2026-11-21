@@ -1,5 +1,6 @@
 import { and, desc, eq, gt, ne } from "drizzle-orm";
 import { Array, Context, DateTime, Effect, Layer, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { SignInSessionPersistenceFailed, SignInSessionId } from "#contexts/auth/SignInSessions.ts";
 import type { UserId } from "#contexts/auth/User.ts";
@@ -70,7 +71,7 @@ export class SignInSessionRepository extends Context.Service<SignInSessionReposi
             .where(and(eq(session.userId, userId), anyOf(session.id, sessionIds)))
             .returning({ id: session.id }),
         );
-        return yield* decodeIds(ended.map((row) => row.id));
+        return yield* decodeIds(EffectArray.map(ended, (row) => row.id));
       });
 
       const endOthers = Effect.fn("SignInSessionRepository.endOthers")(function* (
@@ -83,7 +84,7 @@ export class SignInSessionRepository extends Context.Service<SignInSessionReposi
             .where(and(eq(session.userId, userId), ne(session.id, keptSessionId)))
             .returning({ id: session.id }),
         );
-        return yield* decodeIds(ended.map((row) => row.id));
+        return yield* decodeIds(EffectArray.map(ended, (row) => row.id));
       });
 
       return { list, end, endOthers } as const;

@@ -1,5 +1,7 @@
 import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
 import { Array, Context, DateTime, Effect, Layer, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Order as EffectOrder } from "effect";
 import { SecureRandom } from "effect/crypto";
 
 import type { UserId } from "#contexts/auth/User.ts";
@@ -15,6 +17,18 @@ import { chunked } from "#utilities/collections.ts";
 import { FeedbackDatabase } from "./FeedbackDatabase.ts";
 import type { FeedbackRecord } from "./FeedbackRecord.ts";
 import { feedback, feedbackQuota, FeedbackRow } from "./FeedbackTables.ts";
+function sortWithComparator<A>(
+  self: ReadonlyArray<A>,
+  compare: (left: A, right: A) => number,
+): ReadonlyArray<A> {
+  return EffectArray.sort(
+    self,
+    EffectOrder.make<A>((left, right) => {
+      const result = compare(left, right);
+      return result < 0 ? -1 : result > 0 ? 1 : 0;
+    }),
+  );
+}
 
 const listLimit = 50;
 
@@ -41,11 +55,13 @@ export class FeedbackRepository extends Context.Service<FeedbackRepository>()(
         if (entries.length === 0) {
           return true;
         }
-        const limits = new Map(entries.map((entry) => [entry.key, entry.limit] as const));
+        const limits = new Map(
+          EffectArray.map(entries, (entry) => [entry.key, entry.limit] as const),
+        );
         const counted = yield* database
           .insert(feedbackQuota)
           .values(
-            entries.map((entry) => ({
+            EffectArray.map(entries, (entry) => ({
               key: entry.key,
               windowStartedAt: DateTime.toDateUtc(entry.windowStartedAt),
               count: entry.amount,
@@ -77,9 +93,10 @@ export class FeedbackRepository extends Context.Service<FeedbackRepository>()(
         readonly at: DateTime.Utc;
       }) {
         const ids = yield* Effect.replicateEffect(input.submissions.length)(newId);
-        const rows = Array.zipWith(ids, input.submissions, (id, submission) =>
-          toRow(id, input, submission),
-        ).toSorted((left, right) => left.id.localeCompare(right.id));
+        const rows = sortWithComparator(
+          Array.zipWith(ids, input.submissions, (id, submission) => toRow(id, input, submission)),
+          (left, right) => left.id.localeCompare(right.id),
+        );
         const inserted = yield* chunked(rows, maxInsertRows(feedback), (chunk) =>
           database
             .insert(feedback)
@@ -94,7 +111,9 @@ export class FeedbackRepository extends Context.Service<FeedbackRepository>()(
             ),
           { concurrency: 1 },
         );
-        const byId = new Map<string, FeedbackRecord>(decoded.map((record) => [record.id, record]));
+        const byId = new Map<string, FeedbackRecord>(
+          EffectArray.map(decoded, (record) => [record.id, record]),
+        );
         return Array.map(ids, (id) => {
           const record = byId.get(id);
           if (record === undefined) {
@@ -153,7 +172,7 @@ export class FeedbackRepository extends Context.Service<FeedbackRepository>()(
             )
             .orderBy(asc(feedback.closedAt))
             .limit(input.limit);
-          const closedIds = closed.map((row) => row.id);
+          const closedIds = EffectArray.map(closed, (row) => row.id);
           const reports = Array.isArrayNonEmpty(closedIds)
             ? (yield* database
                 .delete(feedback)
@@ -166,7 +185,7 @@ export class FeedbackRepository extends Context.Service<FeedbackRepository>()(
             .where(lte(feedbackQuota.windowStartedAt, DateTime.toDateUtc(input.quotasBefore)))
             .orderBy(asc(feedbackQuota.windowStartedAt))
             .limit(input.limit);
-          const windowKeys = windows.map((row) => row.key);
+          const windowKeys = EffectArray.map(windows, (row) => row.key);
           const quotas = Array.isArrayNonEmpty(windowKeys)
             ? (yield* database
                 .delete(feedbackQuota)

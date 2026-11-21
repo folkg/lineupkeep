@@ -4,10 +4,12 @@ import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { test, type Page, expect } from "@playwright/test";
 import { Effect } from "effect";
 import { Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { pagePersona } from "./persona.ts";
 import { CallObserver } from "./verify/performance.ts";
 import { serviceCallName, ServiceCallJson, type ServicePhase } from "./verify/serviceEvidence.ts";
+
 export function serviceOperations(
   origin: string,
   signIn: (persona: string) => Promise<ServiceIdentity>,
@@ -65,7 +67,12 @@ async function actingRequest(identity: Page | ServiceIdentity, origin: string): 
   }
   const cookies = await identity.context().cookies(origin);
   return new Request(origin, {
-    headers: { cookie: cookies.map(({ name, value }) => `${name}=${value}`).join("; ") },
+    headers: {
+      cookie: EffectArray.join(
+        EffectArray.map(cookies, ({ name, value }) => `${name}=${value}`),
+        "; ",
+      ),
+    },
   });
 }
 
@@ -97,10 +104,13 @@ export class ServiceIdentity {
         body: jsonTools.jsonString({ email, otp }),
       });
       expect(verified.status, "verify the delivered sign-in code").toBe(200);
-      const cookie = verified.headers
-        .getSetCookie()
-        .map((value) => value.split(";")[0])
-        .join("; ");
+      const cookie = EffectArray.join(
+        EffectArray.filter(
+          EffectArray.map(verified.headers.getSetCookie(), (value) => value.split(";")[0]),
+          (value): value is string => value !== undefined,
+        ),
+        "; ",
+      );
       if (cookie === "") {
         throw new Error("Headless sign-in returned no session cookies.");
       }

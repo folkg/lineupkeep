@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { createServer as createTcpServer, connect } from "node:net";
 import type { Server, Socket } from "node:net";
 
+import { EffectArray } from "@lineupkeep/collections";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -17,7 +18,7 @@ import {
 const live: Array<{ close: () => Promise<void> }> = [];
 
 afterEach(async () => {
-  await Promise.all(live.splice(0).map((entry) => entry.close()));
+  await Promise.all(EffectArray.map(live.splice(0), (entry) => entry.close()));
 });
 
 describe("public address classification", () => {

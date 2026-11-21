@@ -10,6 +10,7 @@
     "./browser": "./src/browser.ts"
   },
   "dependencies": {
+    "@lineupkeep/collections": "workspace:*",
     "playwright": "catalog:"
   }
 }

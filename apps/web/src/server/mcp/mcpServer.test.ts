@@ -57,12 +57,18 @@ import layerTools from "@lineupkeep/backend/runtime/ProvideLayer";
 import { ToolCallQuota, toolCallLimits } from "@lineupkeep/backend/toolCalls/ToolCallQuota";
 import type { ToolCall } from "@lineupkeep/backend/toolCalls/ToolCallQuota";
 import { DateTime, Duration, Effect, Layer, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 import { Tool, Toolkit } from "effect/ai";
 import { expect, it } from "vitest";
 
 import { mcpRequest } from "./mcpEndpoint";
 import { handleMcpRequest } from "./mcpServer";
 import { RequiredScope } from "./toolAuthorization";
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 const DiscoveryDocument = Schema.Struct({
   result: Schema.Struct({
@@ -472,7 +478,7 @@ it("spends the allowance for a failing tool, an invalid call, and an unknown too
   expect(await json(failing)).toMatchObject({ result: { isError: true } });
   expect(invalid.status).toBe(400);
   expect(missing.status).not.toBe(429);
-  expect(consumed.map((call) => call.callClass)).toEqual(["read", "read", "write"]);
+  expect(EffectArray.map(consumed, (call) => call.callClass)).toEqual(["read", "read", "write"]);
 });
 
 it.each(["2025-03-26", "2025-06-18", "2025-11-25"])(
@@ -499,7 +505,7 @@ it("lists only the read-only connection tool without exposing account identity",
       }),
     )(body),
   );
-  expect(decoded.result.tools.map((tool) => tool.name)).toEqual([
+  expect(EffectArray.map(decoded.result.tools, (tool) => tool.name)).toEqual([
     "list_connections",
     "list_teams",
     "get_calendar",
@@ -666,10 +672,9 @@ it("composes the team snapshot from the reads in one tool call", async () => {
       }),
     )(body),
   );
-  expect(content.result.structuredContent.failures.map((failure) => failure.section)).toEqual([
-    "plan",
-    "offers",
-  ]);
+  expect(
+    EffectArray.map(content.result.structuredContent.failures, (failure) => failure.section),
+  ).toEqual(["plan", "offers"]);
 });
 
 it("rejects unexpected connection arguments as JSON-RPC invalid-params and names the field", async () => {
@@ -1218,7 +1223,7 @@ it("appends moves to one team queue and lists them across teams", async () => {
           groups: [],
         },
         refused: [],
-        confirmationCleared: input.moves.some((entry) => entry.move !== undefined),
+        confirmationCleared: EffectArray.some(input.moves, (entry) => entry.move !== undefined),
       });
     },
     plan: (_userId, input) =>
@@ -1326,7 +1331,7 @@ it("appends moves to one team queue and lists them across teams", async () => {
   );
   expect(proposedAgain.status).toBe(200);
   expect(proposed).toHaveLength(2);
-  expect(proposed.map((entry) => entry.userId)).toEqual(["reader", "reader"]);
+  expect(EffectArray.map(proposed, (entry) => entry.userId)).toEqual(["reader", "reader"]);
   expect(proposed[0]?.input.team).toBe(team);
   expect(proposed[1]?.input.team).toBe(team);
 
@@ -1590,7 +1595,10 @@ it("discards one saved move and reports why a run move stays", async () => {
     ),
   );
   const decoded = Effect.runSync(Schema.decodeUnknownEffect(ToolErrorResult)(await json(missing)));
-  const text = decoded.result.content.map((entry) => entry.text).join(" ");
+  const text = EffectArray.join(
+    EffectArray.map(decoded.result.content, (entry) => entry.text),
+    " ",
+  );
   const failure = Effect.runSync(Schema.decodeEffect(Schema.fromJsonString(ToolFailure))(text));
   expect(decoded.result.isError).toBe(true);
   expect(failure.code).toBe("move_not_found");
@@ -1794,7 +1802,10 @@ it("returns a coded remedy instead of a 500 when a move list cannot be read", as
   );
   const body = await json(response);
   const decoded = Effect.runSync(Schema.decodeUnknownEffect(ToolErrorResult)(body));
-  const text = decoded.result.content.map((entry) => entry.text).join(" ");
+  const text = EffectArray.join(
+    EffectArray.map(decoded.result.content, (entry) => entry.text),
+    " ",
+  );
   const failure = Effect.runSync(Schema.decodeEffect(Schema.fromJsonString(ToolFailure))(text));
   expect(decoded.result.isError).toBe(true);
   expect(failure.code).toBe("plan_unavailable");
@@ -1885,7 +1896,7 @@ it("requires teams:manage and changes automation through the shared team service
     ...unavailableTeams,
     control: (_userId, inputs) =>
       Effect.succeed(
-        inputs.map((input) => {
+        EffectArray.map(inputs, (input) => {
           enabled = input.action === "enable";
           return {
             outcome: "changed" as const,
@@ -1968,7 +1979,7 @@ it("requires notes:write and attributes an agent note to the authenticated clien
         ? ["fantasy:read", "notes:write"]
         : ["fantasy:read"];
       return Effect.succeed(
-        scopes.every((scope) => granted.includes(scope))
+        EffectArray.every(scopes, (scope) => granted.includes(scope))
           ? {
               ...signedInGrant(),
               ...(token === "notes" ? { clientId: "client-note", clientName: "Note Agent" } : {}),
@@ -2053,7 +2064,7 @@ it("records agent feedback for the authenticated account on a read grant", async
     submit: (userId, submitter, submissions) => {
       submitted.push({ userId, submitter });
       return Effect.succeed(
-        submissions.map(() => ({
+        EffectArray.map(submissions, () => ({
           id: Effect.runSync(
             Schema.decodeEffect(FeedbackId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b3"),
           ),
@@ -2260,7 +2271,7 @@ const authenticationService: AuthService["Service"] = {
                 ? []
                 : scopes;
     return Effect.succeed(
-      scopes.every((scope) => granted.includes(scope))
+      EffectArray.every(scopes, (scope) => granted.includes(scope))
         ? signedInGrant()
         : { status: "insufficient_scope" as const },
     );
@@ -2379,8 +2390,12 @@ function request(
 it("publishes one queue per team", async () => {
   const response = await handle(request("tools/list", {}, "read"));
   const listed = Effect.runSync(Schema.decodeUnknownEffect(ToolListing)(await json(response)));
-  const propose = listed.result.tools.find((tool) => tool.name === "propose_transactions");
-  const plan = listed.result.tools.find((tool) => tool.name === "get_transaction_plan");
+  const propose = EffectOption.getOrUndefined(
+    EffectArray.findFirst(listed.result.tools, (tool) => tool.name === "propose_transactions"),
+  );
+  const plan = EffectOption.getOrUndefined(
+    EffectArray.findFirst(listed.result.tools, (tool) => tool.name === "get_transaction_plan"),
+  );
   if (propose === undefined || plan === undefined) {
     throw new Error("Expected the tool list to include both plan tools");
   }
@@ -2401,12 +2416,16 @@ it("publishes one queue per team", async () => {
 it("leaves confirmation to the owner and says a saved move waits", async () => {
   const response = await handle(request("tools/list", {}, "read"));
   const listed = Effect.runSync(Schema.decodeUnknownEffect(ToolListing)(await json(response)));
-  const propose = listed.result.tools.find((tool) => tool.name === "propose_transactions");
+  const propose = EffectOption.getOrUndefined(
+    EffectArray.findFirst(listed.result.tools, (tool) => tool.name === "propose_transactions"),
+  );
   if (propose === undefined) {
     throw new Error("Expected the tool list to include propose_transactions");
   }
 
-  expect(listed.result.tools.map((tool) => tool.name)).not.toContain("confirm_transaction_move");
+  expect(EffectArray.map(listed.result.tools, (tool) => tool.name)).not.toContain(
+    "confirm_transaction_move",
+  );
   expect(propose.description).toContain("A saved move waits in Today for the owner to confirm it");
   expect(propose.description).toContain("no tool confirms a move");
 });
@@ -2414,20 +2433,26 @@ it("leaves confirmation to the owner and says a saved move waits", async () => {
 it("asks an agent for adds, drops, reserves, and activations, in plain words", async () => {
   const response = await handle(request("tools/list", {}, "read"));
   const listed = Effect.runSync(Schema.decodeUnknownEffect(ToolListing)(await json(response)));
-  const propose = listed.result.tools.find((tool) => tool.name === "propose_transactions");
+  const propose = EffectOption.getOrUndefined(
+    EffectArray.findFirst(listed.result.tools, (tool) => tool.name === "propose_transactions"),
+  );
   if (propose === undefined) {
     throw new Error("Expected the tool list to include propose_transactions");
   }
 
-  const wording = [
-    propose.description,
-    ...schemaDescriptions(propose.inputSchema, "propose_transactions.input").map(
-      (field) => field.text,
-    ),
-  ].join(" ");
+  const wording = EffectArray.join(
+    [
+      propose.description,
+      ...EffectArray.map(
+        schemaDescriptions(propose.inputSchema, "propose_transactions.input"),
+        (field) => field.text,
+      ),
+    ],
+    " ",
+  );
   expect(wording).toMatch(/the server chooses the place/u);
   expect(wording).toMatch(/Name no slot/u);
-  const kinds = schemaLiterals(propose.inputSchema).filter((value) =>
+  const kinds = EffectArray.filter(schemaLiterals(propose.inputSchema), (value) =>
     ["free_agent_add", "waiver_claim", "drop", "trade", "activate", "stash", "slot_move"].includes(
       value,
     ),
@@ -2444,8 +2469,12 @@ it("asks an agent for adds, drops, reserves, and activations, in plain words", a
 it("publishes fallback choices, a group label, and a stored check on the plan", async () => {
   const response = await handle(request("tools/list", {}, "read"));
   const listed = Effect.runSync(Schema.decodeUnknownEffect(ToolListing)(await json(response)));
-  const propose = listed.result.tools.find((tool) => tool.name === "propose_transactions");
-  const plan = listed.result.tools.find((tool) => tool.name === "get_transaction_plan");
+  const propose = EffectOption.getOrUndefined(
+    EffectArray.findFirst(listed.result.tools, (tool) => tool.name === "propose_transactions"),
+  );
+  const plan = EffectOption.getOrUndefined(
+    EffectArray.findFirst(listed.result.tools, (tool) => tool.name === "get_transaction_plan"),
+  );
   if (propose === undefined || plan === undefined) {
     throw new Error("Expected the tool list to include both plan tools");
   }
@@ -2469,7 +2498,12 @@ it("publishes fallback choices, a group label, and a stored check on the plan", 
 it("publishes the rolling move list with today, saved, and ended filters", async () => {
   const response = await handle(request("tools/list", {}, "read"));
   const listed = Effect.runSync(Schema.decodeUnknownEffect(ToolListing)(await json(response)));
-  const list = listed.result.tools.find((tool) => tool.name === "list_transaction_proposals");
+  const list = EffectOption.getOrUndefined(
+    EffectArray.findFirst(
+      listed.result.tools,
+      (tool) => tool.name === "list_transaction_proposals",
+    ),
+  );
   if (list === undefined) {
     throw new Error("Expected the tool list to include list_transaction_proposals");
   }
@@ -2487,8 +2521,12 @@ it("publishes the rolling move list with today, saved, and ended filters", async
 it("points compact player search rows at get_players for detail", async () => {
   const response = await handle(request("tools/list", {}, "read"));
   const listed = Effect.runSync(Schema.decodeUnknownEffect(ToolListing)(await json(response)));
-  const search = listed.result.tools.find((tool) => tool.name === "search_players");
-  const detail = listed.result.tools.find((tool) => tool.name === "get_players");
+  const search = EffectOption.getOrUndefined(
+    EffectArray.findFirst(listed.result.tools, (tool) => tool.name === "search_players"),
+  );
+  const detail = EffectOption.getOrUndefined(
+    EffectArray.findFirst(listed.result.tools, (tool) => tool.name === "get_players"),
+  );
 
   expect(search?.description).toContain("Use `get_players` for stats and full detail");
   expect(detail?.description).toContain("`search_players` or `get_rosters`");
@@ -2522,28 +2560,41 @@ it("keeps every published description inside its budget", async () => {
     submit_feedback: 280,
   };
 
-  expect(listed.result.tools.map((tool) => tool.name).sort()).toEqual(Object.keys(budgets).sort());
-  const overBudget = listed.result.tools
-    .map((tool) => ({ name: tool.name, length: tool.description.length }))
-    .filter((tool) => tool.length > (budgets[tool.name] ?? 0));
+  expect(EffectArray.map(listed.result.tools, (tool) => tool.name).sort()).toEqual(
+    Object.keys(budgets).sort(),
+  );
+  const overBudget = EffectArray.filter(
+    EffectArray.map(listed.result.tools, (tool) => ({
+      name: tool.name,
+      length: tool.description.length,
+    })),
+    (tool) => tool.length > (budgets[tool.name] ?? 0),
+  );
   expect(overBudget).toEqual([]);
   expect(
-    listed.result.tools.reduce((total, tool) => total + tool.description.length, 0),
+    EffectArray.reduce(listed.result.tools, 0, (total, tool) => total + tool.description.length),
   ).toBeLessThanOrEqual(3_900);
 
-  const fields = listed.result.tools.flatMap((tool) => [
-    ...schemaDescriptions(tool.inputSchema, `${tool.name}.input`),
-    ...schemaDescriptions(tool.outputSchema ?? {}, `${tool.name}.output`),
-  ]);
-  expect(fields.filter((field) => field.text.length > 200)).toEqual([]);
-  expect(fields.reduce((total, field) => total + field.text.length, 0)).toBeLessThanOrEqual(32_000);
+  const fields = EffectArray.flatMap(listed.result.tools, (tool) => {
+    const flatMapped1 = [
+      ...schemaDescriptions(tool.inputSchema, `${tool.name}.input`),
+      ...schemaDescriptions(tool.outputSchema ?? {}, `${tool.name}.output`),
+    ];
+    return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+  });
+  expect(EffectArray.filter(fields, (field) => field.text.length > 200)).toEqual([]);
+  expect(
+    EffectArray.reduce(fields, 0, (total, field) => total + field.text.length),
+  ).toBeLessThanOrEqual(32_000);
 });
 
 it("publishes the accepted player-statistics periods and the compact standings form before a call", async () => {
   const response = await handle(request("tools/list", {}, "read"));
   const listed = Effect.runSync(Schema.decodeUnknownEffect(ToolListing)(await json(response)));
   const tool = (name: string): (typeof listed.result.tools)[number] => {
-    const found = listed.result.tools.find((entry) => entry.name === name);
+    const found = EffectOption.getOrUndefined(
+      EffectArray.findFirst(listed.result.tools, (entry) => entry.name === name),
+    );
     if (found === undefined) {
       throw new Error(`Expected the tool list to include ${name}`);
     }
@@ -2694,47 +2745,58 @@ const ToolListing = Schema.Struct({
 type SchemaDescription = { readonly path: string; readonly text: string };
 
 function schemaDescriptions(schema: unknown, path: string): ReadonlyArray<SchemaDescription> {
-  if (Array.isArray(schema)) {
-    return schema.flatMap((entry, index) => schemaDescriptions(entry, `${path}[${String(index)}]`));
+  if (EffectArray.isArray(schema)) {
+    return EffectArray.flatMap(schema, (entry, index) => {
+      const flatMapped2 = schemaDescriptions(entry, `${path}[${String(index)}]`);
+      return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+    });
   }
   if (typeof schema !== "object" || schema === null) {
     return [];
   }
-  return Object.entries(schema).flatMap(([key, value]) =>
-    key === "description" && typeof value === "string"
-      ? [{ path, text: value }]
-      : schemaDescriptions(value, `${path}.${key}`),
-  );
+  return EffectArray.flatMap(Object.entries(schema), ([key, value]) => {
+    const flatMapped3 =
+      key === "description" && typeof value === "string"
+        ? [{ path, text: value }]
+        : schemaDescriptions(value, `${path}.${key}`);
+    return arrayValueIsArray(flatMapped3) ? flatMapped3 : [flatMapped3];
+  });
 }
 
 function schemaLiterals(schema: unknown): ReadonlyArray<string> {
-  if (Array.isArray(schema)) {
-    return schema.flatMap((entry) => schemaLiterals(entry));
+  if (EffectArray.isArray(schema)) {
+    return EffectArray.flatMap(schema, (entry) => {
+      const flatMapped4 = schemaLiterals(entry);
+      return arrayValueIsArray(flatMapped4) ? flatMapped4 : [flatMapped4];
+    });
   }
   if (typeof schema !== "object" || schema === null) {
     return [];
   }
   const record: Readonly<Record<string, unknown>> = { ...schema };
-  return Object.entries(record).flatMap(([key, value]) => {
+  return EffectArray.flatMap(Object.entries(record), ([key, value]) => {
     if (key === "const" && typeof value === "string") {
       return [value];
     }
-    if (key === "enum" && Array.isArray(value)) {
-      return value.filter((entry): entry is string => typeof entry === "string");
+    if (key === "enum" && EffectArray.isArray(value)) {
+      return EffectArray.filter(value, (entry): entry is string => typeof entry === "string");
     }
     return schemaLiterals(value);
   });
 }
 
 function schemaPropertyNames(schema: unknown): ReadonlyArray<string> {
-  if (Array.isArray(schema)) {
-    return schema.flatMap((entry) => schemaPropertyNames(entry));
+  if (EffectArray.isArray(schema)) {
+    return EffectArray.flatMap(schema, (entry) => {
+      const flatMapped5 = schemaPropertyNames(entry);
+      return arrayValueIsArray(flatMapped5) ? flatMapped5 : [flatMapped5];
+    });
   }
   if (typeof schema !== "object" || schema === null) {
     return [];
   }
   const record: Readonly<Record<string, unknown>> = { ...schema };
-  return Object.entries(record).flatMap(([key, value]) => {
+  return EffectArray.flatMap(Object.entries(record), ([key, value]) => {
     if (key === "properties" && typeof value === "object" && value !== null) {
       return [...Object.keys(value), ...schemaPropertyNames(value)];
     }

@@ -1,3 +1,4 @@
+import { Array as EffectArray } from "effect";
 const nflLeagueAttributes = {
   league_key: "466.l.4000",
   league_id: "4000",
@@ -743,7 +744,7 @@ export function yahooNhlLeagueSettingsWith(attributes: Readonly<Record<string, u
 }
 
 function fixtureFragments(value: unknown): ReadonlyArray<unknown> {
-  return Array.isArray(value) ? value : [];
+  return EffectArray.isArray(value) ? value : [];
 }
 
 export function withPlayerRankSample(
@@ -757,7 +758,7 @@ export function withPlayerRankSample(
       player: [
         [{ player_key: `466.p.9${String(index).padStart(4, "0")}` }],
         {
-          player_ranks: Object.entries(values).map(([type, value]) => ({
+          player_ranks: EffectArray.map(Object.entries(values), ([type, value]) => ({
             player_rank: { rank_type: type, rank_value: value },
           })),
         },
@@ -2321,7 +2322,7 @@ const nhlTeamEntry = [
   [],
 ];
 
-const nflTeamEntryWithoutUrl = nflTeamEntry.filter((fragment) => !("url" in fragment));
+const nflTeamEntryWithoutUrl = EffectArray.filter(nflTeamEntry, (fragment) => !("url" in fragment));
 
 const nhlDiscoverLeagueSettings = yahooNhlLeagueSettingsWith({
   league_key: "466.l.4002",
@@ -2396,7 +2397,7 @@ function yahooDiscoverPayload(
             { guid: "SYNTHETICGUID" },
             {
               games: Object.fromEntries(
-                games.map((game, gameIndex) => [
+                EffectArray.map(games, (game, gameIndex) => [
                   String(gameIndex),
                   {
                     game: [
@@ -2404,7 +2405,7 @@ function yahooDiscoverPayload(
                       {
                         leagues: {
                           ...Object.fromEntries(
-                            game.leagues.map((league, leagueIndex) => {
+                            EffectArray.map(game.leagues, (league, leagueIndex) => {
                               const { attributes, settings } = leagueFragments(league.settings);
                               return [
                                 String(leagueIndex),
@@ -2415,7 +2416,7 @@ function yahooDiscoverPayload(
                                     {
                                       teams: {
                                         ...Object.fromEntries(
-                                          league.teams.map((team, teamIndex) => [
+                                          EffectArray.map(league.teams, (team, teamIndex) => [
                                             String(teamIndex),
                                             { team: [team, []] },
                                           ]),
@@ -2463,11 +2464,11 @@ function leagueFragments(fixture: { readonly fantasy_content: Record<string, unk
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !EffectArray.isArray(value);
 }
 
 function isReadonlyArray(value: unknown): value is ReadonlyArray<unknown> {
-  return Array.isArray(value);
+  return EffectArray.isArray(value);
 }
 
 const nflFreeAgentPlayers = {
@@ -2620,7 +2621,7 @@ export function yahooAggregatePlayerSearch(
                     {
                       leagues: {
                         ...Object.fromEntries(
-                          leagues.map(({ leagueKey, players }, index) => [
+                          EffectArray.map(leagues, ({ leagueKey, players }, index) => [
                             String(index),
                             {
                               league: [{ league_key: leagueKey }, { players }],
@@ -2843,7 +2844,7 @@ export const yahooNhlAvailableDraftPicks = {
               [{ team_key: "466.l.4001.t.1" }, { team_id: "1" }, { name: "Synthetic Team" }],
               {
                 available_draft_picks: {
-                  picks: [1, 2, 3].map((round) => ({ pick: { round } })),
+                  picks: EffectArray.map([1, 2, 3], (round) => ({ pick: { round } })),
                 },
               },
             ],
@@ -2853,7 +2854,7 @@ export const yahooNhlAvailableDraftPicks = {
               [{ team_key: "466.l.4001.t.2" }, { team_id: "2" }, { name: "Synthetic Rival" }],
               {
                 available_draft_picks: {
-                  picks: [1, 2].map((round) => ({ pick: { round } })),
+                  picks: EffectArray.map([1, 2], (round) => ({ pick: { round } })),
                 },
               },
             ],
@@ -3010,7 +3011,7 @@ function standingsPayload(
   teams: ReadonlyArray<unknown>,
 ): { fantasy_content: Record<string, unknown> } {
   const entries: Record<string, unknown> = {};
-  teams.forEach((team, index) => {
+  EffectArray.forEach(teams, (team, index) => {
     entries[String(index)] = { team };
   });
   entries["count"] = teams.length;
@@ -3179,7 +3180,7 @@ type RotoTeamFixture = {
 function rotoStandingsTeam(team: RotoTeamFixture): unknown[] {
   const entries = (values: Readonly<Record<number, string>>): Record<string, unknown> => {
     const stats: Record<string, unknown> = {};
-    [...nhlRotoCategoryIds, ...nhlRotoUnscoredIds].forEach((statId, index) => {
+    EffectArray.forEach([...nhlRotoCategoryIds, ...nhlRotoUnscoredIds], (statId, index) => {
       stats[String(index)] = {
         stat: { stat_id: String(statId), value: values[statId] ?? "" },
       };
@@ -3193,7 +3194,11 @@ function rotoStandingsTeam(team: RotoTeamFixture): unknown[] {
         coverage_type: "season",
         season: "2026",
         total: String(
-          nhlRotoCategoryIds.reduce((sum, statId) => sum + (Number(team.points[statId]) || 0), 0),
+          EffectArray.reduce(
+            nhlRotoCategoryIds,
+            0,
+            (sum, statId) => sum + (Number(team.points[statId]) || 0),
+          ),
         ),
         stats: entries(team.points),
       },
@@ -3385,7 +3390,9 @@ function nhlMatchupTeam(
           coverage_type: "week",
           week: "4",
           stats: {
-            ...Object.fromEntries(stats.map((stat, index) => [String(index), { stat }])),
+            ...Object.fromEntries(
+              EffectArray.map(stats, (stat, index) => [String(index), { stat }]),
+            ),
             count: stats.length,
           },
         },
@@ -3760,7 +3767,7 @@ function playerRanksPayload(
   ranks: ReadonlyArray<{ readonly type: string; readonly rank: string; readonly week?: string }>,
 ): Record<string, unknown> {
   const entries: Record<string, unknown> = {};
-  ranks.forEach((rank, index) => {
+  EffectArray.forEach(ranks, (rank, index) => {
     entries[String(index)] = {
       player_rank: {
         rank_type: rank.type,
@@ -3788,7 +3795,7 @@ function percentStartedFragments(input: {
   }
   if (input.cuts !== undefined && input.cuts.length > 0) {
     fragments.push({
-      percent_started_cut_types: input.cuts.map((cut) => ({
+      percent_started_cut_types: EffectArray.map(input.cuts, (cut) => ({
         percent_started_cut_type: [
           input.coverage,
           { cut_type: cut.cutType },
@@ -3817,7 +3824,7 @@ function playerDetailsPayload(input: {
   }>;
 }): { fantasy_content: Record<string, unknown> } {
   const entries: Record<string, unknown> = {};
-  input.players.forEach((player, index) => {
+  EffectArray.forEach(input.players, (player, index) => {
     const playerKey = input.playerKeys[index] ?? `466.p.9${String(index)}`;
     entries[String(index)] = {
       player: [
@@ -3835,7 +3842,9 @@ function playerDetailsPayload(input: {
           { position_type: "O" },
           { primary_position: player.primaryPosition },
           {
-            eligible_positions: player.eligiblePositions.map((position) => ({ position })),
+            eligible_positions: EffectArray.map(player.eligiblePositions, (position) => ({
+              position,
+            })),
           },
         ],
         ...(player.percentStarted === undefined
@@ -3873,7 +3882,7 @@ export function yahooNhlDatePlayerDetails(
   }>,
 ): { fantasy_content: Record<string, unknown> } {
   const entries: Record<string, unknown> = {};
-  players.forEach((player, index) => {
+  EffectArray.forEach(players, (player, index) => {
     entries[String(index)] = {
       player: [
         [
@@ -3888,7 +3897,9 @@ export function yahooNhlDatePlayerDetails(
         {
           player_stats: {
             "0": { coverage_type: "date", date },
-            stats: player.stats.map(({ statId, value }) => ({ stat: { stat_id: statId, value } })),
+            stats: EffectArray.map(player.stats, ({ statId, value }) => ({
+              stat: { stat_id: statId, value },
+            })),
           },
         },
         { ownership: { ownership_type: "waivers" } },
@@ -3925,7 +3936,7 @@ export function yahooNhlDatedRoster(input: {
   }>;
 }): { fantasy_content: Record<string, unknown> } {
   const entries = Object.fromEntries(
-    input.players.map((player, index) => [
+    EffectArray.map(input.players, (player, index) => [
       String(index),
       {
         player: [

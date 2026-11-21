@@ -10,6 +10,7 @@ import {
 import { teamScopes } from "@lineupkeep/backend/connections/TeamScopes";
 import { Effect, Schema } from "effect";
 import type { Layer } from "effect";
+import { Array as EffectArray } from "effect";
 import { Tool, Toolkit } from "effect/ai";
 
 import { RequiredScope } from "./toolAuthorization";
@@ -22,7 +23,7 @@ export const SetTeamAutomationInput = Schema.Struct({
       Schema.isMinLength(1),
       Schema.isMaxLength(10),
       Schema.makeFilter((inputs: ReadonlyArray<TeamControlInput>) =>
-        new Set(inputs.map((input) => input.team)).size === inputs.length
+        new Set(EffectArray.map(inputs, (input) => input.team)).size === inputs.length
           ? undefined
           : "Each team may appear once per automation request.",
       ),

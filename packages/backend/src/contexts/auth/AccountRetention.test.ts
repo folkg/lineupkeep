@@ -1,5 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { DateTime, Effect, Layer } from "effect";
+import { Array as EffectArray } from "effect";
 
 import layerTools from "#runtime/ProvideLayer.ts";
 
@@ -55,7 +56,7 @@ it.effect(
       );
 
       assert.strictEqual(summary.registrations, 2);
-      assert.deepStrictEqual(remaining.map((row) => row.clientId).sort(), [
+      assert.deepStrictEqual(EffectArray.map(remaining, (row) => row.clientId).sort(), [
         "client-authorized",
         "client-fresh",
         "client-token-authorized",
@@ -87,7 +88,7 @@ it.effect(
 
       assert.strictEqual(summary.consents, 2);
       assert.deepStrictEqual(
-        remaining.map((row) => row.clientId),
+        EffectArray.map(remaining, (row) => row.clientId),
         ["client-used"],
       );
     }).pipe(layerTools.provide(AccountRetentionTestLayer)),
@@ -137,11 +138,11 @@ it.effect(
       assert.strictEqual(summary.sessions, 2);
       assert.strictEqual(summary.verifications, 2);
       assert.deepStrictEqual(
-        sessions.map((row) => row.id),
+        EffectArray.map(sessions, (row) => row.id),
         ["live-session"],
       );
       assert.deepStrictEqual(
-        codes.map((row) => row.id),
+        EffectArray.map(codes, (row) => row.id),
         ["live-code"],
       );
     }).pipe(layerTools.provide(AccountRetentionTestLayer)),

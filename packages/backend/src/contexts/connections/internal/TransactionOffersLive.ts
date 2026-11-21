@@ -1,4 +1,5 @@
 import { Array, DateTime, Effect, Layer, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
@@ -23,6 +24,9 @@ import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption
 import { loadTeamContext, ownerNoteOf, providerIdentity } from "./QueryContext.ts";
 import { QueryRepository } from "./QueryRepository.ts";
 import { QueryTokens } from "./QueryTokens.ts";
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 export const TransactionOffersLive = Layer.effect(
   TransactionOffers,
@@ -179,10 +183,13 @@ function pendingTradeOffers(input: {
   readonly trades: ReadonlyArray<ProviderPendingTrade>;
 }): Effect.Effect<ReadonlyArray<PendingTradeOffer>, TransactionOffersPersistenceFailed> {
   return Effect.gen(function* () {
-    const trades = input.trades.filter((trade) => tradePartiesTeam(trade, input.teamKey));
-    const playerKeys = trades.flatMap((trade) =>
-      trade.players.map((player) => player.providerPlayerKey),
+    const trades = EffectArray.filter(input.trades, (trade) =>
+      tradePartiesTeam(trade, input.teamKey),
     );
+    const playerKeys = EffectArray.flatMap(trades, (trade) => {
+      const flatMapped1 = EffectArray.map(trade.players, (player) => player.providerPlayerKey);
+      return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+    });
     const teamKeys = [...teamKeysOf(trades)];
     const playerRefs = yield* input.tokens.sealPlayerRefs({
       userId: input.userId,
@@ -199,13 +206,13 @@ function pendingTradeOffers(input: {
       groups: [
         {
           leagueKey: input.leagueKey,
-          transactionKeys: trades.map((trade) => trade.transactionKey),
+          transactionKeys: EffectArray.map(trades, (trade) => trade.transactionKey),
         },
       ],
     });
     const offerRefs = Array.getUnsafe(offerRefGroups, 0);
     const partyByTeam = new Map(
-      teamKeys.map((key, index) => [key, Array.getUnsafe(teamRefs, index)] as const),
+      EffectArray.map(teamKeys, (key, index) => [key, Array.getUnsafe(teamRefs, index)] as const),
     );
     const partyOf = (team: ProviderTransactionTeam | undefined): PendingParty | undefined => {
       if (team === undefined) {
@@ -232,7 +239,7 @@ function pendingTradeOffers(input: {
         canRespond: trade.canRespond,
         ...(proposingTeam === undefined ? {} : { proposingTeam }),
         ...(receivingTeam === undefined ? {} : { receivingTeam }),
-        players: trade.players.map((player, playerIndex) => {
+        players: EffectArray.map(trade.players, (player, playerIndex) => {
           const from = partyOf(player.movement.from);
           const to = partyOf(player.movement.to);
           return {
@@ -246,7 +253,7 @@ function pendingTradeOffers(input: {
             ...(to === undefined ? {} : { to }),
           };
         }),
-        picks: trade.picks.map((pick) => {
+        picks: EffectArray.map(trade.picks, (pick) => {
           const from = partyOf(pick.from);
           const to = partyOf(pick.to);
           const original = partyOf(pick.original);

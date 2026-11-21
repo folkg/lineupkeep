@@ -1,17 +1,31 @@
 import { Effect, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Order as EffectOrder } from "effect";
 
 import { IntFromStringOrNumber, decodePayload } from "#yahoo/decode.ts";
 import { YahooParseError } from "#yahoo/errors.ts";
+function sortWithComparator<A>(
+  self: ReadonlyArray<A>,
+  compare: (left: A, right: A) => number,
+): ReadonlyArray<A> {
+  return EffectArray.sort(
+    self,
+    EffectOrder.make<A>((left, right) => {
+      const result = compare(left, right);
+      return result < 0 ? -1 : result > 0 ? 1 : 0;
+    }),
+  );
+}
 
 export function decodeDashboard(
   payload: unknown,
 ): Effect.Effect<YahooMobileDashboard, YahooParseError> {
   return Effect.gen(function* () {
     const decoded = yield* decodePayload(DashboardPayload, payload, "read_mobile_dashboard");
-    const leagues = Object.values(decoded.my_leagues_and_team_keys).map(leagueOf);
+    const leagues = EffectArray.map(Object.values(decoded.my_leagues_and_team_keys), leagueOf);
     return {
-      leagueKeys: decoded.my_league_keys ?? leagues.map((league) => league.leagueKey),
-      leagues: leagues.toSorted((left, right) =>
+      leagueKeys: decoded.my_league_keys ?? EffectArray.map(leagues, (league) => league.leagueKey),
+      leagues: sortWithComparator(leagues, (left, right) =>
         left.leagueKey < right.leagueKey ? -1 : left.leagueKey > right.leagueKey ? 1 : 0,
       ),
     };
@@ -26,7 +40,7 @@ export function decodeLeagueAndTeams(
     const league = Object.values(decoded.league)[0];
     return {
       league: league === undefined ? undefined : leagueOf(league),
-      teams: Object.values(decoded.teams).map(statcloudTeamOf),
+      teams: EffectArray.map(Object.values(decoded.teams), statcloudTeamOf),
     };
   });
 }
@@ -37,9 +51,12 @@ export function decodeMatchups(
   return Effect.gen(function* () {
     const decoded = yield* decodePayload(MatchupsPayload, payload, "read_statcloud_matchups");
     return {
-      matchups: decoded.matchups.map(matchupOf),
+      matchups: EffectArray.map(decoded.matchups, matchupOf),
       teams: Object.fromEntries(
-        Object.entries(decoded.teams ?? {}).map(([key, team]) => [key, statcloudTeamOf(team)]),
+        EffectArray.map(Object.entries(decoded.teams ?? {}), ([key, team]) => [
+          key,
+          statcloudTeamOf(team),
+        ]),
       ),
     };
   });
@@ -51,9 +68,9 @@ export function decodePlayoffs(
   return Effect.gen(function* () {
     const decoded = yield* decodePayload(PlayoffsPayload, payload, "read_statcloud_playoffs");
     return {
-      matchups: decoded.matchups.map(matchupOf),
+      matchups: EffectArray.map(decoded.matchups, matchupOf),
       slots: Object.fromEntries(
-        Object.entries(decoded.playoff_matchup_slots ?? {}).map(([key, slot]) => [
+        EffectArray.map(Object.entries(decoded.playoff_matchup_slots ?? {}), ([key, slot]) => [
           key,
           {
             isChampionshipLevel: slot.is_championship_level,
@@ -79,11 +96,11 @@ export function decodeMatchupScores(
       "read_statcloud_matchup_scores",
     );
     return {
-      matchups: decoded.matchups.map(matchupOf),
+      matchups: EffectArray.map(decoded.matchups, matchupOf),
       playerScores: Object.fromEntries(
-        Object.entries(decoded.player_scores).map(([teamKey, scores]) => [
+        EffectArray.map(Object.entries(decoded.player_scores), ([teamKey, scores]) => [
           teamKey,
-          scores.map((score) => ({
+          EffectArray.map(scores, (score) => ({
             playerKey: score.player_key,
             teamKey: score.team_key,
             rosterPosition: score.roster_position,
@@ -95,7 +112,10 @@ export function decodeMatchupScores(
         ]),
       ),
       teams: Object.fromEntries(
-        Object.entries(decoded.teams).map(([key, team]) => [key, statcloudTeamOf(team)]),
+        EffectArray.map(Object.entries(decoded.teams), ([key, team]) => [
+          key,
+          statcloudTeamOf(team),
+        ]),
       ),
     };
   });
@@ -133,7 +153,7 @@ function statcloudTeamOf(team: typeof StatcloudTeamPayload.Type): YahooStatcloud
     name: team.team_name,
     url: team.team_url ?? undefined,
     imageUrl: team.image_url ?? undefined,
-    managers: (team.managers ?? []).map((manager) => ({
+    managers: EffectArray.map(team.managers ?? [], (manager) => ({
       guid: manager.guid ?? undefined,
       isCommissioner: manager.is_commissioner,
     })),
@@ -155,7 +175,7 @@ function matchupOf(matchup: typeof MatchupPayload.Type): YahooStatcloudMatchup {
     status: matchup.status ?? undefined,
     winnerTeamKey: matchup.winner_team_key ?? undefined,
     isMatchupOfTheWeek: matchup.is_matchup_of_the_week ?? undefined,
-    teams: matchup.teams.map((team) => ({
+    teams: EffectArray.map(matchup.teams, (team) => ({
       teamKey: team.team_key,
       score: team.score ?? undefined,
       initialProjectedScore: team.initial_projected_score ?? undefined,

@@ -7,6 +7,7 @@ import { TransactionOffers } from "@lineupkeep/backend/connections/TransactionOf
 import { TransactionPlanService } from "@lineupkeep/backend/connections/TransactionPlans";
 import { Effect, Schema } from "effect";
 import type { Layer } from "effect";
+import { Array as EffectArray } from "effect";
 import { Tool, Toolkit } from "effect/ai";
 
 import { RequiredScope } from "./toolAuthorization";
@@ -156,7 +157,7 @@ function captureRosterStats(
   if (!isRoster(roster)) {
     return Effect.undefined;
   }
-  const players = roster.players.map((player) => player.player);
+  const players = EffectArray.map(roster.players, (player) => player.player);
   if (players.length === 0) {
     return Effect.undefined;
   }
@@ -186,7 +187,7 @@ function isRoster(value: unknown): value is {
     "status" in value &&
     value.status === "ok" &&
     "players" in value &&
-    Array.isArray(value.players)
+    EffectArray.isArray(value.players)
   );
 }
 

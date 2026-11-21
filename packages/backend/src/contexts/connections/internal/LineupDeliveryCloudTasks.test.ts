@@ -1,5 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Layer, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 
 import { LineupRunId, LineupId } from "#contexts/connections/LineupRun.ts";
@@ -18,7 +19,7 @@ it.effect("enqueues deterministic Cloud Tasks deliveries with no credentials", (
     yield* delivery.enqueueMany([{ delivery: deliveryId, runs: [runId] }]);
 
     assert.strictEqual(requests.length, 4);
-    const tasks = requests.filter((request) => request.url.endsWith("/tasks"));
+    const tasks = EffectArray.filter(requests, (request) => request.url.endsWith("/tasks"));
     assert.strictEqual(tasks.length, 2);
     const first = tasks[0];
     if (first === undefined) {
@@ -115,7 +116,8 @@ const sink = HttpClient.make((request) => {
       ),
     );
   }
-  const status = requests.filter((entry) => entry.url.endsWith("/tasks")).length === 1 ? 409 : 200;
+  const status =
+    EffectArray.filter(requests, (entry) => entry.url.endsWith("/tasks")).length === 1 ? 409 : 200;
   return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}", { status })));
 });
 

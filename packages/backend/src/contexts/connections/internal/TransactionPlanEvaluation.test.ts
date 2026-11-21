@@ -1,6 +1,9 @@
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { DateTime, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
+import { Order as EffectOrder } from "effect";
 
 import { rosterRuleOf } from "#contexts/connections/RosterSlots.ts";
 
@@ -40,6 +43,17 @@ import type {
   TransactionMoveId,
 } from "./TransactionPlanRecord.ts";
 import { TransactionMoveId as TransactionMoveIdSchema } from "./TransactionPlanRecord.ts";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
 
 const checkedAt = DateTime.makeUnsafe("2026-11-10T18:00:00.000Z");
 const idAlphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -62,7 +76,9 @@ it("refuses the second of two drops for one player", () => {
   assert.deepStrictEqual(evaluation.moves[0]?.claims, [{ kind: "player", key: "p1" }]);
   assert.strictEqual(evaluation.moves[1]?.validation.status, "stale");
   assert.deepStrictEqual(
-    evaluation.moves[1]?.validation.reasons.map((reason) => [reason.code, reason.detail]),
+    optionalArrayValue(evaluation.moves[1]?.validation.reasons, (value) =>
+      EffectArray.map(value, (reason) => [reason.code, reason.detail]),
+    ),
     [
       [
         "player_claimed",
@@ -71,7 +87,7 @@ it("refuses the second of two drops for one player", () => {
     ],
   );
   assert.deepStrictEqual(
-    evaluation.order.steps.map((step) => step.move),
+    EffectArray.map(evaluation.order.steps, (step) => step.move),
     [moveId("drop-one")],
   );
 });
@@ -102,15 +118,17 @@ it("refuses the second of two adds for one free agent", () => {
   assert.strictEqual(evaluation.moves[0]?.placement?.toSlot, "BN");
   assert.strictEqual(evaluation.moves[1]?.validation.status, "stale");
   assert.deepStrictEqual(
-    evaluation.moves[1]?.validation.reasons.map((reason) => reason.code),
+    optionalArrayValue(evaluation.moves[1]?.validation.reasons, (value) =>
+      EffectArray.map(value, (reason) => reason.code),
+    ),
     ["player_claimed"],
   );
   assert.deepStrictEqual(
-    evaluation.order.steps.map((step) => step.move),
+    EffectArray.map(evaluation.order.steps, (step) => step.move),
     [moveId("add-one")],
   );
   assert.deepStrictEqual(
-    evaluation.groups.map((group) => [group.group, group.valid]),
+    EffectArray.map(evaluation.groups, (group) => [group.group, group.valid]),
     [["pair", false]],
   );
   assert.include(evaluation.groups[0]?.detail ?? "", "Add Free Agent cannot run:");
@@ -142,7 +160,9 @@ it("refuses a bid the team cannot cover", () => {
   assert.strictEqual(evaluation.moves[0]?.validation.status, "current");
   assert.strictEqual(evaluation.moves[1]?.validation.status, "stale");
   assert.deepStrictEqual(
-    evaluation.moves[1]?.validation.reasons.map((reason) => [reason.code, reason.detail]),
+    optionalArrayValue(evaluation.moves[1]?.validation.reasons, (value) =>
+      EffectArray.map(value, (reason) => [reason.code, reason.detail]),
+    ),
     [["bid_exceeds_budget", "A bid of 11 is more than the 0 FAAB this team has left."]],
   );
 });
@@ -176,12 +196,14 @@ it("refuses two moves for the same reserve place", () => {
   ]);
   assert.strictEqual(evaluation.moves[1]?.validation.status, "stale");
   assert.deepStrictEqual(
-    evaluation.moves[1]?.validation.reasons.map((reason) => reason.code),
+    optionalArrayValue(evaluation.moves[1]?.validation.reasons, (value) =>
+      EffectArray.map(value, (reason) => reason.code),
+    ),
     ["place_claimed"],
   );
   assert.include(evaluation.moves[1]?.validation.reasons[0]?.detail ?? "", "IR place");
   assert.deepStrictEqual(
-    evaluation.order.steps.map((step) => step.move),
+    EffectArray.map(evaluation.order.steps, (step) => step.move),
     [moveId("move-one")],
   );
 });
@@ -207,7 +229,9 @@ it("refuses a slot move to a place that does not accept the player", () => {
 
   assert.strictEqual(evaluation.moves[0]?.validation.status, "illegal");
   assert.deepStrictEqual(
-    evaluation.moves[0]?.validation.reasons.map((reason) => [reason.code, reason.detail]),
+    optionalArrayValue(evaluation.moves[0]?.validation.reasons, (value) =>
+      EffectArray.map(value, (reason) => [reason.code, reason.detail]),
+    ),
     [["slot_illegal", "Roster Runner cannot move to QB: it does not accept their positions (RB)."]],
   );
   assert.deepStrictEqual(evaluation.order.steps, []);
@@ -232,7 +256,9 @@ it("marks a roster with a healthy player in an injury reserve place illegal", ()
 
   assert.strictEqual(evaluation.moves[0]?.validation.status, "illegal");
   assert.deepStrictEqual(
-    evaluation.moves[0]?.validation.reasons.map((reason) => [reason.code, reason.playerKey]),
+    optionalArrayValue(evaluation.moves[0]?.validation.reasons, (value) =>
+      EffectArray.map(value, (reason) => [reason.code, reason.playerKey]),
+    ),
     [["slot_illegal", "h1"]],
   );
   assert.include(
@@ -241,7 +267,7 @@ it("marks a roster with a healthy player in an injury reserve place illegal", ()
   );
   assert.strictEqual(evaluation.moves[1]?.validation.status, "current");
   assert.deepStrictEqual(
-    evaluation.order.steps.map((step) => step.move),
+    EffectArray.map(evaluation.order.steps, (step) => step.move),
     [moveId("drop-healthy")],
   );
 });
@@ -266,7 +292,9 @@ it("refuses a healthy player in an injury-based reserve place", () => {
 
   assert.strictEqual(evaluation.moves[0]?.validation.status, "stale");
   assert.deepStrictEqual(
-    evaluation.moves[0]?.validation.reasons.map((reason) => [reason.code, reason.detail]),
+    optionalArrayValue(evaluation.moves[0]?.validation.reasons, (value) =>
+      EffectArray.map(value, (reason) => [reason.code, reason.detail]),
+    ),
     [
       [
         "reserve_unavailable",
@@ -294,7 +322,9 @@ it("refuses a stash to a reserve list that does not accept the player's position
 
   assert.strictEqual(evaluation.moves[0]?.validation.status, "stale");
   assert.deepStrictEqual(
-    evaluation.moves[0]?.validation.reasons.map((reason) => [reason.code, reason.detail]),
+    optionalArrayValue(evaluation.moves[0]?.validation.reasons, (value) =>
+      EffectArray.map(value, (reason) => [reason.code, reason.detail]),
+    ),
     [
       [
         "reserve_unavailable",
@@ -329,7 +359,9 @@ it("rechecks a saved move whose day arrived without marking it due", () => {
   assert.strictEqual(evaluation.moves[0]?.dueToday, false);
   assert.strictEqual(evaluation.moves[0]?.validation.status, "stale");
   assert.deepStrictEqual(
-    evaluation.moves[0]?.validation.reasons.map((reason) => reason.code),
+    optionalArrayValue(evaluation.moves[0]?.validation.reasons, (value) =>
+      EffectArray.map(value, (reason) => reason.code),
+    ),
     ["drop_not_rostered"],
   );
 });
@@ -355,7 +387,12 @@ it("orders an add after the drop that funds it", () => {
   assert.strictEqual(evaluation.moves[0]?.validation.status, "current");
   assert.strictEqual(evaluation.moves[0]?.placement?.toSlot, "BN");
   assert.deepStrictEqual(
-    evaluation.order.steps.map((step) => [step.move, step.position, step.fundedBy, step.dependsOn]),
+    EffectArray.map(evaluation.order.steps, (step) => [
+      step.move,
+      step.position,
+      step.fundedBy,
+      step.dependsOn,
+    ]),
     [
       [moveId("drop-bench-two"), 0, undefined, []],
       [moveId("add-free-agent"), 1, moveId("drop-bench-two"), [moveId("drop-bench-two")]],
@@ -392,7 +429,7 @@ it("orders a reserve add after the activate that frees its place", () => {
   assert.strictEqual(evaluation.moves[0]?.placement?.toSlot, "IR");
   assert.strictEqual(evaluation.moves[1]?.validation.status, "current");
   assert.deepStrictEqual(
-    evaluation.order.steps.map((step) => [step.move, step.fundedBy, step.dependsOn]),
+    EffectArray.map(evaluation.order.steps, (step) => [step.move, step.fundedBy, step.dependsOn]),
     [
       [moveId("activate-runner"), undefined, []],
       [moveId("add-reserve"), moveId("activate-runner"), [moveId("activate-runner")]],
@@ -445,7 +482,7 @@ it("orders a valid mixed plan", () => {
   const moves: ReadonlyArray<TransactionPlanMoveEvaluation> = evaluation.moves;
   const groups: ReadonlyArray<TransactionPlanGroupEvaluation> = evaluation.groups;
   assert.deepStrictEqual(
-    moves.map((entry) => [entry.move, entry.validation.status, entry.runPosition]),
+    EffectArray.map(moves, (entry) => [entry.move, entry.validation.status, entry.runPosition]),
     [
       [moveId("drop-quarterback"), "current", 0],
       [moveId("move-bench-three"), "current", 1],
@@ -454,7 +491,7 @@ it("orders a valid mixed plan", () => {
     ],
   );
   assert.deepStrictEqual(
-    evaluation.order.steps.map((step) => step.move),
+    EffectArray.map(evaluation.order.steps, (step) => step.move),
     [
       moveId("drop-quarterback"),
       moveId("move-bench-three"),
@@ -463,7 +500,7 @@ it("orders a valid mixed plan", () => {
     ],
   );
   assert.deepStrictEqual(
-    groups.map((group) => [group.group, group.moves, group.valid]),
+    EffectArray.map(groups, (group) => [group.group, group.moves, group.valid]),
     [
       [
         "swap",
@@ -512,7 +549,11 @@ it("replays a drop and add chain onto the projected roster", () => {
   const evaluation = evaluate(plan);
 
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) => [entry.move, entry.validation.status, entry.runPosition]),
+    EffectArray.map(evaluation.moves, (entry) => [
+      entry.move,
+      entry.validation.status,
+      entry.runPosition,
+    ]),
     [
       [moveId("drop-a-add-b"), "current", 0],
       [moveId("drop-b-add-c"), "current", 1],
@@ -520,8 +561,8 @@ it("replays a drop and add chain onto the projected roster", () => {
     ],
   );
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) =>
-      entry.projectedRoster.map((member) => [member.key, member.slot]),
+    EffectArray.map(evaluation.moves, (entry) =>
+      EffectArray.map(entry.projectedRoster, (member) => [member.key, member.slot]),
     ),
     [
       [
@@ -542,13 +583,13 @@ it("replays a drop and add chain onto the projected roster", () => {
     ],
   );
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) => entry.dependsOn),
+    EffectArray.map(evaluation.moves, (entry) => entry.dependsOn),
     [[], [moveId("drop-a-add-b")], [moveId("drop-b-add-c")]],
   );
 
   const order = orderTransactionPlanMoves({
     facts: plan.facts,
-    moves: evaluation.moves.map((entry) => ({
+    moves: EffectArray.map(evaluation.moves, (entry) => ({
       move: requireMove(plan.moves, entry.move),
       placement: entry.placement,
       runnable: entry.validation.status === "current",
@@ -556,8 +597,8 @@ it("replays a drop and add chain onto the projected roster", () => {
   });
 
   assert.deepStrictEqual(
-    order.steps.map((step) => [step.move, step.position, step.dependsOn]),
-    evaluation.order.steps.map((step) => [step.move, step.position, step.dependsOn]),
+    EffectArray.map(order.steps, (step) => [step.move, step.position, step.dependsOn]),
+    EffectArray.map(evaluation.order.steps, (step) => [step.move, step.position, step.dependsOn]),
   );
 });
 
@@ -602,7 +643,11 @@ it("blocks the moves that consume a fact a failed move would have produced", () 
   });
 
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) => [entry.move, entry.validation.status, entry.runPosition]),
+    EffectArray.map(evaluation.moves, (entry) => [
+      entry.move,
+      entry.validation.status,
+      entry.runPosition,
+    ]),
     [
       [moveId("drop-a-add-b"), "current", 0],
       [moveId("drop-b-add-c"), "stale", undefined],
@@ -611,11 +656,15 @@ it("blocks the moves that consume a fact a failed move would have produced", () 
     ],
   );
   assert.deepStrictEqual(
-    evaluation.moves[1]?.validation.reasons.map((reason) => reason.code),
+    optionalArrayValue(evaluation.moves[1]?.validation.reasons, (value) =>
+      EffectArray.map(value, (reason) => reason.code),
+    ),
     ["player_unavailable"],
   );
   assert.deepStrictEqual(
-    evaluation.moves[2]?.validation.reasons.map((reason) => [reason.code, reason.detail]),
+    optionalArrayValue(evaluation.moves[2]?.validation.reasons, (value) =>
+      EffectArray.map(value, (reason) => [reason.code, reason.detail]),
+    ),
     [
       [
         "blocked_by_move",
@@ -625,7 +674,7 @@ it("blocks the moves that consume a fact a failed move would have produced", () 
   );
   assert.deepStrictEqual(evaluation.moves[2]?.dependsOn, [moveId("drop-b-add-c")]);
   assert.deepStrictEqual(
-    evaluation.order.steps.map((step) => step.move),
+    EffectArray.map(evaluation.order.steps, (step) => step.move),
     [moveId("drop-a-add-b"), moveId("drop-x-add-e")],
   );
 });
@@ -651,22 +700,24 @@ it("assumes a pending waiver claim succeeds before a move that drops the player"
   });
 
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) => [entry.validation.status, entry.runPosition]),
+    EffectArray.map(evaluation.moves, (entry) => [entry.validation.status, entry.runPosition]),
     [
       ["current", 0],
       ["current", 1],
     ],
   );
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) => entry.validation.reasons),
+    EffectArray.map(evaluation.moves, (entry) => entry.validation.reasons),
     [[], []],
   );
   assert.deepStrictEqual(
-    evaluation.moves[1]?.projectedRoster.map((member) => member.key),
+    optionalArrayValue(evaluation.moves[1]?.projectedRoster, (value) =>
+      EffectArray.map(value, (member) => member.key),
+    ),
     ["a1", "x1"],
   );
   assert.deepStrictEqual(
-    evaluation.order.steps.map((step) => step.move),
+    EffectArray.map(evaluation.order.steps, (step) => step.move),
     [moveId("claim-c"), moveId("drop-c")],
   );
 });
@@ -697,7 +748,7 @@ it("blocks only a failed waiver claim's dependents", () => {
   });
 
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) => [entry.validation.status, entry.runPosition]),
+    EffectArray.map(evaluation.moves, (entry) => [entry.validation.status, entry.runPosition]),
     [
       ["current", undefined],
       ["stale", undefined],
@@ -705,7 +756,9 @@ it("blocks only a failed waiver claim's dependents", () => {
     ],
   );
   assert.deepStrictEqual(
-    evaluation.moves[1]?.validation.reasons.map((reason) => [reason.code, reason.detail]),
+    optionalArrayValue(evaluation.moves[1]?.validation.reasons, (value) =>
+      EffectArray.map(value, (reason) => [reason.code, reason.detail]),
+    ),
     [
       [
         "blocked_by_move",
@@ -714,11 +767,13 @@ it("blocks only a failed waiver claim's dependents", () => {
     ],
   );
   assert.deepStrictEqual(
-    evaluation.moves[2]?.projectedRoster.map((member) => member.key),
+    optionalArrayValue(evaluation.moves[2]?.projectedRoster, (value) =>
+      EffectArray.map(value, (member) => member.key),
+    ),
     ["a1", "y1"],
   );
   assert.deepStrictEqual(
-    evaluation.order.steps.map((step) => step.move),
+    EffectArray.map(evaluation.order.steps, (step) => step.move),
     [moveId("drop-x")],
   );
 });
@@ -742,7 +797,9 @@ it("waits on a pending trade that would bring the player a later move drops", ()
   });
 
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) => entry.validation.reasons.map((reason) => reason.code)),
+    EffectArray.map(evaluation.moves, (entry) =>
+      EffectArray.map(entry.validation.reasons, (reason) => reason.code),
+    ),
     [["pending_outcome"], ["pending_outcome"]],
   );
   assert.deepStrictEqual(
@@ -793,15 +850,17 @@ it("revalidates later moves against a move inserted in the middle and names the 
   });
 
   assert.deepStrictEqual(
-    before.moves.map((entry) => entry.validation.status),
+    EffectArray.map(before.moves, (entry) => entry.validation.status),
     ["current", "current"],
   );
   assert.deepStrictEqual(
-    after.moves.map((entry) => entry.validation.status),
+    EffectArray.map(after.moves, (entry) => entry.validation.status),
     ["current", "current", "stale"],
   );
   assert.deepStrictEqual(
-    after.moves[2]?.validation.reasons.map((reason) => [reason.code, reason.detail]),
+    optionalArrayValue(after.moves[2]?.validation.reasons, (value) =>
+      EffectArray.map(value, (reason) => [reason.code, reason.detail]),
+    ),
     [
       [
         "move_not_rostered",
@@ -810,7 +869,7 @@ it("revalidates later moves against a move inserted in the middle and names the 
     ],
   );
   assert.deepStrictEqual(
-    after.order.steps.map((step) => step.move),
+    EffectArray.map(after.order.steps, (step) => step.move),
     [moveId("drop-a-add-b"), moveId("drop-d")],
   );
 });
@@ -830,7 +889,7 @@ it("lets a later add use a place an earlier move frees", () => {
   });
 
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) => [entry.validation.status, entry.runPosition]),
+    EffectArray.map(evaluation.moves, (entry) => [entry.validation.status, entry.runPosition]),
     [
       ["current", 1],
       ["current", 0],
@@ -838,14 +897,16 @@ it("lets a later add use a place an earlier move frees", () => {
   );
   assert.deepStrictEqual(evaluation.moves[0]?.dependsOn, [moveId("drop-x")]);
   assert.deepStrictEqual(
-    evaluation.moves[0]?.projectedRoster.map((member) => [member.key, member.slot]),
+    optionalArrayValue(evaluation.moves[0]?.projectedRoster, (value) =>
+      EffectArray.map(value, (member) => [member.key, member.slot]),
+    ),
     [
       ["a1", "BN"],
       ["b1", "BN"],
     ],
   );
   assert.deepStrictEqual(
-    evaluation.order.steps.map((step) => [step.move, step.fundedBy]),
+    EffectArray.map(evaluation.order.steps, (step) => [step.move, step.fundedBy]),
     [
       [moveId("drop-x"), undefined],
       [moveId("add-b"), moveId("drop-x")],
@@ -955,7 +1016,7 @@ it("excludes a move that did not pass its check from the run order", () => {
   const steps: ReadonlyArray<TransactionPlanOrderStep> = order.steps;
 
   assert.deepStrictEqual(
-    steps.map((step) => step.move),
+    EffectArray.map(steps, (step) => step.move),
     [moveId("ordered-drop")],
   );
   assert.deepStrictEqual(order.excluded, [moveId("excluded-drop")]);
@@ -1020,7 +1081,9 @@ it("refuses a second trade for the same draft pick", () => {
   ]);
   assert.strictEqual(evaluation.moves[1]?.validation.status, "stale");
   assert.deepStrictEqual(
-    evaluation.moves[1]?.validation.reasons.map((reason) => [reason.code, reason.detail]),
+    optionalArrayValue(evaluation.moves[1]?.validation.reasons, (value) =>
+      EffectArray.map(value, (reason) => [reason.code, reason.detail]),
+    ),
     [
       [
         "pick_claimed",
@@ -1051,7 +1114,11 @@ it("applies a same-day move on its run day", () => {
   });
 
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) => [entry.runDay, entry.effectiveDate, entry.dueToday]),
+    EffectArray.map(evaluation.moves, (entry) => [
+      entry.runDay,
+      entry.effectiveDate,
+      entry.dueToday,
+    ]),
     [
       ["2026-11-10", "2026-11-10", true],
       ["2026-11-12", "2026-11-12", false],
@@ -1080,7 +1147,11 @@ it("runs a next-day move on its submission day, not when the league applies it",
   });
 
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) => [entry.runDay, entry.effectiveDate, entry.dueToday]),
+    EffectArray.map(evaluation.moves, (entry) => [
+      entry.runDay,
+      entry.effectiveDate,
+      entry.dueToday,
+    ]),
     [
       ["2026-11-10", "2026-11-11", true],
       ["2026-11-12", "2026-11-13", false],
@@ -1109,7 +1180,11 @@ it("runs a past submission day at the next check with its stored effective date"
   });
 
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) => [entry.runDay, entry.effectiveDate, entry.dueToday]),
+    EffectArray.map(evaluation.moves, (entry) => [
+      entry.runDay,
+      entry.effectiveDate,
+      entry.dueToday,
+    ]),
     [["2026-11-11", "2026-11-11", true]],
   );
 });
@@ -1179,14 +1254,21 @@ it("projects the same places for a group whether its legs are open or already su
   const open = evaluate({ facts: scenario, moves: group(false) });
   const submitted = evaluate({ facts: scenario, moves: group(true) });
   for (const evaluation of [open, submitted]) {
-    const activate = evaluation.moves.find((entry) => entry.move === moveId("activate-n1"));
+    const activate = EffectOption.getOrUndefined(
+      EffectArray.findFirst(evaluation.moves, (entry) => entry.move === moveId("activate-n1")),
+    );
     assert.strictEqual(activate?.validation.status, "current");
     assert.deepStrictEqual(activate?.validation.reasons, []);
     assert.strictEqual(activate?.placement?.toSlot, "BN");
-    assert.deepStrictEqual(activate?.projectedRoster.map((member) => member.key).sort(), [
-      "a2",
-      "n1",
-    ]);
+    assert.deepStrictEqual(
+      optionalArrayValue(
+        optionalArrayValue(activate?.projectedRoster, (value) =>
+          EffectArray.map(value, (member) => member.key),
+        ),
+        (value) => EffectArray.sort(value, EffectOrder.String),
+      ),
+      ["a2", "n1"],
+    );
   }
 });
 
@@ -1221,12 +1303,15 @@ it("counts a submitted leg the roster does not show and drops the one it shows",
   };
 
   assert.deepStrictEqual(
-    projectedLegs({
-      rule,
-      roster: scenario.roster,
-      submitted: [drop, activate],
-      dates: ["2026-11-15"],
-    }).map((leg) => leg.id),
+    EffectArray.map(
+      projectedLegs({
+        rule,
+        roster: scenario.roster,
+        submitted: [drop, activate],
+        dates: ["2026-11-15"],
+      }),
+      (leg) => leg.id,
+    ),
     [moveId("drop-a1"), moveId("activate-n1")],
   );
   assert.deepStrictEqual(
@@ -1241,7 +1326,7 @@ it("counts a submitted leg the roster does not show and drops the one it shows",
   assert.deepStrictEqual(
     projectedLegs({
       rule,
-      roster: scenario.roster.filter((member) => member.key !== "a1"),
+      roster: EffectArray.filter(scenario.roster, (member) => member.key !== "a1"),
       submitted: [drop],
       dates: ["2026-11-15"],
     }),
@@ -1250,7 +1335,7 @@ it("counts a submitted leg the roster does not show and drops the one it shows",
   assert.deepStrictEqual(
     projectedLegs({
       rule,
-      roster: scenario.roster.map((member) =>
+      roster: EffectArray.map(scenario.roster, (member) =>
         member.key === "n1" ? { ...member, slot: "BN" } : member,
       ),
       submitted: [activate],
@@ -1285,7 +1370,11 @@ it("applies a weekly-lock move at the start of the locked week, not at its propo
   });
 
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) => [entry.runDay, entry.effectiveDate, entry.dueToday]),
+    EffectArray.map(evaluation.moves, (entry) => [
+      entry.runDay,
+      entry.effectiveDate,
+      entry.dueToday,
+    ]),
     [
       ["2026-11-10", "2026-11-09", true],
       ["2026-11-12", "2026-11-09", false],
@@ -1317,7 +1406,11 @@ it("resolves a weekly-lock move in the next week to that week's period", () => {
   });
 
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) => [entry.runDay, entry.effectiveDate, entry.dueToday]),
+    EffectArray.map(evaluation.moves, (entry) => [
+      entry.runDay,
+      entry.effectiveDate,
+      entry.dueToday,
+    ]),
     [["2026-11-17", "2026-11-16", false]],
   );
 });
@@ -1341,7 +1434,11 @@ it("publishes no weekly-lock date when the league publishes no week start", () =
   });
 
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) => [entry.runDay, entry.effectiveDate, entry.dueToday]),
+    EffectArray.map(evaluation.moves, (entry) => [
+      entry.runDay,
+      entry.effectiveDate,
+      entry.dueToday,
+    ]),
     [["2026-11-10", undefined, true]],
   );
 });
@@ -1365,11 +1462,9 @@ it("refuses a drop of a player who has already played today", () => {
 
   assert.strictEqual(evaluation.moves[0]?.validation.status, "stale");
   assert.deepStrictEqual(
-    evaluation.moves[0]?.validation.reasons.map(({ code, playerKey, detail }) => [
-      code,
-      playerKey,
-      detail,
-    ]),
+    optionalArrayValue(evaluation.moves[0]?.validation.reasons, (value) =>
+      EffectArray.map(value, ({ code, playerKey, detail }) => [code, playerKey, detail]),
+    ),
     [
       [
         "player_locked",
@@ -1399,11 +1494,9 @@ it("refuses moving a player whose place is locked today", () => {
 
   assert.strictEqual(evaluation.moves[0]?.validation.status, "stale");
   assert.deepStrictEqual(
-    evaluation.moves[0]?.validation.reasons.map(({ code, playerKey, detail }) => [
-      code,
-      playerKey,
-      detail,
-    ]),
+    optionalArrayValue(evaluation.moves[0]?.validation.reasons, (value) =>
+      EffectArray.map(value, ({ code, playerKey, detail }) => [code, playerKey, detail]),
+    ),
     [
       [
         "player_locked",
@@ -1456,21 +1549,27 @@ it("frees an active place for a later add when a stash moves a player to a reser
   });
 
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) => [entry.move, entry.validation.status, entry.runPosition]),
+    EffectArray.map(evaluation.moves, (entry) => [
+      entry.move,
+      entry.validation.status,
+      entry.runPosition,
+    ]),
     [
       [moveId("add-free-agent"), "current", 1],
       [moveId("stash-runner"), "current", 0],
     ],
   );
   assert.deepStrictEqual(
-    evaluation.order.steps.map((step) => [step.move, step.fundedBy]),
+    EffectArray.map(evaluation.order.steps, (step) => [step.move, step.fundedBy]),
     [
       [moveId("stash-runner"), undefined],
       [moveId("add-free-agent"), moveId("stash-runner")],
     ],
   );
   assert.deepStrictEqual(
-    evaluation.moves[0]?.projectedRoster.map((member) => [member.key, member.slot]),
+    optionalArrayValue(evaluation.moves[0]?.projectedRoster, (value) =>
+      EffectArray.map(value, (member) => [member.key, member.slot]),
+    ),
     [
       ["a1", "IR"],
       ["w1", "BN"],
@@ -1502,12 +1601,14 @@ it("refuses two stashes that claim the same reserve place", () => {
   assert.deepStrictEqual(evaluation.moves[0]?.claims, [{ kind: "place", key: "IR" }]);
   assert.strictEqual(evaluation.moves[1]?.validation.status, "stale");
   assert.deepStrictEqual(
-    evaluation.moves[1]?.validation.reasons.map((reason) => reason.code),
+    optionalArrayValue(evaluation.moves[1]?.validation.reasons, (value) =>
+      EffectArray.map(value, (reason) => reason.code),
+    ),
     ["place_claimed"],
   );
   assert.include(evaluation.moves[1]?.validation.reasons[0]?.detail ?? "", "IR place");
   assert.deepStrictEqual(
-    evaluation.order.steps.map((step) => step.move),
+    EffectArray.map(evaluation.order.steps, (step) => step.move),
     [moveId("stash-runner-a")],
   );
 });
@@ -1533,7 +1634,11 @@ it("blocks the add a failed drop funds and still validates an independent move",
   });
 
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) => [entry.move, entry.validation.status, entry.runPosition]),
+    EffectArray.map(evaluation.moves, (entry) => [
+      entry.move,
+      entry.validation.status,
+      entry.runPosition,
+    ]),
     [
       [moveId("add-free-agent"), "stale", undefined],
       [moveId("drop-x"), "current", undefined],
@@ -1542,11 +1647,15 @@ it("blocks the add a failed drop funds and still validates an independent move",
     ],
   );
   assert.deepStrictEqual(
-    evaluation.moves[0]?.validation.reasons.map((reason) => [reason.code, reason.detail]),
+    optionalArrayValue(evaluation.moves[0]?.validation.reasons, (value) =>
+      EffectArray.map(value, (reason) => [reason.code, reason.detail]),
+    ),
     [["blocked_by_move", "Add Free Agent cannot run because Drop Bench X did not pass its check."]],
   );
   assert.deepStrictEqual(
-    evaluation.moves[3]?.validation.reasons.map((reason) => [reason.code, reason.detail]),
+    optionalArrayValue(evaluation.moves[3]?.validation.reasons, (value) =>
+      EffectArray.map(value, (reason) => [reason.code, reason.detail]),
+    ),
     [
       [
         "blocked_by_move",
@@ -1555,7 +1664,7 @@ it("blocks the add a failed drop funds and still validates an independent move",
     ],
   );
   assert.deepStrictEqual(
-    evaluation.order.steps.map((step) => step.move),
+    EffectArray.map(evaluation.order.steps, (step) => step.move),
     [moveId("drop-runner")],
   );
 });
@@ -1597,7 +1706,11 @@ it("projects a saved chain through a swap, a stash, and an add", () => {
   });
 
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) => [entry.move, entry.validation.status, entry.runPosition]),
+    EffectArray.map(evaluation.moves, (entry) => [
+      entry.move,
+      entry.validation.status,
+      entry.runPosition,
+    ]),
     [
       [moveId("swap"), "current", 0],
       [moveId("stash"), "current", 1],
@@ -1605,7 +1718,9 @@ it("projects a saved chain through a swap, a stash, and an add", () => {
     ],
   );
   assert.deepStrictEqual(
-    evaluation.moves[2]?.projectedRoster.map((member) => [member.key, member.slot]),
+    optionalArrayValue(evaluation.moves[2]?.projectedRoster, (value) =>
+      EffectArray.map(value, (member) => [member.key, member.slot]),
+    ),
     [
       ["a2", "BN"],
       ["fa1", "IR"],
@@ -1613,7 +1728,7 @@ it("projects a saved chain through a swap, a stash, and an add", () => {
     ],
   );
   assert.deepStrictEqual(
-    evaluation.order.steps.map((step) => [step.move, step.fundedBy]),
+    EffectArray.map(evaluation.order.steps, (step) => [step.move, step.fundedBy]),
     [
       [moveId("swap"), undefined],
       [moveId("stash"), undefined],
@@ -1652,7 +1767,7 @@ it("projects a saved chain of a stash and an add", () => {
   });
 
   assert.deepStrictEqual(
-    evaluation.moves.map((entry) => [
+    EffectArray.map(evaluation.moves, (entry) => [
       entry.move,
       entry.runDay,
       entry.dueToday,
@@ -1664,7 +1779,9 @@ it("projects a saved chain of a stash and an add", () => {
     ],
   );
   assert.deepStrictEqual(
-    evaluation.moves[0]?.projectedRoster.map((member) => [member.key, member.slot]),
+    optionalArrayValue(evaluation.moves[0]?.projectedRoster, (value) =>
+      EffectArray.map(value, (member) => [member.key, member.slot]),
+    ),
     [
       ["a1", "IR"],
       ["w1", "BN"],
@@ -1672,7 +1789,7 @@ it("projects a saved chain of a stash and an add", () => {
     ],
   );
   assert.deepStrictEqual(
-    evaluation.order.steps.map((step) => step.move),
+    EffectArray.map(evaluation.order.steps, (step) => step.move),
     [moveId("stash-runner"), moveId("add-free-agent")],
   );
 });
@@ -1683,7 +1800,7 @@ function evaluate(plan: {
 }): TransactionPlanEvaluation {
   const input: TransactionPlanEvaluationInput = {
     facts: plan.facts,
-    moves: plan.moves.map((move, position) => ({ ...move, position })),
+    moves: EffectArray.map(plan.moves, (move, position) => ({ ...move, position })),
     checkedAt,
   };
   return evaluateTransactionPlan(input);
@@ -1702,7 +1819,7 @@ function requireMove(
   moves: ReadonlyArray<Omit<TransactionPlanMove, "position">>,
   id: TransactionMoveId,
 ): TransactionPlanMove {
-  const found = moves.find((move) => move.id === id);
+  const found = EffectOption.getOrUndefined(EffectArray.findFirst(moves, (move) => move.id === id));
   if (found === undefined) {
     throw new Error("A test read a move it did not declare");
   }
@@ -1722,9 +1839,9 @@ function facts(input: {
 }): TransactionPlanTeamFacts {
   return {
     roster: input.roster,
-    pool: new Map((input.pool ?? []).map((player) => [player.key, player] as const)),
+    pool: new Map(EffectArray.map(input.pool ?? [], (player) => [player.key, player] as const)),
     poolStatus: new Map(
-      (input.pool ?? []).map((player) => [player.key, player.availability] as const),
+      EffectArray.map(input.pool ?? [], (player) => [player.key, player.availability] as const),
     ),
     waiver: { rule: undefined, type: undefined, days: undefined },
     slots: input.slots,

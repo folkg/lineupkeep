@@ -4,6 +4,9 @@
   "workspaces": {
     "": {
       "name": "starter",
+      "dependencies": {
+        "effect": "4.1.4",
+      },
       "devDependencies": {
         "@effect/tsgo": "catalog:",
         "@effect/vitest": "catalog:",
@@ -55,6 +58,7 @@
         "@kobalte/core": "2.0.0-alpha.2",
         "@lineupkeep/backend": "workspace:*",
         "@lineupkeep/brand": "workspace:*",
+        "@lineupkeep/collections": "workspace:*",
         "@lineupkeep/hosted-browser": "workspace:*",
         "@solidjs/vite-plugin": "catalog:",
         "@solidjs/web": "catalog:",
@@ -136,15 +140,20 @@
     "packages/brand": {
       "name": "@lineupkeep/brand",
     },
+    "packages/collections": {
+      "name": "@lineupkeep/collections",
+    },
     "packages/hosted-browser": {
       "name": "@lineupkeep/hosted-browser",
       "dependencies": {
+        "@lineupkeep/collections": "workspace:*",
         "playwright": "catalog:",
       },
     },
     "packages/lineup-solver": {
       "name": "@lineupkeep/lineup-solver",
       "dependencies": {
+        "effect": "catalog:",
         "munkres": "2.1.1",
       },
       "devDependencies": {
@@ -153,6 +162,9 @@
     },
     "packages/machine-test": {
       "name": "@lineupkeep/machine-test",
+      "dependencies": {
+        "effect": "catalog:",
+      },
     },
     "packages/yahoo-sdk": {
       "name": "@lineupkeep/yahoo-sdk",
@@ -577,6 +589,8 @@
     "@lineupkeep/backend": ["@lineupkeep/backend@workspace:packages/backend"],
 
     "@lineupkeep/brand": ["@lineupkeep/brand@workspace:packages/brand"],
+
+    "@lineupkeep/collections": ["@lineupkeep/collections@workspace:packages/collections"],
 
     "@lineupkeep/hosted-browser": ["@lineupkeep/hosted-browser@workspace:packages/hosted-browser"],
 

@@ -1,3 +1,4 @@
+import { Array as EffectArray } from "effect";
 export const sessionPayload = {
   fantasy_content: {
     users: {
@@ -195,7 +196,7 @@ function playerFragments(input: {
     { display_position: input.displayPosition },
     { position_type: "O" },
     { primary_position: input.primaryPosition },
-    { eligible_positions: input.eligiblePositions.map((position) => ({ position })) },
+    { eligible_positions: EffectArray.map(input.eligiblePositions, (position) => ({ position })) },
     ...(input.status === undefined ? [] : [{ status: input.status }]),
     ...(input.statusFull === undefined ? [] : [{ status_full: input.statusFull }]),
     ...(input.injuryNote === undefined ? [] : [{ injury_note: input.injuryNote }]),
@@ -911,7 +912,8 @@ export const availableDraftPicksPayload = {
               ],
               {
                 available_draft_picks: {
-                  picks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19].map(
+                  picks: EffectArray.map(
+                    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
                     (round) => ({ pick: { round } }),
                   ),
                 },
@@ -959,7 +961,7 @@ export const availableDraftPicksForTwoTeamsPayload = {
               [{ team_key: "466.l.4001.t.1" }, { team_id: "1" }, { name: "Synthetic Team" }],
               {
                 available_draft_picks: {
-                  picks: [1, 2, 3].map((round) => ({ pick: { round } })),
+                  picks: EffectArray.map([1, 2, 3], (round) => ({ pick: { round } })),
                 },
               },
             ],
@@ -969,7 +971,7 @@ export const availableDraftPicksForTwoTeamsPayload = {
               [{ team_key: "466.l.4001.t.2" }, { team_id: "2" }, { name: "Synthetic Rival" }],
               {
                 available_draft_picks: {
-                  picks: [1, 2].map((round) => ({ pick: { round } })),
+                  picks: EffectArray.map([1, 2], (round) => ({ pick: { round } })),
                 },
               },
             ],

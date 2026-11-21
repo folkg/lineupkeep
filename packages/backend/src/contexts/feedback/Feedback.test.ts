@@ -2,6 +2,7 @@ import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { Array, DateTime, Effect, Layer, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 import { TestClock } from "effect/testing";
 
 import layerTools from "#runtime/ProvideLayer.ts";
@@ -100,11 +101,11 @@ it.effect("returns only the owner's reports, newest first", () =>
     const otherReports = yield* feedback.list(other, {});
 
     assert.deepStrictEqual(
-      reports.map((report) => report.title),
+      EffectArray.map(reports, (report) => report.title),
       ["Second report", "First report"],
     );
     assert.deepStrictEqual(
-      reports.map((report) => report.submitter.kind),
+      EffectArray.map(reports, (report) => report.submitter.kind),
       ["agent", "user"],
     );
     assert.deepStrictEqual(otherReports, []);
@@ -133,15 +134,15 @@ it.effect("filters the owner's reports by status, kind, and start time", () =>
     const recent = yield* feedback.list(user, { since, limit: 10 });
 
     assert.deepStrictEqual(
-      bugs.map((report) => report.title),
+      EffectArray.map(bugs, (report) => report.title),
       ["Slow run", "Broken roster"],
     );
     assert.deepStrictEqual(
-      open.map((report) => report.title),
+      EffectArray.map(open, (report) => report.title),
       ["Slow run", "Export a season", "Broken roster"],
     );
     assert.deepStrictEqual(
-      recent.map((report) => report.title),
+      EffectArray.map(recent, (report) => report.title),
       ["Slow run"],
     );
   }).pipe(layerTools.provide(FeedbackTestLayer)),

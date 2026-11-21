@@ -3,6 +3,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { Array as EffectArray } from "effect";
 import { expect, it } from "vitest";
 
 import {
@@ -32,7 +33,7 @@ it("accepts video labels for MCP-bearing steps with an asserted browser checkpoi
     attempts: [
       {
         ...passingAttempt,
-        steps: passingAttempt.steps.map((step) => ({
+        steps: EffectArray.map(passingAttempt.steps, (step) => ({
           ...step,
           mcpExchanges: ["MCP exchange 1: tools/call"],
           hasCheckpoint: true,
@@ -56,7 +57,7 @@ it("rejects service-only steps as browser scene proof", () => {
     attempts: [
       {
         ...passingAttempt,
-        steps: passingAttempt.steps.map((step) => ({
+        steps: EffectArray.map(passingAttempt.steps, (step) => ({
           ...step,
           serviceCalls: ["Service call 1: read"],
           hasCheckpoint: false,
@@ -71,7 +72,7 @@ it("rejects service-only steps as browser scene proof", () => {
     results,
   );
 
-  expect(problems.join(" ")).toContain("not in this video");
+  expect(EffectArray.join(problems, " ")).toContain("not in this video");
 });
 
 it("accepts a claim matrix whose passes cite passing assertion steps", () => {
@@ -107,7 +108,7 @@ it("rejects an MCP citation whose exchange artifact is missing", () => {
     attempts: [
       {
         ...passingAttempt,
-        steps: passingAttempt.steps.map((step) => ({
+        steps: EffectArray.map(passingAttempt.steps, (step) => ({
           ...step,
           mcpExchanges: ["MCP exchange 1: tools/call"],
         })),
@@ -128,7 +129,7 @@ it("refuses to label MCP-only assertions in a browser video", () => {
     attempts: [
       {
         ...passingAttempt,
-        steps: passingAttempt.steps.map((step) => ({
+        steps: EffectArray.map(passingAttempt.steps, (step) => ({
           ...step,
           mcpExchanges: ["MCP exchange 1: tools/call"],
         })),
@@ -317,18 +318,24 @@ it("rejects service setup citations and missing cited service evidence", () => {
     attempts: [{ ...passingAttempt, steps: [step], attachments: [] }],
   });
   expect(
-    claimProblems(
-      claims([criterion({ assertions: [{ test: passingAttempt.title, step: action.title }] })]),
-      results(action),
-      () => true,
-    ).join(" "),
+    EffectArray.join(
+      claimProblems(
+        claims([criterion({ assertions: [{ test: passingAttempt.title, step: action.title }] })]),
+        results(action),
+        () => true,
+      ),
+      " ",
+    ),
   ).toContain("missing service call");
   expect(
-    claimProblems(
-      claims([criterion({ assertions: [{ test: passingAttempt.title, step: setup.title }] })]),
-      results(setup),
-      () => true,
-    ).join(" "),
+    EffectArray.join(
+      claimProblems(
+        claims([criterion({ assertions: [{ test: passingAttempt.title, step: setup.title }] })]),
+        results(setup),
+        () => true,
+      ),
+      " ",
+    ),
   ).toContain("not proof");
 });
 

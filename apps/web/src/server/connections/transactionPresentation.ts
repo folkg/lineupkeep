@@ -10,6 +10,7 @@ import type {
   TransactionPlanServiceError,
 } from "@lineupkeep/backend/connections/TransactionPlans";
 import { DateTime, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type {
   TransactionMoveActionData,
@@ -30,9 +31,9 @@ export function toTransactionMoveListView(list: TransactionMoveList): Transactio
     status: "ok",
     ...(list.team === undefined ? {} : { team: list.team }),
     nextCheckAt: DateTime.formatIso(list.nextCheckAt),
-    moves: list.moves.map(toMoveView),
-    days: list.days.map(toMoveDayView),
-    groups: list.groups.map(toGroupView),
+    moves: EffectArray.map(list.moves, toMoveView),
+    days: EffectArray.map(list.days, toMoveDayView),
+    groups: EffectArray.map(list.groups, toGroupView),
     teamFacts: list.teamFacts,
     counts: list.counts,
     teamCount: list.teamCount,
@@ -77,9 +78,9 @@ export function toTransactionPlanData(plan: TransactionPlanRead): TransactionPla
     ...(plan.places === undefined ? {} : { places: plan.places }),
     ...(plan.reserve === undefined ? {} : { reserve: plan.reserve }),
     ...(plan.addsPossible === undefined ? {} : { addsPossible: plan.addsPossible }),
-    moves: plan.moves.map(toMoveView),
-    days: plan.days.map(toPlanDayView),
-    groups: plan.groups.map(toGroupView),
+    moves: EffectArray.map(plan.moves, toMoveView),
+    days: EffectArray.map(plan.days, toPlanDayView),
+    groups: EffectArray.map(plan.groups, toGroupView),
   };
 }
 
@@ -109,7 +110,7 @@ function toMoveView(move: TransactionMoveRead): TransactionMoveView {
     decision: move.decision,
     status: move.status,
     ...(move.phase === undefined ? {} : { phase: move.phase }),
-    attempts: move.attempts.map((attempt) => ({
+    attempts: EffectArray.map(move.attempts, (attempt) => ({
       kind: attempt.kind,
       player: {
         ...(attempt.player.name === undefined ? {} : { name: attempt.player.name }),
@@ -168,7 +169,10 @@ function validationView(validation: TransactionMoveValidationView): {
     ...(validation.checkedAt === undefined
       ? {}
       : { checkedAt: DateTime.formatIso(validation.checkedAt) }),
-    reasons: validation.reasons.map((reason) => ({ code: reason.code, detail: reason.detail })),
+    reasons: EffectArray.map(validation.reasons, (reason) => ({
+      code: reason.code,
+      detail: reason.detail,
+    })),
   };
 }
 
@@ -177,9 +181,9 @@ function toMoveDayView(day: TransactionMoveDay): TransactionMoveDayView {
     ...(day.day === undefined ? {} : { day: day.day }),
     groupedBy: day.groupedBy,
     today: day.today,
-    teams: day.teams.map((entry): TransactionMoveTeamDayView => ({
+    teams: EffectArray.map(day.teams, (entry): TransactionMoveTeamDayView => ({
       team: entry.team,
-      moves: entry.moves.map(toMoveView),
+      moves: EffectArray.map(entry.moves, toMoveView),
     })),
   };
 }
@@ -189,7 +193,7 @@ function toPlanDayView(day: TransactionPlanDay): TransactionPlanDayView {
     ...(day.day === undefined ? {} : { day: day.day }),
     groupedBy: day.groupedBy,
     today: day.today,
-    moves: day.moves.map(toMoveView),
+    moves: EffectArray.map(day.moves, toMoveView),
   };
 }
 
@@ -243,7 +247,10 @@ export function confirmationOf(input: {
       }
     : {
         status: "refused",
-        refusals: input.refusals.map((entry) => ({ code: entry.code, detail: entry.detail })),
+        refusals: EffectArray.map(input.refusals, (entry) => ({
+          code: entry.code,
+          detail: entry.detail,
+        })),
       };
 }
 
@@ -256,7 +263,7 @@ export function actionOf(
   if (refused.length > 0) {
     return {
       status: "refused",
-      refusals: refused.map((entry) => ({ code: entry.code, detail: entry.detail })),
+      refusals: EffectArray.map(refused, (entry) => ({ code: entry.code, detail: entry.detail })),
     };
   }
   return status === "saved" ? { status, move, confirmationCleared } : { status, move };
@@ -266,7 +273,10 @@ export function retryOf(result: TransactionPlanRetry): TransactionMoveRetryData 
   if (result.refusals.length > 0) {
     return {
       status: "refused",
-      refusals: result.refusals.map((entry) => ({ code: entry.code, detail: entry.detail })),
+      refusals: EffectArray.map(result.refusals, (entry) => ({
+        code: entry.code,
+        detail: entry.detail,
+      })),
     };
   }
   return {

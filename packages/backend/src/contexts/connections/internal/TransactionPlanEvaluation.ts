@@ -1,4 +1,6 @@
 import { DateTime } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 
 import { placeIntentItems } from "#contexts/connections/ProposalOrder.ts";
 import type { ProposalPlacementInput } from "#contexts/connections/ProposalOrder.ts";
@@ -24,6 +26,10 @@ import type {
   TransactionMoveRecord,
 } from "./TransactionPlanRecord.ts";
 
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
+
 export function evaluateTransactionPlan(
   input: TransactionPlanEvaluationInput,
 ): TransactionPlanEvaluation {
@@ -31,12 +37,17 @@ export function evaluateTransactionPlan(
   const rule = rosterRuleOf(facts.constraints, facts.slots);
   const moves = [...input.moves].sort(comparePlanMoves);
   const byId = movesById(moves);
-  const entries = moves.map((move) => ({ move, placement: undefined, runnable: true }));
+  const entries = EffectArray.map(moves, (move) => ({
+    move,
+    placement: undefined,
+    runnable: true,
+  }));
   const graph = planDependencies(entries, facts, rule);
   const sequence = topologicalSequence(entries, graph);
   const groupCures = groupCuredPlayers(moves);
   const replay = replayPlan({ facts, rule, entries, byId, graph, sequence, groupCures });
-  const explanations = sequence.blocked.filter(
+  const explanations = EffectArray.filter(
+    sequence.blocked,
     (entry) => reasonCount(replay.steps.get(entry.move)) === 0,
   );
   for (const explanation of explanations) {
@@ -46,8 +57,10 @@ export function evaluateTransactionPlan(
     ).stale.push({ code: "order_conflict", detail: explanation.detail });
   }
 
-  const positions = new Map(replay.applied.map((move, position) => [move, position] as const));
-  const evaluated = moves.map((move) =>
+  const positions = new Map(
+    EffectArray.map(replay.applied, (move, position) => [move, position] as const),
+  );
+  const evaluated = EffectArray.map(moves, (move) =>
     moveEvaluation(
       requireValue(replay.steps.get(move.id), "A plan move was not replayed"),
       facts,
@@ -56,14 +69,17 @@ export function evaluateTransactionPlan(
     ),
   );
   const order: TransactionPlanOrder = {
-    steps: replay.applied.map((move, position) => ({
+    steps: EffectArray.map(replay.applied, (move, position) => ({
       move,
       position,
       fundedBy: graph.fundedBy.get(move),
       dependsOn: orderedDependencies(move, graph.dependencies, entries),
     })),
-    excluded: moves.filter((move) => !positions.has(move.id)).map((move) => move.id),
-    blocked: explanations.map((entry) => ({ move: entry.move, detail: entry.detail })),
+    excluded: EffectArray.map(
+      EffectArray.filter(moves, (move) => !positions.has(move.id)),
+      (move) => move.id,
+    ),
+    blocked: EffectArray.map(explanations, (entry) => ({ move: entry.move, detail: entry.detail })),
   };
 
   return {
@@ -76,8 +92,11 @@ export function evaluateTransactionPlan(
 export function orderTransactionPlanMoves(input: TransactionPlanOrderInput): TransactionPlanOrder {
   const rule = rosterRuleOf(input.facts.constraints, input.facts.slots);
   const entries = [...input.moves].sort((left, right) => comparePlanMoves(left.move, right.move));
-  const runnable = entries.filter((entry) => entry.runnable);
-  const excluded = entries.filter((entry) => !entry.runnable).map((entry) => entry.move.id);
+  const runnable = EffectArray.filter(entries, (entry) => entry.runnable);
+  const excluded = EffectArray.map(
+    EffectArray.filter(entries, (entry) => !entry.runnable),
+    (entry) => entry.move.id,
+  );
   const sequence = topologicalSequence(runnable, planDependencies(runnable, input.facts, rule));
 
   return { steps: sequence.steps, excluded, blocked: sequence.blocked };
@@ -113,7 +132,7 @@ export function claimTransactionPlanMoves(input: TransactionPlanClaimInput): Tra
     }
     claimed.push({
       move: move.id,
-      claims: candidates.map((candidate) => candidate.claim).sort(compareClaims),
+      claims: EffectArray.map(candidates, (candidate) => candidate.claim).sort(compareClaims),
     });
   }
 
@@ -130,9 +149,10 @@ export function projectedLegs(input: {
   readonly submitted: ReadonlyArray<TransactionPlanMove>;
   readonly dates: ReadonlyArray<StoredMoveDate>;
 }): ReadonlyArray<TransactionPlanMove> {
-  const players = new Map(input.roster.map((player) => [player.key, player] as const));
+  const players = new Map(EffectArray.map(input.roster, (player) => [player.key, player] as const));
   const dates = new Set(input.dates);
-  return input.submitted.filter(
+  return EffectArray.filter(
+    input.submitted,
     (move) =>
       (move.effectiveDate === undefined || dates.has(move.effectiveDate)) &&
       !shownOnRoster(move, players, input.rule),
@@ -154,10 +174,10 @@ function replayPlan(input: {
   const projection = initialProjection(input.facts);
   const steps = new Map<TransactionMoveId, ReplayStep>();
   const applied: Array<TransactionMoveId> = [];
-  const blocked = new Set(input.sequence.blocked.map((entry) => entry.move));
+  const blocked = new Set(EffectArray.map(input.sequence.blocked, (entry) => entry.move));
   const runnable = [
-    ...input.sequence.steps.map((step) => step.move),
-    ...input.sequence.blocked.map((entry) => entry.move),
+    ...EffectArray.map(input.sequence.steps, (step) => step.move),
+    ...EffectArray.map(input.sequence.blocked, (entry) => entry.move),
   ];
 
   for (const id of runnable) {
@@ -190,9 +210,10 @@ function evaluateReplayMove(input: ReplayMoveInput): ReplayStep {
   const step: ReplayStep = {
     move,
     dependsOn,
-    claims: claimCandidates(move, undefined, projection.roster, placeClaims)
-      .map((candidate) => candidate.claim)
-      .sort(compareClaims),
+    claims: EffectArray.map(
+      claimCandidates(move, undefined, projection.roster, placeClaims),
+      (candidate) => candidate.claim,
+    ).sort(compareClaims),
     stale: [],
     illegal: [],
     placement: undefined,
@@ -200,10 +221,15 @@ function evaluateReplayMove(input: ReplayMoveInput): ReplayStep {
     pending: false,
     projectedRoster: [],
   };
-  const dependencies = dependsOn.map((id) => input.steps.get(id));
-  const waitingOn = dependencies.find((dependency) => dependency?.pending === true);
-  const brokenBy = dependencies.find(
-    (dependency) => dependency !== undefined && !dependency.pending && !dependency.applied,
+  const dependencies = EffectArray.map(dependsOn, (id) => input.steps.get(id));
+  const waitingOn = EffectOption.getOrUndefined(
+    EffectArray.findFirst(dependencies, (dependency) => dependency?.pending === true),
+  );
+  const brokenBy = EffectOption.getOrUndefined(
+    EffectArray.findFirst(
+      dependencies,
+      (dependency) => dependency !== undefined && !dependency.pending && !dependency.applied,
+    ),
   );
 
   if (move.result === "pending" && move.kind === "trade") {
@@ -319,9 +345,10 @@ function evaluateReplayMove(input: ReplayMoveInput): ReplayStep {
     );
   }
   if (reasonCount(step) === 0 && !input.blocked) {
-    step.claims = claimCandidates(move, step.placement, projection.roster, placeClaims)
-      .map((candidate) => candidate.claim)
-      .sort(compareClaims);
+    step.claims = EffectArray.map(
+      claimCandidates(move, step.placement, projection.roster, placeClaims),
+      (candidate) => candidate.claim,
+    ).sort(compareClaims);
     if (holdsClaimsWithoutEffect(move.result)) {
       holdClaims(step, projection, false, step.placement, placeClaims);
     } else {
@@ -416,7 +443,7 @@ function identityReasons(
         `This move drops ${String(move.drops.length)} players. An ${move.kind} drops one player to fund it.`,
       );
     }
-    if (player !== undefined && move.drops.some((drop) => drop.key === player.key)) {
+    if (player !== undefined && EffectArray.some(move.drops, (drop) => drop.key === player.key)) {
       stale(
         reasons,
         "intent_invalid",
@@ -460,7 +487,10 @@ function identityReasons(
         `This move drops ${String(move.drops.length)} players. A slot move drops one player to fund it.`,
       );
     }
-    if (declared !== undefined && move.drops.some((drop) => drop.key === declared.playerKey)) {
+    if (
+      declared !== undefined &&
+      EffectArray.some(move.drops, (drop) => drop.key === declared.playerKey)
+    ) {
       stale(
         reasons,
         "intent_invalid",
@@ -579,7 +609,7 @@ function lockedActionOf(move: TransactionPlanMove, playerKey: string): string {
   if (move.kind === "trade") {
     return "trade them away";
   }
-  if (move.drops.some((drop) => drop.key === playerKey)) {
+  if (EffectArray.some(move.drops, (drop) => drop.key === playerKey)) {
     return "drop them";
   }
   if (move.kind === "slot_move" && move.slotMove !== undefined) {
@@ -650,8 +680,8 @@ function transfersClaim(
     return false;
   }
   const adds =
-    move.adds.some((add) => add.key === claim.key) ||
-    move.fallbacks.some((fallback) => fallback.key === claim.key);
+    EffectArray.some(move.adds, (add) => add.key === claim.key) ||
+    EffectArray.some(move.fallbacks, (fallback) => fallback.key === claim.key);
   return held.adds !== adds;
 }
 
@@ -692,7 +722,7 @@ function usedDestinations(
   if (placement !== undefined) {
     places.push(placement.toSlot);
   }
-  return uniquePlaces(places).filter(placeClaims);
+  return EffectArray.filter(uniquePlaces(places), placeClaims);
 }
 
 function uniquePlaces(places: ReadonlyArray<string>): ReadonlyArray<string> {
@@ -714,8 +744,9 @@ function placeMove(
   if (item === undefined) {
     return undefined;
   }
-  const players = [...projection.roster.values()].filter(
-    (player) => !move.drops.some((drop) => drop.key === player.key),
+  const players = EffectArray.filter(
+    [...projection.roster.values()],
+    (player) => !EffectArray.some(move.drops, (drop) => drop.key === player.key),
   );
   const placed = placeIntentItems({
     constraints: facts.constraints,
@@ -730,7 +761,9 @@ function placeMove(
       stale(step, refusal.code, undefined, refusal.detail);
     }
   }
-  const placement = placed.placements.find((entry) => entry.item === move.id);
+  const placement = EffectOption.getOrUndefined(
+    EffectArray.findFirst(placed.placements, (entry) => entry.item === move.id),
+  );
   return placement === undefined
     ? undefined
     : {
@@ -757,7 +790,8 @@ function checkSlotDestination(
     return;
   }
   const capacity = slotCapacity(rule, destination);
-  const occupants = [...projection.roster.values()].filter(
+  const occupants = EffectArray.filter(
+    [...projection.roster.values()],
     (occupant) => occupant.slot === destination.position && occupant.key !== declared.playerKey,
   );
   if (capacity !== undefined && occupants.length >= capacity) {
@@ -765,7 +799,7 @@ function checkSlotDestination(
       step,
       "slot_illegal",
       declared.playerKey,
-      `The ${destination.position} place already holds ${nameList(occupants.map((occupant) => occupant.name))}. Move one of them first, or choose another place.`,
+      `The ${destination.position} place already holds ${nameList(EffectArray.map(occupants, (occupant) => occupant.name))}. Move one of them first, or choose another place.`,
     );
   }
 }
@@ -819,7 +853,7 @@ function curesPlacement(
   rule: RosterRule,
   projection: TeamProjection,
 ): boolean {
-  if (move.drops.some((drop) => drop.key === playerKey)) {
+  if (EffectArray.some(move.drops, (drop) => drop.key === playerKey)) {
     return true;
   }
   const declared = move.kind === "slot_move" ? move.slotMove : undefined;
@@ -851,9 +885,12 @@ function accountingReason(
   for (const list of uniquePlaces(effect.reserveUsed)) {
     const slot = rule.byPosition.get(list);
     const capacity = slot?.kind === "reserve" ? slot.count : 0;
-    const occupied = occupancy.reserve.find((entry) => entry.name === list)?.occupied ?? 0;
-    const freed = effect.reserveFreed.filter((name) => name === list).length;
-    const used = effect.reserveUsed.filter((name) => name === list).length;
+    const occupied =
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(occupancy.reserve, (entry) => entry.name === list),
+      )?.occupied ?? 0;
+    const freed = EffectArray.filter(effect.reserveFreed, (name) => name === list).length;
+    const used = EffectArray.filter(effect.reserveUsed, (name) => name === list).length;
     if (used > Math.max(0, capacity - occupied) + freed) {
       return {
         code: "reserve_unavailable",
@@ -940,8 +977,11 @@ function holdClaims(
       move: step.move.id,
       adds:
         candidate.claim.kind === "player" &&
-        (step.move.adds.some((add) => add.key === candidate.claim.key) ||
-          step.move.fallbacks.some((fallback) => fallback.key === candidate.claim.key)),
+        (EffectArray.some(step.move.adds, (add) => add.key === candidate.claim.key) ||
+          EffectArray.some(
+            step.move.fallbacks,
+            (fallback) => fallback.key === candidate.claim.key,
+          )),
       pending,
     });
   }
@@ -969,7 +1009,7 @@ function usedPlaces(
   placeClaims: (place: string) => boolean,
 ): ReadonlyArray<string> {
   const places = claimedPlacesOf(move, placement);
-  return places.filter(placeClaims);
+  return EffectArray.filter(places, placeClaims);
 }
 
 function claimedPlacesOf(
@@ -997,7 +1037,7 @@ function moverKeyOf(move: TransactionPlanMove): string | undefined {
 
 function initialProjection(facts: TransactionPlanTeamFacts): TeamProjection {
   return {
-    roster: new Map(facts.roster.map((player) => [player.key, player] as const)),
+    roster: new Map(EffectArray.map(facts.roster, (player) => [player.key, player] as const)),
     budget: facts.budget,
     claims: new Map(),
     removedBy: new Map(),
@@ -1020,13 +1060,13 @@ function placementItem(
     id: move.id,
     adds:
       intent.kind === "add"
-        ? move.adds.map((add) => ({
+        ? EffectArray.map(move.adds, (add) => ({
             key: add.key,
             name: nameOf(add),
             positions: facts.pool.get(add.key)?.positions ?? [],
           }))
         : [],
-    drops: move.drops.map((drop) => ({ key: drop.key, name: nameOf(drop) })),
+    drops: EffectArray.map(move.drops, (drop) => ({ key: drop.key, name: nameOf(drop) })),
     move: undefined,
     intent,
   };
@@ -1051,7 +1091,7 @@ function planDependencies(
   rule: RosterRule,
 ): PlanGraph {
   const dependencies = new Map<TransactionMoveId, Set<TransactionMoveId>>(
-    entries.map((entry) => [entry.move.id, new Set<TransactionMoveId>()]),
+    EffectArray.map(entries, (entry) => [entry.move.id, new Set<TransactionMoveId>()]),
   );
   const fundedBy = new Map<TransactionMoveId, TransactionMoveId>();
   const blocked = new Map<TransactionMoveId, string>();
@@ -1069,17 +1109,19 @@ function producerOrder(
   dependencies: ReadonlyMap<TransactionMoveId, ReadonlySet<TransactionMoveId>>,
 ): ReadonlyArray<TransactionPlanOrderMove> {
   const sequence = topologicalSequence(entries, {
-    dependencies: new Map([...dependencies].map(([move, deps]) => [move, new Set(deps)] as const)),
+    dependencies: new Map(
+      EffectArray.map([...dependencies], ([move, deps]) => [move, new Set(deps)] as const),
+    ),
     fundedBy: new Map(),
     blocked: new Map(),
   });
-  const byId = new Map(entries.map((entry) => [entry.move.id, entry] as const));
-  const ordered = sequence.steps.flatMap((step) => {
+  const byId = new Map(EffectArray.map(entries, (entry) => [entry.move.id, entry] as const));
+  const ordered = EffectArray.flatMap(sequence.steps, (step) => {
     const entry = byId.get(step.move);
     return entry === undefined ? [] : [entry];
   });
-  const orderedIds = new Set(ordered.map((entry) => entry.move.id));
-  return [...ordered, ...entries.filter((entry) => !orderedIds.has(entry.move.id))];
+  const orderedIds = new Set(EffectArray.map(ordered, (entry) => entry.move.id));
+  return [...ordered, ...EffectArray.filter(entries, (entry) => !orderedIds.has(entry.move.id))];
 }
 
 function topologicalSequence(
@@ -1118,15 +1160,16 @@ function topologicalSequence(
     const waiting = unmetDependencies(entry.move.id, graph.dependencies, done);
     blocked.set(
       entry.move.id,
-      `No order can run ${moveLabel(entry.move)}: it waits on ${waiting
-        .map((id) => moveLabel(moveById(entries, id)))
-        .join(", ")}.`,
+      `No order can run ${moveLabel(entry.move)}: it waits on ${EffectArray.join(
+        EffectArray.map(waiting, (id) => moveLabel(moveById(entries, id))),
+        ", ",
+      )}.`,
     );
   }
 
   return {
     steps,
-    blocked: [...blocked.entries()].map(([move, detail]) => ({ move, detail })),
+    blocked: EffectArray.map([...blocked.entries()], ([move, detail]) => ({ move, detail })),
   };
 }
 
@@ -1154,7 +1197,7 @@ function addProducerDependencies(
 
 function consumedPlayers(move: TransactionPlanMove): ReadonlyArray<string> {
   return [
-    ...move.drops.map((drop) => drop.key),
+    ...EffectArray.map(move.drops, (drop) => drop.key),
     ...(move.slotMove === undefined ? [] : [move.slotMove.playerKey]),
     ...(move.intent?.player === undefined ? [] : [move.intent.player.key]),
   ];
@@ -1175,7 +1218,10 @@ function addDestinationDependencies(
     const mover = moverKeyOf(entry.move);
     const declared = entry.move.kind === "slot_move" ? entry.move.slotMove : undefined;
     const from =
-      entry.placement?.fromSlot ?? facts.roster.find((player) => player.key === mover)?.slot;
+      entry.placement?.fromSlot ??
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(facts.roster, (player) => player.key === mover),
+      )?.slot;
     if (mover !== undefined && from !== undefined && from !== declared?.toSlot) {
       if (!leaves.has(mover)) {
         leaves.set(mover, entry.move.id);
@@ -1210,7 +1256,7 @@ function addPlaceDependencies(input: {
   readonly fundedBy: Map<TransactionMoveId, TransactionMoveId>;
   readonly blocked: Map<TransactionMoveId, string>;
 }): void {
-  const moves = input.entries.map((entry) => entry.move);
+  const moves = EffectArray.map(input.entries, (entry) => entry.move);
   const occupancy = rosterOccupancy({ rule: input.rule, players: input.facts.roster });
 
   const active = allocatePlaces({
@@ -1228,13 +1274,15 @@ function addPlaceDependencies(input: {
     if (slot.kind !== "reserve") {
       continue;
     }
-    const list = occupancy.reserve.find((entry) => entry.name === slot.position);
+    const list = EffectOption.getOrUndefined(
+      EffectArray.findFirst(occupancy.reserve, (entry) => entry.name === slot.position),
+    );
     const reserved = list?.occupied ?? 0;
     const allocation = allocatePlaces({
       moves,
       changes: changesOf(input.entries, input.effects, (effect) => ({
-        frees: effect.reserveFreed.filter((name) => name === slot.position).length,
-        consumes: effect.reserveUsed.filter((name) => name === slot.position).length,
+        frees: EffectArray.filter(effect.reserveFreed, (name) => name === slot.position).length,
+        consumes: EffectArray.filter(effect.reserveUsed, (name) => name === slot.position).length,
       })),
       free: Math.max(0, slot.count - reserved),
       deficit: Math.max(0, reserved - slot.count),
@@ -1249,7 +1297,7 @@ function changesOf(
   change: (effect: PlanEffect) => { readonly frees: number; readonly consumes: number },
 ): ReadonlyMap<TransactionMoveId, { readonly frees: number; readonly consumes: number }> {
   return new Map(
-    entries.map((entry) => {
+    EffectArray.map(entries, (entry) => {
       const effect = requireValue(
         effects.get(entry.move.id),
         "A plan move has no projected effect",
@@ -1304,7 +1352,7 @@ function allocatePlaces(input: {
 }): PlaceAllocation {
   let free = input.free;
   let deficit = input.deficit;
-  const freeing = input.moves.flatMap((move) => {
+  const freeing = EffectArray.flatMap(input.moves, (move) => {
     const change = requireValue(input.changes.get(move.id), "A plan move has no place change");
     const count = Math.max(0, change.frees - change.consumes);
     return count === 0 ? [] : [{ id: move.id, remaining: count }];
@@ -1358,7 +1406,7 @@ function planMoveEffects(
 ): ReadonlyMap<TransactionMoveId, PlanEffect> {
   const state: PlanState = {
     players: new Map(
-      facts.roster.map((player) => [player.key, planMemberOf(player, rule)] as const),
+      EffectArray.map(facts.roster, (player) => [player.key, planMemberOf(player, rule)] as const),
     ),
   };
   const effects = new Map<TransactionMoveId, PlanEffect>();
@@ -1475,7 +1523,7 @@ function planEffectOf(
 
   if (move.kind === "trade") {
     for (const add of move.adds) {
-      if (move.drops.some((drop) => drop.key === add.key)) {
+      if (EffectArray.some(move.drops, (drop) => drop.key === add.key)) {
         continue;
       }
       const member: PlanMember = {
@@ -1521,14 +1569,18 @@ function eligibleReserveList(
   state: PlanState,
   rule: RosterRule,
 ): string | undefined {
-  const eligible = rule.slots.filter(
+  const eligible = EffectArray.filter(
+    rule.slots,
     (slot) => slot.kind === "reserve" && slotPlacement(rule, slot.position, member).legal === true,
   );
   if (eligible.length === 0) {
     return undefined;
   }
-  const open = eligible.find(
-    (slot) => reserveOccupancy(state, slot.position, member.key) < slot.count,
+  const open = EffectOption.getOrUndefined(
+    EffectArray.findFirst(
+      eligible,
+      (slot) => reserveOccupancy(state, slot.position, member.key) < slot.count,
+    ),
   );
   return (open ?? eligible[0])?.position;
 }
@@ -1574,7 +1626,7 @@ function effectOf(transfers: ReadonlyArray<PlanTransfer>, move: TransactionPlanM
     placesUsed,
     reserveFreed,
     reserveUsed,
-    picks: move.picks.map((pick) => pickKey(pick.round, pick.sourceTeamKey)),
+    picks: EffectArray.map(move.picks, (pick) => pickKey(pick.round, pick.sourceTeamKey)),
     budgetSpent: move.bid ?? 0,
   };
 }
@@ -1601,7 +1653,10 @@ function replayEffect(
 ): PlanEffect {
   const state: PlanState = {
     players: new Map(
-      [...projection.roster].map(([key, player]) => [key, planMemberOf(player, rule)] as const),
+      EffectArray.map(
+        [...projection.roster],
+        ([key, player]) => [key, planMemberOf(player, rule)] as const,
+      ),
     ),
   };
   return planEffectOf(move, state, placement, rule, facts);
@@ -1649,7 +1704,7 @@ function groupEvaluations(
   sources: ReadonlyArray<TransactionPlanMove>,
 ): ReadonlyArray<TransactionPlanGroupEvaluation> {
   const byId = movesById(sources);
-  const positions = new Map(sources.map((move) => [move.id, move.position] as const));
+  const positions = new Map(EffectArray.map(sources, (move) => [move.id, move.position] as const));
   const grouped = new Map<string, Array<TransactionPlanMoveEvaluation>>();
   const ungrouped: Array<TransactionPlanMoveEvaluation> = [];
   for (const move of moves) {
@@ -1662,50 +1717,56 @@ function groupEvaluations(
     grouped.set(move.group, entries);
   }
   const entries = [
-    ...[...grouped.entries()].map(([group, movesInGroup]) => ({ group, movesInGroup })),
-    ...ungrouped.map((move) => ({ group: undefined, movesInGroup: [move] })),
+    ...EffectArray.map([...grouped.entries()], ([group, movesInGroup]) => ({
+      group,
+      movesInGroup,
+    })),
+    ...EffectArray.map(ungrouped, (move) => ({ group: undefined, movesInGroup: [move] })),
   ].sort(
     (left, right) =>
       firstGroupPosition(left.movesInGroup, positions) -
       firstGroupPosition(right.movesInGroup, positions),
   );
-  return entries.map(({ group, movesInGroup }) => {
-    const invalid = movesInGroup.find((move) => move.validation.status !== "current");
+  return EffectArray.map(entries, ({ group, movesInGroup }) => {
+    const invalid = EffectOption.getOrUndefined(
+      EffectArray.findFirst(movesInGroup, (move) => move.validation.status !== "current"),
+    );
     if (invalid !== undefined) {
       const source = requireValue(byId.get(invalid.move), "A grouped move was not declared");
       const reason = invalid.validation.reasons[0];
       return {
         group,
-        moves: movesInGroup.map((move) => move.move),
+        moves: EffectArray.map(movesInGroup, (move) => move.move),
         valid: false,
         detail: `A group is checked whole. ${moveLabel(source)} cannot run: ${reason?.detail ?? "its check did not pass"}`,
       };
     }
-    const days = [...new Set(movesInGroup.map((move) => move.runDay))];
+    const days = [...new Set(EffectArray.map(movesInGroup, (move) => move.runDay))];
     if (days.length > 1) {
       return {
         group,
-        moves: movesInGroup.map((move) => move.move),
+        moves: EffectArray.map(movesInGroup, (move) => move.move),
         valid: false,
-        detail: `A group runs on one day, and these moves run on ${days.join(", ")}.`,
+        detail: `A group runs on one day, and these moves run on ${EffectArray.join(days, ", ")}.`,
       };
     }
     const dates = [
       ...new Set(
-        movesInGroup.flatMap((move) =>
-          move.effectiveDate === undefined ? [] : [move.effectiveDate],
-        ),
+        EffectArray.flatMap(movesInGroup, (move) => {
+          const flatMapped1 = move.effectiveDate === undefined ? [] : [move.effectiveDate];
+          return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+        }),
       ),
     ];
     if (dates.length > 1) {
       return {
         group,
-        moves: movesInGroup.map((move) => move.move),
+        moves: EffectArray.map(movesInGroup, (move) => move.move),
         valid: false,
-        detail: `A group applies on one date, and these moves apply on ${dates.join(", ")}.`,
+        detail: `A group applies on one date, and these moves apply on ${EffectArray.join(dates, ", ")}.`,
       };
     }
-    return { group, moves: movesInGroup.map((move) => move.move), valid: true };
+    return { group, moves: EffectArray.map(movesInGroup, (move) => move.move), valid: true };
   });
 }
 
@@ -1838,7 +1899,7 @@ function claimCandidates(
     }
   }
   const seen = new Set<string>();
-  return candidates.filter((candidate) => {
+  return EffectArray.filter(candidates, (candidate) => {
     if (candidate.claim.kind === "place" && !placeClaims(candidate.claim.key)) {
       return false;
     }
@@ -1902,7 +1963,7 @@ function unmetDependencies(
   dependencies: ReadonlyMap<TransactionMoveId, ReadonlySet<TransactionMoveId>>,
   done: ReadonlySet<TransactionMoveId>,
 ): ReadonlyArray<TransactionMoveId> {
-  return [...(dependencies.get(move) ?? [])].filter((id) => !done.has(id));
+  return EffectArray.filter([...(dependencies.get(move) ?? [])], (id) => !done.has(id));
 }
 
 function orderedDependencies(
@@ -1910,7 +1971,9 @@ function orderedDependencies(
   dependencies: ReadonlyMap<TransactionMoveId, ReadonlySet<TransactionMoveId>>,
   entries: ReadonlyArray<TransactionPlanOrderMove>,
 ): ReadonlyArray<TransactionMoveId> {
-  const positions = new Map(entries.map((entry) => [entry.move.id, entry.move.position] as const));
+  const positions = new Map(
+    EffectArray.map(entries, (entry) => [entry.move.id, entry.move.position] as const),
+  );
   return [...(dependencies.get(move) ?? [])].sort(
     (left, right) => (positions.get(left) ?? 0) - (positions.get(right) ?? 0),
   );
@@ -1921,7 +1984,8 @@ function moveById(
   move: TransactionMoveId,
 ): TransactionPlanMove {
   return requireValue(
-    entries.find((entry) => entry.move.id === move)?.move,
+    EffectOption.getOrUndefined(EffectArray.findFirst(entries, (entry) => entry.move.id === move))
+      ?.move,
     "An ordered move was not declared in the plan",
   );
 }
@@ -1936,7 +2000,7 @@ function requireValue<Value>(value: Value | undefined, detail: string): Value {
 function movesById(
   moves: ReadonlyArray<TransactionPlanMove>,
 ): ReadonlyMap<TransactionMoveId, TransactionPlanMove> {
-  return new Map(moves.map((move) => [move.id, move] as const));
+  return new Map(EffectArray.map(moves, (move) => [move.id, move] as const));
 }
 
 function comparePlanMoves(left: TransactionPlanMove, right: TransactionPlanMove): number {
@@ -1970,10 +2034,10 @@ function shownOnRoster(
   if (move.kind === "trade") {
     return true;
   }
-  if (move.drops.some((drop) => !players.has(drop.key))) {
+  if (EffectArray.some(move.drops, (drop) => !players.has(drop.key))) {
     return true;
   }
-  if ([...move.adds, ...move.fallbacks].some((add) => players.has(add.key))) {
+  if (EffectArray.some([...move.adds, ...move.fallbacks], (add) => players.has(add.key))) {
     return true;
   }
   const mover = moverKeyOf(move);
@@ -2011,16 +2075,25 @@ function nameList(names: ReadonlyArray<string>): string {
   if (names.length === 1) {
     return first;
   }
-  return `${names.slice(0, -1).join(", ")} and ${String(names[names.length - 1])}`;
+  return `${EffectArray.join(names.slice(0, -1), ", ")} and ${String(names[names.length - 1])}`;
 }
 
 function moveLabel(move: TransactionPlanMove): string {
-  const drops = move.drops.map((drop) => nameOf(drop)).join(", ");
+  const drops = EffectArray.join(
+    EffectArray.map(move.drops, (drop) => nameOf(drop)),
+    ", ",
+  );
   switch (move.kind) {
     case "free_agent_add":
     case "waiver_claim": {
-      const adds = move.adds.map((add) => nameOf(add)).join(", ");
-      const fallbacks = move.fallbacks.map((fallback) => nameOf(fallback)).join(", ");
+      const adds = EffectArray.join(
+        EffectArray.map(move.adds, (add) => nameOf(add)),
+        ", ",
+      );
+      const fallbacks = EffectArray.join(
+        EffectArray.map(move.fallbacks, (fallback) => nameOf(fallback)),
+        ", ",
+      );
       const reserve =
         move.intent?.to === "reserve" && move.placement !== undefined
           ? ` to ${move.placement.toSlot}`

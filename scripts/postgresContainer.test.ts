@@ -11,6 +11,7 @@ import {
   postgresContainer,
   testContainers,
 } from "@lineupkeep/tools/local-stack/postgresContainer.ts";
+import { Array as EffectArray } from "effect";
 import { expect, it } from "vitest";
 
 it("manages only containers named for a run", () => {
@@ -36,7 +37,7 @@ it("removes a container that an orphaned Docker client finishes creating after i
   await postgresContainer(name, "/lock").remove(AbortSignal.timeout(20_000), false);
 
   expect(existsSync(join(docker.state, name))).toBe(false);
-  expect(docker.calls().filter((call) => call.startsWith("rm "))).not.toHaveLength(0);
+  expect(EffectArray.filter(docker.calls(), (call) => call.startsWith("rm "))).not.toHaveLength(0);
 });
 
 it("refuses removal when a journaled container name has another checkout's ownership label", async () => {
@@ -149,7 +150,13 @@ esac
         readonly labels: Readonly<Record<string, string>>;
       }>,
     ) => {
-      await writeFile(join(folder, "ids"), containers.map((_, index) => `id${index}`).join("\n"));
+      await writeFile(
+        join(folder, "ids"),
+        EffectArray.join(
+          EffectArray.map(containers, (_, index) => `id${index}`),
+          "\n",
+        ),
+      );
       for (const [index, container] of containers.entries()) {
         await writeFile(
           join(folder, `inspect-id${index}.json`),

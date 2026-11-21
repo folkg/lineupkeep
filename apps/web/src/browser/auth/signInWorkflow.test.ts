@@ -1,3 +1,4 @@
+import { EffectArray } from "@lineupkeep/collections";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 
@@ -135,7 +136,9 @@ it("explores every sign-in transition with session recovery invariants", () => {
     invariants,
     final: (state) => state.value === "signedIn",
   });
-  expect(explored.nodes.map(({ snapshot }) => snapshot.state.path)).toContain("signedIn");
+  expect(EffectArray.map(explored.nodes, ({ snapshot }) => snapshot.state.path)).toContain(
+    "signedIn",
+  );
 });
 
 it.each(Object.entries(invariants))(

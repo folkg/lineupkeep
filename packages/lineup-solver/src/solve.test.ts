@@ -1,3 +1,4 @@
+import { Array as EffectArray } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { isLegalPlan, planViolations } from "./lineup.ts";
@@ -323,10 +324,12 @@ describe("lineup optimization", () => {
       ],
     );
     const first = planFrom(solveLineup(problem));
-    const currentById = new Map(first.assignments.map((item) => [item.playerId, item.slotId]));
+    const currentById = new Map(
+      EffectArray.map(first.assignments, (item) => [item.playerId, item.slotId]),
+    );
     const repeated = lineupProblem(
       problem.slots,
-      problem.players.map((item) => ({
+      EffectArray.map(problem.players, (item) => ({
         ...item,
         currentSlotId: currentById.get(item.id) ?? item.currentSlotId,
       })),
@@ -461,7 +464,10 @@ describe("availability tiers", () => {
 
 describe("problem contract", () => {
   it("ranks every adjacent pair of rungs above the one below it", () => {
-    const pairs = longerLadder.slice(0, -1).map((tier, index) => [tier, longerLadder[index + 1]]);
+    const pairs = EffectArray.map(longerLadder.slice(0, -1), (tier, index) => [
+      tier,
+      longerLadder[index + 1],
+    ]);
 
     for (const [above, below] of pairs) {
       const problem = lineupProblem(

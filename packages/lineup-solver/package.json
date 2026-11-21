@@ -7,6 +7,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "effect": "catalog:",
     "munkres": "2.1.1"
   },
   "devDependencies": {

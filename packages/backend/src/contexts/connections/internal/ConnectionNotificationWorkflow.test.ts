@@ -1,5 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Arbitrary, DateTime, Effect, Schema, SchemaParser } from "effect";
+import { Array as EffectArray } from "effect";
+import { Order as EffectOrder } from "effect";
 
 import { decodeUserId } from "#contexts/auth/User.ts";
 import { plan, snapshotOf } from "#utilities/machine.ts";
@@ -51,18 +53,21 @@ it.effect("explores every notification state and transition, including terminal 
     assert.strictEqual(explored.transitionCoverage.branches.missing, 0);
     const statuses = ["pending", "sending", "sent", "cancelled", "failed"];
     assert.deepStrictEqual(
-      [...new Set(explored.nodes.map(({ snapshot }) => snapshot.state.path))].sort(),
-      statuses.toSorted(),
+      [...new Set(EffectArray.map(explored.nodes, ({ snapshot }) => snapshot.state.path))].sort(),
+      EffectArray.sort(statuses, EffectOrder.String),
     );
-    assert.deepStrictEqual(notifications.status.enumValues.toSorted(), statuses.toSorted());
-    for (const node of explored.nodes.filter(({ snapshot }) =>
+    assert.deepStrictEqual(
+      EffectArray.sort(notifications.status.enumValues, EffectOrder.String),
+      EffectArray.sort(statuses, EffectOrder.String),
+    );
+    for (const node of EffectArray.filter(explored.nodes, ({ snapshot }) =>
       ["sent", "cancelled", "failed"].includes(snapshot.state.path),
     )) {
       const trace = yield* MachineTest.run(ConnectionNotificationWorkflow, {
         input: node.snapshot.state.value,
         events,
       });
-      assert.isTrue(trace.steps.every((step) => !step.accepted));
+      assert.isTrue(EffectArray.every(trace.steps, (step) => !step.accepted));
     }
   }),
 );

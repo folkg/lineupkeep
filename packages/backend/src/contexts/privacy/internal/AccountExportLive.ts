@@ -1,4 +1,5 @@
 import { DateTime, Effect, Layer } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import { AccountExport } from "#contexts/privacy/AccountExport.ts";
@@ -14,9 +15,10 @@ export const AccountExportLive = Layer.effect(
       const document = yield* repository.exportData(userId);
       yield* Effect.annotateCurrentSpan({
         "account_export.tables": document.tables.length,
-        "account_export.rows": document.tables.reduce(
-          (total, table) => total + table.rows.length,
+        "account_export.rows": EffectArray.reduce(
+          document.tables,
           0,
+          (total, table) => total + table.rows.length,
         ),
         "account_export.withheld_fields": document.withheld.length,
       });

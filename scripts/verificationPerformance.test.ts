@@ -4,6 +4,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { Effect } from "effect";
 import { Schema } from "effect";
+import { Array as EffectArray } from "effect";
 import { expect, it } from "vitest";
 
 import type { DatabaseProbe } from "#e2e/verify/databaseActivity.ts";
@@ -185,7 +186,7 @@ it(
 
 it("attributes server activity to the spans of the requests the interaction made", async () => {
   await using evidence = await evidenceSink();
-  await using collector = await fakeCollector((tagged) => tagged.map(requestSpan));
+  await using collector = await fakeCollector((tagged) => EffectArray.map(tagged, requestSpan));
   const page = scriptedPage();
   const measure = measurer(page, evidence.sink, origin, scriptedProbe(), unexpectedBudgetFailure);
 
@@ -237,9 +238,15 @@ it("removes its request listeners when tracing cannot start or stop", async () =
   expect(started).toEqual(new Error("route failed"));
   expect(failingStart.listenerCount()).toBe(0);
   expect(failingStop.listenerCount()).toBe(0);
-  expect(evidence.sink.annotations.map((annotation) => annotation.description).join()).toContain(
-    "unroute failed",
-  );
+  expect(
+    EffectArray.join(
+      EffectArray.filter(
+        EffectArray.map(evidence.sink.annotations, (annotation) => annotation.description),
+        (value): value is string => value !== undefined,
+      ),
+      ",",
+    ),
+  ).toContain("unroute failed");
 });
 
 it("removes a route that was registered before tracing failed to start", async () => {
@@ -403,7 +410,7 @@ it("reports every sample over its budget and keeps measuring", async () => {
     expect.objectContaining({ name: "save", sample: 1, budgetMs: 10 }),
     expect.objectContaining({ name: "save", sample: 2, budgetMs: 10 }),
   ]);
-  expect((await evidence.results()).map((sample) => sample["sample"])).toEqual([1, 2]);
+  expect(EffectArray.map(await evidence.results(), (sample) => sample["sample"])).toEqual([1, 2]);
 });
 
 it("totals every database statement even when it lists only the slowest", async () => {
@@ -510,7 +517,7 @@ it("refuses to profile a server inspector that belongs to another process", asyn
 
 it("measures headless calls with isolated trace linkage and client latency", async () => {
   await using evidence = await evidenceSink();
-  await using collector = await fakeCollector((tagged) => tagged.map(requestSpan));
+  await using collector = await fakeCollector((tagged) => EffectArray.map(tagged, requestSpan));
   const calls = new CallObserver();
   const measure = measurer(calls, evidence.sink, origin, scriptedProbe(), unexpectedBudgetFailure);
 
@@ -627,7 +634,7 @@ it("settles delayed headless exports and counts duplicate SQL spans and logs onc
       ...span("sql.execute", 2, { "db.query.text": "select 1" }),
       events: [{ name: "read complete", timeMs: 1, attributes: {} }],
     };
-    return [...tagged.map(requestSpan), sql, sql];
+    return [...EffectArray.map(tagged, requestSpan), sql, sql];
   });
   const calls = new CallObserver();
   const measure = measurer(calls, evidence.sink, origin, scriptedProbe(), unexpectedBudgetFailure);
@@ -720,7 +727,7 @@ function scopedEnvironment(values: Readonly<Record<string, string>>): {
   [Symbol.dispose]: () => void;
 } {
   const previous = Object.fromEntries(
-    Object.keys(values).map((name) => [name, process.env[name]] as const),
+    EffectArray.map(Object.keys(values), (name) => [name, process.env[name]] as const),
   );
   Object.assign(process.env, values);
   return {

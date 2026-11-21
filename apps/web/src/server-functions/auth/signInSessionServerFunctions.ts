@@ -2,6 +2,7 @@ import { SignInSessionId, SignInSessions } from "@lineupkeep/backend/auth/SignIn
 import { createServerFn } from "@tanstack/solid-start";
 import { getRequest } from "@tanstack/solid-start/server";
 import { Effect, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type { SignInSessionListData } from "#contracts/auth/authContract.ts";
 import {
@@ -18,7 +19,9 @@ export const listSignInSessionsServerFn = createServerFn({ method: "GET" }).hand
     (userId, currentSessionId) =>
       SignInSessions.use((sessions) => sessions.list(userId)).pipe(
         Effect.map((listed): SignInSessionListData => ({
-          sessions: listed.map((session) => toSignInSessionView(session, currentSessionId)),
+          sessions: EffectArray.map(listed, (session) =>
+            toSignInSessionView(session, currentSessionId),
+          ),
         })),
       ),
     mapSignInSessionError,
@@ -41,7 +44,9 @@ export const endSignInSessionServerFn = createServerFn({ method: "POST" })
           yield* SignInSessions.use((sessions) => sessions.end(userId, [input.session]));
           const listed = yield* SignInSessions.use((sessions) => sessions.list(userId));
           return {
-            sessions: listed.map((session) => toSignInSessionView(session, currentSessionId)),
+            sessions: EffectArray.map(listed, (session) =>
+              toSignInSessionView(session, currentSessionId),
+            ),
           } satisfies SignInSessionListData;
         }),
       mapSignInSessionError,
@@ -57,7 +62,9 @@ export const endOtherSignInSessionsServerFn = createServerFn({ method: "POST" })
         yield* SignInSessions.use((sessions) => sessions.endOthers(userId, currentSessionId));
         const listed = yield* SignInSessions.use((sessions) => sessions.list(userId));
         return {
-          sessions: listed.map((session) => toSignInSessionView(session, currentSessionId)),
+          sessions: EffectArray.map(listed, (session) =>
+            toSignInSessionView(session, currentSessionId),
+          ),
         } satisfies SignInSessionListData;
       }),
     mapSignInSessionError,

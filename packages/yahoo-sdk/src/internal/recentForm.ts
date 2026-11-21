@@ -1,3 +1,6 @@
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
+
 import type { YahooPlayerRank } from "./player.ts";
 
 export type RecentFormWindow =
@@ -42,21 +45,25 @@ export function recentFormRankName(window: RecentFormWindow): string {
 }
 
 export function recentFormRankNames(): ReadonlyArray<string> {
-  return recentFormWindows.map((window) => recentFormSpec(window).rankName);
+  return EffectArray.map(recentFormWindows, (window) => recentFormSpec(window).rankName);
 }
 
 export function recentFormRankOf(
   ranks: ReadonlyArray<YahooPlayerRank>,
   window: RecentFormWindow,
 ): number | null {
-  return ranks.find((rank) => rank.type === recentFormRankType(window))?.value ?? null;
+  return (
+    EffectOption.getOrUndefined(
+      EffectArray.findFirst(ranks, (rank) => rank.type === recentFormRankType(window)),
+    )?.value ?? null
+  );
 }
 
 export function publishedRecentFormWindows(
   players: ReadonlyArray<{ readonly ranks: ReadonlyArray<YahooPlayerRank> }>,
 ): ReadonlyArray<RecentFormWindow> {
-  return recentFormWindows.filter((window) =>
-    players.some((player) => recentFormRankOf(player.ranks, window) !== null),
+  return EffectArray.filter(recentFormWindows, (window) =>
+    EffectArray.some(players, (player) => recentFormRankOf(player.ranks, window) !== null),
   );
 }
 

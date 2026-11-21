@@ -1,8 +1,20 @@
 import { Effect, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { Flag, IntFromStringOrNumber, decodePayload, optionalNonEmpty } from "#yahoo/decode.ts";
 import { YahooParseError } from "#yahoo/errors.ts";
 import type { YahooLeagueKey } from "#yahoo/keys.ts";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
 
 export function decodeFelo(
   payload: unknown,
@@ -19,13 +31,13 @@ export function decodeFelo(
       weeklyChange: decoded.service.weekly_change ?? undefined,
       currentTier: optionalNonEmpty(decoded.service.current_tier ?? undefined),
       currentTierNumeric: decoded.service.current_tier_numeric ?? undefined,
-      teams: Object.values(decoded.service.teams).map((team) => ({
+      teams: EffectArray.map(Object.values(decoded.service.teams), (team) => ({
         teamKey: team.team_key,
         feloScore: optionalNonEmpty(team.felo_score ?? undefined),
         weeklyChange: team.weekly_change ?? undefined,
         currentTier: optionalNonEmpty(team.current_tier ?? undefined),
         currentTierNumeric: team.current_tier_numeric ?? undefined,
-        managers: Object.values(team.managers ?? {}).map((manager) => ({
+        managers: EffectArray.map(Object.values(team.managers ?? {}), (manager) => ({
           feloScore: optionalNonEmpty(manager.felo_score ?? undefined),
           weeklyChange: manager.weekly_change ?? undefined,
           currentTier: optionalNonEmpty(manager.current_tier ?? undefined),
@@ -48,7 +60,8 @@ export function decodeTradePartners(
         field: "league.league_key",
       });
     }
-    return (decoded.league.recommended_trade_partners ?? []).map(
+    return EffectArray.map(
+      decoded.league.recommended_trade_partners ?? [],
       ({ recommended_trade_partner }) => ({ teamKey: recommended_trade_partner.team_key }),
     );
   });
@@ -66,14 +79,16 @@ export function decodeTeamAnalysis(
         field: "league.league_key",
       });
     }
-    return decoded.league.teams.map(({ team }) => ({
+    return EffectArray.map(decoded.league.teams, ({ team }) => ({
       teamKey: team.team_key,
       name: team.name,
-      availableDraftPicks: (team.available_draft_picks?.picks ?? []).map(({ pick }) => ({
-        round: pick.round,
-        cost: pick.cost,
-        pick: pick.pick,
-      })),
+      availableDraftPicks: optionalArrayValue(team.available_draft_picks?.picks ?? [], (value) =>
+        EffectArray.map(value, ({ pick }) => ({
+          round: pick.round,
+          cost: pick.cost,
+          pick: pick.pick,
+        })),
+      ),
       positionalRanks:
         team.positional_ranks === undefined ? [] : decodePositionalRanks(team.positional_ranks),
     }));
@@ -81,7 +96,7 @@ export function decodeTeamAnalysis(
 }
 
 function decodePositionalRanks(value: ReadonlyArray<unknown>): ReadonlyArray<YahooPositionalRank> {
-  return value.flatMap((entry) => {
+  return EffectArray.flatMap(value, (entry) => {
     if (!isRecord(entry) || !isRecord(entry["positional_rank"])) {
       return [];
     }
@@ -207,5 +222,5 @@ const TeamAnalysisPayload = Schema.Struct({
 });
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !EffectArray.isArray(value);
 }

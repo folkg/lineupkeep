@@ -15,6 +15,8 @@ import {
   Schema,
   Tracer,
 } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 import { vi } from "vitest";
 
 import type { AccessTokenResolution, AuthServiceShape } from "#contexts/auth/Auth.ts";
@@ -42,6 +44,10 @@ import { oauthClient, oauthRefreshToken, jwks } from "./OAuthTables.ts";
 import { SignInCodeQuotaRepository } from "./SignInCodeQuotaRepository.ts";
 import { SignInSessionRepository } from "./SignInSessionRepository.ts";
 import { SignInSessionsLive } from "./SignInSessionsLive.ts";
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 const databaseTestTimeout = 30_000;
 
@@ -101,7 +107,7 @@ it.effect(
       );
 
       assert.deepStrictEqual(
-        replies.map((response) => response.status),
+        EffectArray.map(replies, (response) => response.status),
         [200, 200, 200],
       );
     }).pipe(layerTools.provide(adapterLayer(baseConfig))),
@@ -140,7 +146,11 @@ it.effect(
       assert.strictEqual(signedIn.status, 200);
       assert.strictEqual(session?.user.email, "new.reader@example.test");
       assert.deepStrictEqual(
-        users.map(({ email, emailVerified, name }) => ({ email, emailVerified, name })),
+        EffectArray.map(users, ({ email, emailVerified, name }) => ({
+          email,
+          emailVerified,
+          name,
+        })),
         [{ email: "new.reader@example.test", emailVerified: true, name: "" }],
       );
     }).pipe(layerTools.provide(adapterLayer(baseConfig))),
@@ -651,22 +661,24 @@ it.effect(
       );
 
       assert.deepStrictEqual(
-        responses.map((response) => response.status),
+        EffectArray.map(responses, (response) => response.status),
         [302, 302],
       );
-      const returned = responses.map(
+      const returned = EffectArray.map(
+        responses,
         (response) => new URL(response.headers.get("location") ?? "", baseConfig.BETTER_AUTH_URL),
       );
       assert.deepStrictEqual(
-        returned.map((url) => url.pathname),
+        EffectArray.map(returned, (url) => url.pathname),
         ["/auth", "/auth"],
       );
       assert.deepStrictEqual(
-        returned.map((url) => url.searchParams.get("state")),
+        EffectArray.map(returned, (url) => url.searchParams.get("state")),
         ["first", "second"],
       );
       const clients = yield* Effect.promise(() => database.select().from(oauthClient));
-      const metadataClients = clients.filter(
+      const metadataClients = EffectArray.filter(
+        clients,
         (client) => client.clientId === "https://connections-client.test/client.json",
       );
       assert.strictEqual(metadataClients.length, 1);
@@ -747,14 +759,15 @@ it.effect(
 
       assert.deepStrictEqual(
         authorizationServer.scopes_supported,
-        advertisedScopes.map((scope) => scope.name),
+        EffectArray.map(advertisedScopes, (scope) => scope.name),
       );
       assert.deepStrictEqual(
         protectedResource.scopes_supported,
-        resourceScopes.map((scope) => scope.name),
+        EffectArray.map(resourceScopes, (scope) => scope.name),
       );
       assert.deepStrictEqual(
-        authorizationServer.scopes_supported.filter(
+        EffectArray.filter(
+          authorizationServer.scopes_supported,
           (scope) => !protectedResource.scopes_supported.includes(scope),
         ),
         ["offline_access"],
@@ -885,7 +898,9 @@ it.effect(
       );
       const consentRequest = yield* adapter.getConsentRequest(headers, location.search.slice(1));
       assert.deepStrictEqual(
-        consentRequest.status === "valid" ? consentRequest.scopes.map((scope) => scope.name) : [],
+        consentRequest.status === "valid"
+          ? EffectArray.map(consentRequest.scopes, (scope) => scope.name)
+          : [],
         ["fantasy:read", offlineAccess.name],
       );
 
@@ -967,7 +982,7 @@ it.effect(
       const database = yield* AuthDatabase;
       const registration = yield* adapter.handle(dynamicRegistrationRequest("Early registration"));
       const registered = yield* jsonOf(registration, Schema.Struct({ client_id: Schema.String }));
-      const current = advertisedScopes.map((scope) => scope.name);
+      const current = EffectArray.map(advertisedScopes, (scope) => scope.name);
       const [registeredClient] = yield* Effect.promise(() =>
         database.select().from(oauthClient).where(eq(oauthClient.clientId, registered.client_id)),
       );
@@ -988,7 +1003,7 @@ it.effect(
         response_type: "code",
         client_id: registered.client_id,
         redirect_uri: "http://127.0.0.1:19999/callback",
-        scope: advertised.join(" "),
+        scope: EffectArray.join(advertised, " "),
         resource: mcpResource,
         code_challenge: "a".repeat(43),
         code_challenge_method: "S256",
@@ -1151,8 +1166,12 @@ it.effect(
         }),
       );
 
-      const metadataSpan = spans.find((span) => span.name === "PublicInternet.request");
-      const handlerSpan = spans.find((span) => span.name === "AuthService.handle");
+      const metadataSpan = EffectOption.getOrUndefined(
+        EffectArray.findFirst(spans, (span) => span.name === "PublicInternet.request"),
+      );
+      const handlerSpan = EffectOption.getOrUndefined(
+        EffectArray.findFirst(spans, (span) => span.name === "AuthService.handle"),
+      );
       assert.isDefined(handlerSpan);
       assert.strictEqual(metadataSpan?.kind, "client");
       assert.strictEqual(
@@ -1160,9 +1179,13 @@ it.effect(
         handlerSpan.spanId,
       );
       assert.strictEqual(metadataSpan?.attributes.get("http.response.status_code"), 200);
-      const exported = spans
-        .flatMap((span) => [span.name, ...[...span.attributes].flat().map(String)])
-        .join("\n");
+      const exported = EffectArray.join(
+        EffectArray.flatMap(spans, (span) => {
+          const flatMapped1 = [span.name, ...EffectArray.map([...span.attributes].flat(), String)];
+          return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+        }),
+        "\n",
+      );
       assert.notInclude(exported, "oauth@example.test");
       assert.notInclude(exported, cookieHeader(signedIn));
       assert.notInclude(exported, location.searchParams.get("sig") ?? "missing-signature");
@@ -1344,9 +1367,12 @@ it.effect(
         "status",
         "authenticated",
       );
-      const rotatedRow = (yield* Effect.promise(() =>
-        database.select().from(oauthRefreshToken),
-      )).find((row) => row.revoked === null);
+      const rotatedRow = EffectOption.getOrUndefined(
+        EffectArray.findFirst(
+          yield* Effect.promise(() => database.select().from(oauthRefreshToken)),
+          (row) => row.revoked === null,
+        ),
+      );
       assert.isDefined(rotatedRow);
       assert.strictEqual(
         (rotatedRow.expiresAt.getTime() - rotatedRow.createdAt.getTime()) / 1000,
@@ -1354,8 +1380,8 @@ it.effect(
       );
       const keysAfterRestart = yield* Effect.promise(() => database.select().from(jwks));
       assert.deepStrictEqual(
-        keysAfterRestart.map((key) => key.id),
-        storedKeys.map((key) => key.id),
+        EffectArray.map(keysAfterRestart, (key) => key.id),
+        EffectArray.map(storedKeys, (key) => key.id),
       );
 
       const resolved = yield* restarted.resolveAccessToken(credentials.access_token, [
@@ -1476,9 +1502,16 @@ it.effect(
       assert.strictEqual(presentedAgain.attributes.get("oauth.refresh_token.replay_stored"), true);
       assert.strictEqual(presentedAgain.attributes.get("oauth.outcome"), "replayed");
 
-      const exported = [...first.spans, ...retry.spans]
-        .flatMap((candidate) => [candidate.name, ...[...candidate.attributes].flat().map(String)])
-        .join("\n");
+      const exported = EffectArray.join(
+        EffectArray.flatMap([...first.spans, ...retry.spans], (candidate) => {
+          const flatMapped2 = [
+            candidate.name,
+            ...EffectArray.map([...candidate.attributes].flat(), String),
+          ];
+          return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+        }),
+        "\n",
+      );
       assert.notInclude(exported, grant.refreshToken);
       assert.notInclude(exported, rotated.refresh_token);
       assert.notInclude(exported, rotated.access_token);
@@ -1608,7 +1641,9 @@ it.effect(
         );
 
       assert.strictEqual(refused.status, 400);
-      const span = spans.find((candidate) => candidate.name === "AuthService.handle");
+      const span = EffectOption.getOrUndefined(
+        EffectArray.findFirst(spans, (candidate) => candidate.name === "AuthService.handle"),
+      );
       assert.isDefined(span);
       assert.strictEqual(span.attributes.get("oauth.error"), "invalid_grant");
       assert.strictEqual(span.attributes.get("oauth.grant_type"), "refresh_token");
@@ -1619,9 +1654,16 @@ it.effect(
       assert.strictEqual(span.attributes.get("oauth.refresh_token.replay_stored"), true);
       assert.strictEqual(span.attributes.get("oauth.refresh_token.expired"), false);
       assert.strictEqual(span.attributes.get("oauth.outcome"), "refused");
-      const exported = spans
-        .flatMap((candidate) => [candidate.name, ...[...candidate.attributes].flat().map(String)])
-        .join("\n");
+      const exported = EffectArray.join(
+        EffectArray.flatMap(spans, (candidate) => {
+          const flatMapped3 = [
+            candidate.name,
+            ...EffectArray.map([...candidate.attributes].flat(), String),
+          ];
+          return arrayValueIsArray(flatMapped3) ? flatMapped3 : [flatMapped3];
+        }),
+        "\n",
+      );
       assert.notInclude(exported, grant.refreshToken);
       assert.notInclude(exported, rotated.refresh_token);
       assert.notInclude(exported, rotated.access_token);
@@ -1856,7 +1898,11 @@ function latestCode(email: string): Effect.Effect<string, never, EmailOutbox> {
   return Effect.map(EmailOutbox, (outbox) => outbox.messages).pipe(
     Effect.flatten,
     Effect.map((messages) =>
-      codeIn(messages.findLast((message) => message.to === email)?.text ?? ""),
+      codeIn(
+        EffectOption.getOrUndefined(
+          EffectArray.findLast(messages, (message) => message.to === email),
+        )?.text ?? "",
+      ),
     ),
   );
 }
@@ -2133,7 +2179,9 @@ function captureSpans<A, E>(
 }
 
 function spanNamed(spans: ReadonlyArray<Tracer.Span>, name: string): Tracer.Span {
-  const span = spans.find((candidate) => candidate.name === name);
+  const span = EffectOption.getOrUndefined(
+    EffectArray.findFirst(spans, (candidate) => candidate.name === name),
+  );
   if (span === undefined) {
     throw new Error(`Missing ${name} span`);
   }
@@ -2147,10 +2195,13 @@ const ErrorDescription = Schema.Struct({
 });
 
 function cookieHeader(response: Response): string {
-  return response.headers
-    .getSetCookie()
-    .map((cookie) => cookie.split(";")[0])
-    .join("; ");
+  return EffectArray.join(
+    EffectArray.filter(
+      EffectArray.map(response.headers.getSetCookie(), (cookie) => cookie.split(";")[0]),
+      (value): value is string => value !== undefined,
+    ),
+    "; ",
+  );
 }
 
 type IssuedGrant = {

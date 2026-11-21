@@ -3,6 +3,8 @@ import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { and, eq } from "drizzle-orm";
 import { Array, DateTime, Effect, Layer, Redacted, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 import { SecureRandom } from "effect/crypto";
 
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
@@ -47,15 +49,15 @@ it.effect("discovers multiple teams in one league and persists them disabled", (
 
     assert.strictEqual(discovered.length, 2);
     assert.deepStrictEqual(
-      discovered.map((row) => row.providerTeamKey),
+      EffectArray.map(discovered, (row) => row.providerTeamKey),
       ["nhl.l.1.t.1", "nhl.l.1.t.2"],
     );
-    assert.isTrue(discovered.every((row) => lineupgradeUlid.test(row.id)));
-    assert.strictEqual(new Set(discovered.map((row) => row.id)).size, 2);
-    assert.isTrue(discovered.every((row) => row.league === "nhl"));
-    assert.isTrue(discovered.every((row) => row.providerLeagueKey === "nhl"));
-    assert.isTrue(discovered.every((row) => row.automation.status === "disabled"));
-    assert.isTrue(discovered.every((row) => row.availability === "available"));
+    assert.isTrue(EffectArray.every(discovered, (row) => lineupgradeUlid.test(row.id)));
+    assert.strictEqual(new Set(EffectArray.map(discovered, (row) => row.id)).size, 2);
+    assert.isTrue(EffectArray.every(discovered, (row) => row.league === "nhl"));
+    assert.isTrue(EffectArray.every(discovered, (row) => row.providerLeagueKey === "nhl"));
+    assert.isTrue(EffectArray.every(discovered, (row) => row.automation.status === "disabled"));
+    assert.isTrue(EffectArray.every(discovered, (row) => row.availability === "available"));
     assert.deepStrictEqual(yield* connections.listTeams(owner), discovered);
     assert.deepStrictEqual(yield* connections.listTeams(other), []);
   }).pipe(layerTools.provide(ConnectionsTestLayer)),
@@ -219,7 +221,7 @@ it.effect("refreshes availability, restores teams, and preserves configuration",
     yield* fake.setTeams([first, second, third]);
     const restored = yield* connections.discoverTeams(owner, [{ id: ready.id }]);
 
-    assert.isTrue(restored.every((row) => row.availability === "available"));
+    assert.isTrue(EffectArray.every(restored, (row) => row.availability === "available"));
     assert.strictEqual(findTeam(restored, first.providerTeamKey).automation.status, "enabled");
     assert.strictEqual(findTeam(restored, third.providerTeamKey).automation.status, "disabled");
   }).pipe(layerTools.provide(ConnectionsTestLayer)),
@@ -342,7 +344,9 @@ function team(providerTeamKey: string, name: string): ProviderTeam {
 }
 
 function findTeam(teams: ReadonlyArray<FantasyTeam>, providerTeamKey: string): FantasyTeam {
-  const found = teams.find((row) => row.providerTeamKey === providerTeamKey);
+  const found = EffectOption.getOrUndefined(
+    EffectArray.findFirst(teams, (row) => row.providerTeamKey === providerTeamKey),
+  );
   if (found === undefined) {
     throw new Error(`missing team ${providerTeamKey}`);
   }

@@ -1,5 +1,9 @@
+import { EffectArray } from "@lineupkeep/collections";
 import * as Shared from "@lineupkeep/machine-test";
 import type { EventObject } from "xstate";
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 export function play<
   State extends { readonly value: string; readonly context: object },
@@ -38,7 +42,7 @@ export function exploreWorkflow<
   });
   if (explored.transitionCoverage.definitions.missing > 0) {
     throw new Shared.MachineTestFailure(
-      `Untaken workflow transitions: ${explored.transitionCoverage.uncovered.join(", ")}; add sample events that enable each declared transition.`,
+      `Untaken workflow transitions: ${EffectArray.join(explored.transitionCoverage.uncovered, ", ")}; add sample events that enable each declared transition.`,
     );
   }
   return explored;
@@ -55,8 +59,16 @@ function workflowAdapter<
     readonly stateKey?: (state: State) => string;
   },
 ): Shared.MachineAdapter<State, Event> {
-  const declarations = Object.entries(workflow.config.states).flatMap(([from, definition]) =>
-    Object.keys(definition.on ?? {}).map((event) => ({ id: `${from}.${event}`, from, event })),
+  const declarations = EffectArray.flatMap(
+    Object.entries(workflow.config.states),
+    ([from, definition]) => {
+      const flatMapped1 = EffectArray.map(Object.keys(definition.on ?? {}), (event) => ({
+        id: `${from}.${event}`,
+        from,
+        event,
+      }));
+      return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+    },
   );
   const declared = (state: State, event: Event): boolean => {
     const definition = workflow.config.states[state.value]?.on?.[event.type];
@@ -103,28 +115,31 @@ function workflowInvariants<State, Event>(
   adapter: Shared.MachineAdapter<State, Event>,
   invariants: Invariants<State, Event>,
 ): ReadonlyArray<Shared.Invariant<State, Event>> {
-  return Object.entries(invariants).map(([name, check]): Shared.Invariant<State, Event> => ({
-    _tag: "StepInvariant" as const,
-    name,
-    check: ({
-      before,
-      after,
-      event,
-    }: {
-      readonly before: Shared.TestSnapshot<State>;
-      readonly after: Shared.TestSnapshot<State>;
-      readonly event: Event;
-    }) => {
-      try {
-        check(after.state.value, before.state.value, event);
-        return true;
-      } catch (cause) {
-        throw new Shared.MachineTestFailure(
-          `Workflow invariant "${name}" failed. State: ${adapter.statePath(after.state.value)}. Event: ${adapter.eventName(event)}; ${String(cause)}`,
-        );
-      }
-    },
-  }));
+  return EffectArray.map(
+    Object.entries(invariants),
+    ([name, check]): Shared.Invariant<State, Event> => ({
+      _tag: "StepInvariant" as const,
+      name,
+      check: ({
+        before,
+        after,
+        event,
+      }: {
+        readonly before: Shared.TestSnapshot<State>;
+        readonly after: Shared.TestSnapshot<State>;
+        readonly event: Event;
+      }) => {
+        try {
+          check(after.state.value, before.state.value, event);
+          return true;
+        } catch (cause) {
+          throw new Shared.MachineTestFailure(
+            `Workflow invariant "${name}" failed. State: ${adapter.statePath(after.state.value)}. Event: ${adapter.eventName(event)}; ${String(cause)}`,
+          );
+        }
+      },
+    }),
+  );
 }
 
 function checkInitial<State, Event>(invariants: Invariants<State, Event>, state: State): void {

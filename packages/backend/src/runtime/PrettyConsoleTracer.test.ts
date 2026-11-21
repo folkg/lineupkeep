@@ -11,6 +11,7 @@ import {
   Redacted,
   Tracer,
 } from "effect";
+import { Array as EffectArray } from "effect";
 
 import layerTools from "#runtime/ProvideLayer.ts";
 
@@ -380,5 +381,5 @@ function fixture(): {
       startTime: 0n,
       ...options,
     });
-  return { lines, span, layer, output: () => lines.join("\n") };
+  return { lines, span, layer, output: () => EffectArray.join(lines, "\n") };
 }

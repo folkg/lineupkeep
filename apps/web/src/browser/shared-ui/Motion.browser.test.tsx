@@ -1,4 +1,5 @@
 import "#web/styles.css";
+import { EffectArray } from "@lineupkeep/collections";
 import { render } from "@solidjs/web";
 import type { JSX } from "@solidjs/web";
 import { For, Show, createSignal } from "solid-js";
@@ -49,7 +50,9 @@ it("keeps every running animation inside the theme's duration tokens", async () 
   setTeams(["Alpha"]);
   await Promise.resolve();
 
-  const durations = new Set(durationTokens.map((name) => time(token(`--theme-duration-${name}`))));
+  const durations = new Set(
+    EffectArray.map(durationTokens, (name) => time(token(`--theme-duration-${name}`))),
+  );
   const running = document.getAnimations();
   expect(running.length, "the settle and the hairline are running").toBeGreaterThanOrEqual(2);
   for (const animation of running) {

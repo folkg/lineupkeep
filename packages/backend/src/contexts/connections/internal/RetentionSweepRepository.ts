@@ -1,5 +1,6 @@
 import { and, eq, exists, isNull, lte, not, or } from "drizzle-orm";
 import { Array, DateTime, Effect, Layer } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { AccountRetention } from "#contexts/auth/AccountRetention.ts";
 import type { LineupRunStatus } from "#contexts/connections/LineupRun.ts";
@@ -75,7 +76,7 @@ export const RetentionSweepLive = Layer.effect(
               )
               .orderBy(lineupRuns.updatedAt)
               .limit(limit);
-            const runIds = oldRunIds.map((row) => row.id);
+            const runIds = EffectArray.map(oldRunIds, (row) => row.id);
             const attempts = yield* deleteRunChildren(tx, lineupRunAttempts, runIds);
             const writeIntents = yield* deleteRunChildren(tx, lineupWriteIntents, runIds);
             const runDiagnostics = yield* deleteRunChildren(tx, lineupRunDiagnostics, runIds);
@@ -97,7 +98,7 @@ export const RetentionSweepLive = Layer.effect(
             let deliveries = 0;
             let requests = 0;
             if (orphanRequests.length > 0) {
-              const requestIds = orphanRequests.map((row) => row.id);
+              const requestIds = EffectArray.map(orphanRequests, (row) => row.id);
               const deliveryRows = Array.isArrayNonEmpty(requestIds)
                 ? yield* tx
                     .select({ id: lineupDeliveries.id })
@@ -240,7 +241,7 @@ function deleteIds(
     | typeof transactionMoves,
   rows: ReadonlyArray<{ readonly id: string }>,
 ): Effect.Effect<number, never> {
-  const ids = rows.map((row) => row.id);
+  const ids = EffectArray.map(rows, (row) => row.id);
   if (!Array.isArrayNonEmpty(ids)) {
     return Effect.succeed(0);
   }
@@ -284,7 +285,7 @@ function deletePlans(
     .delete(transactionPlans)
     .where(
       or(
-        ...plans.map((plan) =>
+        ...EffectArray.map(plans, (plan) =>
           and(eq(transactionPlans.userId, plan.userId), eq(transactionPlans.teamId, plan.teamId)),
         ),
       ),
@@ -307,7 +308,7 @@ function deleteRequestIds(
     .delete(lineupRequests)
     .where(
       or(
-        ...requests.map((request) =>
+        ...EffectArray.map(requests, (request) =>
           and(eq(lineupRequests.userId, request.userId), eq(lineupRequests.id, request.id)),
         ),
       ),

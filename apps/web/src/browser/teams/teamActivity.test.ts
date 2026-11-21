@@ -1,3 +1,4 @@
+import { EffectArray } from "@lineupkeep/collections";
 import { describe, expect, it } from "vitest";
 
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
@@ -19,7 +20,7 @@ describe("run activity", () => {
       failed("failed-1", "2026-10-05T08:00:00.000Z"),
     ]);
 
-    expect(entries.map(summarize)).toEqual(["changed-1", 3, "failed-1"]);
+    expect(EffectArray.map(entries, summarize)).toEqual(["changed-1", 3, "failed-1"]);
   });
 
   it("splits quiet runs on either side of a change", () => {
@@ -31,7 +32,7 @@ describe("run activity", () => {
       quiet("quiet-4", "2026-10-05T08:00:00.000Z"),
     ]);
 
-    expect(entries.map(summarize)).toEqual([2, "changed-1", 2]);
+    expect(EffectArray.map(entries, summarize)).toEqual([2, "changed-1", 2]);
   });
 
   it("folds every silent stretch in a day separately", () => {
@@ -47,13 +48,20 @@ describe("run activity", () => {
       quiet("quiet-6", "2026-10-05T04:00:00.000Z"),
     ]);
 
-    expect(entries.map(summarize)).toEqual(["changed-1", 2, "changed-2", 2, "blocked-1", 2]);
+    expect(EffectArray.map(entries, summarize)).toEqual([
+      "changed-1",
+      2,
+      "changed-2",
+      2,
+      "blocked-1",
+      2,
+    ]);
   });
 
   it("keeps a lone quiet run on its own", () => {
     const entries = groupRuns([quiet("quiet-1", "2026-10-05T12:00:00.000Z")]);
 
-    expect(entries.map(summarize)).toEqual(["quiet-1"]);
+    expect(EffectArray.map(entries, summarize)).toEqual(["quiet-1"]);
   });
 
   it("never folds a blocked, failed, uncertain, or in-progress run", () => {
@@ -64,17 +72,20 @@ describe("run activity", () => {
       inProgress("running-1", "2026-10-05T12:00:00.000Z"),
     ]) {
       expect(
-        groupRuns([loud, quiet("quiet-1", "2026-10-05T11:00:00.000Z")]).map(summarize),
+        EffectArray.map(groupRuns([loud, quiet("quiet-1", "2026-10-05T11:00:00.000Z")]), summarize),
       ).toEqual([loud.run, "quiet-1"]);
     }
   });
 
   it("folds a skipped or superseded run that changed nothing", () => {
     expect(
-      groupRuns([
-        skipped("skipped-1", "2026-10-05T12:00:00.000Z"),
-        superseded("superseded-1", "2026-10-05T11:00:00.000Z"),
-      ]).map(summarize),
+      EffectArray.map(
+        groupRuns([
+          skipped("skipped-1", "2026-10-05T12:00:00.000Z"),
+          superseded("superseded-1", "2026-10-05T11:00:00.000Z"),
+        ]),
+        summarize,
+      ),
     ).toEqual([2]);
   });
 });

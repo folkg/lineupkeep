@@ -1,4 +1,5 @@
 import { Effect, Layer } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { SignInSessions } from "#contexts/auth/SignInSessions.ts";
 import type { SignInSessionId, SignInSessionSummary } from "#contexts/auth/SignInSessions.ts";
@@ -16,7 +17,7 @@ export const SignInSessionsLive = Layer.effect(
     const list = Effect.fn("SignInSessions.list")(function* (userId: UserId) {
       const records = yield* repository.list(userId);
       yield* Effect.annotateCurrentSpan({ "session.listed": records.length });
-      return records.map(toSummary);
+      return EffectArray.map(records, toSummary);
     });
 
     const end = Effect.fn("SignInSessions.end")(function* (

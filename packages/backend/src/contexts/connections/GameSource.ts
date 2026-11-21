@@ -1,5 +1,6 @@
 import { Context, Schema } from "effect";
 import type { DateTime, Effect } from "effect";
+import { Array as EffectArray, Option as EffectOption } from "effect";
 
 import type { FantasyLeague, FantasySport } from "./FantasyTeam.ts";
 import type { ProfessionalGameStatus } from "./ProfessionalGame.ts";
@@ -97,7 +98,9 @@ export function gameSourceRegistryOf(
   return {
     sourceFor: (league) => {
       for (const source of sources) {
-        const coverage = source.capabilities.coverage.find((entry) => entry.league === league);
+        const coverage = EffectOption.getOrUndefined(
+          EffectArray.findFirst(source.capabilities.coverage, (entry) => entry.league === league),
+        );
         if (coverage !== undefined) {
           return { source, coverage };
         }

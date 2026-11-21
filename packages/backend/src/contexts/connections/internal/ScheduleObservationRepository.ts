@@ -1,5 +1,7 @@
 import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
 import { Array, Context, DateTime, Effect, Layer, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Order as EffectOrder } from "effect";
 
 import type { ProviderKey } from "#contexts/connections/Connection.ts";
 import type { FantasySport, TeamId } from "#contexts/connections/FantasyTeam.ts";
@@ -23,6 +25,18 @@ import {
   professionalTeamIdentities,
   ProfessionalTeamIdentityRow,
 } from "./ScheduleObservationTables.ts";
+function sortWithComparator<A>(
+  self: ReadonlyArray<A>,
+  compare: (left: A, right: A) => number,
+): ReadonlyArray<A> {
+  return EffectArray.sort(
+    self,
+    EffectOrder.make<A>((left, right) => {
+      const result = compare(left, right);
+      return result < 0 ? -1 : result > 0 ? 1 : 0;
+    }),
+  );
+}
 
 type ScheduleObservation<Value> = {
   readonly source: string;
@@ -111,7 +125,7 @@ export class ScheduleObservationRepository extends Context.Service<ScheduleObser
         readonly confidence: ScheduleObservationConfidence;
         readonly observations: ReadonlyArray<ScheduleObservationWrite<unknown>>;
       }): Effect.Effect<void, QueryPersistenceFailed> => {
-        const observations = input.observations.map((observation) => ({
+        const observations = EffectArray.map(input.observations, (observation) => ({
           source: input.source,
           subjectKind: input.subjectKind,
           subjectKey: observation.subjectKey,
@@ -131,7 +145,7 @@ export class ScheduleObservationRepository extends Context.Service<ScheduleObser
             newestByWindow.set(key, observation);
           }
         }
-        const rows = [...newestByWindow.values()].toSorted((left, right) =>
+        const rows = sortWithComparator([...newestByWindow.values()], (left, right) =>
           observationKey(left).localeCompare(observationKey(right)),
         );
         return chunked(rows, maxInsertRows(scheduleObservations), (chunk) =>
@@ -186,7 +200,7 @@ export class ScheduleObservationRepository extends Context.Service<ScheduleObser
             subjectKind: "fantasy_team",
             source: input.source,
             confidence: input.confidence,
-            observations: input.observations.map((observation) => ({
+            observations: EffectArray.map(input.observations, (observation) => ({
               ...observation,
               subjectKey: input.subjectKey,
             })),
@@ -290,16 +304,17 @@ export class ScheduleObservationRepository extends Context.Service<ScheduleObser
 
       const recordTeamIdentities = Effect.fn("ScheduleObservationRepository.recordTeamIdentities")(
         function* (identities: ReadonlyArray<TeamIdentity>) {
-          const rows = identities
-            .map((identity) => ({
+          const rows = sortWithComparator(
+            EffectArray.map(identities, (identity) => ({
               sport: identity.sport,
               source: identity.source,
               sourceTeamIdentifier: identity.sourceTeamIdentifier,
               provider: identity.provider,
               providerTeamKey: identity.providerTeamKey,
               observedAt: DateTime.toDateUtc(identity.observedAt),
-            }))
-            .toSorted((left, right) => identityKey(left).localeCompare(identityKey(right)));
+            })),
+            (left, right) => identityKey(left).localeCompare(identityKey(right)),
+          );
           yield* chunked(rows, maxInsertRows(professionalTeamIdentities), (chunk) =>
             database
               .insert(professionalTeamIdentities)
@@ -392,15 +407,18 @@ function observationKey(row: {
   readonly coversTo: string;
   readonly observedAt: Date;
 }): string {
-  return [
-    row.source,
-    row.subjectKind,
-    row.subjectKey,
-    row.observationKind,
-    row.coversFrom,
-    row.coversTo,
-    row.observedAt.toISOString(),
-  ].join("|");
+  return EffectArray.join(
+    [
+      row.source,
+      row.subjectKind,
+      row.subjectKey,
+      row.observationKind,
+      row.coversFrom,
+      row.coversTo,
+      row.observedAt.toISOString(),
+    ],
+    "|",
+  );
 }
 
 function identityKey(identity: {
@@ -411,12 +429,15 @@ function identityKey(identity: {
   readonly providerTeamKey: string;
   readonly observedAt: Date;
 }): string {
-  return [
-    identity.sport,
-    identity.source,
-    identity.sourceTeamIdentifier,
-    identity.provider,
-    identity.providerTeamKey,
-    identity.observedAt.toISOString(),
-  ].join("|");
+  return EffectArray.join(
+    [
+      identity.sport,
+      identity.source,
+      identity.sourceTeamIdentifier,
+      identity.provider,
+      identity.providerTeamKey,
+      identity.observedAt.toISOString(),
+    ],
+    "|",
+  );
 }

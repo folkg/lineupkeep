@@ -1,4 +1,6 @@
 import { Effect, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption, Order as EffectOrder } from "effect";
 
 import {
   Flag,
@@ -14,6 +16,22 @@ import type { YahooCoverage, YahooLeagueKey, YahooTeamKey } from "#yahoo/keys.ts
 import type { YahooTransactionCounts } from "./player.ts";
 import { GamesPlayedDetailPayload, gamesPlayedOf } from "./team.ts";
 import type { YahooGamesPlayed } from "./team.ts";
+function sortWithComparator<A>(
+  self: ReadonlyArray<A>,
+  compare: (left: A, right: A) => number,
+): ReadonlyArray<A> {
+  return EffectArray.sort(
+    self,
+    EffectOrder.make<A>((left, right) => {
+      const result = compare(left, right);
+      return result < 0 ? -1 : result > 0 ? 1 : 0;
+    }),
+  );
+}
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 export function decodeRoster(
   payload: unknown,
@@ -45,7 +63,7 @@ export function decodeRoster(
       leagueKey: decoded.team.team_key.slice(0, decoded.team.team_key.lastIndexOf(".t.")),
       coverage,
       editable: rows.declared?.is_editable,
-      players: rows.players.map(rosterPlayerOf),
+      players: EffectArray.map(rows.players, rosterPlayerOf),
     };
   });
 }
@@ -56,13 +74,19 @@ function rosterRows(
   if (isReadonlyArray(roster)) {
     return {
       declared: undefined,
-      players: roster.flatMap((entry) => entry.players),
+      players: EffectArray.flatMap(roster, (entry) => {
+        const flatMapped1 = entry.players;
+        return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+      }),
     };
   }
   const entries = "entries" in roster ? roster.entries : [roster];
   return {
     declared: roster,
-    players: entries.flatMap((entry) => entry.players),
+    players: EffectArray.flatMap(entries, (entry) => {
+      const flatMapped2 = entry.players;
+      return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+    }),
   };
 }
 
@@ -70,13 +94,19 @@ function leagueRosterRows(roster: LeagueRoster): RosterRows<typeof LeagueRosterP
   if (isReadonlyArray(roster)) {
     return {
       declared: undefined,
-      players: roster.flatMap((entry) => entry.players),
+      players: EffectArray.flatMap(roster, (entry) => {
+        const flatMapped3 = entry.players;
+        return arrayValueIsArray(flatMapped3) ? flatMapped3 : [flatMapped3];
+      }),
     };
   }
   const entries = "entries" in roster ? roster.entries : [roster];
   return {
     declared: roster,
-    players: entries.flatMap((entry) => entry.players),
+    players: EffectArray.flatMap(entries, (entry) => {
+      const flatMapped4 = entry.players;
+      return arrayValueIsArray(flatMapped4) ? flatMapped4 : [flatMapped4];
+    }),
   };
 }
 
@@ -86,7 +116,9 @@ function coverageOf(
   operation: "read_roster" | "read_league_rosters",
 ): Effect.Effect<YahooCoverage, YahooParseError> {
   return Effect.gen(function* () {
-    const coverageTypes = new Set(players.map((player) => player.selected_position.coverage_type));
+    const coverageTypes = new Set(
+      EffectArray.map(players, (player) => player.selected_position.coverage_type),
+    );
     if (coverageTypes.size !== 1) {
       return yield* new YahooParseError({
         operation,
@@ -96,9 +128,11 @@ function coverageOf(
     const coverageType = [...coverageTypes][0];
     if (coverageType === "week") {
       const weeks = new Set(
-        players.flatMap((player) =>
-          player.selected_position.week === undefined ? [] : [player.selected_position.week],
-        ),
+        EffectArray.flatMap(players, (player) => {
+          const flatMapped5 =
+            player.selected_position.week === undefined ? [] : [player.selected_position.week];
+          return arrayValueIsArray(flatMapped5) ? flatMapped5 : [flatMapped5];
+        }),
       );
       const week = singleNumber(weeks) ?? declared?.week;
       if (weeks.size > 1 || week === undefined) {
@@ -117,9 +151,11 @@ function coverageOf(
     }
     if (coverageType === "date") {
       const dates = new Set(
-        players.flatMap((player) =>
-          player.selected_position.date === undefined ? [] : [player.selected_position.date],
-        ),
+        EffectArray.flatMap(players, (player) => {
+          const flatMapped6 =
+            player.selected_position.date === undefined ? [] : [player.selected_position.date];
+          return arrayValueIsArray(flatMapped6) ? flatMapped6 : [flatMapped6];
+        }),
       );
       const date = singleText(dates) ?? declared?.date;
       if (dates.size > 1 || date === undefined) {
@@ -160,7 +196,7 @@ function rosterPlayerOf(player: typeof LeagueRosterPlayerPayload.Type): YahooRos
     positionType: optionalNonEmpty(player.position_type),
     proTeamAbbreviation: optionalNonEmpty(player.editorial_team_abbr),
     proTeamKey: optionalNonEmpty(player.editorial_team_key),
-    eligiblePositions: (player.eligible_positions ?? []).map(({ position }) => position),
+    eligiblePositions: EffectArray.map(player.eligible_positions ?? [], ({ position }) => position),
     selectedPosition: selectedPositionOf(player.selected_position),
     editable: player.is_editable,
     statusCode: optionalNonEmpty(player.status),
@@ -193,13 +229,18 @@ function startingStatusOf(
   if (status === undefined) {
     return undefined;
   }
-  const starting = status.find((entry) => entry.is_starting === 0 || entry.is_starting === 1);
+  const starting = EffectOption.getOrUndefined(
+    EffectArray.findFirst(status, (entry) => entry.is_starting === 0 || entry.is_starting === 1),
+  );
   if (starting === undefined) {
     return undefined;
   }
-  const coverageEntry = status.find(
-    (entry) =>
-      entry.coverage_type !== undefined || entry.week !== undefined || entry.date !== undefined,
+  const coverageEntry = EffectOption.getOrUndefined(
+    EffectArray.findFirst(
+      status,
+      (entry) =>
+        entry.coverage_type !== undefined || entry.week !== undefined || entry.date !== undefined,
+    ),
   );
   const coverage =
     coverageEntry?.coverage_type === "week" && coverageEntry.week !== undefined
@@ -284,7 +325,7 @@ export type YahooStartingStatus = {
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !EffectArray.isArray(value);
 }
 
 function pendingTransactionsOf(value: unknown): ReadonlyArray<YahooPendingTransaction> | undefined {
@@ -292,7 +333,7 @@ function pendingTransactionsOf(value: unknown): ReadonlyArray<YahooPendingTransa
     return undefined;
   }
   const entries = isReadonlyArray(value) ? value : [];
-  return entries.flatMap((entry) => {
+  return EffectArray.flatMap(entries, (entry) => {
     const nested = isRecord(entry) && "transaction" in entry ? entry["transaction"] : entry;
     const transaction = isReadonlyArray(nested) ? nested[0] : nested;
     if (!isRecord(transaction)) {
@@ -469,7 +510,7 @@ export function decodeLeagueRosters(
       teams.push({
         teamKey: team.team_key,
         name: team.name,
-        players: rows.players.map(rosterPlayerOf),
+        players: EffectArray.map(rows.players, rosterPlayerOf),
       });
     }
     if (coverage === undefined) {
@@ -481,7 +522,7 @@ export function decodeLeagueRosters(
     return {
       leagueKey: requestedLeagueKey,
       coverage,
-      teams: teams.toSorted((left, right) =>
+      teams: sortWithComparator(teams, (left, right) =>
         left.teamKey < right.teamKey ? -1 : left.teamKey > right.teamKey ? 1 : 0,
       ),
     };
@@ -521,13 +562,13 @@ export function decodeLeagueRostersMany(
               editable: rows.declared?.is_editable,
               pendingTransactions: pendingTransactionsOf(team.transactions),
               gamesPlayed: gamesPlayedOf(team.games_played),
-              players: rows.players.map(rosterPlayerOf),
+              players: EffectArray.map(rows.players, rosterPlayerOf),
             });
           }
         }
       }
     }
-    return rosters.toSorted((left, right) =>
+    return sortWithComparator(rosters, (left, right) =>
       left.teamKey < right.teamKey ? -1 : left.teamKey > right.teamKey ? 1 : 0,
     );
   });

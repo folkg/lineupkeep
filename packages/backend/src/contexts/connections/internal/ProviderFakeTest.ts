@@ -1,4 +1,6 @@
 import { Context, DateTime, Deferred, Effect, Layer, Option, Redacted, Ref, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 
 import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
 import {
@@ -48,6 +50,17 @@ import type {
 } from "#contexts/connections/Provider.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { ProviderRegistry, providerRegistryOf } from "#contexts/connections/ProviderRegistry.ts";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
 
 type FakeWriteAction = "accept" | "reject" | "lost_response" | "unavailable" | "invalid";
 
@@ -804,7 +817,8 @@ const providerFake = Effect.gen(function* () {
         withdrawTradeRequests: [...state.withdrawTradeRequests, input.transactionKey],
         ...(current.withdrawTradeAction === "accept"
           ? {
-              pendingTrades: state.pendingTrades.filter(
+              pendingTrades: EffectArray.filter(
+                state.pendingTrades,
                 (offer) => offer.transactionKey !== input.transactionKey,
               ),
             }
@@ -843,7 +857,7 @@ const providerFake = Effect.gen(function* () {
         yield* Ref.update(world.state, (state) =>
           updateRoster(state, input.providerTeamKey, (roster) => ({
             ...roster,
-            players: roster.players.map((player) =>
+            players: EffectArray.map(roster.players, (player) =>
               player.providerPlayerKey === input.providerPlayerKey
                 ? { ...player, slot: { status: "verified" as const, slot: input.slot } }
                 : player,
@@ -864,7 +878,9 @@ const providerFake = Effect.gen(function* () {
       }
       if (
         new Set(input.providerPlayerKeys).size !== input.providerPlayerKeys.length ||
-        input.providerPlayerKeys.some((key) => current.refusedPlayerDetailKeys.has(key))
+        EffectArray.some(input.providerPlayerKeys, (key) =>
+          current.refusedPlayerDetailKeys.has(key),
+        )
       ) {
         return yield* ProviderResponseInvalid.make({
           operation: "read_player_details",
@@ -873,28 +889,41 @@ const providerFake = Effect.gen(function* () {
       }
       const basis = yield* fakePlayerBasis(input.period, input.sport, input.currentPeriod);
       const requested = new Set(input.providerPlayerKeys);
-      return current.playerDetails
-        .filter((player) => requested.has(player.providerPlayerKey))
-        .map((player) => ({
+      return EffectArray.map(
+        EffectArray.filter(current.playerDetails, (player) =>
+          requested.has(player.providerPlayerKey),
+        ),
+        (player) => ({
           ...player,
           actual:
             player.actual === undefined
               ? undefined
               : { basis, stats: player.actual.stats, notAggregated: [] },
-        }));
+        }),
+      );
     }),
     readPlayerWeeks: Effect.fn("FakeProvider.readPlayerWeeks")(function* (input) {
       const current = yield* prepare(input, "read_player_weeks");
       const rostered = new Map(
-        (current.roster?.players ?? []).map(
-          (player) => [player.providerPlayerKey, player] as const,
+        optionalArrayValue(current.roster?.players ?? [], (value) =>
+          EffectArray.map(value, (player) => [player.providerPlayerKey, player] as const),
         ),
       );
-      return input.providerPlayerKeys.map((providerPlayerKey) => {
+      return EffectArray.map(input.providerPlayerKeys, (providerPlayerKey) => {
         const configured =
-          current.playerWeeks.find(
-            (week) => week.providerPlayerKey === providerPlayerKey && week.week === input.week.week,
-          ) ?? current.playerWeeks.find((week) => week.providerPlayerKey === providerPlayerKey);
+          EffectOption.getOrUndefined(
+            EffectArray.findFirst(
+              current.playerWeeks,
+              (week) =>
+                week.providerPlayerKey === providerPlayerKey && week.week === input.week.week,
+            ),
+          ) ??
+          EffectOption.getOrUndefined(
+            EffectArray.findFirst(
+              current.playerWeeks,
+              (week) => week.providerPlayerKey === providerPlayerKey,
+            ),
+          );
         if (configured !== undefined) {
           return configured;
         }
@@ -911,13 +940,16 @@ const providerFake = Effect.gen(function* () {
     readPlayerWeekOpponents: Effect.fn("FakeProvider.readPlayerWeekOpponents")(function* (input) {
       const current = yield* prepare(input, "read_player_week_opponents");
       const rostered = new Map(
-        (current.roster?.players ?? []).map(
-          (player) => [player.providerPlayerKey, player] as const,
+        optionalArrayValue(current.roster?.players ?? [], (value) =>
+          EffectArray.map(value, (player) => [player.providerPlayerKey, player] as const),
         ),
       );
-      return input.providerPlayerKeys.map((providerPlayerKey) => {
-        const configured = current.playerWeeks.find(
-          (week) => week.providerPlayerKey === providerPlayerKey && week.week === input.week.week,
+      return EffectArray.map(input.providerPlayerKeys, (providerPlayerKey) => {
+        const configured = EffectOption.getOrUndefined(
+          EffectArray.findFirst(
+            current.playerWeeks,
+            (week) => week.providerPlayerKey === providerPlayerKey && week.week === input.week.week,
+          ),
         );
         const player = rostered.get(providerPlayerKey);
         const plays = configured?.plays ?? player?.scheduled ?? true;
@@ -939,17 +971,18 @@ const providerFake = Effect.gen(function* () {
         });
       }
       const requested = new Set(input.providerPlayerKeys);
-      const details = current.playerDetails.filter((player) =>
+      const details = EffectArray.filter(current.playerDetails, (player) =>
         requested.has(player.providerPlayerKey),
       );
-      return input.periods.map((period) => ({ period, details }));
+      return EffectArray.map(input.periods, (period) => ({ period, details }));
     }),
     searchPlayers: Effect.fn("FakeProvider.searchPlayers")(function* (input) {
       const current = yield* prepare(input, "search_players");
       const query = input.query?.toLocaleLowerCase();
       const rows: ReadonlyArray<ProviderPlayerSearchResult["players"][number]> =
         current.searchPlayers ??
-        current.playerDetails.flatMap(
+        EffectArray.flatMap(
+          current.playerDetails,
           (player): ReadonlyArray<ProviderPlayerSearchResult["players"][number]> => {
             if (
               player.rosterStatus === "unknown" ||
@@ -985,7 +1018,8 @@ const providerFake = Effect.gen(function* () {
             ];
           },
         );
-      const filtered = rows.filter(
+      const filtered = EffectArray.filter(
+        rows,
         (player) =>
           (input.availability === "all"
             ? player.availability !== "rostered"
@@ -1018,30 +1052,37 @@ const providerFake = Effect.gen(function* () {
     }),
     readMatchups: Effect.fn("FakeProvider.readMatchups")(function* (input) {
       const current = yield* prepare(input, "read_matchups");
-      return current.matchups.filter((matchup) => matchup.period.week === input.period.week);
+      return EffectArray.filter(
+        current.matchups,
+        (matchup) => matchup.period.week === input.period.week,
+      );
     }),
     readTransactions: Effect.fn("FakeProvider.readTransactions")(function* (input) {
       const current = yield* prepare(input, "read_transactions");
       const offset = input.offset ?? 0;
-      return current.transactions
-        .filter(
-          (transaction) =>
-            input.providerTeamKey === undefined ||
-            transaction.teams.some((team) => team.providerTeamKey === input.providerTeamKey),
-        )
-        .slice(offset, offset + input.limit);
+      return EffectArray.filter(
+        current.transactions,
+        (transaction) =>
+          input.providerTeamKey === undefined ||
+          EffectArray.some(
+            transaction.teams,
+            (team) => team.providerTeamKey === input.providerTeamKey,
+          ),
+      ).slice(offset, offset + input.limit);
     }),
     readCompletedTrades: Effect.fn("FakeProvider.readCompletedTrades")(function* (input) {
       const current = yield* prepare(input, "read_completed_trades");
-      return current.completedTrades
-        .filter((transaction) =>
-          transaction.teams.some((team) => team.providerTeamKey === input.providerTeamKey),
-        )
-        .slice(0, input.limit);
+      return EffectArray.filter(current.completedTrades, (transaction) =>
+        EffectArray.some(
+          transaction.teams,
+          (team) => team.providerTeamKey === input.providerTeamKey,
+        ),
+      ).slice(0, input.limit);
     }),
     readPendingTrades: Effect.fn("FakeProvider.readPendingTrades")(function* (input) {
       const current = yield* prepare(input, "read_pending_trades");
-      return current.pendingTrades.filter(
+      return EffectArray.filter(
+        current.pendingTrades,
         (offer) =>
           offer.proposer?.providerTeamKey === input.providerTeamKey ||
           offer.receiver?.providerTeamKey === input.providerTeamKey,
@@ -1049,14 +1090,15 @@ const providerFake = Effect.gen(function* () {
     }),
     readDraftResults: Effect.fn("FakeProvider.readDraftResults")(function* (input) {
       const current = yield* prepare(input, "read_draft_results");
-      return current.draftResults.filter((pick) =>
+      return EffectArray.filter(current.draftResults, (pick) =>
         pick.providerTeamKey.startsWith(`${input.providerLeagueKey}.t.`),
       );
     }),
     readAvailableDraftPicks: Effect.fn("FakeProvider.readAvailableDraftPicks")(function* (input) {
       const current = yield* prepare(input, "read_available_draft_picks");
       const requested = new Set(input.providerTeamKeys);
-      return current.availableDraftPicks.filter(
+      return EffectArray.filter(
+        current.availableDraftPicks,
         (pick) =>
           pick.providerTeamKey.startsWith(`${input.providerLeagueKey}.t.`) &&
           requested.has(pick.providerTeamKey),
@@ -1064,13 +1106,15 @@ const providerFake = Effect.gen(function* () {
     }),
     readLeagueTeams: Effect.fn("FakeProvider.readLeagueTeams")(function* (input) {
       const current = yield* prepare(input, "read_league_teams");
-      return current.leagueTeams.filter(
+      return EffectArray.filter(
+        current.leagueTeams,
         (team) => team.providerLeagueKey === input.providerLeagueKey,
       );
     }),
     readLeagueRosters: Effect.fn("FakeProvider.readLeagueRosters")(function* (input) {
       const current = yield* prepare(input, "read_league_rosters");
-      const rosters = (current.leagueRosters ?? []).filter(
+      const rosters = EffectArray.filter(
+        current.leagueRosters ?? [],
         (roster) => roster.providerLeagueKey === input.providerLeagueKey,
       );
       if (rosters.length === 0) {
@@ -1215,8 +1259,8 @@ function planFakeLineup(
       detail: "This league publishes no score the custom planner can use.",
     };
   }
-  const byKey = new Map(scores.map((score) => [score.providerPlayerKey, score]));
-  const values = input.roster.players.map((player): ProviderPlayerScore => {
+  const byKey = new Map(EffectArray.map(scores, (score) => [score.providerPlayerKey, score]));
+  const values = EffectArray.map(input.roster.players, (player): ProviderPlayerScore => {
     const declared = byKey.get(player.providerPlayerKey);
     if (declared === undefined) {
       throw new Error("The fake provider must declare a score for every roster player.");
@@ -1346,10 +1390,10 @@ function fakePendingTrade(input: {
     receiver,
     unusedRosterSpots: undefined,
     players: [
-      ...input.send.map((key) => player(key, proposer, receiver)),
-      ...input.receive.map((key) => player(key, receiver, proposer)),
+      ...EffectArray.map(input.send, (key) => player(key, proposer, receiver)),
+      ...EffectArray.map(input.receive, (key) => player(key, receiver, proposer)),
     ],
-    picks: input.picks.map((pick) => ({
+    picks: EffectArray.map(input.picks, (pick) => ({
       round: pick.round,
       from: { providerTeamKey: pick.sourceTeamKey, name: undefined },
       to: { providerTeamKey: pick.destinationTeamKey, name: undefined },
@@ -1434,12 +1478,17 @@ function rosterAfterTransaction(
   details: ReadonlyArray<ProviderPlayerDetail>,
 ): ProviderRoster {
   const dropped = new Set(input.drops);
-  const kept = roster.players.filter((player) => !dropped.has(player.providerPlayerKey));
-  const added = input.adds.flatMap((key) => {
-    if (kept.some((player) => player.providerPlayerKey === key)) {
+  const kept = EffectArray.filter(
+    roster.players,
+    (player) => !dropped.has(player.providerPlayerKey),
+  );
+  const added = EffectArray.flatMap(input.adds, (key) => {
+    if (EffectArray.some(kept, (player) => player.providerPlayerKey === key)) {
       return [];
     }
-    const detail = details.find((player) => player.providerPlayerKey === key);
+    const detail = EffectOption.getOrUndefined(
+      EffectArray.findFirst(details, (player) => player.providerPlayerKey === key),
+    );
     if (detail === undefined) {
       return [];
     }
@@ -1473,11 +1522,11 @@ function applyAssignments(
   assignments: ReadonlyArray<ProviderLineupAssignment>,
 ): ProviderRoster {
   const slots = new Map(
-    assignments.map((assignment) => [assignment.providerPlayerKey, assignment.slot]),
+    EffectArray.map(assignments, (assignment) => [assignment.providerPlayerKey, assignment.slot]),
   );
   return {
     ...roster,
-    players: roster.players.map((player) => {
+    players: EffectArray.map(roster.players, (player) => {
       const assigned = slots.get(player.providerPlayerKey);
       return {
         ...player,
@@ -1499,10 +1548,13 @@ function scheduleForPeriod(
   return {
     ...schedule,
     period,
-    dates: schedule.dates.filter((date) => covered.has(date)),
-    players: schedule.players.map((player) => ({
+    dates: EffectArray.filter(schedule.dates, (date) => covered.has(date)),
+    players: EffectArray.map(schedule.players, (player) => ({
       ...player,
-      games: player.games.filter((game) => game.date !== undefined && covered.has(game.date)),
+      games: EffectArray.filter(
+        player.games,
+        (game) => game.date !== undefined && covered.has(game.date),
+      ),
     })),
   };
 }

@@ -3,6 +3,13 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { join, relative } from "node:path";
 
+import { Array as EffectArray } from "effect";
+import { Order as EffectOrder } from "effect";
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
+
 export function describeSource(root: string): SourceDescription {
   const vcs = versionControl(root);
   switch (vcs) {
@@ -28,15 +35,21 @@ export function sourceFingerprint(root: string, selected: ReadonlyArray<string>)
     versionControl(root) === "git"
       ? command(root, "git", "ls-files", "-z", "--cached", "--others", "--exclude-standard")
       : command(root, "jj", "file", "list", "-T", 'path ++ "\\0"');
-  const scratch = scratchTasks(selected).flatMap((directory) =>
-    readdirSync(join(root, directory), { recursive: true, withFileTypes: true })
-      .filter((entry) => entry.isFile())
-      .map((entry) => relative(root, join(entry.parentPath, entry.name))),
-  );
+  const scratch = EffectArray.flatMap(scratchTasks(selected), (directory) => {
+    const flatMapped1 = EffectArray.map(
+      EffectArray.filter(
+        readdirSync(join(root, directory), { recursive: true, withFileTypes: true }),
+        (entry) => entry.isFile(),
+      ),
+      (entry) => relative(root, join(entry.parentPath, entry.name)),
+    );
+    return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+  });
   const hash = createHash("sha256");
-  for (const path of [...new Set([...files.split("\0"), ...scratch, ...selected])]
-    .filter(Boolean)
-    .toSorted()) {
+  for (const path of EffectArray.sort(
+    EffectArray.filter([...new Set([...files.split("\0"), ...scratch, ...selected])], Boolean),
+    EffectOrder.String,
+  )) {
     hash.update(`${path}\0`);
     const file = join(root, path);
     hash.update(existsSync(file) ? readFileSync(file) : "\0deleted\0");
@@ -47,9 +60,10 @@ export function sourceFingerprint(root: string, selected: ReadonlyArray<string>)
 export function scratchTasks(selected: ReadonlyArray<string>): ReadonlyArray<string> {
   return [
     ...new Set(
-      selected
-        .filter((path) => path.startsWith("e2e/scratch/"))
-        .map((path) => path.split("/").slice(0, 3).join("/")),
+      EffectArray.map(
+        EffectArray.filter(selected, (path) => path.startsWith("e2e/scratch/")),
+        (path) => EffectArray.join(path.split("/").slice(0, 3), "/"),
+      ),
     ),
   ];
 }

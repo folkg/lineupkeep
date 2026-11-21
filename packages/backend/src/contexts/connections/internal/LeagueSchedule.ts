@@ -1,7 +1,21 @@
 import { DateTime } from "effect";
+import { Array as EffectArray } from "effect";
+import { Order as EffectOrder } from "effect";
 
 import type { ProfessionalGame } from "#contexts/connections/ProfessionalGame.ts";
 import { leagueOffNightDefinition } from "#contexts/connections/ProfessionalGame.ts";
+function sortWithComparator<A>(
+  self: ReadonlyArray<A>,
+  compare: (left: A, right: A) => number,
+): ReadonlyArray<A> {
+  return EffectArray.sort(
+    self,
+    EffectOrder.make<A>((left, right) => {
+      const result = compare(left, right);
+      return result < 0 ? -1 : result > 0 ? 1 : 0;
+    }),
+  );
+}
 
 const leagueOffNightTeamShare = leagueOffNightDefinition.maximumTeamShare;
 
@@ -34,7 +48,7 @@ export function leagueGamesByDate(
     byDate.set(game.date, entry);
   }
   return new Map(
-    [...byDate.entries()].map(([date, entry]) => [
+    EffectArray.map([...byDate.entries()], ([date, entry]) => [
       date,
       { date, games: entry.games, teamsPlaying: entry.teams.size },
     ]),
@@ -45,13 +59,15 @@ export function gamesForTeam(
   games: ReadonlyArray<ProfessionalGame>,
   providerTeamKey: string,
 ): ReadonlyArray<ProfessionalGame> {
-  return games
-    .filter(
+  return EffectArray.filter(
+    EffectArray.filter(
+      games,
       (game) =>
         game.home.providerTeamKey === providerTeamKey ||
         game.away.providerTeamKey === providerTeamKey,
-    )
-    .filter(gameCanBePlayed);
+    ),
+    gameCanBePlayed,
+  );
 }
 
 export function countGamesForTeam(
@@ -65,7 +81,9 @@ export function gameDatesForTeam(
   games: ReadonlyArray<ProfessionalGame>,
   providerTeamKey: string,
 ): ReadonlyArray<string> {
-  return [...new Set(gamesForTeam(games, providerTeamKey).map((game) => game.date))].sort();
+  return [
+    ...new Set(EffectArray.map(gamesForTeam(games, providerTeamKey), (game) => game.date)),
+  ].sort();
 }
 
 export function nextGameForTeams(input: {
@@ -73,14 +91,18 @@ export function nextGameForTeams(input: {
   readonly providerTeamKeys: ReadonlySet<string>;
   readonly after: DateTime.Utc;
 }): ProfessionalGame | undefined {
-  return input.games
-    .filter((game) => gameCanBePlayed(game) && gameInvolvesTeam(game, input.providerTeamKeys))
-    .filter(
+  return sortWithComparator(
+    EffectArray.filter(
+      EffectArray.filter(
+        input.games,
+        (game) => gameCanBePlayed(game) && gameInvolvesTeam(game, input.providerTeamKeys),
+      ),
       (game) =>
         game.startTime !== null &&
         DateTime.toEpochMillis(game.startTime.instant) > DateTime.toEpochMillis(input.after),
-    )
-    .toSorted((left, right) => startMillis(left) - startMillis(right))[0];
+    ),
+    (left, right) => startMillis(left) - startMillis(right),
+  )[0];
 }
 
 export function gameInvolvesTeam(
@@ -104,7 +126,8 @@ function startMillis(game: ProfessionalGame): number {
 }
 
 function gameTeams(game: ProfessionalGame): ReadonlyArray<string> {
-  return [game.home, game.away].map(
+  return EffectArray.map(
+    [game.home, game.away],
     (team) => team.providerTeamKey ?? `source:${team.sourceTeamIdentifier}`,
   );
 }

@@ -1,10 +1,12 @@
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { Effect } from "effect";
 import { Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { ServiceIdentity } from "./serviceSetup.ts";
 import { expect, signUp, test } from "./support.ts";
 import { isServiceCallAttachment, ServiceCallJson } from "./verify/serviceEvidence.ts";
+
 test("retains failed service outcomes and rejects non-JSON results", async ({ services }) => {
   const identity = await services.signIn("owner");
 
@@ -15,12 +17,11 @@ test("retains failed service outcomes and rejects non-JSON results", async ({ se
     services.inspect(identity, "return a non-JSON value", "nonJsonResult"),
   ).rejects.toThrow();
 
-  const calls = test
-    .info()
-    .attachments.filter(isServiceCallAttachment)
-    .map((attachment) =>
+  const calls = EffectArray.map(
+    EffectArray.filter(test.info().attachments, isServiceCallAttachment),
+    (attachment) =>
       Effect.runSync(Schema.decodeUnknownEffect(ServiceCallJson)(attachment.body?.toString())),
-    );
+  );
   expect(calls[0]).toMatchObject({
     phase: "Action",
     persona: "owner",
@@ -58,15 +59,24 @@ test("signs in named personas headlessly and isolates persisted service outcomes
   expect(owned).toMatchObject([{ status: "ready" }]);
   expect(isolated).toEqual([]);
   expect(browser.contexts()).toEqual([]);
-  const evidence = test
-    .info()
-    .attachments.filter(isServiceCallAttachment)
-    .map((attachment) =>
+  const evidence = EffectArray.map(
+    EffectArray.filter(test.info().attachments, isServiceCallAttachment),
+    (attachment) =>
       Effect.runSync(Schema.decodeUnknownEffect(ServiceCallJson)(attachment.body?.toString())),
-    );
-  expect(evidence.map(({ phase }) => phase)).toEqual(["Setup", "Action", "Read", "Read"]);
-  expect(evidence.map(({ persona }) => persona)).toEqual(["owner", "owner", "owner", "other"]);
-  expect(evidence.every(({ traceId }) => /^[a-f0-9]{32}$/u.test(traceId))).toBe(true);
+  );
+  expect(EffectArray.map(evidence, ({ phase }) => phase)).toEqual([
+    "Setup",
+    "Action",
+    "Read",
+    "Read",
+  ]);
+  expect(EffectArray.map(evidence, ({ persona }) => persona)).toEqual([
+    "owner",
+    "owner",
+    "owner",
+    "other",
+  ]);
+  expect(EffectArray.every(evidence, ({ traceId }) => /^[a-f0-9]{32}$/u.test(traceId))).toBe(true);
   expect(evidence[1]).toMatchObject({
     outcome: { status: "succeeded" },
     execution: "application",
@@ -95,13 +105,12 @@ test("uses named browser personas with their real sessions for service calls", a
   );
 
   expect(isolated).toEqual([]);
-  const calls = test
-    .info()
-    .attachments.filter(isServiceCallAttachment)
-    .map((attachment) =>
+  const calls = EffectArray.map(
+    EffectArray.filter(test.info().attachments, isServiceCallAttachment),
+    (attachment) =>
       Effect.runSync(Schema.decodeUnknownEffect(ServiceCallJson)(attachment.body?.toString())),
-    );
-  expect(calls.map(({ persona }) => persona)).toEqual(["owner", "other"]);
+  );
+  expect(EffectArray.map(calls, ({ persona }) => persona)).toEqual(["owner", "other"]);
 });
 
 test("rejects anonymous service invocations and invalid programs or arguments", async ({

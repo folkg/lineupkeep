@@ -15,6 +15,7 @@ import { Connections } from "@lineupkeep/backend/connections/Connections";
 import { fantasyQueryScopes } from "@lineupkeep/backend/connections/QueryScopes";
 import { Effect, Schema } from "effect";
 import type { Layer } from "effect";
+import { Array as EffectArray } from "effect";
 import { Tool, Toolkit } from "effect/ai";
 
 import { RequiredScope } from "./toolAuthorization";
@@ -93,7 +94,7 @@ export function connectionToolHandlers(
       return connectionTools.of({
         list_connections: () =>
           connections.list(agent.userId).pipe(
-            Effect.map((rows) => ({ connections: rows.map(toConnectionView) })),
+            Effect.map((rows) => ({ connections: EffectArray.map(rows, toConnectionView) })),
             mapOutcome,
           ),
       });

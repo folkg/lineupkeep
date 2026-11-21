@@ -1,5 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { Arbitrary, DateTime, Effect, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import * as MachineTest from "#utilities/machineTest.ts";
 
@@ -17,7 +18,8 @@ const invariants = [
   define.state(
     "a paused team owns its fantasy-day context",
     ({ snapshot }) =>
-      ["timeZone", "fantasyDay", "fantasyDayVersion"].every(
+      EffectArray.every(
+        ["timeZone", "fantasyDay", "fantasyDayVersion"],
         (key) => key in snapshot.state.value,
       ) ===
       (snapshot.state.value._tag === "PausedUntilFantasyDayEnd"),

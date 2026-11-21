@@ -1,3 +1,4 @@
+import { EffectArray } from "@lineupkeep/collections";
 import { mutationOptions } from "@tanstack/solid-query";
 import type { MutationFunctionContext } from "@tanstack/solid-query";
 
@@ -10,6 +11,17 @@ import type {
 
 import { teamQueries } from "./teamQueries";
 import type { TeamRemote } from "./teamRemote";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
 
 export const teamMutations = {
   control: (remote: TeamRemote) =>
@@ -42,17 +54,19 @@ function storeSavedNote(
     return;
   }
   context.client.setQueryData<ReadonlyArray<TeamSummaryView>>(teamQueries.listKey, (current) =>
-    current?.map((summary) =>
-      summary.team.id === variables.team
-        ? {
-            ...summary,
-            team: {
-              ...summary.team,
-              ownerNote: saved.note,
-              ownerNoteUpdatedAt: saved.updatedAt,
-            },
-          }
-        : summary,
+    optionalArrayValue(current, (value) =>
+      EffectArray.map(value, (summary) =>
+        summary.team.id === variables.team
+          ? {
+              ...summary,
+              team: {
+                ...summary.team,
+                ownerNote: saved.note,
+                ownerNoteUpdatedAt: saved.updatedAt,
+              },
+            }
+          : summary,
+      ),
     ),
   );
 }

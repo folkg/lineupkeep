@@ -1,3 +1,4 @@
+import { EffectArray } from "@lineupkeep/collections";
 import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
 import type { Accessor, Element } from "solid-js";
@@ -231,9 +232,11 @@ function contentsLabel(latest: LatestExport): string {
 
 function areasLabel(areas: LatestExport["areas"]): string {
   const labels = [...areas].sort((left, right) => right.records - left.records);
-  const shown = labels.slice(0, 4).map((area) => area.label);
+  const shown = EffectArray.map(labels.slice(0, 4), (area) => area.label);
   const hidden = labels.length - shown.length;
-  return hidden === 0 ? shown.join(", ") : `${shown.join(", ")}, and ${hidden} more`;
+  return hidden === 0
+    ? EffectArray.join(shown, ", ")
+    : `${EffectArray.join(shown, ", ")}, and ${hidden} more`;
 }
 
 function isThemePreference(value: string): value is ThemePreference {

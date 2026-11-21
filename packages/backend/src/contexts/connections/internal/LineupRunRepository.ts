@@ -55,6 +55,9 @@ import type {
 } from "./LineupRunTables.ts";
 
 export type { LineupWriteIntentRecord };
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
+
 import { toLineupRun } from "./LineupRunViewRepository.ts";
 import {
   LineupPlan,
@@ -69,6 +72,10 @@ import type {
   LineupWriteIntentStatus,
 } from "./LineupRunWorkflow.ts";
 import { TeamAutomationState } from "./TeamAutomationWorkflow.ts";
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 const lineupLeaseDurationMillis = 10 * 60_000;
 const lineupDeliveryStaleMillis = 60_000;
@@ -227,10 +234,12 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                   id: lineupRuns.id,
                 }),
               );
-              const insertedIds = new Set(insertedRows.map((row) => row.id));
-              const created = records.filter((record) => insertedIds.has(record.id));
-              const refused = records.filter((record) => !insertedIds.has(record.id));
-              const refusedTeams = [...new Set(refused.map((record) => record.teamId))];
+              const insertedIds = new Set(EffectArray.map(insertedRows, (row) => row.id));
+              const created = EffectArray.filter(records, (record) => insertedIds.has(record.id));
+              const refused = EffectArray.filter(records, (record) => !insertedIds.has(record.id));
+              const refusedTeams = [
+                ...new Set(EffectArray.map(refused, (record) => record.teamId)),
+              ];
               const waiting = !Array.isArrayNonEmpty(refusedTeams)
                 ? []
                 : yield* tx
@@ -248,7 +257,9 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
               const joined = new Map<string, LineupRunRecord>();
               for (const row of waiting) {
                 const record = yield* decodeRun(row);
-                const requested = refused.find((entry) => entry.teamId === record.teamId);
+                const requested = EffectOption.getOrUndefined(
+                  EffectArray.findFirst(refused, (entry) => entry.teamId === record.teamId),
+                );
                 if (requested !== undefined && Equal.equals(requested.target, record.target)) {
                   joined.set(record.teamId, record);
                 }
@@ -260,12 +271,14 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                   userId: input.userId,
                   requestId: input.requestId,
                   ...deliveryRowProjection(state),
-                  runIds: created.map((record) => record.id),
+                  runIds: EffectArray.map(created, (record) => record.id),
                   createdAt: at,
                 });
               }
-              const settled = input.runs.flatMap((run) => {
-                const record = created.find((entry) => entry.teamId === run.team);
+              const settled = EffectArray.flatMap(input.runs, (run) => {
+                const record = EffectOption.getOrUndefined(
+                  EffectArray.findFirst(created, (entry) => entry.teamId === run.team),
+                );
                 if (record !== undefined) {
                   return [record];
                 }
@@ -374,7 +387,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                   userId: input.userId,
                   requestId,
                   ...deliveryRowProjection(initialLineupDeliveryState(input.at)),
-                  runIds: created.map((record) => record.id),
+                  runIds: EffectArray.map(created, (record) => record.id),
                   createdAt: at,
                 });
                 return { created: true, runs: created };
@@ -417,7 +430,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
             and(anyOf(lineupRuns.teamId, ids), anyOf(lineupRuns.status, nonTerminalRunStatuses)),
           )
           .pipe(Effect.mapError(mapPersistenceFailure));
-        return new Set(rows.map((row) => row.teamId));
+        return new Set(EffectArray.map(rows, (row) => row.teamId));
       });
 
       const loadRuns = Effect.fn("LineupRunRepository.loadRuns")(function* (
@@ -446,8 +459,8 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
           concurrency: 1,
         });
         if (query.runs !== undefined) {
-          const byId = new Map(records.map((record) => [record.id, record]));
-          const ordered = query.runs.flatMap((id) => {
+          const byId = new Map(EffectArray.map(records, (record) => [record.id, record]));
+          const ordered = EffectArray.flatMap(query.runs, (id) => {
             const record = byId.get(id);
             return record === undefined ? [] : [record];
           });
@@ -491,7 +504,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
             activity.set(teamId, { runs, latest });
           }
         }
-        const missing = ids.filter((teamId) => !activity.has(teamId));
+        const missing = EffectArray.filter(ids, (teamId) => !activity.has(teamId));
         if (Array.isArrayNonEmpty(missing)) {
           const latestRows = yield* database
             .selectDistinctOn([lineupRuns.teamId])
@@ -528,7 +541,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
             .orderBy(desc(lineupRuns.createdAt), asc(lineupRuns.id))
             .pipe(Effect.mapError(mapPersistenceFailure));
           const records = yield* Effect.forEach(rows, (row) => decodeRun(row), { concurrency: 1 });
-          return records.map(toLineupRun);
+          return EffectArray.map(records, toLineupRun);
         },
       );
 
@@ -1055,7 +1068,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
           .select({ id: lineupRuns.id, teamId: lineupRuns.teamId })
           .from(lineupRuns)
           .where(anyOf(lineupRuns.id, ids));
-        const teams = [...new Set(runs.map((run) => run.teamId))];
+        const teams = [...new Set(EffectArray.map(runs, (run) => run.teamId))];
         if (!Array.isArrayNonEmpty(teams)) {
           return new Set<LineupRunId>();
         }
@@ -1069,8 +1082,13 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
               notInArray(lineupRuns.id, ids),
             ),
           );
-        const busyTeams = new Set(busy.map((row) => row.teamId));
-        return new Set(runs.filter((run) => busyTeams.has(run.teamId)).map((run) => run.id));
+        const busyTeams = new Set(EffectArray.map(busy, (row) => row.teamId));
+        return new Set(
+          EffectArray.map(
+            EffectArray.filter(runs, (run) => busyTeams.has(run.teamId)),
+            (run) => run.id,
+          ),
+        );
       }, Effect.mapError(mapPersistenceFailure));
 
       const claimDeliveries = (
@@ -1101,7 +1119,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
               if (candidates.length === 0) {
                 return [];
               }
-              const ids = candidates.map((row) => row.id);
+              const ids = EffectArray.map(candidates, (row) => row.id);
               if (!Array.isArrayNonEmpty(ids)) {
                 return [];
               }
@@ -1149,7 +1167,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
         if (inputs.length === 0) {
           return Effect.void;
         }
-        const byId = new Map(inputs.map((input) => [input.deliveryId, input]));
+        const byId = new Map(EffectArray.map(inputs, (input) => [input.deliveryId, input]));
         const at = inputs[0]?.at;
         if (at === undefined) {
           return Effect.void;
@@ -1290,16 +1308,17 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
             ids.push(request.requestId);
             byUser.set(request.userId, ids);
           }
-          const conditions = [...byUser].flatMap(([userId, requestIds]) =>
-            Array.isArrayNonEmpty(requestIds)
+          const conditions = EffectArray.flatMap([...byUser], ([userId, requestIds]) => {
+            const flatMapped1 = Array.isArrayNonEmpty(requestIds)
               ? [
                   and(
                     eq(lineupDeliveries.userId, userId),
                     anyOf(lineupDeliveries.requestId, requestIds),
                   ),
                 ]
-              : [],
-          );
+              : [];
+            return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+          });
           if (!Array.isArrayNonEmpty(conditions)) {
             return [];
           }

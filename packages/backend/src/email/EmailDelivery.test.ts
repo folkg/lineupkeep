@@ -16,6 +16,7 @@ import {
   Schema,
 } from "effect";
 import type { Scope } from "effect";
+import { Array as EffectArray } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { TestClock, TestConsole } from "effect/testing";
 import { http, HttpResponse } from "msw/http";
@@ -177,14 +178,16 @@ it.effect("exhausts retries and scrubs failed HTTP child exports", () =>
     assert.strictEqual(failureReason(exit), "unavailable");
     assert.strictEqual(keys.length, 3);
     assert.strictEqual(new Set(keys).size, 1);
-    assert.isTrue(spans.some((span) => span.parentSpanId !== undefined && span.status.code === 2));
+    assert.isTrue(
+      EffectArray.some(spans, (span) => span.parentSpanId !== undefined && span.status.code === 2),
+    );
     for (const privateValue of [
       "reader@example.test",
       "123456",
       "re_test_key",
       "private-provider-error",
     ]) {
-      assert.notInclude(payloads.join(""), privateValue);
+      assert.notInclude(EffectArray.join(payloads, ""), privateValue);
     }
   }),
 );
@@ -243,10 +246,10 @@ it.effect("records delivery facts without the recipient, content, or key", () =>
     yield* send(signInMessage).pipe(layerTools.provide(Layer.merge(resendLayer, telemetry.layer)));
     const { payloads, spans } = telemetry.read();
 
-    assert.isTrue(spans.some((span) => span.name === "email.send"));
-    assert.include(payloads.join(""), "email.provider_message_id");
+    assert.isTrue(EffectArray.some(spans, (span) => span.name === "email.send"));
+    assert.include(EffectArray.join(payloads, ""), "email.provider_message_id");
     for (const privateValue of ["reader@example.test", "123456", "re_test_key"]) {
-      assert.notInclude(payloads.join(""), privateValue);
+      assert.notInclude(EffectArray.join(payloads, ""), privateValue);
     }
   }),
 );
@@ -442,7 +445,7 @@ function listen(options: SmtpSinkOptions): Effect.Effect<SmtpSink> {
   return Effect.callback<SmtpSink>((resume) => {
     const messages: SmtpSinkMessage[] = [];
     const sockets = new Set<Socket>();
-    const refused = new Set((options.refuseRecipients ?? []).map(lowercase));
+    const refused = new Set(EffectArray.map(options.refuseRecipients ?? [], lowercase));
     const server = createServer((socket) => {
       sockets.add(socket);
       socket.on("close", () => sockets.delete(socket));
@@ -495,7 +498,7 @@ function serve(socket: Socket, messages: SmtpSinkMessage[], refused: ReadonlySet
       if (inData) {
         if (line === ".") {
           inData = false;
-          messages.push({ from, recipients, data: data.join("\r\n") });
+          messages.push({ from, recipients, data: EffectArray.join(data, "\r\n") });
           from = "";
           recipients = [];
           data = [];

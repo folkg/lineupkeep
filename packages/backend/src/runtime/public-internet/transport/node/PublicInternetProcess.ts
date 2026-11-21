@@ -10,6 +10,7 @@ import { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { isPublicRoutableHost } from "@better-auth/core/utils/host";
 import { Effect } from "effect";
 import { Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { PublicInternet } from "#runtime/PublicInternet.ts";
 
@@ -27,7 +28,10 @@ export function makePublicInternetProcess(
     const addresses = await network.resolve(hostname);
     init.signal.throwIfAborted();
     const pinned = addresses[0];
-    if (pinned === undefined || addresses.some(({ address }) => !isPublicRoutableHost(address))) {
+    if (
+      pinned === undefined ||
+      EffectArray.some(addresses, ({ address }) => !isPublicRoutableHost(address))
+    ) {
       throw new Error("Public DNS answers required");
     }
     const headers = Object.fromEntries(webRequest.headers);
@@ -102,7 +106,7 @@ export function makePublicInternetProcess(
 function responseHeaders(headers: IncomingHttpHeaders): Headers {
   const result = new Headers();
   for (const [name, value] of Object.entries(headers)) {
-    if (Array.isArray(value)) {
+    if (EffectArray.isArray(value)) {
       for (const item of value) {
         result.append(name, item);
       }

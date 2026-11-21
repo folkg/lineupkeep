@@ -3,10 +3,27 @@ import { readFileSync } from "node:fs";
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 
 import jsonTools from "#runtime/JsonText.ts";
 
 import { hockeyProfessionalTeamMap, matchProfessionalTeam } from "./ProfessionalTeamMap.ts";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 const LeagueClub = Schema.Struct({
   id: Schema.Int,
@@ -45,27 +62,36 @@ const LeagueWeek = Effect.runSync(
   )(fixture("game-sources/nhl/fixtures/league-week.json")),
 );
 
-const providerTeams = new Map(ProviderTeamRead.teams.map((team) => [team.providerTeamKey, team]));
+const providerTeams = new Map(
+  EffectArray.map(ProviderTeamRead.teams, (team) => [team.providerTeamKey, team]),
+);
 const leagueClubs = new Map(
-  LeagueWeek.gameWeek
-    .flatMap((day) => day.games.flatMap((game) => [game.homeTeam, game.awayTeam]))
-    .map((club) => [String(club.id), club] as const),
+  EffectArray.map(
+    EffectArray.flatMap(LeagueWeek.gameWeek, (day) => {
+      const flatMapped1 = EffectArray.flatMap(day.games, (game) => {
+        const flatMapped1 = [game.homeTeam, game.awayTeam];
+        return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+      });
+      return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+    }),
+    (club) => [String(club.id), club] as const,
+  ),
 );
 
 it("covers every club of the league once, with one provider key and one league identifier each", () => {
   assert.strictEqual(hockeyProfessionalTeamMap.length, 32);
   assert.strictEqual(leagueClubs.size, 32);
-  assert.isTrue(hockeyProfessionalTeamMap.every((entry) => entry.league === "nhl"));
+  assert.isTrue(EffectArray.every(hockeyProfessionalTeamMap, (entry) => entry.league === "nhl"));
   assert.strictEqual(
-    new Set(hockeyProfessionalTeamMap.map((entry) => entry.providerTeamKey)).size,
+    new Set(EffectArray.map(hockeyProfessionalTeamMap, (entry) => entry.providerTeamKey)).size,
     hockeyProfessionalTeamMap.length,
   );
   assert.strictEqual(
-    new Set(hockeyProfessionalTeamMap.map((entry) => entry.sourceIdentifier)).size,
+    new Set(EffectArray.map(hockeyProfessionalTeamMap, (entry) => entry.sourceIdentifier)).size,
     hockeyProfessionalTeamMap.length,
   );
   assert.deepStrictEqual(
-    hockeyProfessionalTeamMap.map((entry) => entry.sourceIdentifier).sort(),
+    EffectArray.map(hockeyProfessionalTeamMap, (entry) => entry.sourceIdentifier).sort(),
     [...leagueClubs.keys()].sort(),
   );
 });
@@ -95,12 +121,13 @@ it("names every club as the league's own week read published it", () => {
 });
 
 it("spells four abbreviations differently from the league, which an abbreviation join would miss", () => {
-  const differently = hockeyProfessionalTeamMap
-    .map((entry) => [
+  const differently = optionalArrayValue(
+    EffectArray.map(hockeyProfessionalTeamMap, (entry) => [
       entry.sourceAbbreviation,
       providerTeams.get(entry.providerTeamKey)?.abbreviation ?? "",
-    ])
-    .filter(([league, provider]) => league !== provider);
+    ]),
+    (value) => EffectArray.filter(value, ([league, provider]) => league !== provider),
+  );
 
   assert.deepStrictEqual(differently, [
     ["LAK", "LA"],
@@ -111,7 +138,9 @@ it("spells four abbreviations differently from the league, which an abbreviation
 });
 
 it("matches a club by its league identifier and refuses a pair the recorded read no longer names", () => {
-  const toronto = hockeyProfessionalTeamMap.find((entry) => entry.sourceAbbreviation === "TOR");
+  const toronto = EffectOption.getOrUndefined(
+    EffectArray.findFirst(hockeyProfessionalTeamMap, (entry) => entry.sourceAbbreviation === "TOR"),
+  );
   assert.isDefined(toronto);
   const club = leagueClubs.get(toronto.sourceIdentifier);
   assert.isDefined(club);

@@ -2,6 +2,7 @@ import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { DateTime, Effect, Layer } from "effect";
+import { Array as EffectArray } from "effect";
 import { TestClock } from "effect/testing";
 
 import layerTools from "#runtime/ProvideLayer.ts";
@@ -50,7 +51,7 @@ it.effect("removes closed reports once their retention window ends", () =>
 
     assert.strictEqual(deleted.reports, 1);
     assert.deepStrictEqual(
-      remaining.map((report) => report.title),
+      EffectArray.map(remaining, (report) => report.title),
       ["Keep this"],
     );
   }).pipe(layerTools.provide(FeedbackRetentionTestLayer)),

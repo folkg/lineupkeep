@@ -4,7 +4,11 @@ import { promisify } from "node:util";
 
 import { Effect } from "effect";
 import { Schema } from "effect";
+import { Array as EffectArray } from "effect";
 import postgres from "postgres";
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 export function postgresContainer(name: string, lockDirectory: string): DisposableDatabase {
   if (!ownedContainerName.test(name)) {
@@ -35,7 +39,10 @@ export function postgresContainer(name: string, lockDirectory: string): Disposab
         "--env",
         `POSTGRES_DB=${credentials.database}`,
         image,
-        ...serverSettings.flatMap((setting) => ["-c", setting]),
+        ...EffectArray.flatMap(serverSettings, (setting) => {
+          const flatMapped1 = ["-c", setting];
+          return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+        }),
       ]);
       await docker(["start", name]);
       return postgresConnection(name, signal);
@@ -86,15 +93,19 @@ export async function testContainers(
   signal: AbortSignal,
   kind: "test-database" | "test-web" = "test-database",
 ): Promise<ReadonlyArray<{ readonly name: string; readonly lockDirectory: string }>> {
-  const ids = (
-    await docker(["ps", "--all", "--quiet", "--filter", `label=${disposableLabel}=${kind}`], signal)
-  )
-    .split("\n")
-    .filter(Boolean);
+  const ids = EffectArray.filter(
+    (
+      await docker(
+        ["ps", "--all", "--quiet", "--filter", `label=${disposableLabel}=${kind}`],
+        signal,
+      )
+    ).split("\n"),
+    Boolean,
+  );
 
   const containers = (
     await Promise.all(
-      ids.map(async (id) => {
+      EffectArray.map(ids, async (id) => {
         try {
           return Effect.runSync(
             Schema.decodeUnknownEffect(InspectedContainers)(
@@ -110,7 +121,7 @@ export async function testContainers(
       }),
     )
   ).flat();
-  return containers.flatMap((container) => {
+  return EffectArray.flatMap(containers, (container) => {
     const name = container.Name.replace(/^\//u, "");
     const lockDirectory = container.Config.Labels?.[lockLabel];
     return ownedContainerName.test(name) && lockDirectory !== undefined && lockDirectory !== ""
@@ -150,10 +161,13 @@ async function removeIfPresent(
 async function clientsFinished(name: string, signal: AbortSignal): Promise<void> {
   for (;;) {
     const { stdout } = await run("ps", ["-A", "-o", "pid=,args="], { encoding: "utf8", signal });
-    const clients = stdout
-      .split("\n")
-      .filter((line) => line.includes(name) && /\bdocker\b/u.test(line))
-      .filter((line) => Number(line.trim().split(/\s+/u)[0]) !== process.pid);
+    const clients = EffectArray.filter(
+      EffectArray.filter(
+        stdout.split("\n"),
+        (line) => line.includes(name) && /\bdocker\b/u.test(line),
+      ),
+      (line) => Number(line.trim().split(/\s+/u)[0]) !== process.pid,
+    );
     if (clients.length === 0) {
       return;
     }

@@ -1,6 +1,6 @@
 import { Config, Effect, Option } from "effect";
 import type { Redacted } from "effect";
-
+import { Array as EffectArray } from "effect";
 const settings: Readonly<Record<string, ApplicationSetting>> = {
   BETTER_AUTH_URL: {
     config: Config.String("BETTER_AUTH_URL"),
@@ -125,7 +125,7 @@ export const applicationConfig = readSettings("production").pipe(
 export const developmentApplicationConfig = readSettings("development");
 
 export function developmentEnvironmentNames(): ReadonlyArray<string> {
-  return selectedSettings("development").map(([name]) => name);
+  return EffectArray.map(selectedSettings("development"), ([name]) => name);
 }
 
 function readSettings(selection: ConfigurationSelection): Effect.Effect<
@@ -137,7 +137,7 @@ function readSettings(selection: ConfigurationSelection): Effect.Effect<
 > {
   return Config.all(
     Object.fromEntries(
-      selectedSettings(selection).map(([name, setting]) => [
+      EffectArray.map(selectedSettings(selection), ([name, setting]) => [
         name,
         selection === "production" && setting.production === "required"
           ? setting.config.pipe(Config.map(Option.some))
@@ -148,7 +148,7 @@ function readSettings(selection: ConfigurationSelection): Effect.Effect<
 }
 
 function selectedSettings(selection: ConfigurationSelection): [string, ApplicationSetting][] {
-  return Object.entries(settings).filter(([, setting]) =>
+  return EffectArray.filter(Object.entries(settings), ([, setting]) =>
     selection === "production" ? setting.production !== false : setting.development,
   );
 }
@@ -157,7 +157,7 @@ function definedOptions(values: Readonly<Record<string, Option.Option<Configurat
   [k: string]: ConfigurationValue;
 } {
   return Object.fromEntries(
-    Object.entries(values).flatMap(([key, value]) =>
+    EffectArray.flatMap(Object.entries(values), ([key, value]) =>
       Option.isSome(value) ? [[key, value.value]] : [],
     ),
   );

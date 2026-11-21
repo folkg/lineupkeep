@@ -1,3 +1,4 @@
+import { Array as EffectArray } from "effect";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
@@ -177,7 +178,7 @@ export const search: API.OperationMethod<
     return {
       host: "read",
       method: "GET",
-      path: `/fantasy/v2/users;use_login=1/games;game_keys=${gameKeys.join(",")}/leagues;league_keys=${input.leagueKeys.join(",")}/players${status}${position};${searchSortFragment(input.sort, input.sortType, statId, input.recentWindow)};count=${String(input.limit)}${search};out=${out}${rankSuffix(input.ranks)}`,
+      path: `/fantasy/v2/users;use_login=1/games;game_keys=${EffectArray.join(gameKeys, ",")}/leagues;league_keys=${EffectArray.join(input.leagueKeys, ",")}/players${status}${position};${searchSortFragment(input.sort, input.sortType, statId, input.recentWindow)};count=${String(input.limit)}${search};out=${out}${rankSuffix(input.ranks)}`,
       ...(Object.keys(cuts).length === 0 ? {} : { query: cuts }),
     };
   },
@@ -310,7 +311,7 @@ export const details: API.OperationMethod<
     return {
       host: "read",
       method: "GET",
-      path: `/fantasy/v2/league/${input.leagueKey}/players;player_keys=${input.playerKeys.join(",")}${weekSelector(input.week)};out=${fields.join(",")}${rankSuffix(input.ranks)}`,
+      path: `/fantasy/v2/league/${input.leagueKey}/players;player_keys=${EffectArray.join(input.playerKeys, ",")}${weekSelector(input.week)};out=${EffectArray.join(fields, ",")}${rankSuffix(input.ranks)}`,
       ...(Object.keys(query).length === 0 ? {} : { query }),
     };
   },
@@ -345,7 +346,7 @@ function detailFieldsOf(input: typeof DetailsShape.Type): ReadonlyArray<DetailFi
 }
 
 function rankSuffix(ranks: ReadonlyArray<string> | undefined): string {
-  return ranks === undefined ? "" : `;ranks=${ranks.join(",")}`;
+  return ranks === undefined ? "" : `;ranks=${EffectArray.join(ranks, ",")}`;
 }
 
 function weekSelector(week: number | undefined): string {
@@ -359,10 +360,10 @@ function cutTypesQuery(input: {
   return {
     ...(input.percentStartedCutTypes === undefined
       ? {}
-      : { "percent_started.cut_types": input.percentStartedCutTypes.join(",") }),
+      : { "percent_started.cut_types": EffectArray.join(input.percentStartedCutTypes, ",") }),
     ...(input.percentOwnedCutTypes === undefined
       ? {}
-      : { "percent_owned.cut_types": input.percentOwnedCutTypes.join(",") }),
+      : { "percent_owned.cut_types": EffectArray.join(input.percentOwnedCutTypes, ",") }),
   };
 }
 
@@ -409,7 +410,7 @@ export const starters: API.OperationMethod<
     const first = yield* startersPage({ ...input, offset: 0 });
     const second = yield* startersPage({ ...input, offset: 25 });
     const seen = new Set<string>();
-    return [...first, ...second].filter((player) => {
+    return EffectArray.filter([...first, ...second], (player) => {
       if (seen.has(player.playerKey)) {
         return false;
       }

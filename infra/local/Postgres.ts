@@ -8,6 +8,7 @@ import {
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { Effect, Redacted } from "effect";
+import { Array as EffectArray, Option as EffectOption } from "effect";
 
 export const Postgres = Resource<PostgresResource>("Lineupkeep.LocalPostgres");
 
@@ -51,8 +52,11 @@ function inspect(properties: { name: string; lockDirectory: string }): Effect.Ef
 > {
   return Effect.tryPromise(async () => {
     const signal = AbortSignal.timeout(60_000);
-    const container = (await testContainers(signal)).find(
-      (entry) => entry.name === properties.name,
+    const container = EffectOption.getOrUndefined(
+      EffectArray.findFirst(
+        await testContainers(signal),
+        (entry) => entry.name === properties.name,
+      ),
     );
     if (container === undefined) {
       return undefined;

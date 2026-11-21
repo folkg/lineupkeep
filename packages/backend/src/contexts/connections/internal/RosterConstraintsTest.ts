@@ -1,3 +1,5 @@
+import { Array as EffectArray } from "effect";
+
 import type {
   ProviderRosterConstraints,
   ProviderRosterPosition,
@@ -7,9 +9,11 @@ export function declaredRosterConstraints(
   positions: ReadonlyArray<ProviderRosterPosition>,
 ): ProviderRosterConstraints {
   return {
-    rosterMaximum: positions
-      .filter((position) => position.kind !== "reserve")
-      .reduce((total, position) => total + position.count, 0),
+    rosterMaximum: EffectArray.reduce(
+      EffectArray.filter(positions, (position) => position.kind !== "reserve"),
+      0,
+      (total, position) => total + position.count,
+    ),
     benchCapacity: "generic",
     startingSlotsMayStandEmpty: true,
     reserveEligibility: { kind: "published_positions" },

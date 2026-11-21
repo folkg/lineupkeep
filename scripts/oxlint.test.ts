@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import { strict } from "@effect/tsgo/oxlint-presets";
+import { Array as EffectArray } from "effect";
 import { expect, it } from "vitest";
 
 import { checkLint } from "./architectureFixture.ts";
@@ -16,7 +17,8 @@ const workflowTestDeclarations = `
 
 it("enables every strict Effect rule as an error", () => {
   const source = readFileSync(new URL("../oxlint.config.ts", import.meta.url), "utf8");
-  const missing = Object.getOwnPropertyNames(strict.rules).filter(
+  const missing = EffectArray.filter(
+    Object.getOwnPropertyNames(strict.rules),
     (rule) => !source.includes(`"${rule}": "error"`),
   );
 
@@ -449,7 +451,7 @@ it.concurrent.each([
 it.concurrent("permits explicit named contracts and inferred inline callbacks", async () => {
   const result = await checkLint({
     "scripts/example.ts":
-      "export function count(): number { return [1, 2].map((value) => value + 1).reduce((total, value) => total + value, 0); } export const read: () => number = () => count();",
+      'import { Array as EffectArray } from "effect"; export function count(): number { return EffectArray.reduce(EffectArray.map([1, 2], (value) => value + 1), 0, (total, value) => total + value); } export const read: () => number = () => count();',
   });
 
   expect(result.status, result.output).toBe(0);
@@ -524,9 +526,9 @@ it.concurrent.each([
 it.concurrent.each([
   "yield* notes.update(owner, inputs);",
   "yield* Effect.flatMap(Effect.succeed(inputs), (commands) => notes.update(owner, commands));",
-  "const commands = inputs.map((input) => input.toUpperCase()); yield* notes.update(owner, commands);",
+  "const commands = EffectArray.map(inputs, (input) => input.toUpperCase()); yield* notes.update(owner, commands);",
   "yield* Effect.forEach(inputs, (input) => Effect.succeed(input), { concurrency: 1 });",
-  "inputs.map((notes) => notes.toString());",
+  "EffectArray.map(inputs, (notes) => notes.toString());",
   "for (const input of inputs) { const notes = { update: () => input }; notes.update(); }",
 ])("permits batching and unrelated pure bindings: %s", async (body) => {
   const result = await checkLint(fixture(body));
@@ -1161,6 +1163,6 @@ function fixture(body: string): {
   return {
     "packages/backend/src/contexts/notes/Notes.ts":
       'import { Context } from "effect"; import type { Effect } from "effect"; export class Notes extends Context.Service<Notes, { readonly update: (owner: string, inputs: readonly string[]) => Effect.Effect<void> }>()("@lineupkeep/backend/contexts/notes/Notes") {}',
-    "apps/web/src/server/notes/fixture.ts": `import { Notes as Renamed } from "@lineupkeep/backend/notes/Notes"; import { Effect } from "effect"; declare const inputs: string[]; declare const owner: string; export const run = Effect.gen(function* () { const notes = yield* Renamed; void owner; void notes; void inputs; ${body} });`,
+    "apps/web/src/server/notes/fixture.ts": `import { Notes as Renamed } from "@lineupkeep/backend/notes/Notes"; import { Array as EffectArray, Effect } from "effect"; declare const inputs: string[]; declare const owner: string; void EffectArray; export const run = Effect.gen(function* () { const notes = yield* Renamed; void owner; void notes; void inputs; ${body} });`,
   };
 }

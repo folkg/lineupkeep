@@ -1,5 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Arbitrary, DateTime, Effect, Schema, SchemaParser } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption, Order as EffectOrder } from "effect";
 
 import { plan, snapshotOf } from "#utilities/machine.ts";
 import * as MachineTest from "#utilities/machineTest.ts";
@@ -51,17 +53,22 @@ it.effect("explores open and resolved with full coverage and terminal rejection"
     assert.strictEqual(explored.transitionCoverage.branches.missing, 0);
     const statuses = ["open", "resolved"];
     assert.deepStrictEqual(
-      [...new Set(explored.nodes.map(({ snapshot }) => snapshot.state.path))].sort(),
+      [...new Set(EffectArray.map(explored.nodes, ({ snapshot }) => snapshot.state.path))].sort(),
       statuses,
     );
-    assert.deepStrictEqual(connectionIncidents.status.enumValues.toSorted(), statuses);
-    const terminal = explored.nodes.find(({ snapshot }) => snapshot.state.path === "resolved");
+    assert.deepStrictEqual(
+      EffectArray.sort(connectionIncidents.status.enumValues, EffectOrder.String),
+      statuses,
+    );
+    const terminal = EffectOption.getOrUndefined(
+      EffectArray.findFirst(explored.nodes, ({ snapshot }) => snapshot.state.path === "resolved"),
+    );
     assert.isDefined(terminal);
     const trace = yield* MachineTest.run(ConnectionIncidentWorkflow, {
       input: terminal.snapshot.state.value,
       events,
     });
-    assert.isTrue(trace.steps.every((step) => !step.accepted));
+    assert.isTrue(EffectArray.every(trace.steps, (step) => !step.accepted));
   }),
 );
 

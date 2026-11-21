@@ -4,6 +4,9 @@ import { extname, join } from "node:path";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { Option, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Order as EffectOrder } from "effect";
+import { Option as EffectOption } from "effect";
 
 import { ClaimsJson, resolveArtifact, ResultsJson } from "./evidence.ts";
 import type { Claims, Results } from "./evidence.ts";
@@ -11,6 +14,34 @@ import { isMcpExchangeAttachment, McpExchangeJson } from "./mcpEvidence.ts";
 import { Cpu, MeasurementJson, ProfileJson } from "./performanceEvidence.ts";
 import type { DatabaseSummary, SpanGroup, PlanGroup } from "./performanceEvidence.ts";
 import { isServiceCallAttachment, ServiceCallJson } from "./serviceEvidence.ts";
+function sortWithComparator<A>(
+  self: ReadonlyArray<A>,
+  compare: (left: A, right: A) => number,
+): ReadonlyArray<A> {
+  return EffectArray.sort(
+    self,
+    EffectOrder.make<A>((left, right) => {
+      const result = compare(left, right);
+      return result < 0 ? -1 : result > 0 ? 1 : 0;
+    }),
+  );
+}
+
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 export async function writeReport(
   directory: string,
@@ -36,36 +67,43 @@ async function reportModel(
   };
   const results = await read("results.json", ResultsJson);
   const performance = await Promise.all(
-    (results?.attempts ?? []).flatMap((attempt) =>
-      attempt.attachments
-        .filter(
-          (attachment) =>
-            attachment.name.startsWith("measurement: ") || attachment.name.startsWith("profile: "),
-        )
-        .map(async (attachment) => ({
-          test: attempt.title,
-          kind: attachment.name.startsWith("profile: ")
-            ? ("profile" as const)
-            : ("measurement" as const),
-          file: attachment.path,
-          attachments: attempt.attachments,
-          result: attachment.name.startsWith("profile: ")
-            ? await read(attachment.path, ProfileJson)
-            : await read(attachment.path, MeasurementJson).then((result) =>
-                result === undefined
-                  ? undefined
-                  : { ...result, browserCpu: undefined, serverCpu: undefined },
-              ),
-        })),
+    optionalArrayValue(results?.attempts ?? [], (value) =>
+      EffectArray.flatMap(value, (attempt) => {
+        const flatMapped1 = EffectArray.map(
+          EffectArray.filter(
+            attempt.attachments,
+            (attachment) =>
+              attachment.name.startsWith("measurement: ") ||
+              attachment.name.startsWith("profile: "),
+          ),
+          async (attachment) => ({
+            test: attempt.title,
+            kind: attachment.name.startsWith("profile: ")
+              ? ("profile" as const)
+              : ("measurement" as const),
+            file: attachment.path,
+            attachments: attempt.attachments,
+            result: attachment.name.startsWith("profile: ")
+              ? await read(attachment.path, ProfileJson)
+              : await read(attachment.path, MeasurementJson).then((result) =>
+                  result === undefined
+                    ? undefined
+                    : { ...result, browserCpu: undefined, serverCpu: undefined },
+                ),
+          }),
+        );
+        return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+      }),
     ),
   );
   const spansPath = resolveArtifact(directory, "server-spans.jsonl");
   const spans =
     spansPath === undefined
       ? undefined
-      : (await readFile(spansPath, "utf8"))
-          .split("\n")
-          .flatMap((line) => Option.toArray(Schema.decodeOption(SpanLine)(line)));
+      : EffectArray.flatMap((await readFile(spansPath, "utf8")).split("\n"), (line) => {
+          const flatMapped1 = Option.toArray(Schema.decodeOption(SpanLine)(line));
+          return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+        });
   return {
     ready: problems.length === 0,
     problems,
@@ -76,23 +114,35 @@ async function reportModel(
     cleanup: await read("cleanup.json", CleanupJson),
     performance,
     exchanges: await Promise.all(
-      (results?.attempts ?? []).flatMap((attempt) =>
-        attempt.attachments.filter(isMcpExchangeAttachment).map(async (attachment) => ({
-          test: attempt.title,
-          name: attachment.name,
-          file: attachment.path,
-          exchange: await read(attachment.path, McpExchangeJson),
-        })),
+      optionalArrayValue(results?.attempts ?? [], (value) =>
+        EffectArray.flatMap(value, (attempt) => {
+          const flatMapped2 = EffectArray.map(
+            EffectArray.filter(attempt.attachments, isMcpExchangeAttachment),
+            async (attachment) => ({
+              test: attempt.title,
+              name: attachment.name,
+              file: attachment.path,
+              exchange: await read(attachment.path, McpExchangeJson),
+            }),
+          );
+          return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+        }),
       ),
     ),
     serviceCalls: await Promise.all(
-      (results?.attempts ?? []).flatMap((attempt) =>
-        attempt.attachments.filter(isServiceCallAttachment).map(async (attachment) => ({
-          test: attempt.title,
-          name: attachment.name,
-          file: attachment.path,
-          call: await read(attachment.path, ServiceCallJson),
-        })),
+      optionalArrayValue(results?.attempts ?? [], (value) =>
+        EffectArray.flatMap(value, (attempt) => {
+          const flatMapped3 = EffectArray.map(
+            EffectArray.filter(attempt.attachments, isServiceCallAttachment),
+            async (attachment) => ({
+              test: attempt.title,
+              name: attachment.name,
+              file: attachment.path,
+              call: await read(attachment.path, ServiceCallJson),
+            }),
+          );
+          return arrayValueIsArray(flatMapped3) ? flatMapped3 : [flatMapped3];
+        }),
       ),
     ),
     spans,
@@ -112,48 +162,60 @@ function reportBlocks(model: ReportModel, directory: string): ReadonlyArray<Bloc
     list(model.problems),
     table(
       ["Criterion", "Status", "Statement"],
-      criteria.map((criterion) => [criterion.id, status(criterion.status), criterion.statement]),
+      EffectArray.map(criteria, (criterion) => [
+        criterion.id,
+        status(criterion.status),
+        criterion.statement,
+      ]),
     ),
     heading(2, "Run"),
     table(["", ""], runRows(model)),
     heading(2, "Criteria"),
-    ...criteria.flatMap((criterion): ReadonlyArray<Block> => [
-      heading(3, `${criterion.id} — ${criterion.status.toUpperCase()}`),
-      paragraph(criterion.statement),
-      paragraph(`Observed: ${criterion.observation}`),
-      table(
-        ["Asserted in", "Status"],
-        criterion.assertions.map((assertion) => [
-          citationText(assertion),
-          stepStatus(model, assertion),
-        ]),
-      ),
-      ...[
-        ...citedAttachments(model, criterion, "mcp"),
-        ...citedAttachments(model, criterion, "service"),
-      ].map((exchange): Block => ({
-        kind: "link",
-        text: exchange.name,
-        href: exchange.anchor,
-      })),
-      ...criterion.artifacts.map((artifact): Block =>
-        resolveArtifact(directory, artifact) === undefined
-          ? paragraph(`Rejected artifact (not a file inside this run): ${artifact}`)
-          : extname(artifact) === ".png"
-            ? { kind: "image", artifact, alt: criterion.id }
-            : paragraph(`Artifact: ${artifact}`),
-      ),
-    ]),
+    ...EffectArray.flatMap(criteria, (criterion) => {
+      const flatMapped2 = [
+        heading(3, `${criterion.id} — ${criterion.status.toUpperCase()}`),
+        paragraph(criterion.statement),
+        paragraph(`Observed: ${criterion.observation}`),
+        table(
+          ["Asserted in", "Status"],
+          EffectArray.map(criterion.assertions, (assertion) => [
+            citationText(assertion),
+            stepStatus(model, assertion),
+          ]),
+        ),
+        ...EffectArray.map(
+          [
+            ...citedAttachments(model, criterion, "mcp"),
+            ...citedAttachments(model, criterion, "service"),
+          ],
+          (exchange): Block => ({
+            kind: "link",
+            text: exchange.name,
+            href: exchange.anchor,
+          }),
+        ),
+        ...EffectArray.map(criterion.artifacts, (artifact): Block =>
+          resolveArtifact(directory, artifact) === undefined
+            ? paragraph(`Rejected artifact (not a file inside this run): ${artifact}`)
+            : extname(artifact) === ".png"
+              ? { kind: "image", artifact, alt: criterion.id }
+              : paragraph(`Artifact: ${artifact}`),
+        ),
+      ];
+      return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+    }),
     heading(2, "Limitations"),
     list(model.claims?.limitations ?? []),
     heading(2, "Tests"),
     table(
       ["Test", "Status", "Steps"],
-      (model.results?.attempts ?? []).map((attempt) => [
-        attempt.title,
-        status(attempt.status),
-        String(attempt.steps.length),
-      ]),
+      optionalArrayValue(model.results?.attempts ?? [], (value) =>
+        EffectArray.map(value, (attempt) => [
+          attempt.title,
+          status(attempt.status),
+          String(attempt.steps.length),
+        ]),
+      ),
     ),
     ...phaseBlocks(model),
     ...mcpBlocks(model),
@@ -168,30 +230,44 @@ function citedAttachments(
   criterion: Claims["criteria"][number],
   kind: "mcp" | "service",
 ): ReadonlyArray<{ readonly name: string; readonly anchor: string }> {
-  const citations = criterion.assertions.map((assertion) => {
-    const attempt = model.results?.attempts.find((candidate) => candidate.title === assertion.test);
-    const steps = (attempt?.steps ?? []).filter(
+  const citations = EffectArray.map(criterion.assertions, (assertion) => {
+    const attempt = optionalArrayValue(model.results?.attempts, (value) =>
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(value, (candidate) => candidate.title === assertion.test),
+      ),
+    );
+    const steps = EffectArray.filter(
+      attempt?.steps ?? [],
       (step) => assertion.step === undefined || step.title === assertion.step,
     );
     return {
       test: assertion.test,
       names: new Set(
         assertion.step === undefined
-          ? (attempt?.attachments ?? [])
-              .filter(kind === "mcp" ? isMcpExchangeAttachment : isServiceCallAttachment)
-              .map((attachment) => attachment.name)
-          : steps.flatMap((step) => (kind === "mcp" ? step.mcpExchanges : step.serviceCalls) ?? []),
+          ? EffectArray.map(
+              EffectArray.filter(
+                attempt?.attachments ?? [],
+                kind === "mcp" ? isMcpExchangeAttachment : isServiceCallAttachment,
+              ),
+              (attachment) => attachment.name,
+            )
+          : EffectArray.flatMap(
+              steps,
+              (step) => (kind === "mcp" ? step.mcpExchanges : step.serviceCalls) ?? [],
+            ),
       ),
     };
   });
-  const entries = kind === "mcp" ? model.exchanges : model.serviceCalls;
-  return entries.flatMap((exchange, index) =>
-    citations.some(
+  const entries: ReadonlyArray<{ readonly test: string; readonly name: string }> =
+    kind === "mcp" ? model.exchanges : model.serviceCalls;
+  return EffectArray.flatMap(entries, (exchange, index) => {
+    return EffectArray.some(
+      citations,
       (citation) => citation.test === exchange.test && citation.names.has(exchange.name),
     )
       ? [{ name: exchange.name, anchor: `#${kind}-${index + 1}` }]
-      : [],
-  );
+      : [];
+  });
 }
 
 function mcpBlocks(model: ReportModel): ReadonlyArray<Block> {
@@ -203,15 +279,30 @@ function mcpBlocks(model: ReportModel): ReadonlyArray<Block> {
     heading(3, "Non-setup steps with MCP exchanges"),
     table(
       ["Test", "Step", "Exchanges"],
-      (model.results?.attempts ?? []).flatMap((attempt) =>
-        attempt.steps
-          .filter((step) => !step.title.startsWith("Setup") && (step.mcpExchanges?.length ?? 0) > 0)
-          .map((step) => [attempt.title, step.title, String(step.mcpExchanges?.length)]),
+      optionalArrayValue(model.results?.attempts ?? [], (value) =>
+        EffectArray.flatMap(value, (attempt) => {
+          const flatMapped4 = optionalArrayValue(
+            EffectArray.filter(
+              attempt.steps,
+              (step) => !step.title.startsWith("Setup") && (step.mcpExchanges?.length ?? 0) > 0,
+            ),
+            (value) =>
+              EffectArray.map(value, (step) => [
+                attempt.title,
+                step.title,
+                String(step.mcpExchanges?.length),
+              ]),
+          );
+          return arrayValueIsArray(flatMapped4) ? flatMapped4 : [flatMapped4];
+        }),
       ),
     ),
-    ...model.exchanges.flatMap((entry, index): ReadonlyArray<Block> => {
+    ...EffectArray.flatMap(model.exchanges, (entry, index): ReadonlyArray<Block> => {
       const exchange = entry.exchange;
-      const spans = model.spans?.filter((span) => span.traceId === exchange?.traceId) ?? [];
+      const spans =
+        optionalArrayValue(model.spans, (value) =>
+          EffectArray.filter(value, (span) => span.traceId === exchange?.traceId),
+        ) ?? [];
       return [
         {
           kind: "transcript",
@@ -221,7 +312,10 @@ function mcpBlocks(model: ReportModel): ReadonlyArray<Block> {
         paragraph(
           spans.length === 0
             ? "Server spans unavailable for this exchange (not proof of zero server work)."
-            : `Correlated server spans: ${spans.map((span) => span.name).join(", ")}`,
+            : `Correlated server spans: ${EffectArray.join(
+                EffectArray.map(spans, (span) => span.name),
+                ", ",
+              )}`,
         ),
       ];
     }),
@@ -240,14 +334,29 @@ function serviceBlocks(model: ReportModel): ReadonlyArray<Block> {
     heading(3, "Non-setup steps with service calls"),
     table(
       ["Test", "Step", "Calls"],
-      (model.results?.attempts ?? []).flatMap((attempt) =>
-        attempt.steps
-          .filter((step) => !step.title.startsWith("Setup") && (step.serviceCalls?.length ?? 0) > 0)
-          .map((step) => [attempt.title, step.title, String(step.serviceCalls?.length)]),
+      optionalArrayValue(model.results?.attempts ?? [], (value) =>
+        EffectArray.flatMap(value, (attempt) => {
+          const flatMapped5 = optionalArrayValue(
+            EffectArray.filter(
+              attempt.steps,
+              (step) => !step.title.startsWith("Setup") && (step.serviceCalls?.length ?? 0) > 0,
+            ),
+            (value) =>
+              EffectArray.map(value, (step) => [
+                attempt.title,
+                step.title,
+                String(step.serviceCalls?.length),
+              ]),
+          );
+          return arrayValueIsArray(flatMapped5) ? flatMapped5 : [flatMapped5];
+        }),
       ),
     ),
-    ...model.serviceCalls.flatMap((entry, index): ReadonlyArray<Block> => {
-      const spans = model.spans?.filter((span) => span.traceId === entry.call?.traceId) ?? [];
+    ...EffectArray.flatMap(model.serviceCalls, (entry, index): ReadonlyArray<Block> => {
+      const spans =
+        optionalArrayValue(model.spans, (value) =>
+          EffectArray.filter(value, (span) => span.traceId === entry.call?.traceId),
+        ) ?? [];
       return [
         {
           kind: "transcript",
@@ -257,7 +366,10 @@ function serviceBlocks(model: ReportModel): ReadonlyArray<Block> {
         paragraph(
           spans.length === 0
             ? "Application server spans unavailable for this service call (not proof of zero work)."
-            : `Correlated server spans: ${spans.map((span) => span.name).join(", ")}`,
+            : `Correlated server spans: ${EffectArray.join(
+                EffectArray.map(spans, (span) => span.name),
+                ", ",
+              )}`,
         ),
       ];
     }),
@@ -294,10 +406,13 @@ function runRows(model: ReportModel): Array<Array<Cell>> {
     ["Fingerprint", run.sourceFingerprint],
     [
       "Selection",
-      [
-        ...run.selection.files,
-        ...(run.selection.grep === undefined ? [] : [`--grep ${run.selection.grep}`]),
-      ].join(" ") || "all committed tests",
+      EffectArray.join(
+        [
+          ...run.selection.files,
+          ...(run.selection.grep === undefined ? [] : [`--grep ${run.selection.grep}`]),
+        ],
+        " ",
+      ) || "all committed tests",
     ],
     ["Application", model.doctor?.origin ?? "not recorded"],
     ["Database", model.doctor?.databaseName ?? "not recorded"],
@@ -318,7 +433,7 @@ function phaseBlocks(model: ReportModel): ReadonlyArray<Block> {
       : [paragraph(`Recovered abandoned run ${cleanup.recoveredRun} before starting.`)]),
     table(
       ["Phase", "Status", "Duration"],
-      cleanup.commands.map((command) => [
+      EffectArray.map(cleanup.commands, (command) => [
         command.name,
         status(command.status),
         `${(command.durationMs / 1000).toFixed(1)} s`,
@@ -328,7 +443,7 @@ function phaseBlocks(model: ReportModel): ReadonlyArray<Block> {
     paragraph(cleanup.cleanupComplete ? "Cleanup complete." : "Cleanup INCOMPLETE."),
     table(
       ["Step", "Status", "Detail"],
-      cleanup.steps.map((step) => [step.name, status(step.status), step.detail ?? ""]),
+      EffectArray.map(cleanup.steps, (step) => [step.name, status(step.status), step.detail ?? ""]),
     ),
   ];
 }
@@ -342,18 +457,26 @@ function performanceBlocks(entries: ReadonlyArray<PerformanceEntry>): ReadonlyAr
     const key = `${entry.kind}\n${entry.test}\n${entry.result?.name ?? entry.file}\n${entry.result?.budgetMs ?? "none"}`;
     groups.set(key, [...(groups.get(key) ?? []), entry]);
   }
-  const summaries = [...groups.values()].map(groupSummary);
+  const summaries = EffectArray.map([...groups.values()], groupSummary);
   return [
     heading(2, "Performance"),
     paragraph(performanceNote),
     list(
-      [...new Set(entries.flatMap((entry) => entry.result?.conditions ?? []))].map(
-        (condition) => `Condition: ${condition}`,
+      optionalArrayValue(
+        [
+          ...new Set(
+            EffectArray.flatMap(entries, (entry) => {
+              const flatMapped4 = entry.result?.conditions ?? [];
+              return arrayValueIsArray(flatMapped4) ? flatMapped4 : [flatMapped4];
+            }),
+          ),
+        ],
+        (value) => EffectArray.map(value, (condition) => `Condition: ${condition}`),
       ),
     ),
     table(
       ["Interaction", "Test", "Kind", "Samples", "Median", "Range", "Budget"],
-      summaries.map((summary) => [
+      EffectArray.map(summaries, (summary) => [
         summary.name,
         summary.test,
         summary.kind,
@@ -367,15 +490,16 @@ function performanceBlocks(entries: ReadonlyArray<PerformanceEntry>): ReadonlyAr
           : `${summary.over} of ${summary.durations.length} over ${summary.budget} ms`,
       ]),
     ),
-    ...summaries.flatMap(groupBlocks),
+    ...EffectArray.flatMap(summaries, groupBlocks),
   ];
 }
 
 function groupSummary(samples: ReadonlyArray<PerformanceEntry>): GroupSummary {
   const [first] = samples;
-  const durations = samples.flatMap((sample) =>
-    sample.result === undefined ? [] : [sample.result.durationMs],
-  );
+  const durations = EffectArray.flatMap(samples, (sample) => {
+    const flatMapped5 = sample.result === undefined ? [] : [sample.result.durationMs];
+    return arrayValueIsArray(flatMapped5) ? flatMapped5 : [flatMapped5];
+  });
   const budget = first?.result?.budgetMs;
   return {
     name: first?.result?.name ?? "unreadable result",
@@ -384,49 +508,68 @@ function groupSummary(samples: ReadonlyArray<PerformanceEntry>): GroupSummary {
     durations,
     median: durations.length === 0 ? undefined : median(durations),
     budget,
-    over: budget === undefined ? 0 : durations.filter((duration) => duration > budget).length,
+    over:
+      budget === undefined
+        ? 0
+        : EffectArray.filter(durations, (duration) => duration > budget).length,
     samples,
   };
 }
 
 function groupBlocks(group: GroupSummary): ReadonlyArray<Block> {
-  const results = group.samples.flatMap((sample) =>
-    sample.result === undefined ? [] : [sample.result],
-  );
-  const servers = results.flatMap((result) =>
-    result.serverActivity.kind === "captured" ? [result.serverActivity.value] : [],
-  );
-  const databases = results.flatMap((result) =>
-    result.databaseActivity.kind === "captured" ? [result.databaseActivity.value] : [],
-  );
+  const results = EffectArray.flatMap(group.samples, (sample) => {
+    const flatMapped6 = sample.result === undefined ? [] : [sample.result];
+    return arrayValueIsArray(flatMapped6) ? flatMapped6 : [flatMapped6];
+  });
+  const servers = EffectArray.flatMap(results, (result) => {
+    const flatMapped7 =
+      result.serverActivity.kind === "captured" ? [result.serverActivity.value] : [];
+    return arrayValueIsArray(flatMapped7) ? flatMapped7 : [flatMapped7];
+  });
+  const databases = EffectArray.flatMap(results, (result) => {
+    const flatMapped8 =
+      result.databaseActivity.kind === "captured" ? [result.databaseActivity.value] : [];
+    return arrayValueIsArray(flatMapped8) ? flatMapped8 : [flatMapped8];
+  });
   const notes = [
     ...(group.durations.length >= 2 && group.kind === "profile"
       ? ["Profiled durations include profiler overhead and are not comparable with measurements."]
       : []),
-    ...group.samples.flatMap((sample) =>
-      sample.result === undefined ? [`A result file is missing or unreadable: ${sample.file}`] : [],
-    ),
-    ...results.flatMap((result) => [
-      ...(result.serverActivity.kind === "unavailable"
-        ? [`Sample ${result.sample}: server activity unavailable: ${result.serverActivity.reason}`]
-        : result.serverActivity.value.unresolvedRequests.length === 0
-          ? []
-          : [
-              `Sample ${result.sample}: server activity PARTIAL: totals exclude ${result.serverActivity.value.unresolvedRequests.length} cancelled request(s) whose server work is unknown: ${result.serverActivity.value.unresolvedRequests.join(", ")}`,
-            ]),
-      ...(result.databaseActivity.kind === "unavailable"
-        ? [
-            `Sample ${result.sample}: database activity unavailable: ${result.databaseActivity.reason}`,
-          ]
-        : []),
-      ...[result.browserCpu, result.serverCpu].flatMap((cpu, index) =>
-        cpu?.kind === "unavailable"
+    ...EffectArray.flatMap(group.samples, (sample) => {
+      const flatMapped9 =
+        sample.result === undefined
+          ? [`A result file is missing or unreadable: ${sample.file}`]
+          : [];
+      return arrayValueIsArray(flatMapped9) ? flatMapped9 : [flatMapped9];
+    }),
+    ...EffectArray.flatMap(results, (result) => {
+      const flatMapped10 = [
+        ...(result.serverActivity.kind === "unavailable"
           ? [
-              `Sample ${result.sample}: ${index === 0 ? "browser" : "server"} CPU unavailable: ${cpu.reason}`,
+              `Sample ${result.sample}: server activity unavailable: ${result.serverActivity.reason}`,
             ]
-          : [],
-      ),
-    ]),
+          : result.serverActivity.value.unresolvedRequests.length === 0
+            ? []
+            : [
+                `Sample ${result.sample}: server activity PARTIAL: totals exclude ${result.serverActivity.value.unresolvedRequests.length} cancelled request(s) whose server work is unknown: ${EffectArray.join(result.serverActivity.value.unresolvedRequests, ", ")}`,
+              ]),
+        ...(result.databaseActivity.kind === "unavailable"
+          ? [
+              `Sample ${result.sample}: database activity unavailable: ${result.databaseActivity.reason}`,
+            ]
+          : []),
+        ...EffectArray.flatMap([result.browserCpu, result.serverCpu], (cpu, index) => {
+          const flatMapped1 =
+            cpu?.kind === "unavailable"
+              ? [
+                  `Sample ${result.sample}: ${index === 0 ? "browser" : "server"} CPU unavailable: ${cpu.reason}`,
+                ]
+              : [];
+          return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+        }),
+      ];
+      return arrayValueIsArray(flatMapped10) ? flatMapped10 : [flatMapped10];
+    }),
   ];
   return [
     heading(
@@ -444,14 +587,18 @@ function groupBlocks(group: GroupSummary): ReadonlyArray<Block> {
         "Database (database-wide)",
         ...(group.kind === "profile" ? ["Browser CPU", "Server CPU"] : []),
       ],
-      results.map((result) => [
+      EffectArray.map(results, (result) => [
         String(result.sample),
         `${result.outcome === "failed" ? "failed after " : ""}${result.durationMs} ms${result.budgetMs === undefined ? "" : result.durationMs > result.budgetMs ? ` (OVER ${result.budgetMs} ms)` : ` (within ${result.budgetMs} ms)`}`,
-        result.requests.join(", ") || "none",
+        EffectArray.join(result.requests, ", ") || "none",
         result.serverActivity.kind === "captured"
-          ? result.serverActivity.value.operations
-              .map((operation) => `${operation.name} ×${operation.calls} ${operation.totalMs} ms`)
-              .join("; ") || "none"
+          ? EffectArray.join(
+              EffectArray.map(
+                result.serverActivity.value.operations,
+                (operation) => `${operation.name} ×${operation.calls} ${operation.totalMs} ms`,
+              ),
+              "; ",
+            ) || "none"
           : "unavailable",
         result.serverActivity.kind === "captured"
           ? `${count(result.serverActivity.value.sql.statements, "statement")}, ${result.serverActivity.value.sql.totalMs} ms`
@@ -464,13 +611,13 @@ function groupBlocks(group: GroupSummary): ReadonlyArray<Block> {
           : []),
       ]),
     ),
-    ...(results.some((result) => (result.calls?.length ?? 0) > 0)
+    ...(EffectArray.some(results, (result) => (result.calls?.length ?? 0) > 0)
       ? [
           heading(4, "Client-observed calls"),
           table(
             ["Sample", "Surface", "Call", "Duration", "Outcome", "Trace ID", "Parent span ID"],
-            results.flatMap((result) =>
-              (result.calls ?? []).map((call) => [
+            EffectArray.flatMap(results, (result) => {
+              const flatMapped11 = EffectArray.map(result.calls ?? [], (call) => [
                 String(result.sample),
                 call.surface,
                 call.description,
@@ -478,15 +625,16 @@ function groupBlocks(group: GroupSummary): ReadonlyArray<Block> {
                 call.outcome,
                 code(call.traceId),
                 code(call.spanId),
-              ]),
-            ),
+              ]);
+              return arrayValueIsArray(flatMapped11) ? flatMapped11 : [flatMapped11];
+            }),
           ),
         ]
       : []),
     ...combinedTable(
       "Server operations",
       ["Operation", "Ran in samples", "Calls", "Median total per sample", "Slowest call"],
-      servers.map((server) => server.operations),
+      EffectArray.map(servers, (server) => server.operations),
       (operations) => [
         operations.name,
         `${operations.samples} of ${servers.length}`,
@@ -498,7 +646,7 @@ function groupBlocks(group: GroupSummary): ReadonlyArray<Block> {
     ...combinedTable(
       "Traced SQL statements",
       ["Statement", "Ran in samples", "Calls", "Median total per sample", "Slowest call"],
-      servers.map((server) => server.sql.slowest),
+      EffectArray.map(servers, (server) => server.sql.slowest),
       (statement) => [
         code(statement.name),
         `${statement.samples} of ${servers.length}`,
@@ -516,7 +664,13 @@ function groupBlocks(group: GroupSummary): ReadonlyArray<Block> {
           ),
           table(
             ["Statement", "Calls", "Total", "Mean", "Rows", "Blocks hit", "Blocks read"],
-            combineStatements(databases.flatMap((database) => database.statements)).map(
+            EffectArray.map(
+              combineStatements(
+                EffectArray.flatMap(databases, (database) => {
+                  const flatMapped2 = database.statements;
+                  return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+                }),
+              ),
               (statement) => [
                 code(statement.query),
                 String(statement.calls),
@@ -531,66 +685,90 @@ function groupBlocks(group: GroupSummary): ReadonlyArray<Block> {
           heading(4, "Query plans (combined across samples; the slowest 15 of each sample)"),
           table(
             ["Statement", "Plan", "Executions", "Total", "Most rows", "Sequential scans"],
-            combinePlans(databases.flatMap((database) => database.plans)).map((plan) => [
-              code(plan.query),
-              plan.plan,
-              String(plan.executions),
-              `${plan.totalMs} ms`,
-              String(plan.maxRows),
-              plan.sequentialScans.join(", "),
-            ]),
+            EffectArray.map(
+              combinePlans(
+                EffectArray.flatMap(databases, (database) => {
+                  const flatMapped3 = database.plans;
+                  return arrayValueIsArray(flatMapped3) ? flatMapped3 : [flatMapped3];
+                }),
+              ),
+              (plan) => [
+                code(plan.query),
+                plan.plan,
+                String(plan.executions),
+                `${plan.totalMs} ms`,
+                String(plan.maxRows),
+                EffectArray.join(plan.sequentialScans, ", "),
+              ],
+            ),
           ),
         ]),
-    ...(servers.some((server) => server.logs.length > 0)
+    ...(EffectArray.some(servers, (server) => server.logs.length > 0)
       ? [
           heading(4, "Server logs"),
           table(
             ["Level", "Message", "Span", "Occurrences"],
             countRows(
-              servers.flatMap((server) =>
-                server.logs.map((log) => [log.level, log.message, log.span]),
-              ),
+              EffectArray.flatMap(servers, (server) => {
+                const flatMapped12 = EffectArray.map(server.logs, (log) => [
+                  log.level,
+                  log.message,
+                  log.span,
+                ]);
+                return arrayValueIsArray(flatMapped12) ? flatMapped12 : [flatMapped12];
+              }),
             ),
           ),
         ]
       : []),
-    ...(servers.some((server) => server.errors.length > 0)
+    ...(EffectArray.some(servers, (server) => server.errors.length > 0)
       ? [
           heading(4, "Failed spans"),
           table(
             ["Span", "Error", "Occurrences"],
             countRows(
-              servers.flatMap((server) => server.errors.map((error) => [error.span, error.error])),
+              EffectArray.flatMap(servers, (server) => {
+                const flatMapped13 = EffectArray.map(server.errors, (error) => [
+                  error.span,
+                  error.error,
+                ]);
+                return arrayValueIsArray(flatMapped13) ? flatMapped13 : [flatMapped13];
+              }),
             ),
           ),
         ]
       : []),
     ...cpuBlocks(
       "Browser CPU",
-      results.map((result) => result.browserCpu),
+      EffectArray.map(results, (result) => result.browserCpu),
     ),
     ...cpuBlocks(
       "Server CPU",
-      results.map((result) => result.serverCpu),
+      EffectArray.map(results, (result) => result.serverCpu),
     ),
     list(
-      group.samples.flatMap((sample) => {
+      EffectArray.flatMap(group.samples, (sample) => {
         const plans = sample.result?.databaseActivity;
         const plansAttachment =
           plans?.kind === "captured" ? plans.value.plansAttachment : undefined;
-        const planFile = sample.attachments.find(
-          (attachment) => attachment.name === plansAttachment,
+        const planFile = EffectOption.getOrUndefined(
+          EffectArray.findFirst(
+            sample.attachments,
+            (attachment) => attachment.name === plansAttachment,
+          ),
         )?.path;
         return [
           `Full result: ${sample.file}`,
           ...(planFile === undefined ? [] : [`Full query plans: ${planFile}`]),
-          ...sample.attachments
-            .filter(
+          ...EffectArray.map(
+            EffectArray.filter(
+              sample.attachments,
               (attachment) =>
                 attachment.name.startsWith("backend spans: ") ||
                 attachment.name.startsWith("database statements: "),
-            )
-            .map((attachment) => `Full evidence (${attachment.name}): ${attachment.path}`),
+            ),
+            (attachment) => `Full evidence (${attachment.name}): ${attachment.path}`,
+          ),
         ];
       }),
     ),
@@ -613,26 +791,27 @@ function combinedTable(
     return [];
   }
 
-  const combined = [...names.entries()]
-    .map(([name, groups]) => ({
+  const combined = sortWithComparator(
+    EffectArray.map([...names.entries()], ([name, groups]) => ({
       name,
       samples: groups.length,
-      calls: groups.reduce((total, group) => total + group.calls, 0),
+      calls: EffectArray.reduce(groups, 0, (total, group) => total + group.calls),
       medianTotalMs: tenths(
         median([
-          ...groups.map((group) => group.totalMs),
+          ...EffectArray.map(groups, (group) => group.totalMs),
           ...Array.from({ length: perSample.length - groups.length }, () => 0),
         ]),
       ),
-      maxMs: Math.max(...groups.map((group) => group.maxMs)),
-    }))
-    .toSorted((left, right) => right.medianTotalMs - left.medianTotalMs);
+      maxMs: Math.max(...EffectArray.map(groups, (group) => group.maxMs)),
+    })),
+    (left, right) => right.medianTotalMs - left.medianTotalMs,
+  );
   return [
     heading(
       4,
       `${title} (combined across ${perSample.length} sample${perSample.length === 1 ? "" : "s"})`,
     ),
-    table(columns, combined.map(row)),
+    table(columns, EffectArray.map(combined, row)),
   ];
 }
 
@@ -656,9 +835,10 @@ function combineStatements(
           },
     );
   }
-  return [...combined.values()]
-    .toSorted((left, right) => right.totalMs - left.totalMs)
-    .slice(0, 15);
+  return sortWithComparator(
+    [...combined.values()],
+    (left, right) => right.totalMs - left.totalMs,
+  ).slice(0, 15);
 }
 
 function combinePlans(plans: ReadonlyArray<PlanGroup>): ReadonlyArray<PlanGroup> {
@@ -678,18 +858,20 @@ function combinePlans(plans: ReadonlyArray<PlanGroup>): ReadonlyArray<PlanGroup>
           },
     );
   }
-  return [...combined.values()]
-    .toSorted((left, right) => right.totalMs - left.totalMs)
-    .slice(0, 15);
+  return sortWithComparator(
+    [...combined.values()],
+    (left, right) => right.totalMs - left.totalMs,
+  ).slice(0, 15);
 }
 
 function cpuBlocks(
   title: string,
   profiles: ReadonlyArray<typeof Cpu.Type | undefined>,
 ): ReadonlyArray<Block> {
-  const captured = profiles.flatMap((profile) =>
-    profile?.kind === "captured" ? [profile.value] : [],
-  );
+  const captured = EffectArray.flatMap(profiles, (profile) => {
+    const flatMapped14 = profile?.kind === "captured" ? [profile.value] : [];
+    return arrayValueIsArray(flatMapped14) ? flatMapped14 : [flatMapped14];
+  });
   if (captured.length === 0) {
     return [];
   }
@@ -716,15 +898,18 @@ function cpuBlocks(
     ),
     table(
       ["Function", "Location", "Self time", "Samples"],
-      [...functions.values()]
-        .toSorted((left, right) => right.selfMs - left.selfMs)
-        .slice(0, 10)
-        .map((entry) => [
+      EffectArray.map(
+        sortWithComparator(
+          [...functions.values()],
+          (left, right) => right.selfMs - left.selfMs,
+        ).slice(0, 10),
+        (entry) => [
           code(entry.function),
           entry.location,
           `${entry.selfMs} ms`,
           String(entry.samples),
-        ]),
+        ],
+      ),
     ),
   ];
 }
@@ -746,8 +931,8 @@ function telemetryBlocks(model: ReportModel): ReadonlyArray<Block> {
   if (model.spans === undefined) {
     return [];
   }
-  const reports = model.spans.filter((span) => span.name.startsWith("telemetry."));
-  const failed = model.spans.filter((span) => span.error !== undefined);
+  const reports = EffectArray.filter(model.spans, (span) => span.name.startsWith("telemetry."));
+  const failed = EffectArray.filter(model.spans, (span) => span.error !== undefined);
   return [
     heading(2, "Application telemetry"),
     ...(model.spans.length === 0
@@ -769,16 +954,19 @@ function telemetryBlocks(model: ReportModel): ReadonlyArray<Block> {
             : [
                 table(
                   ["Report", "Outcome", "Details"],
-                  reports.map((span) => [
+                  EffectArray.map(reports, (span) => [
                     span.name,
                     text(span.attributes["app.outcome"]),
-                    Object.entries(span.attributes)
-                      .filter(([key]) => /^(ui|error|telemetry)\./u.test(key))
-                      .map(
+                    EffectArray.join(
+                      EffectArray.map(
+                        EffectArray.filter(Object.entries(span.attributes), ([key]) =>
+                          /^(ui|error|telemetry)\./u.test(key),
+                        ),
                         ([key, value]) =>
                           `${key}=${typeof value === "string" ? value : jsonTools.jsonString(value)}`,
-                      )
-                      .join("; "),
+                      ),
+                      "; ",
+                    ),
                   ]),
                 ),
               ]),
@@ -787,7 +975,7 @@ function telemetryBlocks(model: ReportModel): ReadonlyArray<Block> {
             : [
                 table(
                   ["Span", "Error", "Occurrences"],
-                  countRows(failed.map((span) => [span.name, span.error ?? ""])),
+                  countRows(EffectArray.map(failed, (span) => [span.name, span.error ?? ""])),
                 ),
               ]),
         ]),
@@ -797,13 +985,16 @@ function telemetryBlocks(model: ReportModel): ReadonlyArray<Block> {
 function countRows(rows: ReadonlyArray<ReadonlyArray<string>>): Array<Array<Cell>> {
   const counts = new Map<string, { cells: ReadonlyArray<string>; count: number }>();
   for (const cells of rows) {
-    const key = cells.join("\n");
+    const key = EffectArray.join(cells, "\n");
     counts.set(key, { cells, count: (counts.get(key)?.count ?? 0) + 1 });
   }
-  return [...counts.values()]
-    .toSorted((left, right) => right.count - left.count)
-    .slice(0, 30)
-    .map((entry) => [...entry.cells, String(entry.count)]);
+  return EffectArray.map(
+    sortWithComparator([...counts.values()], (left, right) => right.count - left.count).slice(
+      0,
+      30,
+    ),
+    (entry) => [...entry.cells, String(entry.count)],
+  );
 }
 
 const performanceNote =
@@ -811,11 +1002,11 @@ const performanceNote =
 
 function statusCounts(model: ReportModel): string {
   const criteria = model.claims?.criteria ?? [];
-  const counts = ["passed", "failed", "blocked", "not-tested"].flatMap((name) => {
-    const count = criteria.filter((criterion) => criterion.status === name).length;
+  const counts = EffectArray.flatMap(["passed", "failed", "blocked", "not-tested"], (name) => {
+    const count = EffectArray.filter(criteria, (criterion) => criterion.status === name).length;
     return count === 0 ? [] : [`${count} ${name}`];
   });
-  return counts.join(", ") || "none claimed";
+  return EffectArray.join(counts, ", ") || "none claimed";
 }
 
 function citationText(assertion: { readonly test: string; readonly step?: string }): string {
@@ -828,11 +1019,19 @@ function stepStatus(
   model: ReportModel,
   assertion: { readonly test: string; readonly step?: string },
 ): string {
-  const attempt = model.results?.attempts.find((candidate) => candidate.title === assertion.test);
+  const attempt = optionalArrayValue(model.results?.attempts, (value) =>
+    EffectOption.getOrUndefined(
+      EffectArray.findFirst(value, (candidate) => candidate.title === assertion.test),
+    ),
+  );
   if (assertion.step === undefined) {
     return attempt === undefined ? "not executed" : `test ${attempt.status}`;
   }
-  const step = attempt?.steps.find((candidate) => candidate.title === assertion.step);
+  const step = optionalArrayValue(attempt?.steps, (value) =>
+    EffectOption.getOrUndefined(
+      EffectArray.findFirst(value, (candidate) => candidate.title === assertion.step),
+    ),
+  );
   if (step === undefined) {
     return "not executed";
   }
@@ -843,12 +1042,14 @@ function stepStatus(
   const protocol = (step.mcpExchanges?.length ?? 0) > 0 ? "; includes MCP exchanges" : "";
   const services = (step.serviceCalls?.length ?? 0) > 0 ? "; includes service calls" : "";
   const personas =
-    (step.personas?.length ?? 0) === 0 ? "" : `; personas: ${step.personas?.join(", ")}`;
+    (step.personas?.length ?? 0) === 0
+      ? ""
+      : `; personas: ${optionalArrayValue(step.personas, (value) => EffectArray.join(value, ", "))}`;
   return `${step.status}${timing}${protocol}${services}${personas}`;
 }
 
 function median(values: ReadonlyArray<number>): number {
-  const sorted = values.toSorted((left, right) => left - right);
+  const sorted = sortWithComparator(values, (left, right) => left - right);
   const middle = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 1
     ? (sorted[middle] ?? 0)
@@ -902,8 +1103,8 @@ function renderMarkdown(blocks: ReadonlyArray<Block>): string {
       ? `\`${content.replaceAll("`", "'")}\``
       : content;
   };
-  return `${blocks
-    .flatMap((block) => {
+  return `${EffectArray.join(
+    EffectArray.flatMap(blocks, (block) => {
       switch (block.kind) {
         case "heading":
           return [`${"#".repeat(block.level)} ${block.text}`];
@@ -914,16 +1115,30 @@ function renderMarkdown(blocks: ReadonlyArray<Block>): string {
         case "list":
           return block.items.length === 0
             ? []
-            : [block.items.map((item) => `- ${item}`).join("\n")];
+            : [
+                EffectArray.join(
+                  EffectArray.map(block.items, (item) => `- ${item}`),
+                  "\n",
+                ),
+              ];
         case "table":
           return block.rows.length === 0
             ? []
             : [
-                [
-                  `| ${block.columns.join(" | ")} |`,
-                  `| ${block.columns.map(() => "---").join(" | ")} |`,
-                  ...block.rows.map((row) => `| ${row.map(cell).join(" | ")} |`),
-                ].join("\n"),
+                EffectArray.join(
+                  [
+                    `| ${EffectArray.join(block.columns, " | ")} |`,
+                    `| ${EffectArray.join(
+                      EffectArray.map(block.columns, () => "---"),
+                      " | ",
+                    )} |`,
+                    ...EffectArray.map(
+                      block.rows,
+                      (row) => `| ${EffectArray.join(EffectArray.map(row, cell), " | ")} |`,
+                    ),
+                  ],
+                  "\n",
+                ),
               ];
         case "link":
           return [`[${block.text}](${block.href})`];
@@ -934,8 +1149,9 @@ function renderMarkdown(blocks: ReadonlyArray<Block>): string {
         case "image":
           return [`![${block.alt}](${block.artifact})`];
       }
-    })
-    .join("\n\n")}\n`;
+    }),
+    "\n\n",
+  )}\n`;
 }
 
 async function renderHtml(
@@ -951,7 +1167,7 @@ async function renderHtml(
     return `<td${value.status === undefined ? "" : ` class="${escape(value.status)}"`}>${content}</td>`;
   };
   const rendered = await Promise.all(
-    blocks.map(async (block) => {
+    EffectArray.map(blocks, async (block) => {
       switch (block.kind) {
         case "heading":
           return `<h${block.level}>${escape(block.text)}</h${block.level}>`;
@@ -962,11 +1178,23 @@ async function renderHtml(
         case "list":
           return block.items.length === 0
             ? ""
-            : `<ul>${block.items.map((item) => `<li>${escape(item)}</li>`).join("")}</ul>`;
+            : `<ul>${EffectArray.join(
+                EffectArray.map(block.items, (item) => `<li>${escape(item)}</li>`),
+                "",
+              )}</ul>`;
         case "table":
           return block.rows.length === 0
             ? ""
-            : `<table><thead><tr>${block.columns.map((column) => `<th>${escape(column)}</th>`).join("")}</tr></thead><tbody>${block.rows.map((row) => `<tr>${row.map(cell).join("")}</tr>`).join("")}</tbody></table>`;
+            : `<table><thead><tr>${EffectArray.join(
+                EffectArray.map(block.columns, (column) => `<th>${escape(column)}</th>`),
+                "",
+              )}</tr></thead><tbody>${EffectArray.join(
+                EffectArray.map(
+                  block.rows,
+                  (row) => `<tr>${EffectArray.join(EffectArray.map(row, cell), "")}</tr>`,
+                ),
+                "",
+              )}</tbody></table>`;
         case "link":
           return `<p><a href="${escape(block.href)}">${escape(block.text)}</a></p>`;
         case "transcript":
@@ -999,7 +1227,7 @@ code { font-size: 12.5px; word-break: break-word; }
 </style>
 </head>
 <body>
-${rendered.filter(Boolean).join("\n")}
+${EffectArray.join(EffectArray.filter(rendered, Boolean), "\n")}
 </body>
 </html>
 `;

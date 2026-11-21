@@ -1,5 +1,6 @@
 import { lte } from "drizzle-orm";
 import { Array, Context, DateTime, Effect, Layer } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { AccountRetentionPersistenceFailed } from "#contexts/auth/AccountRetention.ts";
 import { anyOf } from "#database/dbUtilities.ts";
@@ -42,7 +43,7 @@ export class AccountRetentionRepository extends Context.Service<
             .orderBy(session.expiresAt)
             .limit(input.limit),
         );
-        const sessionIds = expiredSessions.map((row) => row.id);
+        const sessionIds = EffectArray.map(expiredSessions, (row) => row.id);
         const sessions = Array.isArrayNonEmpty(sessionIds)
           ? (yield* query(() =>
               database
@@ -60,7 +61,7 @@ export class AccountRetentionRepository extends Context.Service<
             .orderBy(verification.expiresAt)
             .limit(input.limit),
         );
-        const verificationIds = expiredVerifications.map((row) => row.id);
+        const verificationIds = EffectArray.map(expiredVerifications, (row) => row.id);
         const verifications = Array.isArrayNonEmpty(verificationIds)
           ? (yield* query(() =>
               database
@@ -78,7 +79,7 @@ export class AccountRetentionRepository extends Context.Service<
             .orderBy(oauthConsent.updatedAt)
             .limit(input.limit),
         );
-        const consentIds = unusedConsents.map((row) => row.id);
+        const consentIds = EffectArray.map(unusedConsents, (row) => row.id);
         const consents = Array.isArrayNonEmpty(consentIds)
           ? (yield* query(() =>
               database

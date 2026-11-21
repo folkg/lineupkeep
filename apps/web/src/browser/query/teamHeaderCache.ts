@@ -1,3 +1,4 @@
+import { EffectArray } from "@lineupkeep/collections";
 const storageKey = "lineupkeep.team-headers.v1";
 
 export type CachedTeamHeader = {
@@ -16,7 +17,7 @@ export function readCachedTeamHeaders(viewerId: string): ReadonlyArray<CachedTea
     if (cachedViewer !== viewerId) {
       return [];
     }
-    return lines.flatMap((line) => {
+    return EffectArray.flatMap(lines, (line) => {
       const header = parseHeader(line);
       return header === undefined ? [] : [header];
     });
@@ -44,7 +45,10 @@ export function storeCachedTeamHeaders(
     return;
   }
   try {
-    localStorage.setItem(storageKey, [viewerId, ...teams.map(encodeHeader)].join("\n"));
+    localStorage.setItem(
+      storageKey,
+      EffectArray.join([viewerId, ...EffectArray.map(teams, encodeHeader)], "\n"),
+    );
   } catch {
     return;
   }

@@ -1,8 +1,13 @@
 import { Effect, Layer, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { OtlpSerialization, OtlpTracer } from "effect/observability";
 
 import { safeTracerLayer } from "#runtime/Observability.ts";
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
+
 export function makeTelemetryTest(): {
   layer: Layer.Layer<never, never, never>;
   read: () => {
@@ -50,11 +55,20 @@ export function makeTelemetryTest(): {
     layer: safeTracerLayer.pipe(Layer.provide(exporter)),
     read: () => ({
       payloads,
-      spans: payloads.flatMap((payload) =>
-        Effect.runSync(
-          Schema.decodeEffect(Schema.fromJsonString(TracePayload))(payload),
-        ).resourceSpans.flatMap((resource) => resource.scopeSpans.flatMap((scope) => scope.spans)),
-      ),
+      spans: EffectArray.flatMap(payloads, (payload) => {
+        const flatMapped1 = EffectArray.flatMap(
+          Effect.runSync(Schema.decodeEffect(Schema.fromJsonString(TracePayload))(payload))
+            .resourceSpans,
+          (resource) => {
+            const flatMapped1 = EffectArray.flatMap(resource.scopeSpans, (scope) => {
+              const flatMapped1 = scope.spans;
+              return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+            });
+            return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+          },
+        );
+        return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+      }),
     }),
   };
 }

@@ -19,6 +19,7 @@ import type {
   SlotEligibility,
   SlotId,
 } from "@lineupkeep/lineup-solver";
+import { Array as EffectArray } from "effect";
 
 import type { LineupLeftInPlacePlayer } from "#contexts/connections/LineupRun.ts";
 import type {
@@ -40,6 +41,9 @@ import type {
   RosterRule,
   RosterSlot as RuleSlot,
 } from "#contexts/connections/RosterSlots.ts";
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 const selectionBasis: SelectionBasis = makeSelectionBasis("provider-score");
 const placementBasis: SelectionBasis = makeSelectionBasis("roster-placement");
@@ -58,12 +62,20 @@ const availabilityLadder: ReadonlyArray<AvailabilityTier> = [
 
 export function planAssignments(input: PlanAssignmentsInput): PlanAssignmentsResult {
   const rule = rosterRuleOf(input.league.rosterConstraints, input.league.rosterPositions);
-  const limits = new Map(input.gamesPlayed.map((entry) => [entry.position, entry]));
+  const limits = new Map(EffectArray.map(input.gamesPlayed, (entry) => [entry.position, entry]));
   const lockedBySlot = lockedCounts(input.roster);
-  const slots = input.league.rosterPositions.flatMap((position) =>
-    rosterSlots(position, limits, lockedBySlot.get(position.position) ?? 0, rule),
+  const slots = EffectArray.flatMap(input.league.rosterPositions, (position) => {
+    const flatMapped1 = rosterSlots(
+      position,
+      limits,
+      lockedBySlot.get(position.position) ?? 0,
+      rule,
+    );
+    return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+  });
+  const values = new Map(
+    EffectArray.map(input.values, (value) => [value.providerPlayerKey, value]),
   );
-  const values = new Map(input.values.map((value) => [value.providerPlayerKey, value]));
   const solved = solveLineup({
     selectionBasis,
     availabilityTiers: availabilityLadder,
@@ -96,7 +108,7 @@ export function planRosterPlacement(input: {
     return { kind: "refused", detail: solverRefusalDetail(solved.refusal) };
   }
   const placements = new Map(
-    solved.plan.assignments.map((assignment) => {
+    EffectArray.map(solved.plan.assignments, (assignment) => {
       const position = placement.positionById.get(assignment.slotId);
       if (position === undefined) {
         throw new Error("A planned placement named an undeclared slot.");
@@ -118,7 +130,8 @@ export function planReserveMoves(input: {
   const placement = planRosterPlacement(input);
   return placement.kind === "refused"
     ? []
-    : placement.moves.filter(
+    : EffectArray.filter(
+        placement.moves,
         (move) =>
           input.rule.byPosition.get(move.fromSlot)?.kind !== "reserve" &&
           input.rule.byPosition.get(move.toSlot)?.kind === "reserve",
@@ -135,7 +148,7 @@ function placementSlots(
 } {
   const idByPosition = new Map<string, SlotId>();
   const positionById = new Map<string, string>();
-  const slots = rule.slots.map((slot, index): RosterSlot => {
+  const slots = EffectArray.map(rule.slots, (slot, index): RosterSlot => {
     const id = placementSlotId(slot, index);
     idByPosition.set(slot.position, id);
     positionById.set(String(id), slot.position);
@@ -173,7 +186,7 @@ function placementSlots(
 }
 
 function occupiedCount(players: ReadonlyArray<RosterPlacementPlayer>, position: string): number {
-  return players.filter((player) => player.slot === position).length;
+  return EffectArray.filter(players, (player) => player.slot === position).length;
 }
 
 function placementSlotId(slot: RuleSlot, index: number): SlotId {
@@ -186,7 +199,7 @@ function placementPlayers(
   players: ReadonlyArray<RosterPlacementPlayer>,
   idByPosition: ReadonlyMap<string, SlotId>,
 ): ReadonlyArray<RosterPlayer> {
-  return players.flatMap((player) => {
+  return EffectArray.flatMap(players, (player) => {
     const currentSlotId = player.slot === undefined ? undefined : idByPosition.get(player.slot);
     if (currentSlotId === undefined) {
       return [];
@@ -213,7 +226,7 @@ function placementMoves(
   players: ReadonlyArray<RosterPlacementPlayer>,
   placements: ReadonlyMap<string, string>,
 ): ReadonlyArray<RosterPlacementMove> {
-  return players.flatMap((player) => {
+  return EffectArray.flatMap(players, (player) => {
     const toSlot = placements.get(player.key);
     return toSlot === undefined || player.slot === undefined || toSlot === player.slot
       ? []
@@ -233,7 +246,10 @@ function assignments(
   planned: ReadonlyArray<LineupAssignment>,
 ): ReadonlyArray<ProviderLineupAssignment> {
   const plannedSlots = new Map(
-    planned.map((assignment) => [String(assignment.playerId), String(assignment.slotId)]),
+    EffectArray.map(planned, (assignment) => [
+      String(assignment.playerId),
+      String(assignment.slotId),
+    ]),
   );
   const changed: Array<ProviderLineupAssignment> = [];
   for (const player of roster.players) {
@@ -255,8 +271,8 @@ function leftInPlaceReports(
   rule: RosterRule,
   leftInPlace: ReadonlyArray<PlayerId>,
 ): ReadonlyArray<LineupLeftInPlacePlayer> {
-  const left = new Set(leftInPlace.map(String));
-  return roster.players.flatMap((player) => {
+  const left = new Set(EffectArray.map(leftInPlace, String));
+  return EffectArray.flatMap(roster.players, (player) => {
     if (player.slot.status !== "verified" || !left.has(player.providerPlayerKey)) {
       return [];
     }
@@ -296,10 +312,12 @@ function acceptsSlot(
   place: { readonly positions: ReadonlyArray<string>; readonly injured: boolean },
 ): boolean {
   return (
-    slots.some(
+    EffectArray.some(
+      slots,
       (slot) => slot.kind !== "reserve" && slotAccepts(slot.eligibility, place.positions),
     ) ||
-    rule.slots.some(
+    EffectArray.some(
+      rule.slots,
       (slot) => slot.kind === "reserve" && slotPlacement(rule, slot.position, place).legal === true,
     )
   );
@@ -308,7 +326,7 @@ function acceptsSlot(
 function slotAccepts(eligibility: SlotEligibility, positions: ReadonlyArray<string>): boolean {
   return (
     eligibility.kind === "any" ||
-    eligibility.positions.some((position) => positions.includes(position))
+    EffectArray.some(eligibility.positions, (position) => positions.includes(position))
   );
 }
 
@@ -318,11 +336,21 @@ function solverPlayers(
   slots: ReadonlyArray<RosterSlot>,
   rule: RosterRule,
 ): ReadonlyArray<RosterPlayer> {
-  return members.flatMap((player) =>
-    player.slot.status === "verified"
-      ? [rosterPlayer(player, player.slot.slot, values.get(player.providerPlayerKey), slots, rule)]
-      : [],
-  );
+  return EffectArray.flatMap(members, (player) => {
+    const flatMapped2 =
+      player.slot.status === "verified"
+        ? [
+            rosterPlayer(
+              player,
+              player.slot.slot,
+              values.get(player.providerPlayerKey),
+              slots,
+              rule,
+            ),
+          ]
+        : [];
+    return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+  });
 }
 
 function rosterPlayer(
@@ -341,13 +369,16 @@ function rosterPlayer(
     eligiblePositions: place.positions,
     availabilityTier: makeAvailabilityTier(value.availability),
     selection: selection(value.score),
-    reserveEligible: rule.slots.some(
+    reserveEligible: EffectArray.some(
+      rule.slots,
       (entry) =>
         entry.kind === "reserve" && slotPlacement(rule, entry.position, place).legal === true,
     ),
     reserveSlotIds: reserveSlotIds(rule, place, makeSlotId),
     lockedSlotId: player.isEditable === true ? undefined : makeSlotId(slot),
-    currentSlotId: slots.some((entry) => String(entry.id) === slot) ? makeSlotId(slot) : undefined,
+    currentSlotId: EffectArray.some(slots, (entry) => String(entry.id) === slot)
+      ? makeSlotId(slot)
+      : undefined,
     mayBeLeftInPlace: mayBeLeftInPlace(player, slots, rule),
   };
 }
@@ -456,11 +487,13 @@ function reserveSlotIds(
   place: RosterPlaceFacts,
   idOf: (position: string) => SlotId,
 ): ReadonlyArray<SlotId> {
-  return rule.slots.flatMap((slot) =>
-    slot.kind === "reserve" && slotPlacement(rule, slot.position, place).legal === true
-      ? [idOf(slot.position)]
-      : [],
-  );
+  return EffectArray.flatMap(rule.slots, (slot) => {
+    const flatMapped3 =
+      slot.kind === "reserve" && slotPlacement(rule, slot.position, place).legal === true
+        ? [idOf(slot.position)]
+        : [];
+    return arrayValueIsArray(flatMapped3) ? flatMapped3 : [flatMapped3];
+  });
 }
 
 function solverRefusalDetail(refusal: LineupRefusal): string {

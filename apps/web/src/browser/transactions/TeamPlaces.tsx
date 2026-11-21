@@ -1,3 +1,4 @@
+import { EffectArray } from "@lineupkeep/collections";
 import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 
@@ -44,7 +45,7 @@ function eligibilityCopy(eligibility: ReserveEligibilityView): string {
     case "published_positions":
       return eligibility.positions.length === 0
         ? "accepts any player"
-        : `accepts ${eligibility.positions.join(", ")}`;
+        : `accepts ${EffectArray.join(eligibility.positions, ", ")}`;
     case "injury_status":
       return "accepts an injured player";
     case "not_published":

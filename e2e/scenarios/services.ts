@@ -3,6 +3,7 @@ import { Connections } from "@lineupkeep/backend/connections/Connections";
 import type { FantasyTeam } from "@lineupkeep/backend/connections/FantasyTeam";
 import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
 import { Array, DateTime, Effect, Redacted, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type { ServiceProgram } from "#e2e/serviceContract.ts";
 
@@ -20,14 +21,14 @@ export const connectYahooAndDiscoverTeams: ServiceProgram = (user, arguments_) =
       0,
     );
     const teams = yield* connections.discoverTeams(user.id, [{ id: linked.id }]);
-    return teams.map(observeTeam);
+    return EffectArray.map(teams, observeTeam);
   });
 
 export const readConnections: ServiceProgram = (user, arguments_) =>
   Effect.gen(function* () {
     yield* Schema.decodeUnknownEffect(Schema.Struct({}))(arguments_);
     const connections = yield* Connections;
-    return (yield* connections.list(user.id)).map(observeConnection);
+    return EffectArray.map(yield* connections.list(user.id), observeConnection);
   });
 
 export const rejectOperation: ServiceProgram = (_user, arguments_) =>

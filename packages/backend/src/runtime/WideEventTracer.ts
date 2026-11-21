@@ -1,4 +1,6 @@
 import { Exit, Option, Redacted, Tracer } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 
 import jsonTools from "#runtime/JsonText.ts";
 
@@ -193,7 +195,9 @@ function operationOf(
   if (unitKind === "lineup_run") {
     return root.name;
   }
-  const operation = spans.find((span) => attributeOf(span, "app.operation") !== undefined);
+  const operation = EffectOption.getOrUndefined(
+    EffectArray.findFirst(spans, (span) => attributeOf(span, "app.operation") !== undefined),
+  );
   return textOf(attributeOf(operation ?? root, "app.operation")) ?? root.name;
 }
 
@@ -254,35 +258,38 @@ function spanGroupsOf(
       group.maximum = Math.max(group.maximum, duration);
     }
   }
-  return [...groups]
-    .sort((left, right) => right[1].total - left[1].total)
-    .slice(0, maximumSpanGroups)
-    .map(([name, group]) => ({
+  return EffectArray.map(
+    [...groups].sort((left, right) => right[1].total - left[1].total).slice(0, maximumSpanGroups),
+    ([name, group]) => ({
       name,
       count: group.count,
       total_ms: roundMillis(group.total),
       max_ms: roundMillis(group.maximum),
-    }));
+    }),
+  );
 }
 
 function outcomeOf(spans: ReadonlyArray<SpanRecord>, root: SpanRecord): Outcome {
-  return spans
-    .filter(
-      (span) =>
-        span.spanId === root.spanId ||
-        attributeOf(span, "app.outcome") !== undefined ||
-        attributeOf(span, "app.operation") !== undefined,
-    )
-    .map((span) => outcomeOfSpan(span))
-    .reduce<Outcome>(
-      (worst, outcome) => (outcomeRank[outcome] > outcomeRank[worst] ? outcome : worst),
-      "ok",
-    );
+  const initial = Option.getOrElse(Option.none<Outcome>(), (): Outcome => "ok");
+  return EffectArray.reduce(
+    EffectArray.map(
+      EffectArray.filter(
+        spans,
+        (span) =>
+          span.spanId === root.spanId ||
+          attributeOf(span, "app.outcome") !== undefined ||
+          attributeOf(span, "app.operation") !== undefined,
+      ),
+      (span) => outcomeOfSpan(span),
+    ),
+    initial,
+    (worst, outcome) => (outcomeRank[outcome] > outcomeRank[worst] ? outcome : worst),
+  );
 }
 
 function outcomeOfSpan(span: SpanRecord): Outcome {
   if (Exit.isFailure(span.exit)) {
-    const kinds = new Set(span.exit.cause.reasons.map((reason) => reason._tag));
+    const kinds = new Set(EffectArray.map(span.exit.cause.reasons, (reason) => reason._tag));
     if (kinds.has("Die")) {
       return "defect";
     }
@@ -325,14 +332,18 @@ function severityOf(outcome: Outcome): Severity {
 
 function safeAttributeEntries(attributes: Iterable<readonly [string, unknown]>): SafeAttributes {
   return Object.fromEntries(
-    [...attributes]
-      .filter(([key]) => !suppressedKeys.has(key) && !isSuppressedKey(key))
-      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-      .slice(0, maximumAttributes)
-      .flatMap(([key, value]) => {
+    EffectArray.flatMap(
+      EffectArray.filter(
+        [...attributes],
+        ([key]) => !suppressedKeys.has(key) && !isSuppressedKey(key),
+      )
+        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+        .slice(0, maximumAttributes),
+      ([key, value]) => {
         const safe = safeValue(value);
         return safe === undefined ? [] : [[key, safe]];
-      }),
+      },
+    ),
   );
 }
 
@@ -352,8 +363,8 @@ function safeValue(value: unknown): SafeValue | undefined {
   if (typeof value === "bigint") {
     return value.toString();
   }
-  if (Array.isArray(value)) {
-    return value.slice(0, maximumArrayItems).flatMap((item) => {
+  if (EffectArray.isArray(value)) {
+    return EffectArray.flatMap(value.slice(0, maximumArrayItems), (item) => {
       const safe = safeValue(item);
       return safe === undefined ? [] : [safe];
     });
@@ -377,7 +388,9 @@ function isSuppressedKey(key: string): boolean {
 }
 
 function attributeOf(span: SpanRecord, key: string): unknown {
-  return span.attributes.find(([name]) => name === key)?.[1];
+  return EffectOption.getOrUndefined(
+    EffectArray.findFirst(span.attributes, ([name]) => name === key),
+  )?.[1];
 }
 
 function textOf(value: unknown): string | undefined {

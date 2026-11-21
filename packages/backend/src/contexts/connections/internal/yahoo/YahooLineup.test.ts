@@ -1,4 +1,5 @@
 import { Effect, Redacted, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { planAssignments } from "#contexts/connections/internal/LineupPlanning.ts";
@@ -43,7 +44,7 @@ describe("Yahoo declared trade proposal assets", () => {
 describe("Yahoo scoring translation", () => {
   it("maps every provider status code to one availability tier", () => {
     const tiers = Object.fromEntries(
-      yahooInjuryStatusCodes.map((code) => [
+      EffectArray.map(yahooInjuryStatusCodes, (code) => [
         code,
         assessAvailability(policyPlayerWith(yahooAvailability(code)), {
           kind: "week",
@@ -293,7 +294,7 @@ describe("Yahoo scoring translation", () => {
       ["unconfirmed", 5],
     ]);
 
-    expect(outcome.players.map((player) => player.availability)).toEqual([
+    expect(EffectArray.map(outcome.players, (player) => player.availability)).toEqual([
       "will-play",
       "will-play",
     ]);
@@ -419,7 +420,7 @@ describe("Yahoo scoring translation", () => {
     if (under.kind !== "scored") {
       return;
     }
-    expect(under.players.map((player) => player.availability)).toEqual([
+    expect(EffectArray.map(under.players, (player) => player.availability)).toEqual([
       "not-scheduled",
       "will-play",
     ]);
@@ -494,7 +495,9 @@ describe("Yahoo scoring translation", () => {
       { providerPlayerKey: "hurt", slot: "BN" },
       { providerPlayerKey: "parked", slot: "C" },
     ]);
-    expect(plannedAssignments.every((assignment) => assignment.slot !== "IR")).toBe(true);
+    expect(EffectArray.every(plannedAssignments, (assignment) => assignment.slot !== "IR")).toBe(
+      true,
+    );
   });
 
   it("starts the better projected player ahead of the one the crowd starts more", () => {
@@ -711,7 +714,7 @@ function ownedFacts(
     cuts: [],
     percentOwned,
     percentOwnedDelta: delta,
-    ranks: ranks.map(([type, rank]) => ({ type, rank })),
+    ranks: EffectArray.map(ranks, ([type, rank]) => ({ type, rank })),
   };
 }
 
@@ -772,7 +775,7 @@ function hockeyRosterOf(
     providerTeamKey: "recorded-hockey-team",
     providerLeagueKey: "recorded-hockey-league",
     coverage: { type: "date", date: "2026-10-26" },
-    players: rows.map((row) => ({
+    players: EffectArray.map(rows, (row) => ({
       providerPlayerKey: row.key,
       name: row.key,
       displayPosition: primaryPosition,
@@ -827,7 +830,7 @@ function planWithLeague(
 } {
   const outcome = runPlan(
     { ...hockeyRequest(), league, roster },
-    { rates: percents.map(([key, percent]) => startRate(key, percent, [])) },
+    { rates: EffectArray.map(percents, ([key, percent]) => startRate(key, percent, [])) },
   );
   if (outcome.kind !== "scored") {
     throw new Error("Expected scored values.");
@@ -924,7 +927,7 @@ function flexRoster(
     providerTeamKey: "recorded-team",
     providerLeagueKey: "recorded-league",
     coverage: { type: "week", week: targetWeek },
-    players: rows.map((row) => flexPlayer(row.key, row.slot, byes[row.key])),
+    players: EffectArray.map(rows, (row) => flexPlayer(row.key, row.slot, byes[row.key])),
   };
 }
 
@@ -1028,7 +1031,9 @@ function recordedRoster(
     providerTeamKey: "recorded-team",
     providerLeagueKey: "recorded-league",
     coverage: options.coverage ?? { type: "week", week: targetWeek },
-    players: recordedRosterRows.map((row, index) => rosterPlayer(index, row, editable)),
+    players: EffectArray.map(recordedRosterRows, (row, index) =>
+      rosterPlayer(index, row, editable),
+    ),
   };
 }
 

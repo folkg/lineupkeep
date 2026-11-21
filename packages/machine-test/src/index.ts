@@ -1,3 +1,4 @@
+import { Array as EffectArray } from "effect";
 export type TestSnapshot<State> = {
   readonly state: { readonly path: string; readonly value: State };
 };
@@ -107,7 +108,7 @@ export function verify<State, Event>(
   trace: Trace<State, Event>,
 ): void {
   const declared = new Map(
-    adapter.declarations.map((declaration) => [declaration.id, declaration]),
+    EffectArray.map(adapter.declarations, (declaration) => [declaration.id, declaration]),
   );
   for (const step of trace.steps) {
     if (!step.accepted) {
@@ -165,7 +166,7 @@ export function explore<State, Event>(
   ];
   const seen = new Set([adapter.stateKey(options.input)]);
   const declared = new Map(
-    adapter.declarations.map((declaration) => [declaration.id, declaration]),
+    EffectArray.map(adapter.declarations, (declaration) => [declaration.id, declaration]),
   );
   const taken = new Set<string>();
   for (let cursor = 0; cursor < queue.length; cursor++) {
@@ -181,7 +182,7 @@ export function explore<State, Event>(
         throw new MachineTestFailure(`Final state ${adapter.statePath(current)} accepted ${name}`);
       }
       const after = next ?? current;
-      const prefix = [...path, name].join(" -> ");
+      const prefix = EffectArray.join([...path, name], " -> ");
       try {
         for (const invariant of options.invariants ?? []) {
           if (invariant._tag === "StateInvariant") {
@@ -219,7 +220,10 @@ export function explore<State, Event>(
       }
     }
   }
-  const uncovered = adapter.declarations.filter(({ id }) => !taken.has(id)).map(({ id }) => id);
+  const uncovered = EffectArray.map(
+    EffectArray.filter(adapter.declarations, ({ id }) => !taken.has(id)),
+    ({ id }) => id,
+  );
   const missing = uncovered.length;
   return {
     completeness: { _tag: "Complete" },

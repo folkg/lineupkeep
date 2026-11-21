@@ -1,4 +1,5 @@
 import { DateTime, Duration, Effect, Layer } from "effect";
+import { Array as EffectArray, Option as EffectOption } from "effect";
 
 import { ToolCallQuota, toolCallLimits } from "#contexts/toolCalls/ToolCallQuota.ts";
 import type {
@@ -77,7 +78,9 @@ function countOf(
   counted: ReadonlyArray<{ readonly key: string; readonly count: number }>,
   key: string,
 ): number {
-  const row = counted.find((candidate) => candidate.key === key);
+  const row = EffectOption.getOrUndefined(
+    EffectArray.findFirst(counted, (candidate) => candidate.key === key),
+  );
   if (row === undefined) {
     throw new Error("The tool-call quota counter was not returned");
   }

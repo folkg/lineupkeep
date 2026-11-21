@@ -13,6 +13,7 @@ import {
   notExists,
 } from "drizzle-orm";
 import { Array, Context, DateTime, Effect, Layer } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { AuthenticationUnavailable } from "#contexts/auth/Auth.ts";
 import { acceptedScopeNames } from "#contexts/auth/AuthorizationScopes.ts";
@@ -96,7 +97,7 @@ export class OAuthClientRepository extends Context.Service<OAuthClientRepository
             .orderBy(asc(oauthClient.createdAt))
             .limit(limit),
         );
-        const ids = candidates.map((row) => row.id);
+        const ids = EffectArray.map(candidates, (row) => row.id);
         if (!Array.isArrayNonEmpty(ids)) {
           return 0;
         }
@@ -118,7 +119,7 @@ export class OAuthClientRepository extends Context.Service<OAuthClientRepository
       const widenDynamicRegistrations = Effect.fn(
         "OAuthClientRepository.widenDynamicRegistrations",
       )(function* (scopes: ReadonlyArray<AuthorizationScope>) {
-        const advertised = scopes.map((scope) => scope.name);
+        const advertised = EffectArray.map(scopes, (scope) => scope.name);
         const accepted = [...acceptedScopeNames(scopes)];
         const now = DateTime.toDateUtc(yield* DateTime.now);
         const widened = yield* query(() =>

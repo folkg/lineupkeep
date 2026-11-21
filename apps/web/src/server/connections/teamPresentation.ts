@@ -10,6 +10,7 @@ import type {
   TeamNoteSaved,
 } from "@lineupkeep/backend/connections/Teams";
 import { DateTime, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type {
   LineupRunView,
@@ -26,7 +27,7 @@ export function toTeamSummaryView(summary: TeamSummary): TeamSummaryView {
     connectionStatus: summary.connectionStatus,
     connectionCount: summary.connectionCount,
     ...(summary.lastRun === undefined ? {} : { lastRun: toLineupRunView(summary.lastRun) }),
-    recentRuns: summary.recentRuns.map(toLineupRunView),
+    recentRuns: EffectArray.map(summary.recentRuns, toLineupRunView),
   };
 }
 

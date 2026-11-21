@@ -26,6 +26,7 @@ import {
 import type { TransactionPlanServiceError } from "@lineupkeep/backend/connections/TransactionPlans";
 import { Effect, Schema } from "effect";
 import type { Layer } from "effect";
+import { Array as EffectArray } from "effect";
 import { Tool, Toolkit } from "effect/ai";
 
 import { RequiredScope } from "./toolAuthorization";
@@ -217,7 +218,7 @@ export function proposalToolHandlers(
                   ? {}
                   : { client: input.client }),
               },
-              moves: input.moves.map((move) => ({
+              moves: EffectArray.map(input.moves, (move) => ({
                 ...(move.move === undefined ? {} : { move: move.move }),
                 ...(move.group === undefined ? {} : { group: move.group }),
                 kind: move.kind,

@@ -1,6 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 
 import { Option, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 import postgres from "postgres";
 
 export function postgresProbe(databaseUrl: string): DatabaseProbe {
@@ -32,9 +33,9 @@ export function postgresProbe(databaseUrl: string): DatabaseProbe {
                 )[0]?.text ?? "")
               : "";
           return {
-            statements: statements
-              .filter((row) => !isProbeStatement(row.query))
-              .map((row) => ({
+            statements: EffectArray.map(
+              EffectArray.filter(statements, (row) => !isProbeStatement(row.query)),
+              (row) => ({
                 query: row.query,
                 calls: row.calls,
                 totalMs: tenths(row.total_exec_time),
@@ -42,8 +43,9 @@ export function postgresProbe(databaseUrl: string): DatabaseProbe {
                 rows: row.rows,
                 sharedBlocksHit: row.shared_blks_hit,
                 sharedBlocksRead: row.shared_blks_read,
-              })),
-            plans: parsePlanLog(lines).filter((plan) => !isProbeStatement(plan.query)),
+              }),
+            ),
+            plans: EffectArray.filter(parsePlanLog(lines), (plan) => !isProbeStatement(plan.query)),
           };
         } finally {
           await sql.end({ timeout: 5 });
@@ -54,7 +56,7 @@ export function postgresProbe(databaseUrl: string): DatabaseProbe {
 }
 
 export function parsePlanLog(lines: string): ReadonlyArray<StatementPlan> {
-  return lines.split("\n").flatMap((line) => {
+  return EffectArray.flatMap(lines.split("\n"), (line) => {
     const entry = Option.getOrUndefined(Schema.decodeOption(LogLine)(line));
     const match =
       entry === undefined ? null : /^duration: ([\d.]+) ms\s+plan:\n/u.exec(entry.message);
@@ -76,9 +78,10 @@ export function parsePlanLog(lines: string): ReadonlyArray<StatementPlan> {
         rows: numberAt(top, "Actual Rows"),
         sharedBlocksHit: numberAt(top, "Shared Hit Blocks"),
         sharedBlocksRead: numberAt(top, "Shared Read Blocks"),
-        sequentialScans: planNodes(top)
-          .filter((node) => node["Node Type"] === "Seq Scan")
-          .map((node) => text(node["Relation Name"])),
+        sequentialScans: EffectArray.map(
+          EffectArray.filter(planNodes(top), (node) => node["Node Type"] === "Seq Scan"),
+          (node) => text(node["Relation Name"]),
+        ),
         detail: top,
       },
     ];
@@ -86,22 +89,28 @@ export function parsePlanLog(lines: string): ReadonlyArray<StatementPlan> {
 }
 
 export function describePlan(plan: PlanNode): string {
-  return planNodes(plan)
-    .map((node) => {
+  return EffectArray.join(
+    EffectArray.map(planNodes(plan), (node) => {
       const relation = text(node["Relation Name"]);
       const index = text(node["Index Name"]);
       return `${text(node["Node Type"])}${index === "" ? "" : ` using ${index}`}${relation === "" ? "" : ` on ${relation}`}`;
-    })
-    .join(" → ");
+    }),
+    " → ",
+  );
 }
 
 function planNodes(plan: PlanNode): ReadonlyArray<PlanNode> {
   const children = plan["Plans"];
-  return [plan, ...(Array.isArray(children) ? children.filter(isPlanNode).flatMap(planNodes) : [])];
+  return [
+    plan,
+    ...(EffectArray.isArray(children)
+      ? EffectArray.flatMap(EffectArray.filter(children, isPlanNode), planNodes)
+      : []),
+  ];
 }
 
 function isPlanNode(value: unknown): value is PlanNode {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !EffectArray.isArray(value);
 }
 
 function numberAt(node: PlanNode, key: string): number | undefined {

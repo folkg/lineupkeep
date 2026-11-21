@@ -1,3 +1,4 @@
+import { EffectArray, EffectOption } from "@lineupkeep/collections";
 import { useQuery } from "@tanstack/solid-query";
 
 import type { TeamRunQueryOptions } from "./teamQueries";
@@ -12,7 +13,9 @@ export function useRunPage(props: RunPageOptions): RunPageController {
         return undefined;
       }
       const current = run.data.run;
-      return teams.data.find((candidate) => candidate.team.id === current.team);
+      return EffectOption.getOrUndefined(
+        EffectArray.findFirst(teams.data, (candidate) => candidate.team.id === current.team),
+      );
     },
     isLoading: () => run.isPending,
     failure: () => (run.isPending ? undefined : run.error),

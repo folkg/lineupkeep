@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { Context, DateTime, Effect, Layer } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import type { ConnectionId } from "#contexts/connections/Connection.ts";
@@ -27,7 +28,7 @@ export class ConnectionCredentialRepository extends Context.Service<ConnectionCr
             .select({ envelope: providerCredentials.envelope })
             .from(providerCredentials)
             .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
-          return rows.map((row) => row.envelope);
+          return EffectArray.map(rows, (row) => row.envelope);
         },
       );
 

@@ -1,4 +1,5 @@
 import { Effect, Layer } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { ConnectionPersistenceFailed } from "#contexts/connections/Connection.ts";
 import {
@@ -42,7 +43,8 @@ export const CredentialKeyCensusLive = Layer.effect(
         "connection.credential_current_key_version": summary.currentKeyVersion,
         "connection.credential_older_envelopes": summary.olderEnvelopes,
         "connection.credential_unreadable_envelopes": summary.unreadableEnvelopes,
-        "connection.credential_key_versions": summary.usage.map(
+        "connection.credential_key_versions": EffectArray.map(
+          summary.usage,
           (entry) => `${String(entry.keyVersion)}:${String(entry.envelopes)}`,
         ),
       });
@@ -58,14 +60,19 @@ function countKeyVersions(keyVersions: ReadonlyArray<number>): ReadonlyArray<Cre
   for (const keyVersion of keyVersions) {
     counts.set(keyVersion, (counts.get(keyVersion) ?? 0) + 1);
   }
-  return [...counts]
-    .sort(([left], [right]) => left - right)
-    .map(([keyVersion, envelopes]) => ({ keyVersion, envelopes }));
+  return EffectArray.map(
+    [...counts].sort(([left], [right]) => left - right),
+    ([keyVersion, envelopes]) => ({ keyVersion, envelopes }),
+  );
 }
 
 function totalMatching(
   usage: ReadonlyArray<CredentialKeyUsage>,
   matches: (entry: CredentialKeyUsage) => boolean,
 ): number {
-  return usage.filter(matches).reduce((total, entry) => total + entry.envelopes, 0);
+  return EffectArray.reduce(
+    EffectArray.filter(usage, matches),
+    0,
+    (total, entry) => total + entry.envelopes,
+  );
 }

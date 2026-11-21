@@ -1,10 +1,23 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, Exit, Layer, Redacted, Schema, Tracer } from "effect";
+import { Array as EffectArray } from "effect";
+import { Order as EffectOrder } from "effect";
 
 import layerTools from "#runtime/ProvideLayer.ts";
 
 import { safeTracerLayer } from "./Observability.ts";
 import { makeWideEventTracer } from "./WideEventTracer.ts";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
 
 it.effect("writes one wide event for a request and one for each lineup run inside it", () =>
   Effect.gen(function* () {
@@ -66,12 +79,19 @@ it.effect("writes one wide event for a request and one for each lineup run insid
     assert.strictEqual(request?.event.outcome, "ok");
     assert.strictEqual(request?.event.status_code, undefined);
     assert.strictEqual(request?.event.span_count, 3);
-    assert.deepStrictEqual(request?.event.spans.map((span) => span.name).sort(), [
-      "LineupWorker.run",
-      "lineup.submit",
-    ]);
     assert.deepStrictEqual(
-      request?.event.spans.map((span) => span.count),
+      optionalArrayValue(
+        optionalArrayValue(request?.event.spans, (value) =>
+          EffectArray.map(value, (span) => span.name),
+        ),
+        (value) => EffectArray.sort(value, EffectOrder.String),
+      ),
+      ["LineupWorker.run", "lineup.submit"],
+    );
+    assert.deepStrictEqual(
+      optionalArrayValue(request?.event.spans, (value) =>
+        EffectArray.map(value, (span) => span.count),
+      ),
       [1, 1],
     );
     assert.strictEqual(
@@ -120,7 +140,7 @@ it.effect("never carries a token, cookie, crumb, note, address or provider paylo
     assert.notProperty(entry.event.attributes, "provider.payload");
     assert.notProperty(entry.event.attributes, "parameters");
     assert.strictEqual(entry.event.attributes["secret.credential"], "[REDACTED]");
-    assert.notInclude(lines.join(""), "private-");
+    assert.notInclude(EffectArray.join(lines, ""), "private-");
   }),
 );
 
@@ -148,7 +168,7 @@ it.effect("names the MCP tool a request served", () =>
     assert.strictEqual(entry.event.operation, "mcp.request");
     assert.strictEqual(entry.event.tool, "search_players");
     assert.strictEqual(entry.event.route, "POST /api/mcp");
-    assert.notInclude(lines.join(""), "private-");
+    assert.notInclude(EffectArray.join(lines, ""), "private-");
   }),
 );
 
@@ -185,7 +205,7 @@ it.effect("carries business attributes without repeating transport statement det
     assert.notProperty(entry.event.attributes, "server.address");
     assert.notProperty(entry.event.attributes, "server.port");
     assert.deepStrictEqual(
-      entry.event.spans.map((span) => span.name),
+      EffectArray.map(entry.event.spans, (span) => span.name),
       ["postgres"],
     );
   }),
@@ -222,7 +242,7 @@ it.effect(
       assert.strictEqual(run?.event.attributes["lineup.failure_reason"], "provider_rejected");
       assert.strictEqual(request?.event.outcome, "failed");
       assert.strictEqual(request?.event.kind, "http_request");
-      assert.notInclude(lines.join(""), "private-");
+      assert.notInclude(EffectArray.join(lines, ""), "private-");
     }),
 );
 

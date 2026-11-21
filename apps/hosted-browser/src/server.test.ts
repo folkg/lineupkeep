@@ -10,11 +10,23 @@ import {
   parseTransportMessage,
   type HostedBrowserStatus,
 } from "@lineupkeep/hosted-browser/protocol";
+import { Array as EffectArray, Order as EffectOrder } from "effect";
 import { expect, it } from "vitest";
 import { WebSocket } from "ws";
 import type { RawData } from "ws";
 
 import { createHostedBrowserService, type HostedBrowserSessionEvent } from "./server.ts";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
 
 const descriptorKey = "service-test-descriptor-key";
 
@@ -219,12 +231,19 @@ it("refuses non-public destinations, names them, and records them in the outcome
     expect(await clientClosed).toBe(1000);
     const outcome = await settled.promise;
     expect(outcome.outcome).toBe("cancelled");
-    expect(outcome.refused?.map((refusal) => refusal.host).sort()).toEqual([
-      "127.0.0.1",
-      "169.254.169.254",
-      "localhost",
-    ]);
-    expect(outcome.refused?.every((refusal) => refusal.reason === "non_public_address")).toBe(true);
+    expect(
+      optionalArrayValue(
+        optionalArrayValue(outcome.refused, (value) =>
+          EffectArray.map(value, (refusal) => refusal.host),
+        ),
+        (value) => EffectArray.sort(value, EffectOrder.String),
+      ),
+    ).toEqual(["127.0.0.1", "169.254.169.254", "localhost"]);
+    expect(
+      optionalArrayValue(outcome.refused, (value) =>
+        EffectArray.every(value, (refusal) => refusal.reason === "non_public_address"),
+      ),
+    ).toBe(true);
   } finally {
     await service.close();
     await closeServer(blocked.server);

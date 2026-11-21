@@ -2,6 +2,7 @@ import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, beforeEach, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { Array, Config, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { AccountRetentionLive } from "#contexts/auth/internal/AccountRetentionLive.ts";
 import { AccountRetentionRepository } from "#contexts/auth/internal/AccountRetentionRepository.ts";
@@ -136,11 +137,11 @@ it.effect(
       assert.strictEqual(summary.attempts, 1);
       assert.strictEqual(summary.writeIntents, 1);
       assert.deepStrictEqual(
-        runs.map((run) => run.id),
+        EffectArray.map(runs, (run) => run.id),
         [keptRun],
       );
       assert.deepStrictEqual(
-        intents.map((intent) => intent.runId),
+        EffectArray.map(intents, (intent) => intent.runId),
         [keptRun],
       );
     }).pipe(layerTools.provide(RetentionTestLayer)),
@@ -152,14 +153,14 @@ it.effect("prunes schedule observations 14 days after their covered window ends"
     const retention = yield* RetentionSweep;
     const team = decodeTeamId("00000000-0000-7000-8000-000000000002");
     const at = DateTime.makeUnsafe("2026-06-30T12:00:00.000Z");
-    const windows = [15, 14, 13].map((days) =>
+    const windows = EffectArray.map([15, 14, 13], (days) =>
       DateTime.formatIsoDate(DateTime.subtractDuration(at, days * 86_400_000)),
     );
     yield* store.recordProviderOpponents({
       subjectKey: team,
       source: decodeProviderKey("yahoo"),
       confidence: "authoritative",
-      observations: windows.map((window) => ({
+      observations: EffectArray.map(windows, (window) => ({
         window: { from: window, to: window },
         value: { players: [] },
         observedAt: at,
@@ -176,7 +177,7 @@ it.effect("prunes schedule observations 14 days after their covered window ends"
       { concurrency: 1 },
     );
     assert.deepStrictEqual(
-      remaining.map((rows) => rows.length),
+      EffectArray.map(remaining, (rows) => rows.length),
       [0, 0, 1],
     );
   }).pipe(layerTools.provide(RetentionTestLayer)),
@@ -208,7 +209,7 @@ it.effect("removes finished hosted linking sessions after a day and keeps a live
 
     assert.strictEqual(summary.hostedLinkingSessions, 3);
     assert.deepStrictEqual(
-      remaining.map((session) => session.id),
+      EffectArray.map(remaining, (session) => session.id),
       ["live-session"],
     );
   }).pipe(layerTools.provide(RetentionTestLayer)),
@@ -300,16 +301,16 @@ it.effect("removes ended moves and empty plans after 90 days and keeps current w
     assert.strictEqual(summary.moves, 1);
     assert.strictEqual(summary.plans, 1);
     assert.deepStrictEqual(
-      moves.map((move) => move.id),
+      EffectArray.map(moves, (move) => move.id),
       ["ended-kept", "open-kept"],
     );
     assert.deepStrictEqual(
-      claims.map((claim) => claim.moveId),
+      EffectArray.map(claims, (claim) => claim.moveId),
       ["ended-kept", "open-kept"],
     );
     assert.deepStrictEqual(steps, [{ id: "step-kept" }]);
     assert.deepStrictEqual(
-      plans.map((plan) => plan.teamId).sort(),
+      EffectArray.map(plans, (plan) => plan.teamId).sort(),
       [busyTeam, emptyKeptTeam].sort(),
     );
   }).pipe(layerTools.provide(RetentionTestLayer)),
@@ -339,11 +340,11 @@ it.effect("keeps an in-flight run and its write intent at the retention boundary
     assert.strictEqual(summary.runs, 0);
     assert.strictEqual(summary.writeIntents, 0);
     assert.deepStrictEqual(
-      runs.map((run) => run.id),
+      EffectArray.map(runs, (run) => run.id),
       [inFlightRun],
     );
     assert.deepStrictEqual(
-      intents.map((intent) => intent.runId),
+      EffectArray.map(intents, (intent) => intent.runId),
       [inFlightRun],
     );
   }).pipe(layerTools.provide(RetentionTestLayer)),
@@ -655,7 +656,7 @@ const roster: ProviderRoster = {
 
 const nativeAfter: ProviderRoster = {
   ...roster,
-  players: roster.players.map((player, index) => ({
+  players: EffectArray.map(roster.players, (player, index) => ({
     ...player,
     slot: { status: "verified", slot: index === 0 ? "BN" : "QB" },
   })),

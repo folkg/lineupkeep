@@ -1,5 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Fiber, Option, Tracer } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 import { TestClock } from "effect/testing";
 
 import layerTools from "#runtime/ProvideLayer.ts";
@@ -7,6 +9,10 @@ import layerTools from "#runtime/ProvideLayer.ts";
 import { publicInternetIsolate } from "./public-internet/transport/isolate/PublicInternetIsolate.ts";
 import { publicInternetProcess } from "./public-internet/transport/node/PublicInternetProcess.ts";
 import { PublicInternet } from "./PublicInternet.ts";
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 for (const [name, layer] of [
   ["process", publicInternetProcess],
@@ -83,10 +89,15 @@ it.effect(
         internet.request(new Request("https://client.test/failure?key=private-query")),
       );
 
-      const successful = spans.find(
-        (span) => span.attributes.get("http.response.status_code") === 201,
+      const successful = EffectOption.getOrUndefined(
+        EffectArray.findFirst(
+          spans,
+          (span) => span.attributes.get("http.response.status_code") === 201,
+        ),
       );
-      const parent = spans.find((span) => span.name === "provider.send");
+      const parent = EffectOption.getOrUndefined(
+        EffectArray.findFirst(spans, (span) => span.name === "provider.send"),
+      );
       assert.isDefined(successful);
       assert.strictEqual(successful.name, "PublicInternet.request");
       assert.strictEqual(successful.kind, "client");
@@ -99,15 +110,19 @@ it.effect(
         "server.address",
       ]);
 
-      const exported = spans
-        .flatMap((span) => [
-          span.name,
-          ...[...span.attributes].flat().map(String),
-          span.status._tag === "Ended" && Exit.isFailure(span.status.exit)
-            ? Cause.pretty(span.status.exit.cause)
-            : "",
-        ])
-        .join("\n");
+      const exported = EffectArray.join(
+        EffectArray.flatMap(spans, (span) => {
+          const flatMapped1 = [
+            span.name,
+            ...EffectArray.map([...span.attributes].flat(), String),
+            span.status._tag === "Ended" && Exit.isFailure(span.status.exit)
+              ? Cause.pretty(span.status.exit.cause)
+              : "",
+          ];
+          return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+        }),
+        "\n",
+      );
       for (const secret of [
         "private-path",
         "private-query",

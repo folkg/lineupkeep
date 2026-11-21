@@ -1,3 +1,4 @@
+import { EffectArray } from "@lineupkeep/collections";
 import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 import type { Accessor } from "solid-js";
@@ -21,7 +22,7 @@ import type { SignInSessionView } from "#contracts/auth/authContract.ts";
 
 export function SignInSessionList(props: SignInSessionListProps): JSX.Element {
   const otherSessions = (): ReadonlyArray<SignInSessionView> =>
-    props.sessions().filter((session) => !session.current);
+    EffectArray.filter(props.sessions(), (session) => !session.current);
 
   return (
     <Stack as="section" gap="md" labelledBy="sign-in-sessions-title">

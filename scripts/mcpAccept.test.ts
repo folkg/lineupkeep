@@ -5,14 +5,17 @@ import {
 } from "@lineupkeep/backend/auth/AuthorizationScopes";
 import { advertisedScopes, onboardingScopes } from "@lineupkeep/backend/runtime/ApplicationScopes";
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { Array as EffectArray } from "effect";
 import { expect, it } from "vitest";
 
 import { AcceptanceReport, requestedScopeNames, tokenGrantedScopes } from "#e2e/mcpAccept.ts";
 
-const onboarding = onboardingScopes.map((scope) => scope.name);
+const onboarding = EffectArray.map(onboardingScopes, (scope) => scope.name);
 
 it("defaults the requested scope set to every advertised scope", () => {
-  expect(requestedScopeNames(undefined)).toEqual(advertisedScopes.map((scope) => scope.name));
+  expect(requestedScopeNames(undefined)).toEqual(
+    EffectArray.map(advertisedScopes, (scope) => scope.name),
+  );
 });
 
 it("accepts a comma- or space-separated scope subset, including a retired name", () => {
@@ -42,10 +45,11 @@ it("accepts only the documented metadata difference and no retired name", () => 
   report.metadata({
     metadataUrl: "http://127.0.0.1:3000/.well-known/oauth-protected-resource/mcp",
     authorizationUrl: "http://127.0.0.1:3000/.well-known/oauth-authorization-server/api/auth",
-    authorizationScopes: advertisedScopes.map((scope) => scope.name),
-    resourceScopes: advertisedScopes
-      .filter((scope) => scope.name !== "offline_access")
-      .map((scope) => scope.name),
+    authorizationScopes: EffectArray.map(advertisedScopes, (scope) => scope.name),
+    resourceScopes: EffectArray.map(
+      EffectArray.filter(advertisedScopes, (scope) => scope.name !== "offline_access"),
+      (scope) => scope.name,
+    ),
   });
 
   expect(report.findings).toEqual([]);
@@ -54,7 +58,10 @@ it("accepts only the documented metadata difference and no retired name", () => 
   inconsistent.metadata({
     metadataUrl: "http://127.0.0.1:3000/.well-known/oauth-protected-resource/mcp",
     authorizationUrl: "http://127.0.0.1:3000/.well-known/oauth-authorization-server/api/auth",
-    authorizationScopes: [...advertisedScopes.map((scope) => scope.name), "connections:read"],
+    authorizationScopes: [
+      ...EffectArray.map(advertisedScopes, (scope) => scope.name),
+      "connections:read",
+    ],
     resourceScopes: ["fantasy:read", "transactions:review"],
   });
 
@@ -70,10 +77,11 @@ it("reports a retired name in either metadata document as a finding", () => {
     authorization.metadata({
       metadataUrl: "http://127.0.0.1:3000/.well-known/oauth-protected-resource/mcp",
       authorizationUrl: "http://127.0.0.1:3000/.well-known/oauth-authorization-server/api/auth",
-      authorizationScopes: [...advertisedScopes.map((scope) => scope.name), retired],
-      resourceScopes: advertisedScopes
-        .filter((scope) => scope.name !== "offline_access")
-        .map((scope) => scope.name),
+      authorizationScopes: [...EffectArray.map(advertisedScopes, (scope) => scope.name), retired],
+      resourceScopes: EffectArray.map(
+        EffectArray.filter(advertisedScopes, (scope) => scope.name !== "offline_access"),
+        (scope) => scope.name,
+      ),
     });
     expect(authorization.failureMessage()).toContain(retired);
 
@@ -81,11 +89,12 @@ it("reports a retired name in either metadata document as a finding", () => {
     resource.metadata({
       metadataUrl: "http://127.0.0.1:3000/.well-known/oauth-protected-resource/mcp",
       authorizationUrl: "http://127.0.0.1:3000/.well-known/oauth-authorization-server/api/auth",
-      authorizationScopes: advertisedScopes.map((scope) => scope.name),
+      authorizationScopes: EffectArray.map(advertisedScopes, (scope) => scope.name),
       resourceScopes: [
-        ...advertisedScopes
-          .filter((scope) => scope.name !== "offline_access")
-          .map((scope) => scope.name),
+        ...EffectArray.map(
+          EffectArray.filter(advertisedScopes, (scope) => scope.name !== "offline_access"),
+          (scope) => scope.name,
+        ),
         retired,
       ],
     });
@@ -97,7 +106,7 @@ it("accepts the minimal 401 baseline and the full registration ceiling", () => {
   const report = new AcceptanceReport({ mode: "local", origin: "http://127.0.0.1:3000" });
   report.baseline({
     status: 401,
-    scope: onboarding.join(" "),
+    scope: EffectArray.join(onboarding, " "),
     expected: onboarding,
     matches: true,
     asksForFullSet: false,
@@ -105,7 +114,7 @@ it("accepts the minimal 401 baseline and the full registration ceiling", () => {
   report.register([
     {
       grant: "requested",
-      scope: acceptedScopeNames(advertisedScopes).join(" "),
+      scope: EffectArray.join(acceptedScopeNames(advertisedScopes), " "),
     },
   ]);
 
@@ -114,7 +123,10 @@ it("accepts the minimal 401 baseline and the full registration ceiling", () => {
   const wrong = new AcceptanceReport({ mode: "local", origin: "http://127.0.0.1:3000" });
   wrong.baseline({
     status: 401,
-    scope: advertisedScopes.map((scope) => scope.name).join(" "),
+    scope: EffectArray.join(
+      EffectArray.map(advertisedScopes, (scope) => scope.name),
+      " ",
+    ),
     expected: onboarding,
     matches: false,
     asksForFullSet: true,

@@ -1,4 +1,5 @@
 import { Context, DateTime, Effect, Layer, Ref } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type { GameSourceGame, GameSourceShape } from "#contexts/connections/GameSource.ts";
 import {
@@ -77,7 +78,8 @@ export function fakeGameSourceLayer(
               league: input.league,
               weekStart: input.weekStart,
               weekEnd,
-              games: current.games.filter(
+              games: EffectArray.filter(
+                current.games,
                 (game) => game.date >= input.weekStart && game.date <= weekEnd,
               ),
             };

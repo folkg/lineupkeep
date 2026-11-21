@@ -1,3 +1,4 @@
+import { EffectArray } from "@lineupkeep/collections";
 import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 import type { Accessor } from "solid-js";
@@ -36,7 +37,7 @@ export function TeamList(props: TeamListProps): JSX.Element {
   const skeletonCards = (): ReadonlyArray<SkeletonCard> | undefined =>
     props.cachedHeaders.length === 0
       ? undefined
-      : props.cachedHeaders.map((header) => ({
+      : EffectArray.map(props.cachedHeaders, (header) => ({
           title: header.name,
           meta:
             header.leagueName === undefined
@@ -51,7 +52,7 @@ export function TeamList(props: TeamListProps): JSX.Element {
         action={
           <IconButton
             confirmed
-            disabled={props.teams().some((team) => team.pending !== undefined)}
+            disabled={EffectArray.some(props.teams(), (team) => team.pending !== undefined)}
             label="Refresh teams"
             state={props.refreshState()}
             onClick={props.onRefreshTeams}
@@ -220,7 +221,8 @@ function teamsBySportThenName(
 function allTeamsIdle(teams: ReadonlyArray<TeamSummaryView>): boolean {
   return (
     teams.length > 0 &&
-    teams.every(
+    EffectArray.every(
+      teams,
       (summary) =>
         summary.connectionStatus === "ready" && teamAutomation(summary).status === "disabled",
     )

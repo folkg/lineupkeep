@@ -1,4 +1,6 @@
 import { Array, DateTime, Duration, Effect, Layer, Redacted, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 
 import type { UserId } from "#contexts/auth/User.ts";
@@ -43,7 +45,9 @@ export const HostedLinkingLive = Layer.effect(
     ) {
       if (input.connectionId !== undefined) {
         const owned = yield* connections.list(userId);
-        const target = owned.find((connection) => connection.id === input.connectionId);
+        const target = EffectOption.getOrUndefined(
+          EffectArray.findFirst(owned, (connection) => connection.id === input.connectionId),
+        );
         if (target === undefined) {
           return yield* ConnectionNotFound.make({ id: input.connectionId });
         }
@@ -145,20 +149,20 @@ export const HostedLinkingLive = Layer.effect(
       userId: UserId,
       inputs: ReadonlyArray<HostedLinkingSessionInput>,
     ) {
-      const ids = [...new Set(inputs.map((input) => input.id))];
+      const ids = [...new Set(EffectArray.map(inputs, (input) => input.id))];
       const now = yield* DateTime.now;
       const records = yield* repository.cancel(userId, ids, now);
-      return records.map(toSession);
+      return EffectArray.map(records, toSession);
     });
 
     const expire = Effect.fn("HostedLinking.expire")(function* (
       userId: UserId,
       inputs: ReadonlyArray<HostedLinkingSessionInput>,
     ) {
-      const ids = [...new Set(inputs.map((input) => input.id))];
+      const ids = [...new Set(EffectArray.map(inputs, (input) => input.id))];
       const now = yield* DateTime.now;
       const records = yield* repository.expire(userId, ids, now);
-      return records.map(toSession);
+      return EffectArray.map(records, toSession);
     });
 
     const fail = Effect.fn("HostedLinking.fail")(function* (

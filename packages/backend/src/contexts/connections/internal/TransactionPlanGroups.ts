@@ -1,3 +1,6 @@
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
+
 import type {
   TransactionPlanGroupAction,
   TransactionPlanGroupRead,
@@ -12,6 +15,21 @@ import type {
   StoredMoveStep,
   StoredMoveValidation,
 } from "./TransactionPlanRecord.ts";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 export function planGroupReads(input: PlanGroupInput): ReadonlyArray<TransactionPlanGroupRead> {
   const groups = new Map<string, Array<TransactionPlanGroupMember>>();
@@ -24,18 +42,22 @@ export function planGroupReads(input: PlanGroupInput): ReadonlyArray<Transaction
     held.push(member);
     groups.set(group, held);
   }
-  return [...groups]
-    .map(([group, members]) => ({
-      group,
-      members: sortMembers(members.filter((member) => isLiveMemberOf(group, member))),
-    }))
-    .filter((entry) => entry.members.some((member) => !isDiscarded(member.move)))
-    .sort(
+  return EffectArray.map(
+    EffectArray.filter(
+      EffectArray.map([...groups], ([group, members]) => ({
+        group,
+        members: sortMembers(
+          EffectArray.filter(members, (member) => isLiveMemberOf(group, member)),
+        ),
+      })),
+      (entry) => EffectArray.some(entry.members, (member) => !isDiscarded(member.move)),
+    ).sort(
       (left, right) =>
         positionOf(firstMember(left.members)) - positionOf(firstMember(right.members)) ||
         left.group.localeCompare(right.group),
-    )
-    .map((entry) => groupReadOf(entry.group, entry.members, input.steps));
+    ),
+    (entry) => groupReadOf(entry.group, entry.members, input.steps),
+  );
 }
 
 function isDiscarded(move: TransactionMoveRecord): boolean {
@@ -51,15 +73,22 @@ function groupReadOf(
   members: ReadonlyArray<TransactionPlanGroupMember>,
   steps: ReadonlyMap<TransactionMoveId, ReadonlyArray<StoredMoveStep>>,
 ): TransactionPlanGroupRead {
-  const actions = members.flatMap((member) =>
-    (steps.get(member.move.id) ?? []).map((step) => actionOf(member.move, step)),
+  const actions = EffectArray.flatMap(members, (member) => {
+    const flatMapped1 = EffectArray.map(steps.get(member.move.id) ?? [], (step) =>
+      actionOf(member.move, step),
+    );
+    return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+  });
+  const failed = EffectOption.getOrUndefined(
+    EffectArray.findFirst(
+      actions,
+      (action) => action.outcome === "failed" || action.outcome === "unknown",
+    ),
   );
-  const failed = actions.find(
-    (action) => action.outcome === "failed" || action.outcome === "unknown",
+  const notRun = optionalArrayValue(
+    EffectArray.filter(members, (member) => didNotRun(member) && member.move.id !== failed?.move),
+    (value) => EffectArray.map(value, (member) => member.move.id),
   );
-  const notRun = members
-    .filter((member) => didNotRun(member) && member.move.id !== failed?.move)
-    .map((member) => member.move.id);
   const status = statusOf(members, actions);
   const cure =
     status === "partly_done" || (status === "blocked" && actions.length > 0)
@@ -72,7 +101,7 @@ function groupReadOf(
     ...(isRosterFixGroup(group) ? { label: rosterFixLabel } : {}),
     ...(fixesFor === undefined ? {} : { fixesFor }),
     status,
-    moves: members.map((member) => member.move.id),
+    moves: EffectArray.map(members, (member) => member.move.id),
     actions,
     ...(failed === undefined ? {} : { failed }),
     notRun,
@@ -85,17 +114,18 @@ function statusOf(
   members: ReadonlyArray<TransactionPlanGroupMember>,
   actions: ReadonlyArray<TransactionPlanGroupAction>,
 ): TransactionPlanGroupStatus {
-  if (members.some((member) => isFailed(member))) {
+  if (EffectArray.some(members, (member) => isFailed(member))) {
     return "failed";
   }
-  const executed = members.filter((member) => ran(member.move)).length;
+  const executed = EffectArray.filter(members, (member) => ran(member.move)).length;
   if (executed === members.length) {
     return "done";
   }
-  if (executed > 0 || actions.some((action) => action.outcome === "executed")) {
+  if (executed > 0 || EffectArray.some(actions, (action) => action.outcome === "executed")) {
     return "partly_done";
   }
-  const stopped = members.some(
+  const stopped = EffectArray.some(
+    members,
     (member) =>
       isDiscarded(member.move) ||
       member.move.result !== undefined ||
@@ -114,7 +144,7 @@ function detailOf(input: {
 }): string {
   switch (input.status) {
     case "done":
-      return sentence("This group ran whole.", ...input.actions.map(actionSentence));
+      return sentence("This group ran whole.", ...EffectArray.map(input.actions, actionSentence));
     case "partly_done":
       return sentence(
         "This group ran in part.",
@@ -129,7 +159,10 @@ function detailOf(input: {
     case "ready":
       return sentence(
         "This group is ready to run whole, in this order:",
-        `${input.members.map((member) => memberLabel(member.move)).join(", ")}.`,
+        `${EffectArray.join(
+          EffectArray.map(input.members, (member) => memberLabel(member.move)),
+          ", ",
+        )}.`,
       );
   }
 }
@@ -148,18 +181,24 @@ function blockedDetail(input: {
       input.cure,
     );
   }
-  const blocked = input.members.find((member) => member.blockedBy !== undefined);
+  const blocked = EffectOption.getOrUndefined(
+    EffectArray.findFirst(input.members, (member) => member.blockedBy !== undefined),
+  );
   if (blocked !== undefined) {
     return sentence("This group does not run.", blocked.blockedBy);
   }
-  const discarded = input.members.find((member) => isDiscarded(member.move));
+  const discarded = EffectOption.getOrUndefined(
+    EffectArray.findFirst(input.members, (member) => isDiscarded(member.move)),
+  );
   if (discarded !== undefined) {
     return sentence(
       "This group is not whole.",
       `The ${memberLabel(discarded.move)} was discarded, so the rest cannot run until you discard the group or form it again.`,
     );
   }
-  const invalid = input.members.find((member) => member.validation.status !== "current");
+  const invalid = EffectOption.getOrUndefined(
+    EffectArray.findFirst(input.members, (member) => member.validation.status !== "current"),
+  );
   if (invalid !== undefined) {
     const reason = invalid.validation.reasons[0];
     return sentence(
@@ -171,12 +210,14 @@ function blockedDetail(input: {
 }
 
 function failedDetail(members: ReadonlyArray<TransactionPlanGroupMember>): string {
-  const attempted = members.flatMap((member) =>
-    member.move.attempts.map(
+  const attempted = EffectArray.flatMap(members, (member) => {
+    const flatMapped2 = EffectArray.map(
+      member.move.attempts,
       (attempt) =>
         `${attempt.kind === "claim" ? "Claim" : "Fallback"} ${attempt.player.name ?? attempt.player.key}: ${attempt.reason}`,
-    ),
-  );
+    );
+    return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+  });
   return sentence(
     "This group ended failed.",
     "All choices failed.",
@@ -224,24 +265,27 @@ function actedSentences(
   actions: ReadonlyArray<TransactionPlanGroupAction>,
   failed: TransactionPlanGroupAction | undefined,
 ): ReadonlyArray<string> {
-  return actions
-    .filter(
+  return EffectArray.map(
+    EffectArray.filter(
+      actions,
       (action) =>
         action === failed ||
         action.outcome === "executed" ||
         action.outcome === "pending" ||
         action.outcome === "skipped",
-    )
-    .map(actionSentence);
+    ),
+    actionSentence,
+  );
 }
 
 function notRunSentences(
   members: ReadonlyArray<TransactionPlanGroupMember>,
   failed: TransactionPlanGroupAction | undefined,
 ): ReadonlyArray<string> {
-  return members
-    .filter((member) => didNotRun(member) && member.move.id !== failed?.move)
-    .map((member) => `The ${memberLabel(member.move)} did not run.`);
+  return optionalArrayValue(
+    EffectArray.filter(members, (member) => didNotRun(member) && member.move.id !== failed?.move),
+    (value) => EffectArray.map(value, (member) => `The ${memberLabel(member.move)} did not run.`),
+  );
 }
 
 function actionOf(move: TransactionMoveRecord, step: StoredMoveStep): TransactionPlanGroupAction {
@@ -302,22 +346,28 @@ function memberLabel(move: TransactionMoveRecord): string {
     case "stash": {
       const player = move.intent?.player?.name;
       const noun = move.kind === "activate" ? "activate" : "stash";
-      const drops = move.drops.flatMap((drop) => (drop.name === undefined ? [] : [drop.name]));
+      const drops = EffectArray.flatMap(move.drops, (drop) => {
+        const flatMapped3 = drop.name === undefined ? [] : [drop.name];
+        return arrayValueIsArray(flatMapped3) ? flatMapped3 : [flatMapped3];
+      });
       const base = player === undefined ? noun : `${noun} of ${player}`;
-      return drops.length === 0 ? base : `${base} and drop of ${drops.join(", ")}`;
+      return drops.length === 0 ? base : `${base} and drop of ${EffectArray.join(drops, ", ")}`;
     }
     case "slot_move": {
       const player = move.slotMove?.playerName ?? move.slotMove?.playerKey;
-      const drops = move.drops.flatMap((drop) => (drop.name === undefined ? [] : [drop.name]));
+      const drops = EffectArray.flatMap(move.drops, (drop) => {
+        const flatMapped4 = drop.name === undefined ? [] : [drop.name];
+        return arrayValueIsArray(flatMapped4) ? flatMapped4 : [flatMapped4];
+      });
       const base = player === undefined ? "slot move" : `slot move of ${player}`;
-      return drops.length === 0 ? base : `${base} and drop of ${drops.join(", ")}`;
+      return drops.length === 0 ? base : `${base} and drop of ${EffectArray.join(drops, ", ")}`;
     }
   }
 }
 
 function playerNameOf(move: TransactionMoveRecord, playerKey: string): string | undefined {
   const named: ReadonlyArray<{ readonly key: string; readonly name: string | undefined }> = [
-    ...[...move.adds, ...move.fallbacks, ...move.drops].map((player) => ({
+    ...EffectArray.map([...move.adds, ...move.fallbacks, ...move.drops], (player) => ({
       key: player.key,
       name: player.name,
     })),
@@ -331,7 +381,9 @@ function playerNameOf(move: TransactionMoveRecord, playerKey: string): string | 
       ? []
       : [{ key: move.placement.playerKey, name: move.placement.playerName }]),
   ];
-  return named.find((player) => player.key === playerKey)?.name;
+  return EffectOption.getOrUndefined(
+    EffectArray.findFirst(named, (player) => player.key === playerKey),
+  )?.name;
 }
 
 function didNotRun(member: TransactionPlanGroupMember): boolean {
@@ -385,7 +437,10 @@ function firstMember(
 }
 
 function sentence(...parts: ReadonlyArray<string | undefined>): string {
-  return parts.filter((part) => part !== undefined).join(" ");
+  return EffectArray.join(
+    EffectArray.filter(parts, (part) => part !== undefined),
+    " ",
+  );
 }
 
 export type TransactionPlanGroupMember = {

@@ -1,4 +1,5 @@
 import { DateTime, Effect, Layer, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import {
@@ -85,7 +86,7 @@ export const FeedbackLive = Layer.effect(
         "feedback.submitted": records.length,
         "feedback.submitter_kind": submitter.kind,
       });
-      return records.map(toFeedbackReport);
+      return EffectArray.map(records, toFeedbackReport);
     });
 
     const list: Feedback["Service"]["list"] = Effect.fn("Feedback.list")(function* (
@@ -94,7 +95,7 @@ export const FeedbackLive = Layer.effect(
     ) {
       const records = yield* repository.list({ userId, filter });
       yield* Effect.annotateCurrentSpan({ "feedback.listed": records.length });
-      return records.map(toFeedbackReport);
+      return EffectArray.map(records, toFeedbackReport);
     });
 
     return Feedback.of({ submit, list });

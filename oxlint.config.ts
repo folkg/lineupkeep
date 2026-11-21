@@ -1,18 +1,29 @@
+import { Array as EffectArray } from "effect";
 import { defineConfig } from "oxlint";
 import type { OxlintOverride } from "oxlint";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
 
-const implicitGlobals: GlobalRestriction[] = [
-  "event",
-  "length",
-  "stop",
-  "toString",
-  "alert",
-  "origin",
-  "status",
-].map((name) => ({
-  name,
-  message: `Implicit global ${name} can hide a missing local binding; declare an explicit local value or qualify intentional platform access with globalThis.`,
-}));
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
+
+const implicitGlobals: GlobalRestriction[] = EffectArray.map(
+  ["event", "length", "stop", "toString", "alert", "origin", "status"],
+  (name) => ({
+    name,
+    message: `Implicit global ${name} can hide a missing local binding; declare an explicit local value or qualify intentional platform access with globalThis.`,
+  }),
+);
 
 const sqlImports: ImportPolicy = {
   paths: [
@@ -259,22 +270,25 @@ const persistenceProperties: PropertyRestriction[] = [
 
 const workflowMessage =
   "Ambient APIs make workflow transitions nondeterministic; read platform values in a use*.ts controller and pass them as event data.";
-const workflowGlobals: GlobalRestriction[] = [
-  "window",
-  "document",
-  "navigator",
-  "location",
-  "history",
-  "localStorage",
-  "sessionStorage",
-  "fetch",
-  "crypto",
-  "Date",
-  "setTimeout",
-  "setInterval",
-  "queueMicrotask",
-  "requestAnimationFrame",
-].map((name) => ({ name, message: workflowMessage }));
+const workflowGlobals: GlobalRestriction[] = EffectArray.map(
+  [
+    "window",
+    "document",
+    "navigator",
+    "location",
+    "history",
+    "localStorage",
+    "sessionStorage",
+    "fetch",
+    "crypto",
+    "Date",
+    "setTimeout",
+    "setInterval",
+    "queueMicrotask",
+    "requestAnimationFrame",
+  ],
+  (name) => ({ name, message: workflowMessage }),
+);
 
 const correctnessRules = {
   "repository/package-imports": "error",
@@ -473,6 +487,7 @@ const correctnessRules = {
   "effecttsgo/schema-sync": "error",
   "effecttsgo/missing-concurrency-option": "error",
   "effecttsgo/global-json-in-effect": "error",
+  "effecttsgo/prefer-effect-array": "error",
 } satisfies Rules;
 
 const effectRules = {
@@ -650,10 +665,18 @@ const transportTests = ["packages/backend/src/runtime/public-internet/transport/
 const timing = ["apps/web/src/browser/timing/**"];
 const timerMessage =
   "Timers obscure request completion and recovery; wait on Query, router state, or onSettled instead, or use a named helper in browser/timing/.";
-const timerGlobals = ["setTimeout", "setInterval"].map((name) => ({ name, message: timerMessage }));
-const timerProperties = ["window", "globalThis", "self"].flatMap((object) =>
-  timerGlobals.map(({ name, message }) => ({ object, property: name, message })),
-);
+const timerGlobals = EffectArray.map(["setTimeout", "setInterval"], (name) => ({
+  name,
+  message: timerMessage,
+}));
+const timerProperties = EffectArray.flatMap(["window", "globalThis", "self"], (object) => {
+  const flatMapped1 = EffectArray.map(timerGlobals, ({ name, message }) => ({
+    object,
+    property: name,
+    message,
+  }));
+  return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+});
 export default defineConfig({
   options: { typeAware: true, typeCheck: true, maxWarnings: 0 },
   plugins: ["typescript", "unicorn", "oxc", "effecttsgo", "jsx-a11y"],
@@ -779,9 +802,11 @@ export default defineConfig({
     {
       files: primitives,
       rules: imports({
-        paths: universalImports.paths?.filter((restriction) => restriction.name !== "@solidjs/web"),
-        patterns: universalImports.patterns?.filter(
-          (restriction) => !restriction.group.includes("@kobalte/core"),
+        paths: optionalArrayValue(universalImports.paths, (value) =>
+          EffectArray.filter(value, (restriction) => restriction.name !== "@solidjs/web"),
+        ),
+        patterns: optionalArrayValue(universalImports.patterns, (value) =>
+          EffectArray.filter(value, (restriction) => !restriction.group.includes("@kobalte/core")),
         ),
       }),
     },
@@ -843,10 +868,14 @@ export default defineConfig({
         "no-restricted-imports": [
           "error",
           {
-            paths: sqlImports.paths?.map((policy) => ({
-              ...policy,
-              importNames: policy.importNames?.filter((name) => name !== "sql"),
-            })),
+            paths: optionalArrayValue(sqlImports.paths, (value) =>
+              EffectArray.map(value, (policy) => ({
+                ...policy,
+                importNames: optionalArrayValue(policy.importNames, (value) =>
+                  EffectArray.filter(value, (name) => name !== "sql"),
+                ),
+              })),
+            ),
             patterns: sqlImports.patterns,
           },
         ],
@@ -933,13 +962,17 @@ export default defineConfig({
         ...properties(
           timerProperties,
           [{ object: "Math", property: "random", message: workflowMessage }],
-          ["globalThis", "window", "self"].flatMap((object) =>
-            [...workflowGlobals.map(({ name }) => name), "Math"].map((property) => ({
-              object,
-              property,
-              message: workflowMessage,
-            })),
-          ),
+          EffectArray.flatMap(["globalThis", "window", "self"], (object) => {
+            const flatMapped2 = EffectArray.map(
+              [...EffectArray.map(workflowGlobals, ({ name }) => name), "Math"],
+              (property) => ({
+                object,
+                property,
+                message: workflowMessage,
+              }),
+            );
+            return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+          }),
         ),
       },
     },
@@ -990,7 +1023,10 @@ export default defineConfig({
         "no-restricted-properties": [
           "error",
           ...backendProperties,
-          ...persistenceProperties.filter((restriction) => restriction.property !== "execute"),
+          ...EffectArray.filter(
+            persistenceProperties,
+            (restriction) => restriction.property !== "execute",
+          ),
         ],
       },
     },
@@ -1018,8 +1054,14 @@ function imports(...policies: ImportPolicy[]): Rules {
     "no-restricted-imports": [
       "error",
       {
-        paths: [sqlImports, ...policies].flatMap((policy) => policy.paths ?? []),
-        patterns: [sqlImports, ...policies].flatMap((policy) => policy.patterns ?? []),
+        paths: EffectArray.flatMap([sqlImports, ...policies], (policy) => {
+          const flatMapped3 = policy.paths ?? [];
+          return arrayValueIsArray(flatMapped3) ? flatMapped3 : [flatMapped3];
+        }),
+        patterns: EffectArray.flatMap([sqlImports, ...policies], (policy) => {
+          const flatMapped4 = policy.patterns ?? [];
+          return arrayValueIsArray(flatMapped4) ? flatMapped4 : [flatMapped4];
+        }),
       },
     ],
   };

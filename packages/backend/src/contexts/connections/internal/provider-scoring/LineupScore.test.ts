@@ -1,3 +1,4 @@
+import { Array as EffectArray } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { parseExact } from "./Exact.ts";
@@ -11,6 +12,9 @@ import type {
   StartingLineupRule,
   ValueSource,
 } from "./types.ts";
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 const target: Period = { kind: "week", week: 7 };
 
@@ -25,7 +29,7 @@ describe("the period's projection", () => {
       ),
     );
 
-    expect(result.players.map((entry) => entry.units)).toEqual([4, 1]);
+    expect(EffectArray.map(result.players, (entry) => entry.units)).toEqual([4, 1]);
     expect(result.label).toBe("projected rank for week 7");
   });
 
@@ -39,7 +43,7 @@ describe("the period's projection", () => {
       ),
     );
 
-    expect(result.players.map((entry) => entry.units)).toEqual([1, 77]);
+    expect(EffectArray.map(result.players, (entry) => entry.units)).toEqual([1, 77]);
   });
 
   it("leaves a player without a projection unscored rather than zero", () => {
@@ -109,7 +113,7 @@ describe("the value source ladder", () => {
       ),
     );
 
-    expect(result.players.map((entry) => entry.units)).toEqual([4300, 0]);
+    expect(EffectArray.map(result.players, (entry) => entry.units)).toEqual([4300, 0]);
     expect(result.label).toBe(
       "percent started for week 7 (using all managers, because a platinum-only figure was missing for one player)",
     );
@@ -130,7 +134,7 @@ describe("the value source ladder", () => {
       ),
     );
 
-    expect(result.players.map((entry) => entry.units)).toEqual([5100, 800]);
+    expect(EffectArray.map(result.players, (entry) => entry.units)).toEqual([5100, 800]);
     expect(result.label).toBe("percent started for week 7 (platinum managers only)");
   });
 
@@ -149,7 +153,7 @@ describe("the value source ladder", () => {
       ),
     );
 
-    expect(result.players.map((entry) => entry.units)).toEqual([4300, 1200]);
+    expect(EffectArray.map(result.players, (entry) => entry.units)).toEqual([4300, 1200]);
     expect(result.label).toBe(
       "percent started for week 7 (using all managers, because a platinum-only figure was missing for one player)",
     );
@@ -173,7 +177,7 @@ describe("the value source ladder", () => {
     expect(result.label).toBe(
       "percent started for week 7 (using all managers, because no platinum manager started any player)",
     );
-    expect(result.players.map((entry) => entry.units)).toEqual([4300, 1200]);
+    expect(EffectArray.map(result.players, (entry) => entry.units)).toEqual([4300, 1200]);
   });
 
   it("uses one population for the whole plan when the cut omits a measured player", () => {
@@ -195,7 +199,7 @@ describe("the value source ladder", () => {
     expect(result.label).toBe(
       "percent started for week 7 (using all managers, because a platinum-only figure was missing for one player)",
     );
-    expect(result.players.map((entry) => entry.units)).toEqual([4300, 1200, 4000]);
+    expect(EffectArray.map(result.players, (entry) => entry.units)).toEqual([4300, 1200, 4000]);
   });
 
   it("keeps a zero cut value when the cut population is populated", () => {
@@ -213,7 +217,7 @@ describe("the value source ladder", () => {
       ),
     );
 
-    expect(result.players.map((entry) => entry.units)).toEqual([5100, 0]);
+    expect(EffectArray.map(result.players, (entry) => entry.units)).toEqual([5100, 0]);
     expect(result.label).toBe("percent started for week 7 (platinum managers only)");
   });
 
@@ -430,9 +434,10 @@ function projection(ranks: Readonly<Record<string, number | undefined>>): ValueS
   return {
     kind: "projection",
     period: target,
-    players: Object.entries(ranks).flatMap(([id, rank]) =>
-      rank === undefined ? [] : [{ id, rank }],
-    ),
+    players: EffectArray.flatMap(Object.entries(ranks), ([id, rank]) => {
+      const flatMapped1 = rank === undefined ? [] : [{ id, rank }];
+      return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+    }),
   };
 }
 
@@ -451,7 +456,7 @@ function startRate(
   return {
     id: playerId,
     percent: percent === null ? undefined : parseExact(percent),
-    cuts: cuts.map((cut) => ({ cut: cut.cut, percent: parseExact(cut.percent) })),
+    cuts: EffectArray.map(cuts, (cut) => ({ cut: cut.cut, percent: parseExact(cut.percent) })),
   };
 }
 

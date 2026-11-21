@@ -1,3 +1,4 @@
+import { EffectArray } from "@lineupkeep/collections";
 import { render } from "@solidjs/web";
 import { QueryClientProvider } from "@tanstack/solid-query";
 import {
@@ -9,9 +10,10 @@ import {
   createRouter,
 } from "@tanstack/solid-router";
 import { expect, it } from "vitest";
-import { page } from "vitest/browser";
 
 import "#web/styles.css";
+
+import { page } from "vitest/browser";
 
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
@@ -668,11 +670,14 @@ it("keeps the same row height in every check state on a phone and a desktop", as
   }
 
   for (const width of [390, 1440]) {
-    const measured = heights.filter((entry) => entry.width === width);
+    const measured = EffectArray.filter(heights, (entry) => entry.width === width);
     expect(measured, `${width}px measures every state`).toHaveLength(4);
     expect(
-      new Set(measured.map((entry) => entry.height)).size,
-      `${width}px keeps one row height across ${measured.map((entry) => entry.state).join(", ")}`,
+      new Set(EffectArray.map(measured, (entry) => entry.height)).size,
+      `${width}px keeps one row height across ${EffectArray.join(
+        EffectArray.map(measured, (entry) => entry.state),
+        ", ",
+      )}`,
     ).toBe(1);
   }
 });
@@ -702,10 +707,10 @@ it("sorts team cards by sport then name across leagues", async () => {
   await expect
     .element(page.getByRole("link", { name: "Alpha Football", exact: true }))
     .toBeVisible();
-  const names = page
-    .getByRole("listitem")
-    .elements()
-    .map((row) => row.querySelector("a")?.textContent);
+  const names = EffectArray.map(
+    page.getByRole("listitem").elements(),
+    (row) => row.querySelector("a")?.textContent,
+  );
   expect(names).toEqual(["Charlie Baseball", "Alpha Football", "Bravo Football", "Zulu Hockey"]);
   await expect.element(page.getByRole("heading", { name: "NFL" })).not.toBeInTheDocument();
   await expect.element(page.getByRole("heading", { name: "Your teams" })).toBeVisible();

@@ -5,6 +5,8 @@ import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import type { TestInfo } from "@playwright/test";
 import { Effect } from "effect";
 import { Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Order as EffectOrder } from "effect";
 
 import type { DatabaseActivity, DatabaseProbe } from "./databaseActivity.ts";
 import type {
@@ -18,6 +20,22 @@ import type {
   ProfileResult,
   ObservedCall,
 } from "./performanceEvidence.ts";
+function sortWithComparator<A>(
+  self: ReadonlyArray<A>,
+  compare: (left: A, right: A) => number,
+): ReadonlyArray<A> {
+  return EffectArray.sort(
+    self,
+    EffectOrder.make<A>((left, right) => {
+      const result = compare(left, right);
+      return result < 0 ? -1 : result > 0 ? 1 : 0;
+    }),
+  );
+}
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 export class CallObserver {
   browser:
@@ -86,7 +104,7 @@ export class CallObserver {
       calls: () => window.calls,
       requests: () => [
         ...(browser?.requests() ?? []),
-        ...window.tagged.map((request) =>
+        ...EffectArray.map(window.tagged, (request) =>
           request.cancelled ? `${request.description} (cancelled)` : request.description,
         ),
       ],
@@ -318,15 +336,18 @@ async function databaseEvidence(
   const savedStatements = await attempt(() => attachJson(info, statementsAttachment, statements));
   return captured({
     totals: {
-      statements: statements.reduce((total, statement) => total + statement.calls, 0),
+      statements: EffectArray.reduce(statements, 0, (total, statement) => total + statement.calls),
       distinct: statements.length,
-      totalMs: tenths(statements.reduce((total, statement) => total + statement.totalMs, 0)),
+      totalMs: tenths(
+        EffectArray.reduce(statements, 0, (total, statement) => total + statement.totalMs),
+      ),
     },
     statements: statements.slice(0, databaseRows),
     statementsAttachment: savedStatements.kind === "captured" ? statementsAttachment : undefined,
-    plans: [...plans.values()]
-      .toSorted((left, right) => right.totalMs - left.totalMs)
-      .slice(0, databaseRows),
+    plans: sortWithComparator(
+      [...plans.values()],
+      (left, right) => right.totalMs - left.totalMs,
+    ).slice(0, databaseRows),
     plansAttachment: saved.kind === "captured" ? attachment : undefined,
   });
 }
@@ -371,12 +392,12 @@ const profileConditions = [
 ];
 
 export function summarizeCpuProfile(profile: CpuProfile): CpuSummary {
-  const nodes = new Map(profile.nodes.map((node) => [node.id, node.callFrame]));
+  const nodes = new Map(EffectArray.map(profile.nodes, (node) => [node.id, node.callFrame]));
   const functions = new Map<string, { function: string; location: string; micros: number }>();
   let busy = 0;
   let idle = 0;
   let unattributed = 0;
-  profile.samples.forEach((nodeId, index) => {
+  EffectArray.forEach(profile.samples, (nodeId, index) => {
     const micros = profile.timeDeltas[index] ?? 0;
     const frame = nodes.get(nodeId);
     if (frame === undefined || idleFrames.has(frame.functionName)) {
@@ -399,47 +420,55 @@ export function summarizeCpuProfile(profile: CpuProfile): CpuSummary {
     busyMs: tenths(busy / 1000),
     idleMs: tenths(idle / 1000),
     unattributedMs: tenths(unattributed / 1000),
-    functions: [...functions.values()]
-      .toSorted((left, right) => right.micros - left.micros)
-      .slice(0, 10)
-      .map((entry) => ({
+    functions: EffectArray.map(
+      sortWithComparator(
+        [...functions.values()],
+        (left, right) => right.micros - left.micros,
+      ).slice(0, 10),
+      (entry) => ({
         function: entry.function,
         location: entry.location,
         selfMs: tenths(entry.micros / 1000),
         percentOfBusy: busy === 0 ? 0 : Math.round((entry.micros / busy) * 100),
-      })),
+      }),
+    ),
   };
 }
 
 export function summarizeSpans(spans: ReadonlyArray<CollectedSpan>): SpanSummary {
   const operations = group(
-    spans.filter((span) => typeof span.attributes["app.operation"] === "string"),
+    EffectArray.filter(spans, (span) => typeof span.attributes["app.operation"] === "string"),
     (span) => `${span.name} ${text(span.attributes["app.outcome"])}`.trim(),
   );
-  const statements = spans.filter((span) => typeof span.attributes["db.query.text"] === "string");
-  const start = Math.min(...spans.map((span) => span.startMs));
+  const statements = EffectArray.filter(
+    spans,
+    (span) => typeof span.attributes["db.query.text"] === "string",
+  );
+  const start = Math.min(...EffectArray.map(spans, (span) => span.startMs));
   return {
     operations,
     sql: {
       statements: statements.length,
-      totalMs: tenths(statements.reduce((total, span) => total + span.durationMs, 0)),
+      totalMs: tenths(EffectArray.reduce(statements, 0, (total, span) => total + span.durationMs)),
 
       slowest: group(statements, (span) => text(span.attributes["db.query.text"])),
     },
-    logs: spans
-      .flatMap((span) =>
-        (span.events ?? []).map((event) => ({
+    logs: sortWithComparator(
+      EffectArray.flatMap(spans, (span) => {
+        const flatMapped1 = EffectArray.map(span.events ?? [], (event) => ({
           atMs: tenths(event.timeMs - start),
           level: text(event.attributes["effect.logLevel"]) || "INFO",
           message: event.name,
           span: span.name,
-        })),
-      )
-      .toSorted((left, right) => left.atMs - right.atMs)
-      .slice(0, 30),
-    errors: spans.flatMap((span) =>
-      span.error === undefined ? [] : [{ span: span.name, error: span.error }],
-    ),
+        }));
+        return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+      }),
+      (left, right) => left.atMs - right.atMs,
+    ).slice(0, 30),
+    errors: EffectArray.flatMap(spans, (span) => {
+      const flatMapped2 = span.error === undefined ? [] : [{ span: span.name, error: span.error }];
+      return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+    }),
   };
 }
 
@@ -455,14 +484,15 @@ function group(
   for (const span of spans) {
     groups.set(key(span), [...(groups.get(key(span)) ?? []), span.durationMs]);
   }
-  return [...groups.entries()]
-    .map(([name, durations]) => ({
+  return sortWithComparator(
+    EffectArray.map([...groups.entries()], ([name, durations]) => ({
       name,
       calls: durations.length,
-      totalMs: tenths(durations.reduce((total, duration) => total + duration, 0)),
+      totalMs: tenths(EffectArray.reduce(durations, 0, (total, duration) => total + duration)),
       maxMs: tenths(Math.max(...durations)),
-    }))
-    .toSorted((left, right) => right.totalMs - left.totalMs);
+    })),
+    (left, right) => right.totalMs - left.totalMs,
+  );
 }
 
 export function describeServerRequest(request: RequestLike): string | undefined {
@@ -545,7 +575,7 @@ async function startTracing(
     traceId,
     tagged: () => [...tagged.values()],
     requests: () =>
-      [...tagged.values()].map((entry) =>
+      EffectArray.map([...tagged.values()], (entry) =>
         entry.cancelled ? `${entry.description} (cancelled)` : entry.description,
       ),
     stop: async () => {
@@ -596,19 +626,21 @@ async function serverActivity(
       const spans = Effect.runSync(
         Schema.decodeUnknownEffect(SpansJson)(await (await fetch(url)).text()),
       );
-      return [...new Map(spans.map((span) => [span.spanId, span])).values()];
+      return [...new Map(EffectArray.map(spans, (span) => [span.spanId, span])).values()];
     };
     const missing = (
       spans: ReadonlyArray<CollectedSpan>,
       requests: ReadonlyArray<TaggedRequest>,
     ): TaggedRequest[] =>
-      requests.filter(
+      EffectArray.filter(
+        requests,
         (request) =>
-          !spans.some(
+          !EffectArray.some(
+            spans,
             (span) => span.name === "http.server.request" && span.parentSpanId === request.spanId,
           ),
       );
-    const completed = tracing.tagged().filter((request) => !request.cancelled);
+    const completed = EffectArray.filter(tracing.tagged(), (request) => !request.cancelled);
     let spans = await read();
     for (let quiet = 0, waited = 0; waited < spanSettleAttempts; waited += 1) {
       if (missing(spans, completed).length === 0 && quiet >= 3) {
@@ -628,10 +660,13 @@ async function serverActivity(
       );
     }
 
-    const unresolved = missing(
-      spans,
-      tracing.tagged().filter((request) => request.cancelled),
-    ).map((request) => request.description);
+    const unresolved = EffectArray.map(
+      missing(
+        spans,
+        EffectArray.filter(tracing.tagged(), (request) => request.cancelled),
+      ),
+      (request) => request.description,
+    );
     return {
       ...summarizeSpans(spans),
       unresolvedRequests: unresolved,

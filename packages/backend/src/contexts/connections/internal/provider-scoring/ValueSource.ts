@@ -1,3 +1,6 @@
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
+
 import {
   addExact,
   clampExact,
@@ -20,6 +23,10 @@ import type {
   ValueSourceKind,
 } from "./types.ts";
 import { selectionUnits } from "./Valuation.ts";
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 export const valueSourceLadder: ReadonlyArray<ValueSourceKind> = [
   "projection",
@@ -67,8 +74,10 @@ type CommunityStartRateSource = Extract<ValueSource, { readonly kind: "community
 type OwnershipCompositeSource = Extract<ValueSource, { readonly kind: "ownership-composite" }>;
 
 function projectionSource(source: ProjectionSource): ResolvedValueSource {
-  const ranks = new Map(source.players.map((player) => [player.id, player.rank]));
-  const worstRank = source.players.reduce((worst, player) => Math.max(worst, player.rank), 0);
+  const ranks = new Map(EffectArray.map(source.players, (player) => [player.id, player.rank]));
+  const worstRank = EffectArray.reduce(source.players, 0, (worst, player) =>
+    Math.max(worst, player.rank),
+  );
   return {
     label: `projected rank for ${periodLabel(source.period)}`,
     unitsOf: (player) => {
@@ -83,7 +92,7 @@ function communityStartRateSource(
   period: Period,
 ): ResolvedValueSource {
   const population = communityStartRatePopulation(source.started);
-  const started = new Map(source.started.map((player) => [player.id, player]));
+  const started = new Map(EffectArray.map(source.started, (player) => [player.id, player]));
   return {
     label: `percent started for ${periodLabel(period)}${populationFinding(population)}`,
     unitsOf: (player) => {
@@ -98,7 +107,7 @@ function ownershipCompositeSource(
   source: OwnershipCompositeSource,
   period: Period,
 ): ResolvedValueSource {
-  const byId = new Map(source.players.map((player) => [player.id, player]));
+  const byId = new Map(EffectArray.map(source.players, (player) => [player.id, player]));
   const playersInLeague = exactFromInteger(
     BigInt(source.teamCount) * BigInt(source.standardRosterSpots),
   );
@@ -127,13 +136,15 @@ function ownershipCompositeSource(
 function communityStartRatePopulation(
   started: ReadonlyArray<PlayerCommunityStartRate>,
 ): CommunityStartRatePopulation {
-  const cutValues = started.flatMap((player) =>
-    player.percent === undefined ? [] : [cutPercent(player)],
-  );
-  if (cutValues.some((percent) => percent === undefined)) {
+  const cutValues = EffectArray.flatMap(started, (player) => {
+    const flatMapped1 = player.percent === undefined ? [] : [cutPercent(player)];
+    return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+  });
+  if (EffectArray.some(cutValues, (percent) => percent === undefined)) {
     return { kind: "overall", cut: communityStartRateCut, finding: "cut-incomplete" };
   }
-  const populated = cutValues.some(
+  const populated = EffectArray.some(
+    cutValues,
     (percent) => percent !== undefined && compareExact(percent, exactFromInteger(0n)) > 0,
   );
   return populated
@@ -142,7 +153,9 @@ function communityStartRatePopulation(
 }
 
 function cutPercent(player: PlayerCommunityStartRate): Exact | undefined {
-  return player.cuts.find((entry) => entry.cut === communityStartRateCut)?.percent;
+  return EffectOption.getOrUndefined(
+    EffectArray.findFirst(player.cuts, (entry) => entry.cut === communityStartRateCut),
+  )?.percent;
 }
 
 function rankScoreOf(
@@ -151,7 +164,7 @@ function rankScoreOf(
   playersInLeague: Exact,
 ): Exact {
   const weights = rankWeights[sport];
-  const capped = ranks.flatMap((rank) => {
+  const capped = EffectArray.flatMap(ranks, (rank) => {
     const weight = weights[rank.type];
     if (weight === undefined || rank.rank < 1) {
       return [];
@@ -159,7 +172,7 @@ function rankScoreOf(
     const positionScore = divideByInteger(playersInLeague, BigInt(rank.rank), rankRatioScale);
     return [minExact(positionScore, parseExact(String(weight / 5)))];
   });
-  return multiplyExact(capped.reduce(addExact, exactFromInteger(0n)), rankScoreScale);
+  return multiplyExact(EffectArray.reduce(capped, exactFromInteger(0n), addExact), rankScoreScale);
 }
 
 function percentOf(

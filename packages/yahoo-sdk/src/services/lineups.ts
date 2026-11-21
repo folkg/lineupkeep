@@ -1,3 +1,4 @@
+import { Array as EffectArray } from "effect";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
@@ -46,7 +47,7 @@ export const AssignRequest = Schema.Struct({
     Schema.check(
       Schema.makeFilter(
         (assignments: ReadonlyArray<{ readonly playerKey: string }>) =>
-          new Set(assignments.map((assignment) => assignment.playerKey)).size ===
+          new Set(EffectArray.map(assignments, (assignment) => assignment.playerKey)).size ===
           assignments.length,
       ),
     ),

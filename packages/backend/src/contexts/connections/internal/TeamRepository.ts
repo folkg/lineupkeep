@@ -1,5 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
 import { Array, Context, DateTime, Effect, Layer, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 import { SecureRandom } from "effect/crypto";
 
 import type { UserId } from "#contexts/auth/User.ts";
@@ -189,7 +190,7 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
         userId: UserId,
         inputs: ReadonlyArray<TeamControlInput>,
       ) {
-        const ids = [...new Set(inputs.map((input) => input.team))];
+        const ids = [...new Set(EffectArray.map(inputs, (input) => input.team))];
         if (!Array.isArrayNonEmpty(ids)) {
           return [];
         }
@@ -272,7 +273,7 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
                 yield* tx
                   .insert(providerTeams)
                   .values(
-                    changed.map(({ row, team }) => ({
+                    EffectArray.map(changed, ({ row, team }) => ({
                       ...row,
                       availability: team.availability,
                       automationState: encodeAutomation(automationStateOf(team)),
@@ -405,7 +406,7 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
                 yield* tx
                   .insert(providerTeams)
                   .values(
-                    changed.map(({ row, team }) => ({
+                    EffectArray.map(changed, ({ row, team }) => ({
                       ...row,
                       automationState: encodeAutomation(automationStateOf(team)),
                       automationStatus: team.automation.status,
@@ -421,7 +422,7 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
                     ]),
                   });
               }
-              return changed.map(({ team }) => team);
+              return EffectArray.map(changed, ({ team }) => team);
             }),
           )
           .pipe(Effect.mapError(mapPersistenceError));

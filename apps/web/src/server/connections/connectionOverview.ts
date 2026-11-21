@@ -6,6 +6,7 @@ import type {
 import { Connections } from "@lineupkeep/backend/connections/Connections";
 import type { FantasyTeam } from "@lineupkeep/backend/connections/FantasyTeam";
 import { Effect } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type {
   ConnectionChangeView,
@@ -21,7 +22,7 @@ export function loadConnectionViews(
     const connections = yield* Connections.use((service) => service.list(userId));
     const teams = yield* Connections.use((service) => service.listTeams(userId));
     const counts = countTeamsByConnection(teams);
-    return connections.map((connection) =>
+    return EffectArray.map(connections, (connection) =>
       toConnectionView(connection, teamCount(counts, connection.id)),
     );
   });
@@ -37,7 +38,7 @@ export function loadConnectionChange(
     const counts = countTeamsByConnection(teams);
     return {
       connection: toConnectionView(connection, teamCount(counts, connection.id)),
-      connections: connections.map((candidate) =>
+      connections: EffectArray.map(connections, (candidate) =>
         toConnectionView(candidate, teamCount(counts, candidate.id)),
       ),
     } satisfies ConnectionChangeView;

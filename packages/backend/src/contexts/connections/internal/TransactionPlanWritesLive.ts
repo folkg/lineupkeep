@@ -1,4 +1,5 @@
 import { Effect, Layer } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type {
   ProviderLeagueSettings,
@@ -337,7 +338,8 @@ type DecidedWrite =
   | { readonly status: "retry"; readonly detail: string };
 
 function destinationIsReserve(league: ProviderLeagueSettings, slot: string): boolean {
-  return league.rosterPositions.some(
+  return EffectArray.some(
+    league.rosterPositions,
     (position) => position.position === slot && position.kind === "reserve",
   );
 }
@@ -346,11 +348,14 @@ function slotActions(
   request: TransactionPlanWriteRequest,
   reserveFirst: boolean,
 ): ReadonlyArray<TransactionPlanAction> {
-  const drops: ReadonlyArray<TransactionPlanAction> = request.drops.map((playerKey) => ({
-    kind: "drop",
-    playerKey,
-    outcome: "skipped",
-  }));
+  const drops: ReadonlyArray<TransactionPlanAction> = EffectArray.map(
+    request.drops,
+    (playerKey) => ({
+      kind: "drop",
+      playerKey,
+      outcome: "skipped",
+    }),
+  );
   const playerKey = request.slotMove?.playerKey ?? request.placement?.playerKey;
   const toSlot = request.slotMove?.toSlot ?? request.placement?.toSlot;
   const reserve =
@@ -376,7 +381,7 @@ function withKindOutcome(
   outcome: TransactionPlanAction["outcome"],
   detail?: string,
 ): ReadonlyArray<TransactionPlanAction> {
-  return actions.map((action) =>
+  return EffectArray.map(actions, (action) =>
     action.kind === kind
       ? { ...action, outcome, ...(detail === undefined ? {} : { detail }) }
       : action,
@@ -405,7 +410,7 @@ function tradeOf(input: {
         counterpartyTeamKey: input.request.counterpartyKey,
         send: input.request.drops,
         receive: input.request.adds,
-        picks: input.request.picks.map((pick) => ({
+        picks: EffectArray.map(input.request.picks, (pick) => ({
           round: pick.round,
           sourceTeamKey: pick.sourceTeamKey,
           destinationTeamKey: pick.destinationTeamKey,
@@ -460,12 +465,12 @@ function plannedActions(
     return [];
   }
   const actions: Array<TransactionPlanAction> = [
-    ...request.adds.map((playerKey): TransactionPlanAction => ({
+    ...EffectArray.map(request.adds, (playerKey): TransactionPlanAction => ({
       kind: "add",
       playerKey,
       outcome: "skipped",
     })),
-    ...request.drops.map((playerKey): TransactionPlanAction => ({
+    ...EffectArray.map(request.drops, (playerKey): TransactionPlanAction => ({
       kind: "drop",
       playerKey,
       outcome: "skipped",
@@ -488,7 +493,7 @@ function withOutcome(
   outcome: TransactionPlanAction["outcome"],
   detail?: string,
 ): ReadonlyArray<TransactionPlanAction> {
-  return actions.map((action) => ({
+  return EffectArray.map(actions, (action) => ({
     ...action,
     outcome,
     ...(detail === undefined ? {} : { detail }),
@@ -500,7 +505,7 @@ function reserveActions(input: {
   readonly outcome: "failed" | "unknown";
   readonly detail: string;
 }): ReadonlyArray<TransactionPlanAction> {
-  return input.actions.map((action) =>
+  return EffectArray.map(input.actions, (action) =>
     action.kind === "reserve_move"
       ? { ...action, outcome: input.outcome, detail: input.detail }
       : { ...action, outcome: "executed" },

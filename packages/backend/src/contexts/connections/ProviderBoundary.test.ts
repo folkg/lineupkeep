@@ -2,6 +2,7 @@ import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { Array, DateTime, Effect, Layer, Redacted } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { Connections } from "#contexts/connections/Connections.ts";
 import { FantasyQueries } from "#contexts/connections/FantasyQueries.ts";
@@ -74,7 +75,7 @@ it("plans a second provider's dated rotisserie league from its own declared slot
     gamesPlayed: [],
     league: secondProviderLeague,
     roster: secondProviderRoster,
-    values: secondProviderRoster.players.map((player) => ({
+    values: EffectArray.map(secondProviderRoster.players, (player) => ({
       providerPlayerKey: player.providerPlayerKey,
       score: player.providerPlayerKey === "atlas.p.3" ? 2400 : 1200,
       availability: "will-play" as const,
@@ -159,8 +160,8 @@ it.effect("reads a second provider's player search and states its own schedule b
       assert.include(summary.schedule.detail, "at most 10 dates");
     }
     assert.deepStrictEqual(
-      (summary.roster ?? []).map((row) => row.slot),
-      secondProviderRoster.players.map((player) => player.slot),
+      EffectArray.map(summary.roster ?? [], (row) => row.slot),
+      EffectArray.map(secondProviderRoster.players, (player) => player.slot),
     );
   }).pipe(layerTools.provide(SecondProviderTestLayer)),
 );

@@ -1,22 +1,40 @@
+import { Array as EffectArray } from "effect";
+import { Order as EffectOrder } from "effect";
+function sortWithComparator<A>(
+  self: ReadonlyArray<A>,
+  compare: (left: A, right: A) => number,
+): ReadonlyArray<A> {
+  return EffectArray.sort(
+    self,
+    EffectOrder.make<A>((left, right) => {
+      const result = compare(left, right);
+      return result < 0 ? -1 : result > 0 ? 1 : 0;
+    }),
+  );
+}
+
 export function redactEvidence(
   exchange: unknown,
   knownCredentials: ReadonlyArray<string> = [],
 ): unknown {
   const credentials = new Set<string>(knownCredentials);
   collectCredentials(exchange, credentials);
-  const longestFirst = [...credentials]
-    .filter(Boolean)
-    .toSorted((left, right) => right.length - left.length);
+  const longestFirst = sortWithComparator(
+    EffectArray.filter([...credentials], Boolean),
+    (left, right) => right.length - left.length,
+  );
   return scrubEvidence(exchange, longestFirst);
 }
 
 function collectCredentials(value: unknown, credentials: Set<string>, key = ""): void {
   if (typeof value === "string") {
     collectStringCredentials(value, key, credentials);
-  } else if (Array.isArray(value)) {
-    value.forEach((entry: unknown) => collectCredentials(entry, credentials));
+  } else if (EffectArray.isArray(value)) {
+    EffectArray.forEach(value, (entry: unknown) => collectCredentials(entry, credentials));
   } else if (typeof value === "object" && value !== null) {
-    Object.entries(value).forEach(([name, entry]) => collectCredentials(entry, credentials, name));
+    EffectArray.forEach(Object.entries(value), ([name, entry]) =>
+      collectCredentials(entry, credentials, name),
+    );
   }
 }
 
@@ -54,14 +72,19 @@ function scrubEvidence(value: unknown, credentials: ReadonlyArray<string>, key =
   if (typeof value === "string") {
     return sensitive.test(key)
       ? "[REDACTED]"
-      : credentials.reduce((text, secret) => text.replaceAll(secret, "[REDACTED]"), value);
+      : EffectArray.reduce(credentials, value, (text, secret) =>
+          text.replaceAll(secret, "[REDACTED]"),
+        );
   }
-  if (Array.isArray(value)) {
-    return value.map((entry: unknown) => scrubEvidence(entry, credentials));
+  if (EffectArray.isArray(value)) {
+    return EffectArray.map(value, (entry: unknown) => scrubEvidence(entry, credentials));
   }
   if (typeof value === "object" && value !== null) {
     return Object.fromEntries(
-      Object.entries(value).map(([name, entry]) => [name, scrubEvidence(entry, credentials, name)]),
+      EffectArray.map(Object.entries(value), ([name, entry]) => [
+        name,
+        scrubEvidence(entry, credentials, name),
+      ]),
     );
   }
   return value;

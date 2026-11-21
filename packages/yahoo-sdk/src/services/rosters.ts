@@ -1,3 +1,4 @@
+import { Array as EffectArray } from "effect";
 import * as Schema from "effect/Schema";
 
 import * as API from "#yahoo/api.ts";
@@ -101,7 +102,7 @@ export const forLeagues: API.OperationMethod<
     return {
       host: "read",
       method: "GET",
-      path: `/fantasy/v2/users;use_login=1/games;game_keys=${gameKeys.join(",")}/leagues;league_keys=${input.leagueKeys.join(",")};out=settings/teams;out=transactions,games_played;transactions.types=waiver,pending_trade/roster${coverageSuffix(input.coverage)}/players;out=opponent,starting_status,transactions`,
+      path: `/fantasy/v2/users;use_login=1/games;game_keys=${EffectArray.join(gameKeys, ",")}/leagues;league_keys=${EffectArray.join(input.leagueKeys, ",")};out=settings/teams;out=transactions,games_played;transactions.types=waiver,pending_trade/roster${coverageSuffix(input.coverage)}/players;out=opponent,starting_status,transactions`,
     };
   },
   decode: (payload, input) => decodeLeagueRostersMany(payload, input.leagueKeys),

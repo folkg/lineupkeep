@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
+import { Array as EffectArray } from "effect";
 import { assert, expect, it } from "vitest";
 
 import { discoverAuthorization, mcpClient } from "#e2e/mcpClient.ts";
@@ -37,7 +38,7 @@ it("decodes tool discovery and calls while preserving raw protocol responses", a
   const address = server.address();
   assert(address !== null && typeof address === "object");
   const client = mcpClient(`http://127.0.0.1:${address.port}/agent/channel`, "memory-only-token");
-  expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(["echo"]);
+  expect(EffectArray.map((await client.listTools()).tools, (tool) => tool.name)).toEqual(["echo"]);
   expect(await client.callTool("echo", { value: "hello" })).toMatchObject({
     isError: false,
     structuredContent: { value: "hello" },

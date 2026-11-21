@@ -8,6 +8,8 @@ import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import type { Page } from "@playwright/test";
 import { Effect } from "effect";
 import { Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 
 import {
   AcceptanceReport,
@@ -71,8 +73,11 @@ function authorizeLegacyGrant(
   origin: string,
   owner: Account,
 ): () => Promise<AuthorizedClient> {
-  const retired = Object.keys(retiredScopeAliases).find(
-    (name) => currentScopeName(name) === "fantasy:read",
+  const retired = EffectOption.getOrUndefined(
+    EffectArray.findFirst(
+      Object.keys(retiredScopeAliases),
+      (name) => currentScopeName(name) === "fantasy:read",
+    ),
   );
   if (retired === undefined) {
     throw new Error("No retired scope name maps to the read scope.");
@@ -94,7 +99,10 @@ async function registerLegacyClient(
     headers: {
       "content-type": "application/json",
       origin,
-      cookie: cookies.map(({ name, value }) => `${name}=${value}`).join("; "),
+      cookie: EffectArray.join(
+        EffectArray.map(cookies, ({ name, value }) => `${name}=${value}`),
+        "; ",
+      ),
     },
     body: jsonTools.jsonString({
       client_name: legacyClientName,
@@ -127,11 +135,11 @@ async function authorize(
   clientId: string,
   scopes: ReadonlyArray<string>,
 ): Promise<AuthorizedClient> {
-  return test.step(`Setup (mcp): authorize ${scopes.join(" ")}`, async () => {
+  return test.step(`Setup (mcp): authorize ${EffectArray.join(scopes, " ")}`, async () => {
     const authorization = await beginAuthorization(
       page,
       mcpEndpoint(origin),
-      scopes.join(" "),
+      EffectArray.join(scopes, " "),
       fetch,
       clientId,
     );
@@ -160,10 +168,10 @@ async function authorize(
     await expect(page).toHaveURL(callbackPattern);
     const credentials = await exchangeCode(page, authorization);
     await page.goto("about:blank");
-    const granted = credentials.scope.split(" ").filter(Boolean);
+    const granted = EffectArray.filter(credentials.scope.split(" "), Boolean);
     if (!sameSet(granted, scopes)) {
       throw new Error(
-        `Authorization returned ${granted.join(" ")} instead of the requested ${scopes.join(" ")}.`,
+        `Authorization returned ${EffectArray.join(granted, " ")} instead of the requested ${EffectArray.join(scopes, " ")}.`,
       );
     }
     return { client: mcpClient(mcpEndpoint(origin), credentials.access_token), granted };
@@ -171,7 +179,7 @@ async function authorize(
 }
 
 async function expectConsentScopes(page: Page, scopes: ReadonlyArray<string>): Promise<void> {
-  const requested = new Set(scopes.map(currentScopeName));
+  const requested = new Set(EffectArray.map(scopes, currentScopeName));
   for (const [name, phrase] of Object.entries(scopePhrases)) {
     const visible = await page
       .getByText(phrase)
@@ -179,7 +187,7 @@ async function expectConsentScopes(page: Page, scopes: ReadonlyArray<string>): P
       .catch(() => false);
     if (requested.has(name) !== visible) {
       throw new Error(
-        `The consent screen ${visible ? "shows" : "omits"} the ${name} description for a request of ${scopes.join(" ")}.`,
+        `The consent screen ${visible ? "shows" : "omits"} the ${name} description for a request of ${EffectArray.join(scopes, " ")}.`,
       );
     }
   }
@@ -236,7 +244,10 @@ function requiredReportPath(): string {
 function sameSet(left: ReadonlyArray<string>, right: ReadonlyArray<string>): boolean {
   const leftSet = new Set(left);
   const rightSet = new Set(right);
-  return leftSet.size === rightSet.size && [...leftSet].every((value) => rightSet.has(value));
+  return (
+    leftSet.size === rightSet.size &&
+    EffectArray.every([...leftSet], (value) => rightSet.has(value))
+  );
 }
 
 const clientName = "Lineupgrade MCP acceptance";

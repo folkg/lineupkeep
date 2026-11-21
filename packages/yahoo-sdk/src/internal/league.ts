@@ -1,4 +1,5 @@
 import { Effect, Schema, SchemaTransformation } from "effect";
+import { Array as EffectArray } from "effect";
 
 import {
   Flag,
@@ -14,6 +15,21 @@ import type { YahooLeagueKey } from "#yahoo/keys.ts";
 
 import { PlayerRankPayload, playerRanksOf } from "./player.ts";
 import type { YahooPlayerRank } from "./player.ts";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 export function decodeLeagueSettings(
   payload: unknown,
@@ -33,7 +49,7 @@ export function decodeLeagueSettings(
     const playerRankSample =
       league.players === undefined
         ? undefined
-        : league.players.map((player) => ({
+        : EffectArray.map(league.players, (player) => ({
             playerKey: player.player_key,
             ranks: playerRanksOf(player.player_ranks),
           }));
@@ -69,13 +85,13 @@ export function decodeLeagueSettings(
         maxAdds: settings.max_adds,
         maxGamesPlayed: positiveLimit(settings.max_games_played),
         maxInningsPitched: positiveLimit(settings.max_innings_pitched),
-        rosterPositions: settings.roster_positions.map(({ roster_position }) => ({
+        rosterPositions: EffectArray.map(settings.roster_positions, ({ roster_position }) => ({
           position: roster_position.position,
           positionType: optionalNonEmpty(roster_position.position_type),
           count: roster_position.count,
           isStartingPosition: roster_position.is_starting_position,
         })),
-        statCategories: settings.stat_categories.stats.map(({ stat }) => ({
+        statCategories: EffectArray.map(settings.stat_categories.stats, ({ stat }) => ({
           statId: stat.stat_id,
           name: stat.name,
           displayName: stat.display_name,
@@ -84,19 +100,27 @@ export function decodeLeagueSettings(
           enabled: stat.enabled,
           displayOnly:
             stat.is_only_display_stat === true ||
-            (stat.stat_position_types ?? []).some(
+            EffectArray.some(
+              stat.stat_position_types ?? [],
               ({ stat_position_type }) => stat_position_type.is_only_display_stat === true,
             ),
-          positionTypes: (stat.stat_position_types ?? []).flatMap(({ stat_position_type }) =>
-            stat_position_type.position_type === undefined
-              ? []
-              : [stat_position_type.position_type],
+          positionTypes: EffectArray.flatMap(
+            stat.stat_position_types ?? [],
+            ({ stat_position_type }) => {
+              const flatMapped1 =
+                stat_position_type.position_type === undefined
+                  ? []
+                  : [stat_position_type.position_type];
+              return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+            },
           ),
         })),
-        statModifiers: (settings.stat_modifiers?.stats ?? []).map(({ stat }) => ({
-          statId: stat.stat_id,
-          value: stat.value,
-        })),
+        statModifiers: optionalArrayValue(settings.stat_modifiers?.stats ?? [], (value) =>
+          EffectArray.map(value, ({ stat }) => ({
+            statId: stat.stat_id,
+            value: stat.value,
+          })),
+        ),
       },
     };
   });

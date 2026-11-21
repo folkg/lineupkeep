@@ -1,4 +1,5 @@
 import { assert, it } from "@effect/vitest";
+import { Array as EffectArray } from "effect";
 
 import { rosterOccupancy, rosterRuleOf, slotPlacement } from "./RosterSlots.ts";
 import type { RosterPlayerPlace, RosterSlot } from "./RosterSlots.ts";
@@ -30,7 +31,7 @@ it("names a healthy player on an injury-based reserve list and requires a drop w
   });
 
   assert.deepStrictEqual(
-    occupancy.illegal.map((occupant) => occupant.detail),
+    EffectArray.map(occupancy.illegal, (occupant) => occupant.detail),
     [
       "Linus Ullmark is no longer injured but sits in IR+. This roster is illegal, so all adds and drops are blocked until it is cured. Activate Linus Ullmark together with a drop, or drop Linus Ullmark.",
     ],
@@ -63,7 +64,13 @@ it("publishes the blocker's fact and the drop that cures it", () => {
   });
 
   assert.deepStrictEqual(
-    occupancy.illegal.map(({ key, name, slot, fact, cure }) => ({ key, name, slot, fact, cure })),
+    EffectArray.map(occupancy.illegal, ({ key, name, slot, fact, cure }) => ({
+      key,
+      name,
+      slot,
+      fact,
+      cure,
+    })),
     [
       {
         key: "ullmark",
@@ -86,7 +93,7 @@ it("asks for an activation without a drop when the roster has room", () => {
   });
 
   assert.deepStrictEqual(
-    occupancy.illegal.map((occupant) => occupant.detail),
+    EffectArray.map(occupancy.illegal, (occupant) => occupant.detail),
     [
       "Linus Ullmark is no longer injured but sits in IR+. This roster is illegal, so all adds and drops are blocked until it is cured. Activate Linus Ullmark, or drop Linus Ullmark.",
     ],
@@ -109,7 +116,7 @@ it("keeps the position wording for a reserve list that publishes positions", () 
   });
 
   assert.deepStrictEqual(
-    occupancy.illegal.map((occupant) => occupant.detail),
+    EffectArray.map(occupancy.illegal, (occupant) => occupant.detail),
     [
       "Linus Ullmark sits in IR+, but IR+ does not accept their positions (G). This roster is illegal, so all adds and drops are blocked until it is cured. Activate Linus Ullmark, or drop Linus Ullmark.",
     ],

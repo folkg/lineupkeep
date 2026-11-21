@@ -5,6 +5,10 @@ import { join } from "node:path";
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { Effect } from "effect";
 import { Schema } from "effect";
+import { Array as EffectArray } from "effect";
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 const endpoint = new URL(readRequired("OTEL_EXPORTER_OTLP_ENDPOINT"));
 const evidence = join(readRequired("VERIFICATION_DIR"), "server-spans.jsonl");
@@ -17,25 +21,34 @@ const server = createServer((request, response) => {
     const chunks: Array<Buffer> = [];
     request.on("data", (chunk: Buffer) => chunks.push(chunk));
     request.on("end", () => {
-      const received = collectSpans(
-        Effect.runSync(
-          Schema.decodeUnknownEffect(ExportJson)(Buffer.concat(chunks).toString("utf8")),
+      const received = EffectArray.filter(
+        collectSpans(
+          Effect.runSync(
+            Schema.decodeUnknownEffect(ExportJson)(Buffer.concat(chunks).toString("utf8")),
+          ),
         ),
-      ).filter((span) => !seen.has(`${span.traceId}/${span.spanId}`));
+        (span) => !seen.has(`${span.traceId}/${span.spanId}`),
+      );
       for (const span of received) {
         seen.add(`${span.traceId}/${span.spanId}`);
       }
       for (const span of received) {
         spans.push(span);
       }
-      appendFileSync(evidence, received.map((span) => `${jsonTools.jsonString(span)}\n`).join(""));
+      appendFileSync(
+        evidence,
+        EffectArray.join(
+          EffectArray.map(received, (span) => `${jsonTools.jsonString(span)}\n`),
+          "",
+        ),
+      );
       response.writeHead(200, { "content-type": "application/json" }).end("{}");
     });
     return;
   }
   if (request.method === "GET" && url.pathname === "/spans") {
     const trace = url.searchParams.get("trace");
-    const inTrace = spans.filter((span) => span.traceId === trace);
+    const inTrace = EffectArray.filter(spans, (span) => span.traceId === trace);
     response
       .writeHead(200, { "content-type": "application/json" })
       .end(jsonTools.jsonString(inTrace));
@@ -52,9 +65,9 @@ server.listen(Number(endpoint.port), endpoint.hostname, () => {
 });
 
 function collectSpans(body: typeof ExportJson.Type): Array<CollectedSpan> {
-  return body.resourceSpans.flatMap((resource) =>
-    resource.scopeSpans.flatMap((scope) =>
-      scope.spans.map((span) => {
+  return EffectArray.flatMap(body.resourceSpans, (resource) => {
+    const flatMapped1 = EffectArray.flatMap(resource.scopeSpans, (scope) => {
+      const flatMapped1 = EffectArray.map(scope.spans, (span) => {
         const startMs = nanosToMillis(span.startTimeUnixNano);
         const endMs = nanosToMillis(span.endTimeUnixNano);
         return {
@@ -66,7 +79,7 @@ function collectSpans(body: typeof ExportJson.Type): Array<CollectedSpan> {
           endMs,
           durationMs: Math.round((endMs - startMs) * 10) / 10,
           attributes: attributesOf(span.attributes),
-          events: (span.events ?? []).map((event) => ({
+          events: EffectArray.map(span.events ?? [], (event) => ({
             name: event.name,
             timeMs: nanosToMillis(event.timeUnixNano),
             attributes: attributesOf(event.attributes),
@@ -80,9 +93,11 @@ function collectSpans(body: typeof ExportJson.Type): Array<CollectedSpan> {
               }
             : {}),
         };
-      }),
-    ),
-  );
+      });
+      return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+    });
+    return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+  });
 }
 
 function attributesOf(
@@ -91,7 +106,10 @@ function attributesOf(
     | undefined,
 ): Readonly<Record<string, unknown>> {
   return Object.fromEntries(
-    (attributes ?? []).map((attribute) => [attribute.key, Object.values(attribute.value)[0]]),
+    EffectArray.map(attributes ?? [], (attribute) => [
+      attribute.key,
+      Object.values(attribute.value)[0],
+    ]),
   );
 }
 

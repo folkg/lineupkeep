@@ -4,6 +4,8 @@ import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import type { UserId } from "@lineupkeep/backend/auth/User";
 import { eq } from "drizzle-orm";
 import { Array, DateTime, Effect, Layer, Option, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 
 import layerTools from "#runtime/ProvideLayer.ts";
 
@@ -57,14 +59,14 @@ it.effect("creates one plan per owner and team when two creates race", () =>
 
     const plans = yield* database.select().from(transactionPlans);
     assert.deepStrictEqual(
-      plans.map((plan) => [plan.userId, plan.teamId]),
+      EffectArray.map(plans, (plan) => [plan.userId, plan.teamId]),
       [[owner, firstTeam]],
     );
 
     yield* repository.loadPlan({ userId: owner, team: secondTeam, at });
     const separate = yield* database.select().from(transactionPlans);
     assert.deepStrictEqual(
-      separate.map((plan) => plan.teamId).sort(),
+      EffectArray.map(separate, (plan) => plan.teamId).sort(),
       [firstTeam, secondTeam].sort(),
     );
   }).pipe(layerTools.provide(RepositoryTest)),
@@ -96,15 +98,15 @@ it.effect("appends two interleaved batches without losing a move or its claims",
 
     const moves = yield* repository.readPlanMoves({ userId: owner, team: firstTeam });
     assert.deepStrictEqual(
-      moves.map((move) => move.position),
+      EffectArray.map(moves, (move) => move.position),
       [0, 1, 2],
     );
     assert.deepStrictEqual(
-      moves.map((move) => move.id).sort(),
-      [...first, ...second].map((move) => move.id).sort(),
+      EffectArray.map(moves, (move) => move.id).sort(),
+      EffectArray.map([...first, ...second], (move) => move.id).sort(),
     );
     assert.deepStrictEqual(
-      moves.map((move) => move.claims),
+      EffectArray.map(moves, (move) => move.claims),
       [
         [{ kind: "player", key: "nhl.p.1" }],
         [{ kind: "player", key: "nhl.p.2" }],
@@ -209,7 +211,10 @@ it.effect("edits a move in place and replaces the claims it holds", () =>
     assert.strictEqual(moves[0]?.reason, "The center is out again.");
     assert.deepStrictEqual(moves[0]?.claims, [{ kind: "player", key: "nhl.p.2" }]);
     assert.deepStrictEqual(
-      (yield* database.select().from(transactionMoveClaims)).map((claim) => claim.claimKey),
+      EffectArray.map(
+        yield* database.select().from(transactionMoveClaims),
+        (claim) => claim.claimKey,
+      ),
       ["nhl.p.2"],
     );
   }).pipe(layerTools.provide(RepositoryTest)),
@@ -275,12 +280,22 @@ it.effect("records a result and releases claims only when the result ends the mo
     });
     assert.isTrue(Option.isSome(pending));
     const stillOpen = yield* repository.readPlanMoves({ userId: owner, team: firstTeam });
-    assert.strictEqual(stillOpen.find((move) => move.id === pendingMove.id)?.result, "pending");
-    assert.deepStrictEqual(stillOpen.find((move) => move.id === pendingMove.id)?.claims, [
-      { kind: "player", key: "nhl.p.1" },
-    ]);
     assert.strictEqual(
-      stillOpen.find((move) => move.id === pendingMove.id)?.externalRef,
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(stillOpen, (move) => move.id === pendingMove.id),
+      )?.result,
+      "pending",
+    );
+    assert.deepStrictEqual(
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(stillOpen, (move) => move.id === pendingMove.id),
+      )?.claims,
+      [{ kind: "player", key: "nhl.p.1" }],
+    );
+    assert.strictEqual(
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(stillOpen, (move) => move.id === pendingMove.id),
+      )?.externalRef,
       "waiver-1",
     );
 
@@ -295,10 +310,23 @@ it.effect("records a result and releases claims only when the result ends the mo
     });
     assert.isTrue(Option.isSome(executed));
     const settled = yield* repository.readPlanMoves({ userId: owner, team: firstTeam });
-    assert.strictEqual(settled.find((move) => move.id === executedMove.id)?.result, "executed");
-    assert.deepStrictEqual(settled.find((move) => move.id === executedMove.id)?.claims, []);
+    assert.strictEqual(
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(settled, (move) => move.id === executedMove.id),
+      )?.result,
+      "executed",
+    );
     assert.deepStrictEqual(
-      (yield* database.select().from(transactionMoveClaims)).map((claim) => claim.claimKey),
+      EffectOption.getOrUndefined(
+        EffectArray.findFirst(settled, (move) => move.id === executedMove.id),
+      )?.claims,
+      [],
+    );
+    assert.deepStrictEqual(
+      EffectArray.map(
+        yield* database.select().from(transactionMoveClaims),
+        (claim) => claim.claimKey,
+      ),
       ["nhl.p.1"],
     );
   }).pipe(layerTools.provide(RepositoryTest)),
@@ -349,15 +377,18 @@ it.effect("reads the submitted legs of a plan for one effective date", () =>
     });
 
     assert.deepStrictEqual(
-      read.map((move) => move.id),
+      EffectArray.map(read, (move) => move.id),
       [Array.getUnsafe(submitted, 0).id, Array.getUnsafe(submitted, 2).id],
     );
     assert.deepStrictEqual(
-      (yield* repository.readSubmittedMoves({
-        userId: other,
-        teams: [firstTeam],
-        dates: ["2026-11-15"],
-      })).map((move) => move.id),
+      EffectArray.map(
+        yield* repository.readSubmittedMoves({
+          userId: other,
+          teams: [firstTeam],
+          dates: ["2026-11-15"],
+        }),
+        (move) => move.id,
+      ),
       [],
     );
   }).pipe(layerTools.provide(RepositoryTest)),
@@ -421,13 +452,15 @@ it.effect("pages one owner's moves by state and orders them by run day, team, an
       limit: 50,
     });
     assert.deepStrictEqual(
-      all.map(({ move }) => move.claims[0]?.key),
+      EffectArray.map(all, ({ move }) => move.claims[0]?.key),
       ["nhl.p.4", "nhl.p.1", "nhl.p.3", "nhl.p.2"],
     );
-    assert.isTrue(all.every(({ move, team }) => move.team === firstTeam && team.id === firstTeam));
+    assert.isTrue(
+      EffectArray.every(all, ({ move, team }) => move.team === firstTeam && team.id === firstTeam),
+    );
     assert.deepStrictEqual(
-      all.map(({ team }) => team.name),
-      all.map(() => `Team ${firstTeam}`),
+      EffectArray.map(all, ({ team }) => team.name),
+      EffectArray.map(all, () => `Team ${firstTeam}`),
     );
 
     const saved = yield* repository.readOwnerMoves({
@@ -438,7 +471,7 @@ it.effect("pages one owner's moves by state and orders them by run day, team, an
       limit: 50,
     });
     assert.deepStrictEqual(
-      saved.map(({ move }) => move.claims[0]?.key),
+      EffectArray.map(saved, ({ move }) => move.claims[0]?.key),
       ["nhl.p.3", "nhl.p.2"],
     );
 
@@ -450,7 +483,7 @@ it.effect("pages one owner's moves by state and orders them by run day, team, an
       limit: 50,
     });
     assert.deepStrictEqual(
-      today.map(({ move }) => move.claims[0]?.key),
+      EffectArray.map(today, ({ move }) => move.claims[0]?.key),
       ["nhl.p.4", "nhl.p.1"],
     );
 
@@ -462,7 +495,7 @@ it.effect("pages one owner's moves by state and orders them by run day, team, an
       limit: 50,
     });
     assert.deepStrictEqual(
-      ended.map(({ move }) => move.result ?? move.decision),
+      EffectArray.map(ended, ({ move }) => move.result ?? move.decision),
       ["executed"],
     );
 
@@ -487,7 +520,7 @@ it.effect("pages one owner's moves by state and orders them by run day, team, an
       limit: 50,
     });
     assert.deepStrictEqual(
-      [...firstPage, ...secondPage].map(({ move }) => move.claims[0]?.key),
+      EffectArray.map([...firstPage, ...secondPage], ({ move }) => move.claims[0]?.key),
       ["nhl.p.4", "nhl.p.1", "nhl.p.3", "nhl.p.2"],
     );
 
@@ -512,7 +545,7 @@ it.effect("pages one owner's moves by state and orders them by run day, team, an
       limit: 50,
     });
     assert.deepStrictEqual(
-      [...firstToday, ...afterUndated].map(({ move }) => move.claims[0]?.key),
+      EffectArray.map([...firstToday, ...afterUndated], ({ move }) => move.claims[0]?.key),
       ["nhl.p.4", "nhl.p.1", "nhl.p.3", "nhl.p.2"],
     );
   }).pipe(layerTools.provide(RepositoryTest)),

@@ -266,7 +266,7 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
           )
           .where(and(eq(providerTeams.userId, userId), anyOf(providerTeams.id, ids)))
           .pipe(Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })));
-        const byId = new Map(rows.map((row) => [row.id, row]));
+        const byId = new Map(EffectArray.map(rows, (row) => [row.id, row]));
         const owned: Array<OwnedTeam> = [];
         for (const teamId of teamIds) {
           const row = byId.get(teamId);
@@ -326,7 +326,7 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
               ),
             )
             .pipe(Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })));
-          return rows.map((row) => row.providerTeamKey);
+          return EffectArray.map(rows, (row) => row.providerTeamKey);
         },
       );
 
@@ -344,7 +344,7 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
           yield* connections
             .markReconnectRequired(
               userId,
-              rejections.map((rejection) => ({
+              EffectArray.map(rejections, (rejection) => ({
                 id: rejection.owned.connection.id,
                 expectedGeneration: rejection.owned.connection.generation,
                 ...(rejection.evidence === undefined ? {} : { evidence: rejection.evidence }),

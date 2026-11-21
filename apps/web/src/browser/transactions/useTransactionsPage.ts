@@ -1,3 +1,4 @@
+import { EffectArray } from "@lineupkeep/collections";
 import { useInfiniteQuery, useMutation } from "@tanstack/solid-query";
 import type { MutationFunctionContext } from "@tanstack/solid-query";
 import { createMemo, createSignal } from "solid-js";
@@ -23,6 +24,9 @@ import { transactionQueries } from "./transactionQueries";
 import type { TransactionRemote } from "./transactionRemote";
 import { plannedMoment } from "./transactionTimes";
 import type { ConfirmationTarget } from "./useGroupConfirmation";
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 export function useTransactionsPage(props: TransactionsPageOptions): TransactionsPageController {
   const signIn = useSignInRecovery();
@@ -72,7 +76,7 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
         addMoveDay(held, day);
       }
     }
-    return [...held.values()].map(moveDayView).sort(compareMoveDays);
+    return EffectArray.map([...held.values()], moveDayView).sort(compareMoveDays);
   });
   const refresh = (): void => {
     void open.refetch();
@@ -93,7 +97,10 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
       if (data.status === "refused") {
         setFeedback({
           type: "attention",
-          message: data.refusals.map((entry) => entry.detail).join(" "),
+          message: EffectArray.join(
+            EffectArray.map(data.refusals, (entry) => entry.detail),
+            " ",
+          ),
         });
       } else {
         setEditing(undefined);
@@ -129,7 +136,10 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
       if (data.status === "refused") {
         setFeedback({
           type: "attention",
-          message: data.refusals.map((entry) => entry.detail).join(" "),
+          message: EffectArray.join(
+            EffectArray.map(data.refusals, (entry) => entry.detail),
+            " ",
+          ),
         });
       } else {
         setFeedback({ type: "success", message: `Discarded ${moveCount(1)}.` });
@@ -157,7 +167,10 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
       if (data.status === "refused") {
         setFeedback({
           type: "attention",
-          message: data.refusals.map((entry) => entry.detail).join(" "),
+          message: EffectArray.join(
+            EffectArray.map(data.refusals, (entry) => entry.detail),
+            " ",
+          ),
         });
       } else {
         setFeedback({
@@ -213,7 +226,10 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
       if (data.status === "refused") {
         setFeedback({
           type: "attention",
-          message: data.refusals.map((entry) => entry.detail).join(" "),
+          message: EffectArray.join(
+            EffectArray.map(data.refusals, (entry) => entry.detail),
+            " ",
+          ),
         });
       } else {
         setFeedback({ type: "success", message: "Discarded what was left of this group." });
@@ -240,7 +256,10 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     if (outcome.status === "refused") {
       setFeedback({
         type: "attention",
-        message: outcome.refusals.map((entry) => entry.detail).join(" "),
+        message: EffectArray.join(
+          EffectArray.map(outcome.refusals, (entry) => entry.detail),
+          " ",
+        ),
       });
       return;
     }
@@ -348,9 +367,13 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     },
     earlier: () =>
       earlier.isSuccess
-        ? earlier.data.pages
-            .flatMap((page) => page.moves)
-            .filter((move) => move.decision !== "discarded")
+        ? EffectArray.filter(
+            EffectArray.flatMap(earlier.data.pages, (page) => {
+              const flatMapped1 = page.moves;
+              return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+            }),
+            (move) => move.decision !== "discarded",
+          )
         : [],
     earlierCount: () => counts().ended,
     earlierEnabled,
@@ -370,7 +393,13 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
 
 function retryFeedback(data: TransactionMoveRetryData): ActionFeedbackState {
   if (data.status === "refused") {
-    return { type: "attention", message: data.refusals.map((entry) => entry.detail).join(" ") };
+    return {
+      type: "attention",
+      message: EffectArray.join(
+        EffectArray.map(data.refusals, (entry) => entry.detail),
+        " ",
+      ),
+    };
   }
   const parts: Array<string> = [`Retried ${moveCount(data.counts.moves)}.`];
   if (data.counts.executed > 0) {
@@ -387,7 +416,7 @@ function retryFeedback(data: TransactionMoveRetryData): ActionFeedbackState {
   }
   return {
     type: data.counts.failed > 0 || data.counts.unknown > 0 ? "attention" : "success",
-    message: parts.join(" "),
+    message: EffectArray.join(parts, " "),
   };
 }
 
@@ -407,7 +436,10 @@ function addMoveDay(held: Map<string, MutableMoveDay>, day: TransactionMoveDayVi
       ...(day.day === undefined ? {} : { day: day.day }),
       today: day.today,
       teams: new Map(
-        day.teams.map((team) => [team.team.id, { team: team.team, moves: [...team.moves] }]),
+        EffectArray.map(day.teams, (team) => [
+          team.team.id,
+          { team: team.team, moves: [...team.moves] },
+        ]),
       ),
     });
     return;
@@ -429,12 +461,10 @@ function moveDayView(day: MutableMoveDay): TransactionMoveDayView {
     ...(day.day === undefined ? {} : { day: day.day }),
     groupedBy: "runDay" as const,
     today: day.today,
-    teams: [...day.teams.values()]
-      .map((team) => ({
-        team: team.team,
-        moves: [...team.moves].sort(compareMoveCards),
-      }))
-      .sort(compareTeamNames),
+    teams: EffectArray.map([...day.teams.values()], (team) => ({
+      team: team.team,
+      moves: [...team.moves].sort(compareMoveCards),
+    })).sort(compareTeamNames),
   };
 }
 
@@ -473,7 +503,10 @@ function confirmationMessage(
   target: ConfirmationTarget,
 ): string {
   if (outcome.status === "refused") {
-    return outcome.refusals.map((entry) => entry.detail).join(" ");
+    return EffectArray.join(
+      EffectArray.map(outcome.refusals, (entry) => entry.detail),
+      " ",
+    );
   }
   const parts: Array<string> = [];
   const effect =
@@ -516,7 +549,7 @@ function confirmationMessage(
   for (const refusal of outcome.refusals) {
     parts.push(refusal.detail);
   }
-  return parts.join(" ");
+  return EffectArray.join(parts, " ");
 }
 
 export type TransactionsPageController = {

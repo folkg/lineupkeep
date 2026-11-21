@@ -1,4 +1,5 @@
 import { Effect, Layer } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import { AccountErasure } from "#contexts/privacy/AccountErasure.ts";
@@ -14,7 +15,11 @@ export const AccountErasureLive = Layer.effect(
       const summary = yield* repository.erase(userId);
       yield* Effect.annotateCurrentSpan({
         "account_erasure.classes": summary.removed.length,
-        "account_erasure.rows": summary.removed.reduce((total, entry) => total + entry.count, 0),
+        "account_erasure.rows": EffectArray.reduce(
+          summary.removed,
+          0,
+          (total, entry) => total + entry.count,
+        ),
       });
       return summary;
     });

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
+import { Array as EffectArray, Option as EffectOption } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import type { AccountExportArea } from "#contexts/privacy/AccountExport.ts";
@@ -376,7 +377,9 @@ export const blockAccountErasureStatements = [
 ] as const;
 
 function ownedRowsWhere(table: string, account: OwnedAccount): SQL {
-  const ownedClass = ownedDataInventory.find((entry) => entry.table === table);
+  const ownedClass = EffectOption.getOrUndefined(
+    EffectArray.findFirst(ownedDataInventory, (entry) => entry.table === table),
+  );
   if (ownedClass === undefined) {
     throw new Error(`The erasure inventory does not name ${table}.`);
   }

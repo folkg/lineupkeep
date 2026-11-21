@@ -1,3 +1,4 @@
+import { Array as EffectArray } from "effect";
 import * as Schema from "effect/Schema";
 
 import * as API from "#yahoo/api.ts";
@@ -80,10 +81,11 @@ export const playerCards: API.OperationMethod<
     path: "/v2/fantasy-android/getFantasyPlayerCards",
     query: {
       leagueKey: input.leagueKey,
-      playerKeys: input.playerKeys.join(","),
-      subviews: (
-        input.subViews ?? ["overview", "gameLog", "seasonStats", "leagueAvailability"]
-      ).join(","),
+      playerKeys: EffectArray.join(input.playerKeys, ","),
+      subviews: EffectArray.join(
+        input.subViews ?? ["overview", "gameLog", "seasonStats", "leagueAvailability"],
+        ",",
+      ),
     },
   }),
   decode: (payload) => decodePlayerCards(payload),

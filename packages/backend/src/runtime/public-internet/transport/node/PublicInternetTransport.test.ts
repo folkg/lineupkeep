@@ -7,6 +7,7 @@ import type { LookupFunction } from "node:net";
 import { isPublicRoutableHost } from "@better-auth/core/utils/host";
 import { assert, it } from "@effect/vitest";
 import { Effect, Exit, Fiber } from "effect";
+import { Array as EffectArray } from "effect";
 import { TestClock } from "effect/testing";
 import { Agent } from "undici";
 
@@ -375,20 +376,23 @@ it.effect("rejects every special-use DNS answer before opening a process connect
         { address: approvedAddress, family: 4 },
         { address: "127.0.0.1", family: 4 },
       ],
-      ...[
-        "0.0.0.0",
-        "127.0.0.1",
-        "10.0.0.1",
-        "169.254.169.254",
-        "::1",
-        "fc00::1",
-        "fe80::1",
-        "2001:db8::1",
-        "::ffff:127.0.0.1",
-        "100.64.0.1",
-        "192.0.2.1",
-        "224.0.0.1",
-      ].map((address) => [{ address, family: address.includes(":") ? 6 : 4 }]),
+      ...EffectArray.map(
+        [
+          "0.0.0.0",
+          "127.0.0.1",
+          "10.0.0.1",
+          "169.254.169.254",
+          "::1",
+          "fc00::1",
+          "fe80::1",
+          "2001:db8::1",
+          "::ffff:127.0.0.1",
+          "100.64.0.1",
+          "192.0.2.1",
+          "224.0.0.1",
+        ],
+        (address) => [{ address, family: address.includes(":") ? 6 : 4 }],
+      ),
     ];
     for (const addresses of cases) {
       let connected = false;
@@ -406,7 +410,13 @@ it.effect("rejects every special-use DNS answer before opening a process connect
         ).pipe(layerTools.provide(layer)),
       );
 
-      assert.isTrue(Exit.isFailure(result), addresses.map(({ address }) => address).join(", "));
+      assert.isTrue(
+        Exit.isFailure(result),
+        EffectArray.join(
+          EffectArray.map(addresses, ({ address }) => address),
+          ", ",
+        ),
+      );
       assert.isFalse(connected);
     }
   }),
@@ -539,7 +549,7 @@ async function setupHTTPS(): Promise<HTTPSFixture> {
       ca: certificate,
       lookup: (hostname, options, callback) => {
         void resolve(hostname).then((addresses) => {
-          if (!addresses.every(({ address }) => isPublicRoutableHost(address))) {
+          if (!EffectArray.every(addresses, ({ address }) => isPublicRoutableHost(address))) {
             callback(new Error("Special-use DNS answer"), "", 4);
             return;
           }

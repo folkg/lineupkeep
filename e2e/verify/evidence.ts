@@ -6,9 +6,40 @@ import { isAbsolute, join, relative } from "node:path";
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { Effect } from "effect";
 import { Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption, Order as EffectOrder } from "effect";
 
 import { isMcpExchangeAttachment, McpExchangeJson } from "./mcpEvidence.ts";
 import { isServiceCallAttachment, ServiceCallJson } from "./serviceEvidence.ts";
+function sortWithComparator<A>(
+  self: ReadonlyArray<A>,
+  compare: (left: A, right: A) => number,
+): ReadonlyArray<A> {
+  return EffectArray.sort(
+    self,
+    EffectOrder.make<A>((left, right) => {
+      const result = compare(left, right);
+      return result < 0 ? -1 : result > 0 ? 1 : 0;
+    }),
+  );
+}
+
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
+
 export async function deliveryProblems(directory: string): Promise<ReadonlyArray<string>> {
   const problems: Array<string> = [];
   const read = requiredReader(directory, problems);
@@ -45,14 +76,15 @@ export async function deliveryProblems(directory: string): Promise<ReadonlyArray
     }
   }
   for (const attempt of results?.attempts ?? []) {
-    for (const attachment of attempt.attachments.filter(isMcpExchangeAttachment)) {
+    for (const attachment of EffectArray.filter(attempt.attachments, isMcpExchangeAttachment)) {
       await read(attachment.path, McpExchangeJson);
     }
-    for (const attachment of attempt.attachments.filter(isServiceCallAttachment)) {
+    for (const attachment of EffectArray.filter(attempt.attachments, isServiceCallAttachment)) {
       const call = await read(attachment.path, ServiceCallJson);
       if (
         call !== undefined &&
-        !attempt.steps.some(
+        !EffectArray.some(
+          attempt.steps,
           (step) =>
             step.title === `${call.phase} (services) [${call.persona}]: ${call.description}` &&
             step.serviceCalls?.includes(attachment.name) === true,
@@ -90,7 +122,9 @@ export function declarationProblems(
     );
   }
   for (const criterion of declared.criteria) {
-    const claimed = claims.criteria.find((candidate) => candidate.id === criterion.id);
+    const claimed = EffectOption.getOrUndefined(
+      EffectArray.findFirst(claims.criteria, (candidate) => candidate.id === criterion.id),
+    );
     if (claimed === undefined) {
       problems.push(
         `Declared criterion ${criterion.id} has no claim, leaving coverage undisclosed; add it to claims.json as blocked or not-tested if no proof ran.`,
@@ -102,7 +136,7 @@ export function declarationProblems(
     }
   }
   for (const claimed of claims.criteria) {
-    if (!declared.criteria.some((criterion) => criterion.id === claimed.id)) {
+    if (!EffectArray.some(declared.criteria, (criterion) => criterion.id === claimed.id)) {
       problems.push(
         `Criterion ${claimed.id} was not declared before the run, so it is not prior-intent proof; remove it from claims.json or declare it in a fresh bun run verify --criteria <file> run.`,
       );
@@ -116,8 +150,10 @@ export function sceneAlignmentProblems(
   claims: Claims,
   results: Results,
 ): ReadonlyArray<string> {
-  const attempt = results.attempts.find((candidate) =>
-    candidate.attachments.some((attachment) => attachment.path === shots.rawVideo),
+  const attempt = EffectOption.getOrUndefined(
+    EffectArray.findFirst(results.attempts, (candidate) =>
+      EffectArray.some(candidate.attachments, (attachment) => attachment.path === shots.rawVideo),
+    ),
   );
   if (attempt === undefined) {
     return [
@@ -126,15 +162,18 @@ export function sceneAlignmentProblems(
   }
   const problems: Array<string> = [];
 
-  const pageVideos = attempt.attachments.filter((attachment) => attachment.name === "video");
-  if (pageVideos.length > 1 && shots.scenes.some((scene) => scene.claims.length > 0)) {
+  const pageVideos = EffectArray.filter(
+    attempt.attachments,
+    (attachment) => attachment.name === "video",
+  );
+  if (pageVideos.length > 1 && EffectArray.some(shots.scenes, (scene) => scene.claims.length > 0)) {
     problems.push(
       `"${attempt.title}" recorded ${pageVideos.length} page videos, so step positions are unknown in each; scenes may cite artifacts but not label criteria.`,
     );
     return problems;
   }
-  const primary = pageVideos.some((attachment) => attachment.path === shots.rawVideo);
-  if (!primary && shots.scenes.some((scene) => scene.claims.length > 0)) {
+  const primary = EffectArray.some(pageVideos, (attachment) => attachment.path === shots.rawVideo);
+  if (!primary && EffectArray.some(shots.scenes, (scene) => scene.claims.length > 0)) {
     problems.push(
       `${shots.rawVideo} is another User's video; its scenes may cite artifacts but not label criteria.`,
     );
@@ -142,25 +181,42 @@ export function sceneAlignmentProblems(
   }
   for (const scene of shots.scenes) {
     for (const id of scene.claims) {
-      const windows = (claims.criteria.find((criterion) => criterion.id === id)?.assertions ?? [])
-        .filter((assertion) => assertion.test === attempt.title)
-        .flatMap((assertion) =>
-          attempt.steps
-            .filter(
-              (step) =>
-                step.title === assertion.step &&
-                (((step.mcpExchanges?.length ?? 0) === 0 &&
-                  (step.serviceCalls?.length ?? 0) === 0) ||
-                  step.hasCheckpoint === true),
-            )
-            .flatMap((step) => (step.videoSeconds === undefined ? [] : [step.videoSeconds])),
-        );
+      const windows = optionalArrayValue(
+        optionalArrayValue(
+          EffectOption.getOrUndefined(
+            EffectArray.findFirst(claims.criteria, (criterion) => criterion.id === id),
+          )?.assertions ?? [],
+          (value) => EffectArray.filter(value, (assertion) => assertion.test === attempt.title),
+        ),
+        (value) =>
+          EffectArray.flatMap(value, (assertion) => {
+            const flatMapped1 = optionalArrayValue(
+              EffectArray.filter(
+                attempt.steps,
+                (step) =>
+                  step.title === assertion.step &&
+                  (((step.mcpExchanges?.length ?? 0) === 0 &&
+                    (step.serviceCalls?.length ?? 0) === 0) ||
+                    step.hasCheckpoint === true),
+              ),
+              (value) =>
+                EffectArray.flatMap(value, (step) => {
+                  const flatMapped1 = step.videoSeconds === undefined ? [] : [step.videoSeconds];
+                  return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+                }),
+            );
+            return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+          }),
+      );
       if (windows.length === 0) {
         problems.push(
           `Scene "${scene.title}" labels ${id}, whose cited steps are not in this video; cite an artifact instead, or record a browser checkpoint in the assertion step to ground the label.`,
         );
       } else if (coveredSeconds(scene, windows) < (scene.end - scene.start) / 2) {
-        const when = windows.map((window) => `${window.start}–${window.end}s`).join(", ");
+        const when = EffectArray.join(
+          EffectArray.map(windows, (window) => `${window.start}–${window.end}s`),
+          ", ",
+        );
         problems.push(
           `Scene "${scene.title}" (${scene.start}–${scene.end}s) labels ${id}, but its cited steps happen at ${when}; align the scene with those steps in shots.json so the label shows its proof.`,
         );
@@ -176,7 +232,7 @@ function coveredSeconds(
 ): number {
   let covered = 0;
   let reached = scene.start;
-  for (const window of windows.toSorted((left, right) => left.start - right.start)) {
+  for (const window of sortWithComparator(windows, (left, right) => left.start - right.start)) {
     const start = Math.max(reached, window.start - alignmentToleranceSeconds, scene.start);
     const end = Math.min(window.end + alignmentToleranceSeconds, scene.end);
     if (end > start) {
@@ -211,8 +267,10 @@ export function claimProblems(
       "claims.json must state limitations because local proof is bounded; list untested environments, behaviors, or evidence gaps in limitations.",
     );
   }
-  const ids = claims.criteria.map((criterion) => criterion.id);
-  for (const duplicate of new Set(ids.filter((id, index) => ids.indexOf(id) !== index))) {
+  const ids = EffectArray.map(claims.criteria, (criterion) => criterion.id);
+  for (const duplicate of new Set(
+    EffectArray.filter(ids, (id, index) => ids.indexOf(id) !== index),
+  )) {
     problems.push(
       `Criterion ${duplicate} is declared more than once, making citations ambiguous; keep one claims.json entry per declared criterion ID.`,
     );
@@ -223,11 +281,18 @@ export function claimProblems(
     }
   }
   const disclosed = new Set(
-    claims.criteria
-      .filter((criterion) => criterion.status === "failed" || criterion.status === "blocked")
-      .flatMap((criterion) => criterion.assertions.map((assertion) => assertion.test)),
+    EffectArray.flatMap(
+      EffectArray.filter<Criterion>(
+        claims.criteria,
+        (criterion) => criterion.status === "failed" || criterion.status === "blocked",
+      ),
+      (criterion) => EffectArray.map(criterion.assertions, (assertion) => assertion.test),
+    ),
   );
-  for (const attempt of results.attempts.filter((attempt) => attempt.status !== "passed")) {
+  for (const attempt of EffectArray.filter(
+    results.attempts,
+    (attempt) => attempt.status !== "passed",
+  )) {
     if (!disclosed.has(attempt.title)) {
       problems.push(
         `Test "${attempt.title}" ended ${attempt.status}, but no failed or blocked criterion discloses it; cite it under a failed or blocked claims.json criterion so delivery reflects the run.`,
@@ -236,7 +301,8 @@ export function claimProblems(
   }
   if (
     results.verdict !== "passed" &&
-    !claims.criteria.some(
+    !EffectArray.some(
+      claims.criteria,
       (criterion) => criterion.status === "failed" || criterion.status === "blocked",
     )
   ) {
@@ -266,12 +332,18 @@ function criterionProblems(
       );
     }
   }
-  const outcomes = criterion.assertions.map((assertion) => {
-    const attempt = results.attempts.find((candidate) => candidate.title === assertion.test);
+  const outcomes = EffectArray.map(criterion.assertions, (assertion) => {
+    const attempt = EffectOption.getOrUndefined(
+      EffectArray.findFirst(results.attempts, (candidate) => candidate.title === assertion.test),
+    );
     const step =
       assertion.step === undefined
         ? undefined
-        : attempt?.steps.find((candidate) => candidate.title === assertion.step);
+        : optionalArrayValue(attempt?.steps, (value) =>
+            EffectOption.getOrUndefined(
+              EffectArray.findFirst(value, (candidate) => candidate.title === assertion.step),
+            ),
+          );
     if (attempt === undefined || (assertion.step !== undefined && step === undefined)) {
       problems.push(
         `${label} cites ${citation(assertion)}, which this run did not execute; cite an executed test or assertion step from results.json, or rerun to establish proof.`,
@@ -280,11 +352,25 @@ function criterionProblems(
     }
     const citedSteps = step === undefined ? attempt.steps : [step];
     for (const [kind, names] of [
-      ["MCP exchange", citedSteps.flatMap((entry) => entry.mcpExchanges ?? [])],
-      ["service call", citedSteps.flatMap((entry) => entry.serviceCalls ?? [])],
+      [
+        "MCP exchange",
+        EffectArray.flatMap(citedSteps, (entry) => {
+          const flatMapped1 = entry.mcpExchanges ?? [];
+          return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+        }),
+      ],
+      [
+        "service call",
+        EffectArray.flatMap(citedSteps, (entry) => {
+          const flatMapped2 = entry.serviceCalls ?? [];
+          return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+        }),
+      ],
     ] as const) {
       for (const name of new Set(names)) {
-        const attachment = attempt.attachments.find((entry) => entry.name === name);
+        const attachment = EffectOption.getOrUndefined(
+          EffectArray.findFirst(attempt.attachments, (entry) => entry.name === name),
+        );
         if (attachment === undefined || !artifactExists(attachment.path)) {
           problems.push(
             `${label} cites a missing ${kind}: ${name}; rerun through the MCP or services fixture to retain the exchange or call artifact that supports the assertion.`,
@@ -324,7 +410,8 @@ function criterionProblems(
     }
     case "failed": {
       if (
-        !outcomes.some(
+        !EffectArray.some(
+          outcomes,
           (outcome) =>
             outcome !== undefined &&
             (outcome.attempt.status !== "passed" || outcome.step?.status === "failed"),
@@ -364,8 +451,13 @@ async function videoProblems(
   for (const problem of sceneAlignmentProblems(shots, claims, results)) {
     problems.push(problem);
   }
-  const shown = new Set(shots.scenes.flatMap((scene) => scene.claims));
-  const explained = new Set((shots.notShown ?? []).map((entry) => entry.claim));
+  const shown = new Set(
+    EffectArray.flatMap(shots.scenes, (scene) => {
+      const flatMapped2 = scene.claims;
+      return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+    }),
+  );
+  const explained = new Set(EffectArray.map(shots.notShown ?? [], (entry) => entry.claim));
   for (const entry of shots.notShown ?? []) {
     if (entry.reason.trim() === "") {
       problems.push(
@@ -416,8 +508,14 @@ async function videoProblems(
       "visual-review.json reviewed a different render than the current walkthrough.mp4, so approval is stale; inspect the current review frames and record their render hash in visual-review.json.",
     );
   }
-  const expected = media.reviewFrames.map((frame) => frame.name).toSorted();
-  if (jsonTools.jsonString(review.reviewedFrames.toSorted()) !== jsonTools.jsonString(expected)) {
+  const expected = EffectArray.sort(
+    EffectArray.map(media.reviewFrames, (frame) => frame.name),
+    EffectOrder.String,
+  );
+  if (
+    jsonTools.jsonString(EffectArray.sort(review.reviewedFrames, EffectOrder.String)) !==
+    jsonTools.jsonString(expected)
+  ) {
     problems.push(
       "visual-review.json must list every frame extracted from this render to establish complete review; inspect each media-check.json review frame and record its name in reviewedFrames.",
     );
@@ -622,18 +720,17 @@ export function checkpointPersonaName(name: string): string {
 export function actingPersonas(
   attachments: ReadonlyArray<{ readonly name: string; readonly body?: Buffer }>,
 ): ReadonlyArray<string> {
-  const names = attachments
-    .filter(
+  const names = EffectArray.map(
+    EffectArray.filter(
+      attachments,
       (attachment) =>
         isMcpExchangeAttachment(attachment) ||
         isServiceCallAttachment(attachment) ||
         attachment.name.startsWith("Checkpoint persona: "),
-    )
-    .map(
-      (attachment) =>
-        Effect.runSync(Schema.decodeUnknownEffect(PersonaJson)(attachment.body?.toString()))
-          .persona,
-    );
+    ),
+    (attachment) =>
+      Effect.runSync(Schema.decodeUnknownEffect(PersonaJson)(attachment.body?.toString())).persona,
+  );
   return [...new Set(names)];
 }
 

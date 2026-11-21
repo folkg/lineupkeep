@@ -1,4 +1,6 @@
 import { DateTime, Effect, Layer } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 
 import type { LineupRequestId, LineupRunId } from "#contexts/connections/LineupRun.ts";
 import { LineupDispatcher } from "#contexts/connections/LineupWork.ts";
@@ -6,6 +8,10 @@ import type { LineupDispatcherShape } from "#contexts/connections/LineupWork.ts"
 import { LineupDelivery } from "#contexts/connections/LineupWork.ts";
 
 import { LineupRunRepository } from "./LineupRunRepository.ts";
+
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 export const LineupDispatcherLive = Layer.effect(
   LineupDispatcher,
@@ -25,14 +31,23 @@ export const LineupDispatcherLive = Layer.effect(
         if (claimed.length === 0) {
           return { delivered: 0, pending: 0 };
         }
-        const blocked = yield* repository.blockedRunIds(claimed.flatMap((record) => record.runIds));
-        const runnable = claimed.filter((record) =>
-          record.runIds.every((runId) => !blocked.has(runId)),
+        const blocked = yield* repository.blockedRunIds(
+          EffectArray.flatMap(claimed, (record) => {
+            const flatMapped1 = record.runIds;
+            return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+          }),
         );
-        const held = claimed.filter((record) => !runnable.includes(record));
+        const runnable = EffectArray.filter(claimed, (record) =>
+          EffectArray.every(record.runIds, (runId) => !blocked.has(runId)),
+        );
+        const held = EffectArray.filter(claimed, (record) => !runnable.includes(record));
         if (held.length > 0) {
           yield* repository.finishDeliveries(
-            held.map((record) => ({ deliveryId: record.id, at: now, outcome: "pending" as const })),
+            EffectArray.map(held, (record) => ({
+              deliveryId: record.id,
+              at: now,
+              outcome: "pending" as const,
+            })),
           );
         }
         if (runnable.length === 0) {
@@ -40,17 +55,21 @@ export const LineupDispatcherLive = Layer.effect(
         }
         const result = yield* Effect.result(
           delivery.enqueueMany(
-            runnable.map((record) => ({ delivery: record.id, runs: record.runIds })),
+            EffectArray.map(runnable, (record) => ({ delivery: record.id, runs: record.runIds })),
           ),
         );
         if (result._tag === "Success") {
           yield* repository.finishDeliveries(
-            runnable.map((record) => ({ deliveryId: record.id, at: now, outcome: "dispatched" })),
+            EffectArray.map(runnable, (record) => ({
+              deliveryId: record.id,
+              at: now,
+              outcome: "dispatched",
+            })),
           );
           return { delivered: runnable.length, pending: held.length };
         }
         yield* repository.finishDeliveries(
-          runnable.map((record) => ({
+          EffectArray.map(runnable, (record) => ({
             deliveryId: record.id,
             at: now,
             outcome: "pending" as const,
@@ -76,7 +95,7 @@ export const LineupDispatcherLive = Layer.effect(
         }
         const result = yield* Effect.result(
           delivery.enqueueMany(
-            records.map((record) => ({ delivery: record.id, runs: record.runIds })),
+            EffectArray.map(records, (record) => ({ delivery: record.id, runs: record.runIds })),
           ),
         );
         return result._tag === "Success"
@@ -93,7 +112,9 @@ export const LineupDispatcherLive = Layer.effect(
         return "queued" as const;
       }
       const claimed = yield* repository.claimDeliveries(yield* DateTime.now, 1);
-      const target = claimed.find((delivery) => delivery.id === record.id);
+      const target = EffectOption.getOrUndefined(
+        EffectArray.findFirst(claimed, (delivery) => delivery.id === record.id),
+      );
       if (target === undefined) {
         return "queued" as const;
       }

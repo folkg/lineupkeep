@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { IntFromStringOrNumber, decodePayload, optionalNonEmpty } from "#yahoo/decode.ts";
 import { YahooParseError } from "#yahoo/errors.ts";
@@ -24,16 +25,18 @@ export function decodeAvailableDraftPicks(
     const requested = new Set(requestedTeamKeys);
     if (
       decoded.league.teams.length !== requestedTeamKeys.length ||
-      decoded.league.teams.some((team) => !requested.has(team.team_key))
+      EffectArray.some(decoded.league.teams, (team) => !requested.has(team.team_key))
     ) {
       return yield* new YahooParseError({
         operation: "read_available_draft_picks",
         field: "league.teams",
       });
     }
-    return decoded.league.teams.map((team) => ({
+    return EffectArray.map(decoded.league.teams, (team) => ({
       teamKey: team.team_key,
-      picks: team.available_draft_picks.picks.map(({ pick }) => ({ round: pick.round })),
+      picks: EffectArray.map(team.available_draft_picks.picks, ({ pick }) => ({
+        round: pick.round,
+      })),
     }));
   });
 }
@@ -46,7 +49,8 @@ export function decodeDraftResults(
     const decoded = yield* decodePayload(DraftResultsPayload, payload, "read_draft_results");
     if (
       decoded.league.league_key !== requestedLeagueKey ||
-      decoded.league.draft_results.some(
+      EffectArray.some(
+        decoded.league.draft_results,
         ({ draft_result }) =>
           draft_result.team_key.slice(0, draft_result.team_key.lastIndexOf(".t.")) !==
           requestedLeagueKey,
@@ -57,7 +61,7 @@ export function decodeDraftResults(
         field: "league.draft_results.team_key",
       });
     }
-    return decoded.league.draft_results.map(({ draft_result }) => {
+    return EffectArray.map(decoded.league.draft_results, ({ draft_result }) => {
       const name = optionalNonEmpty(draft_result.entries?.[0]?.players?.[0]?.name?.full ?? "");
       return {
         round: draft_result.round,

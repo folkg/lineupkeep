@@ -1,3 +1,5 @@
+import { Array as EffectArray } from "effect";
+
 import type {
   YahooCoverage,
   YahooDraftPickRound,
@@ -15,12 +17,14 @@ export function assignmentsBody(
   coverage: YahooCoverage,
   assignments: ReadonlyArray<YahooLineupAssignment>,
 ): string {
-  const players = assignments
-    .map(
+  const players = EffectArray.join(
+    EffectArray.map(
+      assignments,
       (assignment) =>
         `<player><player_key>${assignment.playerKey}</player_key><position>${assignment.slot}</position></player>`,
-    )
-    .join("");
+    ),
+    "",
+  );
   return xml(`<roster>${coverageBody(coverage)}<players>${players}</players></roster>`);
 }
 
@@ -52,7 +56,9 @@ export function transactionBody(input: {
         : "drop";
   const bid = input.faabBid === undefined ? "" : `<faab_bid>${String(input.faabBid)}</faab_bid>`;
   const roster =
-    players.length === 1 ? (players[0] ?? "") : `<players>${players.join("")}</players>`;
+    players.length === 1
+      ? (players[0] ?? "")
+      : `<players>${EffectArray.join(players, "")}</players>`;
   return xml(`<transaction><type>${type}</type>${bid}${roster}</transaction>`);
 }
 
@@ -66,23 +72,24 @@ export function tradeProposalBody(input: {
   readonly note: string;
 }): string {
   const players = [
-    ...(input.send ?? []).map((key) =>
+    ...EffectArray.map(input.send ?? [], (key) =>
       tradePlayerBody(key, input.traderTeamKey, input.tradeeTeamKey),
     ),
-    ...(input.receive ?? []).map((key) =>
+    ...EffectArray.map(input.receive ?? [], (key) =>
       tradePlayerBody(key, input.tradeeTeamKey, input.traderTeamKey),
     ),
   ];
   const picks = [
-    ...(input.sendPicks ?? []).map((pick) =>
+    ...EffectArray.map(input.sendPicks ?? [], (pick) =>
       tradePickBody(pick.round, input.traderTeamKey, input.tradeeTeamKey),
     ),
-    ...(input.receivePicks ?? []).map((pick) =>
+    ...EffectArray.map(input.receivePicks ?? [], (pick) =>
       tradePickBody(pick.round, input.tradeeTeamKey, input.traderTeamKey),
     ),
   ];
-  const playersBody = players.length === 0 ? "" : `<players>${players.join("")}</players>`;
-  const picksBody = picks.length === 0 ? "" : `<picks>${picks.join("")}</picks>`;
+  const playersBody =
+    players.length === 0 ? "" : `<players>${EffectArray.join(players, "")}</players>`;
+  const picksBody = picks.length === 0 ? "" : `<picks>${EffectArray.join(picks, "")}</picks>`;
   return xml(
     `<transaction><type>pending_trade</type><trader_team_key>${input.traderTeamKey}</trader_team_key><tradee_team_key>${input.tradeeTeamKey}</tradee_team_key><trade_note>${xmlText(input.note)}</trade_note>${playersBody}${picksBody}</transaction>`,
   );

@@ -1,4 +1,5 @@
 import { Context, DateTime, Effect, Layer, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 import { Digest } from "effect/crypto";
 
 import { signInCodeQuotaKeyFor } from "#contexts/auth/SignInCodeQuotaKey.ts";
@@ -118,11 +119,13 @@ export class AccountDataRepository extends Context.Service<
                   ownedClass.needsAccountIdentity && identity === undefined
                     ? []
                     : (yield* tx.execute(selectOwnedRows(ownedClass.table, account))).rows;
-                const hiddenFields = new Set(ownedClass.withheld.map((entry) => entry.field));
+                const hiddenFields = new Set(
+                  EffectArray.map(ownedClass.withheld, (entry) => entry.field),
+                );
                 tables.push({
                   table: ownedClass.table,
                   label: ownedClass.label,
-                  rows: rows.map((row) => exportedRow(row, hiddenFields)),
+                  rows: EffectArray.map(rows, (row) => exportedRow(row, hiddenFields)),
                 });
                 if (rows.length > 0) {
                   for (const entry of ownedClass.withheld) {
@@ -138,9 +141,10 @@ export class AccountDataRepository extends Context.Service<
                 recordOwnerExport(
                   userId,
                   DateTime.toDateUtc(exportedAt),
-                  tables
-                    .filter((table) => table.rows.length > 0)
-                    .map((table) => ({ label: table.label, records: table.rows.length })),
+                  EffectArray.map(
+                    EffectArray.filter(tables, (table) => table.rows.length > 0),
+                    (table) => ({ label: table.label, records: table.rows.length }),
+                  ),
                 ),
               );
               return {
@@ -176,7 +180,7 @@ export class AccountDataRepository extends Context.Service<
         return {
           latest: {
             takenAt: record,
-            records: areas.reduce((total, area) => total + area.records, 0),
+            records: EffectArray.reduce(areas, 0, (total, area) => total + area.records),
             areas,
           },
           usable: isAccountExportUsable(record, yield* DateTime.now),
@@ -206,12 +210,12 @@ function jsonValue(value: unknown): unknown {
   if (value instanceof Date) {
     return value.toISOString();
   }
-  if (Array.isArray(value)) {
-    return value.map(jsonValue);
+  if (EffectArray.isArray(value)) {
+    return EffectArray.map(value, jsonValue);
   }
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
-      Object.entries(value).map(([field, entry]) => [field, jsonValue(entry)]),
+      EffectArray.map(Object.entries(value), ([field, entry]) => [field, jsonValue(entry)]),
     );
   }
   return value;

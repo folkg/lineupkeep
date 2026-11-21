@@ -11,8 +11,12 @@ import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { Effect, Layer, Redacted, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { DatabaseDeployment } from "#infra/services/DatabaseDeployment.ts";
+function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
+  return EffectArray.isArray(value);
+}
 
 export const DevelopmentPostgres = Resource<
   Resource<
@@ -150,7 +154,10 @@ async function startDatabase(identity: DevelopmentDatabaseIdentity): Promise<{
       "--env",
       "POSTGRES_DB=lineupkeep_dev",
       image,
-      ...serverSettings.flatMap((setting) => ["-c", setting]),
+      ...EffectArray.flatMap(serverSettings, (setting) => {
+        const flatMapped1 = ["-c", setting];
+        return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+      }),
     ]);
   }
   await docker(["start", name]);
@@ -183,7 +190,8 @@ async function inspectContainer(identity: DevelopmentDatabaseIdentity): Promise<
   if (
     entry?.Config.Labels?.[ownerLabel] !== checkout ||
     entry.Config.Labels[purposeLabel] !== "development" ||
-    !entry.Mounts.some(
+    !EffectArray.some(
+      entry.Mounts,
       (mount) => mount.Name === volume && mount.Destination === "/var/lib/postgresql",
     )
   ) {

@@ -1,3 +1,5 @@
+import { EffectArray } from "@lineupkeep/collections";
+import { EffectOption } from "@lineupkeep/collections";
 import { useMutation, useQuery } from "@tanstack/solid-query";
 import { createEffect, createOptimisticStore, createSignal, onSettled, untrack } from "solid-js";
 import type { Accessor } from "solid-js";
@@ -39,11 +41,12 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
       if (viewerId === undefined || teams === undefined) {
         return;
       }
-      storeCachedTeamHeaders(viewerId, teams.map(teamHeader));
+      storeCachedTeamHeaders(viewerId, EffectArray.map(teams, teamHeader));
     },
   );
 
-  const refreshing = (): boolean => teamList.some((team) => team.pending?.action === "refresh");
+  const refreshing = (): boolean =>
+    EffectArray.some(teamList, (team) => team.pending?.action === "refresh");
 
   const reportRefreshFailure = (error: unknown): void => {
     const failure = describeTeamFailure(error);
@@ -80,7 +83,7 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
     refreshState: (): ActionState => actionState(refreshing(), refreshFinished()),
     refresh: () => props.onRefresh(),
     refreshTeams: () => {
-      if (teamList.some((team) => team.pending !== undefined)) {
+      if (EffectArray.some(teamList, (team) => team.pending !== undefined)) {
         return;
       }
       setRefreshFinished(false);
@@ -89,7 +92,9 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
     },
     beginControl: (input) => {
       setTeamList((current) => {
-        const target = current.find((team) => team.team.id === input.team);
+        const target = EffectOption.getOrUndefined(
+          EffectArray.findFirst(current, (team) => team.team.id === input.team),
+        );
         if (target === undefined || target.pending !== undefined) {
           return;
         }

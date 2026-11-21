@@ -4,6 +4,7 @@ import {
   parseTransportMessage,
 } from "@lineupkeep/hosted-browser/protocol";
 import { DateTime, Redacted } from "effect";
+import { Array as EffectArray } from "effect";
 import { WebSocket } from "ws";
 import type { RawData } from "ws";
 
@@ -56,7 +57,7 @@ export function createRemoteHostedBrowser(
       return streamHandle(socket, callbacks, () => live.delete(socket));
     },
     closeAll: async () => {
-      await Promise.all([...live].map((socket) => closeSocket(socket)));
+      await Promise.all(EffectArray.map([...live], (socket) => closeSocket(socket)));
       live.clear();
     },
   };

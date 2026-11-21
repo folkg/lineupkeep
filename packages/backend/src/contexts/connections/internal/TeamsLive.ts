@@ -1,4 +1,5 @@
-import { DateTime, Effect, Layer } from "effect";
+import { DateTime, Effect, Layer, Option } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import { checkAgentNote } from "#contexts/connections/AgentNote.ts";
@@ -31,6 +32,17 @@ import { LineupRunRepository } from "./LineupRunRepository.ts";
 import { toLineupRun } from "./LineupRunViewRepository.ts";
 import { TeamRepository } from "./TeamRepository.ts";
 import type { TeamControlRecord, TeamRecord } from "./TeamRepository.ts";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
 
 export const TeamsLive = Layer.effect(
   Teams,
@@ -50,26 +62,33 @@ export const TeamsLive = Layer.effect(
           return [];
         }
         const now = yield* DateTime.now;
-        const bounds = records.map((record) => ({
+        const bounds = EffectArray.map(records, (record) => ({
           record,
           since: currentFantasyDayStart(now, fantasyDayOf(registry, record.team)),
         }));
         const activity = yield* runs
           .loadTeamActivity(
             userId,
-            records.map((record) => record.team.id),
-            bounds
-              .map((bound) => bound.since)
-              .reduce((earliest, at) =>
+            EffectArray.map(records, (record) => record.team.id),
+            EffectArray.reduce(
+              EffectArray.map(bounds, (bound) => bound.since),
+              Option.getOrThrow(EffectArray.head(EffectArray.map(bounds, (bound) => bound.since))),
+              (earliest, at) =>
                 DateTime.toEpochMillis(at) < DateTime.toEpochMillis(earliest) ? at : earliest,
-              ),
+            ),
           )
           .pipe(Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })));
-        return bounds.map(({ record, since }) => {
+        return EffectArray.map(bounds, ({ record, since }) => {
           const teamActivity = activity.get(record.team.id);
-          const recentRuns: ReadonlyArray<LineupRun> = (teamActivity?.runs ?? [])
-            .filter((run) => DateTime.toEpochMillis(run.createdAt) >= DateTime.toEpochMillis(since))
-            .map(toLineupRun);
+          const recentRuns: ReadonlyArray<LineupRun> = optionalArrayValue(
+            optionalArrayValue(teamActivity?.runs ?? [], (value) =>
+              EffectArray.filter(
+                value,
+                (run) => DateTime.toEpochMillis(run.createdAt) >= DateTime.toEpochMillis(since),
+              ),
+            ),
+            (value) => EffectArray.map(value, toLineupRun),
+          );
           return {
             team: record.team,
             connectionStatus: record.connection.status,
@@ -107,18 +126,21 @@ export const TeamsLive = Layer.effect(
       records: ReadonlyArray<TeamRecord>,
     ): Effect.Effect<ReadonlyArray<TeamRecord>, TeamError> =>
       Effect.gen(function* () {
-        const unnamed = records.filter(
+        const unnamed = EffectArray.filter(
+          records,
           (record) => record.team.leagueName === undefined && record.connection.status === "ready",
         );
         if (unnamed.length === 0) {
           return records;
         }
-        const connectionIds = [...new Set(unnamed.map((record) => record.team.connectionId))];
+        const connectionIds = [
+          ...new Set(EffectArray.map(unnamed, (record) => record.team.connectionId)),
+        ];
         yield* Effect.annotateCurrentSpan("teams.league_names_discovered", connectionIds.length);
         yield* connections
           .discoverTeams(
             userId,
-            connectionIds.map((id) => ({ id })),
+            EffectArray.map(connectionIds, (id) => ({ id })),
           )
           .pipe(Effect.catch(() => Effect.void));
         return yield* teams.list(userId);
@@ -129,7 +151,7 @@ export const TeamsLive = Layer.effect(
       inputs: ReadonlyArray<TeamControlInput>,
     ) {
       const records = yield* teams.control(userId, inputs);
-      const results = records.map(toControlResult);
+      const results = EffectArray.map(records, toControlResult);
       yield* Effect.annotateCurrentSpan({
         "automation.requested": results.length,
         "automation.changed": countOutcome(results, "changed"),
@@ -286,5 +308,5 @@ function countOutcome(
   results: ReadonlyArray<TeamControlResult>,
   outcome: TeamControlResult["outcome"],
 ): number {
-  return results.filter((result) => result.outcome === outcome).length;
+  return EffectArray.filter(results, (result) => result.outcome === outcome).length;
 }

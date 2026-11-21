@@ -1,4 +1,5 @@
 import { Array, Context, DateTime, Effect, Layer } from "effect";
+import { Array as EffectArray } from "effect";
 
 import { ToolCallQuotaUnavailable } from "#contexts/toolCalls/ToolCallQuota.ts";
 import { incrementedWindowCounter } from "#database/dbUtilities.ts";
@@ -19,7 +20,7 @@ export class ToolCallQuotaRepository extends Context.Service<ToolCallQuotaReposi
         const window = DateTime.toDateUtc(windowStartedAt);
         return yield* database
           .insert(toolCallQuota)
-          .values(keys.map((key) => ({ key, windowStartedAt: window, count: 1 })))
+          .values(EffectArray.map(keys, (key) => ({ key, windowStartedAt: window, count: 1 })))
           .onConflictDoUpdate({
             target: toolCallQuota.key,
             set: incrementedWindowCounter(toolCallQuota),

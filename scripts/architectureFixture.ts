@@ -17,6 +17,8 @@ import { fileURLToPath } from "node:url";
 import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import { cruise } from "dependency-cruiser";
 import extractDepcruiseOptions from "dependency-cruiser/config-utl/extract-depcruise-options";
+import { Array as EffectArray } from "effect";
+
 export async function checkArchitecture(
   files: Readonly<Record<string, string>>,
 ): Promise<CommandResult> {
@@ -66,7 +68,7 @@ export async function checkLint(
       ...Object.keys(files),
     ])),
     sources: Object.fromEntries(
-      Object.keys(files).map((path) => [path, readFileSync(join(cwd, path), "utf8")]),
+      EffectArray.map(Object.keys(files), (path) => [path, readFileSync(join(cwd, path), "utf8")]),
     ),
   }));
 }

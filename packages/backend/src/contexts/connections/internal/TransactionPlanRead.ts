@@ -1,4 +1,5 @@
 import { DateTime } from "effect";
+import { Array as EffectArray } from "effect";
 
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
 import type {
@@ -42,7 +43,7 @@ export function moveReadViews(input: {
   }>;
   readonly checks: ReadonlyMap<TeamId, TransactionTeamCheck>;
 }): ReadonlyArray<TransactionMoveRead> {
-  return input.moves.map(({ move, team }) =>
+  return EffectArray.map(input.moves, ({ move, team }) =>
     moveReadView({ move, team, check: input.checks.get(team.id) }),
   );
 }
@@ -65,12 +66,12 @@ export function moveReadView(input: {
     decision,
     status: transactionMoveStatus({ ...move, decision }),
     ...(move.phase === undefined ? {} : { phase: move.phase }),
-    attempts: move.attempts.map(attemptView),
+    attempts: EffectArray.map(move.attempts, attemptView),
     reason: move.reason,
-    adds: move.adds.map(playerView),
-    fallbacks: move.fallbacks.map(playerView),
-    drops: move.drops.map(playerView),
-    picks: move.picks.map((pick): TransactionMovePickView => ({
+    adds: EffectArray.map(move.adds, playerView),
+    fallbacks: EffectArray.map(move.fallbacks, playerView),
+    drops: EffectArray.map(move.drops, playerView),
+    picks: EffectArray.map(move.picks, (pick): TransactionMovePickView => ({
       round: pick.round,
       sourceName: pick.sourceName,
       destinationName: pick.destinationName,
@@ -185,7 +186,7 @@ export function moveDays(input: {
     }
     team.moves.push(move);
   }
-  return [...days.values()].sort(compareMoveDays).map((grouped) => ({
+  return EffectArray.map([...days.values()].sort(compareMoveDays), (grouped) => ({
     ...(grouped.day === undefined ? {} : { day: grouped.day }),
     groupedBy: "runDay" as const,
     today: grouped.today,
@@ -213,7 +214,7 @@ export function planDays(input: {
     }
     day.moves.push(move);
   }
-  return ordered.map((day) => ({
+  return EffectArray.map(ordered, (day) => ({
     ...(day.day === undefined ? {} : { day: day.day }),
     groupedBy: "runDay" as const,
     today: day.today,
@@ -224,15 +225,12 @@ export function planDays(input: {
 export function countTotals(
   teams: ReadonlyArray<TransactionMoveTeamCounts>,
 ): TransactionMoveCounts {
-  return teams.reduce(
-    (total, team) => ({
-      open: total.open + team.open,
-      today: total.today + team.today,
-      saved: total.saved + team.saved,
-      ended: total.ended + team.ended,
-    }),
-    { open: 0, today: 0, saved: 0, ended: 0 },
-  );
+  return EffectArray.reduce(teams, { open: 0, today: 0, saved: 0, ended: 0 }, (total, team) => ({
+    open: total.open + team.open,
+    today: total.today + team.today,
+    saved: total.saved + team.saved,
+    ended: total.ended + team.ended,
+  }));
 }
 
 export function moveCursor(move: TransactionMoveRecord): TransactionMoveCursor {
@@ -292,7 +290,10 @@ function validationView(validation: StoredMoveValidation): TransactionMoveValida
   return {
     status: validation.status,
     ...(validation.checkedAt === undefined ? {} : { checkedAt: validation.checkedAt }),
-    reasons: validation.reasons.map((reason) => ({ code: reason.code, detail: reason.detail })),
+    reasons: EffectArray.map(validation.reasons, (reason) => ({
+      code: reason.code,
+      detail: reason.detail,
+    })),
   };
 }
 

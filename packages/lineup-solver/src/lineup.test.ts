@@ -1,3 +1,4 @@
+import { Array as EffectArray } from "effect";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -410,7 +411,10 @@ function legalPlan(
 ): LineupPlan {
   const value = startingSelectionValue(problem, assignments);
   const startingSlots = new Set(
-    problem.slots.filter((slot) => slot.kind === "starting").map((slot) => slot.id),
+    EffectArray.map(
+      EffectArray.filter(problem.slots, (slot) => slot.kind === "starting"),
+      (slot) => slot.id,
+    ),
   );
 
   return {
@@ -418,10 +422,17 @@ function legalPlan(
     assignments,
     leftInPlace: [],
     totalSelectionValue: value ?? 0,
-    filledStartingPositions: assignments.filter((item) => startingSlots.has(item.slotId)).length,
-    requiredStartingPositions: problem.slots
-      .filter((slot) => slot.kind === "starting" && slot.requirement === "required")
-      .reduce((total, slot) => total + slot.capacity, 0),
+    filledStartingPositions: EffectArray.filter(assignments, (item) =>
+      startingSlots.has(item.slotId),
+    ).length,
+    requiredStartingPositions: EffectArray.reduce(
+      EffectArray.filter(
+        problem.slots,
+        (slot) => slot.kind === "starting" && slot.requirement === "required",
+      ),
+      0,
+      (total, slot) => total + slot.capacity,
+    ),
     comparison: compareWithCurrentLineup(problem, assignments),
   };
 }

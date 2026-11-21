@@ -6,6 +6,8 @@ import jsonTools from "@lineupkeep/backend/runtime/JsonText";
 import type { Page } from "@playwright/test";
 import { Effect } from "effect";
 import { DateTime, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 
 import {
   beginAuthorization,
@@ -16,6 +18,18 @@ import {
   mcpEndpoint,
 } from "./mcpClient.ts";
 import { expect, signIn, signUp, test } from "./support.ts";
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined;
+function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
+  value: A | null | undefined,
+  f: (value: A) => B,
+): B | undefined {
+  return value === undefined || value === null ? undefined : f(value);
+}
+
 test("discovers and authorizes a stateless client through email sign-in, consent and PKCE", async ({
   page,
   baseURL,
@@ -55,7 +69,7 @@ test("discovers and authorizes a stateless client through email sign-in, consent
       }),
     )(await tools.json()),
   );
-  expect(listedTools.result.tools.map((tool) => tool.name)).toEqual([
+  expect(EffectArray.map(listedTools.result.tools, (tool) => tool.name)).toEqual([
     "list_connections",
     "list_teams",
     "get_calendar",
@@ -175,7 +189,7 @@ test("serves every tool scope after one consent for the documented scope set", a
     statuses.push([name, response.status]);
   }
 
-  expect(statuses).toEqual(calls.map(([name]) => [name, 200]));
+  expect(statuses).toEqual(EffectArray.map(calls, ([name]) => [name, 200]));
 });
 
 test("lists the owner's connection status over MCP without exposing account identity", async ({
@@ -468,8 +482,12 @@ test("appends moves to one team queue without writing to the provider and reads 
       ),
     ),
   );
-  const football = discovered.find((team) => team.name === "Embedded Browser Team");
-  const hockey = discovered.find((team) => team.name === "Hosted Hockey Team");
+  const football = EffectOption.getOrUndefined(
+    EffectArray.findFirst(discovered, (team) => team.name === "Embedded Browser Team"),
+  );
+  const hockey = EffectOption.getOrUndefined(
+    EffectArray.findFirst(discovered, (team) => team.name === "Hosted Hockey Team"),
+  );
   expect(football, "a football team").toBeDefined();
   expect(hockey, "a hockey team").toBeDefined();
   if (football === undefined || hockey === undefined) {
@@ -536,7 +554,7 @@ test("appends moves to one team queue without writing to the provider and reads 
   );
   expect(plan.team.id).toBe(football.id);
   expect(plan.moves).toHaveLength(2);
-  expect(plan.days.some((day) => day.today)).toBe(true);
+  expect(EffectArray.some(plan.days, (day) => day.today)).toBe(true);
 
   const locked = await client.callTool("propose_transactions", {
     team: football.id,
@@ -589,7 +607,7 @@ test("appends moves to one team queue without writing to the provider and reads 
   );
   expect(rolling.counts.open).toBeGreaterThanOrEqual(2);
   expect(rolling.teamCount).toBe(1);
-  expect(rolling.days.some((day) => day.today)).toBe(true);
+  expect(EffectArray.some(rolling.days, (day) => day.today)).toBe(true);
 
   const other = await newUser();
   await signUp(other);
@@ -636,8 +654,12 @@ test("appends an agent note that reads back with its author on the summary and t
       ),
     ),
   );
-  const football = discovered.find((team) => team.name === "Embedded Browser Team");
-  const hockey = discovered.find((team) => team.name === "Hosted Hockey Team");
+  const football = EffectOption.getOrUndefined(
+    EffectArray.findFirst(discovered, (team) => team.name === "Embedded Browser Team"),
+  );
+  const hockey = EffectOption.getOrUndefined(
+    EffectArray.findFirst(discovered, (team) => team.name === "Hosted Hockey Team"),
+  );
   expect(football, "a football team").toBeDefined();
   expect(hockey, "a hockey team").toBeDefined();
   if (football === undefined || hockey === undefined) {
@@ -1022,7 +1044,11 @@ function teamAutomation(
         }>;
       }
     | undefined;
-  const row = body?.teams?.find((candidate) => candidate.team === team);
+  const row = optionalArrayValue(body?.teams, (value) =>
+    EffectOption.getOrUndefined(
+      EffectArray.findFirst(value, (candidate) => candidate.team === team),
+    ),
+  );
   if (row === undefined) {
     throw new Error(`No team ${team} in the MCP result`);
   }
@@ -1119,7 +1145,10 @@ async function registerRetiredScopeClient(
     headers: {
       "content-type": "application/json",
       origin,
-      cookie: cookies.map(({ name, value }) => `${name}=${value}`).join("; "),
+      cookie: EffectArray.join(
+        EffectArray.map(cookies, ({ name, value }) => `${name}=${value}`),
+        "; ",
+      ),
     },
     body: jsonTools.jsonString({
       client_name: retiredClientName,
@@ -1225,7 +1254,7 @@ async function advertisedKeyIds(origin: string): Promise<ReadonlyArray<string>> 
       Schema.Struct({ keys: Schema.Array(Schema.Struct({ kid: Schema.String })) }),
     )(await response.json()),
   );
-  return document.keys.map((key) => key.kid);
+  return EffectArray.map(document.keys, (key) => key.kid);
 }
 
 function jwtHeader(token: string): { readonly kid: string } {

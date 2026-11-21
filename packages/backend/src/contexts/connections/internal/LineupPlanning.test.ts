@@ -1,3 +1,4 @@
+import { Array as EffectArray } from "effect";
 import { describe, expect, it } from "vitest";
 
 import type {
@@ -472,7 +473,7 @@ describe("provider-neutral lineup placement", () => {
         league: pool,
         roster: roster(players),
         values: values(
-          players.map((player, index) => [
+          EffectArray.map(players, (player, index) => [
             player.providerPlayerKey,
             (index + 1) * 100,
             player.injuryCode === "O" ? "will-not-play" : "will-play",
@@ -741,9 +742,12 @@ function league(
     rosterCoverage: "week",
     maxGamesPlayed: undefined,
     maxInningsPitched: undefined,
-    rosterPositions: positions.map((position) => ({ ...position, positionType: undefined })),
+    rosterPositions: EffectArray.map(positions, (position) => ({
+      ...position,
+      positionType: undefined,
+    })),
     rosterConstraints: declaredRosterConstraints(
-      positions.map((position) => ({ ...position, positionType: undefined })),
+      EffectArray.map(positions, (position) => ({ ...position, positionType: undefined })),
     ),
     statCategories: [],
     statModifiers: [],
@@ -805,7 +809,7 @@ function member(
 function values(
   scores: ReadonlyArray<readonly [string, number | null, ProviderAvailabilityTier?]>,
 ): ReadonlyArray<ProviderPlayerScore> {
-  return scores.map(([providerPlayerKey, score, availability]) => ({
+  return EffectArray.map(scores, ([providerPlayerKey, score, availability]) => ({
     providerPlayerKey,
     score,
     availability: availability ?? "will-play",
@@ -816,10 +820,12 @@ function applyAssignments(
   current: ProviderRoster,
   assignments: ReadonlyArray<{ readonly providerPlayerKey: string; readonly slot: string }>,
 ): ProviderRoster {
-  const slots = new Map(assignments.map((entry) => [entry.providerPlayerKey, entry.slot]));
+  const slots = new Map(
+    EffectArray.map(assignments, (entry) => [entry.providerPlayerKey, entry.slot]),
+  );
   return {
     ...current,
-    players: current.players.map((player) => {
+    players: EffectArray.map(current.players, (player) => {
       const assigned = slots.get(player.providerPlayerKey);
       return {
         ...player,

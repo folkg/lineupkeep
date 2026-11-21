@@ -4,6 +4,8 @@ import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { and, eq } from "drizzle-orm";
 import { Array, DateTime, Duration, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { Config } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 import { TestClock } from "effect/testing";
 
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
@@ -389,10 +391,11 @@ it.effect("shows only the current fantasy day's checks and keeps the last earlie
     assert.deepStrictEqual(quietSummary.recentRuns, []);
     assert.strictEqual(
       quietSummary.lastRun?.run,
-      earlier.runs.find((run) => run.team === quiet)?.run,
+      EffectOption.getOrUndefined(EffectArray.findFirst(earlier.runs, (run) => run.team === quiet))
+        ?.run,
     );
     assert.deepStrictEqual(
-      activeSummary.recentRuns.map((run) => run.run),
+      EffectArray.map(activeSummary.recentRuns, (run) => run.run),
       [current.runs[0]?.run],
     );
     assert.strictEqual(activeSummary.lastRun?.run, current.runs[0]?.run);
@@ -484,11 +487,11 @@ it.effect(
 
       const notes = yield* queries.recentAgentNotes(owner, seeded);
       assert.deepStrictEqual(
-        notes.map((note) => note.body),
+        EffectArray.map(notes, (note) => note.body),
         ["The manager waits on goaltenders.", "Goalie bubble is thinner than the roster shows."],
       );
       assert.deepStrictEqual(
-        notes.map((note) => note.author),
+        EffectArray.map(notes, (note) => note.author),
         [second.author, author],
       );
       assert.isTrue(
@@ -601,7 +604,7 @@ function seedTeams(
       0,
     );
     const foundTeams = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
-    return foundTeams.map((team) => team.id);
+    return EffectArray.map(foundTeams, (team) => team.id);
   }).pipe(Effect.orDie);
 }
 
@@ -739,7 +742,7 @@ const roster: ProviderRoster = {
 
 const nativeAfter: ProviderRoster = {
   ...roster,
-  players: roster.players.map((player, index) => ({
+  players: EffectArray.map(roster.players, (player, index) => ({
     ...player,
     slot: { status: "verified", slot: index === 0 ? "BN" : "QB" },
   })),

@@ -1,3 +1,5 @@
+import { Array as EffectArray, Option as EffectOption } from "effect";
+
 import type { FantasyLeague } from "#contexts/connections/FantasyTeam.ts";
 
 export const hockeyProfessionalTeamMap: ReadonlyArray<ProfessionalTeamMapEntry> = [
@@ -233,9 +235,12 @@ export function matchProfessionalTeam(input: {
   readonly abbreviation: string;
   readonly name: string;
 }): ProfessionalTeamMatch {
-  const entry = hockeyProfessionalTeamMap.find(
-    (candidate) =>
-      candidate.league === input.league && candidate.sourceIdentifier === input.identifier,
+  const entry = EffectOption.getOrUndefined(
+    EffectArray.findFirst(
+      hockeyProfessionalTeamMap,
+      (candidate) =>
+        candidate.league === input.league && candidate.sourceIdentifier === input.identifier,
+    ),
   );
   if (entry === undefined) {
     return { kind: "not_mapped" };

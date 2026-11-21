@@ -1,5 +1,6 @@
 import { it } from "@effect/vitest";
 import { ConfigProvider, Effect, Exit, Layer, Redacted, Ref, Schema } from "effect";
+import { Array as EffectArray } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { OtlpExporter, OtlpSerialization, OtlpTracer } from "effect/observability";
 import { expect } from "vitest";
@@ -117,7 +118,7 @@ it("routes plain configuration to environment entries and secrets to Secret Mana
   });
 
   expect(environment.plain).toEqual([["BETTER_AUTH_URL", "https://app.example.com"]]);
-  expect(environment.secrets.map(([name]) => name)).toEqual(["BETTER_AUTH_SECRET"]);
+  expect(EffectArray.map(environment.secrets, ([name]) => name)).toEqual(["BETTER_AUTH_SECRET"]);
   expect(Redacted.isRedacted(environment.secrets[0]?.[1])).toBe(true);
 });
 
@@ -184,7 +185,7 @@ it.effect("exports traces using the forwarded production configuration", () =>
       ),
     );
     const environment = Object.fromEntries(
-      Object.entries(config).map(([name, value]) => [
+      EffectArray.map(Object.entries(config), ([name, value]) => [
         name,
         Redacted.isRedacted(value) ? Redacted.value(value) : value,
       ]),

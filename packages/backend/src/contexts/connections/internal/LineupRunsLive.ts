@@ -1,4 +1,6 @@
 import { DateTime, Duration, Effect, Layer, Schema } from "effect";
+import { Array as EffectArray } from "effect";
+import { Option as EffectOption } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import type {
@@ -49,7 +51,7 @@ export const LineupRunsLive = Layer.effect(
           userId,
           requestId: input.requestId,
           intent,
-          runs: teams.map(({ owned, request }): NewLineupRun => ({
+          runs: EffectArray.map(teams, ({ owned, request }): NewLineupRun => ({
             team: owned.team.id,
             connectionId: owned.team.connectionId,
             target: request.period,
@@ -63,7 +65,7 @@ export const LineupRunsLive = Layer.effect(
         .pipe(
           Effect.catchTag("lineup.persistence_failed", () => Effect.succeed("pending" as const)),
         );
-      const runIds = created.runs.map((run) => run.id);
+      const runIds = EffectArray.map(created.runs, (run) => run.id);
       const loaded = yield* repository
         .loadRuns(userId, { runs: runIds, limit: runIds.length })
         .pipe(mapRepositoryError);
@@ -76,7 +78,7 @@ export const LineupRunsLive = Layer.effect(
       return {
         request: input.requestId,
         delivery,
-        runs: loaded.runs.map(toLineupRun),
+        runs: EffectArray.map(loaded.runs, toLineupRun),
       } satisfies LineupSubmitData;
     });
 
@@ -90,15 +92,17 @@ export const LineupRunsLive = Layer.effect(
       };
       const result = yield* repository.loadRuns(userId, query).pipe(mapRepositoryError);
       if (input.runs !== undefined && !result.complete) {
-        const found = new Set(result.runs.map((run) => run.id));
-        const missing = input.runs.find((id) => !found.has(id));
+        const found = new Set(EffectArray.map(result.runs, (run) => run.id));
+        const missing = EffectOption.getOrUndefined(
+          EffectArray.findFirst(input.runs, (id) => !found.has(id)),
+        );
         if (missing !== undefined) {
           return yield* LineupRunNotFound.make({ run: missing });
         }
       }
       return {
         status: "ok" as const,
-        runs: result.runs.map(toLineupRun),
+        runs: EffectArray.map(result.runs, toLineupRun),
         observedAt: yield* DateTime.now,
         page: { returned: result.runs.length, complete: result.complete },
       } satisfies LineupRunsData;
@@ -112,7 +116,7 @@ export const LineupRunsLive = Layer.effect(
       const deadline = DateTime.addDuration(yield* DateTime.now, timeoutMs);
       for (;;) {
         const data = yield* get(userId, { runs: runIds, limit: runIds.length });
-        if (data.runs.every((run) => isSettled(run.status))) {
+        if (EffectArray.every(data.runs, (run) => isSettled(run.status))) {
           return data;
         }
         const now = yield* DateTime.now;
@@ -141,7 +145,7 @@ function validateTeams(
   LineupError
 > {
   return Effect.gen(function* () {
-    const ids = input.teams.map((team) => team.team);
+    const ids = EffectArray.map(input.teams, (team) => team.team);
     if (new Set(ids).size !== ids.length) {
       return yield* LineupSelectionInvalid.make({
         detail: "Each team may appear once in a lineup request.",
@@ -159,7 +163,7 @@ function validateTeams(
         }
       }),
     );
-    const byTeam = new Map(owned.map((entry) => [entry.team.id, entry]));
+    const byTeam = new Map(EffectArray.map(owned, (entry) => [entry.team.id, entry]));
     const selected: Array<{
       readonly owned: OwnedTeam;
       readonly request: LineupRequestInput["teams"][number];
@@ -176,9 +180,10 @@ function validateTeams(
 }
 
 function canonicalIntent(input: LineupRequestInput): string {
-  const teams = [...input.teams]
-    .sort((left, right) => left.team.localeCompare(right.team))
-    .map((team) => ({ team: team.team, period: team.period }));
+  const teams = EffectArray.map(
+    [...input.teams].sort((left, right) => left.team.localeCompare(right.team)),
+    (team) => ({ team: team.team, period: team.period }),
+  );
   return jsonTools.jsonString({ teams });
 }
 
