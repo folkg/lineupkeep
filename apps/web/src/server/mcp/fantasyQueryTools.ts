@@ -86,7 +86,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("search_players", {
     description:
-      "Search one league's pool; each row carries the `sort` value. Add `gamesWindow` for games. Pages are byte-budgeted; `limit` is a cap.",
+      "Search one league's pool; rows are compact discovery. Use `get_players` for stats and full detail. Add `gamesWindow` for games. Pages are byte-budgeted; `limit` is a cap.",
     parameters: SearchPlayersInput,
     success: Schema.toCodecJson(SearchPlayersResult),
     failure: ToolFailure,
@@ -99,7 +99,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_players", {
     description:
-      "Hydrate up to 25 player references from one league. Each returns in `players` or `failures`; group `schedule` adds games. Pages are byte-budgeted; `limit` is a cap.",
+      "Hydrate up to 25 player references from `search_players` or `get_rosters`. Each returns in `players` or `failures`; group `schedule` adds games. Pages are byte-budgeted; `limit` is a cap.",
     parameters: GetPlayersInput,
     success: Schema.toCodecJson(PlayersResult),
     failure: ToolFailure,

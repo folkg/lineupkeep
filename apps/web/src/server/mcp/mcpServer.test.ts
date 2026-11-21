@@ -2435,6 +2435,16 @@ it("publishes the rolling move list with today, saved, and ended filters", async
   expect(JSON.stringify(list.outputSchema)).not.toContain('"sets"');
 });
 
+it("points compact player search rows at get_players for detail", async () => {
+  const response = await handle(request("tools/list", {}, "read"));
+  const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
+  const search = listed.result.tools.find((tool) => tool.name === "search_players");
+  const detail = listed.result.tools.find((tool) => tool.name === "get_players");
+
+  expect(search?.description).toContain("Use `get_players` for stats and full detail");
+  expect(detail?.description).toContain("`search_players` or `get_rosters`");
+});
+
 it("keeps every published description inside its budget", async () => {
   const response = await handle(request("tools/list", {}, "read"));
   const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
