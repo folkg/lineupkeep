@@ -11,17 +11,27 @@ import { Array, Effect, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
 import { Record as EffectRecord } from "effect";
+import { dual } from "effect/Function";
 
 function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
   return EffectArray.isArray(value);
 }
 
-export function anyOf<Column extends PgColumn>(
-  column: Column,
-  values: Array.NonEmptyReadonlyArray<GetColumnData<Column, "raw">>,
-): SQL<boolean> {
-  return sql`${column} = ANY(${arrayParameter(column, values)})`;
-}
+export const anyOf: {
+  <Column extends PgColumn>(
+    values: Array.NonEmptyReadonlyArray<GetColumnData<Column, "raw">>,
+  ): (column: Column) => SQL<boolean>;
+  <Column extends PgColumn>(
+    column: Column,
+    values: Array.NonEmptyReadonlyArray<GetColumnData<Column, "raw">>,
+  ): SQL<boolean>;
+} = dual(
+  2,
+  <Column extends PgColumn>(
+    column: Column,
+    values: Array.NonEmptyReadonlyArray<GetColumnData<Column, "raw">>,
+  ): SQL<boolean> => sql`${column} = ANY(${arrayParameter(column, values)})`,
+);
 
 export function addedToExcluded(column: PgColumn): SQL {
   return sql`${column} + ${excludedColumn(column)}`;
@@ -57,51 +67,72 @@ export function queuedRunPredicate(table: { readonly status: PgColumn }): SQL<bo
   return sql`${table.status} = 'queued'`;
 }
 
-export function unnestRows<
-  Table extends PgTable,
-  Key extends keyof InferSelectModel<Table> & string,
->(
-  table: Table,
-  rows: Array.NonEmptyReadonlyArray<Pick<InferSelectModel<NoInfer<Table>>, Key>> &
-    ScalarColumns<Table, Key>,
-): { readonly source: SQL; readonly column: (key: Key) => SQL } {
-  const first = rows[0];
-  const columns = EffectArray.flatMap(
-    EffectRecord.toEntries(getTableColumns(table)),
-    ([key, column]) => {
-      const flatMapped1 = hasOwnKey(first, key) ? [{ key, column }] : [];
-      return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
-    },
-  );
-  const names = getTableColumns(table) as Record<Key, PgColumn>;
-  return {
-    source: sql`unnest(${sql.join(
-      EffectArray.map(columns, ({ key, column }) =>
-        arrayParameter(
-          column,
-          EffectArray.map(rows, (row) => row[key]),
+export const unnestRows: {
+  <Table extends PgTable, Key extends keyof InferSelectModel<Table> & string>(
+    rows: Array.NonEmptyReadonlyArray<Pick<InferSelectModel<NoInfer<Table>>, Key>> &
+      ScalarColumns<Table, Key>,
+  ): (table: Table) => { readonly source: SQL; readonly column: (key: Key) => SQL };
+  <Table extends PgTable, Key extends keyof InferSelectModel<Table> & string>(
+    table: Table,
+    rows: Array.NonEmptyReadonlyArray<Pick<InferSelectModel<NoInfer<Table>>, Key>> &
+      ScalarColumns<Table, Key>,
+  ): { readonly source: SQL; readonly column: (key: Key) => SQL };
+} = dual(
+  2,
+  <Table extends PgTable, Key extends keyof InferSelectModel<Table> & string>(
+    table: Table,
+    rows: Array.NonEmptyReadonlyArray<Pick<InferSelectModel<NoInfer<Table>>, Key>> &
+      ScalarColumns<Table, Key>,
+  ): { readonly source: SQL; readonly column: (key: Key) => SQL } => {
+    const first = rows[0];
+    const columns = EffectArray.flatMap(
+      EffectRecord.toEntries(getTableColumns(table)),
+      ([key, column]) => {
+        const flatMapped1 = hasOwnKey(first, key) ? [{ key, column }] : [];
+        return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
+      },
+    );
+    const names = getTableColumns(table) as Record<Key, PgColumn>;
+    return {
+      source: sql`unnest(${sql.join(
+        EffectArray.map(columns, ({ key, column }) =>
+          arrayParameter(
+            column,
+            EffectArray.map(rows, (row) => row[key]),
+          ),
         ),
-      ),
-      sql`, `,
-    )}) as batch(${sql.join(
-      EffectArray.map(columns, ({ column }) => sql.identifier(column.name)),
-      sql`, `,
-    )})`,
-    column: (key) => sql`${sql.identifier("batch")}.${sql.identifier(names[key].name)}`,
-  };
-}
+        sql`, `,
+      )}) as batch(${sql.join(
+        EffectArray.map(columns, ({ column }) => sql.identifier(column.name)),
+        sql`, `,
+      )})`,
+      column: (key) => sql`${sql.identifier("batch")}.${sql.identifier(names[key].name)}`,
+    };
+  },
+);
 
 const postgresMaxBindParameters = 65_535;
 
-export function excludedValues<
-  Table extends PgTable,
-  Keys extends keyof InferSelectModel<Table> & string,
->(table: Table, keys: ReadonlyArray<Keys>): Record<string, SQL> {
-  const columns = getTableColumns(table) as Record<Keys, PgColumn>;
-  return EffectRecord.fromEntries(
-    EffectArray.map(keys, (key) => [key, excludedColumn(columns[key])] as const),
-  );
-}
+export const excludedValues: {
+  <Table extends PgTable, Keys extends keyof InferSelectModel<Table> & string>(
+    keys: ReadonlyArray<Keys>,
+  ): (table: Table) => Record<string, SQL>;
+  <Table extends PgTable, Keys extends keyof InferSelectModel<Table> & string>(
+    table: Table,
+    keys: ReadonlyArray<Keys>,
+  ): Record<string, SQL>;
+} = dual(
+  2,
+  <Table extends PgTable, Keys extends keyof InferSelectModel<Table> & string>(
+    table: Table,
+    keys: ReadonlyArray<Keys>,
+  ): Record<string, SQL> => {
+    const columns = getTableColumns(table) as Record<Keys, PgColumn>;
+    return EffectRecord.fromEntries(
+      EffectArray.map(keys, (key) => [key, excludedColumn(columns[key])] as const),
+    );
+  },
+);
 
 export function maxInsertRows(table: PgTable): number {
   const columns = EffectArray.filter(
@@ -111,114 +142,146 @@ export function maxInsertRows(table: PgTable): number {
   return Math.floor(postgresMaxBindParameters / columns.length);
 }
 
-export function mutateRows<Table extends PgTable, Row, E, RD, RE, R>(
-  tx: Pick<PgEffectDatabase<MutationQueryEffect, PgQueryResultHKT>, "select" | "update">,
-  table: Table & ScalarColumns<NoInfer<Table>, keyof InferSelectModel<Table>>,
-  options: {
-    readonly where: SQL | undefined;
-    readonly ids: Array.NonEmptyReadonlyArray<string>;
-    readonly codec: Schema.Codec<Row, InferSelectModel<NoInfer<Table>>, RD, RE>;
-    readonly plan: (locked: ReadonlyMap<string, Row>) => Effect.Effect<ReadonlyArray<Row>, E, R>;
-  },
-): Effect.Effect<
-  ReadonlyArray<Row>,
-  E | Schema.SchemaError | EffectDrizzleQueryError,
-  RD | RE | R
-> {
-  return Effect.gen(function* () {
-    const columns = getTableColumns(table);
-    const config = getTableConfig(table);
-    const primary = [
-      ...EffectArray.filter(EffectRecord.values(columns), (column) => column.primary),
-      ...EffectArray.flatMap(config.primaryKeys, (key) => {
-        const flatMapped2 = key.columns;
-        return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
-      }),
-    ];
-    if (primary.length !== 1) {
-      return yield* Effect.die(
-        "mutateRows requires a single-column primary key; use a dedicated set-based mutation for composite keys",
-      );
-    }
-    const id = Array.getUnsafe(primary, 0);
-    const idKey = EffectOption.getOrUndefined(
-      EffectArray.findFirst(EffectRecord.keys(columns), (key) => columns[key] === id),
-    );
-    if (idKey === undefined) {
-      return yield* Effect.die("mutateRows primary key must belong to the mutated table");
-    }
-    const target: PgTable = table;
-    const selected = yield* tx
-      .select()
-      .from(target)
-      .where(and(options.where, anyOf(id, options.ids)))
-      .orderBy(asc(id))
-      .for("update");
-    const rows = yield* Effect.forEach(
-      selected,
-      (row) => Schema.decodeUnknownEffect(Schema.toEncoded(options.codec))(row),
-      { concurrency: 1 },
-    );
-    const locked = yield* Effect.forEach(rows, (row) => Schema.decodeEffect(options.codec)(row), {
-      concurrency: 1,
-    });
-    const keyed = new Map(
-      EffectArray.map(Array.zip(rows, locked), ([row, value]) => [String(row[idKey]), value]),
-    );
-    const planned = yield* options.plan(keyed);
-    const encoded = yield* Effect.forEach(
-      planned,
-      (value) => Schema.encodeEffect(options.codec)(value),
-      { concurrency: 1 },
-    );
-    const next = new Map(EffectArray.map(encoded, (row) => [String(row[idKey]), row]));
-    if (next.size !== rows.length || encoded.length !== rows.length) {
-      return yield* Effect.die(
-        "mutateRows plan must return one next value for every locked row, preserving primary keys",
-      );
-    }
-    const equivalent = Schema.toEquivalence(Schema.toEncoded(options.codec));
-    const changes: Array<InferSelectModel<Table>> = [];
-    for (const row of rows) {
-      const value = next.get(String(row[idKey]));
-      if (value === undefined) {
-        return yield* Effect.die("mutateRows plan must preserve every locked primary key");
+export const mutateRows: {
+  <Table extends PgTable, Row, E, RD, RE, R>(
+    table: Table & ScalarColumns<NoInfer<Table>, keyof InferSelectModel<Table>>,
+    options: {
+      readonly where: SQL | undefined;
+      readonly ids: Array.NonEmptyReadonlyArray<string>;
+      readonly codec: Schema.Codec<Row, InferSelectModel<NoInfer<Table>>, RD, RE>;
+      readonly plan: (locked: ReadonlyMap<string, Row>) => Effect.Effect<ReadonlyArray<Row>, E, R>;
+    },
+  ): (
+    tx: Pick<PgEffectDatabase<MutationQueryEffect, PgQueryResultHKT>, "select" | "update">,
+  ) => Effect.Effect<
+    ReadonlyArray<Row>,
+    E | Schema.SchemaError | EffectDrizzleQueryError,
+    RD | RE | R
+  >;
+  <Table extends PgTable, Row, E, RD, RE, R>(
+    tx: Pick<PgEffectDatabase<MutationQueryEffect, PgQueryResultHKT>, "select" | "update">,
+    table: Table & ScalarColumns<NoInfer<Table>, keyof InferSelectModel<Table>>,
+    options: {
+      readonly where: SQL | undefined;
+      readonly ids: Array.NonEmptyReadonlyArray<string>;
+      readonly codec: Schema.Codec<Row, InferSelectModel<NoInfer<Table>>, RD, RE>;
+      readonly plan: (locked: ReadonlyMap<string, Row>) => Effect.Effect<ReadonlyArray<Row>, E, R>;
+    },
+  ): Effect.Effect<
+    ReadonlyArray<Row>,
+    E | Schema.SchemaError | EffectDrizzleQueryError,
+    RD | RE | R
+  >;
+} = dual(
+  3,
+  <Table extends PgTable, Row, E, RD, RE, R>(
+    tx: Pick<PgEffectDatabase<MutationQueryEffect, PgQueryResultHKT>, "select" | "update">,
+    table: Table & ScalarColumns<NoInfer<Table>, keyof InferSelectModel<Table>>,
+    options: {
+      readonly where: SQL | undefined;
+      readonly ids: Array.NonEmptyReadonlyArray<string>;
+      readonly codec: Schema.Codec<Row, InferSelectModel<NoInfer<Table>>, RD, RE>;
+      readonly plan: (locked: ReadonlyMap<string, Row>) => Effect.Effect<ReadonlyArray<Row>, E, R>;
+    },
+  ): Effect.Effect<
+    ReadonlyArray<Row>,
+    E | Schema.SchemaError | EffectDrizzleQueryError,
+    RD | RE | R
+  > =>
+    Effect.gen(function* () {
+      const columns = getTableColumns(table);
+      const config = getTableConfig(table);
+      const primary = [
+        ...EffectArray.filter(EffectRecord.values(columns), (column) => column.primary),
+        ...EffectArray.flatMap(config.primaryKeys, (key) => {
+          const flatMapped2 = key.columns;
+          return arrayValueIsArray(flatMapped2) ? flatMapped2 : [flatMapped2];
+        }),
+      ];
+      if (primary.length !== 1) {
+        return yield* Effect.die(
+          "mutateRows requires a single-column primary key; use a dedicated set-based mutation for composite keys",
+        );
       }
-      if (!equivalent(row, value)) {
-        changes.push(value);
+      const id = Array.getUnsafe(primary, 0);
+      const idKey = EffectOption.getOrUndefined(
+        EffectArray.findFirst(EffectRecord.keys(columns), (key) => columns[key] === id),
+      );
+      if (idKey === undefined) {
+        return yield* Effect.die("mutateRows primary key must belong to the mutated table");
       }
-    }
-    const results = new Map(keyed);
-    if (Array.isArrayNonEmpty(changes)) {
-      const batch = unnestRows<PgTable, string>(table, changes);
-      const changed = yield* tx
-        .update(target)
-        .set(
-          EffectRecord.fromEntries(
-            EffectArray.map(
-              EffectArray.filter(EffectRecord.keys(columns), (key) => key !== idKey),
-              (key) => [key, batch.column(key)],
-            ),
-          ),
-        )
-        .from(batch.source)
-        .where(and(options.where, eq(id, batch.column(idKey))))
-        .returning(getTableColumns(target));
-      const decoded = yield* Effect.forEach(
-        changed,
-        (row) => Schema.decodeUnknownEffect(options.codec)(row),
+      const target: PgTable = table;
+      const selected = yield* tx
+        .select()
+        .from(target)
+        .where(and(options.where, anyOf(id, options.ids)))
+        .orderBy(asc(id))
+        .for("update");
+      const rows = yield* Effect.forEach(
+        selected,
+        (row) => Schema.decodeUnknownEffect(Schema.toEncoded(options.codec))(row),
         { concurrency: 1 },
       );
-      for (const [row, value] of Array.zip(changed, decoded)) {
-        results.set(String(row[idKey]), value);
+      const locked = yield* Effect.forEach(rows, (row) => Schema.decodeEffect(options.codec)(row), {
+        concurrency: 1,
+      });
+      const keyed = new Map(
+        EffectArray.map(Array.zip(rows, locked), ([row, value]) => [String(row[idKey]), value]),
+      );
+      const planned = yield* options.plan(keyed);
+      const encoded = yield* Effect.forEach(
+        planned,
+        (value) => Schema.encodeEffect(options.codec)(value),
+        { concurrency: 1 },
+      );
+      const next = new Map(EffectArray.map(encoded, (row) => [String(row[idKey]), row]));
+      if (next.size !== rows.length || encoded.length !== rows.length) {
+        return yield* Effect.die(
+          "mutateRows plan must return one next value for every locked row, preserving primary keys",
+        );
       }
-      if (changed.length !== changes.length) {
-        return yield* Effect.die("A locked mutation did not return every changed row");
+      const equivalent = Schema.toEquivalence(Schema.toEncoded(options.codec));
+      const changes: Array<InferSelectModel<Table>> = [];
+      for (const row of rows) {
+        const value = next.get(String(row[idKey]));
+        if (value === undefined) {
+          return yield* Effect.die("mutateRows plan must preserve every locked primary key");
+        }
+        if (!equivalent(row, value)) {
+          changes.push(value);
+        }
       }
-    }
-    return [...results.values()];
-  });
-}
+      const results = new Map(keyed);
+      if (Array.isArrayNonEmpty(changes)) {
+        const batch = unnestRows<PgTable, string>(table, changes);
+        const changed = yield* tx
+          .update(target)
+          .set(
+            EffectRecord.fromEntries(
+              EffectArray.map(
+                EffectArray.filter(EffectRecord.keys(columns), (key) => key !== idKey),
+                (key) => [key, batch.column(key)],
+              ),
+            ),
+          )
+          .from(batch.source)
+          .where(and(options.where, eq(id, batch.column(idKey))))
+          .returning(getTableColumns(target));
+        const decoded = yield* Effect.forEach(
+          changed,
+          (row) => Schema.decodeUnknownEffect(options.codec)(row),
+          { concurrency: 1 },
+        );
+        for (const [row, value] of Array.zip(changed, decoded)) {
+          results.set(String(row[idKey]), value);
+        }
+        if (changed.length !== changes.length) {
+          return yield* Effect.die("A locked mutation did not return every changed row");
+        }
+      }
+      return [...results.values()];
+    }),
+);
 
 function arrayParameter(column: PgColumn, values: ReadonlyArray<unknown>): SQL {
   if (EffectArray.every(values, (value) => value === null || value === undefined)) {

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { Array as EffectArray, Option as EffectOption } from "effect";
+import { dual } from "effect/Function";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import type { AccountExportArea } from "#contexts/privacy/AccountExport.ts";
@@ -316,34 +317,54 @@ export function deleteOwnerExport(userId: UserId): SQL {
   return sql`delete from ${accountExports} where ${accountExports.userId} = ${userId} returning 1`;
 }
 
-export function recordOwnerExport(
-  userId: UserId,
-  takenAt: Date,
-  contents: ReadonlyArray<AccountExportArea>,
-): SQL {
-  return sql`
+export const recordOwnerExport: {
+  (takenAt: Date, contents: ReadonlyArray<AccountExportArea>): (userId: UserId) => SQL;
+  (userId: UserId, takenAt: Date, contents: ReadonlyArray<AccountExportArea>): SQL;
+} = dual(
+  3,
+  (userId: UserId, takenAt: Date, contents: ReadonlyArray<AccountExportArea>): SQL => sql`
     insert into ${accountExports} (user_id, taken_at, contents)
     values (${userId}, ${takenAt}, ${jsonTools.jsonString(contents)}::jsonb)
     on conflict (user_id) do update
       set taken_at = excluded.taken_at, contents = excluded.contents
-  `;
-}
+  `,
+);
 
-export function deleteOwnedRows(table: string, account: OwnedAccount): SQL {
-  return sql`delete from ${sql.identifier(table)} where ${ownedRowsWhere(table, account)} returning 1`;
-}
+export const deleteOwnedRows: {
+  (account: OwnedAccount): (table: string) => SQL;
+  (table: string, account: OwnedAccount): SQL;
+} = dual(
+  2,
+  (table: string, account: OwnedAccount): SQL =>
+    sql`delete from ${sql.identifier(table)} where ${ownedRowsWhere(table, account)} returning 1`,
+);
 
-export function selectOwnedRows(table: string, account: OwnedAccount): SQL {
-  return sql`select * from ${sql.identifier(table)} where ${ownedRowsWhere(table, account)} order by 1`;
-}
+export const selectOwnedRows: {
+  (account: OwnedAccount): (table: string) => SQL;
+  (table: string, account: OwnedAccount): SQL;
+} = dual(
+  2,
+  (table: string, account: OwnedAccount): SQL =>
+    sql`select * from ${sql.identifier(table)} where ${ownedRowsWhere(table, account)} order by 1`,
+);
 
-export function countOwnedRows(table: string, account: OwnedAccount): SQL {
-  return sql`select count(*)::int as count from ${sql.identifier(table)} where ${ownedRowsWhere(table, account)}`;
-}
+export const countOwnedRows: {
+  (account: OwnedAccount): (table: string) => SQL;
+  (table: string, account: OwnedAccount): SQL;
+} = dual(
+  2,
+  (table: string, account: OwnedAccount): SQL =>
+    sql`select count(*)::int as count from ${sql.identifier(table)} where ${ownedRowsWhere(table, account)}`,
+);
 
-export function countRowsCarryingOwnerColumn(table: string, column: string, userId: UserId): SQL {
-  return sql`select count(*)::int as count from ${sql.identifier(table)} where ${sql.identifier(column)} = ${userId}`;
-}
+export const countRowsCarryingOwnerColumn: {
+  (column: string, userId: UserId): (table: string) => SQL;
+  (table: string, column: string, userId: UserId): SQL;
+} = dual(
+  3,
+  (table: string, column: string, userId: UserId): SQL =>
+    sql`select count(*)::int as count from ${sql.identifier(table)} where ${sql.identifier(column)} = ${userId}`,
+);
 
 export function selectStoredEmail(userId: UserId): SQL {
   return sql`select email from ${sql.identifier("user")} where id = ${userId}`;

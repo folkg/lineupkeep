@@ -11,6 +11,7 @@ import type {
 } from "@lineupkeep/backend/connections/TransactionPlans";
 import { DateTime, Schema } from "effect";
 import { Array as EffectArray } from "effect";
+import { dual } from "effect/Function";
 
 import type {
   TransactionMoveActionData,
@@ -254,20 +255,35 @@ export function confirmationOf(input: {
       };
 }
 
-export function actionOf(
-  move: string,
-  status: "saved" | "discarded" | "fixed",
-  refused: ReadonlyArray<{ readonly code: string; readonly detail: string }>,
-  confirmationCleared = false,
-): TransactionMoveActionData {
-  if (refused.length > 0) {
-    return {
-      status: "refused",
-      refusals: EffectArray.map(refused, (entry) => ({ code: entry.code, detail: entry.detail })),
-    };
-  }
-  return status === "saved" ? { status, move, confirmationCleared } : { status, move };
-}
+export const actionOf: {
+  (
+    status: "saved" | "discarded" | "fixed",
+    refused: ReadonlyArray<{ readonly code: string; readonly detail: string }>,
+    confirmationCleared?: boolean,
+  ): (move: string) => TransactionMoveActionData;
+  (
+    move: string,
+    status: "saved" | "discarded" | "fixed",
+    refused: ReadonlyArray<{ readonly code: string; readonly detail: string }>,
+    confirmationCleared?: boolean,
+  ): TransactionMoveActionData;
+} = dual(
+  (args) => typeof args[1] === "string",
+  (
+    move: string,
+    status: "saved" | "discarded" | "fixed",
+    refused: ReadonlyArray<{ readonly code: string; readonly detail: string }>,
+    confirmationCleared: boolean = false,
+  ): TransactionMoveActionData => {
+    if (refused.length > 0) {
+      return {
+        status: "refused",
+        refusals: EffectArray.map(refused, (entry) => ({ code: entry.code, detail: entry.detail })),
+      };
+    }
+    return status === "saved" ? { status, move, confirmationCleared } : { status, move };
+  },
+);
 
 export function retryOf(result: TransactionPlanRetry): TransactionMoveRetryData {
   if (result.refusals.length > 0) {

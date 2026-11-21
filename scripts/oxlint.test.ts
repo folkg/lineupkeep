@@ -1,42 +1,17 @@
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
-
 import { EffectString } from "@lineupkeep/collections";
-import { Array as EffectArray } from "effect";
 import { expect, it } from "vitest";
-
-import { disabledEffectRules, effectRules, pendingEffectRules } from "#repo/oxlint.config.ts";
 
 import { checkLint } from "./architectureFixture.ts";
 
 const workflowTestDeclarations = `
-  export declare const exploreWorkflow: (workflow: number, options: unknown) => void;
+  declare const exploreWorkflow: (workflow: number, options: unknown) => void;
+  void exploreWorkflow;
   export declare const fc: { assert: (property: unknown) => void; property: (events: unknown, check: unknown) => unknown };
   export declare const MachineTest: { explore: (workflow: number, options: unknown) => void; scenarios: (workflow: number) => void; verify: (workflow: number, trace: unknown) => void; checkInvariants: (workflow: number, trace: unknown, invariants: unknown[]) => void };
   export const options = {};
   export const events: unknown[] = [];
   export const check = (): boolean => true;
 `;
-
-it("enables every Effect rule the plugin publishes", () => {
-  const require = createRequire(import.meta.url);
-  const schema = readFileSync(
-    join(dirname(require.resolve("@effect/tsgo/package.json")), "oxlint-schema.json"),
-    "utf8",
-  );
-  const published = EffectArray.map(
-    [...new Set(EffectString.matchAll(schema, /effecttsgo\/[a-z0-9-]+/gu))],
-    (match) => match[0],
-  );
-
-  expect(Object.keys(effectRules).sort()).toEqual(published.sort());
-  for (const rule of published) {
-    const expected =
-      disabledEffectRules.has(rule) || pendingEffectRules.has(rule) ? "off" : "error";
-    expect(effectRules[rule], rule).toBe(expected);
-  }
-});
 
 it.concurrent.each([
   ["exploration", "fc.assert(fc.property(events, check));"],
@@ -928,14 +903,14 @@ it.concurrent("accepts a qualified literal operation without registering its dom
   const result = await checkLint({
     "apps/web/src/server/backendEntry.ts": `
       import type { Effect } from "effect";
-      export function runBackend<A>(request: Request, operation: string, program: Effect.Effect<A>): Effect.Effect<A> {
-        void request; void operation; return program;
+      export function runBackend<A>(input: { request: Request; operation: string; program: Effect.Effect<A> }): Effect.Effect<A> {
+        void input.request; void input.operation; return input.program;
       }
     `,
     "apps/web/src/server/inventory.ts": `
       import { runBackend } from "./backendEntry";
       import { Effect } from "effect";
-      export const reserve = (request: Request): Effect.Effect<void> => runBackend(request, "inventory.reserve_batch", Effect.void);
+      export const reserve = (request: Request): Effect.Effect<void> => runBackend({ request, operation: "inventory.reserve_batch", program: Effect.void });
     `,
   });
 

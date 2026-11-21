@@ -1,4 +1,5 @@
 import { EffectString } from "@lineupkeep/collections";
+import { dual } from "effect/Function";
 
 export type Exact = {
   readonly units: bigint;
@@ -24,45 +25,58 @@ export function exactFromInteger(units: bigint): Exact {
   return exact(units, 0);
 }
 
-export function addExact(left: Exact, right: Exact): Exact {
+export const addExact: {
+  (right: Exact): (left: Exact) => Exact;
+  (left: Exact, right: Exact): Exact;
+} = dual(2, (left: Exact, right: Exact): Exact => {
   const scale = Math.max(left.scale, right.scale);
   return exact(unitsAtScale(left, scale) + unitsAtScale(right, scale), scale);
-}
+});
 
-export function multiplyExact(left: Exact, right: Exact): Exact {
-  return exact(left.units * right.units, left.scale + right.scale);
-}
+export const multiplyExact: {
+  (right: Exact): (left: Exact) => Exact;
+  (left: Exact, right: Exact): Exact;
+} = dual(2, (left: Exact, right: Exact): Exact =>
+  exact(left.units * right.units, left.scale + right.scale),
+);
 
-export function divideByInteger(value: Exact, divisor: bigint, scale: number): Exact {
+export const divideByInteger: {
+  (divisor: bigint, scale: number): (value: Exact) => Exact;
+  (value: Exact, divisor: bigint, scale: number): Exact;
+} = dual(3, (value: Exact, divisor: bigint, scale: number): Exact => {
   if (divisor === 0n) {
     throw new Error("Cannot divide by zero.");
   }
   const numerator = unitsAtScale(value, value.scale + scale);
   return exact(divideRoundHalfAwayFromZero(numerator, divisor), scale);
-}
+});
 
-export function minExact(left: Exact, right: Exact): Exact {
-  return compareExact(left, right) <= 0 ? left : right;
-}
+export const minExact: {
+  (right: Exact): (left: Exact) => Exact;
+  (left: Exact, right: Exact): Exact;
+} = dual(2, (left: Exact, right: Exact): Exact => (compareExact(left, right) <= 0 ? left : right));
 
-export function clampExact(value: Exact, minimum: Exact, maximum: Exact): Exact {
-  return compareExact(value, minimum) < 0
-    ? minimum
-    : compareExact(value, maximum) > 0
-      ? maximum
-      : value;
-}
+export const clampExact: {
+  (minimum: Exact, maximum: Exact): (value: Exact) => Exact;
+  (value: Exact, minimum: Exact, maximum: Exact): Exact;
+} = dual(3, (value: Exact, minimum: Exact, maximum: Exact): Exact =>
+  compareExact(value, minimum) < 0 ? minimum : compareExact(value, maximum) > 0 ? maximum : value,
+);
 
-export function compareExact(left: Exact, right: Exact): number {
+export const compareExact: {
+  (right: Exact): (left: Exact) => number;
+  (left: Exact, right: Exact): number;
+} = dual(2, (left: Exact, right: Exact): number => {
   const scale = Math.max(left.scale, right.scale);
   const leftUnits = unitsAtScale(left, scale);
   const rightUnits = unitsAtScale(right, scale);
   return leftUnits === rightUnits ? 0 : leftUnits < rightUnits ? -1 : 1;
-}
+});
 
-export function exactToUnits(value: Exact, scale: number): bigint {
-  return unitsAtScale(value, scale);
-}
+export const exactToUnits: {
+  (scale: number): (value: Exact) => bigint;
+  (value: Exact, scale: number): bigint;
+} = dual(2, (value: Exact, scale: number): bigint => unitsAtScale(value, scale));
 
 function exact(units: bigint, scale: number): Exact {
   let nextUnits = units;

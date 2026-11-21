@@ -8,6 +8,7 @@ import {
 import { EffectString } from "@lineupkeep/collections";
 import { optionalStringValue } from "@lineupkeep/collections";
 import { Config, Effect, Option, Schema } from "effect";
+import { dual } from "effect/Function";
 import type { WebSocketHooks } from "h3";
 
 import {
@@ -35,10 +36,10 @@ const maximumPendingInputs = 64;
 const maximumStreamMessages = 500;
 const maximumStreamMessageBytes = 4_096;
 
-export function hostedLinkingHooks(
-  request: Request,
-  sessionId: string,
-): Promise<Partial<WebSocketHooks>> {
+export const hostedLinkingHooks: {
+  (sessionId: string): (request: Request) => Promise<Partial<WebSocketHooks>>;
+  (request: Request, sessionId: string): Promise<Partial<WebSocketHooks>>;
+} = dual(2, (request: Request, sessionId: string): Promise<Partial<WebSocketHooks>> => {
   if (
     optionalStringValue(request.headers.get("upgrade"), (value) =>
       EffectString.toLowerCase(value),
@@ -55,7 +56,7 @@ export function hostedLinkingHooks(
     return Promise.resolve(rejectUpgrade(401, "Unauthorized"));
   }
   return authorizeStream(request, sessionId, ticket, viewport);
-}
+});
 
 async function authorizeStream(
   request: Request,

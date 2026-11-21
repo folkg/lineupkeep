@@ -1,5 +1,6 @@
 import { Context, DateTime, Duration, Schema } from "effect";
 import type { Effect } from "effect";
+import { dual } from "effect/Function";
 
 import type { UserId } from "#contexts/auth/User.ts";
 
@@ -57,10 +58,13 @@ export type AccountExportShape = {
   ) => Effect.Effect<AccountExportStatus, AccountExportPersistenceFailed>;
 };
 
-export function isAccountExportUsable(takenAt: DateTime.Utc, now: DateTime.Utc): boolean {
+export const isAccountExportUsable: {
+  (now: DateTime.Utc): (takenAt: DateTime.Utc) => boolean;
+  (takenAt: DateTime.Utc, now: DateTime.Utc): boolean;
+} = dual(2, (takenAt: DateTime.Utc, now: DateTime.Utc): boolean => {
   const age = DateTime.toEpochMillis(now) - DateTime.toEpochMillis(takenAt);
   return age >= 0 && age <= Duration.toMillis(accountExportFreshnessWindow);
-}
+});
 
 export class AccountExportPersistenceFailed extends Schema.TaggedError<
   AccountExportPersistenceFailed,

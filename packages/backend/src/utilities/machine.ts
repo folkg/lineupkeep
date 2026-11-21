@@ -1,7 +1,8 @@
 import { setupEffect } from "@xstate/effect";
-import { Data, Effect, Equal, Schema } from "effect";
+import { Effect, Equal, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { Record as EffectRecord } from "effect";
+import { dual } from "effect/Function";
 import { isUnhandled, type StateSchema as XStateSchema } from "xstate";
 
 declare const machineTypes: unique symbol;
@@ -117,85 +118,146 @@ export function defineMachine<State extends Tagged, Event extends Tagged>(
   };
 }
 
-export function snapshotOf<State extends Tagged, Event extends Tagged>(
-  machine: DefinedMachine<State, Event>,
-  state: NoInfer<State>,
-): Effect.Effect<Snapshot<State>, Schema.SchemaError> {
-  return Effect.gen(function* () {
-    const decoded = yield* decodeState(machine, state);
-    machine.runtime.resolveState({ value: decoded._tag, context: { state: decoded } });
-    return { state: decoded };
-  });
-}
+export const snapshotOf: {
+  <State extends Tagged, Event extends Tagged>(
+    state: NoInfer<State>,
+  ): (machine: DefinedMachine<State, Event>) => Effect.Effect<Snapshot<State>, Schema.SchemaError>;
+  <State extends Tagged, Event extends Tagged>(
+    machine: DefinedMachine<State, Event>,
+    state: NoInfer<State>,
+  ): Effect.Effect<Snapshot<State>, Schema.SchemaError>;
+} = dual(
+  2,
+  <State extends Tagged, Event extends Tagged>(
+    machine: DefinedMachine<State, Event>,
+    state: NoInfer<State>,
+  ): Effect.Effect<Snapshot<State>, Schema.SchemaError> =>
+    Effect.gen(function* () {
+      const decoded = yield* decodeState(machine, state);
+      machine.runtime.resolveState({ value: decoded._tag, context: { state: decoded } });
+      return { state: decoded };
+    }),
+);
 
-export function plan<State extends Tagged, Event extends Tagged>(
-  machine: DefinedMachine<State, Event>,
-  snapshot: Snapshot<NoInfer<State>>,
-  event: NoInfer<Event>,
-): Effect.Effect<State, TransitionRejected<unknown, State, Event> | Schema.SchemaError> {
-  return Effect.gen(function* () {
-    const restored = machine.runtime.resolveState({
-      value: snapshot.state._tag,
-      context: { state: snapshot.state },
-    });
-    const [next, effects] = machine.runtime.transition(restored, runtimeEvent(event));
-    if (isUnhandled(restored, [next, effects])) {
-      return yield* new TransitionRejected({ state: snapshot.state, event });
-    }
-    return yield* decodeState(machine, next.context.state);
-  });
-}
-
-export function planBatch<
-  State extends Tagged,
-  Event extends Tagged,
-  Id,
-  Row extends { readonly id: Id } & (
-    | { readonly input: NoInfer<State> }
-    | { readonly snapshot: Snapshot<NoInfer<State>> }
-  ),
->(
-  machine: DefinedMachine<State, Event>,
-  rows: ReadonlyArray<Row>,
-  event: NoInfer<Event> | ((row: Row) => NoInfer<Event>),
-): Effect.Effect<
-  ReadonlyArray<{ readonly id: Id; readonly row: Row; readonly snapshot: Snapshot<State> }>,
-  TransitionRejected<Id, State, Event> | Schema.SchemaError
-> {
-  return Effect.gen(function* () {
-    const changes: Array<{
-      readonly id: Id;
-      readonly row: Row;
-      readonly snapshot: Snapshot<State>;
-    }> = [];
-    for (const row of rows) {
-      const initial =
-        "input" in row
-          ? yield* snapshotOf(machine, machine.definition.initial.data({ input: row.input }))
-          : row.snapshot;
-      const request = typeof event === "function" ? event(row) : event;
-      const next = yield* plan(machine, initial, request).pipe(
-        Effect.mapError((cause) =>
-          cause._tag === "TransitionRejected"
-            ? new TransitionRejected({ id: row.id, state: initial.state, event: cause.event })
-            : cause,
-        ),
-      );
-      if (!Equal.equals(initial.state, next)) {
-        changes.push({ id: row.id, row, snapshot: { state: next } });
+export const plan: {
+  <State extends Tagged, Event extends Tagged>(
+    snapshot: Snapshot<NoInfer<State>>,
+    event: NoInfer<Event>,
+  ): (
+    machine: DefinedMachine<State, Event>,
+  ) => Effect.Effect<State, TransitionRejected | Schema.SchemaError>;
+  <State extends Tagged, Event extends Tagged>(
+    machine: DefinedMachine<State, Event>,
+    snapshot: Snapshot<NoInfer<State>>,
+    event: NoInfer<Event>,
+  ): Effect.Effect<State, TransitionRejected | Schema.SchemaError>;
+} = dual(
+  3,
+  <State extends Tagged, Event extends Tagged>(
+    machine: DefinedMachine<State, Event>,
+    snapshot: Snapshot<NoInfer<State>>,
+    event: NoInfer<Event>,
+  ): Effect.Effect<State, TransitionRejected | Schema.SchemaError> =>
+    Effect.gen(function* () {
+      const restored = machine.runtime.resolveState({
+        value: snapshot.state._tag,
+        context: { state: snapshot.state },
+      });
+      const [next, effects] = machine.runtime.transition(restored, runtimeEvent(event));
+      if (isUnhandled(restored, [next, effects])) {
+        return yield* TransitionRejected.make({ state: snapshot.state, event });
       }
-    }
-    return changes;
-  });
-}
+      return yield* decodeState(machine, next.context.state);
+    }),
+);
 
-export class TransitionRejected<Id, State extends Tagged, Event> extends Data.TaggedError(
-  "TransitionRejected",
-)<{
-  readonly id?: Id;
-  readonly state: State;
-  readonly event: Event;
-}> {}
+export const planBatch: {
+  <
+    State extends Tagged,
+    Event extends Tagged,
+    Id,
+    Row extends { readonly id: Id } & (
+      | { readonly input: NoInfer<State> }
+      | { readonly snapshot: Snapshot<NoInfer<State>> }
+    ),
+  >(
+    rows: ReadonlyArray<Row>,
+    event: NoInfer<Event> | ((row: Row) => NoInfer<Event>),
+  ): (
+    machine: DefinedMachine<State, Event>,
+  ) => Effect.Effect<
+    ReadonlyArray<{ readonly id: Id; readonly row: Row; readonly snapshot: Snapshot<State> }>,
+    TransitionRejected | Schema.SchemaError
+  >;
+  <
+    State extends Tagged,
+    Event extends Tagged,
+    Id,
+    Row extends { readonly id: Id } & (
+      | { readonly input: NoInfer<State> }
+      | { readonly snapshot: Snapshot<NoInfer<State>> }
+    ),
+  >(
+    machine: DefinedMachine<State, Event>,
+    rows: ReadonlyArray<Row>,
+    event: NoInfer<Event> | ((row: Row) => NoInfer<Event>),
+  ): Effect.Effect<
+    ReadonlyArray<{ readonly id: Id; readonly row: Row; readonly snapshot: Snapshot<State> }>,
+    TransitionRejected | Schema.SchemaError
+  >;
+} = dual(
+  3,
+  <
+    State extends Tagged,
+    Event extends Tagged,
+    Id,
+    Row extends { readonly id: Id } & (
+      | { readonly input: NoInfer<State> }
+      | { readonly snapshot: Snapshot<NoInfer<State>> }
+    ),
+  >(
+    machine: DefinedMachine<State, Event>,
+    rows: ReadonlyArray<Row>,
+    event: NoInfer<Event> | ((row: Row) => NoInfer<Event>),
+  ): Effect.Effect<
+    ReadonlyArray<{ readonly id: Id; readonly row: Row; readonly snapshot: Snapshot<State> }>,
+    TransitionRejected | Schema.SchemaError
+  > =>
+    Effect.gen(function* () {
+      const changes: Array<{
+        readonly id: Id;
+        readonly row: Row;
+        readonly snapshot: Snapshot<State>;
+      }> = [];
+      for (const row of rows) {
+        const initial =
+          "input" in row
+            ? yield* snapshotOf(machine, machine.definition.initial.data({ input: row.input }))
+            : row.snapshot;
+        const request = typeof event === "function" ? event(row) : event;
+        const next = yield* plan(machine, initial, request).pipe(
+          Effect.mapError((cause) =>
+            cause._tag === "TransitionRejected"
+              ? TransitionRejected.make({ id: row.id, state: initial.state, event: cause.event })
+              : cause,
+          ),
+        );
+        if (!Equal.equals(initial.state, next)) {
+          changes.push({ id: row.id, row, snapshot: { state: next } });
+        }
+      }
+      return changes;
+    }),
+);
+
+export class TransitionRejected extends Schema.TaggedError<
+  TransitionRejected,
+  { readonly brand: unique symbol }
+>()("TransitionRejected", {
+  id: Schema.optional(Schema.Unknown),
+  state: Schema.Unknown,
+  event: Schema.Unknown,
+}) {}
 
 function stateConfig<State extends Tagged>(
   entry: StateEntry<State>,

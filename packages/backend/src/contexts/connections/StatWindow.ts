@@ -1,4 +1,5 @@
 import { Array as EffectArray, Option } from "effect";
+import { dual } from "effect/Function";
 
 import type { RecentFormWindow, StatWindow } from "./Provider.ts";
 
@@ -15,7 +16,10 @@ export function statWindowDays(window: StatWindow): number | undefined {
   }
 }
 
-export function sameStatWindow(left: StatWindow, right: StatWindow): boolean {
+export const sameStatWindow: {
+  (right: StatWindow): (left: StatWindow) => boolean;
+  (left: StatWindow, right: StatWindow): boolean;
+} = dual(2, (left: StatWindow, right: StatWindow): boolean => {
   const leftDays = statWindowDays(left);
   const rightDays = statWindowDays(right);
   if (leftDays !== undefined || rightDays !== undefined) {
@@ -32,31 +36,39 @@ export function sameStatWindow(left: StatWindow, right: StatWindow): boolean {
     case "last_weeks":
       return false;
   }
-}
+});
 
-export function nearestStatWindow(
-  requested: StatWindow,
-  supported: ReadonlyArray<RecentFormWindow>,
-): RecentFormWindow | undefined {
-  const requestedDays = statWindowDays(requested);
-  if (requestedDays === undefined || supported.length === 0) {
-    return undefined;
-  }
-  return EffectArray.reduce(
-    supported,
-    Option.getOrThrow(EffectArray.head(supported)),
-    (nearest, candidate) => {
-      const days = statWindowDays(candidate) ?? 0;
-      const nearestDays = statWindowDays(nearest) ?? 0;
-      const distance = Math.abs(days - requestedDays);
-      const nearestDistance = Math.abs(nearestDays - requestedDays);
-      if (distance !== nearestDistance) {
-        return distance < nearestDistance ? candidate : nearest;
-      }
-      return days > nearestDays ? candidate : nearest;
-    },
-  );
-}
+export const nearestStatWindow: {
+  (
+    supported: ReadonlyArray<RecentFormWindow>,
+  ): (requested: StatWindow) => RecentFormWindow | undefined;
+  (requested: StatWindow, supported: ReadonlyArray<RecentFormWindow>): RecentFormWindow | undefined;
+} = dual(
+  2,
+  (
+    requested: StatWindow,
+    supported: ReadonlyArray<RecentFormWindow>,
+  ): RecentFormWindow | undefined => {
+    const requestedDays = statWindowDays(requested);
+    if (requestedDays === undefined || supported.length === 0) {
+      return undefined;
+    }
+    return EffectArray.reduce(
+      supported,
+      Option.getOrThrow(EffectArray.head(supported)),
+      (nearest, candidate) => {
+        const days = statWindowDays(candidate) ?? 0;
+        const nearestDays = statWindowDays(nearest) ?? 0;
+        const distance = Math.abs(days - requestedDays);
+        const nearestDistance = Math.abs(nearestDays - requestedDays);
+        if (distance !== nearestDistance) {
+          return distance < nearestDistance ? candidate : nearest;
+        }
+        return days > nearestDays ? candidate : nearest;
+      },
+    );
+  },
+);
 
 export function describeStatWindow(window: StatWindow): string {
   switch (window.kind) {

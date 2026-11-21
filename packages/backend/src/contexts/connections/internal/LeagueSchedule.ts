@@ -1,9 +1,11 @@
 import { DateTime } from "effect";
 import { Array as EffectArray } from "effect";
 import { Order as EffectOrder } from "effect";
+import { dual } from "effect/Function";
 
 import type { ProfessionalGame } from "#contexts/connections/ProfessionalGame.ts";
 import { leagueOffNightDefinition } from "#contexts/connections/ProfessionalGame.ts";
+
 function sortWithComparator<A>(
   self: ReadonlyArray<A>,
   compare: (left: A, right: A) => number,
@@ -55,36 +57,48 @@ export function leagueGamesByDate(
   );
 }
 
-export function gamesForTeam(
-  games: ReadonlyArray<ProfessionalGame>,
-  providerTeamKey: string,
-): ReadonlyArray<ProfessionalGame> {
-  return EffectArray.filter(
+export const gamesForTeam: {
+  (
+    providerTeamKey: string,
+  ): (games: ReadonlyArray<ProfessionalGame>) => ReadonlyArray<ProfessionalGame>;
+  (
+    games: ReadonlyArray<ProfessionalGame>,
+    providerTeamKey: string,
+  ): ReadonlyArray<ProfessionalGame>;
+} = dual(
+  2,
+  (
+    games: ReadonlyArray<ProfessionalGame>,
+    providerTeamKey: string,
+  ): ReadonlyArray<ProfessionalGame> =>
     EffectArray.filter(
-      games,
-      (game) =>
-        game.home.providerTeamKey === providerTeamKey ||
-        game.away.providerTeamKey === providerTeamKey,
+      EffectArray.filter(
+        games,
+        (game) =>
+          game.home.providerTeamKey === providerTeamKey ||
+          game.away.providerTeamKey === providerTeamKey,
+      ),
+      gameCanBePlayed,
     ),
-    gameCanBePlayed,
-  );
-}
+);
 
-export function countGamesForTeam(
-  games: ReadonlyArray<ProfessionalGame>,
-  providerTeamKey: string,
-): number {
-  return gamesForTeam(games, providerTeamKey).length;
-}
+export const countGamesForTeam: {
+  (providerTeamKey: string): (games: ReadonlyArray<ProfessionalGame>) => number;
+  (games: ReadonlyArray<ProfessionalGame>, providerTeamKey: string): number;
+} = dual(
+  2,
+  (games: ReadonlyArray<ProfessionalGame>, providerTeamKey: string): number =>
+    gamesForTeam(games, providerTeamKey).length,
+);
 
-export function gameDatesForTeam(
-  games: ReadonlyArray<ProfessionalGame>,
-  providerTeamKey: string,
-): ReadonlyArray<string> {
-  return [
-    ...new Set(EffectArray.map(gamesForTeam(games, providerTeamKey), (game) => game.date)),
-  ].sort();
-}
+export const gameDatesForTeam: {
+  (providerTeamKey: string): (games: ReadonlyArray<ProfessionalGame>) => ReadonlyArray<string>;
+  (games: ReadonlyArray<ProfessionalGame>, providerTeamKey: string): ReadonlyArray<string>;
+} = dual(
+  2,
+  (games: ReadonlyArray<ProfessionalGame>, providerTeamKey: string): ReadonlyArray<string> =>
+    [...new Set(EffectArray.map(gamesForTeam(games, providerTeamKey), (game) => game.date))].sort(),
+);
 
 export function nextGameForTeams(input: {
   readonly games: ReadonlyArray<ProfessionalGame>;
@@ -105,15 +119,15 @@ export function nextGameForTeams(input: {
   )[0];
 }
 
-export function gameInvolvesTeam(
-  game: ProfessionalGame,
-  providerTeamKeys: ReadonlySet<string>,
-): boolean {
-  return (
+export const gameInvolvesTeam: {
+  (providerTeamKeys: ReadonlySet<string>): (game: ProfessionalGame) => boolean;
+  (game: ProfessionalGame, providerTeamKeys: ReadonlySet<string>): boolean;
+} = dual(
+  2,
+  (game: ProfessionalGame, providerTeamKeys: ReadonlySet<string>): boolean =>
     (game.home.providerTeamKey !== null && providerTeamKeys.has(game.home.providerTeamKey)) ||
-    (game.away.providerTeamKey !== null && providerTeamKeys.has(game.away.providerTeamKey))
-  );
-}
+    (game.away.providerTeamKey !== null && providerTeamKeys.has(game.away.providerTeamKey)),
+);
 
 export function gameCanBePlayed(game: ProfessionalGame): boolean {
   return game.status !== "cancelled" && game.status !== "postponed";

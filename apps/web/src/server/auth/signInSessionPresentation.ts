@@ -3,22 +3,21 @@ import type {
   SignInSessionSummary,
 } from "@lineupkeep/backend/auth/SignInSessions";
 import { DateTime, Schema } from "effect";
+import { dual } from "effect/Function";
 
 import type { SignInSessionErrorType, SignInSessionView } from "#contracts/auth/authContract.ts";
 import type { ExpectedFailure } from "#server/backendEntry.ts";
 
-export function toSignInSessionView(
-  session: SignInSessionSummary,
-  currentSessionId: string,
-): SignInSessionView {
-  return {
-    id: session.id,
-    device: session.device,
-    startedAt: DateTime.formatIso(session.startedAt),
-    lastUsedAt: DateTime.formatIso(session.lastUsedAt),
-    current: session.id === currentSessionId,
-  };
-}
+export const toSignInSessionView: {
+  (currentSessionId: string): (session: SignInSessionSummary) => SignInSessionView;
+  (session: SignInSessionSummary, currentSessionId: string): SignInSessionView;
+} = dual(2, (session: SignInSessionSummary, currentSessionId: string): SignInSessionView => ({
+  id: session.id,
+  device: session.device,
+  startedAt: DateTime.formatIso(session.startedAt),
+  lastUsedAt: DateTime.formatIso(session.lastUsedAt),
+  current: session.id === currentSessionId,
+}));
 
 export function mapSignInSessionError(
   error: SignInSessionPersistenceFailed | SignInSessionInputInvalid,

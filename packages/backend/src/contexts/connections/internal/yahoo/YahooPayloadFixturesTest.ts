@@ -1,6 +1,7 @@
 import { EffectString } from "@lineupkeep/collections";
 import { Array as EffectArray } from "effect";
 import { Record as EffectRecord } from "effect";
+import { dual } from "effect/Function";
 
 const nflLeagueAttributes = {
   league_key: "466.l.4000",
@@ -750,31 +751,44 @@ function fixtureFragments(value: unknown): ReadonlyArray<unknown> {
   return EffectArray.isArray(value) ? value : [];
 }
 
-export function withPlayerRankSample(
-  payload: { fantasy_content: Record<string, unknown> },
-  ranks: ReadonlyArray<Readonly<Record<string, string>>>,
-): { fantasy_content: Record<string, unknown> } {
-  const league = fixtureFragments(payload.fantasy_content["league"]);
-  const players: Record<string, unknown> = { count: ranks.length };
-  for (const [index, values] of ranks.entries()) {
-    players[String(index)] = {
-      player: [
-        [{ player_key: `466.p.9${EffectString.padStart(String(index), 4, "0")}` }],
-        {
-          player_ranks: EffectArray.map(EffectRecord.toEntries(values), ([type, value]) => ({
-            player_rank: { rank_type: type, rank_value: value },
-          })),
-        },
-      ],
-    };
-  }
-  return {
-    fantasy_content: {
-      ...payload.fantasy_content,
-      league: [...league, { players }],
-    },
+export const withPlayerRankSample: {
+  (ranks: ReadonlyArray<Readonly<Record<string, string>>>): (payload: {
+    fantasy_content: Record<string, unknown>;
+  }) => {
+    fantasy_content: Record<string, unknown>;
   };
-}
+  (
+    payload: { fantasy_content: Record<string, unknown> },
+    ranks: ReadonlyArray<Readonly<Record<string, string>>>,
+  ): { fantasy_content: Record<string, unknown> };
+} = dual(
+  2,
+  (
+    payload: { fantasy_content: Record<string, unknown> },
+    ranks: ReadonlyArray<Readonly<Record<string, string>>>,
+  ): { fantasy_content: Record<string, unknown> } => {
+    const league = fixtureFragments(payload.fantasy_content["league"]);
+    const players: Record<string, unknown> = { count: ranks.length };
+    for (const [index, values] of ranks.entries()) {
+      players[String(index)] = {
+        player: [
+          [{ player_key: `466.p.9${EffectString.padStart(String(index), 4, "0")}` }],
+          {
+            player_ranks: EffectArray.map(EffectRecord.toEntries(values), ([type, value]) => ({
+              player_rank: { rank_type: type, rank_value: value },
+            })),
+          },
+        ],
+      };
+    }
+    return {
+      fantasy_content: {
+        ...payload.fantasy_content,
+        league: [...league, { players }],
+      },
+    };
+  },
+);
 
 export const yahooNflRoster = {
   fantasy_content: {
@@ -3884,60 +3898,79 @@ function playerDetailsPayload(input: {
   };
 }
 
-export function yahooNhlDatePlayerDetails(
-  date: string,
-  players: ReadonlyArray<{
-    readonly playerKey: string;
-    readonly name: string;
-    readonly stats: ReadonlyArray<{ readonly statId: number; readonly value: string }>;
-  }>,
-): { fantasy_content: Record<string, unknown> } {
-  const entries: Record<string, unknown> = {};
-  EffectArray.forEach(players, (player, index) => {
-    entries[String(index)] = {
-      player: [
-        [
-          { player_key: player.playerKey },
+export const yahooNhlDatePlayerDetails: {
+  (
+    players: ReadonlyArray<{
+      readonly playerKey: string;
+      readonly name: string;
+      readonly stats: ReadonlyArray<{ readonly statId: number; readonly value: string }>;
+    }>,
+  ): (date: string) => { fantasy_content: Record<string, unknown> };
+  (
+    date: string,
+    players: ReadonlyArray<{
+      readonly playerKey: string;
+      readonly name: string;
+      readonly stats: ReadonlyArray<{ readonly statId: number; readonly value: string }>;
+    }>,
+  ): { fantasy_content: Record<string, unknown> };
+} = dual(
+  2,
+  (
+    date: string,
+    players: ReadonlyArray<{
+      readonly playerKey: string;
+      readonly name: string;
+      readonly stats: ReadonlyArray<{ readonly statId: number; readonly value: string }>;
+    }>,
+  ): { fantasy_content: Record<string, unknown> } => {
+    const entries: Record<string, unknown> = {};
+    EffectArray.forEach(players, (player, index) => {
+      entries[String(index)] = {
+        player: [
+          [
+            { player_key: player.playerKey },
+            {
+              player_id: EffectString.slice(
+                player.playerKey,
+                EffectString.lastIndexOf(player.playerKey, ".p.") + 3,
+              ),
+            },
+            { name: { full: player.name, first: "Synthetic", last: player.name } },
+            { display_position: "C,LW" },
+            { position_type: "P" },
+            { primary_position: "C" },
+            { eligible_positions: [{ position: "C" }, { position: "LW" }] },
+          ],
           {
-            player_id: EffectString.slice(
-              player.playerKey,
-              EffectString.lastIndexOf(player.playerKey, ".p.") + 3,
-            ),
+            player_stats: {
+              "0": { coverage_type: "date", date },
+              stats: EffectArray.map(player.stats, ({ statId, value }) => ({
+                stat: { stat_id: statId, value },
+              })),
+            },
           },
-          { name: { full: player.name, first: "Synthetic", last: player.name } },
-          { display_position: "C,LW" },
-          { position_type: "P" },
-          { primary_position: "C" },
-          { eligible_positions: [{ position: "C" }, { position: "LW" }] },
+          { ownership: { ownership_type: "waivers" } },
         ],
-        {
-          player_stats: {
-            "0": { coverage_type: "date", date },
-            stats: EffectArray.map(player.stats, ({ statId, value }) => ({
-              stat: { stat_id: statId, value },
-            })),
+      };
+    });
+    entries["count"] = players.length;
+    return {
+      fantasy_content: {
+        "xml:lang": "en-US",
+        league: [
+          {
+            league_key: "466.l.4002",
+            league_id: "4002",
+            name: "Synthetic Roto League",
+            url: "https://hockey.fantasysports.yahoo.com/hockey/4002",
           },
-        },
-        { ownership: { ownership_type: "waivers" } },
-      ],
+          { players: entries },
+        ],
+      },
     };
-  });
-  entries["count"] = players.length;
-  return {
-    fantasy_content: {
-      "xml:lang": "en-US",
-      league: [
-        {
-          league_key: "466.l.4002",
-          league_id: "4002",
-          name: "Synthetic Roto League",
-          url: "https://hockey.fantasysports.yahoo.com/hockey/4002",
-        },
-        { players: entries },
-      ],
-    },
-  };
-}
+  },
+);
 
 export function yahooNhlDatedRoster(input: {
   readonly date: string;

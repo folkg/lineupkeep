@@ -1,11 +1,12 @@
 import { productName } from "@lineupkeep/brand/product";
 import { EffectString } from "@lineupkeep/collections";
-import { Data, Duration, Effect } from "effect";
+import { Duration, Effect, Schema } from "effect";
+import { dual } from "effect/Function";
 
-export function renderWakingShell(
-  request: Request,
-  options: WakingShellOptions,
-): Promise<Response> {
+export const renderWakingShell: {
+  (options: WakingShellOptions): (request: Request) => Promise<Response>;
+  (request: Request, options: WakingShellOptions): Promise<Response>;
+} = dual(2, (request: Request, options: WakingShellOptions): Promise<Response> => {
   if (!isDocumentNavigation(request)) {
     return options.render(request);
   }
@@ -19,7 +20,7 @@ export function renderWakingShell(
         return wakingShellResponse(request);
     }
   });
-}
+});
 
 export function wakingShellResponse(request: Request): Response {
   const headers = new Headers({
@@ -70,7 +71,7 @@ function wakingOutcome(
   const rendered = Effect.tryPromise({
     try: (signal) =>
       options.render(new Request(request, { signal: AbortSignal.any([request.signal, signal]) })),
-    catch: (cause) => new PageRenderFailed({ cause }),
+    catch: (cause) => PageRenderFailed.make({ cause }),
   }).pipe(
     Effect.match({
       onFailure: (failure): RenderOutcome => ({ status: "failed", error: failure.cause }),
@@ -113,9 +114,12 @@ export type WakingShellOptions = {
   readonly render: (request: Request) => Promise<Response>;
 };
 
-class PageRenderFailed extends Data.TaggedError("PageRenderFailed")<{
-  readonly cause: unknown;
-}> {}
+class PageRenderFailed extends Schema.TaggedError<
+  PageRenderFailed,
+  { readonly brand: unique symbol }
+>()("PageRenderFailed", {
+  cause: Schema.Unknown,
+}) {}
 
 type RenderOutcome =
   | { readonly status: "rendered"; readonly response: Response }

@@ -13,7 +13,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import { Array as EffectArray, Data, Effect, Exit, Schema } from "effect";
+import { Array as EffectArray, Effect, Exit, Schema } from "effect";
 import { Order as EffectOrder } from "effect";
 import { expect, expectTypeOf } from "vitest";
 
@@ -117,7 +117,7 @@ it.effect(
             where,
             ids: ["a", "b"],
             codec,
-            plan: () => Effect.fail(new PlanRejected()),
+            plan: () => Effect.fail(PlanRejected.make({})),
           }),
         ),
       );
@@ -186,7 +186,10 @@ it.effect("rejects composite primary keys with a constructive remedy before quer
   }).pipe(layerTools.provide(PgliteClient.layer())),
 );
 
-class PlanRejected extends Data.TaggedError("PlanRejected") {}
+class PlanRejected extends Schema.TaggedError<PlanRejected, { readonly brand: unique symbol }>()(
+  "PlanRejected",
+  {},
+) {}
 
 const entities = pgTable("entities", {
   key: text("key").primaryKey(),

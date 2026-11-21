@@ -1,7 +1,7 @@
 import { rejects } from "node:assert/strict";
 
 import { assert, it } from "@effect/vitest";
-import { Data, Effect, Option, Tracer } from "effect";
+import { Effect, Option, Schema, Tracer } from "effect";
 
 import { BackendRuntime } from "./BackendRuntime.ts";
 import { RequestContext } from "./RequestContext.ts";
@@ -100,7 +100,7 @@ it.effect("rejects the promise when the backend program fails", () =>
   withTestRuntime((runtime) =>
     Effect.gen(function* () {
       const request = new Request("http://localhost/connections");
-      const program = Effect.fail(new BackendRuntimeTestError());
+      const program = Effect.fail(BackendRuntimeTestError.make({}));
 
       const assertion = rejects(
         runtime.run(program, request, "connections.list"),
@@ -218,7 +218,7 @@ it.effect("owns a failed background report without rejecting platform work", () 
         }),
     );
     runtime.runBackground(
-      Effect.fail(new BackendRuntimeTestError()),
+      Effect.fail(BackendRuntimeTestError.make({})),
       new Request("https://example.test/"),
       "telemetry.server_error",
     );
@@ -249,4 +249,7 @@ function readRequestId(): Effect.Effect<string, never, RequestContext> {
   });
 }
 
-class BackendRuntimeTestError extends Data.TaggedError("BackendRuntimeTestError") {}
+class BackendRuntimeTestError extends Schema.TaggedError<
+  BackendRuntimeTestError,
+  { readonly brand: unique symbol }
+>()("BackendRuntimeTestError", {}) {}

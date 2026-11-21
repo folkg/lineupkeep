@@ -11,6 +11,7 @@ import { productName } from "@lineupkeep/brand/product";
 import { Layer } from "effect";
 import type { Tool } from "effect/ai";
 import { Toolkit } from "effect/ai";
+import { dual } from "effect/Function";
 
 import { runBackend } from "#server/backendEntry.ts";
 
@@ -56,21 +57,39 @@ const applicationHandlers = (
     feedbackToolHandlers(agent),
   );
 
-export function handleMcpRequest(
-  request: Request,
-  run: (
+export const handleMcpRequest: {
+  (
+    run?: (
+      request: Request,
+      operation: "mcp.request",
+      program: ReturnType<typeof applicationRequest>,
+    ) => Promise<Response>,
+  ): (request: Request) => Promise<Response>;
+  (
     request: Request,
-    operation: "mcp.request",
-    program: ReturnType<typeof applicationRequest>,
-  ) => Promise<Response> = runBackend,
-): Promise<Response> {
-  return run(request, "mcp.request", applicationRequest(request)).catch(() =>
-    Response.json(
-      { jsonrpc: "2.0", id: null, error: { code: -32603, message: "Internal error" } },
-      { status: 500 },
+    run?: (
+      request: Request,
+      operation: "mcp.request",
+      program: ReturnType<typeof applicationRequest>,
+    ) => Promise<Response>,
+  ): Promise<Response>;
+} = dual(
+  (args) => typeof args[0] !== "function",
+  (
+    request: Request,
+    run: (
+      request: Request,
+      operation: "mcp.request",
+      program: ReturnType<typeof applicationRequest>,
+    ) => Promise<Response> = runBackend,
+  ): Promise<Response> =>
+    run(request, "mcp.request", applicationRequest(request)).catch(() =>
+      Response.json(
+        { jsonrpc: "2.0", id: null, error: { code: -32603, message: "Internal error" } },
+        { status: 500 },
+      ),
     ),
-  );
-}
+);
 
 function applicationRequest(
   request: Request,

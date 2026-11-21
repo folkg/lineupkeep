@@ -14,7 +14,6 @@ import { eq } from "drizzle-orm";
 import {
   Cause,
   Config,
-  Data,
   ConfigProvider,
   Context,
   DateTime,
@@ -472,12 +471,15 @@ function clientMetadataRequest(
     }
     const failure = Cause.squash(exit.cause);
     throw Schema.is(PublicInternetUnavailable)(failure) && failure.reason === "blocked_redirect"
-      ? new ClientMetadataRedirectRefused()
+      ? ClientMetadataRedirectRefused.make({})
       : failure;
   });
 }
 
-class ClientMetadataRedirectRefused extends Data.TaggedError("ClientMetadataRedirectRefused") {}
+class ClientMetadataRedirectRefused extends Schema.TaggedError<
+  ClientMetadataRedirectRefused,
+  { readonly brand: unique symbol }
+>()("ClientMetadataRedirectRefused", {}) {}
 
 function defaultTokenExchangeResource(
   request: Request,

@@ -1,9 +1,5 @@
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
-
+import { antipattern, correctness, effectNative, strict, style } from "@effect/tsgo/oxlint-presets";
 import { Array as EffectArray } from "effect";
-import { String as EffectString } from "effect";
 import { defineConfig } from "oxlint";
 import type { OxlintOverride } from "oxlint";
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
@@ -508,35 +504,26 @@ const correctnessRules = {
   "effecttsgo/effect-try-without-catch": "off",
 } satisfies Rules;
 
-const disabledEffectRules = new Set([
-  "effecttsgo/api-stability-leak",
-  "effecttsgo/prefer-schema-tagged-error",
-]);
+const disabledEffectRules = new Set(["effecttsgo/api-stability-leak"]);
 
 const pendingEffectRules = new Set([
   "effecttsgo/global-json",
   "effecttsgo/map-map-error-to-map-both",
   "effecttsgo/missed-pipeable-opportunity",
-  "effecttsgo/missing-pipeable-signature",
   "effecttsgo/effect-try-without-catch",
 ]);
 
-const require = createRequire(import.meta.url);
-const effectSchemaPath = join(
-  dirname(require.resolve("@effect/tsgo/package.json")),
-  "oxlint-schema.json",
-);
-const effectRuleNames = EffectArray.map(
-  [
-    ...new Set(
-      EffectString.matchAll(/effecttsgo\/[a-z0-9-]+/gu)(readFileSync(effectSchemaPath, "utf8")),
-    ),
-  ],
-  (match) => match[0],
-);
+const presetRules = {
+  ...antipattern.rules,
+  ...correctness.rules,
+  ...effectNative.rules,
+  ...strict.rules,
+  ...style.rules,
+  "effecttsgo/prefer-schema-over-json": "error",
+};
 
 const effectRules = Object.fromEntries(
-  EffectArray.map(effectRuleNames, (rule) => [
+  EffectArray.map(Object.keys(presetRules), (rule) => [
     rule,
     disabledEffectRules.has(rule) || pendingEffectRules.has(rule) ? "off" : "error",
   ]),
@@ -1028,5 +1015,3 @@ type ImportPolicy = {
 
 type GlobalRestriction = { name: string; message: string };
 type PropertyRestriction = { object?: string; property: string; message: string };
-
-export { disabledEffectRules, effectRules, pendingEffectRules };

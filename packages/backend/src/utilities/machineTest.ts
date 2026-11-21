@@ -1,8 +1,9 @@
 import * as Shared from "@lineupkeep/machine-test";
-import { Arbitrary, Data, Effect, Result, Schema } from "effect";
+import { Arbitrary, Effect, Result, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
 import { Record as EffectRecord } from "effect";
+import { dual } from "effect/Function";
 
 import { type DefinedMachine, plan, snapshotOf, type Tagged } from "#utilities/machine.ts";
 
@@ -15,9 +16,12 @@ export type Invariant<State extends Tagged, Event extends Tagged> = Shared.Invar
 export type Trace<State extends Tagged, Event extends Tagged> = Shared.Trace<State, Event>;
 export type Exploration<State extends Tagged> = Shared.Exploration<State>;
 
-export class MachineTestFailure extends Data.TaggedError("MachineTestFailure")<{
-  readonly detail: string;
-}> {}
+export class MachineTestFailure extends Schema.TaggedError<
+  MachineTestFailure,
+  { readonly brand: unique symbol }
+>()("MachineTestFailure", {
+  detail: Schema.String,
+}) {}
 
 export function invariants<State extends Tagged, Event extends Tagged>(
   _machine: DefinedMachine<State, Event>,
@@ -25,106 +29,189 @@ export function invariants<State extends Tagged, Event extends Tagged>(
   return Shared.invariants<State, Event>();
 }
 
-export function run<State extends Tagged, Event extends Tagged>(
-  machine: DefinedMachine<State, Event>,
-  scenario: { readonly input: NoInfer<State>; readonly events: ReadonlyArray<NoInfer<Event>> },
-): Effect.Effect<Trace<State, Event>, Schema.SchemaError> {
-  return Effect.try({
-    try: () =>
-      Shared.run(
+export const run: {
+  <State extends Tagged, Event extends Tagged>(scenario: {
+    readonly input: NoInfer<State>;
+    readonly events: ReadonlyArray<NoInfer<Event>>;
+  }): (
+    machine: DefinedMachine<State, Event>,
+  ) => Effect.Effect<Trace<State, Event>, Schema.SchemaError>;
+  <State extends Tagged, Event extends Tagged>(
+    machine: DefinedMachine<State, Event>,
+    scenario: { readonly input: NoInfer<State>; readonly events: ReadonlyArray<NoInfer<Event>> },
+  ): Effect.Effect<Trace<State, Event>, Schema.SchemaError>;
+} = dual(
+  2,
+  <State extends Tagged, Event extends Tagged>(
+    machine: DefinedMachine<State, Event>,
+    scenario: { readonly input: NoInfer<State>; readonly events: ReadonlyArray<NoInfer<Event>> },
+  ): Effect.Effect<Trace<State, Event>, Schema.SchemaError> =>
+    Effect.try({
+      try: () =>
+        Shared.run(
+          adapter(
+            machine,
+            () => "",
+            () => [],
+          ),
+          scenario,
+        ),
+      catch: (cause) => {
+        if (cause instanceof Schema.SchemaError) {
+          return cause;
+        }
+        throw cause;
+      },
+    }),
+);
+
+export const verify: {
+  <State extends Tagged, Event extends Tagged>(
+    trace: Trace<NoInfer<State>, NoInfer<Event>>,
+  ): (machine: DefinedMachine<State, Event>) => Effect.Effect<void, MachineTestFailure>;
+  <State extends Tagged, Event extends Tagged>(
+    machine: DefinedMachine<State, Event>,
+    trace: Trace<NoInfer<State>, NoInfer<Event>>,
+  ): Effect.Effect<void, MachineTestFailure>;
+} = dual(
+  2,
+  <State extends Tagged, Event extends Tagged>(
+    machine: DefinedMachine<State, Event>,
+    trace: Trace<NoInfer<State>, NoInfer<Event>>,
+  ): Effect.Effect<void, MachineTestFailure> =>
+    failureEffect(() =>
+      Shared.verify(
         adapter(
           machine,
           () => "",
           () => [],
         ),
-        scenario,
+        trace,
       ),
-    catch: (cause) => {
-      if (cause instanceof Schema.SchemaError) {
-        return cause;
-      }
-      throw cause;
-    },
-  });
-}
-
-export function verify<State extends Tagged, Event extends Tagged>(
-  machine: DefinedMachine<State, Event>,
-  trace: Trace<NoInfer<State>, NoInfer<Event>>,
-): Effect.Effect<void, MachineTestFailure> {
-  return failureEffect(() =>
-    Shared.verify(
-      adapter(
-        machine,
-        () => "",
-        () => [],
-      ),
-      trace,
     ),
-  );
-}
+);
 
-export function checkInvariants<State extends Tagged, Event extends Tagged>(
-  machine: DefinedMachine<State, Event>,
-  trace: Trace<NoInfer<State>, NoInfer<Event>>,
-  invariants: ReadonlyArray<Invariant<NoInfer<State>, NoInfer<Event>>>,
-): Effect.Effect<void, MachineTestFailure> {
-  return failureEffect(() =>
-    Shared.checkInvariants(
-      adapter(
-        machine,
-        () => "",
-        () => [],
+export const checkInvariants: {
+  <State extends Tagged, Event extends Tagged>(
+    trace: Trace<NoInfer<State>, NoInfer<Event>>,
+    invariants: ReadonlyArray<Invariant<NoInfer<State>, NoInfer<Event>>>,
+  ): (machine: DefinedMachine<State, Event>) => Effect.Effect<void, MachineTestFailure>;
+  <State extends Tagged, Event extends Tagged>(
+    machine: DefinedMachine<State, Event>,
+    trace: Trace<NoInfer<State>, NoInfer<Event>>,
+    invariants: ReadonlyArray<Invariant<NoInfer<State>, NoInfer<Event>>>,
+  ): Effect.Effect<void, MachineTestFailure>;
+} = dual(
+  3,
+  <State extends Tagged, Event extends Tagged>(
+    machine: DefinedMachine<State, Event>,
+    trace: Trace<NoInfer<State>, NoInfer<Event>>,
+    invariants: ReadonlyArray<Invariant<NoInfer<State>, NoInfer<Event>>>,
+  ): Effect.Effect<void, MachineTestFailure> =>
+    failureEffect(() =>
+      Shared.checkInvariants(
+        adapter(
+          machine,
+          () => "",
+          () => [],
+        ),
+        trace,
+        invariants,
       ),
-      trace,
-      invariants,
     ),
-  );
-}
+);
 
-export function explore<State extends Tagged, Event extends Tagged>(
-  machine: DefinedMachine<State, Event>,
-  options: {
+export const explore: {
+  <State extends Tagged, Event extends Tagged>(options: {
     readonly input: NoInfer<State>;
     readonly events: (context: {
       readonly snapshot: TestSnapshot<NoInfer<State>>;
     }) => ReadonlyArray<NoInfer<Event>>;
     readonly stateKey: (context: { readonly snapshot: TestSnapshot<NoInfer<State>> }) => string;
     readonly invariants?: ReadonlyArray<Invariant<NoInfer<State>, NoInfer<Event>>>;
-  },
-): Effect.Effect<Exploration<State>, MachineTestFailure | Schema.SchemaError> {
-  return failureEffect(
-    () =>
-      Shared.explore(
-        adapter(
-          machine,
-          (state) => options.stateKey({ snapshot: { state: { path: state._tag, value: state } } }),
-          (state) => options.events({ snapshot: { state: { path: state._tag, value: state } } }),
+  }): (
+    machine: DefinedMachine<State, Event>,
+  ) => Effect.Effect<Exploration<State>, MachineTestFailure | Schema.SchemaError>;
+  <State extends Tagged, Event extends Tagged>(
+    machine: DefinedMachine<State, Event>,
+    options: {
+      readonly input: NoInfer<State>;
+      readonly events: (context: {
+        readonly snapshot: TestSnapshot<NoInfer<State>>;
+      }) => ReadonlyArray<NoInfer<Event>>;
+      readonly stateKey: (context: { readonly snapshot: TestSnapshot<NoInfer<State>> }) => string;
+      readonly invariants?: ReadonlyArray<Invariant<NoInfer<State>, NoInfer<Event>>>;
+    },
+  ): Effect.Effect<Exploration<State>, MachineTestFailure | Schema.SchemaError>;
+} = dual(
+  2,
+  <State extends Tagged, Event extends Tagged>(
+    machine: DefinedMachine<State, Event>,
+    options: {
+      readonly input: NoInfer<State>;
+      readonly events: (context: {
+        readonly snapshot: TestSnapshot<NoInfer<State>>;
+      }) => ReadonlyArray<NoInfer<Event>>;
+      readonly stateKey: (context: { readonly snapshot: TestSnapshot<NoInfer<State>> }) => string;
+      readonly invariants?: ReadonlyArray<Invariant<NoInfer<State>, NoInfer<Event>>>;
+    },
+  ): Effect.Effect<Exploration<State>, MachineTestFailure | Schema.SchemaError> =>
+    failureEffect(
+      () =>
+        Shared.explore(
+          adapter(
+            machine,
+            (state) =>
+              options.stateKey({ snapshot: { state: { path: state._tag, value: state } } }),
+            (state) => options.events({ snapshot: { state: { path: state._tag, value: state } } }),
+          ),
+          options,
         ),
-        options,
-      ),
-    true,
-  );
-}
+      true,
+    ),
+);
 
-export function scenarios<State extends Tagged, Event extends Tagged, Input>(
-  _machine: DefinedMachine<State, Event>,
-  options: {
+export const scenarios: {
+  <State extends Tagged, Event extends Tagged, Input>(options: {
     readonly inputArbitrary: Arbitrary.Arbitrary<Input>;
     readonly eventsArbitrary: Arbitrary.Arbitrary<ReadonlyArray<NoInfer<Event>>>;
-  },
-): {
-  readonly arbitrary: Arbitrary.Arbitrary<{
-    readonly input: Input;
-    readonly events: ReadonlyArray<Event>;
-  }>;
-} {
-  return {
+  }): (_machine: DefinedMachine<State, Event>) => {
+    readonly arbitrary: Arbitrary.Arbitrary<{
+      readonly input: Input;
+      readonly events: ReadonlyArray<Event>;
+    }>;
+  };
+  <State extends Tagged, Event extends Tagged, Input>(
+    _machine: DefinedMachine<State, Event>,
+    options: {
+      readonly inputArbitrary: Arbitrary.Arbitrary<Input>;
+      readonly eventsArbitrary: Arbitrary.Arbitrary<ReadonlyArray<NoInfer<Event>>>;
+    },
+  ): {
+    readonly arbitrary: Arbitrary.Arbitrary<{
+      readonly input: Input;
+      readonly events: ReadonlyArray<Event>;
+    }>;
+  };
+} = dual(
+  2,
+  <State extends Tagged, Event extends Tagged, Input>(
+    _machine: DefinedMachine<State, Event>,
+    options: {
+      readonly inputArbitrary: Arbitrary.Arbitrary<Input>;
+      readonly eventsArbitrary: Arbitrary.Arbitrary<ReadonlyArray<NoInfer<Event>>>;
+    },
+  ): {
+    readonly arbitrary: Arbitrary.Arbitrary<{
+      readonly input: Input;
+      readonly events: ReadonlyArray<Event>;
+    }>;
+  } => ({
     arbitrary: Arbitrary.all([options.inputArbitrary, options.eventsArbitrary]).pipe(
       Arbitrary.map(([input, events]) => ({ input, events })),
     ),
-  };
-}
+  }),
+);
 
 function adapter<State extends Tagged, Event extends Tagged>(
   machine: DefinedMachine<State, Event>,
@@ -207,7 +294,7 @@ function failureEffect<A>(
     try: run,
     catch: (cause) => {
       if (cause instanceof Shared.MachineTestFailure) {
-        return new MachineTestFailure({ detail: cause.detail });
+        return MachineTestFailure.make({ detail: cause.detail });
       }
       if (schema === true && cause instanceof Schema.SchemaError) {
         return cause;

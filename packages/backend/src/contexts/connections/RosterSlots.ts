@@ -1,4 +1,5 @@
 import { Array as EffectArray } from "effect";
+import { dual } from "effect/Function";
 
 import type { ProviderReserveEligibility, ProviderRosterConstraints } from "./Provider.ts";
 import type { ReserveEligibility, ReserveList, RosterPlaces } from "./QueryValues.ts";
@@ -15,16 +16,17 @@ export type RosterRule = ProviderRosterConstraints & {
   readonly byPosition: ReadonlyMap<string, RosterSlot>;
 };
 
-export function rosterRuleOf(
-  constraints: ProviderRosterConstraints,
-  slots: ReadonlyArray<RosterSlot>,
-): RosterRule {
-  return {
+export const rosterRuleOf: {
+  (slots: ReadonlyArray<RosterSlot>): (constraints: ProviderRosterConstraints) => RosterRule;
+  (constraints: ProviderRosterConstraints, slots: ReadonlyArray<RosterSlot>): RosterRule;
+} = dual(
+  2,
+  (constraints: ProviderRosterConstraints, slots: ReadonlyArray<RosterSlot>): RosterRule => ({
     ...constraints,
     slots,
     byPosition: new Map(EffectArray.map(slots, (slot) => [slot.position, slot] as const)),
-  };
-}
+  }),
+);
 
 export type SlotPlacement =
   | { readonly kind: "starting"; readonly countsAsPlace: true; readonly legal: boolean }
@@ -36,32 +38,34 @@ export type SlotPlacement =
     }
   | { readonly kind: "unverified"; readonly countsAsPlace: true; readonly legal: true };
 
-export function slotPlacement(
-  rule: RosterRule,
-  slot: string | undefined,
-  player: RosterPlaceFacts,
-): SlotPlacement {
-  const declared = slot === undefined ? undefined : rule.byPosition.get(slot);
-  if (declared === undefined) {
-    return { kind: "unverified", countsAsPlace: true, legal: true };
-  }
-  switch (declared.kind) {
-    case "starting":
-      return {
-        kind: "starting",
-        countsAsPlace: true,
-        legal: acceptsPositions(declared.eligibility, player.positions),
-      };
-    case "bench":
-      return { kind: "bench", countsAsPlace: true, legal: true };
-    case "reserve":
-      return {
-        kind: "reserve",
-        countsAsPlace: false,
-        legal: reserveLegality(rule, declared, player),
-      };
-  }
-}
+export const slotPlacement: {
+  (slot: string | undefined, player: RosterPlaceFacts): (rule: RosterRule) => SlotPlacement;
+  (rule: RosterRule, slot: string | undefined, player: RosterPlaceFacts): SlotPlacement;
+} = dual(
+  3,
+  (rule: RosterRule, slot: string | undefined, player: RosterPlaceFacts): SlotPlacement => {
+    const declared = slot === undefined ? undefined : rule.byPosition.get(slot);
+    if (declared === undefined) {
+      return { kind: "unverified", countsAsPlace: true, legal: true };
+    }
+    switch (declared.kind) {
+      case "starting":
+        return {
+          kind: "starting",
+          countsAsPlace: true,
+          legal: acceptsPositions(declared.eligibility, player.positions),
+        };
+      case "bench":
+        return { kind: "bench", countsAsPlace: true, legal: true };
+      case "reserve":
+        return {
+          kind: "reserve",
+          countsAsPlace: false,
+          legal: reserveLegality(rule, declared, player),
+        };
+    }
+  },
+);
 
 function reserveLegality(
   rule: RosterRule,
@@ -98,14 +102,20 @@ function acceptsPositions(
   );
 }
 
-export function slotCapacity(rule: RosterRule, slot: RosterSlot): number | undefined {
-  return slot.kind === "bench" && rule.benchCapacity === "generic" ? undefined : slot.count;
-}
+export const slotCapacity: {
+  (slot: RosterSlot): (rule: RosterRule) => number | undefined;
+  (rule: RosterRule, slot: RosterSlot): number | undefined;
+} = dual(2, (rule: RosterRule, slot: RosterSlot): number | undefined =>
+  slot.kind === "bench" && rule.benchCapacity === "generic" ? undefined : slot.count,
+);
 
-export function exclusivePlace(rule: RosterRule, place: string): boolean {
+export const exclusivePlace: {
+  (place: string): (rule: RosterRule) => boolean;
+  (rule: RosterRule, place: string): boolean;
+} = dual(2, (rule: RosterRule, place: string): boolean => {
   const declared = rule.byPosition.get(place);
   return declared === undefined ? true : slotCapacity(rule, declared) === 1;
-}
+});
 
 export function rosterOccupancy(input: {
   readonly rule: RosterRule;

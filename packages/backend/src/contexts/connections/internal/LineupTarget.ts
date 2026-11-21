@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { DateTime, Schema } from "effect";
+import { dual } from "effect/Function";
 
 import { fantasyDayLabel } from "#contexts/connections/FantasyDay.ts";
 import { LineupTargetPeriod } from "#contexts/connections/LineupRun.ts";
@@ -17,19 +18,34 @@ export type TargetResolution =
       readonly detail: string;
     };
 
-export function resolveTarget(
-  requested: LineupTargetPeriod,
-  league: ProviderLeagueSettings,
-  fantasyDay: ProviderFantasyDay,
-  now: DateTime.Utc,
-): TargetResolution {
-  switch (league.rosterCoverage) {
-    case "week":
-      return resolveWeekTarget(requested, league);
-    case "date":
-      return resolveDateTarget(requested, league, fantasyDayLabel(now, fantasyDay));
-  }
-}
+export const resolveTarget: {
+  (
+    league: ProviderLeagueSettings,
+    fantasyDay: ProviderFantasyDay,
+    now: DateTime.Utc,
+  ): (requested: LineupTargetPeriod) => TargetResolution;
+  (
+    requested: LineupTargetPeriod,
+    league: ProviderLeagueSettings,
+    fantasyDay: ProviderFantasyDay,
+    now: DateTime.Utc,
+  ): TargetResolution;
+} = dual(
+  4,
+  (
+    requested: LineupTargetPeriod,
+    league: ProviderLeagueSettings,
+    fantasyDay: ProviderFantasyDay,
+    now: DateTime.Utc,
+  ): TargetResolution => {
+    switch (league.rosterCoverage) {
+      case "week":
+        return resolveWeekTarget(requested, league);
+      case "date":
+        return resolveDateTarget(requested, league, fantasyDayLabel(now, fantasyDay));
+    }
+  },
+);
 
 function resolveWeekTarget(
   requested: LineupTargetPeriod,

@@ -3,6 +3,7 @@ import type {
   ProviderConnection,
 } from "@lineupkeep/backend/connections/Connection";
 import { DateTime, Schema } from "effect";
+import { dual } from "effect/Function";
 
 import type {
   ConnectionMutationError,
@@ -10,34 +11,32 @@ import type {
 } from "#contracts/connections/connectionContract.ts";
 import type { ExpectedFailure } from "#server/backendEntry.ts";
 
-export function toConnectionView(
-  connection: ProviderConnection,
-  teamCount: number,
-): ConnectionView {
-  return {
-    id: connection.id,
-    provider: connection.provider,
-    status: connection.status,
-    teamCount,
-    ...(connection.linkingExpiresAt === undefined
-      ? {}
-      : { linkingExpiresAt: DateTime.formatIso(connection.linkingExpiresAt) }),
-    ...(connection.approvedAt === undefined
-      ? {}
-      : { approvedAt: DateTime.formatIso(connection.approvedAt) }),
-    ...(connection.credentialGeneration === undefined
-      ? {}
-      : { credentialGeneration: connection.credentialGeneration }),
-    ...(connection.reconnectRequiredAt === undefined
-      ? {}
-      : { reconnectRequiredAt: DateTime.formatIso(connection.reconnectRequiredAt) }),
-    ...(connection.disconnectedAt === undefined
-      ? {}
-      : { disconnectedAt: DateTime.formatIso(connection.disconnectedAt) }),
-    createdAt: DateTime.formatIso(connection.createdAt),
-    updatedAt: DateTime.formatIso(connection.updatedAt),
-  };
-}
+export const toConnectionView: {
+  (teamCount: number): (connection: ProviderConnection) => ConnectionView;
+  (connection: ProviderConnection, teamCount: number): ConnectionView;
+} = dual(2, (connection: ProviderConnection, teamCount: number): ConnectionView => ({
+  id: connection.id,
+  provider: connection.provider,
+  status: connection.status,
+  teamCount,
+  ...(connection.linkingExpiresAt === undefined
+    ? {}
+    : { linkingExpiresAt: DateTime.formatIso(connection.linkingExpiresAt) }),
+  ...(connection.approvedAt === undefined
+    ? {}
+    : { approvedAt: DateTime.formatIso(connection.approvedAt) }),
+  ...(connection.credentialGeneration === undefined
+    ? {}
+    : { credentialGeneration: connection.credentialGeneration }),
+  ...(connection.reconnectRequiredAt === undefined
+    ? {}
+    : { reconnectRequiredAt: DateTime.formatIso(connection.reconnectRequiredAt) }),
+  ...(connection.disconnectedAt === undefined
+    ? {}
+    : { disconnectedAt: DateTime.formatIso(connection.disconnectedAt) }),
+  createdAt: DateTime.formatIso(connection.createdAt),
+  updatedAt: DateTime.formatIso(connection.updatedAt),
+}));
 
 export function mapConnectionError(
   error: ConnectionError | ConnectionInputInvalid,

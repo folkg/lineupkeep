@@ -1,4 +1,5 @@
 import { Array as EffectArray } from "effect";
+import { dual } from "effect/Function";
 
 import { exactToUnits } from "./Exact.ts";
 import type { Exact } from "./Exact.ts";
@@ -11,20 +12,26 @@ import type {
   StartingLineupRule,
 } from "./types.ts";
 
-export function assessAvailability(player: PolicyPlayer, period: Period): AvailabilityTier {
+export const assessAvailability: {
+  (period: Period): (player: PolicyPlayer) => AvailabilityTier;
+  (player: PolicyPlayer, period: Period): AvailabilityTier;
+} = dual(2, (player: PolicyPlayer, period: Period): AvailabilityTier => {
   if (!hasGame(player, period)) {
     return "not-scheduled";
   }
   return statusTier(player);
-}
+});
 
-export function selectionUnits(points: Exact, scale: number): number {
+export const selectionUnits: {
+  (scale: number): (points: Exact) => number;
+  (points: Exact, scale: number): number;
+} = dual(2, (points: Exact, scale: number): number => {
   const units = Number(exactToUnits(points, scale));
   if (!Number.isSafeInteger(units)) {
     throw new Error(`Selection value ${String(units)} is not a safe integer.`);
   }
   return units;
-}
+});
 
 function hasGame(player: PolicyPlayer, period: Period): boolean {
   return (

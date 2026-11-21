@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
 import { Record as EffectRecord } from "effect";
+import { dual } from "effect/Function";
 
 import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
 import { parseExact } from "#contexts/connections/internal/provider-scoring/Exact.ts";
@@ -133,62 +134,72 @@ export const yahooCapabilities: ProviderCapabilities = {
   ],
 };
 
-export function scoreYahooRoster(
-  input: ProviderScoreRequest,
-  read: YahooLineupReader,
-): Effect.Effect<ProviderScoreOutcome, ProviderReadFailure> {
-  return Effect.gen(function* () {
-    if (!isSupportedSport(input.sport)) {
-      return {
-        kind: "refused",
-        refusal: "structural",
-        provenance: "yahoo/unsupported-sport",
-        detail: "Your league does not plan lineups for this sport.",
-      };
-    }
-    const period = targetPeriod(input.target);
-    const gamesLimited =
-      input.league.maxGamesPlayed !== undefined || input.league.maxInningsPitched !== undefined;
-    const gamesPlayed = gamesLimited ? yield* read.readGamesPlayed() : [];
-    const players = policyPlayers(input, period, gamesPlayed);
-    const facts = yield* read.readPlayerFacts();
-    const sources: Array<ValueSource> = [];
-    if (gamesLimited) {
-      sources.push({
-        kind: "ownership-composite",
-        sport: input.sport,
-        teamCount: input.league.teamCount,
-        standardRosterSpots: standardRosterSpots(input.league),
-        players: ownershipFactsOf(players, facts),
-      });
-    } else {
-      const projection = projectedRankSource(input, period, facts);
-      if (projection !== undefined) {
-        sources.push(projection);
+export const scoreYahooRoster: {
+  (
+    read: YahooLineupReader,
+  ): (input: ProviderScoreRequest) => Effect.Effect<ProviderScoreOutcome, ProviderReadFailure>;
+  (
+    input: ProviderScoreRequest,
+    read: YahooLineupReader,
+  ): Effect.Effect<ProviderScoreOutcome, ProviderReadFailure>;
+} = dual(
+  2,
+  (
+    input: ProviderScoreRequest,
+    read: YahooLineupReader,
+  ): Effect.Effect<ProviderScoreOutcome, ProviderReadFailure> =>
+    Effect.gen(function* () {
+      if (!isSupportedSport(input.sport)) {
+        return {
+          kind: "refused",
+          refusal: "structural",
+          provenance: "yahoo/unsupported-sport",
+          detail: "Your league does not plan lineups for this sport.",
+        };
       }
-      sources.push({
-        kind: "community-start-rate",
-        started: startRatesOf(players, facts),
-      });
-    }
+      const period = targetPeriod(input.target);
+      const gamesLimited =
+        input.league.maxGamesPlayed !== undefined || input.league.maxInningsPitched !== undefined;
+      const gamesPlayed = gamesLimited ? yield* read.readGamesPlayed() : [];
+      const players = policyPlayers(input, period, gamesPlayed);
+      const facts = yield* read.readPlayerFacts();
+      const sources: Array<ValueSource> = [];
+      if (gamesLimited) {
+        sources.push({
+          kind: "ownership-composite",
+          sport: input.sport,
+          teamCount: input.league.teamCount,
+          standardRosterSpots: standardRosterSpots(input.league),
+          players: ownershipFactsOf(players, facts),
+        });
+      } else {
+        const projection = projectedRankSource(input, period, facts);
+        if (projection !== undefined) {
+          sources.push(projection);
+        }
+        sources.push({
+          kind: "community-start-rate",
+          started: startRatesOf(players, facts),
+        });
+      }
 
-    const scored = scoreLineup({ period, sources, players });
-    if (scored.kind === "refused") {
+      const scored = scoreLineup({ period, sources, players });
+      if (scored.kind === "refused") {
+        return {
+          kind: "refused",
+          refusal: scored.refusal,
+          provenance: `yahoo/${scored.code}`,
+          detail: scored.detail,
+        };
+      }
       return {
-        kind: "refused",
-        refusal: scored.refusal,
-        provenance: `yahoo/${scored.code}`,
-        detail: scored.detail,
+        kind: "scored",
+        provenance: `yahoo/${scored.label}`,
+        players: EffectArray.map(scored.players, providerValue),
+        gamesPlayed,
       };
-    }
-    return {
-      kind: "scored",
-      provenance: `yahoo/${scored.label}`,
-      players: EffectArray.map(scored.players, providerValue),
-      gamesPlayed,
-    };
-  });
-}
+    }),
+);
 
 const healthyAvailability: PlayerAvailability = { kind: "available" };
 

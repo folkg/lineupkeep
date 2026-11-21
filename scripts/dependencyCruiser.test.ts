@@ -1630,7 +1630,7 @@ it.each([
 it.each([
   [
     "a declared-capability read",
-    "export const decide = (sports: ReadonlyArray<string>, sport: string): boolean => sports.includes(sport);",
+    "export const decide = (sports: ReadonlyArray<string>): ((sport: string) => boolean) => (sport: string): boolean => sports.includes(sport);",
   ],
   [
     "an exhaustive declared-value map",

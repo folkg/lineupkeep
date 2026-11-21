@@ -2,6 +2,7 @@ import { RequestContext } from "@lineupkeep/backend/runtime/RequestContext";
 import { getRequestEvent, configureServerErrors } from "@solidjs/web";
 import { Effect, Schema, Clock, Ref } from "effect";
 import { Array as EffectArray } from "effect";
+import { dual } from "effect/Function";
 import { OBSERVE } from "solid-js";
 
 import type {
@@ -10,6 +11,7 @@ import type {
 } from "#contracts/telemetry/telemetryContract.ts";
 import { deploymentTarget } from "#deployment-target";
 import { runBackend } from "#server/backendEntry.ts";
+
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(value: A, f: (value: A) => B): B;
 function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
   value: A | null | undefined,
@@ -52,64 +54,78 @@ function reportSlowBoundary(request: Request, boundary: SlowBoundary): void {
   );
 }
 
-export function recordClientReport(
-  input: unknown,
-  budget: ReportBudget,
-): Effect.Effect<TelemetryAccepted, never, RequestContext> {
-  return Effect.gen(function* () {
-    const { requestId } = yield* RequestContext;
-    const report = yield* Schema.decodeUnknownEffect(TelemetryReportSchema)(input).pipe(
-      Effect.mapError((cause) => TelemetryInputInvalid.make({ cause })),
-      Effect.catchTag("TelemetryInputInvalid", () =>
-        Effect.annotateCurrentSpan({
-          "app.outcome": "rejected",
-          "error.type": "telemetry.input_invalid",
-        }).pipe(
-          Effect.andThen(Effect.die(new Response("Invalid telemetry report", { status: 400 }))),
+export const recordClientReport: {
+  (
+    budget: ReportBudget,
+  ): (input: unknown) => Effect.Effect<TelemetryAccepted, never, RequestContext>;
+  (input: unknown, budget: ReportBudget): Effect.Effect<TelemetryAccepted, never, RequestContext>;
+} = dual(
+  2,
+  (input: unknown, budget: ReportBudget): Effect.Effect<TelemetryAccepted, never, RequestContext> =>
+    Effect.gen(function* () {
+      const { requestId } = yield* RequestContext;
+      const report = yield* Schema.decodeUnknownEffect(TelemetryReportSchema)(input).pipe(
+        Effect.mapError((cause) => TelemetryInputInvalid.make({ cause })),
+        Effect.catchTag("TelemetryInputInvalid", () =>
+          Effect.annotateCurrentSpan({
+            "app.outcome": "rejected",
+            "error.type": "telemetry.input_invalid",
+          }).pipe(
+            Effect.andThen(Effect.die(new Response("Invalid telemetry report", { status: 400 }))),
+          ),
         ),
-      ),
-    );
-    const allowed = yield* budget.check;
-    if (!allowed) {
-      yield* Effect.annotateCurrentSpan({
-        "app.outcome": "dropped",
-        "telemetry.report": "dropped",
-      });
+      );
+      const allowed = yield* budget.check;
+      if (!allowed) {
+        yield* Effect.annotateCurrentSpan({
+          "app.outcome": "dropped",
+          "telemetry.report": "dropped",
+        });
+        return { ref: requestId };
+      }
+      yield* Effect.annotateCurrentSpan(reportAttributes(report));
+      yield* Effect.logError("Telemetry client report received");
       return { ref: requestId };
-    }
-    yield* Effect.annotateCurrentSpan(reportAttributes(report));
-    yield* Effect.logError("Telemetry client report received");
-    return { ref: requestId };
-  });
-}
+    }),
+);
 
-export function recordServerFailure(
-  site: ServerErrorSite,
-  budget: ReportBudget,
-): Effect.Effect<TelemetryAccepted, never, RequestContext> {
-  return Effect.gen(function* () {
-    const { requestId } = yield* RequestContext;
-    const allowed = yield* budget.check;
-    if (!allowed) {
+export const recordServerFailure: {
+  (
+    budget: ReportBudget,
+  ): (site: ServerErrorSite) => Effect.Effect<TelemetryAccepted, never, RequestContext>;
+  (
+    site: ServerErrorSite,
+    budget: ReportBudget,
+  ): Effect.Effect<TelemetryAccepted, never, RequestContext>;
+} = dual(
+  2,
+  (
+    site: ServerErrorSite,
+    budget: ReportBudget,
+  ): Effect.Effect<TelemetryAccepted, never, RequestContext> =>
+    Effect.gen(function* () {
+      const { requestId } = yield* RequestContext;
+      const allowed = yield* budget.check;
+      if (!allowed) {
+        yield* Effect.annotateCurrentSpan({
+          "app.outcome": "dropped",
+          "telemetry.report": "dropped",
+        });
+        return { ref: requestId };
+      }
       yield* Effect.annotateCurrentSpan({
-        "app.outcome": "dropped",
-        "telemetry.report": "dropped",
+        "app.outcome": "failure",
+        "error.type": site.kind === "render" ? "ui.server_render" : "ui.server_function",
+        "ui.site": `${site.kind}/${site.handling}`,
+        ...(site.ownerPath === undefined ? {} : { "ui.thrown_in": site.ownerPath }),
+        ...(site.boundaryPath === undefined ? {} : { "ui.caught_by": site.boundaryPath }),
+        ...(site.functionId === undefined ? {} : { "ui.function_id": site.functionId }),
+        ...(site.status === undefined ? {} : { "http.response.status_code": site.status }),
       });
+      yield* Effect.logError("Telemetry server error recorded");
       return { ref: requestId };
-    }
-    yield* Effect.annotateCurrentSpan({
-      "app.outcome": "failure",
-      "error.type": site.kind === "render" ? "ui.server_render" : "ui.server_function",
-      "ui.site": `${site.kind}/${site.handling}`,
-      ...(site.ownerPath === undefined ? {} : { "ui.thrown_in": site.ownerPath }),
-      ...(site.boundaryPath === undefined ? {} : { "ui.caught_by": site.boundaryPath }),
-      ...(site.functionId === undefined ? {} : { "ui.function_id": site.functionId }),
-      ...(site.status === undefined ? {} : { "http.response.status_code": site.status }),
-    });
-    yield* Effect.logError("Telemetry server error recorded");
-    return { ref: requestId };
-  });
-}
+    }),
+);
 
 export function recordSlowBoundary(
   boundary: SlowBoundary,

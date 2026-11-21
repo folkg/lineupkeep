@@ -1,6 +1,7 @@
 import { EffectString } from "@lineupkeep/collections";
 import { Config, Effect, Option, Redacted, Schema } from "effect";
 import { Array as EffectArray } from "effect";
+import { dual } from "effect/Function";
 
 import {
   ConnectionEncryptionKey,
@@ -26,11 +27,20 @@ export const loadConnectionEncryptionKeyring: Effect.Effect<
   return keyringOf(current, retained);
 });
 
-export function keyringOf(
-  current: ConnectionEncryptionKeyShape,
-  retained: ReadonlyArray<ConnectionEncryptionKeyShape>,
-): ConnectionEncryptionKeyring {
-  return {
+export const keyringOf: {
+  (
+    retained: ReadonlyArray<ConnectionEncryptionKeyShape>,
+  ): (current: ConnectionEncryptionKeyShape) => ConnectionEncryptionKeyring;
+  (
+    current: ConnectionEncryptionKeyShape,
+    retained: ReadonlyArray<ConnectionEncryptionKeyShape>,
+  ): ConnectionEncryptionKeyring;
+} = dual(
+  2,
+  (
+    current: ConnectionEncryptionKeyShape,
+    retained: ReadonlyArray<ConnectionEncryptionKeyShape>,
+  ): ConnectionEncryptionKeyring => ({
     current,
     keysByVersion: new Map([
       [current.keyVersion, current.key],
@@ -39,8 +49,8 @@ export function keyringOf(
     retainedKeyVersions: EffectArray.map(retained, (key) => key.keyVersion).sort(
       (left, right) => left - right,
     ),
-  };
-}
+  }),
+);
 
 function loadRetainedKeys(
   currentKeyVersion: number,
