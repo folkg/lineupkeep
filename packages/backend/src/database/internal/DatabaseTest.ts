@@ -14,20 +14,43 @@ const cacheDirectoryPath = fileURLToPath(
   new URL("../../../../../.artifacts/test-database", import.meta.url),
 );
 
-export const migratedDatabaseImage = loadOrBuildDatabaseImage();
+const migratedDatabaseImage = loadOrBuildDatabaseImage();
+
+const testDatabase = createTestDatabase();
+
+export function createTestDatabase(): Promise<PGlite> {
+  return migratedDatabaseImage.then((loadDataDir) => {
+    const database = new PGlite({ loadDataDir });
+    return database.waitReady.then(() => database);
+  });
+}
 
 export const DatabaseTest = Layer.unwrap(
-  Effect.promise(() => migratedDatabaseImage).pipe(
-    Effect.map((loadDataDir) =>
+  Effect.promise(() => testDatabase).pipe(
+    Effect.map((database) =>
       PgliteDrizzle.DrizzlePostgresClient.layerFrom(
-        Effect.acquireRelease(
-          Effect.sync(() => new PGlite({ loadDataDir })),
-          (database) => Effect.promise(() => database.close()),
-        ).pipe(Effect.flatMap((database) => PgliteDrizzle.DrizzlePostgresClient.make(database))),
+        Effect.gen(function* () {
+          yield* Effect.promise(() => resetTestDatabase(database));
+          return yield* PgliteDrizzle.DrizzlePostgresClient.make(database);
+        }),
       ),
     ),
   ),
 );
+
+export function resetTestDatabase(database: PGlite): Promise<void> {
+  return database
+    .query<{ readonly tablename: string }>(
+      "select tablename from pg_tables where schemaname = 'public'",
+    )
+    .then((result) => {
+      const tables = result.rows.map(({ tablename }) => `"${tablename.replaceAll('"', '""')}"`);
+      return tables.length === 0
+        ? undefined
+        : database.exec(`TRUNCATE TABLE ${tables.join(", ")} RESTART IDENTITY CASCADE`);
+    })
+    .then(() => undefined);
+}
 
 function loadOrBuildDatabaseImage(): Promise<Blob> {
   const cachePath = join(cacheDirectoryPath, `${migrationFingerprint()}.pglite`);
