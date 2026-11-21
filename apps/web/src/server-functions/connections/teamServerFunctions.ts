@@ -51,10 +51,8 @@ export const refreshTeamsServerFn = createServerFn({ method: "POST" }).handler((
     (userId) =>
       Effect.gen(function* () {
         const connections = yield* Connections;
-        const ready = EffectArray.filter(
-          yield* connections.list(userId),
-          (connection) => connection.status === "ready",
-        );
+        const yielded1 = yield* connections.list(userId);
+        const ready = EffectArray.filter(yielded1, (connection) => connection.status === "ready");
         if (ready.length > 0) {
           yield* connections.discoverTeams(
             userId,
@@ -81,10 +79,8 @@ export const controlTeamServerFn = createServerFn({ method: "POST" })
             Effect.mapError(() => TeamInputInvalid.make({})),
           );
           yield* Effect.annotateCurrentSpan({ "automation.action": input.action });
-          const result = Array.getUnsafe(
-            yield* Teams.use((teams) => teams.control(userId, [input])),
-            0,
-          );
+          const yielded2 = yield* Teams.use((teams) => teams.control(userId, [input]));
+          const result = Array.getUnsafe(yielded2, 0);
           switch (result.outcome) {
             case "not_found":
               return yield* TeamNotFound.make({ team: input.team });

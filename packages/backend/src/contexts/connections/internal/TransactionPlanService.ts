@@ -403,20 +403,19 @@ export const TransactionPlanServiceLive = Layer.effect(
       );
       const rule = rosterRuleOf(facts.constraints, facts.slots);
       const planMoves = planProjection({ facts, open, stored });
-      const groupIds = new Map(
-        yield* Effect.forEach(
-          [
-            ...new Set(
-              EffectArray.flatMap(input.moves, (draft) => {
-                const flatMapped3 = draft.group === undefined ? [] : [draft.group];
-                return arrayValueIsArray(flatMapped3) ? flatMapped3 : [flatMapped3];
-              }),
-            ),
-          ],
-          (label) => newId.pipe(Effect.map((id) => [label, id] as const)),
-          { concurrency: 1 },
-        ),
+      const yielded1 = yield* Effect.forEach(
+        [
+          ...new Set(
+            EffectArray.flatMap(input.moves, (draft) => {
+              const flatMapped3 = draft.group === undefined ? [] : [draft.group];
+              return arrayValueIsArray(flatMapped3) ? flatMapped3 : [flatMapped3];
+            }),
+          ),
+        ],
+        (label) => newId.pipe(Effect.map((id) => [label, id] as const)),
+        { concurrency: 1 },
       );
+      const groupIds = new Map(yielded1);
       const firstPosition =
         EffectArray.reduce(stored, -1, (position, move) => Math.max(position, move.position)) + 1;
       const ids = yield* Effect.forEach(

@@ -63,7 +63,8 @@ it.effect("links a captured session into one ready connection", () =>
     assert.strictEqual(connection.credentialGeneration, 1);
     assert.isDefined(connection.approvedAt);
     assert.isUndefined(connection.linkingExpiresAt);
-    assert.deepStrictEqual(yield* connections.list(owner), linked);
+    const yielded1 = yield* connections.list(owner);
+    assert.deepStrictEqual(yielded1, linked);
   }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
@@ -76,7 +77,8 @@ it.effect("leaves no connection when a link's session is rejected", () =>
     const error = yield* Effect.flip(connections.link(owner, [linkInput]));
 
     assert.instanceOf(error, ConnectionProviderRejected);
-    assert.deepStrictEqual(yield* connections.list(owner), []);
+    const yielded2 = yield* connections.list(owner);
+    assert.deepStrictEqual(yielded2, []);
   }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
@@ -109,7 +111,8 @@ it.effect("reports whether the stored session is usable and names the layer to r
     yield* TestClock.setTime(
       DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-08T14:11:27.000Z")),
     );
-    const linked = Array.getUnsafe(yield* connections.link(owner, [linkInput]), 0);
+    const yielded3 = yield* connections.link(owner, [linkInput]);
+    const linked = Array.getUnsafe(yielded3, 0);
     assert.deepStrictEqual(linked.session, {
       usable: true,
       provenAt: DateTime.makeUnsafe("2026-11-08T14:11:27.000Z"),
@@ -130,7 +133,8 @@ it.effect("reports whether the stored session is usable and names the layer to r
     assert.instanceOf(failure, ConnectionProviderRejected);
     yield* fake.rejectSession(false);
 
-    const refused = Array.getUnsafe(yield* connections.list(owner), 0);
+    const yielded4 = yield* connections.list(owner);
+    const refused = Array.getUnsafe(yielded4, 0);
     assert.strictEqual(refused.status, "reconnect-required");
     assert.deepStrictEqual(refused.session, {
       usable: false,
@@ -146,19 +150,19 @@ it.effect("reports whether the stored session is usable and names the layer to r
 it.effect("reconnects a ready connection to a new credential generation", () =>
   Effect.gen(function* () {
     const connections = yield* Connections;
-    const linked = Array.getUnsafe(yield* connections.link(owner, [linkInput]), 0);
+    const yielded5 = yield* connections.link(owner, [linkInput]);
+    const linked = Array.getUnsafe(yielded5, 0);
 
-    const reconnected = Array.getUnsafe(
-      yield* connections.completeReconnect(owner, [
-        { id: linked.id, provider: decodeProviderKey("yahoo"), session },
-      ]),
-      0,
-    );
+    const yielded6 = yield* connections.completeReconnect(owner, [
+      { id: linked.id, provider: decodeProviderKey("yahoo"), session },
+    ]);
+    const reconnected = Array.getUnsafe(yielded6, 0);
 
     assert.strictEqual(linked.credentialGeneration, 1);
     assert.strictEqual(reconnected.status, "ready");
     assert.strictEqual(reconnected.credentialGeneration, 2);
-    assert.deepStrictEqual(yield* connections.list(owner), [reconnected]);
+    const yielded7 = yield* connections.list(owner);
+    assert.deepStrictEqual(yielded7, [reconnected]);
   }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
@@ -167,7 +171,8 @@ it.effect("records the provider's refusal status and wording on the incident", (
     const connections = yield* Connections;
     const database = yield* ConnectionsDatabase;
     const fake = yield* FakeProviderWorld;
-    const linked = Array.getUnsafe(yield* connections.link(owner, [linkInput]), 0);
+    const yielded8 = yield* connections.link(owner, [linkInput]);
+    const linked = Array.getUnsafe(yielded8, 0);
     const detail = "You are not allowed to view this page because you are not in this league.";
     yield* fake.setSessionRejection({ status: 403, detail });
     yield* fake.rejectSession(true);
@@ -190,17 +195,16 @@ it.effect("resolves the open incident when a reconnect replaces the session", ()
     const connections = yield* Connections;
     const database = yield* ConnectionsDatabase;
     const fake = yield* FakeProviderWorld;
-    const linked = Array.getUnsafe(yield* connections.link(owner, [linkInput]), 0);
+    const yielded9 = yield* connections.link(owner, [linkInput]);
+    const linked = Array.getUnsafe(yielded9, 0);
     yield* fake.rejectSession(true);
     yield* Effect.flip(connections.discoverTeams(owner, [{ id: linked.id }]));
     yield* fake.rejectSession(false);
 
-    const reconnected = Array.getUnsafe(
-      yield* connections.completeReconnect(owner, [
-        { id: linked.id, provider: decodeProviderKey("yahoo"), session },
-      ]),
-      0,
-    );
+    const yielded10 = yield* connections.completeReconnect(owner, [
+      { id: linked.id, provider: decodeProviderKey("yahoo"), session },
+    ]);
+    const reconnected = Array.getUnsafe(yielded10, 0);
     assert.strictEqual(reconnected.credentialGeneration, 2);
 
     const incidents = yield* database.select().from(connectionIncidents);
@@ -212,7 +216,8 @@ it.effect("resolves the open incident when a reconnect replaces the session", ()
     yield* connections.completeReconnect(owner, [
       { id: linked.id, provider: decodeProviderKey("yahoo"), session },
     ]);
-    assert.deepStrictEqual(yield* database.select().from(connectionIncidents), incidents);
+    const yielded11 = yield* database.select().from(connectionIncidents);
+    assert.deepStrictEqual(yielded11, incidents);
   }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
@@ -220,18 +225,18 @@ it.effect("reconnects a connection the provider marked reconnect-required", () =
   Effect.gen(function* () {
     const connections = yield* Connections;
     const fake = yield* FakeProviderWorld;
-    const linked = Array.getUnsafe(yield* connections.link(owner, [linkInput]), 0);
+    const yielded12 = yield* connections.link(owner, [linkInput]);
+    const linked = Array.getUnsafe(yielded12, 0);
     yield* fake.rejectSession(true);
     yield* Effect.flip(connections.discoverTeams(owner, [{ id: linked.id }]));
-    const required = Array.getUnsafe(yield* connections.list(owner), 0);
+    const yielded13 = yield* connections.list(owner);
+    const required = Array.getUnsafe(yielded13, 0);
 
     yield* fake.rejectSession(false);
-    const reconnected = Array.getUnsafe(
-      yield* connections.completeReconnect(owner, [
-        { id: linked.id, provider: decodeProviderKey("yahoo"), session },
-      ]),
-      0,
-    );
+    const yielded14 = yield* connections.completeReconnect(owner, [
+      { id: linked.id, provider: decodeProviderKey("yahoo"), session },
+    ]);
+    const reconnected = Array.getUnsafe(yielded14, 0);
 
     assert.strictEqual(required.status, "reconnect-required");
     assert.strictEqual(reconnected.status, "ready");
@@ -246,7 +251,8 @@ it.effect("resolves an open incident on disconnect and leaves it resolved on ret
     const connections = yield* Connections;
     const database = yield* ConnectionsDatabase;
     const fake = yield* FakeProviderWorld;
-    const linked = Array.getUnsafe(yield* connections.link(owner, [linkInput]), 0);
+    const yielded15 = yield* connections.link(owner, [linkInput]);
+    const linked = Array.getUnsafe(yielded15, 0);
     yield* fake.rejectSession(true);
     yield* Effect.flip(connections.discoverTeams(owner, [{ id: linked.id }]));
 
@@ -258,7 +264,8 @@ it.effect("resolves an open incident on disconnect and leaves it resolved on ret
     assert.isDefined(incidents[0]?.resolvedAt);
 
     yield* connections.disconnect(owner, [{ id: linked.id }]);
-    assert.deepStrictEqual(yield* database.select().from(connectionIncidents), incidents);
+    const yielded16 = yield* database.select().from(connectionIncidents);
+    assert.deepStrictEqual(yielded16, incidents);
   }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
@@ -266,7 +273,8 @@ it.effect("disconnects a ready connection, deletes its credentials, and is idemp
   Effect.gen(function* () {
     const connections = yield* Connections;
     const database = yield* ConnectionsDatabase;
-    const linked = Array.getUnsafe(yield* connections.link(owner, [linkInput]), 0);
+    const yielded17 = yield* connections.link(owner, [linkInput]);
+    const linked = Array.getUnsafe(yielded17, 0);
 
     const before = yield* database
       .select()

@@ -213,8 +213,10 @@ it.effect("allows reports up to the limit within the window", () =>
 it.effect("resets the allowance after the window passes", () =>
   Effect.gen(function* () {
     const budget = yield* makeReportBudget({ limit: 1, windowMs: 60_000 });
-    assert.isTrue(yield* budget.check);
-    assert.isFalse(yield* budget.check);
+    const yielded1 = yield* budget.check;
+    assert.isTrue(yielded1);
+    const yielded2 = yield* budget.check;
+    assert.isFalse(yielded2);
 
     yield* TestClock.adjust(60_001);
     const afterWindow = yield* budget.check;

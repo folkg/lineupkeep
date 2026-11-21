@@ -114,7 +114,8 @@ export const LineupRunsLive = Layer.effect(
       runIds: ReadonlyArray<LineupRun["run"]>,
       timeoutMs: number,
     ) {
-      const deadline = DateTime.addDuration(yield* DateTime.now, timeoutMs);
+      const yielded1 = yield* DateTime.now;
+      const deadline = DateTime.addDuration(yielded1, timeoutMs);
       for (;;) {
         const data = yield* get(userId, { runs: runIds, limit: runIds.length });
         if (EffectArray.every(data.runs, (run) => isSettled(run.status))) {

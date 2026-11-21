@@ -53,9 +53,12 @@ it.effect("enrolls, disables, and re-enrolls a team without deleting its configu
     const fake = yield* FakeProviderWorld;
     const seeded = yield* seedTeam(fake);
 
-    const enabled = found(yield* control(teams, seeded, "enable"));
-    const disabled = found(yield* control(teams, seeded, "disable"));
-    const reenabled = found(yield* control(teams, seeded, "enable"));
+    const yielded1 = yield* control(teams, seeded, "enable");
+    const enabled = found(yielded1);
+    const yielded2 = yield* control(teams, seeded, "disable");
+    const disabled = found(yielded2);
+    const yielded3 = yield* control(teams, seeded, "enable");
+    const reenabled = found(yielded3);
 
     assert.strictEqual(enabled.outcome, "changed");
     assert.strictEqual(enabled.enrolled, true);
@@ -80,8 +83,10 @@ it.effect("pauses until the provider fantasy day ends and resumes explicitly", (
     const seeded = yield* seedTeam(fake);
     yield* control(teams, seeded, "enable");
 
-    const paused = found(yield* control(teams, seeded, "pause-today"));
-    const resumed = found(yield* control(teams, seeded, "resume"));
+    const yielded4 = yield* control(teams, seeded, "pause-today");
+    const paused = found(yielded4);
+    const yielded5 = yield* control(teams, seeded, "resume");
+    const resumed = found(yielded5);
 
     assert.strictEqual(paused.outcome, "changed");
     assert.strictEqual(paused.enrolled, true);
@@ -104,13 +109,18 @@ it.effect("reports repeated actions as unchanged no-ops", () =>
     const seeded = yield* seedTeam(fake);
 
     yield* control(teams, seeded, "disable");
-    const repeatedDisable = found(yield* control(teams, seeded, "disable"));
+    const yielded6 = yield* control(teams, seeded, "disable");
+    const repeatedDisable = found(yielded6);
     yield* control(teams, seeded, "enable");
-    const repeatedEnable = found(yield* control(teams, seeded, "enable"));
-    const paused = found(yield* control(teams, seeded, "pause-today"));
-    const repeatedPause = found(yield* control(teams, seeded, "pause-today"));
+    const yielded7 = yield* control(teams, seeded, "enable");
+    const repeatedEnable = found(yielded7);
+    const yielded8 = yield* control(teams, seeded, "pause-today");
+    const paused = found(yielded8);
+    const yielded9 = yield* control(teams, seeded, "pause-today");
+    const repeatedPause = found(yielded9);
     yield* control(teams, seeded, "resume");
-    const repeatedResume = found(yield* control(teams, seeded, "resume"));
+    const yielded10 = yield* control(teams, seeded, "resume");
+    const repeatedResume = found(yielded10);
 
     assert.strictEqual(repeatedDisable.outcome, "unchanged");
     assert.strictEqual(repeatedDisable.automation.status, "disabled");
@@ -131,10 +141,13 @@ it.effect("rejects a mismatched action without changing the stored state", () =>
     yield* control(teams, seeded, "enable");
     yield* control(teams, seeded, "pause-today");
 
-    const enableWhilePaused = found(yield* control(teams, seeded, "enable"));
+    const yielded11 = yield* control(teams, seeded, "enable");
+    const enableWhilePaused = found(yielded11);
     yield* control(teams, seeded, "disable");
-    const pauseWhileDisabled = found(yield* control(teams, seeded, "pause-today"));
-    const resumeWhileDisabled = found(yield* control(teams, seeded, "resume"));
+    const yielded12 = yield* control(teams, seeded, "pause-today");
+    const pauseWhileDisabled = found(yielded12);
+    const yielded13 = yield* control(teams, seeded, "resume");
+    const resumeWhileDisabled = found(yielded13);
 
     assert.strictEqual(enableWhilePaused.outcome, "rejected");
     assert.strictEqual(enableWhilePaused.automation.status, "paused-until-fantasy-day-end");
@@ -160,10 +173,14 @@ it.effect("keeps availability separate from the automation setting", () =>
       .set({ availability: "unavailable" })
       .where(and(eq(providerTeams.userId, owner), eq(providerTeams.id, seeded)));
 
-    const enabled = found(yield* control(teams, seeded, "enable"));
-    const repeated = found(yield* control(teams, seeded, "enable"));
-    const paused = found(yield* control(teams, seeded, "pause-today"));
-    const resumed = found(yield* control(teams, seeded, "resume"));
+    const yielded14 = yield* control(teams, seeded, "enable");
+    const enabled = found(yielded14);
+    const yielded15 = yield* control(teams, seeded, "enable");
+    const repeated = found(yielded15);
+    const yielded16 = yield* control(teams, seeded, "pause-today");
+    const paused = found(yielded16);
+    const yielded17 = yield* control(teams, seeded, "resume");
+    const resumed = found(yielded17);
 
     assert.strictEqual(enabled.outcome, "changed");
     assert.strictEqual(enabled.enrolled, true);
@@ -191,16 +208,15 @@ it.effect("hides another owner's team behind not-found and leaves it untouched",
     const seeded = yield* seedTeam(fake);
     yield* control(teams, seeded, "enable");
 
-    const foreign = Array.getUnsafe(
-      yield* teams.control(other, [{ team: seeded, action: "disable" }]),
-      0,
-    );
+    const yielded18 = yield* teams.control(other, [{ team: seeded, action: "disable" }]);
+    const foreign = Array.getUnsafe(yielded18, 0);
     const current = yield* teams.get(owner, seeded);
 
     assert.strictEqual(foreign.outcome, "not_found");
     assert.strictEqual(foreign.team, seeded);
     assert.strictEqual(current.team.automation.status, "enabled");
-    assert.deepStrictEqual(yield* teams.list(other), []);
+    const yielded19 = yield* teams.list(other);
+    assert.deepStrictEqual(yielded19, []);
   }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
@@ -305,7 +321,8 @@ it.effect("uses a 23-hour fantasy day across the spring DST transition", () =>
     const seeded = yield* seedTeam(fake);
     yield* control(teams, seeded, "enable");
 
-    const paused = found(yield* control(teams, seeded, "pause-today"));
+    const yielded20 = yield* control(teams, seeded, "pause-today");
+    const paused = found(yielded20);
     const resumesAt = requiredResumeBoundary(paused.automation);
     const expired = yield* repository.expirePauses(10, resumesAt);
 
@@ -324,7 +341,8 @@ it.effect("uses a 25-hour fantasy day across the autumn DST transition", () =>
     const seeded = yield* seedTeam(fake);
     yield* control(teams, seeded, "enable");
 
-    const paused = found(yield* control(teams, seeded, "pause-today"));
+    const yielded21 = yield* control(teams, seeded, "pause-today");
+    const paused = found(yielded21);
     const resumesAt = requiredResumeBoundary(paused.automation);
     const expired = yield* repository.expirePauses(10, resumesAt);
 
@@ -372,16 +390,14 @@ it.effect("shows only the current fantasy day's checks and keeps the last earlie
     ]);
 
     yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-25T06:00:00Z")));
-    const earlier = yield* runs.submit(
-      owner,
-      yield* Schema.decodeEffect(LineupRequestInput)({
-        requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164e2",
-        teams: [
-          { team: quiet, period: { coverage: "week", week: 3 } },
-          { team: active, period: { coverage: "week", week: 3 } },
-        ],
-      }),
-    );
+    const yielded22 = yield* Schema.decodeEffect(LineupRequestInput)({
+      requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164e2",
+      teams: [
+        { team: quiet, period: { coverage: "week", week: 3 } },
+        { team: active, period: { coverage: "week", week: 3 } },
+      ],
+    });
+    const earlier = yield* runs.submit(owner, yielded22);
 
     yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-25T12:00:00Z")));
     const current = yield* runs.submit(owner, lineupRequest(active));
@@ -529,7 +545,8 @@ it.effect("refuses an empty agent note and a note on a team the account does not
     assert.instanceOf(foreign, TeamNotFound);
     assert.instanceOf(tooLong, TeamAgentNoteRejected);
     assert.strictEqual(tooLong.reason, "too_long");
-    assert.deepStrictEqual(yield* queries.recentAgentNotes(owner, seeded), []);
+    const yielded23 = yield* queries.recentAgentNotes(owner, seeded);
+    assert.deepStrictEqual(yielded23, []);
   }).pipe(layerTools.provide(TeamsTestLayer)),
 );
 
@@ -540,7 +557,8 @@ it.effect("keeps an owner note when discovery refreshes the team", () =>
     const fake = yield* FakeProviderWorld;
     const seeded = yield* seedTeam(fake);
     yield* teams.saveNote(owner, { team: seeded, note: "Dynasty; keep both goalies." });
-    const connection = Array.getUnsafe(yield* connections.list(owner), 0);
+    const yielded24 = yield* connections.list(owner);
+    const connection = Array.getUnsafe(yielded24, 0);
 
     yield* fake.setTeams([{ ...teamFixture, name: "Renamed Alpha" }]);
     yield* connections.discoverTeams(owner, [{ id: connection.id }]);
@@ -600,10 +618,10 @@ function seedTeams(
     yield* fake.setLeague(league);
     yield* fake.setRoster(roster);
     yield* fake.setNativeAfter(nativeAfter);
-    const linked = Array.getUnsafe(
-      yield* connections.link(owner, [{ provider: decodeProviderKey("yahoo"), session }]),
-      0,
-    );
+    const yielded25 = yield* connections.link(owner, [
+      { provider: decodeProviderKey("yahoo"), session },
+    ]);
+    const linked = Array.getUnsafe(yielded25, 0);
     const foundTeams = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
     return EffectArray.map(foundTeams, (team) => team.id);
   }).pipe(Effect.orDie);

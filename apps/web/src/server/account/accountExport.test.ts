@@ -47,10 +47,8 @@ it.effect("refuses to export for an anonymous request", () =>
     );
 
     assert.strictEqual(response.status, 401);
-    assert.strictEqual(
-      yield* Effect.promise(() => response.text()),
-      "Sign in to export your data.",
-    );
+    const yielded1 = yield* Effect.promise(() => response.text());
+    assert.strictEqual(yielded1, "Sign in to export your data.");
   }),
 );
 
@@ -80,10 +78,8 @@ it.effect("returns the owner's export as a JSON attachment", () =>
       /^attachment; filename="lineupgrade-export-\d{4}-\d{2}-\d{2}\.json"$/,
     );
     const body = yield* Effect.promise(() => response.text());
-    assert.deepStrictEqual(
-      yield* Schema.decodeEffect(Schema.fromJsonString(AccountExportDocument))(body),
-      document,
-    );
+    const yielded2 = yield* Schema.decodeEffect(Schema.fromJsonString(AccountExportDocument))(body);
+    assert.deepStrictEqual(yielded2, document);
     assert.deepStrictEqual(owners, ["signed-in-user"]);
   }),
 );
@@ -104,10 +100,8 @@ it.effect("answers with a readable refusal when the export cannot be prepared", 
     );
 
     assert.strictEqual(response.status, 503);
-    assert.strictEqual(
-      yield* Effect.promise(() => response.text()),
-      "We could not prepare your export. Try again.",
-    );
+    const yielded3 = yield* Effect.promise(() => response.text());
+    assert.strictEqual(yielded3, "We could not prepare your export. Try again.");
   }),
 );
 

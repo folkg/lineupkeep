@@ -173,17 +173,18 @@ describe("lineupgrade identifier storage migration", () => {
         yield* sql.unsafe(statement);
       }
 
-      expect(
-        yield* sql.unsafe<{ readonly id: string }>("select id from provider_teams order by id"),
-      ).toEqual([{ id: oldTeam }]);
-      expect(
-        yield* sql.unsafe<{ readonly id: string; readonly team_id: string }>(
-          "select id, team_id from provider_team_agent_notes order by id",
-        ),
-      ).toEqual([{ id: oldNote, team_id: oldTeam }]);
-      expect(
-        yield* sql.unsafe<{ readonly id: string }>("select id from feedback order by id"),
-      ).toEqual([{ id: oldFeedback }]);
+      const yielded1 = yield* sql.unsafe<{ readonly id: string }>(
+        "select id from provider_teams order by id",
+      );
+      expect(yielded1).toEqual([{ id: oldTeam }]);
+      const yielded2 = yield* sql.unsafe<{ readonly id: string; readonly team_id: string }>(
+        "select id, team_id from provider_team_agent_notes order by id",
+      );
+      expect(yielded2).toEqual([{ id: oldNote, team_id: oldTeam }]);
+      const yielded3 = yield* sql.unsafe<{ readonly id: string }>(
+        "select id from feedback order by id",
+      );
+      expect(yielded3).toEqual([{ id: oldFeedback }]);
 
       const converted = yield* sql.unsafe<{
         readonly table_name: string;
@@ -247,9 +248,10 @@ describe("lineupgrade identifier storage migration", () => {
         values ('${newNote}', '${newTeam}', '${oldConnection}', 'owner', 'new note', 'client', now())
       `);
 
-      expect(
-        yield* sql.unsafe<{ readonly id: string }>("select id from provider_teams order by id"),
-      ).toEqual([{ id: oldTeam }, { id: newTeam }]);
+      const yielded4 = yield* sql.unsafe<{ readonly id: string }>(
+        "select id from provider_teams order by id",
+      );
+      expect(yielded4).toEqual([{ id: oldTeam }, { id: newTeam }]);
     }).pipe(layerTools.provide(PgliteClient.layer())),
   );
 });

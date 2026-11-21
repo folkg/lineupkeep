@@ -122,19 +122,16 @@ export const HostedLinkingLive = Layer.effect(
       ).pipe(Effect.result);
 
       if (linked._tag === "Failure") {
+        const yielded1 = yield* DateTime.now;
         yield* repository
-          .markFailed(userId, input.id, yield* DateTime.now, failureReason(linked.failure))
+          .markFailed(userId, input.id, yielded1, failureReason(linked.failure))
           .pipe(Effect.ignore);
         return yield* linked.failure;
       }
 
       const connection = Array.getUnsafe(linked.success, 0);
-      const session = yield* repository.markCompleted(
-        userId,
-        claimed.id,
-        connection.id,
-        yield* DateTime.now,
-      );
+      const yielded2 = yield* DateTime.now;
+      const session = yield* repository.markCompleted(userId, claimed.id, connection.id, yielded2);
       const teams = yield* connections
         .discoverTeams(userId, [{ id: connection.id }])
         .pipe(Effect.result);
@@ -170,7 +167,8 @@ export const HostedLinkingLive = Layer.effect(
       input: HostedLinkingSessionInput,
       reason: HostedLinkingFailureReason,
     ) {
-      const record = yield* repository.markFailed(userId, input.id, yield* DateTime.now, reason);
+      const yielded3 = yield* DateTime.now;
+      const record = yield* repository.markFailed(userId, input.id, yielded3, reason);
       return toSession(record);
     });
 

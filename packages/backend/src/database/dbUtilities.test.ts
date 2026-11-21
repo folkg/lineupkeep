@@ -122,10 +122,9 @@ it.effect(
         ),
       );
       expect(rejected).toBeInstanceOf(PlanRejected);
+      const yielded1 = yield* db.select().from(entities);
       expect(
-        sortWithComparator(yield* db.select().from(entities), (a, b) =>
-          EffectString.localeCompare(a.key, b.key),
-        ),
+        sortWithComparator(yielded1, (a, b) => EffectString.localeCompare(a.key, b.key)),
       ).toEqual([
         { key: "a", count: "1", owner: "mine" },
         { key: "b", count: "20", owner: "mine" },

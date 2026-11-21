@@ -175,15 +175,13 @@ it.effect("edits a move in place and replaces the claims it holds", () =>
     const repository = yield* TransactionPlanRepository;
     const database = yield* ConnectionsDatabase;
     yield* database.insert(providerTeams).values(teamRow(firstTeam, owner));
-    const stored = Array.getUnsafe(
-      yield* repository.appendMoves({
-        userId: owner,
-        team: firstTeam,
-        at,
-        moves: [appendMove("nhl.p.1")],
-      }),
-      0,
-    );
+    const yielded1 = yield* repository.appendMoves({
+      userId: owner,
+      team: firstTeam,
+      at,
+      moves: [appendMove("nhl.p.1")],
+    });
+    const stored = Array.getUnsafe(yielded1, 0);
 
     const edited = yield* repository.editMove({
       userId: owner,
@@ -211,11 +209,9 @@ it.effect("edits a move in place and replaces the claims it holds", () =>
     assert.strictEqual(moves[0]?.effectiveDate, "2026-11-17");
     assert.strictEqual(moves[0]?.reason, "The center is out again.");
     assert.deepStrictEqual(moves[0]?.claims, [{ kind: "player", key: "nhl.p.2" }]);
+    const yielded2 = yield* database.select().from(transactionMoveClaims);
     assert.deepStrictEqual(
-      EffectArray.map(
-        yield* database.select().from(transactionMoveClaims),
-        (claim) => claim.claimKey,
-      ),
+      EffectArray.map(yielded2, (claim) => claim.claimKey),
       ["nhl.p.2"],
     );
   }).pipe(layerTools.provide(RepositoryTest)),
@@ -226,15 +222,13 @@ it.effect("discards a move and releases the claims it held", () =>
     const repository = yield* TransactionPlanRepository;
     const database = yield* ConnectionsDatabase;
     yield* database.insert(providerTeams).values(teamRow(firstTeam, owner));
-    const stored = Array.getUnsafe(
-      yield* repository.appendMoves({
-        userId: owner,
-        team: firstTeam,
-        at,
-        moves: [appendMove("nhl.p.1")],
-      }),
-      0,
-    );
+    const yielded3 = yield* repository.appendMoves({
+      userId: owner,
+      team: firstTeam,
+      at,
+      moves: [appendMove("nhl.p.1")],
+    });
+    const stored = Array.getUnsafe(yielded3, 0);
 
     const discarded = yield* repository.discardMoves({
       userId: owner,
@@ -252,7 +246,8 @@ it.effect("discards a move and releases the claims it held", () =>
       DateTime.formatIso(at),
     );
     assert.deepStrictEqual(moves[0]?.claims, []);
-    assert.deepStrictEqual(yield* database.select().from(transactionMoveClaims), []);
+    const yielded4 = yield* database.select().from(transactionMoveClaims);
+    assert.deepStrictEqual(yielded4, []);
   }).pipe(layerTools.provide(RepositoryTest)),
 );
 
@@ -323,11 +318,9 @@ it.effect("records a result and releases claims only when the result ends the mo
       )?.claims,
       [],
     );
+    const yielded5 = yield* database.select().from(transactionMoveClaims);
     assert.deepStrictEqual(
-      EffectArray.map(
-        yield* database.select().from(transactionMoveClaims),
-        (claim) => claim.claimKey,
-      ),
+      EffectArray.map(yielded5, (claim) => claim.claimKey),
       ["nhl.p.1"],
     );
   }).pipe(layerTools.provide(RepositoryTest)),
@@ -350,15 +343,13 @@ it.effect("reads the submitted legs of a plan for one effective date", () =>
         appendMove("nhl.p.3"),
       ],
     });
-    const otherTeamMove = Array.getUnsafe(
-      yield* repository.appendMoves({
-        userId: owner,
-        team: secondTeam,
-        at,
-        moves: [appendMove("nhl.p.4")],
-      }),
-      0,
-    );
+    const yielded6 = yield* repository.appendMoves({
+      userId: owner,
+      team: secondTeam,
+      at,
+      moves: [appendMove("nhl.p.4")],
+    });
+    const otherTeamMove = Array.getUnsafe(yielded6, 0);
     for (const move of [...submitted, otherTeamMove]) {
       yield* repository.recordResult({
         userId: owner,
@@ -381,15 +372,13 @@ it.effect("reads the submitted legs of a plan for one effective date", () =>
       EffectArray.map(read, (move) => move.id),
       [Array.getUnsafe(submitted, 0).id, Array.getUnsafe(submitted, 2).id],
     );
+    const yielded7 = yield* repository.readSubmittedMoves({
+      userId: other,
+      teams: [firstTeam],
+      dates: ["2026-11-15"],
+    });
     assert.deepStrictEqual(
-      EffectArray.map(
-        yield* repository.readSubmittedMoves({
-          userId: other,
-          teams: [firstTeam],
-          dates: ["2026-11-15"],
-        }),
-        (move) => move.id,
-      ),
+      EffectArray.map(yielded7, (move) => move.id),
       [],
     );
   }).pipe(layerTools.provide(RepositoryTest)),
@@ -575,9 +564,12 @@ it.effect("removes a plan's moves and claims when the plan is removed", () =>
 
     yield* database.delete(transactionPlans).where(eq(transactionPlans.teamId, firstTeam));
 
-    assert.deepStrictEqual(yield* database.select().from(transactionMoves), []);
-    assert.deepStrictEqual(yield* database.select().from(transactionMoveClaims), []);
-    assert.deepStrictEqual(yield* database.select().from(transactionMoveSteps), []);
+    const yielded8 = yield* database.select().from(transactionMoves);
+    assert.deepStrictEqual(yielded8, []);
+    const yielded9 = yield* database.select().from(transactionMoveClaims);
+    assert.deepStrictEqual(yielded9, []);
+    const yielded10 = yield* database.select().from(transactionMoveSteps);
+    assert.deepStrictEqual(yielded10, []);
   }).pipe(layerTools.provide(RepositoryTest)),
 );
 

@@ -75,23 +75,17 @@ it.effect("round-trips delivery and write-intent rows", () =>
     const deliveryRow = yield* Schema.encodeEffect(LineupDeliveryRow)(delivery);
     const deliveryDecoded = yield* Schema.decodeEffect(LineupDeliveryRow)(deliveryRow);
     assert.isTrue(Schema.toEquivalence(LineupDeliveryRow)(deliveryDecoded, delivery));
-    assert.isTrue(
-      Exit.isFailure(
-        yield* Effect.exit(
-          Schema.decodeEffect(LineupDeliveryRow)({
-            ...deliveryRow,
-            dispatchedAt: DateTime.toDateUtc(at),
-          }),
-        ),
-      ),
+    const yielded1 = yield* Effect.exit(
+      Schema.decodeEffect(LineupDeliveryRow)({
+        ...deliveryRow,
+        dispatchedAt: DateTime.toDateUtc(at),
+      }),
     );
-    assert.isTrue(
-      Exit.isFailure(
-        yield* Effect.exit(
-          Schema.decodeEffect(LineupDeliveryRow)({ ...deliveryRow, status: "dispatched" }),
-        ),
-      ),
+    assert.isTrue(Exit.isFailure(yielded1));
+    const yielded2 = yield* Effect.exit(
+      Schema.decodeEffect(LineupDeliveryRow)({ ...deliveryRow, status: "dispatched" }),
     );
+    assert.isTrue(Exit.isFailure(yielded2));
 
     const intent: LineupWriteIntentRecord = {
       id: yield* Schema.decodeEffect(LineupId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a7"),

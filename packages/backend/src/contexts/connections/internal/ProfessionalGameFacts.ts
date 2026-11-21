@@ -66,11 +66,12 @@ export function readProfessionalGameWeek(input: {
   const weekEnd = addDays(input.weekStart, input.source.capabilities.weekDays - 1);
   const read = Effect.fn("ProfessionalGameFacts.readLeagueWeek")(function* () {
     const now = yield* DateTime.now;
+    const yielded1 = yield* input.store.readProfessionalGames({
+      from: input.weekStart,
+      to: weekEnd,
+    });
     const stored = EffectArray.filter(
-      yield* input.store.readProfessionalGames({
-        from: input.weekStart,
-        to: weekEnd,
-      }),
+      yielded1,
       (row) =>
         row.value.league === input.league &&
         row.window.from === input.weekStart &&

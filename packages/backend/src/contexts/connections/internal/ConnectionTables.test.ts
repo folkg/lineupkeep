@@ -39,7 +39,8 @@ it.effect("round-trips every explored lifecycle state through its row codec", ()
       assert.strictEqual(row.provider, record.state.provider);
       assert.deepStrictEqual(row.updatedAt, DateTime.toDateUtc(record.state.updatedAt));
       assert.deepStrictEqual(restored.state, snapshot.state.value);
-      assert.deepStrictEqual(yield* Schema.encodeEffect(ConnectionRow)(decoded), row);
+      const yielded1 = yield* Schema.encodeEffect(ConnectionRow)(decoded);
+      assert.deepStrictEqual(yielded1, row);
       assert.strictEqual(decoded.id, record.id);
       assert.strictEqual(decoded.userId, record.userId);
       assert.strictEqual(decoded.requestId, record.requestId);
@@ -151,9 +152,10 @@ it.effect("round-trips discovered team rows through the codec", () =>
     assert.strictEqual(decoded.providerUrl, "https://provider.example/f1/1000/1");
     assert.strictEqual(decoded.automation.status, "disabled");
     assert.deepStrictEqual(decoded.lastSeenAt, at);
-    assert.isTrue(
-      yield* Effect.isFailure(Schema.decodeEffect(FantasyTeamRow)({ ...row, season: 1800 })),
+    const yielded2 = yield* Effect.isFailure(
+      Schema.decodeEffect(FantasyTeamRow)({ ...row, season: 1800 }),
     );
+    assert.isTrue(yielded2);
   }),
 );
 
@@ -183,7 +185,8 @@ it.effect("rejects incomplete lifecycle rows through the codec", () =>
       ],
       (row) =>
         Effect.gen(function* () {
-          assert.isTrue(yield* Effect.isFailure(Schema.decodeUnknownEffect(ConnectionRow)(row)));
+          const yielded3 = yield* Effect.isFailure(Schema.decodeUnknownEffect(ConnectionRow)(row));
+          assert.isTrue(yielded3);
         }),
       { concurrency: 1 },
     );

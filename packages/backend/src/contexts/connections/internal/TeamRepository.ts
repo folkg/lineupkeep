@@ -168,14 +168,13 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
           .where(and(eq(providerTeams.userId, userId), anyOf(providerTeams.id, uniqueIds)))
           .orderBy(asc(providerTeams.id))
           .pipe(Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })));
-        const byId = new Map(
-          yield* Effect.forEach(
-            rows,
-            (row) =>
-              toTeamRecord(row).pipe(Effect.map((record) => [record.team.id, record] as const)),
-            { concurrency: 1 },
-          ),
+        const yielded1 = yield* Effect.forEach(
+          rows,
+          (row) =>
+            toTeamRecord(row).pipe(Effect.map((record) => [record.team.id, record] as const)),
+          { concurrency: 1 },
         );
+        const byId = new Map(yielded1);
         return yield* Effect.forEach(
           ids,
           (team) => {
@@ -204,17 +203,16 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
                 .where(and(eq(providerTeams.userId, userId), anyOf(providerTeams.id, ids)))
                 .orderBy(asc(providerTeams.id))
                 .for("update");
-              const locked = new Map(
-                yield* Effect.forEach(
-                  rows,
-                  (row) =>
-                    Schema.decodeEffect(FantasyTeamRow)(row).pipe(
-                      Effect.map((team) => [team.id, { row, team }] as const),
-                      Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })),
-                    ),
-                  { concurrency: 1 },
-                ),
+              const yielded2 = yield* Effect.forEach(
+                rows,
+                (row) =>
+                  Schema.decodeEffect(FantasyTeamRow)(row).pipe(
+                    Effect.map((team) => [team.id, { row, team }] as const),
+                    Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })),
+                  ),
+                { concurrency: 1 },
               );
+              const locked = new Map(yielded2);
               const changedById = new Map<
                 TeamId,
                 {

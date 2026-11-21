@@ -103,8 +103,10 @@ it.effect(
       ]);
 
       assert.deepStrictEqual(EffectArray.map(ended, String), ["session-laptop"]);
-      assert.deepStrictEqual(sessionIds(yield* sessions.list(owner)), ["session-phone"]);
-      assert.deepStrictEqual(sessionIds(yield* sessions.list(other)), ["session-stranger"]);
+      const yielded1 = yield* sessions.list(owner);
+      assert.deepStrictEqual(sessionIds(yielded1), ["session-phone"]);
+      const yielded2 = yield* sessions.list(other);
+      assert.deepStrictEqual(sessionIds(yielded2), ["session-stranger"]);
     }).pipe(layerTools.provide(layer)),
   30_000,
 );
@@ -135,8 +137,10 @@ it.effect(
         "session-phone",
         "session-tablet",
       ]);
-      assert.deepStrictEqual(sessionIds(yield* sessions.list(owner)), ["session-laptop"]);
-      assert.deepStrictEqual(sessionIds(yield* sessions.list(other)), ["session-stranger"]);
+      const yielded3 = yield* sessions.list(owner);
+      assert.deepStrictEqual(sessionIds(yielded3), ["session-laptop"]);
+      const yielded4 = yield* sessions.list(other);
+      assert.deepStrictEqual(sessionIds(yielded4), ["session-stranger"]);
     }).pipe(layerTools.provide(layer)),
   30_000,
 );

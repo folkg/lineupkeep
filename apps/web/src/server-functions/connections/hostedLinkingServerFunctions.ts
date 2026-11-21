@@ -58,7 +58,8 @@ export const startHostedLinkingServerFn = createServerFn({ method: "POST" })
             optionalStringValue(request.headers.get("x-forwarded-proto"), (value) =>
               EffectString.trim(EffectString.split(value, ",")[0] ?? ""),
             ) === "https";
-          const now = DateTime.toEpochMillis(yield* DateTime.now);
+          const yielded1 = yield* DateTime.now;
+          const now = DateTime.toEpochMillis(yielded1);
           setCookie(hostedLinkingCookieName, Redacted.value(started.ticket), {
             httpOnly: true,
             maxAge: Math.max(

@@ -82,7 +82,8 @@ it.effect(
         "client_id=http%3A%2F%2Fclient.test%2Fmeta&sig=forged",
         `client_id=${EffectString.repeat("a", 129)}&sig=forged`,
       ]) {
-        assert.deepStrictEqual(yield* adapter.getConsentRequest(new Headers(), query), {
+        const yielded1 = yield* adapter.getConsentRequest(new Headers(), query);
+        assert.deepStrictEqual(yielded1, {
           status: "invalid",
         });
       }
@@ -179,7 +180,8 @@ it.effect(
       assert.isDefined(listedSession);
       yield* sessions.end(userId, [listedSession.id]);
 
-      assert.isUndefined(yield* adapter.getSession(headers));
+      const yielded2 = yield* adapter.getSession(headers);
+      assert.isUndefined(yielded2);
     }).pipe(layerTools.provide(adapterLayer(baseConfig))),
   databaseTestTimeout,
 );
@@ -198,7 +200,8 @@ it.effect(
       assert.strictEqual(message?.to, "reader@example.test");
       assert.strictEqual(message?.subject, `${code} is your Lineupgrade sign-in code`);
       assert.include(message?.text ?? "", "expires in 10 minutes");
-      assert.notInclude(yield* Effect.promise(() => response.text()), code);
+      const yielded3 = yield* Effect.promise(() => response.text());
+      assert.notInclude(yielded3, code);
     }).pipe(layerTools.provide(adapterLayer(baseConfig))),
   databaseTestTimeout,
 );
@@ -257,7 +260,8 @@ it.effect(
 
       const statuses = [];
       for (const address of ["10.0.1.1", "10.0.1.2", "10.0.1.3", "10.0.1.4", "10.0.1.5"]) {
-        statuses.push(yield* send(address));
+        const yielded4 = yield* send(address);
+        statuses.push(yielded4);
       }
       const limited = yield* adapter.handle(sendCodeRequest("target@example.test", "10.0.1.6"));
 
@@ -313,7 +317,8 @@ it.effect(
 
       const response = yield* adapter.handle(sendCodeRequest("reader@example.test"));
 
-      assert.deepStrictEqual(yield* errorOf(response), {
+      const yielded5 = yield* errorOf(response);
+      assert.deepStrictEqual(yielded5, {
         status: 503,
         code: "EMAIL_UNAVAILABLE",
       });
@@ -329,7 +334,8 @@ it.effect(
 
       const response = yield* adapter.handle(sendCodeRequest("reader@example.test"));
 
-      assert.deepStrictEqual(yield* errorOf(response), {
+      const yielded6 = yield* errorOf(response);
+      assert.deepStrictEqual(yielded6, {
         status: 422,
         code: "EMAIL_RECIPIENT_NOT_ALLOWED",
       });
@@ -352,11 +358,13 @@ it.effect(
       );
       const signIn = yield* adapter.handle(authRequest("/sign-in/email", credentials));
 
-      assert.deepStrictEqual(yield* errorOf(signUp), {
+      const yielded7 = yield* errorOf(signUp);
+      assert.deepStrictEqual(yielded7, {
         status: 400,
         code: "EMAIL_PASSWORD_SIGN_UP_DISABLED",
       });
-      assert.deepStrictEqual(yield* errorOf(signIn), {
+      const yielded8 = yield* errorOf(signIn);
+      assert.deepStrictEqual(yielded8, {
         status: 400,
         code: "EMAIL_PASSWORD_DISABLED",
       });
@@ -603,35 +611,34 @@ it.effect(
       const wrongIssuer = yield* token({ iss: "https://other.example/api/auth" });
       const proofBound = yield* token({ cnf: { jkt: "proof-required" } });
 
-      assertAuthenticated(yield* adapter.resolveAccessToken(valid.token, ["connections:read"]), {
+      const yielded9 = yield* adapter.resolveAccessToken(valid.token, ["connections:read"]);
+      assertAuthenticated(yielded9, {
         userId: decodeUserId("reader"),
       });
-      assert.deepStrictEqual(
-        yield* adapter.resolveAccessToken(valid.token, ["connections:write"]),
-        {
-          status: "insufficient_scope",
-        },
-      );
-      assert.deepStrictEqual(
-        yield* adapter.resolveAccessToken(expired.token, ["connections:read"]),
-        {
-          status: "invalid",
-          reason: "expired",
-        },
-      );
+      const yielded10 = yield* adapter.resolveAccessToken(valid.token, ["connections:write"]);
+      assert.deepStrictEqual(yielded10, {
+        status: "insufficient_scope",
+      });
+      const yielded11 = yield* adapter.resolveAccessToken(expired.token, ["connections:read"]);
+      assert.deepStrictEqual(yielded11, {
+        status: "invalid",
+        reason: "expired",
+      });
       for (const invalid of [
         wrongAudience.token,
         wrongIssuer.token,
         proofBound.token,
         "not.a.token",
       ]) {
-        assert.deepStrictEqual(yield* adapter.resolveAccessToken(invalid, ["connections:read"]), {
+        const yielded12 = yield* adapter.resolveAccessToken(invalid, ["connections:read"]);
+        assert.deepStrictEqual(yielded12, {
           status: "invalid",
         });
       }
 
       yield* Effect.promise(() => database.delete(user).where(eq(user.id, "reader")));
-      assert.deepStrictEqual(yield* adapter.resolveAccessToken(valid.token, ["connections:read"]), {
+      const yielded13 = yield* adapter.resolveAccessToken(valid.token, ["connections:read"]);
+      assert.deepStrictEqual(yielded13, {
         status: "invalid",
       });
     }).pipe(layerTools.provide(adapterLayer(baseConfig))),
@@ -711,7 +718,8 @@ it.effect(
       const response = yield* adapter.handle(metadataClientAuthorization());
 
       assert.strictEqual(response.status, 400);
-      assert.deepStrictEqual(yield* jsonOf(response, ErrorDescription), {
+      const yielded14 = yield* jsonOf(response, ErrorDescription);
+      assert.deepStrictEqual(yielded14, {
         error: "invalid_client",
         error_description:
           "Metadata document fetch was refused: redirects are not followed by policy",
@@ -733,7 +741,8 @@ it.effect(
       const response = yield* adapter.handle(metadataClientAuthorization());
 
       assert.strictEqual(response.status, 400);
-      assert.deepStrictEqual(yield* jsonOf(response, ErrorDescription), {
+      const yielded15 = yield* jsonOf(response, ErrorDescription);
+      assert.deepStrictEqual(yielded15, {
         error: "invalid_client",
         error_description: "Failed to fetch metadata document (network error)",
       });
@@ -751,16 +760,18 @@ it.effect(
     Effect.gen(function* () {
       const adapter = yield* BetterAuthAdapter;
 
+      const yielded16 = yield* adapter.handle(
+        new Request("http://localhost:5173/.well-known/oauth-authorization-server/api/auth"),
+      );
       const authorizationServer = yield* jsonOf(
-        yield* adapter.handle(
-          new Request("http://localhost:5173/.well-known/oauth-authorization-server/api/auth"),
-        ),
+        yielded16,
         Schema.Struct({ scopes_supported: Schema.Array(Schema.String) }),
       );
+      const yielded17 = yield* adapter.handle(
+        new Request("http://localhost:5173/.well-known/oauth-protected-resource/mcp"),
+      );
       const protectedResource = yield* jsonOf(
-        yield* adapter.handle(
-          new Request("http://localhost:5173/.well-known/oauth-protected-resource/mcp"),
-        ),
+        yielded17,
         Schema.Struct({ scopes_supported: Schema.Array(Schema.String) }),
       );
 
@@ -831,19 +842,20 @@ it.effect(
       const current = yield* token("fantasy:read");
       const manageOnly = yield* token("feedback:manage");
 
-      assertAuthenticated(yield* adapter.resolveAccessToken(retired.token, ["fantasy:read"]), {
+      const yielded18 = yield* adapter.resolveAccessToken(retired.token, ["fantasy:read"]);
+      assertAuthenticated(yielded18, {
         userId: decodeUserId("reader"),
       });
-      assertAuthenticated(yield* adapter.resolveAccessToken(current.token, ["fantasy:read"]), {
+      const yielded19 = yield* adapter.resolveAccessToken(current.token, ["fantasy:read"]);
+      assertAuthenticated(yielded19, {
         userId: decodeUserId("reader"),
       });
-      assert.deepStrictEqual(
-        yield* adapter.resolveAccessToken(manageOnly.token, ["fantasy:read"]),
-        {
-          status: "insufficient_scope",
-        },
-      );
-      assert.deepStrictEqual(yield* adapter.resolveAccessToken(retired.token, ["teams:manage"]), {
+      const yielded20 = yield* adapter.resolveAccessToken(manageOnly.token, ["fantasy:read"]);
+      assert.deepStrictEqual(yielded20, {
+        status: "insufficient_scope",
+      });
+      const yielded21 = yield* adapter.resolveAccessToken(retired.token, ["teams:manage"]);
+      assert.deepStrictEqual(yielded21, {
         status: "insufficient_scope",
       });
     }).pipe(
@@ -875,11 +887,9 @@ it.effect(
 
       const registered = yield* jsonOf(retired, Schema.Struct({ client_id: Schema.String }));
       yield* adapter.handle(sendCodeRequest("retired.scope@example.test"));
+      const yielded22 = yield* latestCode("retired.scope@example.test");
       const signedIn = yield* adapter.handle(
-        signInRequest(
-          "retired.scope@example.test",
-          yield* latestCode("retired.scope@example.test"),
-        ),
+        signInRequest("retired.scope@example.test", yielded22),
       );
       const headers = new Headers({ cookie: cookieHeader(signedIn) });
       const session = yield* adapter.getSession(headers);
@@ -915,33 +925,34 @@ it.effect(
       );
 
       const consent = yield* adapter.consent(headers, EffectString.slice(location.search, 1), true);
-      const credentials = yield* jsonOf(
-        yield* adapter.handle(
-          new Request("http://localhost:5173/api/auth/oauth2/token", {
-            method: "POST",
-            headers: { "content-type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({
-              grant_type: "authorization_code",
-              client_id: registered.client_id,
-              redirect_uri: "http://127.0.0.1:19999/callback",
-              resource: mcpResource,
-              code_verifier: pkceVerifier,
-              code: new URL(consent).searchParams.get("code") ?? "",
-            }),
+      const yielded23 = yield* adapter.handle(
+        new Request("http://localhost:5173/api/auth/oauth2/token", {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            grant_type: "authorization_code",
+            client_id: registered.client_id,
+            redirect_uri: "http://127.0.0.1:19999/callback",
+            resource: mcpResource,
+            code_verifier: pkceVerifier,
+            code: new URL(consent).searchParams.get("code") ?? "",
           }),
-        ),
+        }),
+      );
+      const credentials = yield* jsonOf(
+        yielded23,
         Schema.Struct({ access_token: Schema.String, scope: Schema.String }),
       );
 
       assert.strictEqual(credentials.scope, "connections:read offline_access");
-      assertAuthenticated(
-        yield* adapter.resolveAccessToken(credentials.access_token, ["fantasy:read"]),
-        {
-          userId: decodeUserId(session.user.id),
-          clientId: registered.client_id,
-          clientName: "Retired scope client",
-        },
-      );
+      const yielded24 = yield* adapter.resolveAccessToken(credentials.access_token, [
+        "fantasy:read",
+      ]);
+      assertAuthenticated(yielded24, {
+        userId: decodeUserId(session.user.id),
+        clientId: registered.client_id,
+        clientName: "Retired scope client",
+      });
     }).pipe(
       layerTools.provide(
         adapterLayer(baseConfig, EmailDeliveryTest, publicInternetProcess, realScopes),
@@ -1046,9 +1057,8 @@ it.effect(
     Effect.gen(function* () {
       const adapter = yield* BetterAuthAdapter;
       yield* adapter.handle(sendCodeRequest("named@example.test"));
-      const signedIn = yield* adapter.handle(
-        signInRequest("named@example.test", yield* latestCode("named@example.test")),
-      );
+      const yielded25 = yield* latestCode("named@example.test");
+      const signedIn = yield* adapter.handle(signInRequest("named@example.test", yielded25));
       const headers = new Headers({ cookie: cookieHeader(signedIn) });
       const registration = yield* adapter.handle(
         new Request("http://localhost:5173/api/auth/oauth2/register", {
@@ -1104,9 +1114,8 @@ it.effect(
     Effect.gen(function* () {
       const adapter = yield* BetterAuthAdapter;
       yield* adapter.handle(sendCodeRequest("oauth@example.test"));
-      const signedIn = yield* adapter.handle(
-        signInRequest("oauth@example.test", yield* latestCode("oauth@example.test")),
-      );
+      const yielded26 = yield* latestCode("oauth@example.test");
+      const signedIn = yield* adapter.handle(signInRequest("oauth@example.test", yielded26));
       const headers = new Headers({ cookie: cookieHeader(signedIn) });
       const signedInUser = yield* adapter.getSession(headers);
       const verifier = "1234567890123456789012345678901234567890123";
@@ -1243,29 +1252,26 @@ it.effect(
         Schema.Struct({ access_token: Schema.String, refresh_token: Schema.String }),
       );
       assert.notStrictEqual(rotated.refresh_token, credentials.refresh_token);
-      assert.propertyVal(
-        yield* adapter.resolveAccessToken(rotated.access_token, ["connections:write"]),
-        "status",
-        "authenticated",
-      );
-      const replay = yield* jsonOf(
-        yield* refresh(credentials.refresh_token),
-        Schema.Struct({ refresh_token: Schema.String }),
-      );
+      const yielded27 = yield* adapter.resolveAccessToken(rotated.access_token, [
+        "connections:write",
+      ]);
+      assert.propertyVal(yielded27, "status", "authenticated");
+      const yielded28 = yield* refresh(credentials.refresh_token);
+      const replay = yield* jsonOf(yielded28, Schema.Struct({ refresh_token: Schema.String }));
       assert.strictEqual(replay.refresh_token, rotated.refresh_token);
       const signedOut = yield* adapter.handle(
         authRequest("/sign-out", {}, { cookie: cookieHeader(signedIn) }),
       );
       assert.strictEqual(signedOut.status, 200);
+      const yielded29 = yield* refresh(rotated.refresh_token);
       const offline = yield* jsonOf(
-        yield* refresh(rotated.refresh_token),
+        yielded29,
         Schema.Struct({ access_token: Schema.String, refresh_token: Schema.String }),
       );
-      assert.propertyVal(
-        yield* adapter.resolveAccessToken(offline.access_token, ["connections:read"]),
-        "status",
-        "authenticated",
-      );
+      const yielded30 = yield* adapter.resolveAccessToken(offline.access_token, [
+        "connections:read",
+      ]);
+      assert.propertyVal(yielded30, "status", "authenticated");
       const revoked = yield* adapter.handle(
         new Request("http://localhost:5173/api/auth/oauth2/revoke", {
           method: "POST",
@@ -1279,11 +1285,10 @@ it.effect(
       );
       assert.strictEqual(revoked.status, 200);
       assert.strictEqual((yield* refresh(offline.refresh_token)).status, 400);
-      assert.propertyVal(
-        yield* adapter.resolveAccessToken(offline.access_token, ["connections:read"]),
-        "status",
-        "authenticated",
-      );
+      const yielded31 = yield* adapter.resolveAccessToken(offline.access_token, [
+        "connections:read",
+      ]);
+      assert.propertyVal(yielded31, "status", "authenticated");
 
       const database = yield* AuthDatabase;
       yield* Effect.promise(() =>
@@ -1328,9 +1333,8 @@ it.effect(
     Effect.gen(function* () {
       const adapter = yield* BetterAuthAdapter;
       yield* adapter.handle(sendCodeRequest("restart@example.test"));
-      const signedIn = yield* adapter.handle(
-        signInRequest("restart@example.test", yield* latestCode("restart@example.test")),
-      );
+      const yielded32 = yield* latestCode("restart@example.test");
+      const signedIn = yield* adapter.handle(signInRequest("restart@example.test", yielded32));
       const headers = new Headers({ cookie: cookieHeader(signedIn) });
       const challenge = yield* pkceChallenge(pkceVerifier);
       const query = new URLSearchParams({
@@ -1352,8 +1356,9 @@ it.effect(
       );
       const consent = yield* adapter.consent(headers, EffectString.slice(location.search, 1), true);
       const code = new URL(consent).searchParams.get("code") ?? "";
+      const yielded33 = yield* adapter.handle(codeExchangeRequest(code, pkceVerifier));
       const credentials = yield* jsonOf(
-        yield* adapter.handle(codeExchangeRequest(code, pkceVerifier)),
+        yielded33,
         Schema.Struct({ access_token: Schema.String, refresh_token: Schema.String }),
       );
 
@@ -1373,26 +1378,23 @@ it.effect(
       assert.isAbove(storedKeys[0]?.privateKey.length ?? 0, 0);
 
       const restarted = yield* layerTools.provideLayer(BetterAuthAdapter, instanceLayer);
-      assert.propertyVal(
-        yield* restarted.resolveAccessToken(credentials.access_token, ["connections:read"]),
-        "status",
-        "authenticated",
-      );
+      const yielded34 = yield* restarted.resolveAccessToken(credentials.access_token, [
+        "connections:read",
+      ]);
+      assert.propertyVal(yielded34, "status", "authenticated");
+      const yielded35 = yield* restarted.handle(refreshTokenRequest(credentials.refresh_token));
       const refreshed = yield* jsonOf(
-        yield* restarted.handle(refreshTokenRequest(credentials.refresh_token)),
+        yielded35,
         Schema.Struct({ access_token: Schema.String, refresh_token: Schema.String }),
       );
       assert.notStrictEqual(refreshed.refresh_token, credentials.refresh_token);
-      assert.propertyVal(
-        yield* restarted.resolveAccessToken(refreshed.access_token, ["connections:read"]),
-        "status",
-        "authenticated",
-      );
+      const yielded36 = yield* restarted.resolveAccessToken(refreshed.access_token, [
+        "connections:read",
+      ]);
+      assert.propertyVal(yielded36, "status", "authenticated");
+      const yielded37 = yield* Effect.promise(() => database.select().from(oauthRefreshToken));
       const rotatedRow = EffectOption.getOrUndefined(
-        EffectArray.findFirst(
-          yield* Effect.promise(() => database.select().from(oauthRefreshToken)),
-          (row) => row.revoked === null,
-        ),
+        EffectArray.findFirst(yielded37, (row) => row.revoked === null),
       );
       assert.isDefined(rotatedRow);
       assert.strictEqual(
@@ -1423,8 +1425,9 @@ it.effect(
           .where(eq(jwks.id, storedKeys[0]?.id ?? "")),
       );
       const rotatedKeys = yield* layerTools.provideLayer(BetterAuthAdapter, instanceLayer);
+      const yielded38 = yield* rotatedKeys.handle(refreshTokenRequest(refreshed.refresh_token));
       const renewed = yield* jsonOf(
-        yield* rotatedKeys.handle(refreshTokenRequest(refreshed.refresh_token)),
+        yielded38,
         Schema.Struct({ access_token: Schema.String, refresh_token: Schema.String }),
       );
       const keysAfterRotation = yield* Effect.promise(() => database.select().from(jwks));
@@ -1434,14 +1437,14 @@ it.effect(
         jwtHeader(renewed.access_token).kid,
         jwtHeader(credentials.access_token).kid,
       );
-      assertAuthenticated(
-        yield* rotatedKeys.resolveAccessToken(credentials.access_token, ["connections:read"]),
-        { userId: refreshRow.userId },
-      );
-      assertAuthenticated(
-        yield* rotatedKeys.resolveAccessToken(renewed.access_token, ["connections:read"]),
-        { userId: refreshRow.userId },
-      );
+      const yielded39 = yield* rotatedKeys.resolveAccessToken(credentials.access_token, [
+        "connections:read",
+      ]);
+      assertAuthenticated(yielded39, { userId: refreshRow.userId });
+      const yielded40 = yield* rotatedKeys.resolveAccessToken(renewed.access_token, [
+        "connections:read",
+      ]);
+      assertAuthenticated(yielded40, { userId: refreshRow.userId });
     }).pipe(layerTools.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
   databaseTestTimeout,
 );
@@ -1456,10 +1459,10 @@ it.effect(
       vi.setSystemTime(DateTime.toDateUtc(startedAt));
       const grant = yield* issueGrant(adapter, "retry@example.test", mcpResource);
 
-      const rotated = yield* jsonOf(
-        yield* adapter.handle(refreshGrantRequest(grant.refreshToken, grant.clientId, mcpResource)),
-        IssuedCredentials,
+      const yielded41 = yield* adapter.handle(
+        refreshGrantRequest(grant.refreshToken, grant.clientId, mcpResource),
       );
+      const rotated = yield* jsonOf(yielded41, IssuedCredentials);
       vi.setSystemTime(
         DateTime.toDateUtc(DateTime.makeUnsafe(startedAt.epochMilliseconds + 299_000)),
       );
@@ -1471,11 +1474,10 @@ it.effect(
       assert.strictEqual(replay.status, 200);
       const replayed = yield* jsonOf(replay, IssuedCredentials);
       assert.strictEqual(replayed.refresh_token, rotated.refresh_token);
-      assert.propertyVal(
-        yield* adapter.resolveAccessToken(replayed.access_token, ["connections:read"]),
-        "status",
-        "authenticated",
-      );
+      const yielded42 = yield* adapter.resolveAccessToken(replayed.access_token, [
+        "connections:read",
+      ]);
+      assert.propertyVal(yielded42, "status", "authenticated");
     }).pipe(
       Effect.ensuring(Effect.sync(() => vi.useRealTimers())),
       layerTools.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata)),
@@ -1569,7 +1571,8 @@ it.effect(
         adapter.handle(refreshGrantRequest(grant.refreshToken, grant.clientId, mcpResource)),
       );
       assert.strictEqual(retry.value.status, 400);
-      assert.deepStrictEqual(yield* jsonOf(retry.value, ErrorDescription), {
+      const yielded43 = yield* jsonOf(retry.value, ErrorDescription);
+      assert.deepStrictEqual(yielded43, {
         error: "invalid_grant",
         error_description: "invalid refresh token",
       });
@@ -1579,11 +1582,10 @@ it.effect(
       assert.strictEqual(lost.attributes.get("oauth.refresh_token.replay_stored"), false);
       assert.strictEqual(lost.attributes.get("oauth.outcome"), "refused");
       assert.strictEqual(lost.attributes.get("oauth.error"), "invalid_grant");
-      assert.propertyVal(
-        yield* adapter.resolveAccessToken(rotated.access_token, ["connections:read"]),
-        "status",
-        "authenticated",
-      );
+      const yielded44 = yield* adapter.resolveAccessToken(rotated.access_token, [
+        "connections:read",
+      ]);
+      assert.propertyVal(yielded44, "status", "authenticated");
     }).pipe(layerTools.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
   databaseTestTimeout,
 );
@@ -1597,10 +1599,10 @@ it.effect(
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(DateTime.toDateUtc(startedAt));
       const grant = yield* issueGrant(adapter, "spent@example.test", mcpResource);
-      const rotated = yield* jsonOf(
-        yield* adapter.handle(refreshGrantRequest(grant.refreshToken, grant.clientId, mcpResource)),
-        IssuedCredentials,
+      const yielded45 = yield* adapter.handle(
+        refreshGrantRequest(grant.refreshToken, grant.clientId, mcpResource),
       );
+      const rotated = yield* jsonOf(yielded45, IssuedCredentials);
       vi.setSystemTime(
         DateTime.toDateUtc(DateTime.makeUnsafe(startedAt.epochMilliseconds + 301_000)),
       );
@@ -1613,12 +1615,14 @@ it.effect(
       );
 
       assert.strictEqual(spent.status, 400);
-      assert.deepStrictEqual(yield* jsonOf(spent, ErrorDescription), {
+      const yielded46 = yield* jsonOf(spent, ErrorDescription);
+      assert.deepStrictEqual(yielded46, {
         error: "invalid_grant",
         error_description: "invalid refresh token",
       });
       assert.strictEqual(family.status, 400);
-      assert.deepStrictEqual(yield* jsonOf(family, ErrorDescription), {
+      const yielded47 = yield* jsonOf(family, ErrorDescription);
+      assert.deepStrictEqual(yielded47, {
         error: "invalid_grant",
         error_description: "session not found",
       });
@@ -1638,10 +1642,10 @@ it.effect(
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(DateTime.toDateUtc(startedAt));
       const grant = yield* issueGrant(adapter, "refusal-log@example.test", mcpResource);
-      const rotated = yield* jsonOf(
-        yield* adapter.handle(refreshGrantRequest(grant.refreshToken, grant.clientId, mcpResource)),
-        IssuedCredentials,
+      const yielded48 = yield* adapter.handle(
+        refreshGrantRequest(grant.refreshToken, grant.clientId, mcpResource),
       );
+      const rotated = yield* jsonOf(yielded48, IssuedCredentials);
       vi.setSystemTime(
         DateTime.toDateUtc(DateTime.makeUnsafe(startedAt.epochMilliseconds + 301_000)),
       );
@@ -1703,26 +1707,24 @@ it.effect(
       const adapter = yield* BetterAuthAdapter;
       const grant = yield* issueGrant(adapter, "no-resource@example.test", undefined);
 
-      assertAuthenticated(
-        yield* adapter.resolveAccessToken(grant.accessToken, ["connections:read"]),
-        {
-          userId: grant.userId,
-          clientId: grant.clientId,
-          clientName: "no-resource@example.test",
-        },
+      const yielded49 = yield* adapter.resolveAccessToken(grant.accessToken, ["connections:read"]);
+      assertAuthenticated(yielded49, {
+        userId: grant.userId,
+        clientId: grant.clientId,
+        clientName: "no-resource@example.test",
+      });
+      const yielded50 = yield* adapter.handle(
+        refreshGrantRequest(grant.refreshToken, grant.clientId, undefined),
       );
-      const renewed = yield* jsonOf(
-        yield* adapter.handle(refreshGrantRequest(grant.refreshToken, grant.clientId, undefined)),
-        IssuedCredentials,
-      );
-      assertAuthenticated(
-        yield* adapter.resolveAccessToken(renewed.access_token, ["connections:read"]),
-        {
-          userId: grant.userId,
-          clientId: grant.clientId,
-          clientName: "no-resource@example.test",
-        },
-      );
+      const renewed = yield* jsonOf(yielded50, IssuedCredentials);
+      const yielded51 = yield* adapter.resolveAccessToken(renewed.access_token, [
+        "connections:read",
+      ]);
+      assertAuthenticated(yielded51, {
+        userId: grant.userId,
+        clientId: grant.clientId,
+        clientName: "no-resource@example.test",
+      });
     }).pipe(layerTools.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
   databaseTestTimeout,
 );
@@ -2007,7 +2009,8 @@ function issueGrant(
 > {
   return Effect.gen(function* () {
     yield* adapter.handle(sendCodeRequest(email));
-    const signedIn = yield* adapter.handle(signInRequest(email, yield* latestCode(email)));
+    const yielded52 = yield* latestCode(email);
+    const signedIn = yield* adapter.handle(signInRequest(email, yielded52));
     const headers = new Headers({ cookie: cookieHeader(signedIn) });
     const session = yield* adapter.getSession(headers);
     if (session === undefined) {
@@ -2044,16 +2047,14 @@ function issueGrant(
     if (resource !== undefined) {
       exchange.set("resource", resource);
     }
-    const credentials = yield* jsonOf(
-      yield* adapter.handle(
-        new Request("http://localhost:5173/api/auth/oauth2/token", {
-          method: "POST",
-          headers: { "content-type": "application/x-www-form-urlencoded" },
-          body: exchange,
-        }),
-      ),
-      IssuedCredentials,
+    const yielded53 = yield* adapter.handle(
+      new Request("http://localhost:5173/api/auth/oauth2/token", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: exchange,
+      }),
     );
+    const credentials = yield* jsonOf(yielded53, IssuedCredentials);
 
     return {
       accessToken: credentials.access_token,

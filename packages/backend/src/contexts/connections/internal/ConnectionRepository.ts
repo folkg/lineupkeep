@@ -222,17 +222,16 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
           )
           .orderBy(asc(providerConnections.id))
           .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
-        const byId = new Map(
-          yield* Effect.forEach(
-            rows,
-            (row) =>
-              Schema.decodeEffect(ConnectionRow)(row).pipe(
-                Effect.map((record) => [record.id, record] as const),
-                Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
-              ),
-            { concurrency: 1 },
-          ),
+        const yielded1 = yield* Effect.forEach(
+          rows,
+          (row) =>
+            Schema.decodeEffect(ConnectionRow)(row).pipe(
+              Effect.map((record) => [record.id, record] as const),
+              Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+            ),
+          { concurrency: 1 },
         );
+        const byId = new Map(yielded1);
         return yield* Effect.forEach(
           ids,
           (id) => {
@@ -878,17 +877,16 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
           )
           .orderBy(asc(providerCredentials.connectionId))
           .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
-        const byId = new Map(
-          yield* Effect.forEach(
-            rows,
-            (row) =>
-              Schema.decodeEffect(ReadyCredentialRow)(row).pipe(
-                Effect.map((credential) => [credential.connectionId, credential] as const),
-                Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
-              ),
-            { concurrency: 1 },
-          ),
+        const yielded2 = yield* Effect.forEach(
+          rows,
+          (row) =>
+            Schema.decodeEffect(ReadyCredentialRow)(row).pipe(
+              Effect.map((credential) => [credential.connectionId, credential] as const),
+              Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+            ),
+          { concurrency: 1 },
         );
+        const byId = new Map(yielded2);
         return yield* Effect.forEach(
           ids,
           (id) => {

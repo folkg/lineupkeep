@@ -101,14 +101,17 @@ export const TeamsLive = Layer.effect(
 
     const list: TeamsShape["list"] = (userId) =>
       Effect.gen(function* () {
-        const named = yield* ensureLeagueNames(userId, yield* teams.list(userId));
-        return yield* summaries(userId, named, yield* connectionCountOf(userId));
+        const yielded1 = yield* teams.list(userId);
+        const named = yield* ensureLeagueNames(userId, yielded1);
+        const yielded2 = yield* connectionCountOf(userId);
+        return yield* summaries(userId, named, yielded2);
       });
 
     const get: TeamsShape["get"] = (userId, team) =>
       Effect.gen(function* () {
         const records = yield* teams.load(userId, [team]);
-        const summary = (yield* summaries(userId, records, yield* connectionCountOf(userId)))[0];
+        const yielded3 = yield* connectionCountOf(userId);
+        const summary = (yield* summaries(userId, records, yielded3))[0];
         if (summary === undefined) {
           return yield* TeamNotFound.make({ team });
         }

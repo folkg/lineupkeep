@@ -17,17 +17,20 @@ it.effect("allows a read loop up to its client allowance and refuses with the re
     const limit = toolCallLimits.read;
 
     for (let call = 0; call < limit.clientMax; call++) {
-      assert.deepStrictEqual(yield* quota.consume(read("client-a")), { allowed: true });
+      const yielded1 = yield* quota.consume(read("client-a"));
+      assert.deepStrictEqual(yielded1, { allowed: true });
     }
 
-    const refused = refusal(yield* quota.consume(read("client-a")));
+    const yielded2 = yield* quota.consume(read("client-a"));
+    const refused = refusal(yielded2);
     assert.strictEqual(refused.bucket, "client");
     assert.strictEqual(refused.callClass, "read");
     assert.strictEqual(refused.limit.clientMax, limit.clientMax);
     assert.strictEqual(Duration.toSeconds(refused.retryAfter), Duration.toSeconds(limit.window));
 
     yield* TestClock.adjust(limit.window);
-    assert.deepStrictEqual(yield* quota.consume(read("client-a")), { allowed: true });
+    const yielded3 = yield* quota.consume(read("client-a"));
+    assert.deepStrictEqual(yielded3, { allowed: true });
   }).pipe(layerTools.provide(ToolCallQuotaTest)),
 );
 
@@ -38,19 +41,24 @@ it.effect("gives a write a smaller allowance than a read, and keeps the buckets 
     assert.isBelow(toolCallLimits.destructive.clientMax, toolCallLimits.write.clientMax);
 
     for (let call = 0; call < toolCallLimits.write.clientMax; call++) {
-      assert.deepStrictEqual(yield* quota.consume(write("client-a")), { allowed: true });
+      const yielded4 = yield* quota.consume(write("client-a"));
+      assert.deepStrictEqual(yielded4, { allowed: true });
     }
-    const refused = refusal(yield* quota.consume(write("client-a")));
+    const yielded5 = yield* quota.consume(write("client-a"));
+    const refused = refusal(yielded5);
     assert.strictEqual(refused.callClass, "write");
     assert.strictEqual(refused.bucket, "client");
 
     for (let call = 0; call < toolCallLimits.destructive.clientMax; call++) {
-      assert.deepStrictEqual(yield* quota.consume(destructive("client-a")), { allowed: true });
+      const yielded6 = yield* quota.consume(destructive("client-a"));
+      assert.deepStrictEqual(yielded6, { allowed: true });
     }
     assert.isFalse((yield* quota.consume(destructive("client-a"))).allowed);
 
-    assert.deepStrictEqual(yield* quota.consume(read("client-a")), { allowed: true });
-    assert.deepStrictEqual(yield* quota.consume(destructive("client-b")), { allowed: true });
+    const yielded7 = yield* quota.consume(read("client-a"));
+    assert.deepStrictEqual(yielded7, { allowed: true });
+    const yielded8 = yield* quota.consume(destructive("client-b"));
+    assert.deepStrictEqual(yielded8, { allowed: true });
   }).pipe(layerTools.provide(ToolCallQuotaTest)),
 );
 
@@ -62,19 +70,24 @@ it.effect("leaves a second client's allowance intact when one client spends its 
     for (let call = 0; call < limit.clientMax; call++) {
       yield* quota.consume(read("client-a"));
     }
-    assert.strictEqual(refusal(yield* quota.consume(read("client-a"))).bucket, "client");
+    const yielded9 = yield* quota.consume(read("client-a"));
+    assert.strictEqual(refusal(yielded9).bucket, "client");
 
     for (let call = 0; call < limit.clientMax; call++) {
-      assert.deepStrictEqual(yield* quota.consume(read("client-b")), { allowed: true });
+      const yielded10 = yield* quota.consume(read("client-b"));
+      assert.deepStrictEqual(yielded10, { allowed: true });
     }
 
     for (let call = 0; call < limit.clientMax - 1; call++) {
-      assert.deepStrictEqual(yield* quota.consume(read("client-c")), { allowed: true });
+      const yielded11 = yield* quota.consume(read("client-c"));
+      assert.deepStrictEqual(yielded11, { allowed: true });
     }
-    const shared = refusal(yield* quota.consume(read("client-c")));
+    const yielded12 = yield* quota.consume(read("client-c"));
+    const shared = refusal(yielded12);
     assert.strictEqual(shared.bucket, "owner");
     assert.strictEqual(shared.limit.ownerMax, limit.ownerMax);
-    assert.deepStrictEqual(yield* quota.consume(write("client-c")), { allowed: true });
+    const yielded13 = yield* quota.consume(write("client-c"));
+    assert.deepStrictEqual(yielded13, { allowed: true });
   }).pipe(layerTools.provide(ToolCallQuotaTest)),
 );
 
@@ -91,9 +104,11 @@ it.effect("charges a refused call, so hammering spends the owner's allowance too
     }
 
     for (let call = 0; call < limit.clientMax; call++) {
-      assert.deepStrictEqual(yield* quota.consume(destructive("client-b")), { allowed: true });
+      const yielded14 = yield* quota.consume(destructive("client-b"));
+      assert.deepStrictEqual(yielded14, { allowed: true });
     }
-    assert.strictEqual(refusal(yield* quota.consume(destructive("client-c"))).bucket, "owner");
+    const yielded15 = yield* quota.consume(destructive("client-c"));
+    assert.strictEqual(refusal(yielded15).bucket, "owner");
   }).pipe(layerTools.provide(ToolCallQuotaTest)),
 );
 
@@ -112,7 +127,8 @@ it.effect("keeps the count across a fresh process over the same durable store", 
       ToolCallQuota,
       ToolCallQuotaLive.pipe(Layer.provide(ToolCallQuotaRepository.layer)),
     );
-    assert.deepStrictEqual(yield* second.consume(destructive("client-a")), { allowed: true });
+    const yielded16 = yield* second.consume(destructive("client-a"));
+    assert.deepStrictEqual(yielded16, { allowed: true });
     assert.isFalse((yield* second.consume(destructive("client-a"))).allowed);
   }).pipe(layerTools.provide(ToolCallQuotaDatabaseTest)),
 );
@@ -122,9 +138,11 @@ it.effect("charges only the owner bucket when the token names no client", () =>
     const quota = yield* ToolCallQuota;
 
     for (let call = 0; call < toolCallLimits.write.clientMax; call++) {
-      assert.deepStrictEqual(yield* quota.consume(write(undefined)), { allowed: true });
+      const yielded17 = yield* quota.consume(write(undefined));
+      assert.deepStrictEqual(yielded17, { allowed: true });
     }
-    assert.deepStrictEqual(yield* quota.consume(write(undefined)), { allowed: true });
+    const yielded18 = yield* quota.consume(write(undefined));
+    assert.deepStrictEqual(yielded18, { allowed: true });
   }).pipe(layerTools.provide(ToolCallQuotaTest)),
 );
 

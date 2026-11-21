@@ -242,7 +242,8 @@ it.effect("refuses a group whole when one of its moves cannot run", () =>
       "Waiver One is on waivers, so a free-agent add cannot bring them in.",
     );
     assert.deepStrictEqual(result.plan.moves, []);
-    assert.deepStrictEqual(yield* database.select().from(transactionMoves), []);
+    const yielded1 = yield* database.select().from(transactionMoves);
+    assert.deepStrictEqual(yielded1, []);
   }).pipe(
     layerTools.provide(
       serviceLayer([
@@ -402,7 +403,8 @@ it.effect("refuses a proposed move for a player who has already played today", (
       "Wait until the league unlocks Locked One, or choose another player.",
     );
     assert.deepStrictEqual(result.plan.moves, []);
-    assert.deepStrictEqual(yield* database.select().from(transactionMoves), []);
+    const yielded2 = yield* database.select().from(transactionMoves);
+    assert.deepStrictEqual(yielded2, []);
   }).pipe(
     layerTools.provide(serviceLayer([league([locked("a1", "Locked One", "BN", ["RB"])], [])])),
   ),
@@ -513,11 +515,9 @@ it.effect("saves one move of a group for one day and revalidates the plan", () =
         ["saved", "2026-11-16", "2026-11-16"],
       ],
     );
+    const yielded3 = yield* database.select().from(transactionMoves);
     assert.deepStrictEqual(
-      EffectArray.map(yield* database.select().from(transactionMoves), (move) => [
-        move.runDay,
-        move.decision,
-      ]),
+      EffectArray.map(yielded3, (move) => [move.runDay, move.decision]),
       [
         ["2026-11-16", "saved"],
         ["2026-11-16", "saved"],
@@ -711,13 +711,11 @@ it.effect("amends a saved move's reason and fallbacks in place and revalidates t
     const storedAfter = yield* database.select().from(transactionMoves);
     assert.strictEqual(storedAfter.length, 1);
     assert.strictEqual(storedAfter[0]?.position, positionBefore);
-    assert.deepStrictEqual(
-      EffectArray.map(
-        yield* database.select().from(transactionMoveClaims),
-        (claim) => claim.claimKey,
-      ).sort(),
-      ["fa1", "fa3"],
-    );
+    const yielded4 = yield* database.select().from(transactionMoveClaims);
+    assert.deepStrictEqual(EffectArray.map(yielded4, (claim) => claim.claimKey).sort(), [
+      "fa1",
+      "fa3",
+    ]);
   }).pipe(
     layerTools.provide(
       serviceLayer([
@@ -1228,13 +1226,11 @@ it.effect("resolves concurrent proposals to one plan without losing a move", () 
       [],
     );
     assert.strictEqual((yield* database.select().from(transactionPlans)).length, 1);
-    assert.deepStrictEqual(
-      EffectArray.map(
-        yield* database.select().from(transactionMoveClaims),
-        (claim) => claim.claimKey,
-      ).sort(),
-      ["fa1", "fa2"],
-    );
+    const yielded5 = yield* database.select().from(transactionMoveClaims);
+    assert.deepStrictEqual(EffectArray.map(yielded5, (claim) => claim.claimKey).sort(), [
+      "fa1",
+      "fa2",
+    ]);
   }).pipe(
     layerTools.provide(
       serviceLayer([
@@ -4566,7 +4562,8 @@ it.effect("refuses an impossible next-day group at propose and sends nothing", (
       "Free Agent One has no place on the active roster",
     );
     assert.deepStrictEqual(proposed.plan.moves, []);
-    assert.deepStrictEqual(yield* database.select().from(transactionMoves), []);
+    const yielded6 = yield* database.select().from(transactionMoves);
+    assert.deepStrictEqual(yielded6, []);
     assert.deepStrictEqual(writes.requests, []);
   }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
 });
@@ -4597,7 +4594,8 @@ it.effect("refuses a group at propose when the league cannot accept its slot mov
     );
     assert.include(proposed.refused[0]?.detail ?? "", "no roster date for a slot move");
     assert.deepStrictEqual(proposed.plan.moves, []);
-    assert.deepStrictEqual(yield* database.select().from(transactionMoves), []);
+    const yielded7 = yield* database.select().from(transactionMoves);
+    assert.deepStrictEqual(yielded7, []);
     assert.deepStrictEqual(writes.requests, []);
   }).pipe(layerTools.provide(mutableFactsLayer(facts, writes.layer)));
 });

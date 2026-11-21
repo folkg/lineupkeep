@@ -38,7 +38,8 @@ it.effect("starts an owner-bound session, authorizes its ticket, and hides it fr
 
     assert.strictEqual(started.session.status, "active");
     assert.isUndefined(started.session.connectionId);
-    assert.deepStrictEqual(yield* connections.list(owner), []);
+    const yielded1 = yield* connections.list(owner);
+    assert.deepStrictEqual(yielded1, []);
     assert.isAbove(
       started.session.expiresAt.epochMilliseconds,
       started.session.startedAt.epochMilliseconds,
@@ -110,9 +111,11 @@ it.effect("completes once, stores the validated connection, and discovers teams"
     assert.strictEqual(completed.teamsDiscovered, 1);
     assert.instanceOf(replay, HostedLinkingNotActive);
     assert.instanceOf(replayedStream, HostedLinkingNotActive);
-    assert.deepStrictEqual(yield* connections.list(owner), [completed.connection]);
+    const yielded2 = yield* connections.list(owner);
+    assert.deepStrictEqual(yielded2, [completed.connection]);
+    const yielded3 = yield* connections.listTeams(owner);
     assert.deepStrictEqual(
-      EffectArray.map(yield* connections.listTeams(owner), (team) => team.name),
+      EffectArray.map(yielded3, (team) => team.name),
       ["Hosted Team"],
     );
   }).pipe(layerTools.provide(HostedLinkingTestLayer)),
@@ -152,8 +155,9 @@ it.effect("reconnects an expired connection in place instead of creating another
     assert.strictEqual(completed.session.connectionId, first.connection.id);
     assert.strictEqual(completed.connection.id, first.connection.id);
     assert.strictEqual(completed.connection.status, "ready");
+    const yielded4 = yield* connections.list(owner);
     assert.deepStrictEqual(
-      EffectArray.map(yield* connections.list(owner), (connection) => connection.id),
+      EffectArray.map(yielded4, (connection) => connection.id),
       [first.connection.id],
     );
   }).pipe(layerTools.provide(HostedLinkingTestLayer)),
@@ -179,7 +183,8 @@ it.effect("refuses a reconnect target owned by someone else", () =>
     );
 
     assert.strictEqual(error._tag, "connection.not_found");
-    assert.deepStrictEqual(yield* links.list(owner), []);
+    const yielded5 = yield* links.list(owner);
+    assert.deepStrictEqual(yielded5, []);
   }).pipe(layerTools.provide(HostedLinkingTestLayer)),
 );
 
@@ -202,7 +207,8 @@ it.effect("expires a session after its window and refuses completion", () =>
 
     assert.instanceOf(error, HostedLinkingExpired);
     assert.strictEqual(expired[0]?.status, "expired");
-    assert.deepStrictEqual(yield* connections.list(owner), []);
+    const yielded6 = yield* connections.list(owner);
+    assert.deepStrictEqual(yielded6, []);
   }).pipe(layerTools.provide(HostedLinkingTestLayer)),
 );
 
@@ -216,7 +222,8 @@ it.effect("expires a session explicitly without leaving a connection", () =>
 
     assert.strictEqual(expired[0]?.status, "expired");
     assert.isUndefined(expired[0]?.connectionId);
-    assert.deepStrictEqual(yield* connections.list(owner), []);
+    const yielded7 = yield* connections.list(owner);
+    assert.deepStrictEqual(yielded7, []);
   }).pipe(layerTools.provide(HostedLinkingTestLayer)),
 );
 
@@ -243,7 +250,8 @@ it.effect(
       assert.isUndefined(cancelled[0]?.connectionId);
       assert.deepStrictEqual(retried, cancelled);
       assert.instanceOf(completion, HostedLinkingNotActive);
-      assert.deepStrictEqual(yield* connections.list(owner), []);
+      const yielded8 = yield* connections.list(owner);
+      assert.deepStrictEqual(yielded8, []);
     }).pipe(layerTools.provide(HostedLinkingTestLayer)),
 );
 
@@ -257,7 +265,8 @@ it.effect("fails a session without leaving a connection behind", () =>
 
     assert.strictEqual(failed.status, "failed");
     assert.strictEqual(failed.failureReason, "provider_unavailable");
-    assert.deepStrictEqual(yield* connections.list(owner), []);
+    const yielded9 = yield* connections.list(owner);
+    assert.deepStrictEqual(yielded9, []);
   }).pipe(layerTools.provide(HostedLinkingTestLayer)),
 );
 
@@ -279,7 +288,8 @@ it.effect("leaves no connection behind when the provider rejects the captured se
     );
 
     assert.instanceOf(error, ConnectionProviderRejected);
-    assert.deepStrictEqual(yield* connections.list(owner), []);
+    const yielded10 = yield* connections.list(owner);
+    assert.deepStrictEqual(yielded10, []);
   }).pipe(layerTools.provide(HostedLinkingTestLayer)),
 );
 

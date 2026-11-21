@@ -116,16 +116,15 @@ it.effect("leaves a newer envelope in place when the opened envelope has been re
     });
 
     assert.strictEqual(Redacted.value(opened), "retained-cookie-value");
-    assert.strictEqual(yield* storedEnvelope(database), newer);
+    const yielded1 = yield* storedEnvelope(database);
+    assert.strictEqual(yielded1, newer);
   }).pipe(layerTools.provide(TestLayer)),
 );
 
 function sealWithRetainedKey(): Effect.Effect<string> {
   return Effect.gen(function* () {
-    const legacy = Context.get(
-      yield* Effect.scoped(Layer.build(LegacyEncryptionLayer)),
-      ConnectionCredentialEncryption,
-    );
+    const yielded2 = yield* Effect.scoped(Layer.build(LegacyEncryptionLayer));
+    const legacy = Context.get(yielded2, ConnectionCredentialEncryption);
     return yield* legacy.encrypt({
       userId: owner,
       connectionId,

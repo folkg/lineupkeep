@@ -121,7 +121,8 @@ export class OAuthClientRepository extends Context.Service<OAuthClientRepository
       )(function* (scopes: ReadonlyArray<AuthorizationScope>) {
         const advertised = EffectArray.map(scopes, (scope) => scope.name);
         const accepted = [...acceptedScopeNames(scopes)];
-        const now = DateTime.toDateUtc(yield* DateTime.now);
+        const yielded1 = yield* DateTime.now;
+        const now = DateTime.toDateUtc(yielded1);
         const widened = yield* query(() =>
           database
             .update(oauthClient)

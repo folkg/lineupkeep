@@ -166,11 +166,13 @@ it.effect("round-trips every state and row, then resumes a stored notification",
       sentAt: null,
       updatedAt: "2026-10-25T12:00:00.000Z",
     });
-    const next = yield* plan(
-      ConnectionNotificationWorkflow,
-      yield* snapshotOf(ConnectionNotificationWorkflow, stored),
-      { _tag: "Retried", at: later, nextAttemptAt: later, error: "unavailable" },
-    );
+    const yielded1 = yield* snapshotOf(ConnectionNotificationWorkflow, stored);
+    const next = yield* plan(ConnectionNotificationWorkflow, yielded1, {
+      _tag: "Retried",
+      at: later,
+      nextAttemptAt: later,
+      error: "unavailable",
+    });
     assert.strictEqual(next._tag, "pending");
     assert.strictEqual(next.attempts, 3);
     assert.strictEqual(next.lastError, "unavailable");

@@ -37,7 +37,8 @@ it.effect("rejects anonymous invalid input before reporting validation failure",
 it.effect("preserves defects instead of classifying them as expected rejections", () =>
   Effect.gen(function* () {
     const program = authenticatedUseCase(() => Effect.die("private defect"), mapConnectionError);
-    const exit = yield* program.pipe(layerTools.provide(yield* authentication(true)), Effect.exit);
+    const yielded1 = yield* authentication(true);
+    const exit = yield* program.pipe(layerTools.provide(yielded1), Effect.exit);
 
     assert.isTrue(Exit.isFailure(exit) && Cause.hasDies(exit.cause));
   }),
@@ -57,10 +58,11 @@ it.effect("returns ownership-free ISO dates through the authenticated result", (
       updatedAt: timestamp,
     });
 
+    const yielded2 = yield* authentication(true);
     const result = yield* authenticatedUseCase(
       () => Effect.succeed(toConnectionView(connection, 3)),
       mapConnectionError,
-    ).pipe(layerTools.provide(yield* authentication(true)));
+    ).pipe(layerTools.provide(yielded2));
 
     assert.deepStrictEqual(result, {
       type: "success",

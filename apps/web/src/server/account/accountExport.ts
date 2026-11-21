@@ -17,7 +17,8 @@ export const exportAccountData = Effect.gen(function* () {
     });
   }
   const document = yield* AccountExport.use((exporter) => exporter.exportData(session.user.id));
-  const day = DateTime.formatIsoDate(yield* DateTime.now);
+  const yielded1 = yield* DateTime.now;
+  const day = DateTime.formatIsoDate(yielded1);
   const body = yield* Schema.encodeEffect(
     Schema.fromJsonString(AccountExportDocument, { space: 2 }),
   )(document).pipe(Effect.orDie);

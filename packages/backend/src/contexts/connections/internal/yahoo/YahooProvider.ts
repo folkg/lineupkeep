@@ -700,7 +700,8 @@ export const yahooProvider = Effect.gen(function* () {
     const stat = yield* ValidSearchStat(input.sort, input.statId, input.statType);
     const window =
       input.sort === "recent_rank" ? yield* ValidRecentFormWindow(input.window) : undefined;
-    const positions = Option.getOrUndefined(yield* ValidSearchPositions(input.positions));
+    const yielded1 = yield* ValidSearchPositions(input.positions);
+    const positions = Option.getOrUndefined(yielded1);
     const players = yield* searchPlayersThroughSdk(sdk, "search_players", cookie, {
       leagueKey,
       season: input.season,

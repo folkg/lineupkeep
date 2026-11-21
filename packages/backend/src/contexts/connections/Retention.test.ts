@@ -532,10 +532,10 @@ function seedTeam(
     yield* fake.setLeague(league);
     yield* fake.setRoster(roster);
     yield* fake.setNativeAfter(nativeAfter);
-    const linked = Array.getUnsafe(
-      yield* connections.link(owner, [{ provider: decodeProviderKey("yahoo"), session }]),
-      0,
-    );
+    const yielded1 = yield* connections.link(owner, [
+      { provider: decodeProviderKey("yahoo"), session },
+    ]);
+    const linked = Array.getUnsafe(yielded1, 0);
     const found = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
     const team = Array.getUnsafe(found, 0);
     return { team: team.id, connectionId: team.connectionId };

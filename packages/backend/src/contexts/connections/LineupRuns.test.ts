@@ -97,15 +97,18 @@ it.effect(
       assert.strictEqual(submitted.runs[0]?.outcome?.provenance?.kind, "refused");
       assert.strictEqual(submitted.runs[0]?.outcome?.lockedPlayers, 1);
       assert.strictEqual(submitted.runs[0]?.outcome?.editablePlayers, 1);
-      assert.strictEqual(yield* fake.nativeCallCount, 1);
-      assert.strictEqual(yield* fake.explicitCallCount, 0);
+      const yielded1 = yield* fake.nativeCallCount;
+      assert.strictEqual(yielded1, 1);
+      const yielded2 = yield* fake.explicitCallCount;
+      assert.strictEqual(yielded2, 0);
 
       const replay = yield* runs.submit(owner, lineupRequest(team.id, requestId));
       assert.deepStrictEqual(
         EffectArray.map(replay.runs, (run) => run.run),
         EffectArray.map(submitted.runs, (run) => run.run),
       );
-      assert.strictEqual(yield* fake.nativeCallCount, 1);
+      const yielded3 = yield* fake.nativeCallCount;
+      assert.strictEqual(yielded3, 1);
 
       const conflict = yield* Effect.flip(
         runs.submit(owner, lineupRequest(team.id, requestId, { coverage: "week", week: 4 })),
@@ -248,7 +251,8 @@ it.effect("reconciles a lost provider response only when readback proves the cha
     assert.strictEqual(submitted.runs[0]?.outcome?.kind, "changed");
     assert.strictEqual(submitted.runs[0]?.outcome?.verified, true);
     assert.strictEqual(submitted.runs[0]?.outcome?.reconciled, true);
-    assert.strictEqual(yield* fake.nativeCallCount, 1);
+    const yielded4 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded4, 1);
   }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -267,13 +271,15 @@ it.effect("keeps a lost response uncertain when readback does not prove a change
     assert.strictEqual(run?.status, "uncertain");
     assert.strictEqual(run?.outcome?.kind, "uncertain");
     assert.strictEqual(run?.outcome?.verified, false);
-    assert.strictEqual(yield* fake.nativeCallCount, 1);
+    const yielded5 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded5, 1);
     if (run === undefined) {
       return;
     }
 
     yield* worker.deliver([run.run]);
-    assert.strictEqual(yield* fake.nativeCallCount, 1);
+    const yielded6 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded6, 1);
     const after = yield* runs.get(owner, { runs: [run.run] });
     assert.strictEqual(after.runs[0]?.status, "uncertain");
   }).pipe(layerTools.provide(LineupTestLayer)),
@@ -292,7 +298,8 @@ it.effect("reports a definitive provider rejection as failed, never completed", 
     assert.strictEqual(submitted.runs[0]?.status, "failed");
     assert.strictEqual(submitted.runs[0]?.outcome?.kind, "failed");
     assert.strictEqual(submitted.runs[0]?.outcome?.verified, false);
-    assert.strictEqual(yield* fake.nativeCallCount, 1);
+    const yielded7 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded7, 1);
   }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -318,8 +325,10 @@ it.effect("applies and verifies changed explicit assignments", () =>
     assert.strictEqual(run.state.outcome.implementation, "custom_policy");
     assert.strictEqual(run.state.outcome.provenance?.kind, "planned");
     assert.strictEqual(run.state.outcome.changes.length, 2);
-    assert.strictEqual(yield* fake.explicitCallCount, 1);
-    assert.strictEqual(yield* fake.nativeCallCount, 0);
+    const yielded8 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded8, 1);
+    const yielded9 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded9, 0);
     const requests = yield* fake.explicitRequests;
     assert.strictEqual(requests[0]?.length, 2);
   }).pipe(layerTools.provide(LineupTestLayer)),
@@ -347,7 +356,8 @@ it.effect("writes a reserve transit instead of blocking the team", () =>
     assert.strictEqual(run.state.outcome.kind, "changed");
     assert.strictEqual(run.state.outcome.verified, true);
     const requests = yield* fake.explicitRequests;
-    assert.strictEqual(yield* fake.explicitCallCount, 1);
+    const yielded10 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded10, 1);
     assert.deepStrictEqual(
       optionalArrayValue(
         optionalArrayValue(requests[0], (value) =>
@@ -389,7 +399,8 @@ it.effect("leaves a reserve player in place and writes only the rest of the line
       },
     ]);
     const requests = yield* fake.explicitRequests;
-    assert.strictEqual(yield* fake.explicitCallCount, 1);
+    const yielded11 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded11, 1);
     assert.deepStrictEqual(
       optionalArrayValue(requests[0], (value) =>
         EffectArray.map(value, (assignment) => assignment.providerPlayerKey),
@@ -427,7 +438,8 @@ it.effect("reports your league's own words when it refuses the lineup and never 
       ),
       ["Healthy Skater"],
     );
-    assert.strictEqual(yield* fake.explicitCallCount, 1);
+    const yielded12 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded12, 1);
   }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -596,10 +608,13 @@ it.effect("fails loudly when the response stops matching the decoder", () =>
       run.state.outcome.summary,
       /in a shape Lineupgrade could not read \(read_league at league.stat_modifiers\)/u,
     );
-    assert.strictEqual(yield* fake.nativeCallCount, 0);
-    assert.strictEqual(yield* fake.explicitCallCount, 0);
+    const yielded13 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded13, 0);
+    const yielded14 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded14, 0);
     yield* worker.deliver([runId]);
-    assert.strictEqual(yield* fake.nativeCallCount, 0);
+    const yielded15 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded15, 0);
   }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -624,9 +639,11 @@ it.effect("reports exactly which explicit assignments differed after acceptance"
     assert.strictEqual(run.state.outcome.verified, true);
     assert.strictEqual(run.state.outcome.differences?.length, 2);
     assert.strictEqual(run.state.outcome.implementation, "custom_policy");
-    assert.strictEqual(yield* fake.explicitCallCount, 1);
+    const yielded16 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded16, 1);
     yield* worker.deliver([runId]);
-    assert.strictEqual(yield* fake.explicitCallCount, 1);
+    const yielded17 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded17, 1);
   }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -657,9 +674,11 @@ it.effect("reports unplanned readback changes as a mismatch after acceptance", (
       ["QB", "BN"],
     );
     assert.strictEqual(run.state.outcome.implementation, "custom_policy");
-    assert.strictEqual(yield* fake.explicitCallCount, 1);
+    const yielded18 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded18, 1);
     yield* worker.deliver([runId]);
-    assert.strictEqual(yield* fake.explicitCallCount, 1);
+    const yielded19 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded19, 1);
   }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -684,9 +703,11 @@ it.effect("fails an invalid explicit assignment request without retrying", () =>
     assert.strictEqual(run.state.outcome.verified, false);
     assert.strictEqual(run.state.outcome.implementation, "custom_policy");
     assert.strictEqual(run.state.outcome.provenance?.kind, "planned");
-    assert.strictEqual(yield* fake.explicitCallCount, 1);
+    const yielded20 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded20, 1);
     yield* worker.deliver([runId]);
-    assert.strictEqual(yield* fake.explicitCallCount, 1);
+    const yielded21 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded21, 1);
   }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -757,7 +778,8 @@ it.effect("uses the recorded acceptance when verification resumes", () =>
       .from(lineupWriteIntents)
       .where(eq(lineupWriteIntents.id, intent.id));
     assert.strictEqual(updatedIntent?.status, resumed.state.writeIntent?.status);
-    assert.strictEqual(yield* fake.explicitCallCount, 1);
+    const yielded22 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded22, 1);
   }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -781,7 +803,8 @@ it.effect("reconciles a lost explicit response when the readback matches the pla
     assert.strictEqual(run.state.outcome.kind, "changed");
     assert.strictEqual(run.state.outcome.verified, true);
     assert.strictEqual(run.state.outcome.reconciled, true);
-    assert.strictEqual(yield* fake.explicitCallCount, 1);
+    const yielded23 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded23, 1);
   }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -807,9 +830,11 @@ it.effect(
       }
       assert.strictEqual(run.state.outcome.kind, "uncertain");
       assert.strictEqual(run.state.outcome.differences?.length, 4);
-      assert.strictEqual(yield* fake.explicitCallCount, 1);
+      const yielded24 = yield* fake.explicitCallCount;
+      assert.strictEqual(yielded24, 1);
       yield* worker.deliver([runId]);
-      assert.strictEqual(yield* fake.explicitCallCount, 1);
+      const yielded25 = yield* fake.explicitCallCount;
+      assert.strictEqual(yielded25, 1);
     }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -832,9 +857,11 @@ it.effect("retries a lost explicit response only when the readback is unchanged"
       return;
     }
     assert.strictEqual(run.state.reason, "provider_outcome_unknown");
-    assert.strictEqual(yield* fake.explicitCallCount, 1);
+    const yielded26 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded26, 1);
     yield* worker.deliver([runId]);
-    assert.strictEqual(yield* fake.explicitCallCount, 1);
+    const yielded27 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded27, 1);
 
     const database = yield* ConnectionsDatabase;
     const stored = yield* database
@@ -864,7 +891,8 @@ it.effect("retries a lost explicit response only when the readback is unchanged"
 
     yield* worker.deliver([runId]);
 
-    assert.strictEqual(yield* fake.explicitCallCount, 2);
+    const yielded28 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded28, 2);
     const retried = yield* loadRun(repository, runId);
     assert.strictEqual(retried.status, "completed");
   }).pipe(layerTools.provide(LineupTestLayer)),
@@ -884,8 +912,10 @@ it.effect("plans a manual run from your league's declared scores", () =>
     assert.strictEqual(submitted.runs[0]?.outcome?.provenance?.kind, "planned");
     assert.strictEqual(submitted.runs[0]?.outcome?.provenance?.label, "fake/declared-score");
     assert.strictEqual(submitted.runs[0]?.outcome?.changes.length, 2);
-    assert.strictEqual(yield* fake.explicitCallCount, 1);
-    assert.strictEqual(yield* fake.nativeCallCount, 0);
+    const yielded29 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded29, 1);
+    const yielded30 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded30, 0);
   }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -913,8 +943,10 @@ it.effect("falls back to the native action when the planner reports a structural
       return;
     }
     assert.match(run.state.outcome.provenance.detail, /publishes no score/u);
-    assert.strictEqual(yield* fake.nativeCallCount, 1);
-    assert.strictEqual(yield* fake.explicitCallCount, 0);
+    const yielded31 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded31, 1);
+    const yielded32 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded32, 0);
   }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -947,8 +979,10 @@ it.effect("blocks a run when the planner reports a transient refusal", () =>
       return;
     }
     assert.match(run.state.outcome.provenance.detail, /No completed scoring period/u);
-    assert.strictEqual(yield* fake.nativeCallCount, 0);
-    assert.strictEqual(yield* fake.explicitCallCount, 0);
+    const yielded33 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded33, 0);
+    const yielded34 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded34, 0);
   }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -973,7 +1007,8 @@ it.effect("runs a queued intent on the active implementation after the cutover",
     }
     assert.strictEqual(run.state.implementation, "custom_policy");
     assert.strictEqual(run.state.outcome.implementation, "custom_policy");
-    assert.strictEqual(yield* fake.explicitCallCount, 1);
+    const yielded35 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded35, 1);
   }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -1056,8 +1091,10 @@ it.effect(
       assert.isTrue(
         EffectArray.some(attempts, (attempt) => attempt.leaseToken !== updatedIntent?.leaseToken),
       );
-      assert.strictEqual(yield* fake.nativeCallCount, 1);
-      assert.strictEqual(yield* fake.explicitCallCount, 0);
+      const yielded36 = yield* fake.nativeCallCount;
+      assert.strictEqual(yielded36, 1);
+      const yielded37 = yield* fake.explicitCallCount;
+      assert.strictEqual(yielded37, 0);
     }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -1102,7 +1139,8 @@ it.effect("blocks an explicit write when the roster membership changed", () =>
 
     const run = yield* loadRun(repository, runId);
     assert.strictEqual(run.status, "blocked");
-    assert.strictEqual(yield* fake.explicitCallCount, 0);
+    const yielded38 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded38, 0);
   }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -1122,7 +1160,8 @@ it.effect("blocks an explicit write when the roster period changed", () =>
 
     const run = yield* loadRun(repository, runId);
     assert.strictEqual(run.status, "blocked");
-    assert.strictEqual(yield* fake.explicitCallCount, 0);
+    const yielded39 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded39, 0);
   }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -1146,7 +1185,8 @@ it.effect("blocks an explicit write when the scoring week changes during plannin
 
     const run = yield* loadRun(repository, runId);
     assert.strictEqual(run.status, "blocked");
-    assert.strictEqual(yield* fake.explicitCallCount, 0);
+    const yielded40 = yield* fake.explicitCallCount;
+    assert.strictEqual(yielded40, 0);
   }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -1181,7 +1221,8 @@ it.effect("lets a manual run bypass pause and enrollment after observation", () 
 
     assert.strictEqual(submitted.runs[0]?.status, "completed");
     assert.strictEqual(submitted.runs[0]?.outcome?.kind, "changed");
-    assert.strictEqual(yield* fake.nativeCallCount, 1);
+    const yielded41 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded41, 1);
   }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -1208,7 +1249,8 @@ it.effect("blocks when the connection credential generation changes after observ
     const submitted = yield* Fiber.join(fiber);
 
     assert.strictEqual(submitted.runs[0]?.status, "blocked");
-    assert.strictEqual(yield* fake.nativeCallCount, 0);
+    const yielded42 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded42, 0);
   }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -1227,7 +1269,8 @@ it.effect("blocks when the connection is disconnected after observation", () =>
     const submitted = yield* Fiber.join(fiber);
 
     assert.strictEqual(submitted.runs[0]?.status, "blocked");
-    assert.strictEqual(yield* fake.nativeCallCount, 0);
+    const yielded43 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded43, 0);
   }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -1264,9 +1307,11 @@ it.effect("serializes duplicate workers and does not replay a completed team", (
     yield* Fiber.join(first);
     yield* Fiber.join(second);
 
-    assert.strictEqual(yield* fake.nativeCallCount, 1);
+    const yielded44 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded44, 1);
     yield* worker.deliver([runId]);
-    assert.strictEqual(yield* fake.nativeCallCount, 1);
+    const yielded45 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded45, 1);
     const loaded = yield* repository.loadRuns(owner, { runs: [runId], limit: 1 });
     assert.strictEqual(loaded.runs[0]?.status, "completed");
   }).pipe(layerTools.provide(LineupTestLayer)),
@@ -1308,7 +1353,8 @@ it.effect("keeps a partial multi-team batch honest and never replays a completed
 
     yield* worker.deliver(EffectArray.map(created.runs, (run) => run.id));
 
-    assert.strictEqual(yield* fake.nativeCallCount, 1);
+    const yielded46 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded46, 1);
     const loaded = yield* repository.loadRuns(owner, {
       request: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a5",
       limit: 10,
@@ -1317,7 +1363,8 @@ it.effect("keeps a partial multi-team batch honest and never replays a completed
     assert.strictEqual(statusByTeam.get(first.id), "completed");
     assert.strictEqual(statusByTeam.get(second.id), "blocked");
     yield* worker.deliver(EffectArray.map(created.runs, (run) => run.id));
-    assert.strictEqual(yield* fake.nativeCallCount, 1);
+    const yielded47 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded47, 1);
   }).pipe(layerTools.provide(LineupTestLayer)),
 );
 
@@ -1863,12 +1910,10 @@ function seedConnection(
     yield* fake.setLeague(league);
     yield* fake.setRoster(roster);
     yield* fake.setNativeAfter(nativeAfter);
-    const linked = Array.getUnsafe(
-      yield* connections.link(owner, [
-        { provider: decodeProviderKey("yahoo"), session: Redacted.make(sessionValue) },
-      ]),
-      0,
-    );
+    const yielded48 = yield* connections.link(owner, [
+      { provider: decodeProviderKey("yahoo"), session: Redacted.make(sessionValue) },
+    ]);
+    const linked = Array.getUnsafe(yielded48, 0);
     const discovered = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
     return {
       connectionId: linked.id,
@@ -1894,10 +1939,10 @@ function seed(
     yield* fake.setLeague(league);
     yield* fake.setRoster(roster);
     yield* fake.setNativeAfter(nativeAfter);
-    const linked = Array.getUnsafe(
-      yield* connections.link(owner, [{ provider: decodeProviderKey("yahoo"), session }]),
-      0,
-    );
+    const yielded49 = yield* connections.link(owner, [
+      { provider: decodeProviderKey("yahoo"), session },
+    ]);
+    const linked = Array.getUnsafe(yielded49, 0);
     const discovered = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
     return EffectArray.map(discovered, (row) => ({ id: row.id, connectionId: row.connectionId }));
   }).pipe(Effect.orDie);

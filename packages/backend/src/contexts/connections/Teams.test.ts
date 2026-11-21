@@ -58,8 +58,10 @@ it.effect("discovers multiple teams in one league and persists them disabled", (
     assert.isTrue(EffectArray.every(discovered, (row) => row.providerLeagueKey === "nhl"));
     assert.isTrue(EffectArray.every(discovered, (row) => row.automation.status === "disabled"));
     assert.isTrue(EffectArray.every(discovered, (row) => row.availability === "available"));
-    assert.deepStrictEqual(yield* connections.listTeams(owner), discovered);
-    assert.deepStrictEqual(yield* connections.listTeams(other), []);
+    const yielded1 = yield* connections.listTeams(owner);
+    assert.deepStrictEqual(yielded1, discovered);
+    const yielded2 = yield* connections.listTeams(other);
+    assert.deepStrictEqual(yielded2, []);
   }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
@@ -114,10 +116,8 @@ it.effect("names a stored team's league on the teams list read", () =>
     const ready = yield* connect(connections);
     yield* fake.setTeams([team("nhl.l.1.t.1", "First Skate")]);
     yield* connections.discoverTeams(owner, [{ id: ready.id }]);
-    assert.strictEqual(
-      findTeam(yield* connections.listTeams(owner), "nhl.l.1.t.1").leagueName,
-      undefined,
-    );
+    const yielded3 = yield* connections.listTeams(owner);
+    assert.strictEqual(findTeam(yielded3, "nhl.l.1.t.1").leagueName, undefined);
 
     yield* fake.setTeams([
       {
@@ -127,7 +127,8 @@ it.effect("names a stored team's league on the teams list read", () =>
       },
     ]);
 
-    const summary = Array.getUnsafe(yield* teams.list(owner), 0);
+    const yielded4 = yield* teams.list(owner);
+    const summary = Array.getUnsafe(yielded4, 0);
 
     assert.strictEqual(summary.team.leagueName, "Elite League 25");
     assert.strictEqual(summary.team.providerUrl, "https://provider.example/hockey/1/1");
@@ -151,7 +152,8 @@ it.effect("does not rediscover a team whose league is already named", () =>
     yield* connections.discoverTeams(owner, [{ id: ready.id }]);
     const before = yield* fake.providerReads;
 
-    const summary = Array.getUnsafe(yield* teams.list(owner), 0);
+    const yielded5 = yield* teams.list(owner);
+    const summary = Array.getUnsafe(yielded5, 0);
 
     assert.strictEqual(summary.team.leagueName, "Elite League 25");
     assert.strictEqual((yield* fake.providerReads) - before, 0);
@@ -168,7 +170,8 @@ it.effect("lists a team whose league name cannot be read", () =>
     yield* connections.discoverTeams(owner, [{ id: ready.id }]);
     yield* fake.failRequests("unavailable");
 
-    const summary = Array.getUnsafe(yield* teams.list(owner), 0);
+    const yielded6 = yield* teams.list(owner);
+    const summary = Array.getUnsafe(yielded6, 0);
 
     assert.strictEqual(summary.team.name, "First Skate");
     assert.strictEqual(summary.team.leagueName, undefined);
@@ -186,7 +189,8 @@ it.effect("refreshes availability, restores teams, and preserves configuration",
     const second = team("nhl.l.1.t.2", "Second Skate");
     yield* fake.setTeams([first, second]);
     yield* connections.discoverTeams(owner, [{ id: ready.id }]);
-    const originalId = findTeam(yield* connections.listTeams(owner), first.providerTeamKey).id;
+    const yielded7 = yield* connections.listTeams(owner);
+    const originalId = findTeam(yielded7, first.providerTeamKey).id;
     yield* database
       .update(providerTeams)
       .set({
@@ -237,7 +241,8 @@ it.effect("requires a new credential generation after the provider rejects disco
     yield* fake.rejectSession(true);
 
     const rejected = yield* Effect.flip(connections.discoverTeams(owner, [{ id: ready.id }]));
-    const reconnectRequired = Array.getUnsafe(yield* connections.list(owner), 0);
+    const yielded8 = yield* connections.list(owner);
+    const reconnectRequired = Array.getUnsafe(yielded8, 0);
     const retained = yield* connections.listTeams(owner);
 
     assert.instanceOf(rejected, ConnectionProviderRejected);
@@ -247,12 +252,10 @@ it.effect("requires a new credential generation after the provider rejects disco
     assert.strictEqual(Array.getUnsafe(retained, 0).availability, "unavailable");
 
     yield* fake.rejectSession(false);
-    const recovered = Array.getUnsafe(
-      yield* connections.completeReconnect(owner, [
-        { id: ready.id, provider: decodeProviderKey("yahoo"), session },
-      ]),
-      0,
-    );
+    const yielded9 = yield* connections.completeReconnect(owner, [
+      { id: ready.id, provider: decodeProviderKey("yahoo"), session },
+    ]);
+    const recovered = Array.getUnsafe(yielded9, 0);
     const rediscovered = yield* connections.discoverTeams(owner, [{ id: ready.id }]);
 
     assert.strictEqual(recovered.status, "ready");
@@ -302,7 +305,8 @@ it.effect("rejects tampered credentials without exposing their contents", () =>
 
     assert.strictEqual(error._tag, "connection.persistence_failed");
     assert.notInclude(String(error), "tampered-envelope");
-    assert.deepStrictEqual(yield* connections.listTeams(owner), []);
+    const yielded10 = yield* connections.listTeams(owner);
+    assert.deepStrictEqual(yielded10, []);
   }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 

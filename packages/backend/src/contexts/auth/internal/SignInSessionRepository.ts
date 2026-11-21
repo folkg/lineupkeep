@@ -40,7 +40,8 @@ export class SignInSessionRepository extends Context.Service<SignInSessionReposi
         );
 
       const list = Effect.fn("SignInSessionRepository.list")(function* (userId: UserId) {
-        const now = DateTime.toDateUtc(yield* DateTime.now);
+        const yielded1 = yield* DateTime.now;
+        const now = DateTime.toDateUtc(yielded1);
         const rows = yield* query(() =>
           database
             .select({

@@ -117,11 +117,11 @@ it.effect("resumes verification from a not-sent retry as unknown", () =>
       ...storedRetryWait,
       writeIntent: { ...storedRetryWait.writeIntent, status: "not_sent" },
     });
-    const next = yield* planTransition(
-      LineupRunWorkflow,
-      yield* snapshotOf(LineupRunWorkflow, retryState),
-      { ...retryClaimed, _tag: "VerificationClaimed" },
-    );
+    const yielded1 = yield* snapshotOf(LineupRunWorkflow, retryState);
+    const next = yield* planTransition(LineupRunWorkflow, yielded1, {
+      ...retryClaimed,
+      _tag: "VerificationClaimed",
+    });
 
     assert.strictEqual(next._tag, "Verifying");
     if (next._tag !== "Verifying") {
@@ -261,7 +261,8 @@ it.effect("rehydrates and round-trips active and terminal intent states", () =>
     assert.isDefined(terminal);
     for (const value of [active.state.value, terminal.state.value]) {
       const codec = Schema.toCodecJson(LineupRunState);
-      const decoded = yield* Schema.decodeEffect(codec)(yield* Schema.encodeEffect(codec)(value));
+      const yielded2 = yield* Schema.encodeEffect(codec)(value);
+      const decoded = yield* Schema.decodeEffect(codec)(yielded2);
       assert.deepStrictEqual(decoded, value);
       const restored = yield* snapshotOf(LineupRunWorkflow, decoded);
       assert.deepStrictEqual(restored.state, value);

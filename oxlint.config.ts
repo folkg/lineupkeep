@@ -518,7 +518,6 @@ const pendingEffectRules = new Set([
   "effecttsgo/map-map-error-to-map-both",
   "effecttsgo/missed-pipeable-opportunity",
   "effecttsgo/missing-pipeable-signature",
-  "effecttsgo/yield-in-call-argument",
   "effecttsgo/effect-try-without-catch",
 ]);
 

@@ -234,7 +234,8 @@ it.effect("cancels a pending provider request with its delivery fiber", () =>
     yield* Fiber.interrupt(delivery);
     yield* Effect.promise(() => aborted.promise);
 
-    assert.isTrue(Exit.hasInterrupts(yield* Fiber.await(delivery)));
+    const yielded1 = yield* Fiber.await(delivery);
+    assert.isTrue(Exit.hasInterrupts(yielded1));
   }),
 );
 

@@ -67,7 +67,8 @@ it.effect(
       const refused = yield* Effect.flip(erasure.erase(owner.id));
 
       assert.strictEqual(refused._tag, "account_erasure.export_required");
-      assert.deepStrictEqual(yield* countClasses(account), before);
+      const yielded1 = yield* countClasses(account);
+      assert.deepStrictEqual(yielded1, before);
     }).pipe(layerTools.provide(ErasureTestLayer)),
   30_000,
 );
@@ -87,7 +88,8 @@ it.effect(
       const refused = yield* Effect.flip(erasure.erase(owner.id));
 
       assert.strictEqual(refused._tag, "account_erasure.export_required");
-      assert.deepStrictEqual(yield* countClasses(account), before);
+      const yielded2 = yield* countClasses(account);
+      assert.deepStrictEqual(yielded2, before);
     }).pipe(layerTools.provide(ErasureTestLayer)),
   30_000,
 );

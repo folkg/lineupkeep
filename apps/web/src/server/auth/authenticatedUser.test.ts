@@ -23,7 +23,8 @@ it.effect("rejects an expired session before running the use case", () =>
     ).pipe(layerTools.provide(Layer.merge(authentication, requestContextLayer(context))));
 
     assert.deepStrictEqual(result, { type: "error", error: { type: "auth.required" } });
-    assert.deepStrictEqual(yield* Ref.get(owners), []);
+    const yielded1 = yield* Ref.get(owners);
+    assert.deepStrictEqual(yielded1, []);
   }),
 );
 
@@ -43,7 +44,8 @@ it.effect("runs the use case for the authenticated user", () =>
     ).pipe(layerTools.provide(Layer.merge(authentication, requestContextLayer(context))));
 
     assert.strictEqual(result, "saved");
-    assert.deepStrictEqual(yield* Ref.get(owners), ["signed-in-user/signed-in-session"]);
+    const yielded2 = yield* Ref.get(owners);
+    assert.deepStrictEqual(yielded2, ["signed-in-user/signed-in-session"]);
   }),
 );
 

@@ -126,11 +126,12 @@ it.effect("round-trips both states through JSON and resumes a stored open incide
       _tag: "open",
       openedAt: "2026-10-25T12:00:00.000Z",
     });
-    const next = yield* plan(
-      ConnectionIncidentWorkflow,
-      yield* snapshotOf(ConnectionIncidentWorkflow, stored),
-      { _tag: "Resolved", at: later, resolution: "reconnected" },
-    );
+    const yielded1 = yield* snapshotOf(ConnectionIncidentWorkflow, stored);
+    const next = yield* plan(ConnectionIncidentWorkflow, yielded1, {
+      _tag: "Resolved",
+      at: later,
+      resolution: "reconnected",
+    });
     assert.deepStrictEqual(next, {
       _tag: "resolved",
       openedAt: at,

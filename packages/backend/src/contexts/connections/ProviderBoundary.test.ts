@@ -128,12 +128,10 @@ it.effect("reads a second provider's player search and states its own schedule b
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
     const connections = yield* Connections;
-    const linked = Array.getUnsafe(
-      yield* connections.link(owner, [
-        { provider: secondProviderKey, session: Redacted.make("A1=second-session") },
-      ]),
-      0,
-    );
+    const yielded1 = yield* connections.link(owner, [
+      { provider: secondProviderKey, session: Redacted.make("A1=second-session") },
+    ]);
+    const linked = Array.getUnsafe(yielded1, 0);
     const discovered = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
     const teamId = Array.getUnsafe(discovered, 0).id;
 
@@ -171,12 +169,10 @@ it.effect("refuses a schedule window wider than one read of the league's roster 
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
     const connections = yield* Connections;
-    const linked = Array.getUnsafe(
-      yield* connections.link(owner, [
-        { provider: secondProviderKey, session: Redacted.make("A1=second-session") },
-      ]),
-      0,
-    );
+    const yielded2 = yield* connections.link(owner, [
+      { provider: secondProviderKey, session: Redacted.make("A1=second-session") },
+    ]);
+    const linked = Array.getUnsafe(yielded2, 0);
     const discovered = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
     const teamId = Array.getUnsafe(discovered, 0).id;
 

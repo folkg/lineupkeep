@@ -98,19 +98,17 @@ function credential(
 
 function seal(keyVersion: number): Effect.Effect<string> {
   return Effect.gen(function* () {
-    const encryption = Context.get(
-      yield* Effect.scoped(
-        Layer.build(
-          ConnectionCredentialEncryption.forKey(
-            ConnectionEncryptionKey.fromBytes({
-              bytes: keyVersion === 2 ? currentBytes : retainedBytes,
-              keyVersion,
-            }),
-          ).pipe(Layer.provide(NodeCrypto.layer)),
-        ),
+    const yielded1 = yield* Effect.scoped(
+      Layer.build(
+        ConnectionCredentialEncryption.forKey(
+          ConnectionEncryptionKey.fromBytes({
+            bytes: keyVersion === 2 ? currentBytes : retainedBytes,
+            keyVersion,
+          }),
+        ).pipe(Layer.provide(NodeCrypto.layer)),
       ),
-      ConnectionCredentialEncryption,
     );
+    const encryption = Context.get(yielded1, ConnectionCredentialEncryption);
     return yield* encryption.encrypt({
       userId: owner,
       connectionId: firstConnection,

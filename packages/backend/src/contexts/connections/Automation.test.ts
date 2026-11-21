@@ -98,16 +98,19 @@ it.effect("runs one current-period automation per team per hour", () =>
     assert.strictEqual(current.runs[0]?.implementation, "custom_policy");
     assert.strictEqual(current.runs[0]?.outcome?.implementation, "provider_native");
     assert.strictEqual(current.runs[0]?.status, "completed");
-    assert.strictEqual(yield* fake.nativeCallCount, 1);
+    const yielded1 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded1, 1);
 
     const duplicate = yield* automation.run(10);
     assert.strictEqual(duplicate.scheduledRuns, 0);
-    assert.strictEqual(yield* fake.nativeCallCount, 1);
+    const yielded2 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded2, 1);
 
     yield* TestClock.adjust(3_600_000);
     const nextHour = yield* automation.run(10);
     assert.strictEqual(nextHour.scheduledRuns, 1);
-    assert.strictEqual(yield* fake.nativeCallCount, 2);
+    const yielded3 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded3, 2);
   }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
@@ -164,13 +167,11 @@ it.effect("checks all five owner teams at minute 55 without repeating an hour's 
       ["2026-10-26T13:55:00.000Z", "2026-10-26T14:55:00.000Z", "2026-10-26T15:55:00.000Z"],
     );
 
-    const manual = yield* runs.submit(
-      owner,
-      yield* Schema.decodeEffect(LineupRequestInput)({
-        requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164e9",
-        teams: [{ team: Array.getUnsafe(seeded, 0), period: { coverage: "current" } }],
-      }),
-    );
+    const yielded4 = yield* Schema.decodeEffect(LineupRequestInput)({
+      requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164e9",
+      teams: [{ team: Array.getUnsafe(seeded, 0), period: { coverage: "current" } }],
+    });
+    const manual = yield* runs.submit(owner, yielded4);
 
     assert.strictEqual(manual.runs[0]?.trigger, "manual");
     assert.strictEqual(manual.runs[0]?.status, "completed");
@@ -191,7 +192,8 @@ it.effect("collapses several missed hourly ticks into one current run", () =>
 
     assert.strictEqual(summary.scheduledRuns, 1);
     assert.strictEqual(summary.delivered, 1);
-    assert.strictEqual(yield* fake.nativeCallCount, 1);
+    const yielded5 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded5, 1);
   }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
@@ -223,7 +225,8 @@ it.effect("leaves a saved move for the owner when its date arrives on the hourly
 
     assert.strictEqual(move?.result, undefined);
     assert.strictEqual(move?.runDay, "2026-11-01");
-    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+    const yielded6 = yield* fake.transactionRequests;
+    assert.deepStrictEqual(yielded6, []);
   }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
@@ -273,8 +276,9 @@ it.effect("runs a confirmed move when its date arrives on the hourly tick", () =
       DateTime.formatIso(Option.getOrThrow(Option.fromNullishOr(executed?.runAt))),
       DateTime.formatIso(runAt),
     );
+    const yielded7 = yield* fake.transactionRequests;
     assert.deepStrictEqual(
-      EffectArray.map(yield* fake.transactionRequests, (request) => request.drops),
+      EffectArray.map(yielded7, (request) => request.drops),
       [["461.p.10002"]],
     );
   }).pipe(layerTools.provide(AutomationTestLayer)),
@@ -318,7 +322,8 @@ it.effect("sends the funding drop before the activate and leaves the roster lega
 
     assert.deepStrictEqual(confirmed.refusals, []);
     assert.strictEqual(confirmed.counts.executed, 1);
-    assert.deepStrictEqual(yield* fake.writeSequence, ["transaction", "reserve_move"]);
+    const yielded8 = yield* fake.writeSequence;
+    assert.deepStrictEqual(yielded8, ["transaction", "reserve_move"]);
     assert.deepStrictEqual(plan.illegal, []);
     assert.deepStrictEqual(
       optionalArrayValue(state.roster?.players, (value) =>
@@ -389,7 +394,8 @@ it.effect("runs a drop and an activate group so the paperwork ends legal", () =>
     const state = yield* Ref.get(fake.state);
 
     assert.strictEqual(confirmed.counts.executed, 2);
-    assert.deepStrictEqual(yield* fake.writeSequence, ["transaction", "reserve_move"]);
+    const yielded9 = yield* fake.writeSequence;
+    assert.deepStrictEqual(yielded9, ["transaction", "reserve_move"]);
     assert.deepStrictEqual(plan.illegal, []);
     assert.strictEqual(plan.groups[0]?.status, "done");
     assert.deepStrictEqual(
@@ -464,7 +470,8 @@ it.effect("excludes disabled and paused teams but still schedules an available-f
     assert.strictEqual(summary.eligibleTeams, 1);
     assert.strictEqual(summary.scheduledRuns, 1);
     assert.strictEqual(summary.delivered, 1);
-    assert.strictEqual(yield* fake.nativeCallCount, 1);
+    const yielded10 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded10, 1);
     assert.notStrictEqual(disabled, paused);
   }).pipe(layerTools.provide(AutomationTestLayer)),
 );
@@ -490,12 +497,15 @@ it.effect("completes a current hockey run in a rotisserie league with no scoring
 
     assert.strictEqual(submitted.runs[0]?.status, "completed");
     assert.strictEqual(submitted.runs[0]?.outcome?.kind, "changed");
-    assert.deepStrictEqual(yield* fake.rosterPeriods, [
+    const yielded11 = yield* fake.rosterPeriods;
+    assert.deepStrictEqual(yielded11, [
       { type: "date", date: "2026-10-25" },
       { type: "date", date: "2026-10-25" },
     ]);
-    assert.deepStrictEqual(yield* fake.nativeTargets, [{ type: "date", date: "2026-10-25" }]);
-    assert.strictEqual(yield* fake.nativeCallCount, 1);
+    const yielded12 = yield* fake.nativeTargets;
+    assert.deepStrictEqual(yielded12, [{ type: "date", date: "2026-10-25" }]);
+    const yielded13 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded13, 1);
   }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
@@ -519,12 +529,15 @@ it.effect("resolves the current fantasy day for a head-to-head hockey league wit
     const submitted = yield* runs.submit(owner, requested);
 
     assert.strictEqual(submitted.runs[0]?.status, "completed");
-    assert.deepStrictEqual(yield* fake.rosterPeriods, [
+    const yielded14 = yield* fake.rosterPeriods;
+    assert.deepStrictEqual(yielded14, [
       { type: "date", date: "2026-10-25" },
       { type: "date", date: "2026-10-25" },
     ]);
-    assert.deepStrictEqual(yield* fake.nativeTargets, [{ type: "date", date: "2026-10-25" }]);
-    assert.strictEqual(yield* fake.nativeCallCount, 1);
+    const yielded15 = yield* fake.nativeTargets;
+    assert.deepStrictEqual(yielded15, [{ type: "date", date: "2026-10-25" }]);
+    const yielded16 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded16, 1);
   }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
@@ -548,8 +561,10 @@ it.effect("blocks a current hockey run outside the declared season with the actu
 
     assert.strictEqual(submitted.runs[0]?.status, "blocked");
     assert.include(submitted.runs[0]?.outcome?.summary, "outside the league's declared season");
-    assert.deepStrictEqual(yield* fake.rosterPeriods, []);
-    assert.strictEqual(yield* fake.nativeCallCount, 0);
+    const yielded17 = yield* fake.rosterPeriods;
+    assert.deepStrictEqual(yielded17, []);
+    const yielded18 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded18, 0);
   }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
@@ -578,7 +593,8 @@ it.effect("repairs an undispatched scheduled delivery before scheduling another"
     assert.strictEqual(summary.delivered, 1);
     assert.strictEqual(loaded.runs[0]?.run, pending.runs[0]?.id);
     assert.strictEqual(loaded.runs[0]?.status, "completed");
-    assert.strictEqual(yield* fake.nativeCallCount, 1);
+    const yielded19 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded19, 1);
   }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
@@ -694,7 +710,8 @@ it.effect("treats a team with an in-flight manual run as busy for scheduling", (
       ],
     });
     const run = Array.getUnsafe(created.runs, 0);
-    assert.isTrue(Option.isSome(yield* repository.claim(run.id, at)));
+    const yielded20 = yield* repository.claim(run.id, at);
+    assert.isTrue(Option.isSome(yielded20));
 
     const busy = yield* repository.scheduledTeamIds([team]);
 
@@ -797,7 +814,8 @@ it.effect("blocks a stale explicit week instead of replaying or editing a future
     const submitted = yield* runs.submit(owner, requested);
 
     assert.strictEqual(submitted.runs[0]?.status, "blocked");
-    assert.strictEqual(yield* fake.nativeCallCount, 0);
+    const yielded21 = yield* fake.nativeCallCount;
+    assert.strictEqual(yielded21, 0);
   }).pipe(layerTools.provide(AutomationTestLayer)),
 );
 
@@ -824,10 +842,10 @@ function seedOwnerTeams(
     yield* fake.setLeague(league);
     yield* fake.setRoster(roster);
     yield* fake.setNativeAfter(nativeAfter);
-    const linked = Array.getUnsafe(
-      yield* connections.link(owner, [{ provider: decodeProviderKey("yahoo"), session }]),
-      0,
-    );
+    const yielded22 = yield* connections.link(owner, [
+      { provider: decodeProviderKey("yahoo"), session },
+    ]);
+    const linked = Array.getUnsafe(yielded22, 0);
     const found = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
     return EffectArray.map(found, (team) => team.id);
   }).pipe(Effect.orDie);
@@ -845,10 +863,10 @@ function seedTeam(
     yield* fake.setLeague(shape.league);
     yield* fake.setRoster(shape.roster);
     yield* fake.setNativeAfter(shape.nativeAfter);
-    const linked = Array.getUnsafe(
-      yield* connections.link(owner, [{ provider: decodeProviderKey("yahoo"), session }]),
-      0,
-    );
+    const yielded23 = yield* connections.link(owner, [
+      { provider: decodeProviderKey("yahoo"), session },
+    ]);
+    const linked = Array.getUnsafe(yielded23, 0);
     const found = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
     return Array.getUnsafe(found, 0).id;
   }).pipe(Effect.orDie);

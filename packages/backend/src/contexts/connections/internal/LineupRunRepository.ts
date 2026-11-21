@@ -202,8 +202,9 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                       queuedAt: now,
                       updatedAt: now,
                     };
+                    const yielded1 = yield* newId;
                     return {
-                      id: yield* Schema.decodeEffect(LineupRunId)(yield* newId),
+                      id: yield* Schema.decodeEffect(LineupRunId)(yielded1),
                       userId: input.userId,
                       requestId: input.requestId,
                       teamId: run.team,
@@ -332,8 +333,9 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                     queuedAt: input.at,
                     updatedAt: input.at,
                   };
+                  const yielded2 = yield* newId;
                   return {
-                    id: yield* Schema.decodeEffect(LineupRunId)(yield* newId),
+                    id: yield* Schema.decodeEffect(LineupRunId)(yielded2),
                     userId: input.userId,
                     requestId,
                     teamId: run.team,
@@ -411,7 +413,8 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
           readonly runs: ReadonlyArray<LineupRunRecord>;
         }> = [];
         for (const input of inputs) {
-          results.push(yield* createScheduledRuns(input));
+          const yielded3 = yield* createScheduledRuns(input);
+          results.push(yielded3);
         }
         return results;
       });
@@ -596,10 +599,8 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
               if (row === undefined) {
                 return Option.none<ClaimedLineupRun>();
               }
-              const record = alignClaimedImplementation(
-                yield* decodeRun(row),
-                activeLineupImplementation,
-              );
+              const yielded4 = yield* decodeRun(row);
+              const record = alignClaimedImplementation(yielded4, activeLineupImplementation);
               const state = record.state;
               if (isTerminal(state)) {
                 return Option.none<ClaimedLineupRun>();
@@ -628,8 +629,9 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
               }
 
               const attempt = record.attempts + 1;
+              const yielded5 = yield* newId;
               const lease: LineupLeaseRef = {
-                token: yield* Schema.decodeEffect(LineupId)(yield* newId),
+                token: yield* Schema.decodeEffect(LineupId)(yielded5),
                 generation: (leaseRow?.generation ?? 0) + 1,
               };
               const expiresAt = DateTime.addDuration(now, lineupLeaseDurationMillis);
@@ -816,7 +818,8 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                 return { status: "blocked" as const, reason: "unresolved_prior_write" as const };
               }
 
-              const intentId = yield* Schema.decodeEffect(LineupId)(yield* newId);
+              const yielded6 = yield* newId;
+              const intentId = yield* Schema.decodeEffect(LineupId)(yielded6);
               const plan = yield* Schema.encodeEffect(Schema.toCodecJson(LineupPlan))(
                 input.plan,
               ).pipe(Effect.mapError(mapPersistenceFailure));
@@ -1328,7 +1331,8 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
             .where(or(...conditions));
           const deliveries: LineupDeliveryRecord[] = [];
           for (const row of rows) {
-            deliveries.push(yield* decodeDelivery(row));
+            const yielded7 = yield* decodeDelivery(row);
+            deliveries.push(yielded7);
           }
           return deliveries;
         }).pipe(

@@ -273,7 +273,8 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
           if (row === undefined) {
             return yield* QueryTeamNotFound.make({ team: teamId });
           }
-          owned.push(yield* decodeOwnedTeam(row));
+          const yielded1 = yield* decodeOwnedTeam(row);
+          owned.push(yielded1);
         }
         return owned;
       });

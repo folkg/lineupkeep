@@ -201,10 +201,8 @@ it.effect("opens an envelope retained from an older key version", () => {
     keyVersion: 1,
   });
   return Effect.gen(function* () {
-    const old = Context.get(
-      yield* Effect.scoped(Layer.build(EncryptionLayerFor(retainedKey))),
-      ConnectionCredentialEncryption,
-    );
+    const yielded1 = yield* Effect.scoped(Layer.build(EncryptionLayerFor(retainedKey)));
+    const old = Context.get(yielded1, ConnectionCredentialEncryption);
     const envelope = yield* old.encrypt({
       userId: owner,
       connectionId,
@@ -274,10 +272,8 @@ it.effect("binds a retained key version as authenticated data", () => {
     keyVersion: 1,
   });
   return Effect.gen(function* () {
-    const old = Context.get(
-      yield* Effect.scoped(Layer.build(EncryptionLayerFor(retainedKey))),
-      ConnectionCredentialEncryption,
-    );
+    const yielded2 = yield* Effect.scoped(Layer.build(EncryptionLayerFor(retainedKey)));
+    const old = Context.get(yielded2, ConnectionCredentialEncryption);
     const envelope = yield* old.encrypt({
       userId: owner,
       connectionId,

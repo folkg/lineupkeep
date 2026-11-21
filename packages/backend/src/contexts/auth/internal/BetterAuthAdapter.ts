@@ -121,7 +121,8 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
 
       const runAuthHandler = Effect.fnUntraced(function* (request: Request) {
         const auth = yield* loadAuth;
-        const run = Effect.runPromiseWith(yield* Effect.context<Scope.Scope>());
+        const yielded1 = yield* Effect.context<Scope.Scope>();
+        const run = Effect.runPromiseWith(yielded1);
         metadataRequests.set(request, (metadata) => clientMetadataRequest(run, internet, metadata));
         return yield* Effect.tryPromise({
           try: () => auth.handler(request),
@@ -175,7 +176,8 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
           if (request.method !== "POST" || new URL(request.url).pathname !== registrationPath) {
             return undefined;
           }
-          const live = yield* oauthClients.liveUnapprovedCount(yield* DateTime.now);
+          const yielded2 = yield* DateTime.now;
+          const live = yield* oauthClients.liveUnapprovedCount(yielded2);
           if (live < unapprovedRegistrationLimit) {
             return undefined;
           }

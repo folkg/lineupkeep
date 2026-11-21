@@ -111,7 +111,8 @@ export const LineupDispatcherLive = Layer.effect(
       if (record === undefined || record.status === "dispatched") {
         return "queued" as const;
       }
-      const claimed = yield* repository.claimDeliveries(yield* DateTime.now, 1);
+      const yielded1 = yield* DateTime.now;
+      const claimed = yield* repository.claimDeliveries(yielded1, 1);
       const target = EffectOption.getOrUndefined(
         EffectArray.findFirst(claimed, (delivery) => delivery.id === record.id),
       );

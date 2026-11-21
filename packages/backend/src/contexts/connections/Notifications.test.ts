@@ -110,7 +110,8 @@ it.effect("cancels the notification when the connection is reconnected", () =>
     yield* connections.completeReconnect(owner, [
       { id: ready.id, provider: decodeProviderKey("yahoo"), session },
     ]);
-    const summary = yield* notificationRunner.run(10, yield* DateTime.now);
+    const yielded1 = yield* DateTime.now;
+    const summary = yield* notificationRunner.run(10, yielded1);
     const messages = yield* outbox.messages;
 
     assert.strictEqual(summary.sent, 0);
@@ -138,10 +139,12 @@ it.effect("cancels a pending incident notification when the connection is discon
     ]);
 
     yield* connections.disconnect(owner, [{ id: ready.id }]);
-    const summary = yield* notificationRunner.run(10, yield* DateTime.now);
+    const yielded2 = yield* DateTime.now;
+    const summary = yield* notificationRunner.run(10, yielded2);
 
     assert.strictEqual(summary.sent, 0);
-    assert.deepStrictEqual(yield* outbox.messages, []);
+    const yielded3 = yield* outbox.messages;
+    assert.deepStrictEqual(yielded3, []);
     const incidents = yield* database.select().from(connectionIncidents);
     assert.strictEqual(incidents[0]?.resolution, "disconnected");
     const rows = yield* database.select().from(notifications);
@@ -187,7 +190,8 @@ it.effect("fails without a verified recipient without counting a delivery attemp
       { id: ready.id, expectedGeneration: credentialGeneration(ready) },
     ]);
 
-    const summary = yield* runner.run(10, yield* DateTime.now);
+    const yielded4 = yield* DateTime.now;
+    const summary = yield* runner.run(10, yielded4);
     assert.strictEqual(summary.failed, 1);
     assert.strictEqual(summary.sent, 0);
     const rows = yield* database.select().from(notifications);

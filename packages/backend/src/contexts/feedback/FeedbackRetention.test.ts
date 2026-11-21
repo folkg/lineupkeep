@@ -24,7 +24,8 @@ it.effect("removes closed reports once their retention window ends", () =>
     yield* feedback.submit(user, { kind: "user", reference: "web" }, [
       { kind: "wishlist", title: "Keep this", body: "An open wishlist item." },
     ]);
-    const closedAt = DateTime.toDateUtc(yield* DateTime.now);
+    const yielded1 = yield* DateTime.now;
+    const closedAt = DateTime.toDateUtc(yielded1);
     yield* database.insert(feedbackTable).values({
       id: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b3",
       userId: user,
@@ -41,12 +42,14 @@ it.effect("removes closed reports once their retention window ends", () =>
     });
 
     yield* TestClock.adjust(aYearMillis - 1_000);
-    const retained = yield* retention.run(10, yield* DateTime.now);
+    const yielded2 = yield* DateTime.now;
+    const retained = yield* retention.run(10, yielded2);
     assert.deepStrictEqual(retained.reports, 0);
     assert.strictEqual((yield* feedback.list(user, {})).length, 2);
 
     yield* TestClock.adjust(2_000);
-    const deleted = yield* retention.run(10, yield* DateTime.now);
+    const yielded3 = yield* DateTime.now;
+    const deleted = yield* retention.run(10, yielded3);
     const remaining = yield* feedback.list(user, {});
 
     assert.strictEqual(deleted.reports, 1);
@@ -70,10 +73,12 @@ it.effect("removes quota windows that can no longer accept submissions", () =>
     assert.strictEqual(windows.length, 2);
 
     yield* TestClock.adjust(25 * 60 * 60 * 1000);
-    const deleted = yield* retention.run(10, yield* DateTime.now);
+    const yielded4 = yield* DateTime.now;
+    const deleted = yield* retention.run(10, yielded4);
 
     assert.strictEqual(deleted.quotas, 2);
-    assert.deepStrictEqual(yield* database.select().from(feedbackQuota), []);
+    const yielded5 = yield* database.select().from(feedbackQuota);
+    assert.deepStrictEqual(yielded5, []);
   }).pipe(layerTools.provide(FeedbackRetentionTestLayer)),
 );
 

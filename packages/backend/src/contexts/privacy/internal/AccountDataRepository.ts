@@ -49,9 +49,10 @@ export class AccountDataRepository extends Context.Service<
             Effect.gen(function* () {
               const latest = yield* tx.execute(selectLatestExport(userId));
               const takenAt = latest.rows[0]?.["taken_at"];
+              const yielded1 = yield* DateTime.now;
               if (
                 !(takenAt instanceof Date) ||
-                !isAccountExportUsable(DateTime.fromDateUnsafe(takenAt), yield* DateTime.now)
+                !isAccountExportUsable(DateTime.fromDateUnsafe(takenAt), yielded1)
               ) {
                 return { refused: true } as const;
               }
@@ -178,13 +179,14 @@ export class AccountDataRepository extends Context.Service<
           row["contents"],
         ).pipe(Effect.mapError((cause) => AccountExportPersistenceFailed.make({ cause })));
         const record = DateTime.fromDateUnsafe(takenAt);
+        const yielded2 = yield* DateTime.now;
         return {
           latest: {
             takenAt: record,
             records: EffectArray.reduce(areas, 0, (total, area) => total + area.records),
             areas,
           },
-          usable: isAccountExportUsable(record, yield* DateTime.now),
+          usable: isAccountExportUsable(record, yielded2),
         } satisfies AccountExportStatus;
       });
 

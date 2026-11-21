@@ -178,7 +178,8 @@ it.effect(
       yield* seedOwnedAccount;
       const exporter = yield* AccountExport;
 
-      assert.deepStrictEqual(yield* exporter.status(owner.id), {
+      const yielded1 = yield* exporter.status(owner.id);
+      assert.deepStrictEqual(yielded1, {
         latest: undefined,
         usable: false,
       });

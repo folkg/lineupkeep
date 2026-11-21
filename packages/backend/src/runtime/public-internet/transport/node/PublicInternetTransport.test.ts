@@ -37,7 +37,8 @@ for (const name of ["process", "isolate"] as const) {
         }),
       );
 
-      assert.strictEqual(yield* Effect.promise(() => response.text()), '{"event":"saved"}');
+      const yielded1 = yield* Effect.promise(() => response.text());
+      assert.strictEqual(yielded1, '{"event":"saved"}');
       assert.strictEqual(response.headers.get("x-received-method"), "POST");
       assert.strictEqual(response.headers.get("x-received-content-type"), "application/json");
       assert.strictEqual(response.headers.get("x-received-key"), "private-key");
@@ -61,7 +62,8 @@ for (const name of ["process", "isolate"] as const) {
         );
 
         assert.strictEqual(response.headers.get("x-received-method"), method);
-        assert.strictEqual(yield* Effect.promise(() => response.text()), "bytes");
+        const yielded2 = yield* Effect.promise(() => response.text());
+        assert.strictEqual(yielded2, "bytes");
       }
     }),
   );
@@ -87,7 +89,8 @@ for (const name of ["process", "isolate"] as const) {
       controller.enqueue(new TextEncoder().encode("second"));
       controller.close();
 
-      assert.strictEqual(yield* Fiber.join(pending), "firstsecond");
+      const yielded3 = yield* Fiber.join(pending);
+      assert.strictEqual(yielded3, "firstsecond");
     }),
   );
 

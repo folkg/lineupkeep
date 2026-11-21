@@ -88,7 +88,8 @@ it.effect("round-trips every hosted linking lifecycle state through its row code
       const restored = yield* snapshotOf(HostedLinkingWorkflow, decoded.state);
 
       assert.deepStrictEqual(restored.state, snapshot.state.value);
-      assert.deepStrictEqual(yield* Schema.encodeEffect(HostedLinkingRow)(decoded), row);
+      const yielded1 = yield* Schema.encodeEffect(HostedLinkingRow)(decoded);
+      assert.deepStrictEqual(yielded1, row);
       assert.strictEqual(decoded.id, record.id);
       assert.strictEqual(decoded.userId, record.userId);
       assert.strictEqual(decoded.ticketHash, record.ticketHash);
@@ -122,7 +123,8 @@ it.effect("round-trips a reconnect target through the row codec", () =>
       decoded.state._tag === "Active" ? decoded.state.connectionId : undefined,
       connectionId,
     );
-    assert.deepStrictEqual(yield* Schema.encodeEffect(HostedLinkingRow)(decoded), row);
+    const yielded2 = yield* Schema.encodeEffect(HostedLinkingRow)(decoded);
+    assert.deepStrictEqual(yielded2, row);
   }),
 );
 

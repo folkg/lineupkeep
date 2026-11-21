@@ -66,6 +66,7 @@ it.effect("rebuilds a request with added headers from its parts", () =>
     assert.strictEqual(rebuilt.headers.get("content-type"), "text/plain");
     assert.strictEqual(rebuilt.headers.get("x-request-id"), "request-1");
     assert.strictEqual(original.headers.get("x-request-id"), null);
-    assert.strictEqual(yield* Effect.promise(() => rebuilt.text()), "request body");
+    const yielded1 = yield* Effect.promise(() => rebuilt.text());
+    assert.strictEqual(yielded1, "request body");
   }),
 );

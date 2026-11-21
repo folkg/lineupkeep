@@ -343,11 +343,12 @@ export const LineupWorkerLive = Layer.effect(
       if (freshLeague === undefined) {
         return { kind: "blocked" as const };
       }
+      const yielded1 = yield* DateTime.now;
       const freshResolution = resolveTarget(
         run.record.target,
         freshLeague,
         provider.capabilities.fantasyDay,
-        yield* DateTime.now,
+        yielded1,
       );
       if (freshResolution.status === "blocked") {
         yield* block(

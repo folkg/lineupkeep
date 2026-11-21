@@ -950,7 +950,8 @@ it.effect("publishes the site's starting status on team roster rows and the summ
     yield* fake.setLeagueRosters([leagueRosterFixture("461.l.1000.t.1", "Alpha", 3, 10001)]);
 
     const teamRoster = yield* queries.getRosters(owner, { team: teamId, period: { week: 3 } });
-    assert.strictEqual(yield* fake.readCount("read_roster"), 1);
+    const yielded1 = yield* fake.readCount("read_roster");
+    assert.strictEqual(yielded1, 1);
     assert.strictEqual(teamRoster.status, "ok");
     if (teamRoster.status !== "ok" || teamRoster.scope !== "team") {
       return;
@@ -961,7 +962,8 @@ it.effect("publishes the site's starting status on team roster rows and the summ
     );
 
     const summary = yield* queries.getTeamSummary(owner, { team: teamId, groups: ["roster"] });
-    assert.strictEqual(yield* fake.readCount("read_roster"), 2);
+    const yielded2 = yield* fake.readCount("read_roster");
+    assert.strictEqual(yielded2, 2);
     assert.strictEqual(summary.status, "ok");
     if (summary.status !== "ok") {
       return;
@@ -974,8 +976,10 @@ it.effect("publishes the site's starting status on team roster rows and the summ
     );
 
     const leagueRoster = yield* queries.getRosters(owner, { team: teamId, scope: "league" });
-    assert.strictEqual(yield* fake.readCount("read_league_rosters"), 1);
-    assert.strictEqual(yield* fake.readCount("read_roster"), 2);
+    const yielded3 = yield* fake.readCount("read_league_rosters");
+    assert.strictEqual(yielded3, 1);
+    const yielded4 = yield* fake.readCount("read_roster");
+    assert.strictEqual(yielded4, 2);
     assert.strictEqual(leagueRoster.status, "ok");
     if (leagueRoster.status !== "ok" || leagueRoster.scope !== "league") {
       return;
@@ -2463,7 +2467,8 @@ it.effect("stops a summary at its first refused read and names the layer to reco
       groups: ["league"],
     });
     assert.strictEqual(healthy.status, "ok");
-    const proven = Array.getUnsafe(yield* connections.list(owner), 0);
+    const yielded5 = yield* connections.list(owner);
+    const proven = Array.getUnsafe(yielded5, 0);
     assert.deepStrictEqual(
       proven.session.provenAt,
       DateTime.makeUnsafe("2026-11-08T14:11:29.000Z"),
@@ -2491,7 +2496,8 @@ it.effect("stops a summary at its first refused read and names the layer to reco
       [providerSessionReconnectDetail],
     );
 
-    const connection = Array.getUnsafe(yield* connections.list(owner), 0);
+    const yielded6 = yield* connections.list(owner);
+    const connection = Array.getUnsafe(yielded6, 0);
     assert.strictEqual(connection.status, "reconnect-required");
     assert.strictEqual(connection.session.action, "reconnect-provider-connection");
     assert.deepStrictEqual(
@@ -2659,7 +2665,8 @@ it.effect("answers a batch when one player's details fail verification", () =>
     const [failure] = hydrated.failures;
     assert.strictEqual(failure?.resource, Array.getUnsafe(refs, 2));
     assert.include(failure?.message, "Ask again for this player alone");
-    assert.strictEqual(yield* fake.readCount("read_player_details"), 5);
+    const yielded7 = yield* fake.readCount("read_player_details");
+    assert.strictEqual(yielded7, 5);
   }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
@@ -2687,7 +2694,8 @@ it.effect("answers a repeated player reference from one detail read", () =>
       ["Pool Player 1", "Pool Player 2", "Pool Player 1"],
     );
     assert.deepStrictEqual(hydrated.failures, []);
-    assert.strictEqual(yield* fake.readCount("read_player_details"), 1);
+    const yielded8 = yield* fake.readCount("read_player_details");
+    assert.strictEqual(yielded8, 1);
   }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
@@ -4382,7 +4390,8 @@ it.effect("reads one draft history for the whole response, not one read per play
 
     const beforeSummary = yield* fake.readCount("read_draft_results");
     const summary = yield* queries.getTeamSummary(owner, { team: teamId, groups: ["roster"] });
-    assert.strictEqual(yield* fake.readCount("read_roster"), 1);
+    const yielded9 = yield* fake.readCount("read_roster");
+    assert.strictEqual(yielded9, 1);
     assert.strictEqual(summary.status, "ok");
     if (summary.status !== "ok") {
       return;
@@ -5799,9 +5808,8 @@ it.effect("reports each rostered player's scheduled games and the roster count p
     if (summary.status !== "ok") {
       return;
     }
-    assert.deepStrictEqual(yield* fake.schedulePeriods, [
-      { type: "date", start: "2026-10-19", end: "2026-10-25" },
-    ]);
+    const yielded10 = yield* fake.schedulePeriods;
+    assert.deepStrictEqual(yielded10, [{ type: "date", start: "2026-10-19", end: "2026-10-25" }]);
     const schedule = summary.schedule;
     assert.strictEqual(schedule?.status, "available");
     if (schedule?.status !== "available") {
@@ -5933,7 +5941,8 @@ it.effect(
       if (summary.status !== "ok") {
         return;
       }
-      assert.deepStrictEqual(yield* fake.schedulePeriods, []);
+      const yielded11 = yield* fake.schedulePeriods;
+      assert.deepStrictEqual(yielded11, []);
       const schedule = summary.schedule;
       assert.strictEqual(schedule?.status, "available");
       if (schedule?.status !== "available") {
@@ -6072,7 +6081,8 @@ it.effect(
       if (summary.status !== "ok") {
         return;
       }
-      assert.deepStrictEqual(yield* fake.schedulePeriods, []);
+      const yielded12 = yield* fake.schedulePeriods;
+      assert.deepStrictEqual(yielded12, []);
       const schedule = summary.schedule;
       assert.strictEqual(schedule?.status, "available");
       if (schedule?.status !== "available") {
@@ -6140,7 +6150,8 @@ it.effect("reports the league's professional games instead of reading the provid
         assert.include(summary.schedule.detail, "professional-game source could not be reached");
       }
     }
-    assert.deepStrictEqual(yield* fake.schedulePeriods, []);
+    const yielded13 = yield* fake.schedulePeriods;
+    assert.deepStrictEqual(yielded13, []);
   }).pipe(layerTools.provide(queriesTestLayerWithGames(6))),
 );
 
@@ -6214,9 +6225,8 @@ it.effect("serves a repeated schedule window from stored opponent facts", () =>
       window: opponentWindow,
     });
 
-    assert.deepStrictEqual(yield* fake.schedulePeriods, [
-      { type: "date", start: "2026-10-19", end: "2026-10-21" },
-    ]);
+    const yielded14 = yield* fake.schedulePeriods;
+    assert.deepStrictEqual(yielded14, [{ type: "date", start: "2026-10-19", end: "2026-10-21" }]);
     assert.strictEqual(second.status, "ok");
     if (first.status !== "ok" || second.status !== "ok") {
       return;
@@ -6291,9 +6301,8 @@ it.effect("re-reads only the date past its fantasy-day boundary", () =>
         "2026-10-19T12:00:00.000Z",
       );
     }
-    assert.deepStrictEqual(yield* fake.schedulePeriods, [
-      { type: "date", start: "2026-10-19", end: "2026-10-21" },
-    ]);
+    const yielded15 = yield* fake.schedulePeriods;
+    assert.deepStrictEqual(yielded15, [{ type: "date", start: "2026-10-19", end: "2026-10-21" }]);
 
     yield* TestClock.setTime(
       DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-20T08:00:00.000Z")),
@@ -6304,7 +6313,8 @@ it.effect("re-reads only the date past its fantasy-day boundary", () =>
       window: opponentWindow,
     });
 
-    assert.deepStrictEqual(yield* fake.schedulePeriods, [
+    const yielded16 = yield* fake.schedulePeriods;
+    assert.deepStrictEqual(yielded16, [
       { type: "date", start: "2026-10-19", end: "2026-10-21" },
       { type: "date", start: "2026-10-19", end: "2026-10-19" },
     ]);
@@ -6552,7 +6562,8 @@ it.effect("uses the scoring week's opponent for a league whose coverage is a wee
     if (summary.status !== "ok") {
       return;
     }
-    assert.deepStrictEqual(yield* fake.schedulePeriods, [{ type: "week", week: 3 }]);
+    const yielded17 = yield* fake.schedulePeriods;
+    assert.deepStrictEqual(yielded17, [{ type: "week", week: 3 }]);
     const schedule = summary.schedule;
     assert.strictEqual(schedule?.status, "available");
     if (schedule?.status !== "available") {
@@ -6604,7 +6615,8 @@ it.effect("refuses a date window it cannot establish instead of inventing one", 
     assert.include(schedule.detail, "neither a scoring period nor a current date");
     assert.include(schedule.detail, "`window`");
     assert.include(schedule.detail, "`days`");
-    assert.deepStrictEqual(yield* fake.schedulePeriods, []);
+    const yielded18 = yield* fake.schedulePeriods;
+    assert.deepStrictEqual(yielded18, []);
     assert.isTrue(
       EffectArray.some(
         summary.coverage,
@@ -6660,9 +6672,8 @@ it.effect("reads the rest of your league's week for a league with no scoring per
     if (summary.status !== "ok") {
       return;
     }
-    assert.deepStrictEqual(yield* fake.schedulePeriods, [
-      { type: "date", start: "2026-10-30", end: "2026-11-01" },
-    ]);
+    const yielded19 = yield* fake.schedulePeriods;
+    assert.deepStrictEqual(yielded19, [{ type: "date", start: "2026-10-30", end: "2026-11-01" }]);
     const schedule = summary.schedule;
     assert.strictEqual(schedule?.status, "available");
     if (schedule?.status !== "available") {
@@ -6735,9 +6746,8 @@ it.effect("counts a requested day window from your league's current date", () =>
     if (summary.status !== "ok") {
       return;
     }
-    assert.deepStrictEqual(yield* fake.schedulePeriods, [
-      { type: "date", start: "2026-10-30", end: "2026-10-31" },
-    ]);
+    const yielded20 = yield* fake.schedulePeriods;
+    assert.deepStrictEqual(yielded20, [{ type: "date", start: "2026-10-30", end: "2026-10-31" }]);
     const schedule = summary.schedule;
     assert.strictEqual(schedule?.status, "available");
     if (schedule?.status !== "available") {
@@ -6790,9 +6800,8 @@ it.effect("uses a requested window instead of the league's scoring period", () =
     if (summary.status !== "ok") {
       return;
     }
-    assert.deepStrictEqual(yield* fake.schedulePeriods, [
-      { type: "date", start: "2026-10-26", end: "2026-10-28" },
-    ]);
+    const yielded21 = yield* fake.schedulePeriods;
+    assert.deepStrictEqual(yielded21, [{ type: "date", start: "2026-10-26", end: "2026-10-28" }]);
     const schedule = summary.schedule;
     assert.strictEqual(schedule?.status, "available");
     if (schedule?.status !== "available") {
@@ -6830,7 +6839,8 @@ it.effect("refuses a date window for a league whose coverage is a scoring week",
     }
     assert.include(schedule.detail, "scoring week");
     assert.include(schedule.detail, "Omit `window` and `days`");
-    assert.deepStrictEqual(yield* fake.schedulePeriods, []);
+    const yielded22 = yield* fake.schedulePeriods;
+    assert.deepStrictEqual(yielded22, []);
   }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
@@ -7561,10 +7571,10 @@ function seed(
         ],
       }),
     ]);
-    const linked = Array.getUnsafe(
-      yield* connections.link(owner, [{ provider: decodeProviderKey("yahoo"), session }]),
-      0,
-    );
+    const yielded23 = yield* connections.link(owner, [
+      { provider: decodeProviderKey("yahoo"), session },
+    ]);
+    const linked = Array.getUnsafe(yielded23, 0);
     const discovered = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
     return EffectArray.map(discovered, (row) => ({ id: row.id }));
   }).pipe(Effect.orDie);

@@ -120,12 +120,8 @@ export const NotificationsLive = Layer.effect(
           ),
         { concurrency: 1 },
       );
-      const emails = new Map(
-        EffectArray.map(yield* directory.emailsFor(userIds), (entry) => [
-          entry.userId,
-          entry.email,
-        ]),
-      );
+      const yielded1 = yield* directory.emailsFor(userIds);
+      const emails = new Map(EffectArray.map(yielded1, (entry) => [entry.userId, entry.email]));
 
       const notificationIds = EffectArray.map(rows, (row) => row.notificationId);
       if (!Array.isArrayNonEmpty(notificationIds)) {

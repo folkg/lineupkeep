@@ -25,17 +25,15 @@ const lineupgradeUlid = /^[0-9A-HJKMNP-TV-Z]{26}$/u;
 it.effect("records an owner's submission with normalized text and an open status", () =>
   Effect.gen(function* () {
     const feedback = yield* Feedback;
-    const report = Array.getUnsafe(
-      yield* feedback.submit(user, { kind: "user", reference: "web" }, [
-        {
-          kind: "bug",
-          title: "  Lineup\r\n  shows\u0000 the wrong   week ",
-          body: "\u0007The roster view says week 3 but the run used week 4.\r\n",
-          context: { surface: "team", team, tool: "list_teams" },
-        },
-      ]),
-      0,
-    );
+    const yielded1 = yield* feedback.submit(user, { kind: "user", reference: "web" }, [
+      {
+        kind: "bug",
+        title: "  Lineup\r\n  shows\u0000 the wrong   week ",
+        body: "\u0007The roster view says week 3 but the run used week 4.\r\n",
+        context: { surface: "team", team, tool: "list_teams" },
+      },
+    ]);
+    const report = Array.getUnsafe(yielded1, 0);
 
     assert.isTrue(lineupgradeUlid.test(report.id));
     assert.strictEqual(report.status, "open");
@@ -181,12 +179,10 @@ it.effect("limits submissions per acting client and per owner", () =>
 
     yield* feedback.submit(other, muse, [submission()]);
     yield* TestClock.adjust(3_600_000);
-    const accepted = Array.getUnsafe(
-      yield* feedback.submit(user, muse, [
-        submission({ context: { client: "Muse", surface: "mcp" } }),
-      ]),
-      0,
-    );
+    const yielded2 = yield* feedback.submit(user, muse, [
+      submission({ context: { client: "Muse", surface: "mcp" } }),
+    ]);
+    const accepted = Array.getUnsafe(yielded2, 0);
     assert.strictEqual(accepted.status, "open");
   }).pipe(layerTools.provide(FeedbackTestLayer)),
 );
@@ -207,7 +203,8 @@ it.effect("refuses content that is blank or too long once control characters are
 
     assert.instanceOf(blank, FeedbackContentInvalid);
     assert.instanceOf(tooLong, FeedbackContentInvalid);
-    assert.deepStrictEqual(yield* feedback.list(user, {}), []);
+    const yielded3 = yield* feedback.list(user, {});
+    assert.deepStrictEqual(yielded3, []);
   }).pipe(layerTools.provide(FeedbackTestLayer)),
 );
 

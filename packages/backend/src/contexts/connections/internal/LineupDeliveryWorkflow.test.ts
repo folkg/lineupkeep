@@ -131,14 +131,11 @@ it.effect("round-trips every state through JSON and resumes a stored delivery", 
       dispatchedAt: null,
       updatedAt: "2026-10-25T12:00:00.000Z",
     });
-    const next = yield* plan(
-      LineupDeliveryWorkflow,
-      yield* snapshotOf(LineupDeliveryWorkflow, stored),
-      {
-        _tag: "Released",
-        at: later,
-      },
-    );
+    const yielded1 = yield* snapshotOf(LineupDeliveryWorkflow, stored);
+    const next = yield* plan(LineupDeliveryWorkflow, yielded1, {
+      _tag: "Released",
+      at: later,
+    });
     assert.strictEqual(next._tag, "pending");
     assert.strictEqual(next.attempts, 2);
     assert.strictEqual(next.lastError, null);

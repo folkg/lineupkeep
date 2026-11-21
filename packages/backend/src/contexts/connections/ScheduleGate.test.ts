@@ -388,14 +388,17 @@ it.effect("measures one provider read across a quiet day of hourly ticks", () =>
       assert.strictEqual(decision.kind, "skip");
     }
 
-    assert.strictEqual(yield* fake.providerCalls, 1);
-    assert.strictEqual(yield* fake.providerReads, 1);
+    const yielded1 = yield* fake.providerCalls;
+    assert.strictEqual(yielded1, 1);
+    const yielded2 = yield* fake.providerReads;
+    assert.strictEqual(yielded2, 1);
   }).pipe(layerTools.provide(GateTest)),
 );
 
 it.effect("runs a quiet tick when the team has no lineup run today", () =>
   Effect.gen(function* () {
-    assert.deepStrictEqual(yield* evaluateQuietTick(), { kind: "run", reason: "no_run_today" });
+    const yielded3 = yield* evaluateQuietTick();
+    assert.deepStrictEqual(yielded3, { kind: "run", reason: "no_run_today" });
   }).pipe(layerTools.provide(GateTest)),
 );
 
@@ -407,7 +410,8 @@ it.effect("runs a quiet tick when today's last run was blocked", () =>
       at: DateTime.makeUnsafe("2026-11-02T11:05:00.000Z"),
     });
 
-    assert.deepStrictEqual(yield* evaluateQuietTick(), {
+    const yielded4 = yield* evaluateQuietTick();
+    assert.deepStrictEqual(yielded4, {
       kind: "run",
       reason: "last_run_blocked",
     });
@@ -442,7 +446,8 @@ it.effect("runs a quiet tick when today's last run ended unverified", () =>
       at: DateTime.makeUnsafe("2026-11-02T11:05:00.000Z"),
     });
 
-    assert.deepStrictEqual(yield* evaluateQuietTick(), {
+    const yielded5 = yield* evaluateQuietTick();
+    assert.deepStrictEqual(yielded5, {
       kind: "run",
       reason: "last_run_unverified",
     });
@@ -457,7 +462,8 @@ it.effect("runs a quiet tick when today's last run has no outcome yet", () =>
       at: DateTime.makeUnsafe("2026-11-02T11:05:00.000Z"),
     });
 
-    assert.deepStrictEqual(yield* evaluateQuietTick(), {
+    const yielded6 = yield* evaluateQuietTick();
+    assert.deepStrictEqual(yielded6, {
       kind: "run",
       reason: "last_run_unverified",
     });
@@ -472,7 +478,8 @@ it.effect("runs a quiet tick when the verified run is from yesterday", () =>
       at: DateTime.makeUnsafe("2026-11-01T22:00:00.000Z"),
     });
 
-    assert.deepStrictEqual(yield* evaluateQuietTick(), { kind: "run", reason: "no_run_today" });
+    const yielded7 = yield* evaluateQuietTick();
+    assert.deepStrictEqual(yielded7, { kind: "run", reason: "no_run_today" });
   }).pipe(layerTools.provide(GateTest)),
 );
 
@@ -484,7 +491,8 @@ it.effect("ignores the run whose schedule gate is being decided", () =>
       at: DateTime.makeUnsafe("2026-11-02T09:05:00.000Z"),
     });
 
-    assert.deepStrictEqual(yield* evaluateQuietTick(), { kind: "run", reason: "no_run_today" });
+    const yielded8 = yield* evaluateQuietTick();
+    assert.deepStrictEqual(yielded8, { kind: "run", reason: "no_run_today" });
   }).pipe(layerTools.provide(GateTest)),
 );
 

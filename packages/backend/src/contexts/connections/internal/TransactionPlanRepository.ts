@@ -252,12 +252,8 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                     eq(transactionPlans.teamId, input.team),
                   ),
                 );
-              const byId = new Map(
-                EffectArray.map(
-                  yield* Effect.forEach(inserted, decodeMove, { concurrency: 1 }),
-                  (move) => [move.id, move],
-                ),
-              );
+              const yielded1 = yield* Effect.forEach(inserted, decodeMove, { concurrency: 1 });
+              const byId = new Map(EffectArray.map(yielded1, (move) => [move.id, move]));
               return EffectArray.map(ids, ({ move, id }) => {
                 const stored = byId.get(id);
                 if (stored === undefined) {
@@ -563,9 +559,11 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
           )
           .limit(1);
         const row = rows[0];
-        return row === undefined
-          ? Option.none<TransactionRunRecord>()
-          : Option.some(yield* decodeRun(row));
+        if (row === undefined) {
+          return Option.none<TransactionRunRecord>();
+        }
+        const yielded2 = yield* decodeRun(row);
+        return Option.some(yielded2);
       }, Effect.mapError(persistenceFailure));
 
       const readRunByKey = Effect.fn("TransactionPlanRepository.readRunByKey")(function* (input: {
@@ -585,9 +583,11 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
           )
           .limit(1);
         const row = rows[0];
-        return row === undefined
-          ? Option.none<TransactionRunRecord>()
-          : Option.some(yield* decodeRun(row));
+        if (row === undefined) {
+          return Option.none<TransactionRunRecord>();
+        }
+        const yielded3 = yield* decodeRun(row);
+        return Option.some(yielded3);
       }, Effect.mapError(persistenceFailure));
 
       const claimRun = Effect.fn("TransactionPlanRepository.claimRun")(function* (input: {
@@ -649,7 +649,8 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
               if (row === undefined) {
                 return Option.none<TransactionPlanRecord>();
               }
-              return Option.some(yield* decodePlan(row));
+              const yielded4 = yield* decodePlan(row);
+              return Option.some(yielded4);
             }),
           )
           .pipe(Effect.mapError(persistenceFailure));
@@ -1013,7 +1014,8 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
           for (const row of rows) {
             const id = yield* Schema.decodeEffect(TransactionMoveId)(row.moveId);
             const held = steps.get(id) ?? [];
-            held.push(yield* Schema.decodeEffect(StoredMoveStepRow)(row));
+            const yielded5 = yield* Schema.decodeEffect(StoredMoveStepRow)(row);
+            held.push(yielded5);
             steps.set(id, held);
           }
           return steps;
@@ -1201,9 +1203,11 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
             .where(and(eq(providerTeams.userId, input.userId), eq(providerTeams.id, input.team)))
             .limit(1);
           const row = rows[0];
-          return row === undefined
-            ? Option.none<TransactionMoveTeam>()
-            : Option.some(yield* decodeTeam(row));
+          if (row === undefined) {
+            return Option.none<TransactionMoveTeam>();
+          }
+          const yielded6 = yield* decodeTeam(row);
+          return Option.some(yielded6);
         }).pipe(Effect.mapError(persistenceFailure));
       });
 
