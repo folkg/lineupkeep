@@ -2140,14 +2140,14 @@ function ValidSearchPositions(
   positions: ReadonlyArray<string> | undefined,
 ): Effect.Effect<Option.Option<ReadonlyArray<string>>, ProviderResponseInvalid> {
   if (positions === undefined) {
-    return Effect.succeed(Option.none());
+    return Effect.succeedNone;
   }
   const valid =
     positions.length > 0 &&
     new Set(positions).size === positions.length &&
     positions.every((position) => /^[A-Za-z]{1,3}$/u.test(position));
   return valid
-    ? Effect.succeed(Option.some(positions))
+    ? Effect.succeedSome(positions)
     : ProviderResponseInvalid.make({ operation: "search_players", field: "positions" });
 }
 

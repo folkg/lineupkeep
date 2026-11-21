@@ -171,10 +171,9 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
             nowMillis: DateTime.toEpochMillis(now),
           }),
         ).pipe(
-          Effect.flatMap((result) =>
-            typeof result === "number"
-              ? Effect.succeed(result)
-              : QueryCursorInvalid.make({ reason: result }),
+          Effect.filterOrElse(
+            (result): result is number => typeof result === "number",
+            (result) => QueryCursorInvalid.make({ reason: result }),
           ),
         ),
       sealPlayerRef: ({ userId, leagueKey, playerKey }) =>

@@ -921,12 +921,13 @@ const googleConfig = Config.all({
 }).pipe(
   Config.mapEffect(({ clientId, clientSecret }) => {
     if (Option.isSome(clientId) && Option.isSome(clientSecret)) {
-      return Effect.succeed(
-        Option.some({ clientId: clientId.value, clientSecret: clientSecret.value }),
-      );
+      return Effect.succeedSome({
+        clientId: clientId.value,
+        clientSecret: clientSecret.value,
+      });
     }
     if (Option.isNone(clientId) && Option.isNone(clientSecret)) {
-      return Effect.succeed(Option.none<GoogleCredentials>());
+      return Effect.succeedNone;
     }
     return Effect.fail(
       new Config.ConfigError(

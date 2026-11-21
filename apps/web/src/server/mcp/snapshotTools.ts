@@ -154,11 +154,11 @@ function captureRosterStats(
   failures: Array<typeof SnapshotFailure.Type>,
 ): Effect.Effect<unknown, never, never> {
   if (!isRoster(roster)) {
-    return Effect.succeed(undefined);
+    return Effect.undefined;
   }
   const players = roster.players.map((player) => player.player);
   if (players.length === 0) {
-    return Effect.succeed(undefined);
+    return Effect.undefined;
   }
   if (players.length > 25) {
     failures.push({

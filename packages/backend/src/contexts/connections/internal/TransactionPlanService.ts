@@ -3215,7 +3215,7 @@ function reconcileClaim(input: {
 > {
   const outcome = claimOutcomeOf(input.move, input.facts);
   if (outcome.status === "with_league") {
-    return Effect.succeed(undefined);
+    return Effect.undefined;
   }
   const base = claimAttemptsOf(input.move, input.at);
   const claim = input.move.adds[0];

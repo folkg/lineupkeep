@@ -103,10 +103,7 @@ it.effect("exports failed automatic HTTP children without provider causes or URL
     );
     const program = Effect.flatMap(HttpClient.HttpClient, (client) =>
       client.get("https://provider.test/private-path?customer=private-query"),
-    ).pipe(
-      Effect.provide(Layer.succeed(HttpClient.HttpClient)(provider)),
-      Effect.withSpan("email.send"),
-    );
+    ).pipe(Effect.provideService(HttpClient.HttpClient, provider), Effect.withSpan("email.send"));
 
     const telemetry = makeTelemetryTest();
     const exit = yield* Effect.exit(program).pipe(Effect.provide(telemetry.layer));

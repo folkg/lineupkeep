@@ -18,9 +18,7 @@ import { makePublicInternetProcess } from "./PublicInternetProcess.ts";
 for (const name of ["process", "isolate"] as const) {
   it.effect(`sends JSON and headers over ${name} HTTPS`, () =>
     Effect.gen(function* () {
-      const fixture = yield* Effect.acquireRelease(Effect.promise(setupHTTPS), (fixture) =>
-        Effect.promise(() => fixture[Symbol.asyncDispose]()),
-      );
+      const fixture = yield* Effect.acquireDisposable(Effect.promise(setupHTTPS));
       const internet = yield* PublicInternet.pipe(
         Effect.provide(name === "process" ? fixture.processLayer : publicInternetIsolate),
       );
@@ -47,9 +45,7 @@ for (const name of ["process", "isolate"] as const) {
 
   it.effect(`sends bytes with other HTTP methods on ${name}`, () =>
     Effect.gen(function* () {
-      const fixture = yield* Effect.acquireRelease(Effect.promise(setupHTTPS), (fixture) =>
-        Effect.promise(() => fixture[Symbol.asyncDispose]()),
-      );
+      const fixture = yield* Effect.acquireDisposable(Effect.promise(setupHTTPS));
       const internet = yield* PublicInternet.pipe(
         Effect.provide(name === "process" ? fixture.processLayer : publicInternetIsolate),
       );
@@ -69,9 +65,7 @@ for (const name of ["process", "isolate"] as const) {
 
   it.effect(`uploads a stream before its producer finishes on ${name}`, () =>
     Effect.gen(function* () {
-      const fixture = yield* Effect.acquireRelease(Effect.promise(setupHTTPS), (fixture) =>
-        Effect.promise(() => fixture[Symbol.asyncDispose]()),
-      );
+      const fixture = yield* Effect.acquireDisposable(Effect.promise(setupHTTPS));
       const internet = yield* PublicInternet.pipe(
         Effect.provide(name === "process" ? fixture.processLayer : publicInternetIsolate),
       );
@@ -96,9 +90,7 @@ for (const name of ["process", "isolate"] as const) {
 
   it.effect(`cancels an unfinished upload and its socket on ${name}`, () =>
     Effect.gen(function* () {
-      const fixture = yield* Effect.acquireRelease(Effect.promise(setupHTTPS), (fixture) =>
-        Effect.promise(() => fixture[Symbol.asyncDispose]()),
-      );
+      const fixture = yield* Effect.acquireDisposable(Effect.promise(setupHTTPS));
       const internet = yield* PublicInternet.pipe(
         Effect.provide(name === "process" ? fixture.processLayer : publicInternetIsolate),
       );
@@ -136,9 +128,7 @@ for (const name of ["process", "isolate"] as const) {
 
   it.effect(`closes a response when its caller scope ends on ${name}`, () =>
     Effect.gen(function* () {
-      const fixture = yield* Effect.acquireRelease(Effect.promise(setupHTTPS), (fixture) =>
-        Effect.promise(() => fixture[Symbol.asyncDispose]()),
-      );
+      const fixture = yield* Effect.acquireDisposable(Effect.promise(setupHTTPS));
       const internet = yield* PublicInternet.pipe(
         Effect.provide(name === "process" ? fixture.processLayer : publicInternetIsolate),
       );
@@ -152,9 +142,7 @@ for (const name of ["process", "isolate"] as const) {
 
   it.effect(`interrupts an upload with its consumer scope on ${name}`, () =>
     Effect.gen(function* () {
-      const fixture = yield* Effect.acquireRelease(Effect.promise(setupHTTPS), (fixture) =>
-        Effect.promise(() => fixture[Symbol.asyncDispose]()),
-      );
+      const fixture = yield* Effect.acquireDisposable(Effect.promise(setupHTTPS));
       const internet = yield* PublicInternet.pipe(
         Effect.provide(name === "process" ? fixture.processLayer : publicInternetIsolate),
       );
@@ -185,9 +173,7 @@ for (const name of ["process", "isolate"] as const) {
 
   it.effect(`rejects POST redirects without replaying the body on ${name}`, () =>
     Effect.gen(function* () {
-      const fixture = yield* Effect.acquireRelease(Effect.promise(setupHTTPS), (fixture) =>
-        Effect.promise(() => fixture[Symbol.asyncDispose]()),
-      );
+      const fixture = yield* Effect.acquireDisposable(Effect.promise(setupHTTPS));
       const internet = yield* PublicInternet.pipe(
         Effect.provide(name === "process" ? fixture.processLayer : publicInternetIsolate),
       );
@@ -206,9 +192,7 @@ for (const name of ["process", "isolate"] as const) {
 
   it.effect(`times out a POST before response headers on ${name}`, () =>
     Effect.gen(function* () {
-      const fixture = yield* Effect.acquireRelease(Effect.promise(setupHTTPS), (fixture) =>
-        Effect.promise(() => fixture[Symbol.asyncDispose]()),
-      );
+      const fixture = yield* Effect.acquireDisposable(Effect.promise(setupHTTPS));
       const internet = yield* PublicInternet.pipe(
         Effect.provide(name === "process" ? fixture.processLayer : publicInternetIsolate),
       );
@@ -228,9 +212,7 @@ for (const name of ["process", "isolate"] as const) {
 
   it.effect(`keeps the deadline active through a stalled response body on ${name}`, () =>
     Effect.gen(function* () {
-      const fixture = yield* Effect.acquireRelease(Effect.promise(setupHTTPS), (fixture) =>
-        Effect.promise(() => fixture[Symbol.asyncDispose]()),
-      );
+      const fixture = yield* Effect.acquireDisposable(Effect.promise(setupHTTPS));
       const internet = yield* PublicInternet.pipe(
         Effect.provide(name === "process" ? fixture.processLayer : publicInternetIsolate),
       );
@@ -251,9 +233,7 @@ for (const name of ["process", "isolate"] as const) {
 
   it.effect(`rejects oversized responses and closes the socket before EOF on ${name}`, () =>
     Effect.gen(function* () {
-      const fixture = yield* Effect.acquireRelease(Effect.promise(setupHTTPS), (fixture) =>
-        Effect.promise(() => fixture[Symbol.asyncDispose]()),
-      );
+      const fixture = yield* Effect.acquireDisposable(Effect.promise(setupHTTPS));
       const internet = yield* PublicInternet.pipe(
         Effect.provide(name === "process" ? fixture.processLayer : publicInternetIsolate),
       );
@@ -269,9 +249,7 @@ for (const name of ["process", "isolate"] as const) {
 
   it.effect(`allows an exact byte limit and a larger caller override on ${name}`, () =>
     Effect.gen(function* () {
-      const fixture = yield* Effect.acquireRelease(Effect.promise(setupHTTPS), (fixture) =>
-        Effect.promise(() => fixture[Symbol.asyncDispose]()),
-      );
+      const fixture = yield* Effect.acquireDisposable(Effect.promise(setupHTTPS));
       const internet = yield* PublicInternet.pipe(
         Effect.provide(name === "process" ? fixture.processLayer : publicInternetIsolate),
       );
@@ -293,9 +271,7 @@ for (const name of ["process", "isolate"] as const) {
 
   it.effect(`enforces the default response cap on ${name}`, () =>
     Effect.gen(function* () {
-      const fixture = yield* Effect.acquireRelease(Effect.promise(setupHTTPS), (fixture) =>
-        Effect.promise(() => fixture[Symbol.asyncDispose]()),
-      );
+      const fixture = yield* Effect.acquireDisposable(Effect.promise(setupHTTPS));
       const internet = yield* PublicInternet.pipe(
         Effect.provide(name === "process" ? fixture.processLayer : publicInternetIsolate),
       );
@@ -309,9 +285,7 @@ for (const name of ["process", "isolate"] as const) {
 
   it.effect(`preserves HEAD and bodyless statuses, including 304, on ${name}`, () =>
     Effect.gen(function* () {
-      const fixture = yield* Effect.acquireRelease(Effect.promise(setupHTTPS), (fixture) =>
-        Effect.promise(() => fixture[Symbol.asyncDispose]()),
-      );
+      const fixture = yield* Effect.acquireDisposable(Effect.promise(setupHTTPS));
       const internet = yield* PublicInternet.pipe(
         Effect.provide(name === "process" ? fixture.processLayer : publicInternetIsolate),
       );
@@ -331,9 +305,7 @@ for (const name of ["process", "isolate"] as const) {
 
   it.effect(`rejects invalid response statuses without escaping the transport on ${name}`, () =>
     Effect.gen(function* () {
-      const fixture = yield* Effect.acquireRelease(Effect.promise(setupHTTPS), (fixture) =>
-        Effect.promise(() => fixture[Symbol.asyncDispose]()),
-      );
+      const fixture = yield* Effect.acquireDisposable(Effect.promise(setupHTTPS));
       const internet = yield* PublicInternet.pipe(
         Effect.provide(name === "process" ? fixture.processLayer : publicInternetIsolate),
       );
@@ -348,9 +320,7 @@ for (const name of ["process", "isolate"] as const) {
 
   it.effect(`verifies the TLS certificate against the original hostname on ${name}`, () =>
     Effect.gen(function* () {
-      const fixture = yield* Effect.acquireRelease(Effect.promise(setupHTTPS), (fixture) =>
-        Effect.promise(() => fixture[Symbol.asyncDispose]()),
-      );
+      const fixture = yield* Effect.acquireDisposable(Effect.promise(setupHTTPS));
       const internet = yield* PublicInternet.pipe(
         Effect.provide(name === "process" ? fixture.processLayer : publicInternetIsolate),
       );
@@ -380,9 +350,7 @@ for (const autoSelectFamily of [true, false]) {
       },
     });
     return Effect.gen(function* () {
-      const fixture = yield* Effect.acquireRelease(Effect.promise(setupHTTPS), (fixture) =>
-        Effect.promise(() => fixture[Symbol.asyncDispose]()),
-      );
+      const fixture = yield* Effect.acquireDisposable(Effect.promise(setupHTTPS));
       const internet = yield* PublicInternet.pipe(Effect.provide(layer));
 
       const response = yield* internet.request(
@@ -399,9 +367,7 @@ for (const autoSelectFamily of [true, false]) {
 
 it.effect("rejects every special-use DNS answer before opening a process connection", () =>
   Effect.gen(function* () {
-    const fixture = yield* Effect.acquireRelease(Effect.promise(setupHTTPS), (fixture) =>
-      Effect.promise(() => fixture[Symbol.asyncDispose]()),
-    );
+    const fixture = yield* Effect.acquireDisposable(Effect.promise(setupHTTPS));
     const cases = [
       [],
       [
@@ -460,9 +426,7 @@ it.effect("times out unresolved DNS and refuses to connect when the answer arriv
     },
   });
   return Effect.gen(function* () {
-    const fixture = yield* Effect.acquireRelease(Effect.promise(setupHTTPS), (fixture) =>
-      Effect.promise(() => fixture[Symbol.asyncDispose]()),
-    );
+    const fixture = yield* Effect.acquireDisposable(Effect.promise(setupHTTPS));
     const internet = yield* PublicInternet.pipe(Effect.provide(layer));
 
     const pending = yield* internet
@@ -481,9 +445,7 @@ it.effect("times out unresolved DNS and refuses to connect when the answer arriv
 
 it.effect("rejects an untrusted process certificate without disabling verification", () =>
   Effect.gen(function* () {
-    const fixture = yield* Effect.acquireRelease(Effect.promise(setupHTTPS), (fixture) =>
-      Effect.promise(() => fixture[Symbol.asyncDispose]()),
-    );
+    const fixture = yield* Effect.acquireDisposable(Effect.promise(setupHTTPS));
     const internet = yield* PublicInternet.pipe(
       Effect.provide(makePublicInternetProcess({ resolve, connect: connectLocal })),
     );

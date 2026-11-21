@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+
+import { strict } from "@effect/tsgo/oxlint-presets";
 import { expect, it } from "vitest";
 
 import { checkLint } from "./architectureFixture.ts";
@@ -10,6 +13,15 @@ const workflowTestDeclarations = `
   export const events: unknown[] = [];
   export const check = (): boolean => true;
 `;
+
+it("enables every strict Effect rule as an error", () => {
+  const source = readFileSync(new URL("../oxlint.config.ts", import.meta.url), "utf8");
+  const missing = Object.getOwnPropertyNames(strict.rules).filter(
+    (rule) => !source.includes(`"${rule}": "error"`),
+  );
+
+  expect(missing).toEqual([]);
+});
 
 it.concurrent.each([
   ["exploration", "fc.assert(fc.property(events, check));"],

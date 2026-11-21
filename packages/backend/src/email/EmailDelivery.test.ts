@@ -30,9 +30,7 @@ it.effect(
   "delivers through production Fetch with the configured authorization, sender, and replay key",
   () =>
     Effect.gen(function* () {
-      const server = yield* Effect.acquireRelease(Effect.sync(setupEmailTransport), (server) =>
-        Effect.sync(() => server[Symbol.dispose]()),
-      );
+      const server = yield* Effect.acquireDisposable(Effect.sync(setupEmailTransport));
       const requests: Array<RecordedRequest> = [];
       server.use(
         http.post(endpoint, async ({ request }) => {
@@ -64,9 +62,7 @@ it.effect(
 
 it.effect("reports provider rejection without retrying", () =>
   Effect.gen(function* () {
-    const server = yield* Effect.acquireRelease(Effect.sync(setupEmailTransport), (server) =>
-      Effect.sync(() => server[Symbol.dispose]()),
-    );
+    const server = yield* Effect.acquireDisposable(Effect.sync(setupEmailTransport));
     let attempts = 0;
     server.use(
       http.post(endpoint, () => {
@@ -84,9 +80,7 @@ it.effect("reports provider rejection without retrying", () =>
 
 it.effect("keeps the sender's own words when it refuses a recipient it may not reach", () =>
   Effect.gen(function* () {
-    const server = yield* Effect.acquireRelease(Effect.sync(setupEmailTransport), (server) =>
-      Effect.sync(() => server[Symbol.dispose]()),
-    );
+    const server = yield* Effect.acquireDisposable(Effect.sync(setupEmailTransport));
     server.use(
       http.post(endpoint, () =>
         HttpResponse.json(
@@ -113,9 +107,7 @@ it.effect("keeps the sender's own words when it refuses a recipient it may not r
 
 it.effect("keeps a rejection that is not about the recipient unmarked", () =>
   Effect.gen(function* () {
-    const server = yield* Effect.acquireRelease(Effect.sync(setupEmailTransport), (server) =>
-      Effect.sync(() => server[Symbol.dispose]()),
-    );
+    const server = yield* Effect.acquireDisposable(Effect.sync(setupEmailTransport));
     server.use(
       http.post(endpoint, () =>
         HttpResponse.json({ message: "The recipient address is malformed." }, { status: 422 }),
@@ -133,9 +125,7 @@ it.effect("keeps a rejection that is not about the recipient unmarked", () =>
 
 it.effect("retries transient failures with one stable key and succeeds", () =>
   Effect.gen(function* () {
-    const server = yield* Effect.acquireRelease(Effect.sync(setupEmailTransport), (server) =>
-      Effect.sync(() => server[Symbol.dispose]()),
-    );
+    const server = yield* Effect.acquireDisposable(Effect.sync(setupEmailTransport));
     const keys: Array<string | null> = [];
     server.use(
       http.post(endpoint, ({ request }) => {
@@ -161,9 +151,7 @@ it.effect("retries transient failures with one stable key and succeeds", () =>
 
 it.effect("exhausts retries and scrubs failed HTTP child exports", () =>
   Effect.gen(function* () {
-    const server = yield* Effect.acquireRelease(Effect.sync(setupEmailTransport), (server) =>
-      Effect.sync(() => server[Symbol.dispose]()),
-    );
+    const server = yield* Effect.acquireDisposable(Effect.sync(setupEmailTransport));
     const keys: Array<string | null> = [];
     server.use(
       http.post(endpoint, ({ request }) => {
@@ -202,9 +190,7 @@ it.effect("exhausts retries and scrubs failed HTTP child exports", () =>
 
 it.effect("rejects malformed provider JSON and response shapes", () =>
   Effect.gen(function* () {
-    const server = yield* Effect.acquireRelease(Effect.sync(setupEmailTransport), (server) =>
-      Effect.sync(() => server[Symbol.dispose]()),
-    );
+    const server = yield* Effect.acquireDisposable(Effect.sync(setupEmailTransport));
     server.use(
       http.post(
         endpoint,
@@ -223,9 +209,7 @@ it.effect("rejects malformed provider JSON and response shapes", () =>
 
 it.effect("cancels a pending provider request with its delivery fiber", () =>
   Effect.gen(function* () {
-    const server = yield* Effect.acquireRelease(Effect.sync(setupEmailTransport), (server) =>
-      Effect.sync(() => server[Symbol.dispose]()),
-    );
+    const server = yield* Effect.acquireDisposable(Effect.sync(setupEmailTransport));
     const started = Promise.withResolvers<void>();
     const aborted = Promise.withResolvers<void>();
     server.use(
@@ -247,9 +231,7 @@ it.effect("cancels a pending provider request with its delivery fiber", () =>
 
 it.effect("records delivery facts without the recipient, content, or key", () =>
   Effect.gen(function* () {
-    const server = yield* Effect.acquireRelease(Effect.sync(setupEmailTransport), (server) =>
-      Effect.sync(() => server[Symbol.dispose]()),
-    );
+    const server = yield* Effect.acquireDisposable(Effect.sync(setupEmailTransport));
     server.use(http.post(endpoint, () => HttpResponse.json({ id: "email-1" })));
     const telemetry = makeTelemetryTest();
 
@@ -266,9 +248,7 @@ it.effect("records delivery facts without the recipient, content, or key", () =>
 
 it.effect("writes messages to the development console without a configured transport", () =>
   Effect.gen(function* () {
-    yield* Effect.acquireRelease(Effect.sync(setupEmailTransport), (server) =>
-      Effect.sync(() => server[Symbol.dispose]()),
-    );
+    yield* Effect.acquireDisposable(Effect.sync(setupEmailTransport));
     const layer = EmailDelivery.fromConfig.pipe(
       Layer.provide(configLayer({ APP_ENV: "development", EMAIL_SMTP_HOST: "" })),
       Layer.provide(transport),
@@ -284,9 +264,7 @@ it.effect("writes messages to the development console without a configured trans
 
 it.effect("refuses production startup without any mail transport", () =>
   Effect.gen(function* () {
-    yield* Effect.acquireRelease(Effect.sync(setupEmailTransport), (server) =>
-      Effect.sync(() => server[Symbol.dispose]()),
-    );
+    yield* Effect.acquireDisposable(Effect.sync(setupEmailTransport));
     const layer = EmailDelivery.fromConfig.pipe(
       Layer.provide(configLayer({ APP_ENV: "production" })),
       Layer.provide(transport),
@@ -430,9 +408,7 @@ it.effect("prefers a configured SMTP relay over a Resend key", () =>
 
 it.effect("selects Resend in production when a key is configured", () =>
   Effect.gen(function* () {
-    const server = yield* Effect.acquireRelease(Effect.sync(setupEmailTransport), (server) =>
-      Effect.sync(() => server[Symbol.dispose]()),
-    );
+    const server = yield* Effect.acquireDisposable(Effect.sync(setupEmailTransport));
     let delivered = false;
     server.use(
       http.post(endpoint, () => {
