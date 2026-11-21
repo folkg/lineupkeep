@@ -127,7 +127,7 @@ const DiscardedTransactionPlan = Schema.Struct({
 export const proposalTools = Toolkit.make(
   Tool.make("propose_transactions", {
     description:
-      "Add or amend a team's queue: add, claim, drop, stash, or activate. Stash and activate name `player`; the server chooses the place. Name no slot. `window` is the send day, not the effective date. Nothing is submitted or spent. A saved move waits in Today for the owner to confirm it; no tool confirms a move. A claim's `fallbacks` are tried if the league does not award it.",
+      "Add or amend a team's queue: add, claim, drop, stash, or activate. Stash/activate name `player`; the server chooses the place. Name no slot. `window` is the send day, not the effective date. A saved move waits in Today for the owner to confirm it; no tool confirms a move. `fallbacks` are tried if the league does not award it.",
     parameters: ProposeAgentTransactionsInput,
     success: Schema.toCodecJson(ProposedTransactions),
     failure: ToolFailure,
@@ -153,7 +153,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("list_transaction_proposals", {
     description:
-      "List open moves across owned teams, grouped by run day and team. Filter by team and state `today`, `saved`, or `ended`. Each move carries its check and run. A submitted claim is `ended` while its `phase` is `with_league`, `won`, or `lost`, and never open. Discarded moves are omitted.",
+      "List open moves across owned teams, grouped by run day and team. Filter by team and state `today`, `saved`, or `ended`. Each move carries its check and run. A submitted claim is `ended` while its `phase` is `with_league`, `won`, or `lost`; discarded moves are omitted.",
     parameters: ListTransactionMovesInput,
     success: Schema.toCodecJson(TransactionMoveList),
     failure: ToolFailure,
@@ -166,7 +166,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_transaction_plan", {
     description:
-      "Read one team's queue by runDay: each move's `runDay` (send day), `effectiveDate` (league apply day), exact `sendsAt`, decision, check, and claim phase. Buckets group by runDay. `addsPossible`, `canFree`, and `illegal` say what fits and blocks it.",
+      "Read one team's queue by runDay: each move's `runDay` (send day), `effectiveDate` (apply day), `sendsAt`, decision, check, and claim phase. Buckets group by runDay. `addsPossible`, `canFree`, and `illegal` say what fits and blocks it.",
     parameters: TransactionPlanInput,
     success: Schema.toCodecJson(TransactionPlanRead),
     failure: ToolFailure,

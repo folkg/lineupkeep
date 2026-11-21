@@ -4472,7 +4472,7 @@ function calendarWithoutWeekWindow(
 ): CalendarData {
   const failed = outcome._tag === "failed";
   return {
-    status: failed ? "failed" : "unsupported",
+    status: failed ? "failed" : "ok",
     team,
     periods: [],
     ...(outcome._tag === "ok"

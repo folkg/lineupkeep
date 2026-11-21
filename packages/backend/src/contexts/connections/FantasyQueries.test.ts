@@ -807,8 +807,8 @@ it.effect("reports a league without a scoring-week window instead of inventing p
     const league = yield* queries.getLeague(owner, { team: teamId, groups: ["overview"] });
     const roster = yield* queries.getRosters(owner, { team: teamId });
 
-    assert.strictEqual(calendar.status, "unsupported");
-    if (calendar.status === "unsupported") {
+    assert.strictEqual(calendar.status, "ok");
+    if (calendar.status === "ok") {
       assert.deepStrictEqual(calendar.periods, []);
       assert.deepStrictEqual(calendar.week, { status: "unsupported", reason: "not_published" });
       assert.isTrue(

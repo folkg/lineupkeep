@@ -2408,7 +2408,7 @@ it("publishes the accepted player-statistics periods and the compact standings f
   expect(JSON.stringify(tool("get_players").inputSchema)).toContain('"schedule"');
   expect(JSON.stringify(tool("get_players").inputSchema)).toContain("gamesWindow");
   expect(JSON.stringify(tool("get_players").inputSchema)).toContain("search_players");
-  expect(tool("get_calendar").description).toContain("when a week window is published");
+  expect(tool("get_calendar").description).toContain("dated league returns week `unsupported`");
   expect(JSON.stringify(tool("search_players").outputSchema)).toContain("playsThisWeek");
   expect(JSON.stringify(tool("get_league").outputSchema)).toContain("inline player name");
   expect(JSON.stringify(tool("get_pending_trade_offers").outputSchema)).toContain("ownerNote");

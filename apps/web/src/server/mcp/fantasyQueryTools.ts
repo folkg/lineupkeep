@@ -47,7 +47,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_calendar", {
     description:
-      "One linked team's calendar: current week, season periods, and pro-team games for one `period` when a week window is published.",
+      "One linked team's calendar for a published week window: current week, periods, and pro-team games for one `period`. A dated league returns week `unsupported`; use the player `schedule` group.",
     parameters: GetCalendarInput,
     success: Schema.toCodecJson(CalendarResult),
     failure: ToolFailure,
@@ -73,7 +73,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_rosters", {
     description:
-      "One linked team's roster for an exact league week, or every roster in its league with `scope: league`. Places and reserve lists carry the league's own names.",
+      "One linked team's roster for an exact league week, or all league rosters with `scope: league`. Places and reserves use league names. Pages are byte-budgeted; `limit` is a cap.",
     parameters: GetRostersInput,
     success: Schema.toCodecJson(RosterResult),
     failure: ToolFailure,
@@ -86,7 +86,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("search_players", {
     description:
-      "Search one league's player pool. Each row carries the value that orders `sort`; add `gamesWindow` for game days or weeks.",
+      "Search one league's pool; each row carries the `sort` value. Add `gamesWindow` for games. Pages are byte-budgeted; `limit` is a cap.",
     parameters: SearchPlayersInput,
     success: Schema.toCodecJson(SearchPlayersResult),
     failure: ToolFailure,
@@ -99,7 +99,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_players", {
     description:
-      "Hydrate up to 25 player references from one league in one response. Each returns in `players` or `failures`. Group `schedule` adds `gameDays` or `gameWeeks`.",
+      "Hydrate up to 25 player references from one league. Each returns in `players` or `failures`; group `schedule` adds games. Pages are byte-budgeted; `limit` is a cap.",
     parameters: GetPlayersInput,
     success: Schema.toCodecJson(PlayersResult),
     failure: ToolFailure,
@@ -138,7 +138,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_transactions", {
     description:
-      "Bounded transaction history for one linked team, newest first. Pending offers are `get_pending_trade_offers`; made draft picks are `get_league` `draft_history`.",
+      "Bounded history for one linked team, newest first. Pending offers are `get_pending_trade_offers`; made picks are `get_league` `draft_history`.",
     parameters: GetTransactionsInput,
     success: Schema.toCodecJson(TransactionsResult),
     failure: ToolFailure,
