@@ -67,6 +67,7 @@ test("discovers and authorizes a stateless client through email sign-in, consent
     "list_transaction_proposals",
     "get_transaction_plan",
     "discard_transaction_move",
+    "get_team_snapshot",
     "set_lineup",
     "get_lineup_runs",
     "set_team_automation",

@@ -795,6 +795,7 @@ function callArguments(tool: string, team: string): Record<string, unknown> {
     case "get_calendar":
     case "get_league":
     case "get_team_summary":
+    case "get_team_snapshot":
     case "get_transactions":
       return { team };
     case "get_rosters":
