@@ -254,6 +254,19 @@ it("names an expired presented token as invalid_token so a client refreshes inst
   expect(JSON.stringify(body)).toContain("refresh token");
 });
 
+it("names an invalid non-expired token as terminal so a client authorizes again", async () => {
+  const response = await handle(request("tools/list", {}, "invalid"));
+  const body = await json(response);
+
+  expect(response.status).toBe(401);
+  expect(response.headers.get("www-authenticate")).toContain('error="invalid_token"');
+  expect(body).toMatchObject({
+    error: "invalid_token",
+    error_code: "token_invalid",
+  });
+  expect(JSON.stringify(body)).not.toContain("token_expired");
+});
+
 it("names only the calling tool's missing scope in a 403 body", async () => {
   const response = await handle(
     request(
@@ -2027,6 +2040,9 @@ const authenticationService: AuthService["Service"] = {
     if (token === "expired") {
       return Effect.succeed({ status: "invalid" as const, reason: "expired" as const });
     }
+    if (token === "invalid") {
+      return Effect.succeed({ status: "invalid" as const });
+    }
     const granted =
       token === "read"
         ? ["fantasy:read", "example:read"]
@@ -2369,6 +2385,7 @@ it("publishes the accepted player-statistics periods and the compact standings f
   expect(summaryOutput).toContain('"canFree"');
   expect(summaryOutput).toContain('"addsWithFixes"');
   expect(summaryOutput).toContain('"illegal"');
+  expect(summaryOutput).toContain("seasonProgress");
   expect(searchWindow).toContain("gamesWindow");
   expect(searchWindow).toContain("next_weeks");
   expect(JSON.stringify(tool("search_players").outputSchema)).toContain("gameDays");
@@ -2390,6 +2407,8 @@ it("publishes the accepted player-statistics periods and the compact standings f
   expect(playersOutput).toContain("gameWeeks");
   expect(JSON.stringify(tool("get_players").inputSchema)).toContain('"schedule"');
   expect(JSON.stringify(tool("get_players").inputSchema)).toContain("gamesWindow");
+  expect(JSON.stringify(tool("get_players").inputSchema)).toContain("search_players");
+  expect(tool("get_calendar").description).toContain("when a week window is published");
   expect(JSON.stringify(tool("search_players").outputSchema)).toContain("playsThisWeek");
   expect(JSON.stringify(tool("get_league").outputSchema)).toContain("inline player name");
   expect(JSON.stringify(tool("get_pending_trade_offers").outputSchema)).toContain("ownerNote");

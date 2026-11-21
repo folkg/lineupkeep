@@ -798,6 +798,7 @@ function providerPlayerDetailOf(
     primaryPosition: player.primaryPosition,
     displayPosition: player.displayPosition,
     proTeam: player.proTeamAbbreviation,
+    ...(player.proTeamKey === undefined ? {} : { proTeamKey: player.proTeamKey }),
     availabilityDetail: player.status?.detail,
     eligiblePositions: player.eligiblePositions,
     rosterStatus: providerAvailabilityOf(player.ownershipType),

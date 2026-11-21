@@ -611,6 +611,7 @@ it.effect("reads season player details with ownership and missing stats preserve
         displayPosition: "QB",
         positionType: "O",
         proTeamAbbreviation: "SYN",
+        proTeamKey: "nfl.t.2",
         eligiblePositions: ["QB", "W/R"],
         ownershipType: "freeagents",
         percentOwned: undefined,

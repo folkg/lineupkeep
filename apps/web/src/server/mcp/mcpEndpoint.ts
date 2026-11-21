@@ -202,7 +202,7 @@ function challengeResponse(
         : rejected
           ? {
               error: "invalid_token",
-              ...(reason === "expired" ? { error_code: "token_expired" } : {}),
+              error_code: reason === "expired" ? "token_expired" : "token_invalid",
               scope,
               resource_metadata: metadata,
               error_description: `The access token is expired or invalid. Refresh it with the grant's refresh token and retry; authorize again only when the client holds no refresh token.`,

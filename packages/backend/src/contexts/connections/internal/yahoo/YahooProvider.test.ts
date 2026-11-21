@@ -3311,6 +3311,7 @@ it.effect("reads completed-week football statistics on a weekly basis", () => {
         primaryPosition: "QB",
         displayPosition: "QB",
         proTeam: "SYN",
+        proTeamKey: "466.l.5000",
         availabilityDetail: undefined,
         eligiblePositions: ["QB"],
         rosterStatus: "rostered",

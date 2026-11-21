@@ -134,6 +134,7 @@ export function decodePlayerDetails(
         displayPosition: optionalNonEmpty(player.display_position),
         positionType: optionalNonEmpty(player.position_type),
         proTeamAbbreviation: optionalNonEmpty(player.editorial_team_abbr),
+        proTeamKey: optionalNonEmpty(player.editorial_team_key),
         eligiblePositions:
           player.eligible_positions === undefined
             ? undefined
@@ -398,6 +399,7 @@ export type YahooPlayerDetail = {
   readonly displayPosition?: string;
   readonly positionType?: string;
   readonly proTeamAbbreviation?: string;
+  readonly proTeamKey?: string;
   readonly eligiblePositions?: ReadonlyArray<string>;
   readonly ownershipType?: string;
   readonly percentOwned?: YahooPercent;
@@ -572,6 +574,7 @@ const PlayerDetailPayload = Schema.Struct({
   display_position: Schema.optional(Schema.String),
   position_type: Schema.optional(Schema.String),
   editorial_team_abbr: Schema.optional(Schema.String),
+  editorial_team_key: Schema.optional(Schema.String),
   eligible_positions: Schema.optional(Schema.Array(Schema.Struct({ position: Schema.String }))),
   ownership: Schema.optional(Schema.Struct({ ownership_type: Schema.optional(Schema.String) })),
   percent_owned: Schema.optional(PercentOwned),

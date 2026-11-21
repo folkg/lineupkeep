@@ -469,6 +469,7 @@ const playerIdentity = (playerKey: string, name: string): ReadonlyArray<unknown>
   { player_id: playerKey.split(".").at(-1) },
   { name: { full: name } },
   { editorial_team_abbr: "SYN" },
+  { editorial_team_key: "nfl.t.2" },
   { display_position: "QB" },
   { position_type: "O" },
   { primary_position: "QB" },

@@ -1187,6 +1187,26 @@ it.effect("resolves an unowned player reference from a league roster read in get
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+it.effect("points a get_players call without references at search_players", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const before = yield* fake.providerReads;
+
+    const refused = yield* Effect.flip(
+      queries.getPlayers(owner, { team: Array.getUnsafe(seeded, 0).id }),
+    );
+
+    assert.strictEqual(refused._tag, "query.selection_invalid");
+    if (refused._tag === "query.selection_invalid") {
+      assert.include(refused.detail, "get_players");
+      assert.include(refused.detail, "search_players");
+    }
+    assert.strictEqual((yield* fake.providerReads) - before, 0);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
 it.effect("reports a refused league roster read instead of an empty roster", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
@@ -1574,6 +1594,7 @@ it.effect("resolves a dropped player's identity from transaction history", () =>
     assert.deepStrictEqual(Array.getUnsafe(hydrated.players, 0).identity, {
       name: "Dropped Veteran",
       displayPosition: "WR",
+      proTeam: "SYN",
       draft: { status: "not_published" },
     });
     assert.deepStrictEqual(hydrated.failures, []);
@@ -2709,7 +2730,8 @@ it.effect(
           name: "Keyed Skater",
           primaryPosition: "C",
           displayPosition: "C",
-          proTeam: "TOR",
+          proTeam: undefined,
+          proTeamKey: "nhl.t.21",
           availabilityDetail: undefined,
           eligiblePositions: ["C"],
           rosterStatus: "free_agent",
@@ -4890,6 +4912,31 @@ it.effect("degrades one team summary section without failing the snapshot", () =
     }
     assert.notInclude(encodedKeys(summary), "probableStarters");
     assert.deepStrictEqual(summary.ownerNote, { status: "not_set" });
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("publishes how far the season has progressed in a team summary", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+
+    const summary = yield* queries.getTeamSummary(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+    });
+
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(summary.seasonProgress, {
+      currentPeriod: 3,
+      firstPeriod: 1,
+      lastPeriod: 17,
+      periodCount: 17,
+      startDate: "2026-09-03",
+      endDate: "2026-12-28",
+    });
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 

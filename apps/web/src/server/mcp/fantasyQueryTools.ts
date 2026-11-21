@@ -47,7 +47,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_calendar", {
     description:
-      "One linked team's league calendar: the current scoring week and the season's periods, plus each professional team's games for one `period`.",
+      "One linked team's calendar: current week, season periods, and pro-team games for one `period` when a week window is published.",
     parameters: GetCalendarInput,
     success: Schema.toCodecJson(CalendarResult),
     failure: ToolFailure,
@@ -73,7 +73,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_rosters", {
     description:
-      "One linked team's roster for an exact league week, or every roster in its league with `scope: league`. Places and each reserve list carry the league's own names.",
+      "One linked team's roster for an exact league week, or every roster in its league with `scope: league`. Places and reserve lists carry the league's own names.",
     parameters: GetRostersInput,
     success: Schema.toCodecJson(RosterResult),
     failure: ToolFailure,
@@ -86,7 +86,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("search_players", {
     description:
-      "Search one league's player pool. Each row carries the value that orders `sort`. Add `gamesWindow` for game days or weeks.",
+      "Search one league's player pool. Each row carries the value that orders `sort`; add `gamesWindow` for game days or weeks.",
     parameters: SearchPlayersInput,
     success: Schema.toCodecJson(SearchPlayersResult),
     failure: ToolFailure,

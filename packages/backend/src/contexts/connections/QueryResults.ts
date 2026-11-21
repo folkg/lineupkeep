@@ -721,7 +721,7 @@ export const GetRostersInput = Schema.Struct({
     PageLimit.pipe(
       Schema.annotate({
         description:
-          "The most rows this page may carry: players for `scope: team`, whole teams for `scope: league`.",
+          "A maximum: players for `scope: team`, whole teams for `scope: league`. A page can return fewer rows; follow `page.next` until `complete`.",
       }),
     ),
   ),
@@ -984,7 +984,14 @@ export const SearchPlayersInput = Schema.Struct({
   ),
   gamesWindow: Schema.optional(GamesWindowInput),
   cursor: Schema.optional(Cursor),
-  limit: Schema.optional(PageLimit),
+  limit: Schema.optional(
+    PageLimit.pipe(
+      Schema.annotate({
+        description:
+          "A maximum row count. A page can return fewer rows; follow `page.next` until `complete`.",
+      }),
+    ),
+  ),
 });
 export type SearchPlayersInput = typeof SearchPlayersInput.Type;
 
@@ -1186,12 +1193,14 @@ export const GetPlayersInput = Schema.Struct({
         "The league that seals every reference; a player on another team in the same league resolves.",
     }),
   ),
-  players: Schema.Array(PlayerRef).pipe(
-    Schema.check(Schema.isMinLength(1), Schema.isMaxLength(25)),
-    Schema.annotate({
-      description:
-        "1 to 25 private player references from the league named by `team`. The whole list returns in one response.",
-    }),
+  players: Schema.optional(
+    Schema.Array(PlayerRef).pipe(
+      Schema.check(Schema.isMinLength(1), Schema.isMaxLength(25)),
+      Schema.annotate({
+        description:
+          "1 to 25 private player references from the league named by `team`. The whole list returns in one response. To browse players without references, use `search_players`.",
+      }),
+    ),
   ),
   period: Schema.optional(
     StatWindow.pipe(
@@ -1210,7 +1219,14 @@ export const GetPlayersInput = Schema.Struct({
   ),
   gamesWindow: Schema.optional(GamesWindowInput),
   cursor: Schema.optional(Cursor),
-  limit: Schema.optional(PageLimit),
+  limit: Schema.optional(
+    PageLimit.pipe(
+      Schema.annotate({
+        description:
+          "A maximum row count. A page can return fewer rows; follow `page.next` until `complete`.",
+      }),
+    ),
+  ),
 });
 export type GetPlayersInput = typeof GetPlayersInput.Type;
 
@@ -1321,6 +1337,7 @@ const PlayerIdentity = Schema.Struct({
   name: Schema.NonEmptyString,
   primaryPosition: Schema.optional(Schema.NonEmptyString),
   displayPosition: Schema.NonEmptyString,
+  proTeam: Schema.optional(Schema.NonEmptyString),
   draft: PlayerDraft,
 });
 
@@ -1632,6 +1649,20 @@ const SummaryTransactionTiming = Schema.Struct({
   rosterChange: Schema.optional(Schema.Literals(["same_day", "next_day", "weekly_lock"])),
   waiverDays: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
 }).annotate({ description: "The league's roster-change timing." });
+
+const SeasonProgress = Schema.Struct({
+  currentPeriod: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+  firstPeriod: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+  lastPeriod: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+  periodCount: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+  startDate: Schema.optional(Schema.String),
+  endDate: Schema.optional(Schema.String),
+}).pipe(
+  Schema.annotate({
+    description:
+      "How far the season has progressed: the current scoring period and the season's first and last periods, plus the season dates when published.",
+  }),
+);
 
 const SummaryLeague = Schema.Union([
   Schema.Struct({
@@ -1997,6 +2028,7 @@ export const TeamSummaryData = Schema.Struct({
   status: QueryStatus,
   team: QueryTeam,
   period: Schema.optional(QueryPeriod),
+  seasonProgress: Schema.optional(SeasonProgress),
   league: Schema.optional(SummaryLeague),
   waiverBid: Schema.optional(WaiverBid).pipe(
     Schema.annotate({

@@ -14,21 +14,21 @@ Status: proposed surface and acceptance criteria. Names other than the agreed ge
 
 ## Proposed tool families
 
-| Tool                  | Purpose and important limits                                                                                                                                                                                                          |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list_connections`    | Safe owned provider connection metadata/status only                                                                                                                                                                                   |
-| `list_teams`          | Compact owned team discovery with season/sport/connection filters; stable paging                                                                                                                                                      |
-| `get_calendar`        | Valid current/historical periods and relevant fantasy-day/lock context; no guessed week equivalence                                                                                                                                   |
-| `get_league`          | Selected league settings, scoring definitions, roster rules, standings with records, season points, and category totals, and completed draft history; bounded groups/pages                                                            |
-| `get_rosters`         | Exact selected team/period rosters, or every team's roster in a linked league paged by whole teams; professional-team abbreviation and goalie/pitcher starting status; full detail carries the owner note                             |
-| `search_players`      | Bounded league/sport-context player search with ownership/started signals, validated sorts including the league's published recent-form windows, draft provenance, and optional professional games remaining                          |
-| `get_players`         | Explicit-list hydration of up to 25 selected-player references, returned whole; stats, availability, draft provenance, and the week's projection where published                                                                      |
-| `get_matchups`        | Selected matchup/scoreboard data with explicit period, category values/winners, and remaining player-games                                                                                                                            |
-| `get_transactions`    | Bounded transaction history with team scope and date filtering, two-sided player movements, trade parties, traded draft picks, and explicit incompleteness; no execution                                                              |
-| `get_team_summary`    | One bounded per-team snapshot: league with its waiver bid shape, standing and record, standings, current matchup, places, reserve lists, freeable moves, blockers, and a compact roster carrying draft provenance and starting status |
-| `set_lineup`          | The sole roster mutation operation; creates durable team runs and returns verified or pending outcomes                                                                                                                                |
-| `set_team_automation` | Enable, disable, pause for the rest of the fantasy day, or resume owned team automation; reports resulting state                                                                                                                      |
-| `get_lineup_runs`     | Owned run status, safe concise explanations, observed changes, and unresolved conditions                                                                                                                                              |
+| Tool                  | Purpose and important limits                                                                                                                                                                                                                           |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `list_connections`    | Safe owned provider connection metadata/status only                                                                                                                                                                                                    |
+| `list_teams`          | Compact owned team discovery with season/sport/connection filters; stable paging                                                                                                                                                                       |
+| `get_calendar`        | Valid current/historical periods and relevant fantasy-day/lock context, plus professional-team games when the league publishes a week window; no guessed week equivalence                                                                              |
+| `get_league`          | Selected league settings, scoring definitions, roster rules, standings with records, season points, and category totals, and completed draft history; bounded groups/pages                                                                             |
+| `get_rosters`         | Exact selected team/period rosters, or every team's roster in a linked league paged by whole teams; professional-team abbreviation and goalie/pitcher starting status; full detail carries the owner note                                              |
+| `search_players`      | Bounded league/sport-context player search with ownership/started signals, validated sorts including the league's published recent-form windows, draft provenance, and optional professional games remaining                                           |
+| `get_players`         | Explicit-list hydration of up to 25 selected-player references, returned whole; stats, availability, draft provenance, and the week's projection where published                                                                                       |
+| `get_matchups`        | Selected matchup/scoreboard data with explicit period, category values/winners, and remaining player-games                                                                                                                                             |
+| `get_transactions`    | Bounded transaction history with team scope and date filtering, two-sided player movements, trade parties, traded draft picks, and explicit incompleteness; no execution                                                                               |
+| `get_team_summary`    | One bounded per-team snapshot: league with its waiver bid shape, season progress, standing and record, standings, current matchup, places, reserve lists, freeable moves, blockers, and a compact roster carrying draft provenance and starting status |
+| `set_lineup`          | The sole roster mutation operation; creates durable team runs and returns verified or pending outcomes                                                                                                                                                 |
+| `set_team_automation` | Enable, disable, pause for the rest of the fantasy day, or resume owned team automation; reports resulting state                                                                                                                                       |
+| `get_lineup_runs`     | Owned run status, safe concise explanations, observed changes, and unresolved conditions                                                                                                                                                               |
 
 Do not expose a general policy-mode selector, native/premium action selector, custom formula, or fallback override. Return the implementation actually used. The MCP surface covers automation enrollment, pause, and resume because an agent must be able to manage a team it owns; it still does not expose registration, provider session upload, or every frontend control as tools.
 
@@ -69,6 +69,8 @@ Submission is bounded and rate-limited: title ≤ 120 characters, body ≤ 4000,
 ## Budgets and paging
 
 Initial service policy: aim for about 12 KiB and enforce a 16 KiB model-facing application-result ceiling. These are our proposed application budgets, not claimed Muse/MCP limits. The measurement counts both representations a client receives: `structuredContent` and the JSON text copy that a text-only client reads. Keeping the text copy follows the specification's backwards-compatibility recommendation, so a structured page fills about half the ceiling instead of dropping the copy and halving what a text-only client can use.
+
+A page can return fewer rows than `limit` to fit the response; follow `page.next` until `page.complete`. The page metadata states `returned` and `remaining`, and the limit field on `get_rosters`, `search_players`, and `get_players` repeats the rule.
 
 `get_team_summary` is the one deliberate exception because it composes up to six sections into one snapshot: it aims for 20 KiB and enforces a 28 KiB hard ceiling, with the same double-counting of structured and text copies. The ordinary six-group call fits a 13-team league inside that ceiling. A request that still cannot fit one player row refuses with the largest sections and the groups to drop, so the exception does not turn a genuinely oversized snapshot into a silent truncation or an unbounded result. `get_players` is the second deliberate exception: an explicit list of at most 25 player references is returned whole in one response, so it is bounded by a 256 KiB hard ceiling instead of paging at the pool size. A caller that deliberately passes `limit` can still request a smaller page. Every other tool keeps the 12 KiB target and 16 KiB hard ceiling.
 
@@ -422,7 +424,7 @@ pick history. Team names come from one batched league-teams read and are omitted
 read fails while the picks remain. The group pages picks inside the result budget, and the section's
 detail note repeats that this is completed draft history rather than pick ownership.
 
-Every player row that carries identity also carries `draft`: `drafted` with `draftRound`,
+Every player row that carries identity also carries `proTeam` when the league publishes it, and `draft`: `drafted` with `draftRound`,
 `overallPick`, `draftedBy`, and `draftSeason`; `undrafted` when the league's completed draft did not
 take him; or `not_published` when the league published no draft history that could be read. It
 appears on `get_team_summary`'s roster rows, inside `get_players` `identity`, and on every
@@ -1153,7 +1155,9 @@ token an `accessToken` of `{status: "active", expiresAt, expiresInSeconds}` for 
 still accepts or `{status: "rejected"}` for one it refuses. A client can read that before its first
 authenticated call, refresh while it still has time, and retry a refresh that timed out. A 401 on a
 request that presented a bearer token carries `error="invalid_token"` in `WWW-Authenticate` and the
-body, which means "refresh and retry"; the 401 without an error code means "authorize".
+body. The body adds `error_code: "token_expired"` when the token is expired, and
+`error_code: "token_invalid"` when it is invalid for another reason; the 401 without an error code
+means "authorize".
 
 Invalid `tools/call` arguments return HTTP 400 with JSON-RPC `-32602` and name the offending field
 path, for example `Invalid tool arguments: Expected a value greater than or equal to 1 at

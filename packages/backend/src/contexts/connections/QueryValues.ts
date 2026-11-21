@@ -149,13 +149,7 @@ export const QueryPage = Schema.Struct({
   complete: Schema.Boolean,
   remaining: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   next: Schema.optional(Schema.String),
-  size: Schema.optional(
-    Schema.Int.check(Schema.isGreaterThan(0)).pipe(
-      Schema.annotate({
-        description: "The effective `limit`.",
-      }),
-    ),
-  ),
+  size: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
   total: Schema.optional(
     Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
       Schema.annotate({

@@ -1451,6 +1451,7 @@ function rosterAfterTransaction(
         primaryPosition: detail.primaryPosition ?? detail.displayPosition ?? "",
         positionType: undefined,
         proTeamAbbreviation: detail.proTeam,
+        ...(detail.proTeamKey === undefined ? {} : { proTeamKey: detail.proTeamKey }),
         eligiblePositions: detail.eligiblePositions ?? [],
         slot: { status: "verified" as const, slot: "BN" },
         isEditable: true,

@@ -1935,6 +1935,13 @@ export const FantasyQueriesLive = Layer.effect(
       userId: UserId,
       input: GetPlayersInput,
     ) {
+      const requested = input.players;
+      if (requested === undefined) {
+        return yield* QuerySelectionInvalid.make({
+          detail:
+            "`get_players` needs explicit player references. To browse a league's pool, use `search_players` with the team, availability, and sort; then pass the references it returns here.",
+        });
+      }
       const context = yield* loadContext(userId, input.team);
       const team = queryTeam(context.owned);
       const groups = [...new Set(input.groups ?? defaultPlayerGroups)];
@@ -1945,9 +1952,9 @@ export const FantasyQueriesLive = Layer.effect(
       }
       const fetchedAt = yield* DateTime.now;
       const leagueKey = context.owned.team.providerLeagueKey;
-      const opened = yield* tokens.openPlayerRefs({ userId, leagueKey, refs: input.players });
+      const opened = yield* tokens.openPlayerRefs({ userId, leagueKey, refs: requested });
       const resolved = EffectArray.map(
-        EffectArray.zip(input.players, opened),
+        EffectArray.zip(requested, opened),
         ([ref, providerPlayerKey]) => ({
           ref,
           providerPlayerKey,
@@ -1957,7 +1964,7 @@ export const FantasyQueriesLive = Layer.effect(
         (
           row,
         ): row is {
-          readonly ref: (typeof input.players)[number];
+          readonly ref: (typeof requested)[number];
           readonly providerPlayerKey: string;
         } => row.providerPlayerKey !== undefined,
       );
@@ -2189,7 +2196,8 @@ export const FantasyQueriesLive = Layer.effect(
           : undefined;
       const missingProTeamKeys = validKeys.flatMap((key) => {
         const rosterPlayer = rosterByKey.get(key);
-        const abbreviation = rosterPlayer?.proTeamAbbreviation ?? detailsByKey.get(key)?.proTeam;
+        const abbreviation =
+          rosterPlayer?.proTeamAbbreviation ?? detailsByKey.get(key)?.proTeam ?? undefined;
         return rosterPlayer?.proTeamKey === undefined && abbreviation !== undefined
           ? [abbreviation]
           : [];
@@ -2204,9 +2212,11 @@ export const FantasyQueriesLive = Layer.effect(
       const proTeamKeyByAbbreviation = uniqueProviderTeamKeys(proTeamIdentities);
       const proTeamKeyOf = (key: string): string | undefined => {
         const rosterPlayer = rosterByKey.get(key);
-        const abbreviation = rosterPlayer?.proTeamAbbreviation ?? detailsByKey.get(key)?.proTeam;
+        const abbreviation =
+          rosterPlayer?.proTeamAbbreviation ?? detailsByKey.get(key)?.proTeam ?? undefined;
         return (
           rosterPlayer?.proTeamKey ??
+          detailsByKey.get(key)?.proTeamKey ??
           (abbreviation === undefined ? undefined : proTeamKeyByAbbreviation.get(abbreviation))
         );
       };
@@ -2464,7 +2474,7 @@ export const FantasyQueriesLive = Layer.effect(
           `period=${statWindowKey(requestedPeriod)}`,
           `groups=${[...groups].sort().join(",")}`,
           `gamesWindow=${gamesWindowKey(input.gamesWindow)}`,
-          `players=${input.players.join(",")}`,
+          `players=${requested.join(",")}`,
           "order=request",
         ].join("|"),
       );
@@ -2517,7 +2527,7 @@ export const FantasyQueriesLive = Layer.effect(
         schema: PlayersSchema,
         rows: playerRows,
         offset,
-        limit: input.limit ?? input.players.length,
+        limit: input.limit ?? requested.length,
         resource: "players",
         groups,
         remedy: "Select fewer player groups or fewer player references.",
@@ -3909,10 +3919,12 @@ export const FantasyQueriesLive = Layer.effect(
           ? undefined
           : rosterSummary.places.free +
             rosterSummary.reserve.reduce((total, list) => total + list.free, 0);
+      const seasonProgress = seasonProgressOf(league);
       const base: Omit<TeamSummaryData, "roster" | "page" | "schedule"> = {
         status,
         team,
         ...(rosterPeriod === undefined ? {} : { period: rosterPeriod }),
+        ...(seasonProgress === undefined ? {} : { seasonProgress }),
         ...(leagueSection === undefined ? {} : { league: leagueSection }),
         ...(standingSection === undefined ? {} : { standing: standingSection }),
         ...(recordSection === undefined ? {} : { record: recordSection }),
@@ -5523,6 +5535,28 @@ function leagueFacts(
   };
 }
 
+function seasonProgressOf(
+  league: ProviderLeagueSettings | undefined,
+): TeamSummaryData["seasonProgress"] {
+  if (league === undefined) {
+    return undefined;
+  }
+  const window = league.periodWindow;
+  const progress = {
+    ...(window === undefined
+      ? {}
+      : {
+          currentPeriod: window.current,
+          firstPeriod: window.start,
+          lastPeriod: window.end,
+          periodCount: window.end - window.start + 1,
+        }),
+    ...(league.startDate === undefined ? {} : { startDate: league.startDate }),
+    ...(league.endDate === undefined ? {} : { endDate: league.endDate }),
+  };
+  return Object.keys(progress).length === 0 ? undefined : progress;
+}
+
 function leagueTransactionRules(
   league: ProviderLeagueSettings,
 ): NonNullable<LeagueData["overview"]>["transactionRules"] {
@@ -5713,6 +5747,7 @@ type PlayerIdentityView = {
   readonly name: string;
   readonly displayPosition: string;
   readonly primaryPosition?: string;
+  readonly proTeam?: string;
 };
 
 type DraftProvenanceRead = {
@@ -5734,16 +5769,20 @@ function playerIdentity(
         readonly name?: string | undefined;
         readonly primaryPosition?: string | undefined;
         readonly displayPosition?: string | undefined;
+        readonly proTeam?: string | undefined;
+        readonly proTeamAbbreviation?: string | undefined;
       }
     | undefined,
 ): PlayerIdentityView | undefined {
   if (source?.name === undefined || source.displayPosition === undefined) {
     return undefined;
   }
+  const proTeam = source.proTeam ?? source.proTeamAbbreviation;
   return {
     name: source.name,
     displayPosition: source.displayPosition,
     ...(source.primaryPosition === undefined ? {} : { primaryPosition: source.primaryPosition }),
+    ...(proTeam === undefined ? {} : { proTeam }),
   };
 }
 
