@@ -1,9 +1,12 @@
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 
-import { strict } from "@effect/tsgo/oxlint-presets";
 import { EffectString } from "@lineupkeep/collections";
 import { Array as EffectArray } from "effect";
 import { expect, it } from "vitest";
+
+import { effectRules, pendingEffectRules } from "#repo/oxlint.config.ts";
 
 import { checkLint } from "./architectureFixture.ts";
 
@@ -16,14 +19,23 @@ const workflowTestDeclarations = `
   export const check = (): boolean => true;
 `;
 
-it("enables every strict Effect rule as an error", () => {
-  const source = readFileSync(new URL("../oxlint.config.ts", import.meta.url), "utf8");
-  const missing = EffectArray.filter(
-    Object.getOwnPropertyNames(strict.rules),
-    (rule) => !EffectString.includes(source, `"${rule}": "error"`),
+it("enables every Effect rule the plugin publishes", () => {
+  const require = createRequire(import.meta.url);
+  const schema = readFileSync(
+    join(dirname(require.resolve("@effect/tsgo/package.json")), "oxlint-schema.json"),
+    "utf8",
+  );
+  const published = EffectArray.map(
+    [...new Set(EffectString.matchAll(schema, /effecttsgo\/[a-z0-9-]+/gu))],
+    (match) => match[0],
   );
 
-  expect(missing).toEqual([]);
+  expect(Object.keys(effectRules).sort()).toEqual(published.sort());
+  for (const rule of published) {
+    const expected =
+      rule === "effecttsgo/api-stability-leak" || pendingEffectRules.has(rule) ? "off" : "error";
+    expect(effectRules[rule], rule).toBe(expected);
+  }
 });
 
 it.concurrent.each([
