@@ -195,7 +195,7 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
     return options
       .remote()
       .startHosted({
-        provider: defaultProviderKey,
+        provider: input.provider ?? defaultProviderKey,
         viewport: viewportProfileForClientWidth(window.innerWidth),
         ...(input.connectionId === undefined ? {} : { connectionId: input.connectionId }),
       })
@@ -338,6 +338,7 @@ type HostedLinkingOptions = {
 };
 
 type StartHostedLinkingOptions = {
+  readonly provider?: string;
   readonly connectionId?: string;
 };
 

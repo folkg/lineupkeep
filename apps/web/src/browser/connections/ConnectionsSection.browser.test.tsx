@@ -153,6 +153,25 @@ it("starts a hosted sign-in for a connection that needs to reconnect", async () 
   await expect.element(page.getByText("Opening sign-in…")).not.toBeInTheDocument();
 });
 
+it("starts the sign-in from an agent link", async () => {
+  await page.viewport(1440, 900);
+  const hostedInputs: Array<Parameters<ConnectionRemote["startHosted"]>[0]> = [];
+  using _section = setupConnectionsSection(
+    [],
+    {
+      startHosted: (input) => {
+        hostedInputs.push(input);
+        return new Promise(() => undefined);
+      },
+    },
+    { connect: "yahoo", connection: reconnectable.id },
+  );
+
+  await expect
+    .poll(() => hostedInputs)
+    .toEqual([{ provider: "yahoo", connectionId: reconnectable.id, viewport: "desktop" }]);
+});
+
 it("starts a phone viewport profile from a phone-sized client", async () => {
   await page.viewport(390, 844);
   const hostedInputs: Array<Parameters<ConnectionRemote["startHosted"]>[0]> = [];
@@ -186,6 +205,7 @@ it("starts a desktop viewport profile from a wide client", async () => {
 function setupConnectionsSection(
   connections: ReadonlyArray<ConnectionView>,
   overrides: Partial<Pick<ConnectionRemote, "startHosted" | "disconnect">> = {},
+  props: { readonly connect?: string; readonly connection?: string } = {},
 ): { [Symbol.dispose](): void } {
   const queryClient = createQueryClient();
   const remote: ConnectionRemote = {
@@ -218,6 +238,8 @@ function setupConnectionsSection(
     path: "/account",
     component: () => (
       <ConnectionsSection
+        connect={props.connect}
+        connection={props.connection}
         connectionsQuery={() => connectionsQuery}
         onRefresh={() => Promise.resolve()}
         remote={remote}

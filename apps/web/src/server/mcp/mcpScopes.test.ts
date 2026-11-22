@@ -74,6 +74,7 @@ it("spends a declared allowance on every shipped tool, smallest for the destruct
     "list_teams",
     "list_transaction_proposals",
     "search_players",
+    "start_connection",
   ]);
   expect(toolCallLimits.destructive.clientMax).toBeLessThan(toolCallLimits.write.clientMax);
   expect(toolCallLimits.write.clientMax).toBeLessThan(toolCallLimits.read.clientMax);
@@ -124,6 +125,7 @@ it("reads a connection, a team, and a lineup run under the same read scope", () 
   const scopeOf = new Map(EffectArray.map(toolScopes, ({ name, scope }) => [name, scope]));
 
   expect(scopeOf.get("list_connections")).toBe("fantasy:read");
+  expect(scopeOf.get("start_connection")).toBe("fantasy:read");
   expect(scopeOf.get("list_teams")).toBe("fantasy:read");
   expect(scopeOf.get("list_transaction_proposals")).toBe("fantasy:read");
   expect(scopeOf.get("discard_transaction_move")).toBe("transactions:review");

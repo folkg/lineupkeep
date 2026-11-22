@@ -1,3 +1,4 @@
+import { AuthService } from "@lineupkeep/backend/auth/Auth";
 import type { AuthenticatedAgent } from "@lineupkeep/backend/auth/Auth";
 import {
   ConnectionCredentialGeneration,
@@ -46,6 +47,28 @@ const ProviderSessionView = Schema.Struct({
   ),
 });
 
+const StartConnectionInput = Schema.Struct({
+  provider: ProviderKey.pipe(
+    Schema.annotate({ description: "Provider key from `list_connections`." }),
+  ),
+  connectionId: Schema.optional(
+    ConnectionId.pipe(
+      Schema.annotate({
+        description: "Existing connection to reconnect. Omit to connect a new account.",
+      }),
+    ),
+  ),
+});
+
+const StartConnectionResult = Schema.Struct({
+  url: Schema.String.pipe(
+    Schema.annotate({
+      description:
+        "Open in a browser while signed in to Lineupgrade. It starts the provider sign-in.",
+    }),
+  ),
+});
+
 const ConnectionView = Schema.Struct({
   id: ConnectionId,
   provider: ProviderKey,
@@ -83,20 +106,46 @@ export const connectionTools = Toolkit.make(
     .annotate(Tool.Destructive, false)
     .annotate(Tool.Idempotent, true)
     .annotate(Tool.OpenWorld, false),
+  Tool.make("start_connection", {
+    description:
+      "Get a Lineupgrade link that starts a provider sign-in. Send it to the person; they sign in, then poll `list_connections` until ready. Use an id from `list_connections` to reconnect.",
+    parameters: StartConnectionInput,
+    success: StartConnectionResult,
+    failure: ToolFailure,
+  })
+    .annotate(RequiredScope, fantasyQueryScopes.read)
+    .annotate(Tool.Title, "Start a connection")
+    .annotate(Tool.Readonly, true)
+    .annotate(Tool.Destructive, false)
+    .annotate(Tool.Idempotent, true)
+    .annotate(Tool.OpenWorld, false),
 );
 
 export function connectionToolHandlers(
   agent: AuthenticatedAgent,
-): Layer.Layer<Tool.HandlersFor<Toolkit.Tools<typeof connectionTools>>, never, Connections> {
+): Layer.Layer<
+  Tool.HandlersFor<Toolkit.Tools<typeof connectionTools>>,
+  never,
+  Connections | AuthService
+> {
   return connectionTools.toLayer(
     Effect.gen(function* () {
       const connections = yield* Connections;
+      const auth = yield* AuthService;
       return connectionTools.of({
         list_connections: () =>
           connections.list(agent.userId).pipe(
             Effect.map((rows) => ({ connections: EffectArray.map(rows, toConnectionView) })),
             mapOutcome,
           ),
+        start_connection: ({ provider, connectionId }) => {
+          const url = new URL("/account", auth.oauthResource);
+          url.searchParams.set("connect", provider);
+          if (connectionId !== undefined) {
+            url.searchParams.set("connection", connectionId);
+          }
+          return Effect.succeed({ url: url.href });
+        },
       });
     }),
   );

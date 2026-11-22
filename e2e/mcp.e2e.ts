@@ -73,6 +73,7 @@ test("discovers and authorizes a stateless client through email sign-in, consent
   );
   expect(EffectArray.map(listedTools.result.tools, (tool) => tool.name)).toEqual([
     "list_connections",
+    "start_connection",
     "get_lineup_outlook",
     "list_teams",
     "get_calendar",
@@ -160,6 +161,7 @@ test("serves every tool scope after one consent for the documented scope set", a
   const team = randomUUID();
   const calls = [
     ["list_connections", {}],
+    ["start_connection", { provider: "yahoo" }],
     ["list_teams", {}],
     ["get_calendar", { team }],
     [

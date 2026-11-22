@@ -495,6 +495,29 @@ it.each(["2025-03-26", "2025-06-18", "2025-11-25"])(
   },
 );
 
+it("starts a provider sign-in from an owned connection link", async () => {
+  const response = await handle(
+    request(
+      "tools/call",
+      {
+        name: "start_connection",
+        arguments: { provider: "yahoo", connectionId: reconnectableId },
+      },
+      "read",
+    ),
+  );
+
+  expect(response.status).toBe(200);
+  expect(await json(response)).toMatchObject({
+    result: {
+      isError: false,
+      structuredContent: {
+        url: `https://connections.example/account?connect=yahoo&connection=${reconnectableId}`,
+      },
+    },
+  });
+});
+
 it("lists only the read-only connection tool without exposing account identity", async () => {
   const response = await handle(request("tools/list", {}, "read"));
   const body = await json(response);
@@ -511,6 +534,7 @@ it("lists only the read-only connection tool without exposing account identity",
   );
   expect(EffectArray.map(decoded.result.tools, (tool) => tool.name)).toEqual([
     "list_connections",
+    "start_connection",
     "get_lineup_outlook",
     "list_teams",
     "get_calendar",
@@ -2278,6 +2302,8 @@ const permissiveQuota = Layer.succeed(ToolCallQuota)({
   consume: () => Effect.succeed({ allowed: true as const }),
 });
 
+const reconnectableId = "018f79ea-7d86-7c18-9b4a-8b4d0c9165a2";
+
 const signedInGrant = (): Extract<AccessTokenResolution, { status: "authenticated" }> => ({
   status: "authenticated",
   userId: decodeUserId("reader"),
@@ -2646,6 +2672,7 @@ it("keeps every published description inside its budget", async () => {
     get_transactions: 220,
     list_connections: 220,
     list_feedback: 220,
+    start_connection: 220,
     list_teams: 220,
     list_transaction_proposals: 360,
     propose_transactions: 400,
@@ -2668,7 +2695,7 @@ it("keeps every published description inside its budget", async () => {
   expect(overBudget).toEqual([]);
   expect(
     EffectArray.reduce(listed.result.tools, 0, (total, tool) => total + tool.description.length),
-  ).toBeLessThanOrEqual(4_120);
+  ).toBeLessThanOrEqual(4_320);
 
   const fields = EffectArray.flatMap(listed.result.tools, (tool) => {
     const flatMapped1 = [

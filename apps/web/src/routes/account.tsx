@@ -20,6 +20,7 @@ import { teamQueries } from "#browser/teams/teamQueries.ts";
 
 export const Route = createFileRoute("/account")({
   ssr: true,
+  validateSearch: parseAccountSearch,
   context: () => ({
     connectionsQuery: connectionQueries.list(connectionRemote),
     signInSessionsQuery: signInSessionsQueries.list(signInSessionsRemote),
@@ -37,12 +38,27 @@ export const Route = createFileRoute("/account")({
   component: AccountRoute,
 });
 
+function parseAccountSearch(input: Record<string, unknown>): AccountSearch {
+  return {
+    ...(typeof input["connect"] === "string" ? { connect: input["connect"] } : {}),
+    ...(typeof input["connection"] === "string" ? { connection: input["connection"] } : {}),
+  };
+}
+
+type AccountSearch = {
+  readonly connect?: string;
+  readonly connection?: string;
+};
+
 function AccountRoute(): JSX.Element {
   const context = Route.useRouteContext();
+  const search = Route.useSearch();
   return (
     <AccountPage
       connections={
         <ConnectionsSection
+          connect={search().connect}
+          connection={search().connection}
           connectionsQuery={() => context().connectionsQuery}
           onRefresh={() =>
             refreshConnectionLists(context().queryClient).then(() =>

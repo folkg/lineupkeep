@@ -1,5 +1,5 @@
 import type { JSX } from "@solidjs/web";
-import { Show } from "solid-js";
+import { Show, onSettled } from "solid-js";
 import type { Accessor } from "solid-js";
 
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
@@ -27,6 +27,17 @@ export function ConnectionsSection(props: ConnectionsSectionProps): JSX.Element 
     onRefresh: () => props.onRefresh(),
   });
   const hasConnection = (): boolean => page.connections().length > 0;
+  let startedFromLink = false;
+  onSettled(() => {
+    if (startedFromLink || props.connect === undefined || typeof window === "undefined") {
+      return;
+    }
+    startedFromLink = true;
+    void hosted.start({
+      provider: props.connect,
+      ...(props.connection === undefined ? {} : { connectionId: props.connection }),
+    });
+  });
 
   return (
     <Stack as="section" gap="md" labelledBy="connections-title">
@@ -66,4 +77,6 @@ type ConnectionsSectionProps = {
   readonly connectionsQuery: Accessor<ConnectionListQueryOptions>;
   readonly remote: ConnectionRemote;
   readonly onRefresh: () => Promise<void>;
+  readonly connect?: string;
+  readonly connection?: string;
 };
