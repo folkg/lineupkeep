@@ -59,6 +59,7 @@ it("spends a declared allowance on every shipped tool, smallest for the destruct
   ).toEqual([
     "get_calendar",
     "get_league",
+    "get_lineup_outlook",
     "get_lineup_runs",
     "get_matchups",
     "get_pending_trade_offers",

@@ -158,6 +158,7 @@ const ProfessionalCalendarLayer = ProfessionalCalendarLive.pipe(
   Layer.provide(GameSourceLayer),
 );
 const QueriesLayer = FantasyQueriesLive.pipe(
+  Layer.provide(TransactionPlanRepositoryLayer),
   Layer.provide(QueryRepositoryLayer),
   Layer.provide(ScheduleObservationRepositoryLayer),
   Layer.provide(ProfessionalCalendarLayer),

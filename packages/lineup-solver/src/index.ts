@@ -9,6 +9,15 @@ export {
   startingSelectionValue,
 } from "./lineup.ts";
 export { solveLineup } from "./solve.ts";
+export { projectLineupOutlook } from "./outlook.ts";
+export type {
+  OutlookInput,
+  OutlookMove,
+  OutlookPlayer,
+  OutlookResult,
+  OutlookSlot,
+  OutlookWindowPeriod,
+} from "./outlook.ts";
 export {
   knownSelection,
   makeAvailabilityTier,

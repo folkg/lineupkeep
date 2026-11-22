@@ -30,6 +30,7 @@ import {
   secondProviderLeague,
   secondProviderRoster,
 } from "./internal/SecondProviderFakeTest.ts";
+import { TransactionPlanRepository } from "./internal/TransactionPlanRepository.ts";
 
 const owner = decodeUserId("owner");
 
@@ -47,6 +48,7 @@ const ProfessionalCalendarTest = ProfessionalCalendarLive.pipe(
 );
 
 const SecondProviderTestLayer = FantasyQueriesLive.pipe(
+  Layer.provide(TransactionPlanRepository.layer.pipe(Layer.provide(ConnectionsDatabaseTest))),
   Layer.provideMerge(ConnectionsLive),
   Layer.provideMerge(QueryRepository.layer.pipe(Layer.provide(ConnectionRepositoryTest))),
   Layer.provideMerge(ConnectionRepositoryTest),

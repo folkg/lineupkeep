@@ -7,6 +7,7 @@ import { Option as EffectOption, Order as EffectOrder } from "effect";
 import type { UserId } from "#contexts/auth/User.ts";
 import { providerSessionReconnectDetail } from "#contexts/connections/Connection.ts";
 import { Connections } from "#contexts/connections/Connections.ts";
+import { fantasyDayLabel } from "#contexts/connections/FantasyDay.ts";
 import { FantasyQueries } from "#contexts/connections/FantasyQueries.ts";
 import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
 import { GameSourceRegistry } from "#contexts/connections/GameSource.ts";
@@ -80,6 +81,8 @@ import type {
   TransactionsData,
   TransactionWindow,
   GetTeamSummaryInput,
+  GetLineupOutlookInput,
+  LineupOutlookData,
   StandingRow,
   StandingDetail,
   SummaryGroup,
@@ -145,6 +148,7 @@ import {
   isLeagueOffNight,
   leagueGamesByDate,
 } from "./LeagueSchedule.ts";
+import { buildOutlook, readOpenOutlookPlan } from "./LineupOutlook.ts";
 import { planReserveMoves } from "./LineupPlanning.ts";
 import type { RosterPlacementPlayer } from "./LineupPlanning.ts";
 import { uniqueProviderTeamKeys } from "./ProfessionalTeamIdentity.ts";
@@ -156,6 +160,7 @@ import { QueryRepository } from "./QueryRepository.ts";
 import type { OwnedTeam } from "./QueryRepository.ts";
 import { QueryTokens } from "./QueryTokens.ts";
 import { ScheduleObservationRepository } from "./ScheduleObservationRepository.ts";
+import { TransactionPlanRepository } from "./TransactionPlanRepository.ts";
 
 function sortWithComparator<A>(
   self: ReadonlyArray<A>,
@@ -242,6 +247,7 @@ export const FantasyQueriesLive = Layer.effect(
     const scheduleObservations = yield* ScheduleObservationRepository;
     const calendar = yield* ProfessionalCalendar;
     const gameSources = yield* GameSourceRegistry;
+    const outlookPlans = yield* TransactionPlanRepository;
 
     const loadContext = (
       userId: UserId,
@@ -4190,7 +4196,374 @@ export const FantasyQueriesLive = Layer.effect(
       });
     });
 
+    const getLineupOutlook = Effect.fn("FantasyQueries.getLineupOutlook")(function* (
+      userId: UserId,
+      input: GetLineupOutlookInput,
+    ) {
+      const context = yield* loadContext(userId, input.team);
+      const now = yield* DateTime.now;
+      const today = fantasyDayLabel(now, context.provider.capabilities.fantasyDay);
+      if (input.window !== undefined && input.days !== undefined) {
+        return yield* QuerySelectionInvalid.make({ detail: "Pass `window` or `days`, not both." });
+      }
+      const requested =
+        input.window === undefined
+          ? undefined
+          : scheduleWindowDates(input.window.start, input.window.end);
+      if (input.window !== undefined && requested === undefined) {
+        return yield* QuerySelectionInvalid.make({
+          detail: "`window` needs real dates in order, with `start` on or before `end`.",
+        });
+      }
+      if (requested !== undefined && requested.length > maximumSeasonDates) {
+        return {
+          status: "narrowing_required" as const,
+          resource: "lineup_outlook",
+          groups: ["periods", "players"],
+          detail: "Ask for a window of at most 366 days. No day has been removed from this result.",
+          budget: queryBudget,
+        };
+      }
+      const coverageEntries: QueryCoverage[] = [];
+      const failures: QueryFailure[] = [];
+      const leagueOutcome = yield* readLeague(context);
+      const league = leagueOutcome._tag === "ok" ? leagueOutcome.value : undefined;
+      coverageEntries.push(
+        leagueOutcome._tag === "ok"
+          ? coverage("league", "league_settings", now)
+          : unsupportedCoverage(
+              "league",
+              "league_settings",
+              now,
+              leagueOutcome._tag === "failed"
+                ? leagueOutcome.failure.message
+                : leagueOutcome.detail,
+            ),
+      );
+      if (leagueOutcome._tag === "failed") {
+        failures.push(leagueOutcome.failure);
+      }
+      const week = currentPeriod(league?.periodWindow);
+      const matchupOutcome =
+        week === undefined || input.window !== undefined || input.days !== undefined
+          ? undefined
+          : yield* readOutcome(
+              context,
+              "matchups",
+              context.provider.readMatchups({
+                ...providerIdentity(context),
+                providerLeagueKey: context.owned.team.providerLeagueKey,
+                period: week,
+              }),
+            );
+      if (matchupOutcome?._tag === "failed") {
+        failures.push(matchupOutcome.failure);
+      }
+      const matchupWindow =
+        matchupOutcome?._tag === "ok"
+          ? publishedWeekWindow(undefined, matchupOutcome.value)
+          : undefined;
+      const periodDates =
+        matchupWindow === undefined
+          ? undefined
+          : scheduleWindowDates(matchupWindow.start, matchupWindow.end);
+      const dates =
+        requested ??
+        (input.days === undefined ? periodDates : undefined) ??
+        scheduleWindowDates(
+          today,
+          DateTime.formatIsoDate(
+            DateTime.add(DateTime.makeUnsafe(`${today}T00:00:00.000Z`), {
+              days: (input.days ?? 7) - 1,
+            }),
+          ),
+        );
+      if (dates === undefined) {
+        throw new Error("The fantasy day could not be made into a calendar window.");
+      }
+      const window = {
+        start: dates[0] ?? today,
+        end: dates.at(-1) ?? today,
+        source:
+          input.window !== undefined || input.days !== undefined
+            ? ("requested" as const)
+            : periodDates === undefined
+              ? ("today" as const)
+              : ("period" as const),
+      };
+      const weekly = league?.rosterCoverage === "week";
+      const basis = weekly ? ("week" as const) : ("date" as const);
+      const unsupported = (detail: string): LineupOutlookData => {
+        coverageEntries.push(unsupportedCoverage("outlook", "lineup_fit", now, detail));
+        return {
+          status: "unsupported" as const,
+          team: input.team,
+          basis,
+          window,
+          generatedAt: now,
+          periods: [],
+          players: [],
+          windowTotals: {
+            openSlotPeriods: 0,
+            periodsWithOpenSlot: 0,
+            rosterGames: 0,
+            unknownPlayers: 0,
+          },
+          moves: { applied: [], unapplied: [] },
+          coverage: coverageEntries,
+          failures,
+          budget: queryBudget,
+        } satisfies LineupOutlookData;
+      };
+      if (league === undefined) {
+        return unsupported("League settings are not available, so starting places are unknown.");
+      }
+      if (weekly && week === undefined) {
+        return unsupported("The current scoring week is not published.");
+      }
+      if (weekly && periodDates === undefined) {
+        return unsupported(
+          "The scoring week's start and end dates are not published, so its window cannot be verified.",
+        );
+      }
+      if (weekly && (input.days !== undefined || input.window !== undefined)) {
+        return unsupported(
+          "This league locks its lineup once per scoring week. Omit `window` and `days` to read that week.",
+        );
+      }
+      const rosterOutcome = yield* readOutcome(
+        context,
+        "roster",
+        context.provider.readRoster({
+          ...providerIdentity(context),
+          providerTeamKey: context.owned.team.providerTeamKey,
+          period: weekly ? providerRosterPeriod(week) : undefined,
+        }),
+      );
+      if (rosterOutcome._tag !== "ok") {
+        const detail =
+          rosterOutcome._tag === "failed" ? rosterOutcome.failure.message : rosterOutcome.detail;
+        if (rosterOutcome._tag === "failed") {
+          failures.push(rosterOutcome.failure);
+        }
+        return unsupported(`The roster could not be read: ${detail}`);
+      }
+      coverageEntries.push(coverage("roster", "roster", now, week));
+      const periods = weekly
+        ? [{ week: week?.week, start: window.start, end: window.end }]
+        : EffectArray.map(dates, (date) => ({ date, start: date, end: date }));
+      const professional =
+        gameSources.sourceFor(context.owned.team.league) === undefined || weekly
+          ? undefined
+          : yield* readProfessionalScheduleGames({
+              calendar,
+              league: context.owned.team.league,
+              from: window.start,
+              to: window.end,
+            });
+      const providerBound = context.provider.capabilities.scheduleRead.maximumDates;
+      const providerOutcome =
+        weekly || professional?.status === "available" || dates.length > providerBound
+          ? undefined
+          : yield* readOutcome(
+              context,
+              "schedule",
+              readProviderOpponent({
+                store: scheduleObservations,
+                provider: context.provider,
+                material: providerIdentity(context),
+                teamId: context.owned.team.id,
+                sport: context.owned.team.sport,
+                providerTeamKey: context.owned.team.providerTeamKey,
+                period: { type: "date", start: window.start, end: window.end },
+              }),
+            );
+      if (professional?.status === "available") {
+        coverageEntries.push(
+          coverage(
+            "schedule",
+            "professional_games",
+            professional.observedAt,
+            undefined,
+            "Games and opponents from the league's professional schedule.",
+          ),
+        );
+      }
+      if (providerOutcome?._tag === "ok") {
+        coverageEntries.push(
+          coverage("schedule", "roster_schedule", providerOutcome.value.observedAt),
+        );
+      }
+      if (providerOutcome?._tag === "failed") {
+        failures.push(providerOutcome.failure);
+      }
+      if (!weekly && professional?.status !== "available" && providerOutcome?._tag !== "ok") {
+        return unsupported(
+          dates.length > providerBound
+            ? `One schedule read covers at most ${String(providerBound)} dates. Ask for a narrower window.`
+            : (professional?.detail ??
+                (providerOutcome?._tag === "failed"
+                  ? providerOutcome.failure.message
+                  : "The schedule could not be read.")),
+        );
+      }
+      const openMoves = yield* readOpenOutlookPlan({
+        repository: outlookPlans,
+        userId,
+        team: input.team,
+      }).pipe(Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })));
+      coverageEntries.push(coverage("moves", "transaction_plan", now));
+      const abbreviations = [
+        ...new Set([
+          ...EffectArray.flatMap(rosterOutcome.value.players, (player) =>
+            player.proTeamAbbreviation === undefined ? [] : [player.proTeamAbbreviation],
+          ),
+          ...EffectArray.flatMap(openMoves, (move) =>
+            EffectArray.flatMap(move.adds, (player) =>
+              player.proTeam === undefined ? [] : [player.proTeam],
+            ),
+          ),
+        ]),
+      ];
+      const identities =
+        professional?.status === "available" && abbreviations.length > 0
+          ? yield* scheduleObservations.readProviderTeamIdentities({
+              sport: context.owned.team.sport,
+              identifiers: abbreviations,
+            })
+          : [];
+      const projected = buildOutlook({
+        league,
+        roster: rosterOutcome.value,
+        periods,
+        moves: openMoves,
+        teamKeysByAbbreviation: uniqueProviderTeamKeys(identities),
+        ...(professional?.status === "available" ? { professionalGames: professional.games } : {}),
+        ...(providerOutcome?._tag === "ok"
+          ? { providerSchedule: providerOutcome.value.schedule }
+          : {}),
+      });
+      const moveById = new Map<string, (typeof openMoves)[number]>(
+        EffectArray.map(openMoves, (move) => [move.id, move] as const),
+      );
+      const storedMoveOf = (id: string): (typeof openMoves)[number] => {
+        const move = moveById.get(id);
+        if (move === undefined) {
+          throw new Error("An outlook move has no stored record.");
+        }
+        return move;
+      };
+      const keys = [
+        ...new Set([
+          ...EffectArray.map(rosterOutcome.value.players, (player) => player.providerPlayerKey),
+          ...EffectArray.flatMap(openMoves, (move) => [
+            ...EffectArray.map(move.adds, (player) => player.key),
+            ...EffectArray.map(move.fallbacks, (player) => player.key),
+            ...EffectArray.map(move.drops, (player) => player.key),
+          ]),
+        ]),
+      ];
+      const sealed = yield* tokens.sealPlayerRefs({
+        userId,
+        leagueKey: context.owned.team.providerLeagueKey,
+        playerKeys: keys,
+      });
+      const references = new Map(
+        EffectArray.map(keys, (key, index) => [key, sealed[index]] as const),
+      );
+      const refOf = (key: string): PlayerRef => {
+        const ref = references.get(key);
+        if (ref === undefined) {
+          throw new Error("An outlook player has no owner-scoped reference.");
+        }
+        return ref;
+      };
+      const result: LineupOutlookData = {
+        status: "ok",
+        team: input.team,
+        basis,
+        window,
+        generatedAt: now,
+        periods: EffectArray.map(projected.periods, (period) => ({
+          ...(period.date === undefined
+            ? { period: { week: period.week ?? 0 } }
+            : { date: period.date }),
+          start: period.start,
+          end: period.end,
+          totals: period.totals,
+          slots: [...period.slots],
+          sittingWithGame: EffectArray.map(period.sittingWithGame, (player) => ({
+            player: refOf(player.key),
+            name: player.name,
+            positions: [...player.positions],
+            slot: player.slot,
+            reason: player.reason,
+          })),
+          unknownGameDays: EffectArray.map(period.unknownGameDays, (player) => ({
+            player: refOf(player.key),
+            name: player.name,
+            ...(player.proTeam === undefined ? {} : { proTeam: player.proTeam }),
+            reason: player.reason,
+          })),
+          games: period.games,
+          moves: EffectArray.map(period.moves, (move) => ({
+            move: storedMoveOf(move.id).id,
+            kind: storedMoveOf(move.id).kind,
+            effectiveDate: move.effectiveDate,
+            adds: EffectArray.map(move.adds, (player) => ({
+              player: refOf(player.key),
+              name: player.name,
+            })),
+            fallbacks: EffectArray.map(move.fallbacks, (player) => ({
+              player: refOf(player.key),
+              name: player.name,
+            })),
+            drops: EffectArray.map(move.drops, (player) => ({
+              player: refOf(player.key),
+              name: player.name,
+            })),
+            validation: move.validation === "illegal" ? ("unchecked" as const) : move.validation,
+            certainty: move.certainty,
+            conditional: move.conditional,
+          })),
+          ...(period.fitDetail === undefined ? {} : { fitDetail: period.fitDetail }),
+        })),
+        players: EffectArray.map(projected.players, (player) => ({
+          player: refOf(player.key),
+          name: player.name,
+          ...(player.proTeam === undefined ? {} : { proTeam: player.proTeam }),
+          gamesInWindow: player.gamesInWindow,
+          gamesThatFit: player.gamesThatFit,
+          unknownPeriods: player.unknownPeriods,
+          games: [...player.games],
+        })),
+        windowTotals: projected.windowTotals,
+        moves: {
+          applied: EffectArray.map(projected.moves.applied, (id) => storedMoveOf(id).id),
+          unapplied: EffectArray.map(projected.moves.unapplied, (move) => ({
+            move: storedMoveOf(move.move).id,
+            reason: move.reason,
+          })),
+        },
+        coverage: coverageEntries,
+        failures,
+        budget: queryBudget,
+      };
+      const bytes = new TextEncoder().encode(jsonTools.jsonString(result)).length + 1_024;
+      return bytes <= queryBudget.hardLimitBytes
+        ? result
+        : {
+            status: "narrowing_required" as const,
+            resource: "lineup_outlook",
+            groups: ["periods", "players", "moves"],
+            detail:
+              "This complete outlook exceeds the result budget. Ask for a narrower `window` or fewer `days`; no day is omitted.",
+            budget: queryBudget,
+          };
+    });
+
     return FantasyQueries.of({
+      getLineupOutlook,
       listTeams,
       getCalendar,
       getLeague,

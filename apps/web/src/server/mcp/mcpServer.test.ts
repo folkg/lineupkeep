@@ -15,6 +15,7 @@ import { LineupRuns } from "@lineupkeep/backend/connections/LineupRuns";
 import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
 import {
   LeagueData,
+  LineupOutlookData,
   RosterData,
   SearchPlayersData,
   TeamSummaryData,
@@ -509,6 +510,7 @@ it("lists only the read-only connection tool without exposing account identity",
   );
   expect(EffectArray.map(decoded.result.tools, (tool) => tool.name)).toEqual([
     "list_connections",
+    "get_lineup_outlook",
     "list_teams",
     "get_calendar",
     "get_league",
@@ -2310,7 +2312,55 @@ function handle(
   );
 }
 
+it("advertises and calls the owner-scoped lineup outlook read", async () => {
+  const team = decodeTeamId("00000000-0000-7000-8000-000000000001");
+  const queries: FantasyQueriesShape = {
+    ...unavailableQueries,
+    getLineupOutlook: (_userId, input) =>
+      Effect.succeed({
+        status: "unsupported",
+        team: input.team,
+        basis: "date",
+        window: { start: "2026-11-21", end: "2026-11-21", source: "today" },
+        generatedAt: DateTime.makeUnsafe("2026-11-21T12:00:00.000Z"),
+        periods: [],
+        players: [],
+        windowTotals: {
+          openSlotPeriods: 0,
+          periodsWithOpenSlot: 0,
+          rosterGames: 0,
+          unknownPlayers: 0,
+        },
+        moves: { applied: [], unapplied: [] },
+        coverage: [],
+        failures: [],
+        budget: { targetBytes: 28 * 1024, hardLimitBytes: 32 * 1024 },
+      } satisfies LineupOutlookData),
+  };
+  const services = Layer.mergeAll(
+    authentication,
+    permissiveQuota,
+    Layer.succeed(Connections)(unavailableConnections),
+    Layer.succeed(FantasyQueries)(queries),
+    Layer.succeed(TransactionOffers)(unavailableOffers),
+    Layer.succeed(TransactionPlanService)(unavailablePlans),
+    Layer.succeed(LineupRuns)(unavailableLineups),
+    Layer.succeed(Teams)(unavailableTeams),
+    Layer.succeed(Feedback)(unavailableFeedback),
+  );
+  const response = await handleMcpRequest(
+    request("tools/call", { name: "get_lineup_outlook", arguments: { team } }, "fantasy"),
+    (_request, _operation, program) =>
+      Effect.runPromise(layerTools.provideLayer(program, services)),
+  );
+  expect(response.status).toBe(200);
+  expect(await json(response)).toMatchObject({
+    result: { isError: false, structuredContent: { status: "unsupported", team } },
+  });
+});
+
 const unavailableQueries: FantasyQueriesShape = {
+  getLineupOutlook: () => Effect.die(new Error("queries unavailable")),
   listTeams: () => Effect.die(new Error("queries unavailable")),
   getCalendar: () => Effect.die(new Error("queries unavailable")),
   getLeague: () => Effect.die(new Error("queries unavailable")),
@@ -2541,6 +2591,7 @@ it("keeps every published description inside its budget", async () => {
     add_team_agent_note: 220,
     discard_transaction_move: 220,
     get_calendar: 220,
+    get_lineup_outlook: 220,
     get_league: 220,
     get_lineup_runs: 220,
     get_matchups: 220,
@@ -2575,7 +2626,7 @@ it("keeps every published description inside its budget", async () => {
   expect(overBudget).toEqual([]);
   expect(
     EffectArray.reduce(listed.result.tools, 0, (total, tool) => total + tool.description.length),
-  ).toBeLessThanOrEqual(3_900);
+  ).toBeLessThanOrEqual(4_120);
 
   const fields = EffectArray.flatMap(listed.result.tools, (tool) => {
     const flatMapped1 = [

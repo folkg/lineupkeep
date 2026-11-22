@@ -39,6 +39,7 @@ import { QueryRepository } from "./internal/QueryRepository.ts";
 import { QueryTokens } from "./internal/QueryTokens.ts";
 import { declaredRosterConstraints } from "./internal/RosterConstraintsTest.ts";
 import { ScheduleObservationRepository } from "./internal/ScheduleObservationRepository.ts";
+import { TransactionPlanRepository } from "./internal/TransactionPlanRepository.ts";
 import { ProfessionalCalendar } from "./ProfessionalCalendar.ts";
 import type {
   ProviderAcquisitionUsage,
@@ -7508,6 +7509,126 @@ const unknownStatRef = Effect.runSync(Schema.decodeEffect(StatRef)("s1.unknown")
 const owner = decodeUserId("owner");
 const session = Redacted.make("A1=test-session-cookie");
 
+it.effect("publishes a dated roto outlook with known games and owner-scoped references", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const roster = rosterFixture({
+      count: 2,
+      providerTeamKey: "465.l.2000.t.1",
+      providerLeagueKey: "465.l.2000",
+      coverage: { type: "date", date: "2026-10-19" },
+    });
+    const seeded = yield* seed(fake, [team("465.l.2000.t.1", "Hockey", "nhl")], {
+      league: rotoLeagueFixture,
+      roster: {
+        ...roster,
+        players: EffectArray.map(roster.players, (player) => ({
+          ...player,
+          eligiblePositions: ["C"],
+          primaryPosition: "C",
+          slot: { status: "verified" as const, slot: "C" },
+        })),
+      },
+    });
+    yield* fake.setTeamSchedule(
+      "465.l.2000.t.1",
+      scheduleFixture({
+        providerTeamKey: "465.l.2000.t.1",
+        dates: ["2026-10-19", "2026-10-20"],
+        players: [
+          {
+            key: "461.p.10001",
+            name: "Synthetic 0",
+            proTeamAbbreviation: "SYN",
+            games: [{ date: "2026-10-19", opponent: "BOS", home: true }],
+          },
+        ],
+      }),
+    );
+    const id = Array.getUnsafe(seeded, 0).id;
+    const result = yield* queries.getLineupOutlook(owner, {
+      team: id,
+      window: { start: "2026-10-19", end: "2026-10-20" },
+    });
+    assert.strictEqual(result.status, "ok");
+    if (result.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(result.basis, "date");
+    assert.deepStrictEqual(
+      EffectArray.map(result.periods, (period) => period.date),
+      ["2026-10-19", "2026-10-20"],
+    );
+    assert.strictEqual(result.players[0]?.gamesInWindow, 1);
+    assert.deepStrictEqual(result.players[0]?.games, [
+      { date: "2026-10-19", opponent: "BOS", home: true, fitsStartingSlot: true },
+    ]);
+    assert.notInclude(jsonTools.jsonString(result), "461.p.10001");
+    const foreign = yield* Effect.flip(
+      queries.getLineupOutlook(decodeUserId("other"), { team: id }),
+    );
+    assert.instanceOf(foreign, QueryTeamNotFound);
+  }).pipe(layerTools.provide(QueriesTestLayer)),
+);
+
+it.effect("publishes one weekly lock rather than seven daily lineups", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    yield* fake.setMatchups([
+      {
+        ...matchupFixture({ period: 3 }),
+        home: { ...matchupFixture({ period: 3 }).home, providerTeamKey: "461.l.1000.t.1" },
+      },
+    ]);
+    const result = yield* queries.getLineupOutlook(owner, { team: Array.getUnsafe(seeded, 0).id });
+    assert.strictEqual(result.status, "ok");
+    if (result.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(result.basis, "week");
+    assert.strictEqual(result.periods.length, 1);
+    assert.deepStrictEqual(result.periods[0]?.period, { week: 3 });
+    assert.isUndefined(result.periods[0]?.date);
+  }).pipe(layerTools.provide(QueriesTestLayer)),
+);
+
+it.effect("refuses an outlook that cannot fit all periods in its result budget", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("465.l.2000.t.1", "Hockey", "nhl")], {
+      league: rotoLeagueFixture,
+      roster: rosterFixture({
+        count: 30,
+        providerTeamKey: "465.l.2000.t.1",
+        providerLeagueKey: "465.l.2000",
+        coverage: { type: "date", date: "2026-10-19" },
+      }),
+    });
+    const dates = globalThis.Array.from({ length: 21 }, (_, index) =>
+      DateTime.formatIsoDate(
+        DateTime.add(DateTime.makeUnsafe("2026-10-19T00:00:00.000Z"), { days: index }),
+      ),
+    );
+    yield* fake.setTeamSchedule(
+      "465.l.2000.t.1",
+      scheduleFixture({ providerTeamKey: "465.l.2000.t.1", dates, players: [] }),
+    );
+    const result = yield* queries.getLineupOutlook(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      window: { start: "2026-10-19", end: "2026-11-08" },
+    });
+    assert.strictEqual(result.status, "narrowing_required");
+    if (result.status === "narrowing_required") {
+      assert.deepStrictEqual(result.groups, ["periods", "players", "moves"]);
+      assert.match(result.detail, /no day is omitted/u);
+    }
+  }).pipe(layerTools.provide(QueriesTestLayer)),
+);
+
 function seed(
   fake: FakeProviderWorld["Service"],
   teams: ReadonlyArray<ProviderTeam>,
@@ -8340,6 +8461,7 @@ const queriesTestLayer = (
     Layer.provide(gameSource),
   );
   return FantasyQueriesLive.pipe(
+    Layer.provide(TransactionPlanRepository.layer.pipe(Layer.provide(ConnectionsDatabaseTest))),
     Layer.provideMerge(ConnectionsLive),
     Layer.provideMerge(QueryRepositoryTest),
     Layer.provideMerge(ConnectionRepositoryTest),

@@ -31,6 +31,7 @@ import {
   TeamOwnerNote,
   WaiverBid,
 } from "./QueryValues.ts";
+import { TransactionMoveId, TransactionMoveKind } from "./TransactionPlans.ts";
 
 const ScheduleWindowDate = Schema.String.pipe(
   Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)),
@@ -1651,6 +1652,123 @@ export const GetTeamSummaryInput = Schema.Struct({
   limit: Schema.optional(PageLimit),
 });
 export type GetTeamSummaryInput = typeof GetTeamSummaryInput.Type;
+
+export const GetLineupOutlookInput = Schema.Struct({
+  team: TeamId,
+  window: Schema.optional(ScheduleWindowInput),
+  days: Schema.optional(
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(366)),
+  ),
+});
+export type GetLineupOutlookInput = typeof GetLineupOutlookInput.Type;
+
+const OutlookPerson = Schema.Struct({ player: PlayerRef, name: Schema.String });
+const OutlookTotals = Schema.Struct({
+  startingSlots: Schema.Int,
+  assigned: Schema.Int,
+  playing: Schema.Int,
+  open: Schema.Int,
+  empty: Schema.Int,
+});
+export const LineupOutlookData = Schema.Struct({
+  status: Schema.Literals(["ok", "unsupported", "failed"]),
+  team: TeamId,
+  basis: Schema.Literals(["date", "week"]),
+  window: Schema.Struct({
+    start: ScheduleWindowDate,
+    end: ScheduleWindowDate,
+    source: Schema.Literals(["requested", "period", "today"]),
+  }),
+  generatedAt: Schema.DateTimeUtc,
+  periods: Schema.Array(
+    Schema.Struct({
+      date: Schema.optional(ScheduleWindowDate),
+      period: Schema.optional(QueryPeriod),
+      start: ScheduleWindowDate,
+      end: ScheduleWindowDate,
+      totals: OutlookTotals,
+      slots: Schema.Array(
+        Schema.Struct({
+          position: Schema.String,
+          total: Schema.Int,
+          assigned: Schema.Int,
+          playing: Schema.Int,
+          open: Schema.Int,
+          empty: Schema.Int,
+        }),
+      ),
+      sittingWithGame: Schema.Array(
+        Schema.Struct({
+          ...OutlookPerson.fields,
+          positions: Schema.Array(Schema.String),
+          slot: Schema.String,
+          reason: Schema.String,
+        }),
+      ),
+      unknownGameDays: Schema.Array(
+        Schema.Struct({
+          ...OutlookPerson.fields,
+          proTeam: Schema.optional(Schema.String),
+          reason: Schema.String,
+        }),
+      ),
+      games: Schema.Struct({
+        rosterGames: Schema.Int,
+        leagueGames: Schema.optional(Schema.Int),
+        teamsPlaying: Schema.optional(Schema.Int),
+        offNight: Schema.optional(Schema.Boolean),
+      }),
+      moves: Schema.Array(
+        Schema.Struct({
+          move: TransactionMoveId,
+          kind: TransactionMoveKind,
+          effectiveDate: ScheduleWindowDate,
+          adds: Schema.Array(OutlookPerson),
+          fallbacks: Schema.Array(OutlookPerson),
+          drops: Schema.Array(OutlookPerson),
+          validation: Schema.Literals(["current", "stale", "unchecked"]),
+          certainty: Schema.Literals(["saved", "confirmed"]),
+          conditional: Schema.Boolean,
+        }),
+      ),
+      fitDetail: Schema.optional(Schema.String),
+    }),
+  ),
+  players: Schema.Array(
+    Schema.Struct({
+      ...OutlookPerson.fields,
+      proTeam: Schema.optional(Schema.String),
+      gamesInWindow: Schema.Int,
+      gamesThatFit: Schema.Int,
+      unknownPeriods: Schema.Int,
+      games: Schema.Array(
+        Schema.Struct({
+          date: Schema.optional(ScheduleWindowDate),
+          week: Schema.optional(Schema.Int),
+          fitsStartingSlot: Schema.Boolean,
+          opponent: Schema.optional(Schema.String),
+          home: Schema.optional(Schema.Boolean),
+        }),
+      ),
+    }),
+  ),
+  windowTotals: Schema.Struct({
+    openSlotPeriods: Schema.Int,
+    periodsWithOpenSlot: Schema.Int,
+    rosterGames: Schema.Int,
+    unknownPlayers: Schema.Int,
+  }),
+  moves: Schema.Struct({
+    applied: Schema.Array(TransactionMoveId),
+    unapplied: Schema.Array(Schema.Struct({ move: TransactionMoveId, reason: Schema.String })),
+  }),
+  coverage: Schema.Array(QueryCoverage),
+  failures: Schema.Array(QueryFailure),
+  budget: QueryBudget,
+});
+export type LineupOutlookData = typeof LineupOutlookData.Type;
+export const LineupOutlookResult = Schema.Union([LineupOutlookData, NarrowingResult]);
+export type LineupOutlookResult = typeof LineupOutlookResult.Type;
 
 const SummaryTransactionTiming = Schema.Struct({
   weeklyDeadline: Schema.optional(Schema.String),

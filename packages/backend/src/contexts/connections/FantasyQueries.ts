@@ -21,6 +21,8 @@ import type {
   SearchPlayersResult,
   TeamSummaryResult,
   GetTeamSummaryInput,
+  GetLineupOutlookInput,
+  LineupOutlookResult,
   TransactionsResult,
 } from "./QueryResults.ts";
 import type { QueryError } from "./QueryValues.ts";
@@ -30,6 +32,10 @@ export class FantasyQueries extends Context.Service<FantasyQueries, FantasyQueri
 ) {}
 
 export type FantasyQueriesShape = {
+  readonly getLineupOutlook: (
+    userId: UserId,
+    input: GetLineupOutlookInput,
+  ) => Effect.Effect<LineupOutlookResult, QueryError>;
   readonly listTeams: (
     userId: UserId,
     input: ListTeamsInput,

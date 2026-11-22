@@ -19,6 +19,8 @@ import {
   SearchPlayersResult,
   TeamSummaryResult,
   GetTeamSummaryInput,
+  GetLineupOutlookInput,
+  LineupOutlookResult,
   TransactionsResult,
 } from "@lineupkeep/backend/connections/QueryResults";
 import { fantasyQueryScopes } from "@lineupkeep/backend/connections/QueryScopes";
@@ -32,6 +34,19 @@ import { RequiredScope } from "./toolAuthorization";
 const ToolFailure = Schema.Struct({ code: Schema.String, message: Schema.String });
 
 export const fantasyQueryTools = Toolkit.make(
+  Tool.make("get_lineup_outlook", {
+    description:
+      "Forward starter-slot fit for one team over a date window, including scheduled moves, sitting players with games, unknown game days, and opponents. No recommendations; asks to narrow large results.",
+    parameters: GetLineupOutlookInput,
+    success: Schema.toCodecJson(LineupOutlookResult),
+    failure: ToolFailure,
+  })
+    .annotate(RequiredScope, fantasyQueryScopes.read)
+    .annotate(Tool.Title, "Get lineup outlook")
+    .annotate(Tool.Readonly, true)
+    .annotate(Tool.Destructive, false)
+    .annotate(Tool.Idempotent, true)
+    .annotate(Tool.OpenWorld, false),
   Tool.make("list_teams", {
     description:
       "Your linked fantasy teams, filterable by sport, season, or connection. `team` is the private id every other tool takes.",
@@ -158,6 +173,8 @@ export function fantasyQueryToolHandlers(
     Effect.gen(function* () {
       const queries = yield* FantasyQueries;
       return fantasyQueryTools.of({
+        get_lineup_outlook: (input) =>
+          queries.getLineupOutlook(agent.userId, input).pipe(mapOutcome),
         list_teams: (input) => queries.listTeams(agent.userId, input).pipe(mapOutcome),
         get_calendar: (input) => queries.getCalendar(agent.userId, input).pipe(mapOutcome),
         get_league: (input) => queries.getLeague(agent.userId, input).pipe(mapOutcome),
