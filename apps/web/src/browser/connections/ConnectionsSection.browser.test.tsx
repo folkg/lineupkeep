@@ -165,6 +165,23 @@ it("starts a hosted sign-in for a connection that needs to reconnect", async () 
   await expect.element(page.getByText("Opening sign-in…")).not.toBeInTheDocument();
 });
 
+it("puts the reconnect action before connecting another account", async () => {
+  await page.viewport(1440, 900);
+  const hostedInputs: Array<Parameters<ConnectionRemote["startHosted"]>[0]> = [];
+  using _section = setupConnectionsSection([connected, reconnectable], {
+    startHosted: (input) => {
+      hostedInputs.push(input);
+      return new Promise(() => undefined);
+    },
+  });
+
+  await page.getByRole("button", { name: "Reconnect Yahoo" }).click();
+
+  await expect
+    .poll(() => hostedInputs)
+    .toEqual([{ provider: "yahoo", connectionId: reconnectable.id, viewport: "desktop" }]);
+});
+
 it("starts the sign-in from an agent link", async () => {
   await page.viewport(1440, 900);
   const hostedInputs: Array<Parameters<ConnectionRemote["startHosted"]>[0]> = [];

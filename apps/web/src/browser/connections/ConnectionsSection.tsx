@@ -1,3 +1,4 @@
+import { EffectArray, EffectOption } from "@lineupkeep/collections";
 import type { JSX } from "@solidjs/web";
 import { Show, onSettled } from "solid-js";
 import type { Accessor } from "solid-js";
@@ -8,6 +9,8 @@ import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
+import type { ConnectionView } from "#contracts/connections/connectionContract.ts";
+import { providerDisplayName } from "#contracts/connections/providerLabels.ts";
 
 import { ConnectionList } from "./ConnectionList";
 import type { ConnectionListQueryOptions } from "./connectionQueries";
@@ -28,6 +31,13 @@ export function ConnectionsSection(props: ConnectionsSectionProps): JSX.Element 
     onRefresh: () => props.onRefresh(),
   });
   const hasConnection = (): boolean => page.connections().length > 0;
+  const reconnectable = (): ConnectionView | undefined =>
+    EffectOption.getOrUndefined(
+      EffectArray.findFirst(
+        page.connections(),
+        (connection) => connection.status === "reconnect-required",
+      ),
+    );
   let startedFromLink = false;
   onSettled(() => {
     if (startedFromLink || props.connect === undefined || typeof window === "undefined") {
@@ -51,6 +61,13 @@ export function ConnectionsSection(props: ConnectionsSectionProps): JSX.Element 
       </Show>
       <Show when={hasConnection() && hosted.session() === undefined}>
         <Inline gap="sm">
+          <Show when={reconnectable()}>
+            {(connection) => (
+              <Button onClick={() => void hosted.start({ connectionId: connection().id })}>
+                {`Reconnect ${providerDisplayName(connection().provider)}`}
+              </Button>
+            )}
+          </Show>
           <Button variant="secondary" onClick={() => void hosted.start()}>
             Connect another account
           </Button>
