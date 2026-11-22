@@ -48,7 +48,7 @@ it("names reading the teams after the provider accepts the sign-in", async () =>
 it("shows the connected state instead of setup when a connection already exists", async () => {
   using _panel = renderPanel({ connected: true, session: false });
 
-  await expect.element(page.getByRole("button", { name: "Connect another account" })).toBeVisible();
+  await expect.element(page.getByRole("button", { name: "Add a different account" })).toBeVisible();
   await expect
     .element(page.getByText("Yahoo is connected. Lineup checks use this connection."))
     .not.toBeInTheDocument();

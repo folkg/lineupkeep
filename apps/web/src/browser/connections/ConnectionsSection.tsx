@@ -69,7 +69,7 @@ export function ConnectionsSection(props: ConnectionsSectionProps): JSX.Element 
             )}
           </Show>
           <Button variant="secondary" onClick={() => void hosted.start()}>
-            Connect another account
+            Add a different account
           </Button>
         </Inline>
       </Show>

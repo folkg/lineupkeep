@@ -87,7 +87,7 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
       >
         <Inline gap="sm">
           <Button variant="secondary" onClick={() => void props.controller.start()}>
-            Connect another account
+            Add a different account
           </Button>
         </Inline>
       </Show>

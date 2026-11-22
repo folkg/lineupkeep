@@ -8,6 +8,7 @@ import {
   refreshConnectionLists,
 } from "#browser/connections/connectionQueries.ts";
 import { connectionRemote } from "#browser/connections/connectionRemote.ts";
+import { parseConnectionSearch } from "#browser/connections/connectionSearch.ts";
 import { ConnectionsSection } from "#browser/connections/ConnectionsSection.tsx";
 import { requireAuthenticatedSession } from "#browser/session/requireAuthenticatedSession.ts";
 import { sessionQueries } from "#browser/session/sessionQueries.ts";
@@ -20,7 +21,7 @@ import { teamQueries } from "#browser/teams/teamQueries.ts";
 
 export const Route = createFileRoute("/account")({
   ssr: true,
-  validateSearch: parseAccountSearch,
+  validateSearch: parseConnectionSearch,
   context: () => ({
     connectionsQuery: connectionQueries.list(connectionRemote),
     signInSessionsQuery: signInSessionsQueries.list(signInSessionsRemote),
@@ -37,18 +38,6 @@ export const Route = createFileRoute("/account")({
     ]),
   component: AccountRoute,
 });
-
-function parseAccountSearch(input: Record<string, unknown>): AccountSearch {
-  return {
-    ...(typeof input["connect"] === "string" ? { connect: input["connect"] } : {}),
-    ...(typeof input["connection"] === "string" ? { connection: input["connection"] } : {}),
-  };
-}
-
-type AccountSearch = {
-  readonly connect?: string;
-  readonly connection?: string;
-};
 
 function AccountRoute(): JSX.Element {
   const context = Route.useRouteContext();

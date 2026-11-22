@@ -49,12 +49,14 @@ test("returns a signed-in visitor to their teams from the landing page", async (
   await expect(page.getByText("Open development shell")).toHaveCount(0);
 });
 
-test("sends an old connections bookmark to the account page", async ({ page }) => {
+test("opens connections on its own page", async ({ page }) => {
   await signUp(page);
   await page.goto("/connections");
 
-  await expect(page).toHaveURL("/account");
-  await expect(page.getByRole("heading", { name: "Account", exact: true })).toBeVisible();
+  await expect(page).toHaveURL("/connections");
+  await expect(
+    page.getByRole("heading", { name: "Connect an account", exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole("region", { name: "Connections" })).toBeVisible();
 });
 

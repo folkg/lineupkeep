@@ -512,7 +512,7 @@ it("starts a provider sign-in from an owned connection link", async () => {
     result: {
       isError: false,
       structuredContent: {
-        url: `https://connections.example/account?connect=yahoo&connection=${reconnectableId}`,
+        url: `https://connections.example/connections?connect=yahoo&connection=${reconnectableId}`,
       },
     },
   });

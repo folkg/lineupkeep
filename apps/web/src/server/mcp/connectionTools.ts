@@ -139,7 +139,7 @@ export function connectionToolHandlers(
             mapOutcome,
           ),
         start_connection: ({ provider, connectionId }) => {
-          const url = new URL("/account", auth.oauthResource);
+          const url = new URL("/connections", auth.oauthResource);
           url.searchParams.set("connect", provider);
           if (connectionId !== undefined) {
             url.searchParams.set("connection", connectionId);

@@ -106,7 +106,7 @@ it("keeps the removed connection explanation off the connections section", async
   await expect
     .element(page.getByText("Yahoo is connected. Lineup checks use this connection."))
     .not.toBeInTheDocument();
-  await expect.element(page.getByRole("button", { name: "Connect another account" })).toBeVisible();
+  await expect.element(page.getByRole("button", { name: "Add a different account" })).toBeVisible();
   await expect
     .element(
       page.getByText(
