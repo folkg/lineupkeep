@@ -559,7 +559,14 @@ it("composes the team snapshot from the reads in one tool call", async () => {
             team: teamView,
             ownerNote: { status: "not_set" },
             agentNotes: [],
-            coverage: [],
+            coverage: [
+              {
+                resource: "league",
+                status: "available",
+                source: "test",
+                fetchedAt: DateTime.makeUnsafe("2026-11-22T00:00:00.000Z"),
+              },
+            ],
             failures: [],
             page,
             budget,

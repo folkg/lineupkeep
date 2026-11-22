@@ -133,12 +133,13 @@ function readSnapshot(
   });
 }
 
-function capture<A>(
+function capture(
   section: string,
   failures: Array<typeof SnapshotFailure.Type>,
-  read: () => Effect.Effect<A, SectionError>,
-): Effect.Effect<A | undefined, never, never> {
+  read: () => Effect.Effect<unknown, SectionError>,
+): Effect.Effect<unknown, never, never> {
   return read().pipe(
+    Effect.flatMap(jsonValue),
     Effect.catchCause((cause) =>
       Effect.sync(() => {
         const failure = Cause.findFail(cause);
@@ -155,6 +156,17 @@ function capture<A>(
       }),
     ),
   );
+}
+
+function jsonValue(value: unknown): Effect.Effect<unknown, Schema.SchemaError> {
+  if (value === undefined) {
+    return Effect.undefined;
+  }
+  const json = Schema.fromJsonString(Schema.Unknown);
+  return Effect.gen(function* () {
+    const text = yield* Schema.encodeEffect(json)(value);
+    return yield* Schema.decodeEffect(json)(text);
+  });
 }
 
 function captureRosterStats(
