@@ -977,6 +977,7 @@ lacking a scope a different tool needs, does not change whether a call succeeds.
 | Tool                         | Required scope        |
 | ---------------------------- | --------------------- |
 | `list_connections`           | `fantasy:read`        |
+| `start_connection`           | `fantasy:read`        |
 | `list_teams`                 | `fantasy:read`        |
 | `get_calendar`               | `fantasy:read`        |
 | `get_league`                 | `fantasy:read`        |

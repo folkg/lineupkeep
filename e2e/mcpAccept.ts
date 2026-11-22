@@ -816,9 +816,12 @@ function callArguments(tool: string, team: string): Record<string, unknown> {
     case "list_teams":
     case "get_lineup_runs":
       return {};
+    case "start_connection":
+      return { provider: "yahoo" };
     case "get_calendar":
     case "get_league":
     case "get_team_summary":
+    case "get_lineup_outlook":
     case "get_team_snapshot":
     case "get_transactions":
       return { team };
