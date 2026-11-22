@@ -490,7 +490,6 @@ const correctnessRules = {
   "effecttsgo/global-json-in-effect": "error",
   "effecttsgo/prefer-effect-array": "error",
   "effecttsgo/global-json": "error",
-  "effecttsgo/map-map-error-to-map-both": "off",
   "effecttsgo/missed-pipeable-opportunity": "off",
   "effecttsgo/prefer-schema-tagged-error": "off",
   "effecttsgo/provide-merge-all-to-array": "off",
@@ -506,11 +505,7 @@ const correctnessRules = {
 
 const disabledEffectRules = new Set(["effecttsgo/api-stability-leak"]);
 
-const pendingEffectRules = new Set([
-  "effecttsgo/map-map-error-to-map-both",
-  "effecttsgo/missed-pipeable-opportunity",
-  "effecttsgo/effect-try-without-catch",
-]);
+const pendingEffectRules = new Set<string>();
 
 const presetRules = {
   ...antipattern.rules,

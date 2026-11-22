@@ -299,12 +299,14 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
           rows,
           (row) =>
             Schema.decodeEffect(AgentNoteRow)(row).pipe(
-              Effect.map((stored): TeamAgentNote => ({
-                author: { clientId: stored.authorClientId, name: stored.authorName },
-                body: stored.body,
-                writtenAt: stored.writtenAt,
-              })),
-              Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })),
+              Effect.mapBoth({
+                onFailure: (cause) => QueryPersistenceFailed.make({ cause }),
+                onSuccess: (stored): TeamAgentNote => ({
+                  author: { clientId: stored.authorClientId, name: stored.authorName },
+                  body: stored.body,
+                  writtenAt: stored.writtenAt,
+                }),
+              }),
             ),
           { concurrency: 1 },
         );

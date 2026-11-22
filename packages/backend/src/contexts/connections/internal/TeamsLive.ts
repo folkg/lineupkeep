@@ -120,8 +120,10 @@ export const TeamsLive = Layer.effect(
 
     const connectionCountOf = (userId: UserId): Effect.Effect<number, TeamError> =>
       connections.list(userId).pipe(
-        Effect.map((owned) => owned.length),
-        Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })),
+        Effect.mapBoth({
+          onFailure: (cause) => TeamPersistenceFailed.make({ cause }),
+          onSuccess: (owned) => owned.length,
+        }),
       );
 
     const ensureLeagueNames = (

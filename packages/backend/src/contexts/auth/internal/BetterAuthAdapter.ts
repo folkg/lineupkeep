@@ -558,20 +558,22 @@ function describeRefreshToken(
   return Effect.gen(function* () {
     const now = DateTime.nowUnsafe().epochMilliseconds;
     const tokenHash = yield* providerRefreshTokenHash(digest, presented);
-    const stored = yield* Effect.tryPromise(() =>
-      database
-        .select({
-          id: oauthRefreshToken.id,
-          revoked: oauthRefreshToken.revoked,
-          rotatedAt: oauthRefreshToken.rotatedAt,
-          rotationReplayExpiresAt: oauthRefreshToken.rotationReplayExpiresAt,
-          rotationReplayResponse: oauthRefreshToken.rotationReplayResponse,
-          expiresAt: oauthRefreshToken.expiresAt,
-        })
-        .from(oauthRefreshToken)
-        .where(eq(oauthRefreshToken.token, tokenHash))
-        .limit(1),
-    ).pipe(Effect.option);
+    const stored = yield* Effect.tryPromise({
+      try: () =>
+        database
+          .select({
+            id: oauthRefreshToken.id,
+            revoked: oauthRefreshToken.revoked,
+            rotatedAt: oauthRefreshToken.rotatedAt,
+            rotationReplayExpiresAt: oauthRefreshToken.rotationReplayExpiresAt,
+            rotationReplayResponse: oauthRefreshToken.rotationReplayResponse,
+            expiresAt: oauthRefreshToken.expiresAt,
+          })
+          .from(oauthRefreshToken)
+          .where(eq(oauthRefreshToken.token, tokenHash))
+          .limit(1),
+      catch: (cause) => AuthenticationUnavailable.make({ cause }),
+    }).pipe(Effect.option);
     if (Option.isNone(stored)) {
       return "unavailable";
     }
@@ -686,11 +688,17 @@ function isFormPost(request: Request, path: string): boolean {
 }
 
 function readForm(request: Request): Effect.Effect<Option.Option<string>> {
-  return Effect.tryPromise(() => request.clone().text()).pipe(Effect.option);
+  return Effect.tryPromise({
+    try: () => request.clone().text(),
+    catch: (cause) => AuthenticationUnavailable.make({ cause }),
+  }).pipe(Effect.option);
 }
 
 function oauthErrorCode(response: Response): Effect.Effect<string | undefined> {
-  return Effect.tryPromise(() => response.clone().json()).pipe(
+  return Effect.tryPromise({
+    try: () => response.clone().json(),
+    catch: (cause) => AuthenticationUnavailable.make({ cause }),
+  }).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(OAuthErrorBody)),
     Effect.map((body) => body.error),
     Effect.option,
@@ -944,8 +952,10 @@ const authBaseUrlConfig = Config.URL("BETTER_AUTH_URL").pipe(
 const authSecretConfig = Config.Redacted("BETTER_AUTH_SECRET").pipe(
   Config.mapEffect((value) =>
     Schema.decodeEffect(AuthSecret)(Redacted.value(value)).pipe(
-      Effect.map((secret) => Redacted.make(secret)),
-      Effect.mapError((error) => new Config.ConfigError(error)),
+      Effect.mapBoth({
+        onFailure: (error) => new Config.ConfigError(error),
+        onSuccess: (secret) => Redacted.make(secret),
+      }),
     ),
   ),
 );

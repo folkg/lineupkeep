@@ -51,9 +51,10 @@ export const nhlGameSource: Effect.Effect<GameSourceShape, never, PublicInternet
             );
 
           if (!response.ok) {
-            yield* Effect.tryPromise(() => response.body?.cancel() ?? Promise.resolve()).pipe(
-              Effect.ignore,
-            );
+            yield* Effect.tryPromise({
+              try: () => response.body?.cancel() ?? Promise.resolve(),
+              catch: () => GameSourceRequestFailed.make({ source: sourceKey, detail: "body_read" }),
+            }).pipe(Effect.ignore);
             return yield* GameSourceRequestFailed.make({
               source: sourceKey,
               status: response.status,

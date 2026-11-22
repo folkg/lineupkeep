@@ -30,6 +30,13 @@ const LineupWorkerRequest = Schema.Union([
 ]);
 const LineupWorkerRequestJson = Schema.fromJsonString(LineupWorkerRequest);
 
+class LineupWorkerRequestUnreadable extends Schema.TaggedError<
+  LineupWorkerRequestUnreadable,
+  { readonly brand: unique symbol }
+>()("LineupWorkerRequestUnreadable", {
+  cause: Schema.Unknown,
+}) {}
+
 export function handleLineupWorkerRequest(request: Request): Promise<Response> {
   return runBackend(
     request,
@@ -39,7 +46,10 @@ export function handleLineupWorkerRequest(request: Request): Promise<Response> {
       if (Option.isNone(enabled) || enabled.value !== "true") {
         return new Response("Not found", { status: 404 });
       }
-      const decoded = yield* Effect.tryPromise(() => request.text()).pipe(
+      const decoded = yield* Effect.tryPromise({
+        try: () => request.text(),
+        catch: (cause) => LineupWorkerRequestUnreadable.make({ cause }),
+      }).pipe(
         Effect.flatMap((body) => Schema.decodeEffect(LineupWorkerRequestJson)(body)),
         Effect.option,
       );

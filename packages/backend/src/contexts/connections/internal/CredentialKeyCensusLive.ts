@@ -24,8 +24,10 @@ export const CredentialKeyCensusLive = Layer.effect(
         envelopes,
         (envelope) =>
           decodeCredentialEnvelope(envelope).pipe(
-            Effect.map((decoded) => decoded.keyVersion),
-            Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+            Effect.mapBoth({
+              onFailure: (cause) => ConnectionPersistenceFailed.make({ cause }),
+              onSuccess: (decoded) => decoded.keyVersion,
+            }),
           ),
         { concurrency: 1 },
       );

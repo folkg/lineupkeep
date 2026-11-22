@@ -207,8 +207,10 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
                 rows,
                 (row) =>
                   Schema.decodeEffect(FantasyTeamRow)(row).pipe(
-                    Effect.map((team) => [team.id, { row, team }] as const),
-                    Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })),
+                    Effect.mapBoth({
+                      onFailure: (cause) => TeamPersistenceFailed.make({ cause }),
+                      onSuccess: (team) => [team.id, { row, team }] as const,
+                    }),
                   ),
                 { concurrency: 1 },
               );

@@ -105,15 +105,17 @@ export class ScheduleObservationRepository extends Context.Service<ScheduleObser
                 rows,
                 (row) =>
                   Schema.decodeUnknownEffect(input.value)(row.value).pipe(
-                    Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })),
-                    Effect.map((value): ScheduleObservation<Value> => ({
-                      source: row.source,
-                      subjectKey: row.subjectKey,
-                      window: { from: row.coversFrom, to: row.coversTo },
-                      value,
-                      observedAt: DateTime.fromDateUnsafe(row.observedAt),
-                      sourceReference: row.sourceReference,
-                    })),
+                    Effect.mapBoth({
+                      onFailure: (cause) => QueryPersistenceFailed.make({ cause }),
+                      onSuccess: (value): ScheduleObservation<Value> => ({
+                        source: row.source,
+                        subjectKey: row.subjectKey,
+                        window: { from: row.coversFrom, to: row.coversTo },
+                        value,
+                        observedAt: DateTime.fromDateUnsafe(row.observedAt),
+                        sourceReference: row.sourceReference,
+                      }),
+                    }),
                   ),
                 { concurrency: 1 },
               ),
@@ -346,30 +348,34 @@ const decodeProfessionalGame = (
   row: typeof scheduleObservations.$inferSelect,
 ): Effect.Effect<ProfessionalGameObservation, QueryPersistenceFailed> =>
   Schema.decodeUnknownEffect(publishedProfessionalGameValue)(row.value).pipe(
-    Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })),
-    Effect.map((value): ProfessionalGameObservation => ({
-      source: row.source,
-      subjectKey: row.subjectKey,
-      window: { from: row.coversFrom, to: row.coversTo },
-      value,
-      observedAt: DateTime.fromDateUnsafe(row.observedAt),
-      sourceReference: row.sourceReference,
-    })),
+    Effect.mapBoth({
+      onFailure: (cause) => QueryPersistenceFailed.make({ cause }),
+      onSuccess: (value): ProfessionalGameObservation => ({
+        source: row.source,
+        subjectKey: row.subjectKey,
+        window: { from: row.coversFrom, to: row.coversTo },
+        value,
+        observedAt: DateTime.fromDateUnsafe(row.observedAt),
+        sourceReference: row.sourceReference,
+      }),
+    }),
   );
 
 const decodeTeamIdentity = (
   row: typeof professionalTeamIdentities.$inferSelect,
 ): Effect.Effect<TeamIdentity, QueryPersistenceFailed> =>
   Schema.decodeEffect(ProfessionalTeamIdentityRow)(row).pipe(
-    Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })),
-    Effect.map((decoded): TeamIdentity => ({
-      sport: decoded.sport,
-      source: decoded.source,
-      sourceTeamIdentifier: decoded.sourceTeamIdentifier,
-      provider: decoded.provider,
-      providerTeamKey: decoded.providerTeamKey,
-      observedAt: decoded.observedAt,
-    })),
+    Effect.mapBoth({
+      onFailure: (cause) => QueryPersistenceFailed.make({ cause }),
+      onSuccess: (decoded): TeamIdentity => ({
+        sport: decoded.sport,
+        source: decoded.source,
+        sourceTeamIdentifier: decoded.sourceTeamIdentifier,
+        provider: decoded.provider,
+        providerTeamKey: decoded.providerTeamKey,
+        observedAt: decoded.observedAt,
+      }),
+    }),
   );
 
 function scheduleObservationKey(row: {

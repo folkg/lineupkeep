@@ -41,17 +41,16 @@ export function googleCloudTelemetryClient(
   return Effect.map(Ref.make<TokenCache>(Option.none()), (cache) =>
     HttpClient.mapRequestEffect(client, (request) =>
       accessToken(client, cache).pipe(
-        Effect.map((token) =>
-          HttpClientRequest.setHeaders(request, {
-            authorization: `Bearer ${Redacted.value(token)}`,
-          }),
-        ),
-        Effect.mapError(
-          (cause) =>
+        Effect.mapBoth({
+          onFailure: (cause) =>
             new HttpClientError.HttpClientError({
               reason: new HttpClientError.TransportError({ request, cause }),
             }),
-        ),
+          onSuccess: (token) =>
+            HttpClientRequest.setHeaders(request, {
+              authorization: `Bearer ${Redacted.value(token)}`,
+            }),
+        }),
       ),
     ),
   );

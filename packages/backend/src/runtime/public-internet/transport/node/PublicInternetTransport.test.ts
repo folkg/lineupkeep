@@ -7,7 +7,7 @@ import type { LookupFunction } from "node:net";
 import { isPublicRoutableHost } from "@better-auth/core/utils/host";
 import { assert, it } from "@effect/vitest";
 import { EffectString } from "@lineupkeep/collections";
-import { Effect, Exit, Fiber } from "effect";
+import { Effect, Exit, Fiber, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { TestClock } from "effect/testing";
 import { Agent } from "undici";
@@ -17,6 +17,13 @@ import { publicInternetIsolate } from "#runtime/public-internet/transport/isolat
 import { PublicInternet } from "#runtime/PublicInternet.ts";
 
 import { makePublicInternetProcess } from "./PublicInternetProcess.ts";
+
+class TestResponseReadFailed extends Schema.TaggedError<
+  TestResponseReadFailed,
+  { readonly brand: unique symbol }
+>()("TestResponseReadFailed", {
+  cause: Schema.Unknown,
+}) {}
 
 for (const name of ["process", "isolate"] as const) {
   it.effect(`sends JSON and headers over ${name} HTTPS`, () =>
@@ -82,7 +89,12 @@ for (const name of ["process", "isolate"] as const) {
       const init: RequestInit & { duplex: "half" } = { method: "POST", body, duplex: "half" };
 
       const pending = yield* internet.request(new Request(exchange.url, init)).pipe(
-        Effect.flatMap((response) => Effect.tryPromise(() => response.text())),
+        Effect.flatMap((response) =>
+          Effect.tryPromise({
+            try: () => response.text(),
+            catch: (cause) => TestResponseReadFailed.make({ cause }),
+          }),
+        ),
         Effect.forkChild,
       );
       yield* Effect.promise(() => exchange.received.promise);
@@ -119,7 +131,12 @@ for (const name of ["process", "isolate"] as const) {
       };
 
       const pending = yield* internet.request(new Request(exchange.url, init)).pipe(
-        Effect.flatMap((response) => Effect.tryPromise(() => response.text())),
+        Effect.flatMap((response) =>
+          Effect.tryPromise({
+            try: () => response.text(),
+            catch: (cause) => TestResponseReadFailed.make({ cause }),
+          }),
+        ),
         Effect.forkChild,
       );
       yield* Effect.promise(() => exchange.received.promise);
@@ -165,7 +182,12 @@ for (const name of ["process", "isolate"] as const) {
       const init: RequestInit & { duplex: "half" } = { method: "POST", body, duplex: "half" };
 
       const pending = yield* internet.request(new Request(exchange.url, init)).pipe(
-        Effect.flatMap((response) => Effect.tryPromise(() => response.text())),
+        Effect.flatMap((response) =>
+          Effect.tryPromise({
+            try: () => response.text(),
+            catch: (cause) => TestResponseReadFailed.make({ cause }),
+          }),
+        ),
         Effect.scoped,
         Effect.forkChild,
       );
@@ -228,7 +250,10 @@ for (const name of ["process", "isolate"] as const) {
       assert.isDefined(reader);
       yield* Effect.promise(() => reader.read());
 
-      const pending = yield* Effect.tryPromise(() => reader.read()).pipe(Effect.forkChild);
+      const pending = yield* Effect.tryPromise({
+        try: () => reader.read(),
+        catch: (cause) => TestResponseReadFailed.make({ cause }),
+      }).pipe(Effect.forkChild);
       yield* TestClock.adjust(50);
       const result = yield* Effect.exit(Fiber.join(pending));
 
@@ -246,7 +271,12 @@ for (const name of ["process", "isolate"] as const) {
       const exchange = fixture.observe("/oversize");
 
       const response = yield* internet.request(new Request(exchange.url), { maxResponseBytes: 8 });
-      const result = yield* Effect.exit(Effect.tryPromise(() => response.text()));
+      const result = yield* Effect.exit(
+        Effect.tryPromise({
+          try: () => response.text(),
+          catch: (cause) => TestResponseReadFailed.make({ cause }),
+        }),
+      );
 
       assert.isTrue(Exit.isFailure(result));
       yield* Effect.promise(() => exchange.closed.promise);
@@ -283,7 +313,12 @@ for (const name of ["process", "isolate"] as const) {
       );
 
       const response = yield* internet.request(new Request(`${fixture.origin}/fixed-large`));
-      const result = yield* Effect.exit(Effect.tryPromise(() => response.arrayBuffer()));
+      const result = yield* Effect.exit(
+        Effect.tryPromise({
+          try: () => response.arrayBuffer(),
+          catch: (cause) => TestResponseReadFailed.make({ cause }),
+        }),
+      );
 
       assert.isTrue(Exit.isFailure(result));
     }),

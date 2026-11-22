@@ -162,26 +162,21 @@ export const RetentionSweepLive = Layer.effect(
               (yield* deleteIds(tx, transactionMoves, endedMoves)) +
               (yield* deleteIds(tx, transactionMoves, discardedMoves));
 
+            const transactionMoveQuery = tx
+              .select({ id: transactionMoves.id })
+              .from(transactionMoves)
+              .where(
+                and(
+                  eq(transactionMoves.userId, transactionPlans.userId),
+                  eq(transactionMoves.teamId, transactionPlans.teamId),
+                ),
+              );
+            const transactionMoveExists = exists(transactionMoveQuery);
             const emptyPlans = yield* tx
               .select({ userId: transactionPlans.userId, teamId: transactionPlans.teamId })
               .from(transactionPlans)
               .where(
-                and(
-                  lte(transactionPlans.updatedAt, emptyPlansBefore),
-                  not(
-                    exists(
-                      tx
-                        .select({ id: transactionMoves.id })
-                        .from(transactionMoves)
-                        .where(
-                          and(
-                            eq(transactionMoves.userId, transactionPlans.userId),
-                            eq(transactionMoves.teamId, transactionPlans.teamId),
-                          ),
-                        ),
-                    ),
-                  ),
-                ),
+                and(lte(transactionPlans.updatedAt, emptyPlansBefore), not(transactionMoveExists)),
               )
               .orderBy(transactionPlans.updatedAt)
               .limit(limit);

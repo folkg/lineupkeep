@@ -16,14 +16,19 @@ const DatabaseUrl = Schema.URLFromString.pipe(
 );
 
 export const databaseUrlConfig = Config.Redacted("DATABASE_URL").pipe(
-  Config.mapEffect((value) => decodeDatabaseUrl(Redacted.value(value))),
+  Config.mapEffect((value) => {
+    const raw = Redacted.value(value);
+    return decodeDatabaseUrl(raw);
+  }),
 );
 
 export function decodeDatabaseUrl(
   value: string,
 ): Effect.Effect<Redacted.Redacted<string>, Config.ConfigError> {
   return Schema.decodeEffect(DatabaseUrl)(value).pipe(
-    Effect.map((url) => Redacted.make(url.href)),
-    Effect.mapError((error) => new Config.ConfigError(error)),
+    Effect.mapBoth({
+      onFailure: (error) => new Config.ConfigError(error),
+      onSuccess: (url) => Redacted.make(url.href),
+    }),
   );
 }

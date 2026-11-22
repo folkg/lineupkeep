@@ -388,7 +388,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                   id: deliveryId,
                   userId: input.userId,
                   requestId,
-                  ...deliveryRowProjection(initialLineupDeliveryState(input.at)),
+                  ...deliveryRowProjection(input.at.pipe(initialLineupDeliveryState)),
                   runIds: EffectArray.map(created, (record) => record.id),
                   createdAt: at,
                 });
@@ -575,8 +575,10 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
               ],
               { concurrency: 1 },
             ).pipe(
-              Effect.map(([run, userId, connectionId]) => ({ run, userId, connectionId })),
-              Effect.mapError(mapPersistenceFailure),
+              Effect.mapBoth({
+                onFailure: mapPersistenceFailure,
+                onSuccess: ([run, userId, connectionId]) => ({ run, userId, connectionId }),
+              }),
             ),
           { concurrency: 1 },
         );

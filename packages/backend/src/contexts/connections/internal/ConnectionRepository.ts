@@ -179,10 +179,13 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
         return yield* Effect.forEach(
           rows,
           (row) =>
-            Effect.map(Schema.decodeEffect(ConnectionStatus)(row.status), (status) => ({
-              id: decodeConnectionId(row.id),
-              status,
-            })).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause }))),
+            Effect.mapBoth(Schema.decodeEffect(ConnectionStatus)(row.status), {
+              onFailure: (cause) => ConnectionPersistenceFailed.make({ cause }),
+              onSuccess: (status) => ({
+                id: decodeConnectionId(row.id),
+                status,
+              }),
+            }),
           { concurrency: 1 },
         );
       });
@@ -226,8 +229,10 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
           rows,
           (row) =>
             Schema.decodeEffect(ConnectionRow)(row).pipe(
-              Effect.map((record) => [record.id, record] as const),
-              Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+              Effect.mapBoth({
+                onFailure: (cause) => ConnectionPersistenceFailed.make({ cause }),
+                onSuccess: (record) => [record.id, record] as const,
+              }),
             ),
           { concurrency: 1 },
         );
@@ -741,7 +746,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                       })),
                     ];
                     const incident = connectionIncidentProjection(
-                      initialConnectionIncidentState(at),
+                      at.pipe(initialConnectionIncidentState),
                     );
                     const candidates = EffectArray.flatMap(next, (record) => {
                       const flatMapped1 =
@@ -881,8 +886,10 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
           rows,
           (row) =>
             Schema.decodeEffect(ReadyCredentialRow)(row).pipe(
-              Effect.map((credential) => [credential.connectionId, credential] as const),
-              Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+              Effect.mapBoth({
+                onFailure: (cause) => ConnectionPersistenceFailed.make({ cause }),
+                onSuccess: (credential) => [credential.connectionId, credential] as const,
+              }),
             ),
           { concurrency: 1 },
         );
