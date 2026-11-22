@@ -203,6 +203,21 @@ describe("forward lineup outlook", () => {
     ).toBe(1);
   });
 
+  it("reports a reserve player with a game as sitting", () => {
+    const result = projectLineupOutlook({
+      players: [player("starter", "C", true, false), player("reserve", "BN", true, false)],
+      moves: [],
+      slots: [
+        { position: "C", kind: "starting", count: 1, eligibility: ["C"] },
+        { position: "BN", kind: "reserve", count: 1, eligibility: [] },
+      ],
+      periods: [{ date: saturday, start: saturday, end: saturday }],
+    });
+    expect(EffectArray.map(result.periods[0]?.sittingWithGame ?? [], (entry) => entry.key)).toEqual(
+      ["reserve"],
+    );
+  });
+
   it("counts each game of a doubleheader inside its stated window", () => {
     const starter = player("starter", "C", true, false);
     const result = outlook([

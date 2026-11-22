@@ -251,7 +251,7 @@ function fitPeriod(
     slots: slotRows,
     sittingWithGame: EffectArray.map(
       EffectArray.filter(
-        available,
+        games,
         (player) =>
           player.game !== undefined &&
           player.game !== null &&
