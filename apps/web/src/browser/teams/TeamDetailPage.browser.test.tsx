@@ -16,6 +16,7 @@ import "#web/styles.css";
 import { page } from "vitest/browser";
 
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
+import { applyTheme } from "#browser/app-shell/theme.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
 import {
@@ -29,6 +30,7 @@ import {
 import type {
   LineupRunView,
   TeamNoteSaveResult,
+  TeamOverviewView,
   TeamSummaryView,
 } from "#contracts/connections/teamContract.ts";
 
@@ -38,6 +40,40 @@ import { teamQueries } from "./teamQueries";
 import type { TeamRemote } from "./teamRemote";
 
 const teamId = "018f79ea-7d86-7c18-9b4a-8b4d0c9165a1";
+const overviewFixture: TeamOverviewView = {
+  format: "head_to_head_categories",
+  league: {
+    teamCount: 12,
+    scoringType: "head",
+    scoringLabel: "Head to head, categories",
+    weeklyDeadline: "weekly",
+    endDate: "2027-04-10",
+    gamesCaps: { gamesPlayed: 162, inningsPitched: 1400 },
+  },
+  seasonProgress: { currentPeriod: 11, lastPeriod: 18, endDate: "2027-04-10" },
+  standing: { rank: 3, points: 0, pointsFor: 0, pointsAgainst: 120, pointsBack: 0 },
+  record: { wins: 7, losses: 3, ties: 0, percentage: 0.7 },
+  matchup: {
+    week: 11,
+    opponent: "Beta",
+    points: 0,
+    opponentPoints: 42,
+    projectedPoints: 63.5,
+    opponentProjectedPoints: 55,
+    remainingGames: 0,
+    opponentRemainingGames: 2,
+    statusLabel: "Live",
+    categories: [
+      { name: "Goals", scoring: undefined, own: 0, opponent: 3 },
+      { name: "Shots", scoring: "informational", own: 12, opponent: null },
+    ],
+  },
+  gamesUsage: {
+    status: "available",
+    games: [{ position: "C", played: 0, projected: 150 }],
+    innings: { pitched: 10.1, projected: 1300.5 },
+  },
+};
 const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1_000).toISOString();
 const hoursAgo = (hours: number): string => new Date(Date.now() - hours * 3_600_000).toISOString();
 
@@ -608,14 +644,151 @@ function foldedLabel(runs: ReadonlyArray<LineupRunView>): string {
     : `${String(span.count)} checks changed nothing from ${start} to ${end}`;
 }
 
+it("shows season facts, both matchup sides, category detail, and cap usage", async () => {
+  using _app = setupTeamDetailPage(team, { overview: () => Promise.resolve(overviewFixture) });
+
+  await expect.element(page.getByText("Head to head, categories")).toBeVisible();
+  await expect.element(page.getByText("Week 11 · Against Beta")).toBeVisible();
+  await expect.element(page.getByText("0 played · 150 projected")).toBeVisible();
+  await expect.element(page.getByText("10.1 pitched · 1,300.5 projected")).toBeVisible();
+  await expect.element(page.getByText("7-3-0 (.700)")).toBeVisible();
+  await page.getByText("Scoring detail").click();
+  await expect.element(page.getByText("You: 0 · Opponent: 3")).toBeVisible();
+  await expect.element(page.getByText("Shots (informational)")).toBeVisible();
+});
+
+it("reads the detail overview without requesting team card facts", async () => {
+  const reads: string[] = [];
+  using _app = setupTeamDetailPage(team, {
+    cards: () => {
+      reads.push("cards");
+      return Promise.resolve([]);
+    },
+    overview: () => {
+      reads.push("overview");
+      return Promise.resolve(overviewFixture);
+    },
+  });
+
+  await expect.element(page.getByText("Head to head, categories")).toBeVisible();
+  expect(reads).toEqual(["overview"]);
+});
+
+it.each([
+  { format: "head_to_head_categories", label: "Head to head categories" },
+  { format: "head_to_head_points", label: "Head to head points" },
+  { format: "rotisserie", label: "Rotisserie" },
+  { format: "unknown", label: "Unknown scoring format" },
+] as const)(
+  "shows the published $format format when its label is absent",
+  async ({ format, label }) => {
+    using _app = setupTeamDetailPage(team, {
+      overview: () =>
+        Promise.resolve({
+          ...overviewFixture,
+          format,
+          league: { teamCount: 12, scoringType: "head", gamesCaps: {}, scoringLabel: undefined },
+          leagueReason: "League settings could not be loaded.",
+        }),
+    });
+
+    await expect.element(page.getByText(label, { exact: true })).toBeVisible();
+    expect(page.getByText("League settings could not be loaded.").elements()).toHaveLength(0);
+  },
+);
+
+it("shows an unknown format rather than a league read error when settings are missing", async () => {
+  using _app = setupTeamDetailPage(team, {
+    overview: () =>
+      Promise.resolve({
+        ...overviewFixture,
+        format: undefined,
+        league: undefined,
+        leagueReason: "League settings could not be loaded.",
+      }),
+  });
+
+  await expect.element(page.getByText("Unknown scoring format")).toBeVisible();
+  expect(page.getByText("League settings could not be loaded.").elements()).toHaveLength(0);
+});
+
+it("states why partial and unsupported season facts are missing", async () => {
+  using _app = setupTeamDetailPage(team, {
+    overview: () =>
+      Promise.resolve({
+        league: {
+          teamCount: 12,
+          scoringType: "custom",
+          scoringLabel: "Custom league scoring",
+          weeklyDeadline: "intraday",
+          gamesCaps: { gamesPlayed: 162 },
+        },
+        recordReason: "This format does not publish a win-loss record.",
+        standingReason: "Standings were not published.",
+        matchupReason: "No current matchup was published.",
+        gamesUsage: {
+          status: "not_published",
+          detail: "The provider did not publish this team's cap usage.",
+        },
+      }),
+  });
+
+  await expect.element(page.getByText("Custom league scoring")).toBeVisible();
+  await expect
+    .element(page.getByText("This format does not publish a win-loss record."))
+    .toBeVisible();
+  await expect.element(page.getByText("No current matchup was published.")).toBeVisible();
+  await expect.element(page.getByText("Usage not published")).toBeVisible();
+  await expect
+    .element(page.getByText("The provider did not publish this team's cap usage."))
+    .toBeVisible();
+  expect(page.getByText("Lineup changes").elements()).toHaveLength(0);
+  expect(page.getByText("0 of 162").elements()).toHaveLength(0);
+});
+
+it("keeps controls and activity when season facts are unavailable", async () => {
+  using _app = setupTeamDetailPage(team, {
+    overview: () => Promise.resolve({ reason: "Season facts are unavailable." }),
+  });
+
+  await expect.element(page.getByText("Season facts are unavailable.")).toBeVisible();
+  await expect.element(page.getByRole("heading", { name: "Recent activity" })).toBeVisible();
+  await expect.element(page.getByRole("switch", { name: "Lineup checks for Alpha" })).toBeVisible();
+});
+
+it("captures the team overview at desktop and phone sizes in light and dark", async () => {
+  using _app = setupTeamDetailPage(team, { overview: () => Promise.resolve(overviewFixture) });
+  await expect.element(page.getByText("10.1 pitched · 1,300.5 projected")).toBeVisible();
+
+  for (const [width, height] of [
+    [1440, 900],
+    [390, 844],
+  ] as const) {
+    await page.viewport(width, height);
+    for (const theme of ["light", "dark"] as const) {
+      applyTheme(theme);
+      await expect.element(page.getByText("Week 11 · Against Beta")).toBeVisible();
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+      await page.screenshot({
+        path: `../../../../../.artifacts/team-overview/detail-${width}x${height}-${theme}.png`,
+        save: true,
+      });
+    }
+  }
+  applyTheme("light");
+});
+
 function setupTeamDetailPage(
   teamSummary: TeamSummaryView,
-  overrides: Partial<Pick<TeamRemote, "saveNote">> = {},
+  overrides: Partial<Pick<TeamRemote, "saveNote" | "overview" | "cards">> = {},
 ): { [Symbol.dispose](): void } {
   const queryClient = createQueryClient();
   const remote: TeamRemote = {
     list: () => Promise.resolve([teamSummary]),
-    cards: () => Promise.resolve([]),
+    cards: overrides.cards ?? (() => Promise.resolve([])),
+    overview:
+      overrides.overview ??
+      (() => Promise.resolve({ reason: "Season overview is not available." })),
     refresh: () => Promise.resolve({ teams: [teamSummary] }),
     control: () => Promise.resolve({ changed: [], teams: [teamSummary] }),
     readRun: () => Promise.reject(new Error("Unexpected run read")),

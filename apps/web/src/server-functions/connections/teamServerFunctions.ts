@@ -1,4 +1,6 @@
 import { Connections } from "@lineupkeep/backend/connections/Connections";
+import { FantasyQueries } from "@lineupkeep/backend/connections/FantasyQueries";
+import { TeamId } from "@lineupkeep/backend/connections/FantasyTeam";
 import { LineupRunId } from "@lineupkeep/backend/connections/LineupRun";
 import { LineupRuns } from "@lineupkeep/backend/connections/LineupRuns";
 import {
@@ -19,6 +21,7 @@ import type {
   TeamRefreshView,
 } from "#contracts/connections/teamContract.ts";
 import { runUseCase } from "#server/backendEntry.ts";
+import { toTeamOverviewView } from "#server/connections/teamOverviewPresentation.ts";
 import {
   LineupRunInputInvalid,
   TeamInputInvalid,
@@ -57,6 +60,31 @@ export const listTeamCardsServerFn = createServerFn({ method: "GET" }).handler((
     mapTeamRefreshError,
   ),
 );
+
+export const readTeamOverviewServerFn = createServerFn({ method: "POST" })
+  .validator((raw: { readonly team: string }) =>
+    Schema.decodeResult(Schema.Struct({ team: TeamId }))(raw),
+  )
+  .handler(({ data }) =>
+    runUseCase(
+      getRequest(),
+      "teams.overview",
+      (userId) =>
+        Effect.gen(function* () {
+          const input = yield* Effect.fromResult(data).pipe(
+            Effect.mapError(() => TeamInputInvalid.make({})),
+          );
+          const summary = yield* FantasyQueries.use((queries) =>
+            queries.getTeamSummary(userId, {
+              team: input.team,
+              groups: ["league", "standings", "categories", "matchup"],
+            }),
+          );
+          return toTeamOverviewView(summary);
+        }),
+      () => ({ type: "team.refresh_failed" as const, outcome: "failure" as const }),
+    ),
+  );
 
 export const refreshTeamsServerFn = createServerFn({ method: "POST" }).handler(() => {
   const request = getRequest();

@@ -129,7 +129,7 @@ export const yahooCapabilities: ProviderCapabilities = {
     {
       subject: "per_team_games_played",
       detail:
-        "Yahoo publishes no per-team games-played count: its teams games-played output returns an empty per-team node, and its roster, standings, and players reads refuse that output, so only the league's games-played cap is known.",
+        "Yahoo did not publish games-played usage for this team. League settings publish the cap, but an empty team games-played response does not establish how many games or innings were used.",
     },
   ],
 };

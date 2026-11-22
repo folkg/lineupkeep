@@ -312,14 +312,27 @@ export const AcquisitionUsage = Schema.Union([
   }),
 ]);
 
-const GamesPlayedUsage = Schema.Struct({
-  status: Schema.Literal("not_published"),
-  detail: Schema.NonEmptyString,
-}).pipe(
-  Schema.annotate({
-    description: "Per-team games played is not published; `detail` says why.",
+const GamesPlayedUsage = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("available"),
+    games: Schema.Array(
+      Schema.Struct({
+        position: Schema.NonEmptyString,
+        played: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+        max: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+        projected: Schema.Finite,
+      }),
+    ),
+    innings: Schema.optional(
+      Schema.Struct({
+        pitched: Schema.Finite,
+        max: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+        projected: Schema.Finite,
+      }),
+    ),
   }),
-);
+  Schema.Struct({ status: Schema.Literal("not_published"), detail: Schema.NonEmptyString }),
+]);
 export type AcquisitionUsage = typeof AcquisitionUsage.Type;
 export type AcquisitionLimits = typeof AcquisitionLimits.Type;
 
@@ -1794,6 +1807,10 @@ const SummaryLeague = Schema.Union([
   Schema.Struct({
     status: Schema.Literal("available"),
     ...LeagueOverview.fields,
+    gamesCaps: Schema.Struct({
+      gamesPlayed: DeclaredNumber,
+      inningsPitched: DeclaredNumber,
+    }),
     transactionTiming: SummaryTransactionTiming,
   }),
   Schema.Struct({ status: Schema.Literal("degraded"), detail: Schema.String }),

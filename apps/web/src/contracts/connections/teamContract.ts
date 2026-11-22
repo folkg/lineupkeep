@@ -164,6 +164,76 @@ export type TeamCardView = {
   readonly reason?: string;
 };
 
+export type TeamOverviewView = {
+  readonly reason?: string;
+  readonly format?: "head_to_head_categories" | "head_to_head_points" | "rotisserie" | "unknown";
+  readonly league?: {
+    readonly teamCount: number;
+    readonly scoringLabel?: string;
+    readonly scoringType: string;
+    readonly weeklyDeadline?: string;
+    readonly startDate?: string;
+    readonly endDate?: string;
+    readonly gamesCaps: { readonly gamesPlayed?: number; readonly inningsPitched?: number };
+  };
+  readonly leagueReason?: string;
+  readonly seasonProgress?: {
+    readonly currentPeriod?: number;
+    readonly lastPeriod?: number;
+    readonly endDate?: string;
+  };
+  readonly standing?: {
+    readonly rank: number | null;
+    readonly points: number | null;
+    readonly pointsFor: number | null;
+    readonly pointsAgainst: number | null;
+    readonly pointsBack: number | null;
+  };
+  readonly standingReason?: string;
+  readonly record?: {
+    readonly wins: number;
+    readonly losses: number;
+    readonly ties: number;
+    readonly percentage: number | null;
+  };
+  readonly recordReason?: string;
+  readonly matchup?: {
+    readonly week: number;
+    readonly opponent: string;
+    readonly points: number | null;
+    readonly opponentPoints: number | null;
+    readonly projectedPoints: number | null;
+    readonly opponentProjectedPoints: number | null;
+    readonly remainingGames?: number;
+    readonly opponentRemainingGames?: number;
+    readonly statusLabel?: string;
+    readonly categories: ReadonlyArray<{
+      readonly name: string;
+      readonly scoring: "informational" | undefined;
+      readonly own: number | null;
+      readonly opponent: number | null;
+    }>;
+  };
+  readonly matchupReason?: string;
+  readonly categoryPoints?: ReadonlyArray<{
+    readonly name: string;
+    readonly scoring: "informational" | undefined;
+    readonly value: number | null;
+  }>;
+  readonly categoryReason?: string;
+  readonly gamesUsage?:
+    | {
+        readonly status: "available";
+        readonly games: ReadonlyArray<{
+          readonly position: string;
+          readonly played: number;
+          readonly projected: number;
+        }>;
+        readonly innings?: { readonly pitched: number; readonly projected: number };
+      }
+    | { readonly status: "not_published"; readonly detail: string };
+};
+
 export type TeamChangeView = {
   readonly changed: ReadonlyArray<TeamSummaryView>;
   readonly teams: ReadonlyArray<TeamSummaryView>;

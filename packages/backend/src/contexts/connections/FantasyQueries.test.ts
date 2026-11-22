@@ -582,6 +582,152 @@ it.effect("carries the owning team's acquisition usage on the team summary", () 
   }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
+it.effect("publishes games and innings caps with played and projected usage", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      league: { ...leagueFixture, maxGamesPlayed: 162, maxInningsPitched: 1400 },
+    });
+    yield* fake.setStandings({
+      providerLeagueKey: "461.l.1000",
+      teams: [
+        standingWithUsage("461.l.1000.t.1", "Alpha", 1, {
+          seasonMoves: undefined,
+          weeklyAdds: undefined,
+        }),
+      ],
+    });
+    yield* fake.setGamesPlayed([{ position: "C", played: 0, max: 162, projected: 150.5 }]);
+    yield* fake.setInningsPitched({ pitched: 10.1, max: 1400, projected: 1350.2 });
+
+    const summary = yield* queries.getTeamSummary(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      groups: ["league", "standings"],
+    });
+
+    assert.strictEqual(summary.status, "ok");
+    if (
+      summary.status !== "ok" ||
+      summary.league?.status !== "available" ||
+      summary.acquisitionUsage?.status !== "available"
+    ) {
+      assert.fail("expected published league and usage");
+      return;
+    }
+    assert.deepStrictEqual(summary.league.gamesCaps, {
+      gamesPlayed: { status: "published", value: 162 },
+      inningsPitched: { status: "published", value: 1400 },
+    });
+    assert.deepStrictEqual(summary.acquisitionUsage.gamesPlayedUsage, {
+      status: "available",
+      games: [{ position: "C", played: 0, max: 162, projected: 150.5 }],
+      innings: { pitched: 10.1, max: 1400, projected: 1350.2 },
+    });
+    const reads = yield* fake.readCount("read_games_played");
+    assert.strictEqual(reads, 1);
+    yield* Schema.encodeEffect(Schema.toCodecJson(TeamSummaryData))(summary);
+  }).pipe(layerTools.provide(QueriesTestLayer)),
+);
+
+it.effect("does not mistake unpublished usage for zero played", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      league: { ...leagueFixture, maxGamesPlayed: 162 },
+    });
+    yield* fake.setStandings({
+      providerLeagueKey: "461.l.1000",
+      teams: [
+        standingWithUsage("461.l.1000.t.1", "Alpha", 1, {
+          seasonMoves: undefined,
+          weeklyAdds: undefined,
+        }),
+      ],
+    });
+
+    const summary = yield* queries.getTeamSummary(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      groups: ["standings"],
+    });
+
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok" || summary.acquisitionUsage?.status !== "available") {
+      return;
+    }
+    assert.strictEqual(summary.acquisitionUsage.gamesPlayedUsage.status, "not_published");
+    const reads = yield* fake.readCount("read_games_played");
+    assert.strictEqual(reads, 1);
+  }).pipe(layerTools.provide(QueriesTestLayer)),
+);
+
+it.effect("skips games usage when the league declares no cap", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+
+    const summary = yield* queries.getTeamSummary(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      groups: ["league", "standings"],
+    });
+
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok" || summary.league?.status !== "available") {
+      return;
+    }
+    assert.deepStrictEqual(summary.league.gamesCaps, {
+      gamesPlayed: { status: "not_set" },
+      inningsPitched: { status: "not_set" },
+    });
+    const reads = yield* fake.readCount("read_games_played");
+    assert.strictEqual(reads, 0);
+  }).pipe(layerTools.provide(QueriesTestLayer)),
+);
+
+it.effect("keeps standings available when games usage fails", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      league: { ...leagueFixture, maxGamesPlayed: 162 },
+    });
+    yield* fake.setStandings({
+      providerLeagueKey: "461.l.1000",
+      teams: [
+        standingWithUsage("461.l.1000.t.1", "Alpha", 1, {
+          seasonMoves: undefined,
+          weeklyAdds: undefined,
+        }),
+      ],
+    });
+    yield* fake.failGamesPlayed(ProviderResponseInvalid.make({ operation: "read_games_played" }));
+
+    const summary = yield* queries.getTeamSummary(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      groups: ["standings"],
+    });
+
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok" || summary.acquisitionUsage?.status !== "available") {
+      return;
+    }
+    assert.strictEqual(summary.acquisitionUsage.gamesPlayedUsage.status, "not_published");
+    assert.strictEqual(
+      EffectArray.some(summary.failures, (failure) => failure.resource === "games_played"),
+      true,
+    );
+    assert.strictEqual(
+      EffectArray.some(
+        summary.coverage,
+        (entry) => entry.resource === "games_played" && entry.status === "degraded",
+      ),
+      true,
+    );
+  }).pipe(layerTools.provide(QueriesTestLayer)),
+);
+
 it.effect("carries the league's roster-change timing on the team summary", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;

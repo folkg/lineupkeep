@@ -42,7 +42,7 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
   );
   const facts = useQuery(() => ({
     ...teamQueries.cards(props.remote()),
-    enabled: !isServer && !query.isPending && teamList.length > 0,
+    enabled: props.includeCards !== false && !isServer && !query.isPending && teamList.length > 0,
   }));
 
   createEffect(
@@ -135,6 +135,7 @@ export type TeamsPageController = {
 
 type TeamsPageOptions = {
   readonly teamsQuery: () => TeamListQueryOptions;
+  readonly includeCards?: boolean;
   readonly viewerId?: () => string | undefined;
   readonly remote: () => TeamRemote;
   readonly onRefresh: () => Promise<void>;

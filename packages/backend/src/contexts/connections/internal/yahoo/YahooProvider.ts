@@ -730,20 +730,33 @@ export const yahooProvider = Effect.gen(function* () {
     readonly providerTeamKey: string;
     readonly pitcherSlot: string | undefined;
   }) {
-    yield* Effect.annotateCurrentSpan("provider.operation", "read_league");
-    const cookie = yield* sessionCookie(input, "read_league");
-    const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_league");
-    const teamKey = yield* ValidTeamKey(input.providerTeamKey, "read_league");
+    yield* Effect.annotateCurrentSpan("provider.operation", "read_games_played");
+    const cookie = yield* sessionCookie(input, "read_games_played");
+    const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_games_played");
+    const teamKey = yield* ValidTeamKey(input.providerTeamKey, "read_games_played");
     const facts = yield* readTeamGamesPlayedThroughSdk(
       sdk,
-      "read_league",
+      "read_games_played",
       cookie,
       leagueKey,
       teamKey,
     );
-    const gamesPlayed = providerGamesPlayedOf(facts, input.pitcherSlot);
-    yield* Effect.annotateCurrentSpan("provider.games_played_position_count", gamesPlayed.length);
-    return gamesPlayed;
+    const games = providerGamesPlayedOf(facts, undefined);
+    const innings = EffectArray.findFirst(facts, (fact) => fact.inningsPitched !== undefined);
+    const pitched = Option.getOrUndefined(innings)?.inningsPitched;
+    yield* Effect.annotateCurrentSpan("provider.games_played_position_count", games.length);
+    return {
+      games,
+      ...(pitched === undefined
+        ? {}
+        : {
+            innings: {
+              pitched: Number(pitched.pitched),
+              max: Number(pitched.max),
+              projected: Number(pitched.projected),
+            },
+          }),
+    };
   });
 
   const searchPlayers = Effect.fn("YahooProvider.searchPlayers")(function* (
@@ -924,6 +937,7 @@ export const yahooProvider = Effect.gen(function* () {
     validateSession,
     discoverTeams,
     readTeamCards,
+    readGamesPlayed,
     readLeague,
     readStandings,
     readRoster,
@@ -967,7 +981,24 @@ export const yahooProvider = Effect.gen(function* () {
             providerLeagueKey: input.providerLeagueKey,
             providerTeamKey: input.providerTeamKey,
             pitcherSlot: pitcherSlotOf(input.league),
-          }),
+          }).pipe(
+            Effect.map((usage) => {
+              const pitcherSlot = pitcherSlotOf(input.league);
+              return [
+                ...usage.games,
+                ...(usage.innings === undefined || pitcherSlot === undefined
+                  ? []
+                  : [
+                      {
+                        position: pitcherSlot,
+                        played: usage.innings.pitched,
+                        max: usage.innings.max,
+                        projected: usage.innings.projected,
+                      },
+                    ]),
+              ];
+            }),
+          ),
       }),
   } satisfies ProviderShape;
 });

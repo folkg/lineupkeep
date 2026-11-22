@@ -118,6 +118,10 @@ type FakeProviderState = {
   readonly searchPlayers: ReadonlyArray<ProviderPlayerSearchResult["players"][number]> | undefined;
   readonly playerScores: ReadonlyArray<FakePlayerScore>;
   readonly gamesPlayed: ReadonlyArray<ProviderGamesPlayed>;
+  readonly inningsPitched:
+    | { readonly pitched: number; readonly max: number; readonly projected: number }
+    | undefined;
+  readonly gamesPlayedFailure: ProviderResponseInvalid | undefined;
   readonly playerDetailsFailure: ProviderPeriodMismatch | undefined;
   readonly refusedPlayerDetailKeys: ReadonlySet<string>;
   readonly matchups: ReadonlyArray<ProviderMatchup>;
@@ -194,6 +198,12 @@ export type FakeProviderWorldShape = {
   ) => Effect.Effect<void>;
   readonly setPlayerScores: (scores: ReadonlyArray<FakePlayerScore>) => Effect.Effect<void>;
   readonly setGamesPlayed: (gamesPlayed: ReadonlyArray<ProviderGamesPlayed>) => Effect.Effect<void>;
+  readonly setInningsPitched: (
+    innings:
+      | { readonly pitched: number; readonly max: number; readonly projected: number }
+      | undefined,
+  ) => Effect.Effect<void>;
+  readonly failGamesPlayed: (failure: ProviderResponseInvalid | undefined) => Effect.Effect<void>;
   readonly failPlayerDetails: (failure: ProviderPeriodMismatch | undefined) => Effect.Effect<void>;
   readonly refusePlayerDetailKeys: (keys: ReadonlyArray<string>) => Effect.Effect<void>;
   readonly setMatchups: (matchups: ReadonlyArray<ProviderMatchup>) => Effect.Effect<void>;
@@ -291,6 +301,8 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         searchPlayers: undefined,
         playerScores: [],
         gamesPlayed: [],
+        inningsPitched: undefined,
+        gamesPlayedFailure: undefined,
         playerDetailsFailure: undefined,
         refusedPlayerDetailKeys: new Set(),
         matchups: [],
@@ -392,6 +404,10 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
           modify((current) => ({ ...current, searchPlayers: players })),
         setPlayerScores: (playerScores) => modify((current) => ({ ...current, playerScores })),
         setGamesPlayed: (gamesPlayed) => modify((current) => ({ ...current, gamesPlayed })),
+        setInningsPitched: (inningsPitched) =>
+          modify((current) => ({ ...current, inningsPitched })),
+        failGamesPlayed: (gamesPlayedFailure) =>
+          modify((current) => ({ ...current, gamesPlayedFailure })),
         failPlayerDetails: (playerDetailsFailure) =>
           modify((current) => ({ ...current, playerDetailsFailure })),
         refusePlayerDetailKeys: (keys) =>
@@ -542,6 +558,16 @@ const providerFake = Effect.gen(function* () {
         ),
       );
       return current.teamCards;
+    }),
+    readGamesPlayed: Effect.fn("FakeProvider.readGamesPlayed")(function* (input) {
+      const current = yield* prepare(input, "read_games_played");
+      if (current.gamesPlayedFailure !== undefined) {
+        return yield* ProviderResponseInvalid.make({ operation: "read_games_played" });
+      }
+      return {
+        games: current.gamesPlayed,
+        ...(current.inningsPitched === undefined ? {} : { innings: current.inningsPitched }),
+      };
     }),
     readLeague: Effect.fn("FakeProvider.readLeague")(function* (input) {
       const current = yield* prepare(input, "read_league");
@@ -1168,6 +1194,7 @@ export const ProviderFakeTest = Layer.effect(ProviderRegistry)(
 
 const readOperations: ReadonlySet<ProviderOperation> = new Set<ProviderOperation>([
   "read_team_cards",
+  "read_games_played",
   "validate_session",
   "discover_teams",
   "read_league",
@@ -1264,7 +1291,7 @@ const fakeCapabilities: ProviderCapabilities = {
     {
       subject: "per_team_games_played",
       detail:
-        "This provider publishes no per-team games-played count: its league settings carry only the league's games-played cap.",
+        "This provider did not publish games-played usage for this team. Its league settings carry the cap, but an empty team response does not establish usage.",
     },
   ],
 };

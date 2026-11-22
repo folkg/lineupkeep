@@ -3871,6 +3871,30 @@ it.effect("declares each period kind's support as the capability table says", ()
   });
 });
 
+it.effect("reads one team's published games and innings usage through the SDK", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflGamesPlayed));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const usage = yield* provider.readGamesPlayed({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      providerTeamKey: "466.l.4000.t.1",
+      pitcherSlot: "P",
+    });
+
+    assert.deepStrictEqual(usage, {
+      games: [{ position: "QB", played: 12, max: 17, projected: 17 }],
+      innings: { pitched: 82.1, max: 1400, projected: 1400.1 },
+    });
+    assert.strictEqual(internet.calls.length, 1);
+    assert.strictEqual(
+      internet.calls[0]?.url.pathname,
+      "/fantasy/v2/league/466.l.4000/teams;team_keys=466.l.4000.t.1;out=games_played",
+    );
+  }).pipe(layerTools.provide(yahooLayer(internet)));
+});
+
 it.effect("reads a declared games limit and the team's per-position allowance", () => {
   const internet = recordingInternet((request) =>
     jsonResponse(

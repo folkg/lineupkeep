@@ -11,6 +11,7 @@ const ProviderOperation = Schema.Literals([
   "validate_session",
   "discover_teams",
   "read_team_cards",
+  "read_games_played",
   "read_league",
   "read_standings",
   "read_roster",
@@ -253,6 +254,14 @@ export type ProviderShape = {
   readonly readTeamCards: (
     input: ProviderSessionMaterial,
   ) => Effect.Effect<ReadonlyArray<ProviderTeamCard>, ProviderFailure>;
+
+  readonly readGamesPlayed: (
+    input: ProviderSessionMaterial & {
+      readonly providerLeagueKey: string;
+      readonly providerTeamKey: string;
+      readonly pitcherSlot: string | undefined;
+    },
+  ) => Effect.Effect<ProviderGamesPlayedUsage, ProviderReadFailure>;
 
   readonly readLeague: (
     input: ProviderSessionMaterial & {
@@ -1003,4 +1012,9 @@ export type ProviderGamesPlayed = {
   readonly played: number;
   readonly max: number;
   readonly projected: number;
+};
+
+type ProviderGamesPlayedUsage = {
+  readonly games: ReadonlyArray<ProviderGamesPlayed>;
+  readonly innings?: { readonly pitched: number; readonly max: number; readonly projected: number };
 };

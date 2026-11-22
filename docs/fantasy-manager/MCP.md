@@ -217,10 +217,9 @@ without a second read. `status: "published"` reports `seasonMovesUsed`, `weeklyA
 it is never zero used. The section's `acquisitionLimits` states the league's weekly and season limits
 once, `not_set` when the league declares none. `seasonMovesRemaining` and `weeklyAddsRemaining`
 appear only where the league declares the matching limit, so no remaining count is manufactured
-against no limit. The provider publishes no per-team games-played count — its
-`teams;out=games_played` read returns an empty per-team node, and its roster, standings, and players
-reads refuse that output — so only the league's games cap is known, and the standings `detailNote`
-says so.
+against no limit. Standings do not carry a per-team games-played count. For a league with a
+positive games or innings cap, the team summary reads that team's games and innings usage
+separately. An empty provider response remains `not_published`, never zero played.
 
 `get_matchups` carries per-category values and the category winner (or a tie) for category
 leagues, plus `remainingGames` for the scoring week where the provider publishes it. Its `schedule`
@@ -457,8 +456,11 @@ rule is stated. `intraday` and a game-time deadline are same-day; a weekday numb
 lock; an empty deadline is read together with the provider's editable period — a scoring week is a
 weekly lock, the current date is same-day, and the next date is next-day. Per-team usage is published with the
 team objects the provider returns: every standings row carries it, and `get_team_summary` repeats
-the owning team's usage beside the league limits. The provider publishes no per-team games-played
-count, so `transactionRules.detailNote` states that only the league's games cap is known.
+the owning team's usage beside the league limits. League settings publish the games and innings caps
+when declared. The team summary reads games and innings usage only when a positive cap applies;
+its `gamesPlayedUsage` is `available` with position games and optional innings, including played
+and projected counts, or `not_published` with the provider's limitation or read failure. A missing
+count is never reported as zero.
 
 `get_team_summary` composes the league overview, the linked team's standing and record, league
 standings, the owning team's acquisition usage, the current matchup, this week's and next week's
@@ -477,13 +479,14 @@ from 0 to the published balance, and a bidless league refuses any bid and accept
 one. Roster entries in
 this summary carry the same `transactionTrend` shape as a full `search_players` row, with the same current-day
 window and the same `not_published` rule, and the same `startingStatus` as a team roster row. Its
-league section is the compact static context (name, team count, scoring type, week window, and
-dates) and deliberately omits `transactionRules`, which belongs to `get_league`; the rules would
+league section is the compact static context (name, team count, scoring type, week window, dates,
+and `gamesCaps` with published or not-set games and innings limits) and deliberately omits
+`transactionRules`, which belongs to `get_league`; the rules would
 consume the summary's bounded result budget without changing a per-team snapshot. The
 `acquisitionUsage` section carries the same row usage as the standings group beside the league
 limits, because the summary omits `transactionRules`; it is available when the `standings` group is
-selected and the league settings could be read, and it states the same no-per-team-games-played
-boundary. `groups` selects `league`, `standings`,
+selected and the league settings could be read. Its games usage may be published when a cap applies;
+otherwise `not_published` explains why. `groups` selects `league`, `standings`,
 `categories`, `matchup`, `schedule`, and `roster`; the default is league, standings, matchup, and
 roster, `categories` adds season category totals and points plus the matchup's paired per-category
 values, and `schedule` adds the period's per-player games. The six-group call is the ordinary full

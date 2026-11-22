@@ -3138,6 +3138,10 @@ export const FantasyQueriesLive = Layer.effect(
           ? {
               status: "available",
               ...leagueFacts(leagueOutcome.value),
+              gamesCaps: {
+                gamesPlayed: declared(leagueOutcome.value.maxGamesPlayed),
+                inningsPitched: declared(leagueOutcome.value.maxInningsPitched),
+              },
               transactionTiming: {
                 ...(leagueOutcome.value.weeklyDeadline === undefined
                   ? {}
@@ -3349,6 +3353,58 @@ export const FantasyQueriesLive = Layer.effect(
               })),
             }
           : { status: "unsupported", detail: standingsDetail };
+      const hasGamesCap = (league?.maxGamesPlayed ?? 0) > 0 || (league?.maxInningsPitched ?? 0) > 0;
+      const gamesOutcome =
+        includes("standings") && hasGamesCap
+          ? yield* readOutcome(
+              context,
+              "games_played",
+              context.provider.readGamesPlayed({
+                ...providerIdentity(context),
+                providerLeagueKey: context.owned.team.providerLeagueKey,
+                providerTeamKey: context.owned.team.providerTeamKey,
+                pitcherSlot: undefined,
+              }),
+            )
+          : undefined;
+      if (gamesOutcome !== undefined) {
+        coverageEntries.push(
+          gamesOutcome._tag === "ok"
+            ? coverage("games_played", "games_played", fetchedAt)
+            : gamesOutcome._tag === "unsupported"
+              ? unsupportedCoverage("games_played", "games_played", fetchedAt, gamesOutcome.detail)
+              : degradedCoverage(
+                  "games_played",
+                  "games_played",
+                  fetchedAt,
+                  gamesOutcome.failure.message,
+                ),
+        );
+        if (gamesOutcome._tag === "failed") {
+          failures.push(gamesOutcome.failure);
+        }
+      }
+      const gamesPlayedUsage: NonNullable<
+        Extract<TeamSummaryData["acquisitionUsage"], { status: "available" }>
+      >["gamesPlayedUsage"] =
+        gamesOutcome?._tag === "ok" &&
+        (gamesOutcome.value.games.length > 0 || gamesOutcome.value.innings !== undefined)
+          ? {
+              status: "available",
+              games: [...gamesOutcome.value.games],
+              ...(gamesOutcome.value.innings === undefined
+                ? {}
+                : { innings: gamesOutcome.value.innings }),
+            }
+          : {
+              status: "not_published",
+              detail:
+                gamesOutcome?._tag === "failed"
+                  ? gamesOutcome.failure.message
+                  : gamesOutcome?._tag === "unsupported"
+                    ? gamesOutcome.detail
+                    : limitation(context.provider, "per_team_games_played"),
+            };
       const acquisitionUsageSection: TeamSummaryData["acquisitionUsage"] = !includes("standings")
         ? undefined
         : current === undefined || standingsOutcome?._tag !== "ok"
@@ -3363,10 +3419,7 @@ export const FantasyQueriesLive = Layer.effect(
                 status: "available",
                 limits: acquisitionLimitsOf(league),
                 usage: current.acquisitionUsage,
-                gamesPlayedUsage: {
-                  status: "not_published",
-                  detail: limitation(context.provider, "per_team_games_played"),
-                },
+                gamesPlayedUsage,
               };
 
       const window = league?.periodWindow;
