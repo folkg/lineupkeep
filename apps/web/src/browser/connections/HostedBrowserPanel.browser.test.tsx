@@ -90,18 +90,6 @@ it("offers the connect action when no connection exists", async () => {
   await expect.element(page.getByRole("button", { name: "Connect Yahoo" })).toBeVisible();
 });
 
-it("shows the Google-account route before the browser starts", async () => {
-  using _panel = renderPanel({ connected: false, session: false });
-
-  const summary = page.getByText("Signing in with Google?");
-  await expect.element(summary).toBeVisible();
-  await summary.click();
-
-  await expect.element(page.getByText(/Choose "Forgot username"/)).toBeVisible();
-  await expect.element(page.getByText(/Use recovery phone number/)).toBeVisible();
-  await expect.element(page.getByText(/"Sign in with Google" does not work/)).toBeVisible();
-});
-
 function renderPanel(
   options: {
     readonly connected?: boolean;

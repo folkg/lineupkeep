@@ -88,6 +88,18 @@ it("explains the encrypted session without naming the provider", async () => {
     .toBeVisible();
 });
 
+it("shows the Google-account route even when another connection exists", async () => {
+  using _section = setupConnectionsSection([connected]);
+
+  const summary = page.getByText("Signing in with Google?");
+  await expect.element(summary).toBeVisible();
+  await summary.click();
+
+  await expect.element(page.getByText(/Choose "Forgot username"/)).toBeVisible();
+  await expect.element(page.getByText(/Use recovery phone number/)).toBeVisible();
+  await expect.element(page.getByText(/"Sign in with Google" does not work/)).toBeVisible();
+});
+
 it("keeps the removed connection explanation off the connections section", async () => {
   using _section = setupConnectionsSection([connected]);
 

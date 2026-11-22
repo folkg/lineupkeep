@@ -12,6 +12,7 @@ import { Text } from "#browser/shared-ui/Text.tsx";
 import { ConnectionList } from "./ConnectionList";
 import type { ConnectionListQueryOptions } from "./connectionQueries";
 import type { ConnectionRemote } from "./connectionRemote";
+import { GoogleSignInNote } from "./GoogleSignInNote";
 import { HostedBrowserPanel } from "./HostedBrowserPanel";
 import { useConnectionsPage } from "./useConnectionsPage";
 import { useHostedLinking } from "./useHostedLinking";
@@ -45,6 +46,9 @@ export function ConnectionsSection(props: ConnectionsSectionProps): JSX.Element 
       <Text type="meta" tone="muted">
         Lineupgrade keeps the encrypted sign-in session, not your password.
       </Text>
+      <Show when={hosted.session() === undefined}>
+        <GoogleSignInNote />
+      </Show>
       <Show when={hasConnection() && hosted.session() === undefined}>
         <Inline gap="sm">
           <Button variant="secondary" onClick={() => void hosted.start()}>
