@@ -193,12 +193,20 @@ export function scoringLabel(label: string | undefined): string | undefined {
     return undefined;
   }
   switch (EffectString.toLowerCase(EffectString.trim(label))) {
+    case "h2h":
+    case "head to head":
+      return "Head to head";
+    case "h2h cat":
+    case "h2h cats":
     case "h2h categories":
     case "head to head, categories":
       return "Head to head categories";
     case "h2h points":
+    case "h2h pts":
     case "head to head, points":
       return "Head to head points";
+    case "roto":
+      return "Rotisserie";
     default:
       return label;
   }

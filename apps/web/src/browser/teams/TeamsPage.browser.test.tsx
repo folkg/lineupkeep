@@ -32,6 +32,7 @@ import type {
 import { requireTeamSuccess } from "./teamFailure";
 import { teamQueries } from "./teamQueries";
 import type { TeamRemote } from "./teamRemote";
+import { scoringLabel } from "./TeamSeasonFacts";
 import { TeamsPage } from "./TeamsPage";
 
 const teamId = "018f79ea-7d86-7c18-9b4a-8b4d0c9165a1";
@@ -121,7 +122,7 @@ const standingFacts: NonNullable<NonNullable<TeamCardView["season"]>["standing"]
 const seasonFacts: NonNullable<TeamCardView["season"]> = {
   format: "head_to_head_categories",
   seasonOver: false,
-  scoringLabel: "H2H categories",
+  scoringLabel: "H2H Cat",
   teamCount: 12,
   weeklyDeadline: "weekly",
   startDate: "2026-09-01",
@@ -145,6 +146,18 @@ const tallSeasonCard: TeamCardView = {
     standing: { ...standingFacts, record: undefined, pointsAgainst: 0 },
   },
 };
+
+it.each([
+  { published: "H2H", label: "Head to head" },
+  { published: "H2H Cat", label: "Head to head categories" },
+  { published: "H2H Categories", label: "Head to head categories" },
+  { published: "H2H Points", label: "Head to head points" },
+  { published: "H2H Pts", label: "Head to head points" },
+  { published: "Roto", label: "Rotisserie" },
+  { published: "Custom league scoring", label: "Custom league scoring" },
+] as const)("expands published $published", ({ published, label }) => {
+  expect(scoringLabel(published)).toBe(label);
+});
 
 it("shows batch season facts before local status and preserves zero", async () => {
   using _app = setupTeamsPage([baseTeam], { cards: () => Promise.resolve([seasonCard]) });
