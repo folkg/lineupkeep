@@ -64,7 +64,7 @@ Filing a report and reading back what happened to it both need only `fantasy:rea
 
 The surface is submit and read-back only. A report is filed `open`; a report's status is set when the work lands, not through a tool, so no client can acknowledge, resolve, close, or otherwise change a report. `feedback:manage` is therefore retired: no tool requires it, it is absent from both discovery documents, and a token minted while it existed keeps working for every tool it holds another scope for.
 
-Status is `open`, `acknowledged`, `resolved`, or `wontfix`, and it is stored history. A stored status, optional resolution note, and closure time are read back as they were recorded; nothing in the application writes them now.
+Status is `open`, `acknowledged`, `resolved`, or `wontfix`, and it is stored history. A stored status, optional resolution note, and closure time are read back as they were recorded; nothing in the application writes them now. A resolution note belongs only to a resolved or not-planned report, and a closure time belongs only to one of those statuses.
 
 Submission is bounded and rate-limited: title ≤ 120 characters, body ≤ 4000, control characters removed, and user text always returned as plain text. An account may submit 20 reports per clock hour and one acting client label may submit 10; the per-account limit is the backstop, so a client that renames itself cannot exceed it, and a refusal names the retry delay in seconds. Reports must never contain passwords, provider cookies, account identifiers, or raw provider payloads. Open reports are retained; resolved and not-planned reports already stored are deleted 180 days after closure.
 

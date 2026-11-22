@@ -473,6 +473,67 @@ describe("transaction proposal storage removal migration", () => {
   );
 });
 
+describe("feedback note repair migration", () => {
+  const repairMigration = "20261122170000_repair_feedback_notes";
+
+  it.effect("clears resolution notes from reports that are not closed", () =>
+    Effect.gen(function* () {
+      const sql = yield* PgliteClient.PgliteClient;
+
+      for (const statement of migrationStatements((name) => name < repairMigration)) {
+        yield* sql.unsafe(statement);
+      }
+
+      yield* sql.unsafe(`
+        insert into feedback (
+          id, user_id, submitter_kind, submitter_reference, kind, status, title, body,
+          resolution_note, closed_at, created_at, updated_at
+        )
+        values
+          ('open-note', 'owner', 'agent', 'mcp', 'bug', 'open', 'Open', 'Body',
+            'Open note', null, now(), now()),
+          ('open-clean', 'owner', 'agent', 'mcp', 'bug', 'open', 'Clean', 'Body',
+            null, null, now(), now()),
+          ('ack-note', 'owner', 'agent', 'mcp', 'wishlist', 'acknowledged', 'Ack', 'Body',
+            'Ack note', null, now(), now()),
+          ('resolved-note', 'owner', 'agent', 'mcp', 'bug', 'resolved', 'Closed', 'Body',
+            'Resolved note', now(), now(), now())
+      `);
+
+      for (const statement of migrationStatements((name) => name === repairMigration)) {
+        yield* sql.unsafe(statement);
+      }
+
+      const rows = yield* sql.unsafe<{
+        readonly id: string;
+        readonly status: string;
+        readonly resolution_note: string | null;
+        readonly closed: boolean;
+      }>(`
+        select id, status, resolution_note, (closed_at is not null) as closed
+        from feedback
+        order by id
+      `);
+      expect(rows).toEqual([
+        {
+          id: "ack-note",
+          status: "acknowledged",
+          resolution_note: null,
+          closed: false,
+        },
+        { id: "open-clean", status: "open", resolution_note: null, closed: false },
+        { id: "open-note", status: "open", resolution_note: null, closed: false },
+        {
+          id: "resolved-note",
+          status: "resolved",
+          resolution_note: "Resolved note",
+          closed: true,
+        },
+      ]);
+    }).pipe(layerTools.provide(PgliteClient.layer())),
+  );
+});
+
 function migrationStatements(select: (name: string) => boolean): ReadonlyArray<string> {
   const statements: string[] = [];
   for (const name of EffectArray.filter(readdirSync(migrationsFolder), select).sort()) {
