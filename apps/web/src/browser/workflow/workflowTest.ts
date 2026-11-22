@@ -1,10 +1,10 @@
 import { EffectArray } from "@lineupkeep/collections";
+import { jsonString } from "@lineupkeep/collections";
 import * as Shared from "@lineupkeep/machine-test";
 import type { EventObject } from "xstate";
 function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
   return EffectArray.isArray(value);
 }
-
 export function play<
   State extends { readonly value: string; readonly context: object },
   Event extends EventObject,
@@ -21,7 +21,6 @@ export function play<
   Shared.checkInvariants(adapter, trace, checks);
   return trace.final.state.value;
 }
-
 export function exploreWorkflow<
   State extends { readonly value: string; readonly context: object },
   Event extends EventObject,
@@ -47,7 +46,6 @@ export function exploreWorkflow<
   }
   return explored;
 }
-
 function workflowAdapter<
   State extends { readonly value: string; readonly context: object },
   Event extends EventObject,
@@ -80,7 +78,7 @@ function workflowAdapter<
   };
   return {
     statePath: (state) => state.value,
-    stateKey: options.stateKey ?? ((state) => JSON.stringify(state)),
+    stateKey: options.stateKey ?? ((state) => jsonString(state)),
     events: () => options.events,
     eventName: (event) => event.type,
     isFinal: options.final ?? (() => false),
@@ -110,7 +108,6 @@ function workflowAdapter<
       declared(state, event) ? workflow.transition(state, event)[0] : undefined,
   };
 }
-
 function workflowInvariants<State, Event>(
   adapter: Shared.MachineAdapter<State, Event>,
   invariants: Invariants<State, Event>,
@@ -141,7 +138,6 @@ function workflowInvariants<State, Event>(
     }),
   );
 }
-
 function checkInitial<State, Event>(invariants: Invariants<State, Event>, state: State): void {
   for (const [name, check] of Object.entries(invariants)) {
     try {
@@ -153,7 +149,6 @@ function checkInitial<State, Event>(invariants: Invariants<State, Event>, state:
     }
   }
 }
-
 type Workflow<State, Event extends EventObject> = {
   readonly initialState: State;
   readonly transition: (state: State, event: Event) => readonly [State, ...ReadonlyArray<unknown>];
@@ -161,7 +156,6 @@ type Workflow<State, Event extends EventObject> = {
     readonly states: Readonly<Record<string, { readonly on?: Readonly<Record<string, unknown>> }>>;
   };
 };
-
 type Invariants<State, Event> = Readonly<
   Record<string, (state: State, previous: State, event: Event | undefined) => void>
 >;

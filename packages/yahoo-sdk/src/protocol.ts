@@ -9,6 +9,7 @@ import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 
+import { jsonValue } from "#yahoo/stringTools.ts";
 import { EffectString } from "#yahoo/stringTools.ts";
 
 import { Credentials } from "./credentials.ts";
@@ -35,7 +36,6 @@ import {
 } from "./errors.ts";
 import type { StatusErrors, YahooReadError, YahooWriteError } from "./errors.ts";
 import { normalizeYahooJson } from "./json.ts";
-
 export type YahooHost =
   | "read"
   | "androidRead"
@@ -48,7 +48,6 @@ export type YahooHost =
   | "wallet"
   | "fandom"
   | "graphite";
-
 export interface RequestSpec {
   readonly host: YahooHost;
   readonly method: "GET" | "POST" | "PUT" | "DELETE";
@@ -57,7 +56,6 @@ export interface RequestSpec {
   readonly body?: string;
   readonly format?: "json" | "json_f" | "none";
 }
-
 interface DecodeArgs<I, O> {
   readonly operation: string;
   readonly response: HttpClientResponse.HttpClientResponse;
@@ -68,7 +66,6 @@ interface DecodeArgs<I, O> {
     input: I,
   ) => Effect.Effect<O, YahooParseError | YahooCoverageMismatch | Unauthorized | YahooWriteUnknown>;
 }
-
 export interface ProtocolShape {
   readonly encode: {
     (args: {
@@ -93,14 +90,11 @@ export interface ProtocolShape {
     <I, O>(args: DecodeArgs<I, O> & { readonly write: true }): Effect.Effect<O, YahooWriteError>;
   };
 }
-
 export class Protocol extends Context.Service<Protocol, ProtocolShape>()("YahooProtocol") {}
-
 export const YahooProtocol = Layer.succeed(Protocol)({
   encode,
   decode,
 });
-
 const hosts: Readonly<Record<YahooHost, string>> = {
   read: "https://pub-api-ro.fantasysports.yahoo.com",
   androidRead: "https://pub-api-android-ro.fantasysports.yahoo.com",
@@ -114,13 +108,11 @@ const hosts: Readonly<Record<YahooHost, string>> = {
   fandom: "https://sports-fandom-api.sports.yahoo.com",
   graphite: "https://graphite.sports.yahoo.com",
 };
-
 const readDeadline = Duration.seconds(30);
 const defaultReadLimitBytes = 4 * 1024 * 1024;
 export const maximumReadLimitBytes = 8 * 1024 * 1024;
 const writeDeadline = Duration.seconds(30);
 const writeLimitBytes = 256 * 1024;
-
 function encode(args: {
   readonly request: RequestSpec;
   readonly write: false;
@@ -160,7 +152,6 @@ function encode(args: {
     return HttpClientRequest.make(args.request.method)(url, { headers, body });
   });
 }
-
 function readCrumb(
   cookie: Redacted.Redacted<string>,
 ): Effect.Effect<string, Unauthorized | Forbidden | YahooNotSent | YahooParseError, HttpClient> {
@@ -255,7 +246,6 @@ function readCrumb(
     return crumb;
   });
 }
-
 function decode(
   args: DecodeArgs<unknown, unknown> & { readonly write: false },
 ): Effect.Effect<unknown, YahooReadError>;
@@ -349,7 +339,6 @@ function decode(
     );
   });
 }
-
 function readBody(
   response: HttpClientResponse.HttpClientResponse,
   operation: string,
@@ -391,7 +380,6 @@ function readBody(
     ),
   );
 }
-
 function effectBody(
   response: HttpClientResponse.HttpClientResponse,
   deadline: Duration.Duration,
@@ -408,7 +396,6 @@ function effectBody(
     })),
   );
 }
-
 function requestUrl(request: RequestSpec, crumb: string): Effect.Effect<string, YahooParseError> {
   return Effect.gen(function* () {
     if (
@@ -435,16 +422,14 @@ function requestUrl(request: RequestSpec, crumb: string): Effect.Effect<string, 
     return url.toString();
   });
 }
-
 function parseJson(text: string): unknown {
   try {
-    const value: unknown = JSON.parse(text);
+    const value: unknown = jsonValue(text);
     return value;
   } catch {
     return undefined;
   }
 }
-
 function crumbOf(text: string): string | undefined {
   const payload = parseJson(text);
   if (!isRecord(payload) || !isRecord(payload["service"])) {
@@ -455,7 +440,6 @@ function crumbOf(text: string): string | undefined {
     ? EffectString.trim(crumb)
     : undefined;
 }
-
 function statusFailure(status: number, message: string | undefined): StatusErrors | undefined {
   switch (status) {
     case 400:
@@ -517,7 +501,6 @@ function statusFailure(status: number, message: string | undefined): StatusError
       return undefined;
   }
 }
-
 function providerMessage(
   text: string,
 ): { readonly text: string; readonly structured: boolean } | undefined {
@@ -540,7 +523,6 @@ function providerMessage(
     ? undefined
     : { text: withoutProviderSecrets(statement), structured: false };
 }
-
 function jsonMessage(payload: unknown): string | undefined {
   if (!isRecord(payload)) {
     return undefined;
@@ -565,7 +547,6 @@ function jsonMessage(payload: unknown): string | undefined {
   }
   return undefined;
 }
-
 function statementText(value: string): string | undefined {
   const cleaned = EffectString.trim(
     EffectString.replace(
@@ -588,7 +569,6 @@ function statementText(value: string): string | undefined {
   );
   return cleaned.length === 0 ? undefined : cleaned;
 }
-
 function withoutProviderSecrets(text: string): string {
   return EffectString.replace(
     EffectString.replace(
@@ -600,7 +580,6 @@ function withoutProviderSecrets(text: string): string {
     "<crumb><redacted></crumb>",
   );
 }
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !EffectArray.isArray(value);
 }

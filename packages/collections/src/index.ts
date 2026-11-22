@@ -166,6 +166,14 @@ export function optionalStringValue<A extends string, B>(
   return value === undefined || value === null ? undefined : f(value);
 }
 
+export function jsonString(value: unknown, replacer: null = null, space?: string | number): string {
+  return JSON.stringify(value, replacer, space);
+}
+
+export function jsonValue<T = unknown>(text: string): T {
+  return JSON.parse(text) as T;
+}
+
 export function recordKeys(self: object): string[] {
   return Object.keys(self);
 }

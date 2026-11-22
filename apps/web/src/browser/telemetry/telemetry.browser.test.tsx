@@ -1,5 +1,6 @@
 import { EffectArray } from "@lineupkeep/collections";
 import { EffectString } from "@lineupkeep/collections";
+import { jsonString } from "@lineupkeep/collections";
 import { render } from "@solidjs/web";
 import { createServerReference } from "@solidjs/web/server-functions/client";
 import { Errored, OBSERVE, createSignal, flush } from "solid-js";
@@ -10,77 +11,59 @@ import { page } from "vitest/browser";
 import type { TelemetryReportData } from "#contracts/telemetry/telemetryContract.ts";
 
 import { installClientTelemetry } from "./telemetry";
-
 it("collects private-safe reactive records without verbose console logs", async () => {
   using fixture = setup();
-
   await page.getByRole("button", { name: "Private draft before", exact: true }).click();
   await expect.element(page.getByRole("button", { name: "Private draft after" })).toBeVisible();
-
   expect(fixture.records.length).toBeGreaterThan(0);
-  expect(JSON.stringify([...fixture.records, ...fixture.events])).not.toContain("Private draft");
+  expect(jsonString([...fixture.records, ...fixture.events])).not.toContain("Private draft");
   expect(
     EffectArray.filter(fixture.consoleOutput, (line) => EffectString.includes(line, "[why-run]")),
   ).toEqual([]);
-
   fixture.telemetry[Symbol.dispose]();
   await page.getByRole("button", { name: "Private draft after", exact: true }).click();
-
   await expect
-    .poll(() => JSON.stringify([...fixture.records, ...fixture.events]))
+    .poll(() => jsonString([...fixture.records, ...fixture.events]))
     .toContain("Private draft");
 });
-
 it("stops reporting real calls and interactions after disposal without retaining old subscriptions", async () => {
   using first = setup();
-
   await page.getByRole("button", { name: "Private draft before", exact: true }).click();
   await first.call();
-
   await expect
     .poll(() => EffectArray.map(first.reports, (report) => report.kind).sort())
     .toEqual(["slow_call", "slow_interaction"]);
   first.telemetry[Symbol.dispose]();
   const reported = [...first.reports];
   const observed = first.events.length;
-
   await page.getByRole("button", { name: "Private draft after", exact: true }).click();
   await first.call();
-
   await expect.poll(() => first.events.length).toBeGreaterThan(observed + 1);
   expect(first.reports).toEqual(reported);
   first[Symbol.dispose]();
   const records = [...first.records];
-
   using later = setup();
   await page.getByRole("button", { name: "Private draft before", exact: true }).click();
   await later.call();
-
   await expect
     .poll(() => EffectArray.map(later.reports, (report) => report.kind).sort())
     .toEqual(["slow_call", "slow_interaction"]);
   expect(first.reports).toEqual(reported);
   expect(first.records).toEqual(records);
 });
-
 it("clears its exclusive client error registration when disposed", () => {
   using first = setup();
   first.fail();
-
   expect(EffectArray.map(first.reports, (report) => report.kind)).toEqual(["client_error"]);
   first.telemetry[Symbol.dispose]();
   first.fail();
-
   expect(EffectArray.map(first.reports, (report) => report.kind)).toEqual(["client_error"]);
   first[Symbol.dispose]();
-
   using later = setup();
   later.fail();
-
   expect(EffectArray.map(later.reports, (report) => report.kind)).toEqual(["client_error"]);
   expect(EffectArray.map(first.reports, (report) => report.kind)).toEqual(["client_error"]);
 });
-
 function setup(): TelemetryFixture {
   using resources = new DisposableStack();
   const consoleOutput: string[] = [];
@@ -163,11 +146,9 @@ function setup(): TelemetryFixture {
     [Symbol.dispose]: () => owned.dispose(),
   };
 }
-
 function Failure(): never {
   throw new Error("Private failure");
 }
-
 type TelemetryFixture = Disposable & {
   readonly consoleOutput: string[];
   readonly records: unknown[];

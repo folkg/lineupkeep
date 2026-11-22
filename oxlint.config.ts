@@ -489,7 +489,7 @@ const correctnessRules = {
   "effecttsgo/missing-concurrency-option": "error",
   "effecttsgo/global-json-in-effect": "error",
   "effecttsgo/prefer-effect-array": "error",
-  "effecttsgo/global-json": "off",
+  "effecttsgo/global-json": "error",
   "effecttsgo/map-map-error-to-map-both": "off",
   "effecttsgo/missed-pipeable-opportunity": "off",
   "effecttsgo/prefer-schema-tagged-error": "off",
@@ -507,7 +507,6 @@ const correctnessRules = {
 const disabledEffectRules = new Set(["effecttsgo/api-stability-leak"]);
 
 const pendingEffectRules = new Set([
-  "effecttsgo/global-json",
   "effecttsgo/map-map-error-to-map-both",
   "effecttsgo/missed-pipeable-opportunity",
   "effecttsgo/effect-try-without-catch",
@@ -910,6 +909,7 @@ export default defineConfig({
         "effecttsgo/prefer-effect-array": "off",
         "effecttsgo/prefer-effect-string": "off",
         "effecttsgo/prefer-effect-record": "off",
+        "effecttsgo/global-json": "off",
         "typescript/no-unsafe-type-assertion": "off",
       },
     },

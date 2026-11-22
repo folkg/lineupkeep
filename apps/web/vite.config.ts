@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import cloudflare from "@alchemy.run/cloudflare-runtime/vite";
 import { EffectString } from "@lineupkeep/collections";
+import { jsonString } from "@lineupkeep/collections";
 import solidPlugin from "@solidjs/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/solid-start/plugin/vite";
@@ -14,7 +15,6 @@ import { defineConfig, type PluginOption } from "vite";
 
 import { cloudflareCompatibility, workerConfiguration } from "./deploy/cloudflare/settings.ts";
 import { clientBoundary } from "./deploy/verifyComposition.ts";
-
 const deploymentTargets = {
   cloudflare: {
     module: "./src/server/targets/cloudflare.ts",
@@ -34,7 +34,7 @@ const deploymentTargets = {
           this.emitFile({
             type: "asset",
             fileName: "worker-configuration.json",
-            source: JSON.stringify(workerConfiguration("server.js")),
+            source: jsonString(workerConfiguration("server.js")),
           });
         },
       },
@@ -60,10 +60,8 @@ const deploymentTargets = {
     ],
   },
 } satisfies Record<string, DeploymentTargetBuild>;
-
 export default defineConfig(({ command }) => {
   const target = readDeploymentTarget(command);
-
   return {
     envDir: process.env["BUILD_WITHOUT_DOTENV"] === "true" ? false : "../..",
     ...(command === "serve" && process.env["DEVELOPMENT_STACK"] === "true"
@@ -92,7 +90,6 @@ export default defineConfig(({ command }) => {
     resolve: {
       alias: {
         "solid-js/store": "solid-js",
-
         ...(process.env["E2E_TEST_COMPOSITION"] === "true"
           ? {
               "#backend-runtime": new URL("../../e2e/testRuntime.ts", import.meta.url).pathname,
@@ -110,9 +107,7 @@ export default defineConfig(({ command }) => {
     },
   };
 });
-
 const hostedBrowserUpgradeServers = new WeakSet<object>();
-
 function hostedBrowserStreamPlugin(): PluginOption {
   return {
     name: "lineupkeep:hosted-browser-stream",
@@ -160,30 +155,24 @@ function hostedBrowserStreamPlugin(): PluginOption {
     },
   };
 }
-
 type HostedLinkingStream = {
   readonly hostedLinkingHooks: (
     request: Request,
     sessionId: string,
   ) => Promise<Record<string, unknown>>;
 };
-
 type Runner = {
   readonly import: (id: string) => Promise<unknown>;
 };
-
 function isRunner(value: unknown): value is Runner {
   return isRecord(value) && typeof value["import"] === "function";
 }
-
 function isHostedLinkingStream(value: unknown): value is HostedLinkingStream {
   return isRecord(value) && typeof value["hostedLinkingHooks"] === "function";
 }
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
-
 function upgradeRequest(request: IncomingMessage): Request {
   const headers = new Headers();
   for (const [name, value] of Object.entries(request.headers)) {
@@ -196,7 +185,6 @@ function upgradeRequest(request: IncomingMessage): Request {
     headers,
   });
 }
-
 function readDeploymentTarget(command: "build" | "serve"): DeploymentTargetBuild | undefined {
   const name = process.env["DEPLOY_TARGET"];
   if (name === undefined || name === "") {
@@ -210,15 +198,12 @@ function readDeploymentTarget(command: "build" | "serve"): DeploymentTargetBuild
   }
   return deploymentTargets[name];
 }
-
 function isDeploymentTargetName(name: string): name is keyof typeof deploymentTargets {
   return Object.hasOwn(deploymentTargets, name);
 }
-
 function targetNames(): string {
   return EffectArray.join(Object.keys(deploymentTargets), ", ");
 }
-
 type DeploymentTargetBuild = {
   readonly module: string;
   readonly beforeStart: () => Array<PluginOption>;

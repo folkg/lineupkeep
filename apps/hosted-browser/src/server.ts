@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import type { ServerResponse } from "node:http";
 
+import { jsonString } from "@lineupkeep/collections";
 import { createHostedBrowser, type HostedBrowserHandle } from "@lineupkeep/hosted-browser/browser";
 import {
   verifyHostedBrowserDescriptor,
@@ -16,13 +17,11 @@ import {
 } from "@lineupkeep/hosted-browser/protocol";
 import { WebSocketServer, WebSocket } from "ws";
 import type { RawData } from "ws";
-
 const descriptorTimeoutMillis = 5_000;
 const shutdownTimeoutMillis = 4_000;
 const maximumInputMessages = 2_000;
 const maximumPendingInputs = 64;
 const sessionPath = "/session";
-
 export type HostedBrowserServiceOptions = {
   readonly descriptorKey: string;
   readonly fixtureOrigin?: string;
@@ -30,12 +29,10 @@ export type HostedBrowserServiceOptions = {
   readonly chromiumSandbox?: boolean;
   readonly log?: (event: HostedBrowserSessionEvent) => void;
 };
-
 export type HostedBrowserService = {
   readonly listen: (port: number) => Promise<number>;
   readonly close: () => Promise<void>;
 };
-
 type HostedBrowserSessionOutcome =
   | "captured"
   | "cancelled"
@@ -43,7 +40,6 @@ type HostedBrowserSessionOutcome =
   | "failed"
   | "rejected"
   | "shutdown";
-
 export type HostedBrowserSessionEvent = {
   readonly event: "hosted_browser.session";
   readonly outcome: HostedBrowserSessionOutcome;
@@ -52,7 +48,6 @@ export type HostedBrowserSessionEvent = {
   readonly failure?: HostedBrowserFailure;
   readonly refused?: ReadonlyArray<EgressRefusal>;
 };
-
 export function createHostedBrowserService(
   options: HostedBrowserServiceOptions,
 ): HostedBrowserService {
@@ -67,7 +62,6 @@ export function createHostedBrowserService(
   const pendingCloses = new Set<Promise<void>>();
   const pendingSessions = new Set<Promise<void>>();
   let shuttingDown = false;
-
   const server = createServer((request, response) => {
     if (request.method === "GET" && request.url === "/healthz") {
       respond(response, 200, { status: shuttingDown ? "stopping" : "ready" });
@@ -75,7 +69,6 @@ export function createHostedBrowserService(
     }
     respond(response, 404, { status: "not_found" });
   });
-
   server.on("upgrade", (request, socket, head) => {
     const pathname = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
     if (pathname !== sessionPath || shuttingDown) {
@@ -86,11 +79,9 @@ export function createHostedBrowserService(
       sockets.emit("connection", peer, request);
     });
   });
-
   sockets.on("connection", (peer) => {
     acceptSession(peer);
   });
-
   function acceptSession(peer: WebSocket): void {
     const startedAt = Date.now();
     const reject = (outcome: HostedBrowserSessionOutcome, code: number, reason: string): void => {
@@ -101,7 +92,6 @@ export function createHostedBrowserService(
       reject("rejected", 1008, "Session descriptor required");
     }, descriptorTimeoutMillis);
     peer.once("close", () => clearTimeout(descriptorTimer));
-
     peer.once("message", (data: RawData, isBinary: boolean) => {
       clearTimeout(descriptorTimer);
       const text = isBinary ? undefined : textOf(data);
@@ -134,7 +124,6 @@ export function createHostedBrowserService(
       void session.finally(() => pendingSessions.delete(session));
     });
   }
-
   async function runSession(
     peer: WebSocket,
     descriptor: HostedBrowserDescriptor,
@@ -162,7 +151,6 @@ export function createHostedBrowserService(
       },
     };
     live = liveSession;
-
     const settle = (outcome: HostedBrowserSessionOutcome, failure?: HostedBrowserFailure): void => {
       if (terminal !== undefined) {
         return;
@@ -186,7 +174,6 @@ export function createHostedBrowserService(
         peer.send(encodeTransportMessage(message));
       }
     };
-
     peer.on("message", (data, isBinary) => {
       inputCount++;
       if (inputCount > maximumInputMessages) {
@@ -220,7 +207,6 @@ export function createHostedBrowserService(
       settle("cancelled");
       void closeHandle();
     });
-
     try {
       handle = await browser.open(
         {
@@ -277,7 +263,6 @@ export function createHostedBrowserService(
       handleReady.resolve();
     }
   }
-
   return {
     listen: (port) =>
       new Promise<number>((resolve, reject) => {
@@ -318,9 +303,8 @@ export function createHostedBrowserService(
     },
   };
 }
-
 function respond(response: ServerResponse, status: number, body: unknown): void {
-  const payload = JSON.stringify(body);
+  const payload = jsonString(body);
   response.writeHead(status, {
     "cache-control": "no-store",
     "content-type": "application/json; charset=utf-8",
@@ -328,11 +312,9 @@ function respond(response: ServerResponse, status: number, body: unknown): void 
   });
   response.end(payload);
 }
-
 function writeLog(event: HostedBrowserSessionEvent): void {
-  console.log(JSON.stringify(event));
+  console.log(jsonString(event));
 }
-
 function textOf(data: RawData): string | undefined {
   if (typeof data === "string") {
     return data;
@@ -345,7 +327,6 @@ function textOf(data: RawData): string | undefined {
   }
   return undefined;
 }
-
 type LiveSession = {
   readonly sessionId: string;
   readonly startedAt: number;

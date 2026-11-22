@@ -2,6 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { Redacted } from "effect";
 import { Array as EffectArray } from "effect";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 import { EffectString } from "#yahoo/stringTools.ts";
 
@@ -40,11 +41,8 @@ import {
 } from "./fixturesTest.ts";
 import * as Yahoo from "./index.ts";
 import { jsonResponse, recordingClient, testLayer, textResponse } from "./testSupportTest.ts";
-
 const session: YahooSession = { cookie: Redacted.make("T=test-session; Y=test-user") };
-
 type WithSession<T> = T & { readonly session?: YahooSession };
-
 const client = {
   validateSession: (input: { readonly session?: YahooSession }) => Yahoo.session.validate(input),
   readLeagueSettings: (input: WithSession<Yahoo.leagues.SettingsRequest>) =>
@@ -80,12 +78,10 @@ const client = {
   respondTrade: (input: WithSession<Yahoo.trades.RespondRequest>) => Yahoo.trades.respond(input),
   withdrawTrade: (input: WithSession<Yahoo.trades.WithdrawRequest>) => Yahoo.trades.withdraw(input),
 };
-
 it.effect("validates a session with one exact read request", () => {
   const recording = recordingClient(() => jsonResponse(sessionPayload));
   return Effect.gen(function* () {
     yield* client.validateSession({ session });
-
     const call = recording.calls[0];
     if (call === undefined) {
       return yield* Effect.die("expected one request");
@@ -98,21 +94,17 @@ it.effect("validates a session with one exact read request", () => {
     assert.strictEqual(call.headers["cookie"], "T=test-session; Y=test-user");
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("rejects a session the provider answers with no user", () => {
   const recording = recordingClient(() => jsonResponse({ fantasy_content: { users: [] } }));
   return Effect.gen(function* () {
     const error = yield* Effect.flip(client.validateSession({ session }));
-
     assert.strictEqual(error._tag, "Unauthorized");
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reads league settings into named slots, categories, and modifiers", () => {
   const recording = recordingClient(() => jsonResponse(leagueSettingsPayload));
   return Effect.gen(function* () {
     const league = yield* client.readLeagueSettings({ session, leagueKey: "466.l.4000" });
-
     const call = recording.calls[0];
     if (call === undefined) {
       return yield* Effect.die("expected one request");
@@ -143,12 +135,10 @@ it.effect("reads league settings into named slots, categories, and modifiers", (
     assert.strictEqual(league.settings.tradeRatifyType, "commish");
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reads the player-rank sample that travels with the league settings", () => {
   const recording = recordingClient(() => jsonResponse(leagueSettingsWithPlayerRanks));
   return Effect.gen(function* () {
     const league = yield* client.readLeagueSettings({ session, leagueKey: "466.l.4000" });
-
     assert.deepStrictEqual(league.playerRankSample, [
       {
         playerKey: "466.p.20001",
@@ -180,26 +170,22 @@ it.effect("reads the player-rank sample that travels with the league settings", 
     );
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("keeps declared zero acquisition limits and leaves zero caps absent", () => {
   const recording = recordingClient(() => jsonResponse(leagueSettingsWithZeroLimits));
   return Effect.gen(function* () {
     const league = yield* client.readLeagueSettings({ session, leagueKey: "466.l.4000" });
-
     assert.strictEqual(league.settings.maxWeeklyAdds, 0);
     assert.strictEqual(league.settings.maxAdds, 0);
     assert.isUndefined(league.settings.maxGamesPlayed);
     assert.isUndefined(league.settings.maxInningsPitched);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reports a partially published week window by field", () => {
   const recording = recordingClient(() => jsonResponse(leagueSettingsWithPartialWeekWindow));
   return Effect.gen(function* () {
     const error = yield* Effect.flip(
       client.readLeagueSettings({ session, leagueKey: "466.l.4000" }),
     );
-
     assert.strictEqual(error._tag, "YahooParseError");
     assert.strictEqual(
       error._tag === "YahooParseError" ? error.field : undefined,
@@ -207,12 +193,10 @@ it.effect("reports a partially published week window by field", () => {
     );
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reads head-to-head standings with record, points, usage, and streak", () => {
   const recording = recordingClient(() => jsonResponse(standingsPayload));
   return Effect.gen(function* () {
     const standings = yield* client.readStandings({ session, leagueKey: "466.l.4000" });
-
     const call = recording.calls[0];
     if (call === undefined) {
       return yield* Effect.die("expected one request");
@@ -254,12 +238,10 @@ it.effect("reads head-to-head standings with record, points, usage, and streak",
     });
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reads rotisserie standings with category totals and published points", () => {
   const recording = recordingClient(() => jsonResponse(rotoStandingsPayload));
   return Effect.gen(function* () {
     const standings = yield* client.readStandings({ session, leagueKey: "466.l.4002" });
-
     const first = standings.teams[0];
     if (first === undefined) {
       return yield* Effect.die("expected a standing");
@@ -290,12 +272,10 @@ it.effect("reads rotisserie standings with category totals and published points"
     assert.deepStrictEqual(first.categoryPoints.at(-1), { statId: 26, value: 10 });
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("rejects standings for another league", () => {
   const recording = recordingClient(() => jsonResponse(standingsPayload));
   return Effect.gen(function* () {
     const error = yield* Effect.flip(client.readStandings({ session, leagueKey: "466.l.4999" }));
-
     assert.strictEqual(error._tag, "YahooParseError");
     assert.strictEqual(
       error._tag === "YahooParseError" ? error.field : undefined,
@@ -303,17 +283,14 @@ it.effect("rejects standings for another league", () => {
     );
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("rejects standings with no teams", () => {
   const recording = recordingClient(() => jsonResponse(emptyStandingsPayload));
   return Effect.gen(function* () {
     const error = yield* Effect.flip(client.readStandings({ session, leagueKey: "466.l.4000" }));
-
     assert.strictEqual(error._tag, "YahooParseError");
     assert.isUndefined(error._tag === "YahooParseError" ? error.field : undefined);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reads a week roster with coverage, starting status, and injury facts", () => {
   const recording = recordingClient(() => jsonResponse(rosterPayload));
   return Effect.gen(function* () {
@@ -322,7 +299,6 @@ it.effect("reads a week roster with coverage, starting status, and injury facts"
       teamKey: "466.l.4000.t.1",
       coverage: { type: "week", week: 6 },
     });
-
     const call = recording.calls[0];
     if (call === undefined) {
       return yield* Effect.die("expected one request");
@@ -334,7 +310,6 @@ it.effect("reads a week roster with coverage, starting status, and injury facts"
     assert.deepStrictEqual(roster.coverage, { type: "week", week: 6 });
     assert.strictEqual(roster.editable, true);
     assert.strictEqual(roster.players.length, 3);
-
     const starter = roster.players[0];
     const reserve = roster.players[1];
     const emptySlot = roster.players[2];
@@ -368,7 +343,6 @@ it.effect("reads a week roster with coverage, starting status, and injury facts"
     assert.strictEqual(emptySlot.startingStatus, undefined);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reports a roster whose coverage differs from the requested week", () => {
   const recording = recordingClient(() => jsonResponse(rosterPayload));
   return Effect.gen(function* () {
@@ -379,7 +353,6 @@ it.effect("reports a roster whose coverage differs from the requested week", () 
         coverage: { type: "week", week: 7 },
       }),
     );
-
     assert.strictEqual(error._tag, "YahooCoverageMismatch");
     if (error._tag === "YahooCoverageMismatch") {
       assert.deepStrictEqual(error.requested, { type: "week", week: 7 });
@@ -387,7 +360,6 @@ it.effect("reports a roster whose coverage differs from the requested week", () 
     }
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reads a date roster and keeps the provider's date coverage", () => {
   const recording = recordingClient(() => jsonResponse(datedRosterPayload));
   return Effect.gen(function* () {
@@ -396,7 +368,6 @@ it.effect("reads a date roster and keeps the provider's date coverage", () => {
       teamKey: "466.l.4002.t.3",
       coverage: { type: "date", date: "2026-10-17" },
     });
-
     const call = recording.calls[0];
     if (call === undefined) {
       return yield* Effect.die("expected one request");
@@ -414,12 +385,10 @@ it.effect("reads a date roster and keeps the provider's date coverage", () => {
     assert.strictEqual(roster.players[0]?.proTeamKey, "nhl.t.17");
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reads every team's roster in one league with the team roster's player rows", () => {
   const recording = recordingClient(() => jsonResponse(leagueRostersPayload));
   return Effect.gen(function* () {
     const rosters = yield* client.readLeagueRosters({ session, leagueKey: "466.l.4000" });
-
     const call = recording.calls[0];
     if (call === undefined) {
       return yield* Effect.die("expected one request");
@@ -449,7 +418,6 @@ it.effect("reads every team's roster in one league with the team roster's player
         },
       ],
     );
-
     const [starter, reserve] = rosters.teams[0]?.players ?? [];
     if (starter === undefined || reserve === undefined) {
       return yield* Effect.die("expected two players on the first team");
@@ -470,7 +438,6 @@ it.effect("reads every team's roster in one league with the team roster's player
     assert.strictEqual(reserve.opponent, null);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("refuses league rosters that name another league", () => {
   const recording = recordingClient(() =>
     jsonResponse(leagueRostersWithTeams([rosterTeam("466.l.4001.t.1")], "466.l.4001")),
@@ -479,11 +446,9 @@ it.effect("refuses league rosters that name another league", () => {
     const error = yield* Effect.flip(
       client.readLeagueRosters({ session, leagueKey: "466.l.4000" }),
     );
-
     assert.strictEqual(error._tag, "YahooParseError");
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("refuses league rosters with a team key from another league", () => {
   const recording = recordingClient(() =>
     jsonResponse(leagueRostersWithTeams([rosterTeam("466.l.4001.t.1")])),
@@ -492,14 +457,12 @@ it.effect("refuses league rosters with a team key from another league", () => {
     const error = yield* Effect.flip(
       client.readLeagueRosters({ session, leagueKey: "466.l.4000" }),
     );
-
     assert.strictEqual(error._tag, "YahooParseError");
     if (error._tag === "YahooParseError") {
       assert.strictEqual(error.field, "league.teams.team_key");
     }
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("refuses league rosters that publish the same team twice", () => {
   const recording = recordingClient(() =>
     jsonResponse(
@@ -513,14 +476,12 @@ it.effect("refuses league rosters that publish the same team twice", () => {
     const error = yield* Effect.flip(
       client.readLeagueRosters({ session, leagueKey: "466.l.4000" }),
     );
-
     assert.strictEqual(error._tag, "YahooParseError");
     if (error._tag === "YahooParseError") {
       assert.strictEqual(error.field, "league.teams.team_key");
     }
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("refuses league rosters whose teams disagree on coverage", () => {
   const recording = recordingClient(() =>
     jsonResponse(
@@ -534,20 +495,17 @@ it.effect("refuses league rosters whose teams disagree on coverage", () => {
     const error = yield* Effect.flip(
       client.readLeagueRosters({ session, leagueKey: "466.l.4000" }),
     );
-
     assert.strictEqual(error._tag, "YahooParseError");
     if (error._tag === "YahooParseError") {
       assert.strictEqual(error.field, "league.teams.roster.coverage");
     }
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("refuses a league roster read with no teams or an empty roster", () => {
   const empty = leagueRostersWithTeams([]);
   const emptyRoster = leagueRostersWithTeams([
     rosterTeam("466.l.4000.t.1", "Synthetic Team", 6, []),
   ]);
-
   return Effect.gen(function* () {
     const noTeams = yield* Effect.flip(
       client
@@ -555,7 +513,6 @@ it.effect("refuses a league roster read with no teams or an empty roster", () =>
         .pipe(Effect.provide(testLayer(recordingClient(() => jsonResponse(empty)).client))),
     );
     assert.strictEqual(noTeams._tag, "YahooParseError");
-
     const noPlayers = yield* Effect.flip(
       client
         .readLeagueRosters({ session, leagueKey: "466.l.4000" })
@@ -564,30 +521,25 @@ it.effect("refuses a league roster read with no teams or an empty roster", () =>
     assert.strictEqual(noPlayers._tag, "YahooParseError");
   });
 });
-
 it.effect("accepts a league roster answer above the default read bound", () => {
   const recording = recordingClient(() => jsonResponse(leagueRostersPadded(5 * 1024 * 1024)));
   return Effect.gen(function* () {
     const rosters = yield* client.readLeagueRosters({ session, leagueKey: "466.l.4000" });
-
     assert.strictEqual(rosters.teams.length, 2);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("refuses a league roster answer above its own read bound", () => {
   const recording = recordingClient(() => jsonResponse(leagueRostersPadded(9 * 1024 * 1024)));
   return Effect.gen(function* () {
     const error = yield* Effect.flip(
       client.readLeagueRosters({ session, leagueKey: "466.l.4000" }),
     );
-
     assert.strictEqual(error._tag, "YahooHttpError");
     if (error._tag === "YahooHttpError") {
       assert.include(error.message, "exceeded");
     }
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reads season player details with ownership and missing stats preserved as null", () => {
   const recording = recordingClient(() => jsonResponse(seasonPlayerDetailsPayload));
   return Effect.gen(function* () {
@@ -597,7 +549,6 @@ it.effect("reads season player details with ownership and missing stats preserve
       playerKeys: ["466.p.20001"],
       stats: { type: "season" },
     });
-
     const call = recording.calls[0];
     if (call === undefined) {
       return yield* Effect.die("expected one request");
@@ -632,7 +583,6 @@ it.effect("reads season player details with ownership and missing stats preserve
     ]);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reads week player details with percent owned and started values", () => {
   const recording = recordingClient(() => jsonResponse(weekPlayerDetailsPayload));
   return Effect.gen(function* () {
@@ -642,7 +592,6 @@ it.effect("reads week player details with percent owned and started values", () 
       playerKeys: ["466.p.20001"],
       stats: { type: "week", week: 6 },
     });
-
     const call = recording.calls[0];
     if (call === undefined) {
       return yield* Effect.die("expected one request");
@@ -672,7 +621,6 @@ it.effect("reads week player details with percent owned and started values", () 
     assert.deepStrictEqual(details[0]?.ranks, [{ type: "OR", value: 11, season: undefined }]);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reads requested player fields, rank types, and cut types", () => {
   const recording = recordingClient(() => jsonResponse(playerFactsPayload));
   return Effect.gen(function* () {
@@ -684,7 +632,6 @@ it.effect("reads requested player fields, rank types, and cut types", () => {
       ranks: ["projected_week", "last4weeks"],
       percentStartedCutTypes: ["diamond"],
     });
-
     const call = recording.calls[0];
     if (call === undefined) {
       return yield* Effect.die("expected one request");
@@ -711,7 +658,6 @@ it.effect("reads requested player fields, rank types, and cut types", () => {
     assert.strictEqual(details[0]?.opponent, "@SEA");
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reports a player-stat week that differs from the requested week", () => {
   const recording = recordingClient(() => jsonResponse(weekPlayerDetailsForAnotherWeek));
   return Effect.gen(function* () {
@@ -723,7 +669,6 @@ it.effect("reports a player-stat week that differs from the requested week", () 
         stats: { type: "week", week: 6 },
       }),
     );
-
     assert.strictEqual(error._tag, "YahooCoverageMismatch");
     if (error._tag === "YahooCoverageMismatch") {
       assert.deepStrictEqual(error.requested, { type: "week", week: 6 });
@@ -731,7 +676,6 @@ it.effect("reports a player-stat week that differs from the requested week", () 
     }
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("refuses more player keys than one detail read accepts", () => {
   const recording = recordingClient(() => jsonResponse(weekPlayerDetailsPayload));
   const playerKeys = Array.from({ length: 26 }, (_, index) => `466.p.${String(index + 20_000)}`);
@@ -744,12 +688,10 @@ it.effect("refuses more player keys than one detail read accepts", () => {
         stats: { type: "week", week: 6 },
       }),
     );
-
     assert.strictEqual(error._tag, "YahooRequestInvalid");
     assert.strictEqual(recording.calls.length, 0);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reads matchups with both team scores and category winners", () => {
   const recording = recordingClient(() => jsonResponse(matchupsPayload));
   return Effect.gen(function* () {
@@ -758,7 +700,6 @@ it.effect("reads matchups with both team scores and category winners", () => {
       leagueKey: "466.l.4000",
       week: 6,
     });
-
     const call = recording.calls[0];
     if (call === undefined) {
       return yield* Effect.die("expected one request");
@@ -799,26 +740,22 @@ it.effect("reads matchups with both team scores and category winners", () => {
     ]);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reports a scoreboard week that differs from the requested week", () => {
   const recording = recordingClient(() => jsonResponse(matchupsPayload));
   return Effect.gen(function* () {
     const error = yield* Effect.flip(
       client.readMatchups({ session, leagueKey: "466.l.4000", week: 7 }),
     );
-
     assert.strictEqual(error._tag, "YahooCoverageMismatch");
     if (error._tag === "YahooCoverageMismatch") {
       assert.deepStrictEqual(error.covered, { type: "week", week: 6 });
     }
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reads draft results with the optional player name", () => {
   const recording = recordingClient(() => jsonResponse(draftResultsPayload));
   return Effect.gen(function* () {
     const picks = yield* client.readDraftResults({ session, leagueKey: "466.l.4000" });
-
     const call = recording.calls[0];
     if (call === undefined) {
       return yield* Effect.die("expected one request");
@@ -839,7 +776,6 @@ it.effect("reads draft results with the optional player name", () => {
     ]);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reads a team's games-played allowance by position", () => {
   const recording = recordingClient(() => jsonResponse(teamGamesPlayedPayload));
   return Effect.gen(function* () {
@@ -848,7 +784,6 @@ it.effect("reads a team's games-played allowance by position", () => {
       leagueKey: "466.l.4000",
       teamKey: "466.l.4000.t.1",
     });
-
     const call = recording.calls[0];
     if (call === undefined) {
       return yield* Effect.die("expected one request");
@@ -873,7 +808,6 @@ it.effect("reads a team's games-played allowance by position", () => {
     ]);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("refuses a games-played answer for another league", () => {
   const recording = recordingClient(() => jsonResponse(teamGamesPlayedForAnotherLeaguePayload));
   return Effect.gen(function* () {
@@ -884,7 +818,6 @@ it.effect("refuses a games-played answer for another league", () => {
         teamKey: "466.l.4000.t.1",
       }),
     );
-
     assert.strictEqual(error._tag, "YahooParseError");
     assert.strictEqual(
       error._tag === "YahooParseError" ? error.field : undefined,
@@ -892,7 +825,6 @@ it.effect("refuses a games-played answer for another league", () => {
     );
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("refuses a games-played answer that omits the requested team", () => {
   const recording = recordingClient(() => jsonResponse(teamGamesPlayedWithoutTeamPayload));
   return Effect.gen(function* () {
@@ -903,7 +835,6 @@ it.effect("refuses a games-played answer that omits the requested team", () => {
         teamKey: "466.l.4000.t.1",
       }),
     );
-
     assert.strictEqual(error._tag, "YahooParseError");
     assert.strictEqual(
       error._tag === "YahooParseError" ? error.field : undefined,
@@ -911,7 +842,6 @@ it.effect("refuses a games-played answer that omits the requested team", () => {
     );
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("refuses a games-played team key from another league before sending", () => {
   const recording = recordingClient(() => jsonResponse(teamGamesPlayedPayload));
   return Effect.gen(function* () {
@@ -922,12 +852,10 @@ it.effect("refuses a games-played team key from another league before sending", 
         teamKey: "466.l.4001.t.1",
       }),
     );
-
     assert.strictEqual(error._tag, "YahooRequestInvalid");
     assert.deepStrictEqual(recording.calls, []);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reads available draft picks from the app read host, per team", () => {
   const recording = recordingClient(() => jsonResponse(availableDraftPicksPayload));
   return Effect.gen(function* () {
@@ -936,7 +864,6 @@ it.effect("reads available draft picks from the app read host, per team", () => 
       leagueKey: "466.l.4001",
       teamKeys: ["466.l.4001.t.1"],
     });
-
     const call = recording.calls[0];
     if (call === undefined) {
       return yield* Effect.die("expected one request");
@@ -958,7 +885,6 @@ it.effect("reads available draft picks from the app read host, per team", () => 
     ]);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reads one pick list per requested team in one app read", () => {
   const recording = recordingClient(() => jsonResponse(availableDraftPicksForTwoTeamsPayload));
   return Effect.gen(function* () {
@@ -967,7 +893,6 @@ it.effect("reads one pick list per requested team in one app read", () => {
       leagueKey: "466.l.4001",
       teamKeys: ["466.l.4001.t.1", "466.l.4001.t.2"],
     });
-
     const call = recording.calls[0];
     if (call === undefined) {
       return yield* Effect.die("expected one request");
@@ -982,7 +907,6 @@ it.effect("reads one pick list per requested team in one app read", () => {
     ]);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("refuses an available draft pick answer that omits a requested team", () => {
   const recording = recordingClient(() => jsonResponse(availableDraftPicksWithoutOneTeamPayload));
   return Effect.gen(function* () {
@@ -993,12 +917,10 @@ it.effect("refuses an available draft pick answer that omits a requested team", 
         teamKeys: ["466.l.4001.t.1", "466.l.4001.t.2"],
       }),
     );
-
     assert.strictEqual(error._tag, "YahooParseError");
     assert.strictEqual(error._tag === "YahooParseError" ? error.field : undefined, "league.teams");
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("refuses a team that publishes no available draft picks", () => {
   const recording = recordingClient(() => jsonResponse(availableDraftPicksWithoutPicksPayload));
   return Effect.gen(function* () {
@@ -1009,7 +931,6 @@ it.effect("refuses a team that publishes no available draft picks", () => {
         teamKeys: ["466.l.4001.t.1"],
       }),
     );
-
     assert.strictEqual(error._tag, "YahooParseError");
     assert.strictEqual(
       error._tag === "YahooParseError" ? error.field : undefined,
@@ -1017,7 +938,6 @@ it.effect("refuses a team that publishes no available draft picks", () => {
     );
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("refuses available draft pick keys from another league before sending", () => {
   const recording = recordingClient(() => jsonResponse(availableDraftPicksPayload));
   return Effect.gen(function* () {
@@ -1028,12 +948,10 @@ it.effect("refuses available draft pick keys from another league before sending"
         teamKeys: ["466.l.4001.t.1", "466.l.4002.t.1"],
       }),
     );
-
     assert.strictEqual(error._tag, "YahooRequestInvalid");
     assert.deepStrictEqual(recording.calls, []);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reads transactions with instant timestamps and both movement sides", () => {
   const recording = recordingClient(() => jsonResponse(transactionsPayload));
   return Effect.gen(function* () {
@@ -1044,7 +962,6 @@ it.effect("reads transactions with instant timestamps and both movement sides", 
       limit: 50,
       offset: undefined,
     });
-
     const call = recording.calls[0];
     if (call === undefined) {
       return yield* Effect.die("expected one request");
@@ -1073,7 +990,6 @@ it.effect("reads transactions with instant timestamps and both movement sides", 
     });
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("publishes pending_trade as its own transaction type", () => {
   const recording = recordingClient(() => jsonResponse(pendingTradeAsTransactionPayload));
   return Effect.gen(function* () {
@@ -1084,11 +1000,9 @@ it.effect("publishes pending_trade as its own transaction type", () => {
       limit: 50,
       offset: undefined,
     });
-
     assert.strictEqual(transactions[0]?.type, "pending_trade");
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("filters transactions by an owned team and paginates with start", () => {
   const recording = recordingClient(() => jsonResponse(transactionsPayload));
   return Effect.gen(function* () {
@@ -1099,7 +1013,6 @@ it.effect("filters transactions by an owned team and paginates with start", () =
       limit: 10,
       offset: 20,
     });
-
     const call = recording.calls[0];
     if (call === undefined) {
       return yield* Effect.die("expected one request");
@@ -1110,7 +1023,6 @@ it.effect("filters transactions by an owned team and paginates with start", () =
     );
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("filters transactions to trades and keeps the provider's order", () => {
   const recording = recordingClient(() => jsonResponse(tradeTransactionsPayload));
   return Effect.gen(function* () {
@@ -1122,7 +1034,6 @@ it.effect("filters transactions to trades and keeps the provider's order", () =>
       offset: 20,
       type: "trade",
     });
-
     const call = recording.calls[0];
     if (call === undefined) {
       return yield* Effect.die("expected one request");
@@ -1140,7 +1051,6 @@ it.effect("filters transactions to trades and keeps the provider's order", () =>
     assert.strictEqual(transactions[0]?.players.length, 2);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("filters transactions by another type with its provider token", () => {
   const recording = recordingClient(() => jsonResponse(transactionsPayload));
   return Effect.gen(function* () {
@@ -1150,7 +1060,6 @@ it.effect("filters transactions by another type with its provider token", () => 
       limit: 50,
       type: "add_drop",
     });
-
     const call = recording.calls[0];
     if (call === undefined) {
       return yield* Effect.die("expected one request");
@@ -1165,7 +1074,6 @@ it.effect("filters transactions by another type with its provider token", () => 
     );
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("drops a non-trade row the provider returns for a trade filter", () => {
   const recording = recordingClient(() => jsonResponse(transactionsPayload));
   return Effect.gen(function* () {
@@ -1175,11 +1083,9 @@ it.effect("drops a non-trade row the provider returns for a trade filter", () =>
       limit: 50,
       type: "trade",
     });
-
     assert.deepStrictEqual(transactions, []);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reads pending trade offers with parties, note, and pick movement", () => {
   const recording = recordingClient(() => jsonResponse(pendingTradesPayload));
   return Effect.gen(function* () {
@@ -1188,7 +1094,6 @@ it.effect("reads pending trade offers with parties, note, and pick movement", ()
       leagueKey: "466.l.4000",
       teamKey: "466.l.4000.t.1",
     });
-
     const call = recording.calls[0];
     if (call === undefined) {
       return yield* Effect.die("expected one request");
@@ -1225,7 +1130,6 @@ it.effect("reads pending trade offers with parties, note, and pick movement", ()
     assert.strictEqual(offer.players[0]?.movement.kind, "pending_trade");
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("applies a native lineup action with the crumb handshake first", () => {
   const recording = recordingClient((call) =>
     EffectString.includes(call.url, "getCrumb")
@@ -1238,7 +1142,6 @@ it.effect("applies a native lineup action with the crumb handshake first", () =>
       teamKey: "466.l.4000.t.1",
       coverage: { type: "week", week: 6 },
     });
-
     assert.deepStrictEqual(result, { status: "accepted" });
     assert.strictEqual(recording.calls.length, 2);
     const crumb = recording.calls[0];
@@ -1262,7 +1165,6 @@ it.effect("applies a native lineup action with the crumb handshake first", () =>
     );
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("applies explicit assignments for a date and retains every listed player", () => {
   const recording = recordingClient((call) =>
     EffectString.includes(call.url, "getCrumb")
@@ -1279,7 +1181,6 @@ it.effect("applies explicit assignments for a date and retains every listed play
         { playerKey: "466.p.30002", slot: "BN" },
       ],
     });
-
     assert.deepStrictEqual(result, { status: "accepted" });
     assert.strictEqual(recording.calls.length, 2);
     const write = recording.calls[1];
@@ -1292,7 +1193,6 @@ it.effect("applies explicit assignments for a date and retains every listed play
     );
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("carries the provider's own refusal sentence on a rejected transaction", () => {
   const recording = recordingClient((call) =>
     EffectString.includes(call.url, "getCrumb")
@@ -1310,7 +1210,6 @@ it.effect("carries the provider's own refusal sentence on a rejected transaction
         faabBid: undefined,
       }),
     );
-
     assert.strictEqual(error._tag, "BadRequest");
     if (error._tag === "BadRequest") {
       assert.strictEqual(
@@ -1332,7 +1231,6 @@ it.effect("carries the provider's own refusal sentence on a rejected transaction
     assert.strictEqual(yield* Effect.promise(() => write.body), transactionRefusal.request.body);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("does not send a transaction when the crumb is missing", () => {
   const recording = recordingClient(() => jsonResponse({ service: { crumb: null } }));
   return Effect.gen(function* () {
@@ -1346,7 +1244,6 @@ it.effect("does not send a transaction when the crumb is missing", () => {
         faabBid: undefined,
       }),
     );
-
     assert.strictEqual(error._tag, "YahooNotSent");
     if (error._tag === "YahooNotSent") {
       assert.strictEqual(error.reason, "session_incomplete");
@@ -1354,7 +1251,6 @@ it.effect("does not send a transaction when the crumb is missing", () => {
     assert.strictEqual(recording.calls.length, 1);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reports an unknown write outcome after a server failure", () => {
   const recording = recordingClient((call) =>
     EffectString.includes(call.url, "getCrumb")
@@ -1369,7 +1265,6 @@ it.effect("reports an unknown write outcome after a server failure", () => {
         coverage: { type: "week", week: 6 },
       }),
     );
-
     assert.strictEqual(error._tag, "YahooWriteUnknown");
     if (error._tag === "YahooWriteUnknown") {
       assert.strictEqual(error.status, 503);
@@ -1377,7 +1272,6 @@ it.effect("reports an unknown write outcome after a server failure", () => {
     }
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reports a rate-limited write as not sent", () => {
   const recording = recordingClient((call) =>
     EffectString.includes(call.url, "getCrumb")
@@ -1394,7 +1288,6 @@ it.effect("reports a rate-limited write as not sent", () => {
         slot: "IR",
       }),
     );
-
     assert.strictEqual(error._tag, "YahooNotSent");
     if (error._tag === "YahooNotSent") {
       assert.strictEqual(error.reason, "request_failed");
@@ -1402,7 +1295,6 @@ it.effect("reports a rate-limited write as not sent", () => {
     }
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("proposes a two-sided trade and reads the pending key from the response", () => {
   const recording = recordingClient((call) =>
     EffectString.includes(call.url, "getCrumb")
@@ -1431,7 +1323,6 @@ it.effect("proposes a two-sided trade and reads the pending key from the respons
       receive: ["466.p.20003"],
       note: undefined,
     });
-
     assert.deepStrictEqual(result, {
       status: "accepted",
       transactionKey: "466.l.4000.pt.9",
@@ -1452,7 +1343,6 @@ it.effect("proposes a two-sided trade and reads the pending key from the respons
     assert.notInclude(yield* Effect.promise(() => write.body), "<picks>");
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("does not claim acceptance of a trade whose pending key is absent", () => {
   const recording = recordingClient((call) =>
     EffectString.includes(call.url, "getCrumb")
@@ -1471,11 +1361,9 @@ it.effect("does not claim acceptance of a trade whose pending key is absent", ()
         note: undefined,
       }),
     );
-
     assert.strictEqual(error._tag, "YahooWriteUnknown");
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("proposes draft picks to the app write host with a note and no players element", () => {
   const recording = recordingClient((call) =>
     EffectString.includes(call.url, "getCrumb")
@@ -1502,7 +1390,6 @@ it.effect("proposes draft picks to the app write host with a note and no players
       receivePicks: [{ round: 1 }],
       note: undefined,
     });
-
     assert.deepStrictEqual(result, {
       status: "accepted",
       transactionKey: "466.l.4000.pt.13",
@@ -1525,7 +1412,6 @@ it.effect("proposes draft picks to the app write host with a note and no players
     assert.notInclude(body, "<players>");
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("accepts a roster write whose receipt is not JSON", () => {
   const recording = recordingClient((call) =>
     EffectString.includes(call.url, "getCrumb")
@@ -1538,11 +1424,9 @@ it.effect("accepts a roster write whose receipt is not JSON", () => {
       teamKey: "466.l.4000.t.1",
       coverage: { type: "week", week: 6 },
     });
-
     assert.deepStrictEqual(result, { status: "accepted" });
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("counts an unreadable proposal receipt as unknown rather than a refusal", () => {
   const recording = recordingClient((call) =>
     EffectString.includes(call.url, "getCrumb")
@@ -1560,11 +1444,9 @@ it.effect("counts an unreadable proposal receipt as unknown rather than a refusa
         note: undefined,
       }),
     );
-
     assert.strictEqual(error._tag, "YahooWriteUnknown");
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("counters an incoming offer back to its proposer with one new proposal", () => {
   const recording = recordingClient((call) =>
     EffectString.includes(call.url, "getCrumb")
@@ -1593,7 +1475,6 @@ it.effect("counters an incoming offer back to its proposer with one new proposal
       receive: ["466.p.20003"],
       note: "Counter",
     });
-
     assert.deepStrictEqual(result, {
       status: "accepted",
       transactionKey: "466.l.4000.pt.10",
@@ -1613,7 +1494,6 @@ it.effect("counters an incoming offer back to its proposer with one new proposal
     );
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("counters with draft picks on the app write host", () => {
   const recording = recordingClient((call) =>
     EffectString.includes(call.url, "getCrumb")
@@ -1638,7 +1518,6 @@ it.effect("counters with draft picks on the app write host", () => {
       receivePicks: [{ round: 3 }],
       note: "Counter",
     });
-
     const write = recording.calls[1];
     if (write === undefined) {
       return yield* Effect.die("expected a write");
@@ -1653,7 +1532,6 @@ it.effect("counters with draft picks on the app write host", () => {
     );
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("rejects an incoming pending trade with a PUT action", () => {
   const recording = recordingClient((call) =>
     EffectString.includes(call.url, "getCrumb")
@@ -1667,7 +1545,6 @@ it.effect("rejects an incoming pending trade with a PUT action", () => {
       action: "reject",
       note: "No thanks",
     });
-
     assert.deepStrictEqual(result, { status: "accepted" });
     const write = recording.calls[1];
     if (write === undefined) {
@@ -1684,7 +1561,6 @@ it.effect("rejects an incoming pending trade with a PUT action", () => {
     );
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("withdraws a trade by its pending key", () => {
   const recording = recordingClient((call) =>
     EffectString.includes(call.url, "getCrumb")
@@ -1696,7 +1572,6 @@ it.effect("withdraws a trade by its pending key", () => {
       session,
       transactionKey: "466.l.4000.pt.9",
     });
-
     assert.deepStrictEqual(result, { status: "accepted" });
     const write = recording.calls[1];
     if (write === undefined) {
@@ -1710,19 +1585,16 @@ it.effect("withdraws a trade by its pending key", () => {
     assert.strictEqual(yield* Effect.promise(() => write.body), "");
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("refuses a completed-trade key for a withdrawal before sending", () => {
   const recording = recordingClient(() => jsonResponse(crumbPayload));
   return Effect.gen(function* () {
     const error = yield* Effect.flip(
       client.withdrawTrade({ session, transactionKey: "466.l.4000.tr.9" }),
     );
-
     assert.strictEqual(error._tag, "YahooRequestInvalid");
     assert.strictEqual(recording.calls.length, 0);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("refuses a team that belongs to another league before sending it", () => {
   const recording = recordingClient(() => jsonResponse(crumbPayload));
   return Effect.gen(function* () {
@@ -1736,16 +1608,18 @@ it.effect("refuses a team that belongs to another league before sending it", () 
         faabBid: undefined,
       }),
     );
-
     assert.strictEqual(error._tag, "YahooRequestInvalid");
     assert.strictEqual(recording.calls.length, 0);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reports a read refusal with the provider's wording", () => {
   const recording = recordingClient(() =>
     textResponse(
-      JSON.stringify({ error: { description: "League 466.l.4000 does not exist." } }),
+      Effect.runSync(
+        Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+          error: { description: "League 466.l.4000 does not exist." },
+        }),
+      ),
       404,
     ),
   );
@@ -1753,39 +1627,33 @@ it.effect("reports a read refusal with the provider's wording", () => {
     const error = yield* Effect.flip(
       client.readLeagueSettings({ session, leagueKey: "466.l.4000" }),
     );
-
     assert.strictEqual(error._tag, "NotFound");
     if (error._tag === "NotFound") {
       assert.strictEqual(error.message, "League 466.l.4000 does not exist.");
     }
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("reports a provider server failure as a failed read with its status", () => {
   const recording = recordingClient(() => textResponse("upstream failure", 503));
   return Effect.gen(function* () {
     const error = yield* Effect.flip(
       client.readLeagueSettings({ session, leagueKey: "466.l.4000" }),
     );
-
     assert.strictEqual(error._tag, "ServiceUnavailable");
     if (error._tag === "ServiceUnavailable") {
       assert.strictEqual(error.message, "upstream failure");
     }
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("rejects an expired session on a read", () => {
   const recording = recordingClient(() => textResponse("unauthorized", 401));
   return Effect.gen(function* () {
     const error = yield* Effect.flip(
       client.readLeagueSettings({ session, leagueKey: "466.l.4000" }),
     );
-
     assert.strictEqual(error._tag, "Unauthorized");
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 it.effect("redacts a crumb echoed in a provider refusal body", () => {
   const recording = recordingClient((call) =>
     EffectString.includes(call.url, "getCrumb")
@@ -1803,7 +1671,6 @@ it.effect("redacts a crumb echoed in a provider refusal body", () => {
         faabBid: undefined,
       }),
     );
-
     assert.strictEqual(error._tag, "BadRequest");
     if (error._tag === "BadRequest") {
       assert.strictEqual(error.message, "refused: crumb=<redacted>&league=466");
@@ -1811,7 +1678,6 @@ it.effect("redacts a crumb echoed in a provider refusal body", () => {
     }
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
-
 function leagueRostersWithTeams(teams: ReadonlyArray<unknown>, leagueKey = "466.l.4000"): unknown {
   return {
     fantasy_content: {
@@ -1826,7 +1692,6 @@ function leagueRostersWithTeams(teams: ReadonlyArray<unknown>, leagueKey = "466.
     },
   };
 }
-
 function rosterTeam(
   teamKey: string,
   name = "Synthetic Team",
@@ -1851,7 +1716,6 @@ function rosterTeam(
     },
   ];
 }
-
 function rosterPlayer(playerKey: string, week: number): ReadonlyArray<unknown> {
   return [
     { player_key: playerKey },
@@ -1862,7 +1726,6 @@ function rosterPlayer(playerKey: string, week: number): ReadonlyArray<unknown> {
     { selected_position: [{ coverage_type: "week", week }, { position: "QB" }] },
   ];
 }
-
 function leagueRostersPadded(bytes: number): unknown {
   return {
     ...leagueRostersPayload,

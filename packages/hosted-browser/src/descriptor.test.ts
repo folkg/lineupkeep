@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 
 import { EffectString } from "@lineupkeep/collections";
+import { jsonString, jsonValue } from "@lineupkeep/collections";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -8,20 +9,16 @@ import {
   verifyHostedBrowserDescriptor,
   type HostedBrowserDescriptor,
 } from "./descriptor.ts";
-
 const key = "descriptor-test-key";
 const now = Date.now();
-
 describe("hosted browser session descriptors", () => {
   it("round-trips a signed descriptor for its signer only", () => {
     const envelope = signHostedBrowserDescriptor(key, descriptor());
-
     expect(verifyHostedBrowserDescriptor(key, envelope, now)).toEqual(descriptor());
     expect(verifyHostedBrowserDescriptor("another-key", envelope, now)).toBeUndefined();
   });
-
   it("rejects a tampered payload", () => {
-    const envelope = JSON.parse(signedEnvelope()) as unknown;
+    const envelope = jsonValue(signedEnvelope());
     if (
       typeof envelope !== "object" ||
       envelope === null ||
@@ -37,60 +34,47 @@ describe("hosted browser session descriptors", () => {
       "login.yahoo.com",
       "attacker.example",
     );
-    const tampered = JSON.stringify({
+    const tampered = jsonString({
       payload: Buffer.from(payload).toString("base64url"),
       signature: envelope.signature,
     });
-
     expect(verifyHostedBrowserDescriptor(key, tampered, now)).toBeUndefined();
   });
-
   it("rejects descriptors outside the bounded session lifetime", () => {
     const expired = signHostedBrowserDescriptor(key, descriptor({ expiresAt: now - 1 }));
     const overlong = signHostedBrowserDescriptor(
       key,
       descriptor({ expiresAt: now + 16 * 60 * 1_000 }),
     );
-
     expect(verifyHostedBrowserDescriptor(key, expired, now)).toBeUndefined();
     expect(verifyHostedBrowserDescriptor(key, overlong, now)).toBeUndefined();
   });
-
   it("rejects a login URL that is not an absolute HTTP destination", () => {
     const relativeLogin = signHostedBrowserDescriptor(key, descriptor({ loginUrl: "/login" }));
     const scriptLogin = signHostedBrowserDescriptor(
       key,
       descriptor({ loginUrl: "javascript:alert(1)" }),
     );
-
     expect(verifyHostedBrowserDescriptor(key, relativeLogin, now)).toBeUndefined();
     expect(verifyHostedBrowserDescriptor(key, scriptLogin, now)).toBeUndefined();
   });
-
   it("rejects a descriptor without a known viewport profile", () => {
     const missing = signRaw({ ...descriptor(), viewport: undefined });
     const unknown = signRaw({ ...descriptor(), viewport: "tablet" });
-
     expect(verifyHostedBrowserDescriptor(key, missing, now)).toBeUndefined();
     expect(verifyHostedBrowserDescriptor(key, unknown, now)).toBeUndefined();
   });
-
   it("rejects a descriptor without a known provider", () => {
     const missing = signRaw({ ...descriptor(), provider: undefined });
     const unknown = signRaw({ ...descriptor(), provider: "unknown" });
-
     expect(verifyHostedBrowserDescriptor(key, missing, now)).toBeUndefined();
     expect(verifyHostedBrowserDescriptor(key, unknown, now)).toBeUndefined();
   });
-
   it("rejects something that is not a signed envelope", () => {
     expect(verifyHostedBrowserDescriptor(key, "not-json", now)).toBeUndefined();
-    expect(
-      verifyHostedBrowserDescriptor(key, JSON.stringify({ payload: "x" }), now),
-    ).toBeUndefined();
+    expect(verifyHostedBrowserDescriptor(key, jsonString({ payload: "x" }), now)).toBeUndefined();
   });
 });
-
 function descriptor(overrides: Partial<HostedBrowserDescriptor> = {}): HostedBrowserDescriptor {
   return {
     sessionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",
@@ -101,13 +85,11 @@ function descriptor(overrides: Partial<HostedBrowserDescriptor> = {}): HostedBro
     ...overrides,
   };
 }
-
 function signedEnvelope(): string {
   return signHostedBrowserDescriptor(key, descriptor());
 }
-
 function signRaw(payload: Record<string, unknown>): string {
-  const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+  const encoded = Buffer.from(jsonString(payload), "utf8").toString("base64url");
   const signature = createHmac("sha256", key).update(encoded).digest("base64url");
-  return JSON.stringify({ payload: encoded, signature });
+  return jsonString({ payload: encoded, signature });
 }

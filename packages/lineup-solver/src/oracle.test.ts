@@ -1,3 +1,4 @@
+import { jsonString } from "@lineupkeep/collections";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
 import * as fc from "fast-check";
@@ -22,21 +23,17 @@ import type {
   RosterSlot,
   SlotId,
 } from "./types.ts";
-
 const basis = makeSelectionBasis("oracle-basis");
 const willPlay = makeAvailabilityTier("will-play");
 const mightPlay = makeAvailabilityTier("might-play");
 const willNotPlay = makeAvailabilityTier("will-not-play");
 const tiers = [willPlay, mightPlay, willNotPlay];
-
 describe("exhaustive oracle agreement", () => {
   it.each(adversarialCases())("agrees on $name", ({ problem }) => {
     expectAgreement(problem);
   });
-
   it("agrees with the exhaustive oracle on generated tiny problems", () => {
     let generatedProblems = 0;
-
     fc.assert(
       fc.property(generatedProblemArbitrary(), (problem) => {
         generatedProblems += 1;
@@ -44,10 +41,8 @@ describe("exhaustive oracle agreement", () => {
       }),
       { numRuns: 10000, seed: 20261026 },
     );
-
     expect(generatedProblems).toBe(10000);
   });
-
   it("never worsens the achieved objective when a player's value increases", () => {
     fc.assert(
       fc.property(generatedProblemArbitrary(), fc.nat(), (problem, offset) => {
@@ -59,7 +54,6 @@ describe("exhaustive oracle agreement", () => {
         if (target === undefined || target.selection.kind !== "known") {
           return;
         }
-
         const increased: LineupProblem = {
           ...problem,
           players: EffectArray.map(problem.players, (player, playerIndex) =>
@@ -70,7 +64,6 @@ describe("exhaustive oracle agreement", () => {
         };
         const before = solveLineup(problem);
         const after = solveLineup(increased);
-
         expect(after.kind).toBe(before.kind);
         if (before.kind === "plan" && after.kind === "plan") {
           expect(
@@ -84,10 +77,8 @@ describe("exhaustive oracle agreement", () => {
       { numRuns: 2000, seed: 20261027 },
     );
   });
-
   it("agrees with the exhaustive oracle when players may be left in place", () => {
     let generatedProblems = 0;
-
     fc.assert(
       fc.property(generatedRetentionProblemArbitrary(), (problem) => {
         generatedProblems += 1;
@@ -95,10 +86,8 @@ describe("exhaustive oracle agreement", () => {
       }),
       { numRuns: 3000, seed: 20261102 },
     );
-
     expect(generatedProblems).toBe(3000);
   });
-
   it("finds a known optimum and a known infeasibility", () => {
     const optimal = lineupProblem(
       [startingSlot("S1", 1, "optional", ["A"]), startingSlot("S2", 1, "optional", ["A"])],
@@ -108,12 +97,10 @@ describe("exhaustive oracle agreement", () => {
       [startingSlot("S1", 1, "required", ["A"])],
       [player("a", 1, { positions: ["B"] })],
     );
-
     expect(solveTinyProblem(optimal)).toMatchObject({ kind: "optimal", value: 3 });
     expect(solveTinyProblem(infeasible)).toEqual({ kind: "infeasible" });
   });
 });
-
 function oracleLineupViolations(
   problem: LineupProblem,
   assignments: ReadonlyArray<LineupAssignment>,
@@ -123,7 +110,6 @@ function oracleLineupViolations(
   const assignmentsByPlayer = new Map<PlayerId, number>();
   const assignmentsBySlot = new Map<SlotId, number>();
   const violations: Array<string> = [];
-
   for (const assignment of assignments) {
     const player = playersById.get(assignment.playerId);
     const slot = slotsById.get(assignment.slotId);
@@ -144,7 +130,6 @@ function oracleLineupViolations(
       violations.push(`${player.id} may not occupy ${slot.id}`);
     }
   }
-
   for (const player of problem.players) {
     const count = assignmentsByPlayer.get(player.id) ?? 0;
     if (count !== 1) {
@@ -160,29 +145,24 @@ function oracleLineupViolations(
       violations.push(`${slot.id} has ${count} assignments but requires ${slot.capacity}`);
     }
   }
-
   return violations;
 }
-
 function expectAgreement(problem: LineupProblem): void {
   const result = solveLineup(problem);
   const oracle = solveTinyProblem(problem);
-
   if (oracle.kind === "infeasible") {
     if (result.kind !== "refusal") {
       throw new Error(
-        `Solver returned a plan but the oracle found no legal assignment: ${JSON.stringify(problem)}`,
+        `Solver returned a plan but the oracle found no legal assignment: ${jsonString(problem)}`,
       );
     }
     return;
   }
-
   if (result.kind !== "plan") {
     throw new Error(
-      `Solver refused (${result.refusal.reason}) but the oracle found value ${oracle.value}: ${JSON.stringify(problem)}`,
+      `Solver refused (${result.refusal.reason}) but the oracle found value ${oracle.value}: ${jsonString(problem)}`,
     );
   }
-
   expect(isLegalPlan(problem, result.plan)).toBe(true);
   expect(oracleLineupViolations(problem, result.plan.assignments)).toEqual([]);
   expect(result.plan.assignments).toEqual(oracle.assignments);
@@ -191,7 +171,6 @@ function expectAgreement(problem: LineupProblem): void {
   expect(zeroStartingPlayers(problem, result.plan.assignments)).toBe(oracle.zeroStarters);
   expect(result.plan.comparison.slotChanges).toHaveLength(oracle.changes);
 }
-
 function adversarialCases(): ReadonlyArray<{
   readonly name: string;
   readonly problem: LineupProblem;
@@ -387,7 +366,6 @@ function adversarialCases(): ReadonlyArray<{
     },
   ];
 }
-
 function generatedRetentionProblemArbitrary(): fc.Arbitrary<LineupProblem> {
   return fc
     .tuple(
@@ -416,26 +394,22 @@ function generatedRetentionProblemArbitrary(): fc.Arbitrary<LineupProblem> {
       return { selectionBasis: basis, availabilityTiers: tiers, slots, players };
     });
 }
-
 function expectRetentionAgreement(problem: LineupProblem): void {
   const result = solveLineup(problem);
   const oracle = solveTinyWithRetention(problem);
-
   if (oracle.kind === "infeasible") {
     if (result.kind !== "refusal") {
       throw new Error(
-        `Solver returned a plan but the retention oracle found no assignment: ${JSON.stringify(problem)}`,
+        `Solver returned a plan but the retention oracle found no assignment: ${jsonString(problem)}`,
       );
     }
     return;
   }
-
   if (result.kind !== "plan") {
     throw new Error(
-      `Solver refused (${result.refusal.reason}) but the retention oracle found a plan: ${JSON.stringify(problem)}`,
+      `Solver refused (${result.refusal.reason}) but the retention oracle found a plan: ${jsonString(problem)}`,
     );
   }
-
   expect(isLegalPlan(problem, result.plan)).toBe(true);
   expect(result.plan.leftInPlace.length).toBe(oracle.leftCount);
   expect(startingTierCounts(problem, result.plan.assignments)).toEqual(oracle.tierCounts);
@@ -443,7 +417,6 @@ function expectRetentionAgreement(problem: LineupProblem): void {
   expect(zeroStartingPlayers(problem, result.plan.assignments)).toBe(oracle.zeroStarters);
   expect(result.plan.comparison.slotChanges).toHaveLength(oracle.changes);
 }
-
 type RetentionOracleResult =
   | {
       readonly kind: "optimal";
@@ -454,7 +427,6 @@ type RetentionOracleResult =
       readonly changes: number;
     }
   | { readonly kind: "infeasible" };
-
 type RetentionCandidate = {
   readonly leftCount: number;
   readonly tierCounts: ReadonlyArray<number>;
@@ -463,25 +435,21 @@ type RetentionCandidate = {
   readonly changes: number;
   readonly assignments: ReadonlyArray<LineupAssignment>;
 };
-
 function solveTinyWithRetention(problem: LineupProblem): RetentionOracleResult {
   const players = [...problem.players].sort((left, right) => compareText(left.id, right.id));
   if (EffectArray.some(players, (player) => player.selection.kind !== "known")) {
     throw new Error("The exhaustive oracle requires known selection values.");
   }
-
   const units: Array<RosterSlot> = [];
   for (const slot of problem.slots) {
     for (let index = 0; index < slot.capacity; index += 1) {
       units.push(slot);
     }
   }
-
   const unassigned = new Set(EffectArray.map(players, (player) => player.id));
   const assignment = new Map<PlayerId, SlotId>();
   const empty = new Map<SlotId, number>();
   let best: RetentionCandidate | undefined;
-
   const search = (unitIndex: number): void => {
     if (unitIndex === units.length) {
       const left = EffectArray.filter(players, (player) => unassigned.has(player.id));
@@ -494,12 +462,10 @@ function solveTinyWithRetention(problem: LineupProblem): RetentionOracleResult {
       }
       return;
     }
-
     const slot = units[unitIndex];
     if (slot === undefined) {
       return;
     }
-
     for (const player of players) {
       if (!unassigned.has(player.id) || !oracleMayOccupy(player, slot)) {
         continue;
@@ -510,16 +476,13 @@ function solveTinyWithRetention(problem: LineupProblem): RetentionOracleResult {
       assignment.delete(player.id);
       unassigned.add(player.id);
     }
-
     if (oracleMayStayEmpty(slot)) {
       empty.set(slot.id, (empty.get(slot.id) ?? 0) + 1);
       search(unitIndex + 1);
       empty.set(slot.id, (empty.get(slot.id) ?? 0) - 1);
     }
   };
-
   search(0);
-
   return best === undefined
     ? { kind: "infeasible" }
     : {
@@ -531,7 +494,6 @@ function solveTinyWithRetention(problem: LineupProblem): RetentionOracleResult {
         changes: best.changes,
       };
 }
-
 function retentionLeavesPossible(
   problem: LineupProblem,
   left: ReadonlyArray<RosterPlayer>,
@@ -557,16 +519,13 @@ function retentionLeavesPossible(
     }
     needed.set(slot.id, (needed.get(slot.id) ?? 0) + 1);
   }
-
   for (const [slotId, count] of needed) {
     if ((empty.get(slotId) ?? 0) < count) {
       return false;
     }
   }
-
   return true;
 }
-
 function evaluateRetentionAssignment(
   problem: LineupProblem,
   players: ReadonlyArray<RosterPlayer>,
@@ -579,7 +538,6 @@ function evaluateRetentionAssignment(
   let zeroStarters = 0;
   let changes = 0;
   const assignments: Array<LineupAssignment> = [];
-
   for (const player of players) {
     const assignedSlotId = assignment.get(player.id);
     if (assignedSlotId === undefined) {
@@ -607,11 +565,9 @@ function evaluateRetentionAssignment(
     }
     assignments.push({ playerId: player.id, slotId: assignedSlotId });
   }
-
   assignments.sort(compareAssignments);
   return { leftCount, tierCounts, value, zeroStarters, changes, assignments };
 }
-
 function compareRetentionCandidates(left: RetentionCandidate, right: RetentionCandidate): number {
   if (left.leftCount !== right.leftCount) {
     return left.leftCount - right.leftCount;
@@ -634,7 +590,6 @@ function compareRetentionCandidates(left: RetentionCandidate, right: RetentionCa
   }
   return compareAssignmentLists(left.assignments, right.assignments);
 }
-
 function generatedProblemArbitrary(): fc.Arbitrary<LineupProblem> {
   return fc
     .tuple(
@@ -644,7 +599,6 @@ function generatedProblemArbitrary(): fc.Arbitrary<LineupProblem> {
     )
     .map(([shape, slotSpecs, playerSpecs]) => buildGeneratedProblem(shape, slotSpecs, playerSpecs));
 }
-
 function buildGeneratedProblem(
   shape: Shape,
   slotSpecs: ReadonlyArray<SlotSpec>,
@@ -658,15 +612,12 @@ function buildGeneratedProblem(
     playerFromSpec(spec, index, shape, slotIds),
   );
   const lockedPlayers = shape === "locked" ? applyLockedShape(slots, players) : players;
-
   return { selectionBasis: basis, availabilityTiers: tiers, slots, players: lockedPlayers };
 }
-
 function slotFromSpec(spec: SlotSpec, index: number, shape: Shape): RosterSlot {
   const eligibility =
     shape === "all-eligible" ? { kind: "any" as const } : eligibilityFromSpec(spec.eligibility);
   const capacity = shape === "capacity-over-roster" ? 3 : spec.capacity;
-
   if (spec.kind === "starting-required") {
     return {
       kind: "starting",
@@ -692,7 +643,6 @@ function slotFromSpec(spec: SlotSpec, index: number, shape: Shape): RosterSlot {
   }
   return { kind: "reserve", id: slotId(`S${index}`), capacity, eligibility };
 }
-
 function playerFromSpec(
   spec: PlayerSpec,
   index: number,
@@ -731,7 +681,6 @@ function playerFromSpec(
     spec.currentOffset === undefined || slotIds.length === 0
       ? undefined
       : slotIds[spec.currentOffset % slotIds.length];
-
   return {
     id: playerId(`P${index}`),
     eligiblePositions: positions,
@@ -742,7 +691,6 @@ function playerFromSpec(
     currentSlotId,
   };
 }
-
 function applyLockedShape(
   slots: ReadonlyArray<RosterSlot>,
   players: ReadonlyArray<RosterPlayer>,
@@ -760,11 +708,9 @@ function applyLockedShape(
       : startingSlot.eligibility.kind === "positions"
         ? startingSlot.eligibility.positions
         : ["A"];
-
   if (lockedPositions === undefined) {
     return players;
   }
-
   return EffectArray.map(players, (player, index) =>
     index === 0
       ? {
@@ -776,14 +722,12 @@ function applyLockedShape(
       : { ...player, lockedSlotId: undefined },
   );
 }
-
 function eligibilityFromSpec(spec: EligibilitySpec): RosterSlot["eligibility"] {
   if (spec === "any") {
     return { kind: "any" };
   }
   return { kind: "positions", positions: positionsFromSpec(spec) };
 }
-
 function positionsFromSpec(spec: PositionSpec | EligibilitySpec): ReadonlyArray<string> {
   if (spec === "none" || spec === "empty" || spec === "any") {
     return [];
@@ -799,7 +743,6 @@ function positionsFromSpec(spec: PositionSpec | EligibilitySpec): ReadonlyArray<
   }
   return ["A", "B", "C"];
 }
-
 type OracleResult =
   | {
       readonly kind: "optimal";
@@ -810,13 +753,11 @@ type OracleResult =
       readonly assignments: ReadonlyArray<LineupAssignment>;
     }
   | { readonly kind: "infeasible" };
-
 type OracleUnit = {
   readonly index: number;
   readonly slot: RosterSlot;
   readonly lockedPlayerId: PlayerId | undefined;
 };
-
 type OracleCandidate = {
   readonly tierCounts: ReadonlyArray<number>;
   readonly value: number;
@@ -824,7 +765,6 @@ type OracleCandidate = {
   readonly changes: number;
   readonly assignments: ReadonlyArray<LineupAssignment>;
 };
-
 function solveTinyProblem(problem: LineupProblem): OracleResult {
   const players = [...problem.players].sort((left, right) => compareText(left.id, right.id));
   if (EffectArray.some(players, (player) => player.selection.kind !== "known")) {
@@ -836,12 +776,10 @@ function solveTinyProblem(problem: LineupProblem): OracleResult {
       return { kind: "infeasible" };
     }
   }
-
   const units = buildOracleUnits(problem.slots, players);
   if (units === undefined) {
     return { kind: "infeasible" };
   }
-
   const lockedPlayerIds = new Set(
     EffectArray.map(
       EffectArray.filter(players, (player) => player.lockedSlotId !== undefined),
@@ -860,9 +798,7 @@ function solveTinyProblem(problem: LineupProblem): OracleResult {
       assignment.set(unit.lockedPlayerId, unit.slot.id);
     }
   }
-
   let best: OracleCandidate | undefined;
-
   const search = (unitIndex: number): void => {
     if (units.length - unitIndex < unassigned.size) {
       return;
@@ -876,7 +812,6 @@ function solveTinyProblem(problem: LineupProblem): OracleResult {
       }
       return;
     }
-
     const unit = units[unitIndex];
     if (unit === undefined) {
       return;
@@ -885,7 +820,6 @@ function solveTinyProblem(problem: LineupProblem): OracleResult {
       search(unitIndex + 1);
       return;
     }
-
     for (const player of players) {
       if (!unassigned.has(player.id) || !oracleMayOccupy(player, unit.slot)) {
         continue;
@@ -896,18 +830,14 @@ function solveTinyProblem(problem: LineupProblem): OracleResult {
       assignment.delete(player.id);
       unassigned.add(player.id);
     }
-
     if (oracleMayStayEmpty(unit.slot)) {
       search(unitIndex + 1);
     }
   };
-
   search(0);
-
   if (best === undefined) {
     return { kind: "infeasible" };
   }
-
   return {
     kind: "optimal",
     tierCounts: best.tierCounts,
@@ -917,7 +847,6 @@ function solveTinyProblem(problem: LineupProblem): OracleResult {
     assignments: best.assignments,
   };
 }
-
 function buildOracleUnits(
   slots: ReadonlyArray<RosterSlot>,
   players: ReadonlyArray<RosterPlayer>,
@@ -931,7 +860,6 @@ function buildOracleUnits(
     locked.push(player);
     lockedBySlot.set(player.lockedSlotId, locked);
   }
-
   const units: Array<OracleUnit> = [];
   let index = 0;
   for (const slot of slots) {
@@ -951,10 +879,8 @@ function buildOracleUnits(
       index += 1;
     }
   }
-
   return units;
 }
-
 function oracleMayOccupy(player: RosterPlayer, slot: RosterSlot): boolean {
   if (player.lockedSlotId !== undefined && player.lockedSlotId !== slot.id) {
     return false;
@@ -970,11 +896,9 @@ function oracleMayOccupy(player: RosterPlayer, slot: RosterSlot): boolean {
     eligibility.positions.includes(position),
   );
 }
-
 function oracleMayStayEmpty(slot: RosterSlot): boolean {
   return !(slot.kind === "starting" && slot.requirement === "required");
 }
-
 function evaluateOracleAssignment(
   problem: LineupProblem,
   players: ReadonlyArray<RosterPlayer>,
@@ -986,7 +910,6 @@ function evaluateOracleAssignment(
   let zeroStarters = 0;
   let changes = 0;
   const assignments: Array<LineupAssignment> = [];
-
   for (const player of players) {
     const assignedSlotId = assignment.get(player.id);
     if (assignedSlotId === undefined) {
@@ -1014,11 +937,9 @@ function evaluateOracleAssignment(
     }
     assignments.push({ playerId: player.id, slotId: assignedSlotId });
   }
-
   assignments.sort(compareAssignments);
   return { tierCounts, value, zeroStarters, changes, assignments };
 }
-
 function compareCandidates(left: OracleCandidate, right: OracleCandidate): number {
   for (let rank = 0; rank < left.tierCounts.length; rank += 1) {
     const leftCount = left.tierCounts[rank] ?? 0;
@@ -1038,7 +959,6 @@ function compareCandidates(left: OracleCandidate, right: OracleCandidate): numbe
   }
   return compareAssignmentLists(left.assignments, right.assignments);
 }
-
 function compareAssignmentLists(
   left: ReadonlyArray<LineupAssignment>,
   right: ReadonlyArray<LineupAssignment>,
@@ -1057,15 +977,12 @@ function compareAssignmentLists(
   }
   return left.length - right.length;
 }
-
 function compareAssignments(left: LineupAssignment, right: LineupAssignment): number {
   return compareText(left.playerId, right.playerId) || compareText(left.slotId, right.slotId);
 }
-
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
-
 function zeroStartingPlayers(
   problem: LineupProblem,
   assignments: ReadonlyArray<LineupAssignment>,
@@ -1083,7 +1000,6 @@ function zeroStartingPlayers(
     );
   }).length;
 }
-
 function compareObjectives(left: ReadonlyArray<number>, right: ReadonlyArray<number>): number {
   const length = Math.max(left.length, right.length);
   for (let index = 0; index < length; index += 1) {
@@ -1094,14 +1010,12 @@ function compareObjectives(left: ReadonlyArray<number>, right: ReadonlyArray<num
   }
   return 0;
 }
-
 function objectiveOf(problem: LineupProblem, plan: LineupPlan): ReadonlyArray<number> {
   return [
     ...EffectArray.map(startingTierCounts(problem, plan.assignments), (count) => -count),
     -plan.totalSelectionValue,
   ];
 }
-
 function startingTierCounts(
   problem: LineupProblem,
   assignments: ReadonlyArray<LineupAssignment>,
@@ -1109,7 +1023,6 @@ function startingTierCounts(
   const playersById = new Map(EffectArray.map(problem.players, (player) => [player.id, player]));
   const slotsById = new Map(EffectArray.map(problem.slots, (slot) => [slot.id, slot]));
   const counts = EffectArray.map(problem.availabilityTiers, () => 0);
-
   for (const assignment of assignments) {
     const player = playersById.get(assignment.playerId);
     const slot = slotsById.get(assignment.slotId);
@@ -1122,17 +1035,14 @@ function startingTierCounts(
     const rank = problem.availabilityTiers.indexOf(player.availabilityTier);
     counts[rank] = (counts[rank] ?? 0) + 1;
   }
-
   return counts;
 }
-
 function lineupProblem(
   slots: ReadonlyArray<RosterSlot>,
   players: ReadonlyArray<RosterPlayer>,
 ): LineupProblem {
   return { selectionBasis: basis, availabilityTiers: tiers, slots, players };
 }
-
 function startingSlot(
   id: string,
   capacity: number,
@@ -1147,15 +1057,12 @@ function startingSlot(
     eligibility: { kind: "positions", positions },
   };
 }
-
 function benchSlot(id: string, capacity: number): RosterSlot {
   return { kind: "bench", id: slotId(id), capacity, eligibility: { kind: "any" } };
 }
-
 function reserveSlot(id: string, capacity: number): RosterSlot {
   return { kind: "reserve", id: slotId(id), capacity, eligibility: { kind: "any" } };
 }
-
 function player(
   id: string,
   units: number,
@@ -1177,15 +1084,12 @@ function player(
     currentSlotId: options.currentSlotId,
   };
 }
-
 function playerId(value: string): PlayerId {
   return makePlayerId(value);
 }
-
 function slotId(value: string): SlotId {
   return makeSlotId(value);
 }
-
 type Shape =
   | "mixed"
   | "all-equal"
@@ -1198,7 +1102,6 @@ type Shape =
   | "locked"
   | "all-unavailable"
   | "tier-against-value";
-
 const shapes: ReadonlyArray<Shape> = [
   "mixed",
   "all-equal",
@@ -1212,17 +1115,13 @@ const shapes: ReadonlyArray<Shape> = [
   "all-unavailable",
   "tier-against-value",
 ];
-
 type SlotSpec = {
   readonly kind: "starting-required" | "starting-optional" | "bench" | "reserve";
   readonly capacity: number;
   readonly eligibility: EligibilitySpec;
 };
-
 type EligibilitySpec = "any" | "A" | "B" | "AB" | "empty";
-
 type PositionSpec = "none" | "A" | "B" | "AB" | "ABC";
-
 type PlayerSpec = {
   readonly positions: PositionSpec;
   readonly units: number;
@@ -1231,13 +1130,11 @@ type PlayerSpec = {
   readonly lockOffset: number | undefined;
   readonly currentOffset: number | undefined;
 };
-
 const slotArbitrary: fc.Arbitrary<SlotSpec> = fc.record({
   kind: fc.constantFrom("starting-required", "starting-optional", "bench", "reserve"),
   capacity: fc.integer({ min: 1, max: 3 }),
   eligibility: fc.constantFrom("any", "A", "B", "AB", "empty"),
 });
-
 const playerArbitrary: fc.Arbitrary<PlayerSpec> = fc.record({
   positions: fc.constantFrom("none", "A", "B", "AB", "ABC"),
   units: fc.integer({ min: -3, max: 3 }),

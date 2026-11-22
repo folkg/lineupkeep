@@ -28,3 +28,7 @@ export function optionalStringValue<A extends string, B>(
 ): B | undefined {
   return value === undefined || value === null ? undefined : f(value);
 }
+
+export function jsonValue<T = unknown>(text: string): T {
+  return JSON.parse(text) as T;
+}

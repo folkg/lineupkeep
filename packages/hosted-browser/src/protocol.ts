@@ -1,36 +1,30 @@
 import { EffectArray } from "@lineupkeep/collections";
+import { jsonString, jsonValue } from "@lineupkeep/collections";
 export const hostedBrowserViewports = {
   desktop: { width: 1100, height: 720 },
   phone: { width: 390, height: 844 },
 } as const;
-
 export type HostedBrowserViewportProfile = keyof typeof hostedBrowserViewports;
-
 export const maximumHostedBrowserTextLength = 2_048;
-
 export function viewportSize(profile: HostedBrowserViewportProfile): {
   readonly width: number;
   readonly height: number;
 } {
   return hostedBrowserViewports[profile];
 }
-
 export function viewportProfileForClientWidth(width: number): HostedBrowserViewportProfile {
   return width >= 768 ? "desktop" : "phone";
 }
-
 export function isHostedBrowserViewportProfile(
   value: unknown,
 ): value is HostedBrowserViewportProfile {
   return value === "desktop" || value === "phone";
 }
-
 export type HostedBrowserInput =
   | { readonly _tag: "Click"; readonly x: number; readonly y: number }
   | { readonly _tag: "Text"; readonly text: string }
   | { readonly _tag: "Key"; readonly key: HostedBrowserKey }
   | { readonly _tag: "Scroll"; readonly deltaY: number };
-
 export type HostedBrowserKey =
   | "Enter"
   | "Tab"
@@ -45,7 +39,6 @@ export type HostedBrowserKey =
   | "End"
   | "PageUp"
   | "PageDown";
-
 export type HostedBrowserStatus =
   | "starting"
   | "loading"
@@ -54,17 +47,14 @@ export type HostedBrowserStatus =
   | "blocked"
   | "identifier-refused"
   | "finishing";
-
 export type HostedBrowserRefusalReason =
   | "non_public_address"
   | "unresolvable"
   | "invalid_destination";
-
 export type HostedBrowserRefusal = {
   readonly host: string;
   readonly reason: HostedBrowserRefusalReason;
 };
-
 export type HostedBrowserFailure =
   | "browser_unavailable"
   | "page_unavailable"
@@ -72,7 +62,6 @@ export type HostedBrowserFailure =
   | "session_rejected"
   | "completion_failed"
   | "expired";
-
 export type HostedBrowserMessage =
   | { readonly _tag: "Status"; readonly status: HostedBrowserStatus }
   | { readonly _tag: "AcceptsInput" }
@@ -80,7 +69,6 @@ export type HostedBrowserMessage =
   | { readonly _tag: "Ready"; readonly connectionId: string; readonly teamsDiscovered: number }
   | { readonly _tag: "Failed"; readonly reason: HostedBrowserFailure }
   | { readonly _tag: "Expired" };
-
 export type HostedBrowserTransportMessage =
   | { readonly _tag: "Status"; readonly status: HostedBrowserStatus }
   | { readonly _tag: "AcceptsInput" }
@@ -88,11 +76,9 @@ export type HostedBrowserTransportMessage =
   | { readonly _tag: "Captured"; readonly session: string }
   | { readonly _tag: "Failed"; readonly reason: HostedBrowserFailure }
   | { readonly _tag: "Expired" };
-
 export function encodeHostedBrowserInput(input: HostedBrowserInput): string {
-  return JSON.stringify(input);
+  return jsonString(input);
 }
-
 export function parseHostedBrowserInput(value: string): HostedBrowserInput | undefined {
   const decoded = parseJson(value);
   if (!isRecord(decoded) || typeof decoded["_tag"] !== "string") {
@@ -126,11 +112,9 @@ export function parseHostedBrowserInput(value: string): HostedBrowserInput | und
       return undefined;
   }
 }
-
 export function encodeHostedBrowserMessage(message: HostedBrowserMessage): string {
-  return JSON.stringify(message);
+  return jsonString(message);
 }
-
 export function parseHostedBrowserMessage(value: string): HostedBrowserMessage | undefined {
   const decoded = parseJson(value);
   if (!isRecord(decoded) || typeof decoded["_tag"] !== "string") {
@@ -173,11 +157,9 @@ export function parseHostedBrowserMessage(value: string): HostedBrowserMessage |
       return undefined;
   }
 }
-
 export function encodeTransportMessage(message: HostedBrowserTransportMessage): string {
-  return JSON.stringify(message);
+  return jsonString(message);
 }
-
 export function parseTransportMessage(value: string): HostedBrowserTransportMessage | undefined {
   const decoded = parseJson(value);
   if (!isRecord(decoded) || typeof decoded["_tag"] !== "string") {
@@ -216,19 +198,16 @@ export function parseTransportMessage(value: string): HostedBrowserTransportMess
       return undefined;
   }
 }
-
 function parseJson(value: string): unknown {
   try {
-    return JSON.parse(value);
+    return jsonValue(value);
   } catch {
     return undefined;
   }
 }
-
 function isUnit(value: unknown): value is number {
   return typeof value === "number" && value >= 0 && value <= 1;
 }
-
 function isHostedBrowserKey(value: unknown): value is HostedBrowserKey {
   return (
     value === "Enter" ||
@@ -246,13 +225,11 @@ function isHostedBrowserKey(value: unknown): value is HostedBrowserKey {
     value === "PageDown"
   );
 }
-
 function isHostedBrowserRefusalReason(value: unknown): value is HostedBrowserRefusalReason {
   return (
     value === "non_public_address" || value === "unresolvable" || value === "invalid_destination"
   );
 }
-
 function isHostedBrowserStatus(value: unknown): value is HostedBrowserStatus {
   return (
     value === "starting" ||
@@ -264,7 +241,6 @@ function isHostedBrowserStatus(value: unknown): value is HostedBrowserStatus {
     value === "finishing"
   );
 }
-
 function isHostedBrowserFailure(value: unknown): value is HostedBrowserFailure {
   return (
     value === "browser_unavailable" ||
@@ -275,7 +251,6 @@ function isHostedBrowserFailure(value: unknown): value is HostedBrowserFailure {
     value === "expired"
   );
 }
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !EffectArray.isArray(value);
 }

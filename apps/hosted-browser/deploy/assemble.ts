@@ -1,14 +1,12 @@
 import { spawnSync } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 
+import { jsonString, jsonValue } from "@lineupkeep/collections";
 import { Array as EffectArray } from "effect";
-
 const output = new URL("../.output/", import.meta.url);
 const catalog = await readCatalog(new URL("../../../package.json", import.meta.url));
-
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
-
 const build = spawnSync(
   "bun",
   [
@@ -31,10 +29,9 @@ if (build.error) {
 if (build.status !== 0) {
   process.exit(build.status ?? 1);
 }
-
 await writeFile(
   new URL("package.json", output),
-  `${JSON.stringify(
+  `${jsonString(
     {
       name: "lineupkeep-hosted-browser-service",
       private: true,
@@ -48,9 +45,8 @@ await writeFile(
     2,
   )}\n`,
 );
-
 async function readCatalog(manifestUrl: URL): Promise<Readonly<Record<string, string>>> {
-  const manifest: unknown = JSON.parse(await readFile(manifestUrl, "utf8"));
+  const manifest: unknown = jsonValue(await readFile(manifestUrl, "utf8"));
   if (!isRecord(manifest) || !isRecord(manifest["catalog"])) {
     throw new Error("The workspace manifest has no dependency catalog");
   }
@@ -63,7 +59,6 @@ async function readCatalog(manifestUrl: URL): Promise<Readonly<Record<string, st
   }
   return catalog;
 }
-
 function version(catalog: Readonly<Record<string, string>>, name: string): string {
   const value = catalog[name];
   if (value === undefined) {
@@ -71,7 +66,6 @@ function version(catalog: Readonly<Record<string, string>>, name: string): strin
   }
   return value;
 }
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !EffectArray.isArray(value);
 }

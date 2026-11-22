@@ -1,3 +1,4 @@
+import { jsonString } from "@lineupkeep/collections";
 import { Array as EffectArray } from "effect";
 import { munkres } from "munkres";
 
@@ -20,16 +21,13 @@ import type {
   RosterSlot,
   SlotId,
 } from "./types.ts";
-
 export function solveLineup(problem: LineupProblem): LineupSolveResult {
   validateProblem(problem);
-
   const base = prepareProblem(problem);
   const lockRefusal = findLockRefusal(base);
   if (lockRefusal !== undefined) {
     return { kind: "refusal", refusal: lockRefusal };
   }
-
   const leftWithoutSlot = EffectArray.filter(
     base.players,
     (player) =>
@@ -43,7 +41,6 @@ export function solveLineup(problem: LineupProblem): LineupSolveResult {
     units: buildUnits(base),
   };
   const columnCount = prepared.units.length + prepared.leftWithoutSlot.length;
-
   if (prepared.players.length > columnCount) {
     return {
       kind: "refusal",
@@ -54,7 +51,6 @@ export function solveLineup(problem: LineupProblem): LineupSolveResult {
       },
     };
   }
-
   if (prepared.units.length === 0) {
     return {
       kind: "plan",
@@ -66,7 +62,6 @@ export function solveLineup(problem: LineupProblem): LineupSolveResult {
       ),
     };
   }
-
   const unplaceablePlayerIds = EffectArray.map(
     EffectArray.filter(prepared.players, (player) => !hasLegalUnit(prepared, player)),
     (player) => player.id,
@@ -77,23 +72,19 @@ export function solveLineup(problem: LineupProblem): LineupSolveResult {
       refusal: { reason: "player-has-no-legal-slot", playerIds: unplaceablePlayerIds },
     };
   }
-
   const unusableRefusal = findUnusableSelectionRefusal(prepared);
   if (unusableRefusal !== undefined) {
     return { kind: "refusal", refusal: unusableRefusal };
   }
-
   const requiredRefusal = findRequiredPositionRefusal(prepared);
   if (requiredRefusal !== undefined) {
     return { kind: "refusal", refusal: requiredRefusal };
   }
-
   const matrix = buildAssignmentMatrix(prepared);
   const pairs = munkres(matrix.costs);
   if (pairs.length !== matrix.costs.length) {
     throw new Error("The assignment solver did not return a complete matching.");
   }
-
   const hasForbiddenEdge = EffectArray.some(
     pairs,
     ([row, column]) => matrix.costs[row]?.[column] === matrix.forbiddenCost,
@@ -101,22 +92,18 @@ export function solveLineup(problem: LineupProblem): LineupSolveResult {
   if (hasForbiddenEdge) {
     return { kind: "refusal", refusal: refusalForInfeasible(prepared, matrix, pairs) };
   }
-
   const placed = assignmentsFromPairs(matrix, pairs);
   const plan = buildPlan(problem, prepared, placed.assignments, placed.leftInPlace);
   const violations = planViolations(problem, plan);
   if (violations.length > 0) {
-    throw new Error(`The lineup solver produced an invalid plan: ${JSON.stringify(violations)}`);
+    throw new Error(`The lineup solver produced an invalid plan: ${jsonString(violations)}`);
   }
-
   return { kind: "plan", plan };
 }
-
 function validateProblem(problem: LineupProblem): void {
   if (problem.selectionBasis.length === 0) {
     throw new Error("A lineup problem requires a non-empty selection basis.");
   }
-
   if (problem.availabilityTiers.length === 0) {
     throw new Error("A lineup problem requires at least one availability tier.");
   }
@@ -127,7 +114,6 @@ function validateProblem(problem: LineupProblem): void {
     }
     tiers.add(tier);
   }
-
   const slotsById = new Map<SlotId, RosterSlot>();
   for (const slot of problem.slots) {
     if (slot.id.length === 0) {
@@ -141,7 +127,6 @@ function validateProblem(problem: LineupProblem): void {
     }
     slotsById.set(slot.id, slot);
   }
-
   const playerIds = new Set<PlayerId>();
   for (const player of problem.players) {
     if (player.id.length === 0) {
@@ -165,13 +150,11 @@ function validateProblem(problem: LineupProblem): void {
     playerIds.add(player.id);
   }
 }
-
 function prepareProblem(problem: LineupProblem): ProblemBase {
   const players = [...problem.players].sort((left, right) => compareText(left.id, right.id));
   const slots = [...problem.slots].sort((left, right) => compareText(left.id, right.id));
   const slotsById = new Map(EffectArray.map(slots, (slot) => [slot.id, slot]));
   const lockedBySlot = new Map<SlotId, Array<RosterPlayer>>();
-
   for (const player of players) {
     if (player.lockedSlotId === undefined) {
       continue;
@@ -180,7 +163,6 @@ function prepareProblem(problem: LineupProblem): ProblemBase {
     locked.push(player);
     lockedBySlot.set(player.lockedSlotId, locked);
   }
-
   const lockedPlayersBySlot = new Map<SlotId, ReadonlyArray<RosterPlayer>>();
   for (const [slotId, locked] of lockedBySlot) {
     lockedPlayersBySlot.set(
@@ -188,7 +170,6 @@ function prepareProblem(problem: LineupProblem): ProblemBase {
       locked.sort((left, right) => compareText(left.id, right.id)),
     );
   }
-
   return { problem, players, slots, slotsById, lockedPlayersBySlot };
 }
 function findLockRefusal(base: ProblemBase): LineupRefusal | undefined {
@@ -215,7 +196,6 @@ function findLockRefusal(base: ProblemBase): LineupRefusal | undefined {
       };
     }
   }
-
   for (const slot of base.slots) {
     const locked = base.lockedPlayersBySlot.get(slot.id) ?? [];
     if (locked.length > slot.capacity) {
@@ -227,14 +207,11 @@ function findLockRefusal(base: ProblemBase): LineupRefusal | undefined {
       };
     }
   }
-
   return undefined;
 }
-
 function buildUnits(base: ProblemBase): ReadonlyArray<SlotUnit> {
   const units: Array<SlotUnit> = [];
   let index = 0;
-
   for (const slot of base.slots) {
     const locked = base.lockedPlayersBySlot.get(slot.id) ?? [];
     for (let lockedIndex = 0; lockedIndex < locked.length; lockedIndex += 1) {
@@ -247,21 +224,17 @@ function buildUnits(base: ProblemBase): ReadonlyArray<SlotUnit> {
       index += 1;
     }
   }
-
   return units;
 }
-
 function hasLegalUnit(prepared: PreparedProblem, player: RosterPlayer): boolean {
   return (
     canBeLeftWithoutSlot(prepared, player) ||
     EffectArray.some(prepared.units, (unit) => playerAllowedOnUnit(player, unit))
   );
 }
-
 function canBeLeftWithoutSlot(prepared: PreparedProblem, player: RosterPlayer): boolean {
   return EffectArray.some(prepared.leftWithoutSlot, (held) => held.id === player.id);
 }
-
 function findUnusableSelectionRefusal(prepared: PreparedProblem): LineupRefusal | undefined {
   const playerIds = EffectArray.map(
     EffectArray.filter(
@@ -270,17 +243,14 @@ function findUnusableSelectionRefusal(prepared: PreparedProblem): LineupRefusal 
     ),
     (player) => player.id,
   );
-
   return playerIds.length === 0 ? undefined : { reason: "unusable-selection-value", playerIds };
 }
-
 function canStart(prepared: PreparedProblem, player: RosterPlayer): boolean {
   return EffectArray.some(
     prepared.units,
     (unit) => isStartingSlot(unit.slot) && playerAllowedOnUnit(player, unit),
   );
 }
-
 function canBeBenched(prepared: PreparedProblem, player: RosterPlayer): boolean {
   return (
     canBeLeftWithoutSlot(prepared, player) ||
@@ -290,7 +260,6 @@ function canBeBenched(prepared: PreparedProblem, player: RosterPlayer): boolean 
     )
   );
 }
-
 function requiredSlotDependsOn(prepared: PreparedProblem, player: RosterPlayer): boolean {
   if (!canStart(prepared, player)) {
     return false;
@@ -310,7 +279,6 @@ function requiredSlotDependsOn(prepared: PreparedProblem, player: RosterPlayer):
       ),
   );
 }
-
 function findRequiredPositionRefusal(prepared: PreparedProblem): LineupRefusal | undefined {
   for (const slot of prepared.slots) {
     if (!isStartingSlot(slot) || slot.requirement !== "required") {
@@ -335,10 +303,8 @@ function findRequiredPositionRefusal(prepared: PreparedProblem): LineupRefusal |
       };
     }
   }
-
   return undefined;
 }
-
 function buildAssignmentMatrix(prepared: PreparedProblem): AssignmentMatrix {
   const players = prepared.players;
   const units = prepared.units;
@@ -356,7 +322,6 @@ function buildAssignmentMatrix(prepared: PreparedProblem): AssignmentMatrix {
   );
   const costs: Array<Array<bigint>> = [];
   const placementsOnly = prepared.problem.objective === "places";
-
   for (let row = 0; row < unitCount; row += 1) {
     const player = row < playerCount ? players[row] : undefined;
     const rowCosts: Array<bigint> = [];
@@ -365,10 +330,8 @@ function buildAssignmentMatrix(prepared: PreparedProblem): AssignmentMatrix {
     }
     costs.push(rowCosts);
   }
-
   return { costs, units, leftWithoutSlot, players, forbiddenCost: scale.forbiddenCost };
 }
-
 function costScale(
   playerCount: number,
   unitCount: number,
@@ -394,7 +357,6 @@ function costScale(
     BigInt(unitCount) * changeWeight +
     BigInt(playerCount) * vacancyWeight +
     canonicalMax;
-
   const tierWeights: Array<bigint> = [];
   let lowerBound = belowTierBound;
   for (let rank = tierCount - 1; rank >= 0; rank -= 1) {
@@ -402,7 +364,6 @@ function costScale(
     tierWeights[rank] = weight;
     lowerBound += BigInt(unitCount) * weight;
   }
-
   const legalCellBound =
     BigInt(maxAbsValue) * valueWeight +
     EffectArray.reduce(tierWeights, 0n, (total, weight) => total + weight) +
@@ -414,7 +375,6 @@ function costScale(
   const legalPlanBound = BigInt(unitCount) * legalCellBound;
   const retainWeight = legalPlanBound * 3n + 1n;
   const forbiddenCost = BigInt(unitCount) * retainWeight + legalPlanBound * 3n + 1n;
-
   return {
     valueWeight,
     preferenceWeight,
@@ -430,7 +390,6 @@ function costScale(
     tierWeightByPlayerRow: EffectArray.map(tierRankByPlayerRow, (rank) => tierWeights[rank] ?? 0n),
   };
 }
-
 function maximumAbsoluteValue(players: ReadonlyArray<RosterPlayer>): number {
   return EffectArray.reduce(players, 0, (maximum, player) =>
     player.selection.kind === "known"
@@ -438,7 +397,6 @@ function maximumAbsoluteValue(players: ReadonlyArray<RosterPlayer>): number {
       : maximum,
   );
 }
-
 function cellCost(
   player: RosterPlayer | undefined,
   row: number,
@@ -458,7 +416,6 @@ function cellCost(
       ? scale.retainWeight + BigInt(column) * canonicalWeight
       : scale.forbiddenCost;
   }
-
   const unit = units[column];
   if (player === undefined) {
     return unit !== undefined && dummyAllowedOnUnit(unit) ? 0n : scale.forbiddenCost;
@@ -472,12 +429,10 @@ function cellCost(
   if (!playerAllowedOnUnit(player, unit)) {
     return scale.forbiddenCost;
   }
-
   const starting = isStartingSlot(unit.slot);
   if (starting && player.selection.kind !== "known") {
     return scale.forbiddenCost;
   }
-
   const value = starting && player.selection.kind === "known" ? player.selection.units : 0;
   const valueCost = !placementsOnly && starting ? -BigInt(value) * scale.valueWeight : 0n;
   const availabilityCost =
@@ -487,7 +442,6 @@ function cellCost(
   const vacancyCost = unit.slot.vacant === false ? scale.vacancyWeight : 0n;
   const changeCost = player.currentSlotId === unit.slot.id ? 0n : scale.changeWeight;
   const canonicalCost = BigInt(unit.index) * canonicalWeight;
-
   return (
     valueCost +
     availabilityCost +
@@ -498,7 +452,6 @@ function cellCost(
     canonicalCost
   );
 }
-
 function playerAllowedOnUnit(player: RosterPlayer, unit: SlotUnit): boolean {
   if (retentionEdge(player, unit)) {
     return true;
@@ -510,7 +463,6 @@ function playerAllowedOnUnit(player: RosterPlayer, unit: SlotUnit): boolean {
   }
   return !unit.locked && playerMayOccupySlot(player, unit.slot);
 }
-
 function retentionEdge(player: RosterPlayer, unit: SlotUnit): boolean {
   if (player.mayBeLeftInPlace !== true) {
     return false;
@@ -529,17 +481,14 @@ function retentionEdge(player: RosterPlayer, unit: SlotUnit): boolean {
   }
   return player.lockedSlotId === undefined ? !unit.locked : unit.locked;
 }
-
 function mayRetainInSlot(player: RosterPlayer, slot: RosterSlot): boolean {
   return (
     player.mayBeLeftInPlace === true && player.currentSlotId === slot.id && retentionAllowed(slot)
   );
 }
-
 function retentionAllowed(slot: RosterSlot): boolean {
   return !isStartingSlot(slot) || slot.requirement === "optional";
 }
-
 function dummyAllowedOnUnit(unit: SlotUnit): boolean {
   if (unit.locked) {
     return false;
@@ -549,7 +498,6 @@ function dummyAllowedOnUnit(unit: SlotUnit): boolean {
   }
   return true;
 }
-
 function assignmentsFromPairs(
   matrix: AssignmentMatrix,
   pairs: ReadonlyArray<readonly [number, number]>,
@@ -559,7 +507,6 @@ function assignmentsFromPairs(
 } {
   const assignments: Array<LineupAssignment> = [];
   const leftInPlace: Array<PlayerId> = [];
-
   for (const [row, column] of pairs) {
     if (row >= matrix.players.length) {
       continue;
@@ -586,17 +533,14 @@ function assignmentsFromPairs(
       assignments.push({ playerId: player.id, slotId: unit.slot.id });
     }
   }
-
   if (assignments.length + leftInPlace.length !== matrix.players.length) {
     throw new Error("The assignment solver did not account for every roster player.");
   }
-
   return {
     assignments: assignments.sort(compareAssignments),
     leftInPlace: leftInPlace.sort(compareText),
   };
 }
-
 function buildPlan(
   problem: LineupProblem,
   prepared: PreparedProblem,
@@ -607,7 +551,6 @@ function buildPlan(
   if (totalSelectionValue === undefined) {
     throw new Error("The lineup plan contains a starting player without a usable selection value.");
   }
-
   const filledStartingPositions = EffectArray.filter(assignments, (assignment) => {
     const slot = prepared.slotsById.get(assignment.slotId);
     return slot !== undefined && isStartingSlot(slot);
@@ -620,7 +563,6 @@ function buildPlan(
     0,
     (total, slot) => total + slot.capacity,
   );
-
   return {
     selectionBasis: problem.selectionBasis,
     assignments,
@@ -631,7 +573,6 @@ function buildPlan(
     comparison: compareWithCurrentLineup(problem, assignments, leftInPlace),
   };
 }
-
 function refusalForInfeasible(
   prepared: PreparedProblem,
   matrix: AssignmentMatrix,
@@ -640,7 +581,6 @@ function refusalForInfeasible(
   const playerIds = new Set<PlayerId>();
   const slotIds = new Set<SlotId>();
   const requiredSlotIds = new Set<SlotId>();
-
   for (const [row, column] of pairs) {
     if (matrix.costs[row]?.[column] !== matrix.forbiddenCost) {
       continue;
@@ -665,7 +605,6 @@ function refusalForInfeasible(
       requiredSlotIds.add(unit.slot.id);
     }
   }
-
   const requiredSlotId = [...requiredSlotIds].sort(compareText)[0];
   if (requiredSlotId !== undefined) {
     const slot = prepared.slotsById.get(requiredSlotId);
@@ -684,28 +623,23 @@ function refusalForInfeasible(
       };
     }
   }
-
   return {
     reason: "no-legal-assignment",
     playerIds: [...playerIds].sort(compareText),
     slotIds: [...slotIds].sort(compareText),
   };
 }
-
 function compareAssignments(left: LineupAssignment, right: LineupAssignment): number {
   return compareText(left.playerId, right.playerId) || compareText(left.slotId, right.slotId);
 }
-
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
-
 type SlotUnit = {
   readonly index: number;
   readonly slot: RosterSlot;
   readonly locked: boolean;
 };
-
 type ProblemBase = {
   readonly problem: LineupProblem;
   readonly players: ReadonlyArray<RosterPlayer>;
@@ -713,12 +647,10 @@ type ProblemBase = {
   readonly slotsById: ReadonlyMap<SlotId, RosterSlot>;
   readonly lockedPlayersBySlot: ReadonlyMap<SlotId, ReadonlyArray<RosterPlayer>>;
 };
-
 type PreparedProblem = ProblemBase & {
   readonly units: ReadonlyArray<SlotUnit>;
   readonly leftWithoutSlot: ReadonlyArray<RosterPlayer>;
 };
-
 type CostScale = {
   readonly valueWeight: bigint;
   readonly preferenceWeight: bigint;
@@ -730,7 +662,6 @@ type CostScale = {
   readonly canonicalWeights: ReadonlyArray<bigint>;
   readonly tierWeightByPlayerRow: ReadonlyArray<bigint>;
 };
-
 type AssignmentMatrix = {
   readonly costs: ReadonlyArray<ReadonlyArray<bigint>>;
   readonly units: ReadonlyArray<SlotUnit>;

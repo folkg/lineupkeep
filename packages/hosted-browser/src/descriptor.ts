@@ -1,11 +1,11 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { EffectArray } from "@lineupkeep/collections";
+import { jsonString, jsonValue } from "@lineupkeep/collections";
 
 import { isHostedBrowserViewportProfile } from "./protocol.ts";
 import type { HostedBrowserViewportProfile } from "./protocol.ts";
 import { hostedBrowserProvider } from "./provider.ts";
-
 export type HostedBrowserDescriptor = {
   readonly sessionId: string;
   readonly provider: string;
@@ -13,17 +13,14 @@ export type HostedBrowserDescriptor = {
   readonly loginUrl: string;
   readonly viewport: HostedBrowserViewportProfile;
 };
-
 const maximumDescriptorLifetimeMillis = 15 * 60 * 1_000;
-
 export function signHostedBrowserDescriptor(
   key: string,
   descriptor: HostedBrowserDescriptor,
 ): string {
-  const payload = Buffer.from(JSON.stringify(descriptor), "utf8").toString("base64url");
-  return JSON.stringify({ payload, signature: signature(key, payload) });
+  const payload = Buffer.from(jsonString(descriptor), "utf8").toString("base64url");
+  return jsonString({ payload, signature: signature(key, payload) });
 }
-
 export function verifyHostedBrowserDescriptor(
   key: string,
   envelope: string,
@@ -51,7 +48,6 @@ export function verifyHostedBrowserDescriptor(
   }
   return descriptor;
 }
-
 function decodeDescriptor(payload: string): HostedBrowserDescriptor | undefined {
   const decoded = parseJson(payload);
   if (!isRecord(decoded)) {
@@ -79,12 +75,10 @@ function decodeDescriptor(payload: string): HostedBrowserDescriptor | undefined 
   }
   return { sessionId, provider, expiresAt, loginUrl, viewport };
 }
-
 function isHttpUrl(value: string): boolean {
   const url = parseUrl(value);
   return url !== undefined && (url.protocol === "https:" || url.protocol === "http:");
 }
-
 function parseUrl(value: string): URL | undefined {
   try {
     return new URL(value);
@@ -92,11 +86,9 @@ function parseUrl(value: string): URL | undefined {
     return undefined;
   }
 }
-
 function signature(key: string, payload: string): string {
   return createHmac("sha256", key).update(payload).digest("base64url");
 }
-
 function signaturesMatch(expected: string, provided: string): boolean {
   const expectedBytes = Buffer.from(expected, "utf8");
   const providedBytes = Buffer.from(provided, "utf8");
@@ -104,15 +96,13 @@ function signaturesMatch(expected: string, provided: string): boolean {
     expectedBytes.length === providedBytes.length && timingSafeEqual(expectedBytes, providedBytes)
   );
 }
-
 function parseJson(value: string): unknown {
   try {
-    return JSON.parse(value);
+    return jsonValue(value);
   } catch {
     return undefined;
   }
 }
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !EffectArray.isArray(value);
 }
