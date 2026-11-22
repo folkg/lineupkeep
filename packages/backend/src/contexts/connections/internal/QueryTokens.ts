@@ -153,6 +153,13 @@ export class QueryTokens extends Context.Service<QueryTokens, QueryTokensShape>(
     Layer.effect(QueryTokens, makeQueryTokens(secret).pipe(Effect.orDie));
 }
 
+function traverseEffectUnbounded<A, B>(
+  items: ReadonlyArray<A>,
+  f: (item: A) => Effect.Effect<B>,
+): Effect.Effect<ReadonlyArray<B>> {
+  return Effect.all(EffectArray.map(items, f), { concurrency: "unbounded" });
+}
+
 function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
   return Effect.promise(() =>
     deriveKeys(secret).then((keys) => ({
@@ -184,12 +191,8 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
           Effect.map((value) => Effect.runSync(Schema.decodeEffect(PlayerRef)(value))),
         ),
       sealPlayerRefs: ({ userId, leagueKey, playerKeys }) =>
-        Effect.promise(() =>
-          Promise.all(
-            EffectArray.map(playerKeys, (playerKey) =>
-              sealReference(keys.aes, "player", userId, leagueKey, playerKey),
-            ),
-          ),
+        traverseEffectUnbounded(playerKeys, (playerKey) =>
+          Effect.promise(() => sealReference(keys.aes, "player", userId, leagueKey, playerKey)),
         ).pipe(
           Effect.map((values) =>
             EffectArray.map(values, (value) =>
@@ -198,14 +201,10 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
           ),
         ),
       sealPlayerRefGroups: ({ userId, groups }) =>
-        Effect.promise(() =>
-          Promise.all(
-            EffectArray.map(groups, (group) =>
-              Promise.all(
-                EffectArray.map(group.playerKeys, (playerKey) =>
-                  sealReference(keys.aes, "player", userId, group.leagueKey, playerKey),
-                ),
-              ),
+        traverseEffectUnbounded(groups, (group) =>
+          traverseEffectUnbounded(group.playerKeys, (playerKey) =>
+            Effect.promise(() =>
+              sealReference(keys.aes, "player", userId, group.leagueKey, playerKey),
             ),
           ),
         ).pipe(
@@ -223,23 +222,17 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
           catch: () => QueryReferenceInvalid.make({ reason: "invalid" }),
         }),
       openPlayerRefs: ({ userId, leagueKey, refs }) =>
-        Effect.promise(() =>
-          Promise.all(
-            EffectArray.map(refs, (ref) =>
-              openReference(keys.aes, "player", userId, leagueKey, ref).catch(() => undefined),
-            ),
+        traverseEffectUnbounded(refs, (ref) =>
+          Effect.promise(() =>
+            openReference(keys.aes, "player", userId, leagueKey, ref).catch(() => undefined),
           ),
         ),
       openPlayerRefGroups: ({ userId, groups }) =>
-        Effect.promise(() =>
-          Promise.all(
-            EffectArray.map(groups, (group) =>
-              Promise.all(
-                EffectArray.map(group.refs, (ref) =>
-                  openReference(keys.aes, "player", userId, group.leagueKey, ref).catch(
-                    () => undefined,
-                  ),
-                ),
+        traverseEffectUnbounded(groups, (group) =>
+          traverseEffectUnbounded(group.refs, (ref) =>
+            Effect.promise(() =>
+              openReference(keys.aes, "player", userId, group.leagueKey, ref).catch(
+                () => undefined,
               ),
             ),
           ),
@@ -249,12 +242,8 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
           sealReference(keys.aes, "counterparty", userId, leagueKey, teamKey),
         ).pipe(Effect.map((value) => Effect.runSync(Schema.decodeEffect(CounterpartyRef)(value)))),
       sealCounterpartyRefs: ({ userId, leagueKey, teamKeys }) =>
-        Effect.promise(() =>
-          Promise.all(
-            EffectArray.map(teamKeys, (teamKey) =>
-              sealReference(keys.aes, "counterparty", userId, leagueKey, teamKey),
-            ),
-          ),
+        traverseEffectUnbounded(teamKeys, (teamKey) =>
+          Effect.promise(() => sealReference(keys.aes, "counterparty", userId, leagueKey, teamKey)),
         ).pipe(
           Effect.map((values) =>
             EffectArray.map(values, (value) =>
@@ -263,14 +252,10 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
           ),
         ),
       sealCounterpartyRefGroups: ({ userId, groups }) =>
-        Effect.promise(() =>
-          Promise.all(
-            EffectArray.map(groups, (group) =>
-              Promise.all(
-                EffectArray.map(group.teamKeys, (teamKey) =>
-                  sealReference(keys.aes, "counterparty", userId, group.leagueKey, teamKey),
-                ),
-              ),
+        traverseEffectUnbounded(groups, (group) =>
+          traverseEffectUnbounded(group.teamKeys, (teamKey) =>
+            Effect.promise(() =>
+              sealReference(keys.aes, "counterparty", userId, group.leagueKey, teamKey),
             ),
           ),
         ).pipe(
@@ -288,28 +273,20 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
           catch: () => QueryReferenceInvalid.make({ reason: "invalid" }),
         }),
       openCounterpartyRefGroups: ({ userId, groups }) =>
-        Effect.promise(() =>
-          Promise.all(
-            EffectArray.map(groups, (group) =>
-              Promise.all(
-                EffectArray.map(group.refs, (ref) =>
-                  openReference(keys.aes, "counterparty", userId, group.leagueKey, ref).catch(
-                    () => undefined,
-                  ),
-                ),
+        traverseEffectUnbounded(groups, (group) =>
+          traverseEffectUnbounded(group.refs, (ref) =>
+            Effect.promise(() =>
+              openReference(keys.aes, "counterparty", userId, group.leagueKey, ref).catch(
+                () => undefined,
               ),
             ),
           ),
         ),
       sealTradeOfferRefGroups: ({ userId, groups }) =>
-        Effect.promise(() =>
-          Promise.all(
-            EffectArray.map(groups, (group) =>
-              Promise.all(
-                EffectArray.map(group.transactionKeys, (transactionKey) =>
-                  sealReference(keys.aes, "trade_offer", userId, group.leagueKey, transactionKey),
-                ),
-              ),
+        traverseEffectUnbounded(groups, (group) =>
+          traverseEffectUnbounded(group.transactionKeys, (transactionKey) =>
+            Effect.promise(() =>
+              sealReference(keys.aes, "trade_offer", userId, group.leagueKey, transactionKey),
             ),
           ),
         ).pipe(

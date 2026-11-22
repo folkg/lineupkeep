@@ -6,6 +6,7 @@ export default ({ production }: { readonly production?: boolean }): KnipConfig =
   ignoreBinaries: ["ffmpeg", "ffprobe", "jj"],
   ignoreIssues: {
     "tsconfig.json": ["unlisted"],
+    "packages/backend/package.json": ["subpaths"],
     ...(production === true ? productionTestSeams : {}),
   },
   workspaces: {
@@ -58,7 +59,6 @@ export default ({ production }: { readonly production?: boolean }): KnipConfig =
         "@solidjs/diagnostics",
         "@solidjs/vite-plugin!",
         "@tailwindcss/vite!",
-        "cloudflare",
         ...(production === true ? ["@kobalte/core"] : []),
       ],
       project: ["src/**/*.ts!", "src/**/*.tsx!", "src/**/*.css!", "!src/**/*Test.ts!"],

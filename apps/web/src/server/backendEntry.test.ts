@@ -96,20 +96,15 @@ it.effect("projects every expected connection failure to a safe code and busines
     ];
     const layer = yield* authentication(true);
     for (const [error, code, outcome] of failures) {
-      const observation = yield* authenticatedUseCase(
-        () => Effect.fail(error),
-        mapConnectionError,
-      ).pipe(
-        Effect.flatMap((result) =>
-          Effect.map(Effect.currentSpan, (span) => ({
-            result,
-            outcome: span.attributes.get("app.outcome"),
-            status: span.attributes.get("http.response.status_code"),
-          })),
-        ),
-        Effect.withSpan("test.expected_failure"),
-        layerTools.provide(layer),
-      );
+      const observation = yield* Effect.zipWith(
+        authenticatedUseCase(() => Effect.fail(error), mapConnectionError),
+        Effect.currentSpan,
+        (result, span) => ({
+          result,
+          outcome: span.attributes.get("app.outcome"),
+          status: span.attributes.get("http.response.status_code"),
+        }),
+      ).pipe(Effect.withSpan("test.expected_failure"), layerTools.provide(layer));
 
       assert.deepStrictEqual(observation, {
         result: { type: "error", error: { type: code } },

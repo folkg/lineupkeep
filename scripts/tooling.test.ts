@@ -150,7 +150,7 @@ it("keeps Bun-dispatched Alchemy on its Node branch without inherited credential
   `,
   );
 
-  execFileSync("bun", ["--filter", "@lineupkeep/infra", "plan", "--help"], {
+  execFileSync("bun", ["run", "--filter", "@lineupkeep/infra", "plan", "--help"], {
     cwd: new URL("../", import.meta.url),
     env: {
       PATH: process.env["PATH"],

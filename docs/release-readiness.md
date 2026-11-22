@@ -88,12 +88,6 @@ Solid 2.0.3 includes the escaping fix for raw string children of server `<Errore
 
 These are **not whole-v1 blockers while the features remain excluded or current integrations retained**. Keep awaiting primary loader data under the [loading policy](loading-and-single-flight.md).
 
-### Independently delayed SSR sections: available
-
-[Router #8204](https://github.com/TanStack/router/pull/8204) merged on 2026-09-16 and superseded [#8026](https://github.com/TanStack/router/pull/8026). The first fixed `router-core` is **1.171.31**; the installed **1.171.39** streams post-`</body>` output through `htmlBoundaryScanner` and no longer has the **65,536-character tail cap**. The app does not yet render independently delayed sections.
-
-When adding them, prove with a real browser that a fast boundary paints before an independently gated slow boundary resolves and before stream completion; **>64 KiB late HTML** completes without response failure; hydration is clean. Preserve initial SSR, authentication, redirects, navigation and one-request writes.
-
 ### Native Query SSR / single-flight: optional migration
 
 Router [#8192](https://github.com/TanStack/router/pull/8192), [#8193](https://github.com/TanStack/router/pull/8193), [#8213](https://github.com/TanStack/router/pull/8213) and Query [#11326](https://github.com/TanStack/query/pull/11326) are **merged and present in the pinned releases**, not unresolved upstream blockers. Their primitives do not automatically compose a replacement for Start's current integration.
@@ -104,7 +98,7 @@ Retain `setupRouterSsrQueryIntegration` until an approved replacement proves use
 
 - **Start action URLs:** [Router #8467](https://github.com/TanStack/router/pull/8467) is shipped since rc.10. The solid-start patch is removed; server-function and SSR regressions pass.
 - **Start request-scope export:** the rc.11 patch adds the missing `./request-scope` export for [TanStack/router #8964](https://github.com/TanStack/router/issues/8964). Remove it when a published `start-server-core` exports the subpath and the build passes without the patch.
-- **Better Auth 1.7.12:** retain the cause-chain patch for concurrent CIMD registration. No exact upstream tracker was found; the related resource-seeding fix is not this registration race. Remove only after the unpatched registration regression passes.
+- **Better Auth 1.7.27:** the oauth-provider cause-chain patch is no longer needed; upstream follows the cause chain. The CIMD patch remains so a policy-refused redirect is named separately from a network failure. Remove it when upstream makes that distinction.
 
 Related open Query [#12031](https://github.com/TanStack/query/issues/12031)/[#12034](https://github.com/TanStack/query/pull/12034) (NotReadyError/disposal) and [#11903](https://github.com/TanStack/query/issues/11903)/[#12126](https://github.com/TanStack/query/pull/12126) (cached-key tearing) are watches, not exact #4189 matches or proven current application blockers.
 

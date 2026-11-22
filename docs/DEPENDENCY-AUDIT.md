@@ -5,6 +5,18 @@ replaces the earlier, untriaged count of 47 records recorded in
 [release-readiness.md](release-readiness.md). It is a dated observation, not a security-clean result and
 not publication authorization.
 
+## Baseline after the 2026-11-22 upgrade
+
+Every direct dependency is at its latest published version except three deliberate holds:
+
+| Package           | Installed | Reason                                                               |
+| ----------------- | --------- | -------------------------------------------------------------------- |
+| `@types/node`     | 24.19.2   | Tracks the Node 24 runtime; the 26.x line describes Node 26.         |
+| `oxlint-tsgolint` | 7.0.2007  | `@effect/tsgo` 0.73.2 supports 7.0.2005 through 7.0.2007.            |
+| `undici`          | 7.30.2    | 8.x changes the transport surface and breaks the Node isolate tests. |
+
+`bun audit` reports five records at this baseline: the four `toml` records below, which remain tooling-only under the developer `effect-solutions` CLI, and one `effect` cookie record. The in-range `effect` copy is 4.0.0-beta.59 nested under `effect-solutions`; the shipped copy is 4.1.5, whose `makeCookie` validates the cookie name, encoded value, domain and path. No shipped artifact contains the nested CLI copy.
+
 ## Scan
 
 | Item              | Value                                                                                                                         |
@@ -270,7 +282,7 @@ Scan chain: `workspace:@lineupkeep/web > effect > toml`. **This is not the insta
 | GHSA-9j65-hcg3-gc64 | CVE-2026-114143 | high     | 5.0.1 | No — E8   | Left, see D4 |
 | GHSA-9qmh-m7c6-f92p | CVE-2026-114144 | high     | 5.0.1 | No — E8   | Left, see D4 |
 
-**E8.** The application's `effect@4.0.5` declares **no dependencies at all** and contains no `toml`
+**E8.** The application's `effect@4.1.5` declares **no dependencies at all** and contains no `toml`
 import (`rg 'from "toml"' node_modules/effect` returns nothing). The only installed `toml` is required by
 `effect@4.0.0-beta.59`, nested under the root devDependency `effect-solutions`, where
 `dist/unstable/cli/Primitive.js` imports it for CLI config files. That TOML parser is bundled into
@@ -325,7 +337,7 @@ three resolutions, their now-deduplicated nested copies, and one stale workspace
 Those framework versions were current when this audit was written. The 2026-11-19 migration moved them
 to Solid 2.0.3, and the 2026-11-22 upgrade moved them to the TanStack 2.0.0-rc.11 line. See [release
 readiness](release-readiness.md#publication-blocker-solid-start-rpc-security-fixed-upstream) for the
-current closure and the one retained packaging patch.
+current closure and the two retained patches (CIMD redirect naming and request-scope export).
 
 ## Verification
 

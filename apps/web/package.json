@@ -7,8 +7,6 @@
     "#server/*": "./src/server/*",
     "#server-functions/*": "./src/server-functions/*",
     "#contracts/*": "./src/contracts/*",
-    "#routes/*": "./src/routes/*",
-    "#theme/*": "./src/theme/*",
     "#web/*": "./src/*",
     "#deploy/*": "./deploy/*",
     "#deployment-target": "./src/server/targets/node.ts",
@@ -54,8 +52,8 @@
     "@lineupkeep/machine-test": "workspace:*",
     "@solidjs/diagnostics": "catalog:",
     "@types/ws": "catalog:",
-    "crossws": "0.4.15",
-    "fast-check": "4.10.2",
+    "crossws": "0.4.17",
+    "fast-check": "4.11.0",
     "nitro": "catalog:"
   }
 }

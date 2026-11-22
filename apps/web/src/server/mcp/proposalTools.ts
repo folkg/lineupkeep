@@ -236,15 +236,11 @@ export function proposalToolHandlers(
               })),
             })
             .pipe(
-              Effect.flatMap((result) =>
-                plans.plan(agent.userId, { team: input.team }).pipe(
-                  Effect.map((plan) => ({
-                    ...plan,
-                    refused: result.refused,
-                    confirmationCleared: result.confirmationCleared,
-                  })),
-                ),
-              ),
+              Effect.zipWith(plans.plan(agent.userId, { team: input.team }), (result, plan) => ({
+                ...plan,
+                refused: result.refused,
+                confirmationCleared: result.confirmationCleared,
+              })),
               mapPlanFailure,
             ),
         get_pending_trade_offers: (input) =>
@@ -252,24 +248,19 @@ export function proposalToolHandlers(
         list_transaction_proposals: (input) => plans.list(agent.userId, input).pipe(mapPlanFailure),
         get_transaction_plan: (input) => plans.plan(agent.userId, input).pipe(mapPlanFailure),
         discard_transaction_move: (input) =>
-          plans
-            .discard(agent.userId, {
+          Effect.zipWith(
+            plans.discard(agent.userId, {
               team: input.team,
               move: input.move,
               decision: { decidedBy: "agent", surface: "discard_transaction_move" },
-            })
-            .pipe(
-              Effect.flatMap((result) =>
-                plans.plan(agent.userId, { team: input.team }).pipe(
-                  Effect.map((plan) => ({
-                    ...plan,
-                    refused: result.refused,
-                    ...(input.reason === undefined ? {} : { reason: input.reason }),
-                  })),
-                ),
-              ),
-              mapPlanFailure,
-            ),
+            }),
+            plans.plan(agent.userId, { team: input.team }),
+            (result, plan) => ({
+              ...plan,
+              refused: result.refused,
+              ...(input.reason === undefined ? {} : { reason: input.reason }),
+            }),
+          ).pipe(mapPlanFailure),
       });
     }),
   );

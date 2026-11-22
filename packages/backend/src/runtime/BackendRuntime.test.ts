@@ -1,7 +1,7 @@
 import { rejects } from "node:assert/strict";
 
 import { assert, it } from "@effect/vitest";
-import { Effect, Option, Schema, Tracer } from "effect";
+import { Array as EffectArray, Effect, Option, Schema, Tracer } from "effect";
 
 import { BackendRuntime } from "./BackendRuntime.ts";
 import { RequestContext } from "./RequestContext.ts";
@@ -120,12 +120,14 @@ it.effect("hands after-response work to the platform once the response is ready"
 
     const response = yield* withTestRuntime(
       (runtime) =>
-        Effect.promise(async () => {
-          const response = await runtime.runHttpHandler(request, () => {
-            completed.push("response");
-            return Promise.resolve(new Response("ok"));
-          });
-          await Promise.all(extended);
+        Effect.gen(function* () {
+          const response = yield* Effect.promise(() =>
+            runtime.runHttpHandler(request, () => {
+              completed.push("response");
+              return Promise.resolve(new Response("ok"));
+            }),
+          );
+          yield* awaitPromises(extended);
           return response;
         }),
       {
@@ -158,7 +160,7 @@ it.effect("finishes in-flight requests before releasing resources on dispose", (
     const disposed = runtime.dispose().then(() => events.push("disposed"));
     events.push("response sent");
     handler.resolve(new Response("ok"));
-    yield* Effect.promise(() => Promise.all([response, disposed]));
+    yield* awaitPromises<unknown>([response, disposed]);
 
     assert.deepStrictEqual(events, ["response sent", "disposed"]);
   }),
@@ -178,10 +180,10 @@ it.effect("extends platform lifetime for reports and drains them before disposal
         }),
       ),
       (runtime) =>
-        Effect.promise(async () => {
+        Effect.gen(function* () {
           finish.resolve();
-          await runtime.dispose();
-          await Promise.all(extended);
+          yield* Effect.promise(() => runtime.dispose());
+          yield* awaitPromises(extended);
         }),
     );
     runtime.runBackground(
@@ -200,7 +202,7 @@ it.effect("extends platform lifetime for reports and drains them before disposal
     assert.deepStrictEqual(events, []);
 
     finish.resolve();
-    yield* Effect.promise(() => Promise.all([disposed, ...extended]));
+    yield* awaitPromises([disposed, ...extended]);
 
     assert.deepStrictEqual(events, ["reported", "flushed", "disposed"]);
   }),
@@ -212,9 +214,9 @@ it.effect("owns a failed background report without rejecting platform work", () 
     const runtime = yield* Effect.acquireRelease(
       Effect.sync(() => BackendRuntime.makeTest({ waitUntil: (work) => extended.push(work) })),
       (runtime) =>
-        Effect.promise(async () => {
-          await runtime.dispose();
-          await Promise.all(extended);
+        Effect.gen(function* () {
+          yield* Effect.promise(() => runtime.dispose());
+          yield* awaitPromises(extended);
         }),
     );
     runtime.runBackground(
@@ -224,11 +226,18 @@ it.effect("owns a failed background report without rejecting platform work", () 
     );
 
     yield* Effect.promise(() => runtime.dispose());
-    yield* Effect.promise(() => Promise.all(extended));
+    yield* awaitPromises(extended);
 
     assert.strictEqual(extended.length, 1);
   }),
 );
+
+function awaitPromises<A>(promises: ReadonlyArray<Promise<A>>): Effect.Effect<ReadonlyArray<A>> {
+  return Effect.all(
+    EffectArray.map(promises, (promise) => Effect.promise(() => promise)),
+    { concurrency: "unbounded" },
+  );
+}
 
 function withTestRuntime<A, E>(
   use: (runtime: BackendRuntime<never>) => Effect.Effect<A, E>,

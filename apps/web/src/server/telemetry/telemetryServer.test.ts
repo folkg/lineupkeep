@@ -51,7 +51,7 @@ it.effect("accepts a client error report with the request id as ref", () =>
       },
       budget,
     ).pipe(
-      Effect.flatMap((result) => Effect.map(Effect.currentSpan, (span) => ({ result, span }))),
+      Effect.zipWith(Effect.currentSpan, (result, span) => ({ result, span })),
       provideTestContext,
     );
 
@@ -72,7 +72,7 @@ it.effect("sheds reports past the budget without logging", () =>
     yield* recordClientReport(input, budget).pipe(Effect.asVoid, provideTestContext, Effect.ignore);
 
     const { result, span } = yield* recordClientReport(input, budget).pipe(
-      Effect.flatMap((result) => Effect.map(Effect.currentSpan, (span) => ({ result, span }))),
+      Effect.zipWith(Effect.currentSpan, (result, span) => ({ result, span })),
       provideTestContext,
     );
 
@@ -94,7 +94,7 @@ it.effect("records server errors with site and paths", () =>
       },
       budget,
     ).pipe(
-      Effect.flatMap((result) => Effect.map(Effect.currentSpan, (span) => ({ result, span }))),
+      Effect.zipWith(Effect.currentSpan, (result, span) => ({ result, span })),
       provideTestContext,
     );
 
@@ -113,7 +113,7 @@ it.effect("records slow SSR boundaries with wait facts", () =>
       outcome: "settled",
       passes: 2,
     }).pipe(
-      Effect.flatMap((result) => Effect.map(Effect.currentSpan, (span) => ({ result, span }))),
+      Effect.zipWith(Effect.currentSpan, (result, span) => ({ result, span })),
       provideTestContext,
     );
 
