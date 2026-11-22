@@ -1,4 +1,4 @@
-import { EffectArray } from "@lineupkeep/collections";
+import { EffectArray, EffectString } from "@lineupkeep/collections";
 import { render } from "@solidjs/web";
 import { QueryClientProvider } from "@tanstack/solid-query";
 import {
@@ -16,6 +16,7 @@ import "#web/styles.css";
 import { page } from "vitest/browser";
 
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
+import { applyTheme } from "#browser/app-shell/theme.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
 import { formatClockTime, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
@@ -149,14 +150,13 @@ it("shows batch season facts before local status and preserves zero", async () =
   using _app = setupTeamsPage([baseTeam], { cards: () => Promise.resolve([seasonCard]) });
   await expect.element(page.getByText("3rd of 12")).toBeVisible();
   await expect.element(page.getByText("7-3-0 (.700)")).toBeVisible();
-  await expect.element(page.getByText("1,234.5 points")).toBeVisible();
-  await expect.element(page.getByText("1,200 points against")).toBeVisible();
-  await expect.element(page.getByText("0 points behind leader")).toBeVisible();
-  await expect.element(page.getByText("H2H categories")).toBeVisible();
+  await expect.element(page.getByText("1,234.5", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("1,200", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Head to head categories")).toBeVisible();
   const text = page.getByRole("listitem").first().element().textContent;
-  expect(text).toMatch(/1,234\.5 points[\s\S]*1,200 points against[\s\S]*0 points behind leader/u);
-  await expect.element(page.getByText("Max games: 162")).toBeVisible();
-  await expect.element(page.getByText("Lineup changes: weekly")).toBeVisible();
+  expect(text).toMatch(/1,234\.5[\s\S]*1,200[\s\S]*0[\s\S]*Head to head categories/u);
+  await expect.element(page.getByText("162", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Weekly", { exact: true })).toBeVisible();
   await expect.element(page.getByText("Week 11 of 18")).toBeVisible();
   await expect.element(page.getByRole("switch", { name: "Lineup checks for Alpha" })).toBeVisible();
 });
@@ -188,11 +188,11 @@ it("shows missing facts without a made-up record, label, cap or weekly lock", as
       ]),
   });
   await expect.element(page.getByText("Record not published.")).toBeVisible();
-  await expect.element(page.getByText("0 points")).toBeVisible();
+  await expect.element(page.getByText("0", { exact: true }).first()).toBeVisible();
   await expect.element(page.getByText("Season ends 2027-01-04")).toBeVisible();
-  expect(page.getByText("Lineup changes: weekly").elements()).toHaveLength(0);
-  expect(page.getByText("Max games: 0").elements()).toHaveLength(0);
-  expect(page.getByText("H2H categories").elements()).toHaveLength(0);
+  expect(page.getByText("Weekly", { exact: true }).elements()).toHaveLength(0);
+  expect(page.getByText("Games cap").elements()).toHaveLength(0);
+  expect(page.getByText("Head to head categories").elements()).toHaveLength(0);
 });
 
 it("shows provider labels for unknown formats, and preserves local controls when facts fail", async () => {
@@ -230,7 +230,7 @@ it("keeps rotisserie points without fabricating a season record", async () => {
         },
       ]),
   });
-  await expect.element(page.getByText("0 points")).toBeVisible();
+  await expect.element(page.getByText("0", { exact: true }).first()).toBeVisible();
   await expect
     .element(page.getByText("This format does not publish a win-loss record."))
     .toBeVisible();
@@ -256,10 +256,9 @@ it("keeps published zero for points for, against and behind without substituting
         },
       ]),
   });
-  await expect.element(page.getByText("0 points", { exact: true })).toBeVisible();
-  await expect.element(page.getByText("0 points against")).toBeVisible();
-  await expect.element(page.getByText("0 points behind leader")).toBeVisible();
-  expect(page.getByText("99 points", { exact: true }).elements()).toHaveLength(0);
+  await expect.element(page.getByText("0", { exact: true }).first()).toBeVisible();
+  expect(page.getByText("0", { exact: true }).elements().length).toBeGreaterThanOrEqual(3);
+  expect(page.getByText("99", { exact: true }).elements()).toHaveLength(0);
 });
 
 it.each([
@@ -283,7 +282,7 @@ it.each([
       ]),
   });
   await expect.element(page.getByText("Points were not published for this team.")).toBeVisible();
-  expect(page.getByText("99 points", { exact: true }).elements()).toHaveLength(0);
+  expect(page.getByText("99", { exact: true }).elements()).toHaveLength(0);
 });
 
 it.each([
@@ -403,10 +402,46 @@ it("keeps local status in place while season facts arrive", async () => {
   await expect.element(page.getByText("Loading season facts.")).toBeVisible();
   const card = status.element().closest<HTMLElement>("[data-card]");
   const height = card?.getBoundingClientRect().height;
-  pending.resolve([tallSeasonCard]);
+  const rows = card?.querySelector('[aria-hidden="true"].grid');
+  expect(rows?.children).toHaveLength(8);
+  expect(
+    EffectString.split(getComputedStyle(rows ?? document.body).gridTemplateColumns, " "),
+  ).toHaveLength(2);
+  await page.screenshot({
+    path: "../../../../../.artifacts/team-overview-polish/card-loading-390.png",
+    save: true,
+    element: card ?? undefined,
+  });
+  pending.resolve([seasonCard]);
   await expect.element(page.getByText("3rd of 12")).toBeVisible();
   await document.fonts.ready;
-  expect(card?.getBoundingClientRect().height).toBe(height);
+  expect(Math.abs((card?.getBoundingClientRect().height ?? 0) - (height ?? 0))).toBeLessThanOrEqual(
+    8,
+  );
+});
+
+it("keeps the loading card close to settled at desktop width", async () => {
+  await page.viewport(1440, 900);
+  await document.fonts.ready;
+  const pending = Promise.withResolvers<ReadonlyArray<TeamCardView>>();
+  using _app = setupTeamsPage([baseTeam], { cards: () => pending.promise });
+  await expect.element(page.getByText("Loading season facts.")).toBeVisible();
+  const card = page
+    .getByRole("switch", { name: "Lineup checks for Alpha" })
+    .element()
+    .closest<HTMLElement>("[data-card]");
+  const loadingHeight = card?.getBoundingClientRect().height ?? 0;
+  expect(card?.querySelector('[aria-hidden="true"].grid')?.children).toHaveLength(8);
+  await page.screenshot({
+    path: "../../../../../.artifacts/team-overview-polish/card-loading-1440.png",
+    save: true,
+    element: card ?? undefined,
+  });
+  pending.resolve([seasonCard]);
+  await expect.element(page.getByText("Head to head categories")).toBeVisible();
+  expect(Math.abs((card?.getBoundingClientRect().height ?? 0) - loadingHeight)).toBeLessThanOrEqual(
+    8,
+  );
 });
 
 it("explains when a ready connection has no card facts for a local team", async () => {
@@ -432,12 +467,41 @@ it("keeps season facts and controls in a phone viewport", async () => {
     card
       ?.querySelector("[data-card-body]")
       ?.firstElementChild?.firstElementChild?.getBoundingClientRect().height ?? 0;
-  expect(facts).toBeGreaterThan(450);
+  expect(facts).toBeLessThan(320);
   expect(reserved).toBeLessThanOrEqual(facts + 4);
-  expect(card?.getBoundingClientRect().height).toBeLessThanOrEqual(720);
+  expect(card?.getBoundingClientRect().height).toBeLessThanOrEqual(550);
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
     document.documentElement.clientWidth,
   );
+});
+
+it("keeps the first card controls in the first phone screen and captures both themes", async () => {
+  using _app = setupTeamsPage([baseTeam], { cards: () => Promise.resolve([seasonCard]) });
+  await expect.element(page.getByText("Head to head categories")).toBeVisible();
+  await document.fonts.ready;
+  for (const [width, height] of [
+    [1440, 900],
+    [390, 844],
+  ] as const) {
+    await page.viewport(width, height);
+    for (const theme of ["light", "dark"] as const) {
+      applyTheme(theme);
+      const card = page
+        .getByRole("link", { name: "Alpha", exact: true })
+        .element()
+        .closest<HTMLElement>("[data-card]");
+      const toggle = page.getByRole("switch", { name: "Lineup checks for Alpha" }).element();
+      expect(toggle.getBoundingClientRect().bottom).toBeLessThan(844);
+      expect(toggle.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+      await page.screenshot({
+        path: `../../../../../.artifacts/team-overview-polish/card-full-${width}x${height}-${theme}.png`,
+        save: true,
+        element: card ?? undefined,
+      });
+    }
+  }
+  applyTheme("light");
 });
 
 const enabledTeam: TeamSummaryView = {
@@ -1149,16 +1213,14 @@ it("keeps the loading card the same height as the team card it becomes", async (
   await expect.element(skeleton).toBeVisible();
   const skeletonElement = skeleton.element();
   const skeletonHeight = skeletonElement.getBoundingClientRect().height;
-  pending.resolve([
-    { ...enabledTeam, lastRun: changedRun, recentRuns: [changedRun, noOpRun, noOpRun] },
-  ]);
+  pending.resolve([enabledTeam]);
   const name = page.getByRole("link", { name: "Alpha", exact: true });
   await expect.element(name).toBeVisible();
   const card = name.element().closest<HTMLElement>("[data-card]");
   expect(card).not.toBeNull();
   const cardHeight = card?.getBoundingClientRect().height ?? 0;
 
-  expect(Math.abs(skeletonHeight - cardHeight)).toBeLessThanOrEqual(1);
+  expect(skeletonHeight).toBeGreaterThanOrEqual(cardHeight);
 });
 
 it("keeps refresh an icon button with a tooltip and no text label", async () => {

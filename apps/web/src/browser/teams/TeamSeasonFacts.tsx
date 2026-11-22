@@ -3,6 +3,8 @@ import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
 
 import { Definition, DefinitionList } from "#browser/shared-ui/DefinitionList.tsx";
+import { OverviewLoadingRows } from "#browser/shared-ui/Skeleton.tsx";
+import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import type { TeamCardView } from "#contracts/connections/teamContract.ts";
 
@@ -31,20 +33,25 @@ export function TeamSeasonFacts(props: {
   return (
     <Show
       fallback={
-        <Text type="meta" tone="muted">
-          {props.failed
-            ? "Season facts could not be loaded. Lineup checks and controls are still available."
-            : (props.facts?.reason ??
-              (props.loading
-                ? "Loading season facts."
-                : "Season facts were not published for this team."))}
-        </Text>
+        <Stack gap="sm">
+          <Text type="meta" tone="muted">
+            {props.failed
+              ? "Season facts could not be loaded. Lineup checks and controls are still available."
+              : (props.facts?.reason ??
+                (props.loading
+                  ? "Loading season facts."
+                  : "Season facts were not published for this team."))}
+          </Text>
+          <Show when={props.loading && !props.failed && props.facts?.reason === undefined}>
+            <OverviewLoadingRows count={8} paired />
+          </Show>
+        </Stack>
       }
       when={season()}
     >
       {(facts) => (
         <>
-          <DefinitionList compact>
+          <DefinitionList compact paired>
             <Show
               when={
                 standing()?.rank !== null &&
@@ -62,7 +69,7 @@ export function TeamSeasonFacts(props: {
               <Definition compact term="Record" value={record()} />
             </Show>
             <Show when={points() !== null && points() !== undefined}>
-              <Definition compact term="Points" value={`${number(points() ?? 0)} points`} />
+              <Definition compact term="Points" value={number(points() ?? 0)} />
             </Show>
             <Show
               when={standing()?.pointsAgainst !== null && standing()?.pointsAgainst !== undefined}
@@ -70,23 +77,23 @@ export function TeamSeasonFacts(props: {
               <Definition
                 compact
                 term="Points against"
-                value={`${number(standing()?.pointsAgainst ?? 0)} points against`}
+                value={number(standing()?.pointsAgainst ?? 0)}
               />
             </Show>
             <Show when={standing()?.pointsBack !== null && standing()?.pointsBack !== undefined}>
               <Definition
                 compact
                 term="Behind leader"
-                value={`${number(standing()?.pointsBack ?? 0)} points behind leader`}
+                value={number(standing()?.pointsBack ?? 0)}
               />
             </Show>
             <Definition
               compact
               term="Scoring format"
-              value={facts().scoringLabel ?? scoringFormatLabel(facts().format)}
+              value={scoringLabel(facts().scoringLabel) ?? scoringFormatLabel(facts().format)}
             />
             <Show when={facts().maxGamesPlayed !== undefined && (facts().maxGamesPlayed ?? 0) > 0}>
-              <Definition compact term="Games cap" value={`Max games: ${facts().maxGamesPlayed}`} />
+              <Definition compact term="Games cap" value={number(facts().maxGamesPlayed ?? 0)} />
             </Show>
             <Show
               when={facts().maxInningsPitched !== undefined && (facts().maxInningsPitched ?? 0) > 0}
@@ -94,7 +101,7 @@ export function TeamSeasonFacts(props: {
               <Definition
                 compact
                 term="Innings cap"
-                value={`Max innings: ${facts().maxInningsPitched}`}
+                value={number(facts().maxInningsPitched ?? 0)}
               />
             </Show>
             <Show
@@ -104,7 +111,7 @@ export function TeamSeasonFacts(props: {
                 facts().weeklyDeadline !== "intraday"
               }
             >
-              <Definition compact term="Lineup changes" value="Lineup changes: weekly" />
+              <Definition compact term="Lineup changes" value="Weekly" />
             </Show>
             <Show
               when={
@@ -178,6 +185,22 @@ function scoringFormatLabel(format: NonNullable<TeamCardView["season"]>["format"
       return "Points";
     case "unknown":
       return "Unknown scoring format";
+  }
+}
+
+export function scoringLabel(label: string | undefined): string | undefined {
+  if (label === undefined) {
+    return undefined;
+  }
+  switch (EffectString.toLowerCase(EffectString.trim(label))) {
+    case "h2h categories":
+    case "head to head, categories":
+      return "Head to head categories";
+    case "h2h points":
+    case "head to head, points":
+      return "Head to head points";
+    default:
+      return label;
   }
 }
 

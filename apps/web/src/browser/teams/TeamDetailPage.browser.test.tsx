@@ -9,6 +9,7 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/solid-router";
+import { createSignal } from "solid-js";
 import { expect, it } from "vitest";
 
 import "#web/styles.css";
@@ -38,6 +39,7 @@ import { TeamDetailPage } from "./TeamDetailPage";
 import { quietGroupSpan } from "./teamLabels";
 import { teamQueries } from "./teamQueries";
 import type { TeamRemote } from "./teamRemote";
+import { TeamSeasonOverview } from "./TeamSeasonOverview";
 
 const teamId = "018f79ea-7d86-7c18-9b4a-8b4d0c9165a1";
 const overviewFixture: TeamOverviewView = {
@@ -647,11 +649,32 @@ function foldedLabel(runs: ReadonlyArray<LineupRunView>): string {
 it("shows season facts, both matchup sides, category detail, and cap usage", async () => {
   using _app = setupTeamDetailPage(team, { overview: () => Promise.resolve(overviewFixture) });
 
-  await expect.element(page.getByText("Head to head, categories")).toBeVisible();
+  await expect.element(page.getByText("Head to head categories")).toBeVisible();
   await expect.element(page.getByText("Week 11 · Against Beta")).toBeVisible();
   await expect.element(page.getByText("0 played · 150 projected")).toBeVisible();
   await expect.element(page.getByText("10.1 pitched · 1,300.5 projected")).toBeVisible();
   await expect.element(page.getByText("7-3-0 (.700)")).toBeVisible();
+  await expect
+    .element(page.getByRole("heading", { level: 3, name: "Current matchup" }))
+    .toBeVisible();
+  await expect.element(page.getByRole("heading", { level: 3, name: "Season caps" })).toBeVisible();
+  const score = page.getByText("1,400", { exact: true }).element();
+  expect(getComputedStyle(score).fontVariantNumeric).toBe("normal");
+  expect(getComputedStyle(score.querySelector("span") ?? score).fontVariantNumeric).toBe(
+    "tabular-nums",
+  );
+  const prose = page.getByText("Head to head categories").element();
+  expect(getComputedStyle(prose).fontVariantNumeric).not.toBe("tabular-nums");
+  const season = page
+    .getByRole("heading", { name: "Season overview" })
+    .element()
+    .closest<HTMLElement>("[data-card]");
+  const cap = page.getByText("Games cap").element();
+  expect(
+    cap.compareDocumentPosition(page.getByRole("heading", { name: "Current matchup" }).element()) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(season).not.toBeNull();
   await page.getByText("Scoring detail").click();
   await expect.element(page.getByText("You: 0 · Opponent: 3")).toBeVisible();
   await expect.element(page.getByText("Shots (informational)")).toBeVisible();
@@ -670,7 +693,7 @@ it("reads the detail overview without requesting team card facts", async () => {
     },
   });
 
-  await expect.element(page.getByText("Head to head, categories")).toBeVisible();
+  await expect.element(page.getByText("Head to head categories")).toBeVisible();
   expect(reads).toEqual(["overview"]);
 });
 
@@ -713,6 +736,7 @@ it("shows an unknown format rather than a league read error when settings are mi
 });
 
 it("states why partial and unsupported season facts are missing", async () => {
+  await page.viewport(390, 844);
   using _app = setupTeamDetailPage(team, {
     overview: () =>
       Promise.resolve({
@@ -737,6 +761,9 @@ it("states why partial and unsupported season facts are missing", async () => {
   await expect
     .element(page.getByText("This format does not publish a win-loss record."))
     .toBeVisible();
+  const record = page.getByText("Record", { exact: true }).element().closest("div");
+  expect(getComputedStyle(record ?? document.body).gridColumnEnd).toBe("span 2");
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
   await expect.element(page.getByText("No current matchup was published.")).toBeVisible();
   await expect.element(page.getByText("Usage not published")).toBeVisible();
   await expect
@@ -744,6 +771,19 @@ it("states why partial and unsupported season facts are missing", async () => {
     .toBeVisible();
   expect(page.getByText("Lineup changes").elements()).toHaveLength(0);
   expect(page.getByText("0 of 162").elements()).toHaveLength(0);
+});
+
+it("does not name a current week after the published last period", async () => {
+  using _app = setupTeamDetailPage(team, {
+    overview: () =>
+      Promise.resolve({
+        ...overviewFixture,
+        seasonProgress: { currentPeriod: 19, lastPeriod: 18, endDate: "2027-04-10" },
+      }),
+  });
+  await expect.element(page.getByText("Season ended")).toBeVisible();
+  expect(page.getByText("Week 19 of 18").elements()).toHaveLength(0);
+  expect(page.getByText("Season ends").elements()).toHaveLength(0);
 });
 
 it("keeps controls and activity when season facts are unavailable", async () => {
@@ -754,6 +794,73 @@ it("keeps controls and activity when season facts are unavailable", async () => 
   await expect.element(page.getByText("Season facts are unavailable.")).toBeVisible();
   await expect.element(page.getByRole("heading", { name: "Recent activity" })).toBeVisible();
   await expect.element(page.getByRole("switch", { name: "Lineup checks for Alpha" })).toBeVisible();
+});
+
+it.each([null, 0] as const)("shows only points-for when it is %s", async (pointsFor) => {
+  using _app = setupTeamDetailPage(team, {
+    overview: () =>
+      Promise.resolve({
+        ...overviewFixture,
+        standing: { rank: 3, points: 99, pointsFor, pointsAgainst: 120, pointsBack: 0 },
+      }),
+  });
+  await expect.element(page.getByText("Head to head categories")).toBeVisible();
+  const points = page
+    .getByText("Points", { exact: true })
+    .element()
+    .closest("div")
+    ?.querySelector("dd");
+  expect(points?.textContent).toBe(pointsFor === null ? "Not published" : "0");
+  expect(page.getByText("99", { exact: true }).elements()).toHaveLength(0);
+});
+
+it.each([
+  [390, 844],
+  [1440, 900],
+] as const)("keeps activity in place as season facts arrive at %ipx", async (width, height) => {
+  await page.viewport(width, height);
+  await document.fonts.ready;
+  const [facts, setFacts] = createSignal<TeamOverviewView>();
+  const host = document.body.appendChild(document.createElement("main"));
+  const dispose = render(
+    () => (
+      <>
+        <TeamSeasonOverview facts={facts()} loading={facts() === undefined} failed={false} />
+        <h2>Recent activity</h2>
+      </>
+    ),
+    host,
+  );
+  using _app = {
+    [Symbol.dispose](): void {
+      dispose();
+      host.remove();
+    },
+  };
+  await expect.element(page.getByText("Loading season facts.")).toBeVisible();
+  const loadingRows = host.querySelectorAll<HTMLElement>('[aria-hidden="true"].grid');
+  expect(loadingRows[0]?.children).toHaveLength(10);
+  expect(
+    EffectString.split(getComputedStyle(loadingRows[0] ?? host).gridTemplateColumns, " "),
+  ).toHaveLength(2);
+  expect(loadingRows[1]?.children).toHaveLength(6);
+  const activity = page.getByRole("heading", { name: "Recent activity" }).element();
+  const before = activity.getBoundingClientRect().top;
+  await page.screenshot({
+    path: `../../../../../.artifacts/team-overview-polish/detail-loading-${width}.png`,
+    save: true,
+    element: host,
+  });
+  applyTheme("dark");
+  await page.screenshot({
+    path: `../../../../../.artifacts/team-overview-polish/detail-loading-${width}-dark.png`,
+    save: true,
+    element: host,
+  });
+  applyTheme("light");
+  setFacts(overviewFixture);
+  await expect.element(page.getByText("Head to head categories")).toBeVisible();
+  expect(Math.abs(activity.getBoundingClientRect().top - before)).toBeLessThanOrEqual(8);
 });
 
 it("captures the team overview at desktop and phone sizes in light and dark", async () => {
@@ -768,11 +875,23 @@ it("captures the team overview at desktop and phone sizes in light and dark", as
     for (const theme of ["light", "dark"] as const) {
       applyTheme(theme);
       await expect.element(page.getByText("Week 11 · Against Beta")).toBeVisible();
+      const overview = page.getByRole("region", { name: "Season overview" }).element();
+      const facts = overview.querySelector("dl");
+      expect(
+        EffectString.split(getComputedStyle(facts ?? overview).gridTemplateColumns, " "),
+      ).toHaveLength(2);
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
       await page.screenshot({
-        path: `../../../../../.artifacts/team-overview/detail-${width}x${height}-${theme}.png`,
+        path: `../../../../../.artifacts/team-overview-polish/detail-top-${width}x${height}-${theme}.png`,
         save: true,
       });
+      page.getByRole("heading", { name: "Season caps" }).element().scrollIntoView();
+      await expect.element(page.getByText("10.1 pitched · 1,300.5 projected")).toBeVisible();
+      await page.screenshot({
+        path: `../../../../../.artifacts/team-overview-polish/detail-caps-${width}x${height}-${theme}.png`,
+        save: true,
+      });
+      window.scrollTo(0, 0);
     }
   }
   applyTheme("light");

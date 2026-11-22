@@ -175,7 +175,7 @@ function TeamCard(props: TeamCardProps): JSX.Element {
       }
     >
       <Stack gap="xs">
-        <SeasonArea>
+        <SeasonArea loading={props.factsLoading}>
           <TeamSeasonFacts
             facts={props.facts}
             failed={props.factsFailure}
