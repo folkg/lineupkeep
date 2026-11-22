@@ -70,9 +70,9 @@ The owner has chosen to proceed with local implementation. The upstream security
 
 Open **Connections** and choose **Connect Yahoo**. A private browser opens inside the page; sign in there once. Lineupgrade never stores your password, and keystrokes are relayed only to that temporary browser. When Yahoo accepts the sign-in, the connection becomes ready, teams are discovered automatically, and the app opens **Teams**. No install, code copy, or second approval is required. The temporary browser profile is destroyed when the session ends.
 
-Hosted sign-in runs on the Node target when a Playwright Chromium is installed. The Cloudflare target and a Node image without that browser report `hosted_browser.unsupported`; the dedicated production browser service is [planned but not provisioned](docs/fantasy-manager/HOSTED-BROWSER-INFRA-PLAN.md). The hosted browser is the only linking path.
+Hosted sign-in runs on the Node target when a Playwright Chromium is installed. The deployed Cloud Run stage uses the dedicated hosted-browser service; the Cloudflare target and a Node image without that browser report `hosted_browser.unsupported`. The hosted browser is the only linking path.
 
-If your Yahoo account signs in with Google, Yahoo will not accept a Gmail address on the hosted sign-in page. Add a phone number to your Yahoo account and sign in with that number instead. The Connections page shows this route under **Signing in with Google?** before the private browser starts.
+If your Yahoo account signs in with Google, Yahoo will not accept a Gmail address on the hosted sign-in page. The Connections page shows the route under **Signing in with Google?** before the private browser starts: choose **Forgot username**, then **Use recovery phone number**, and follow the code. If Yahoo only resets the password, sign in with the phone number and that password.
 
 ## Connecting an MCP client
 

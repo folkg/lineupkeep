@@ -3,6 +3,10 @@
 Date: 2026-11-01. Walked in the built app with the provider fake, at 1440x1000 and 390x844, in light and
 dark. The screenshots referenced below are in `.artifacts/onboarding/`.
 
+**Current update (2026-11-22):** the Gmail workaround is visible before the browser starts in a
+**Signing in with Google?** disclosure on Connections, including when another connection already exists.
+The in-frame note remains. The 2026-11-01 observations below are kept as the audit record.
+
 ## Before
 
 Five screens. Five fixed actions for an account that signs in with a Yahoo password, or six when the

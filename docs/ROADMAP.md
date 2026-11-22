@@ -894,8 +894,8 @@ grants when a retry crossed it; the five-minute window is documented in the
 
 - [x] Map the first-run path and count the steps. Before: 17 facts and 6 fixed actions. After: 13 facts and 5
       actions, with no new page.
-- [x] Put the Gmail workaround where someone gets stuck: inside the browser frame, when the provider refuses the
-      address, rather than in a disclosure on the page they have left.
+- [x] Put the Gmail workaround where someone gets stuck: in the browser frame when the provider refuses the
+      address, and in a visible **Signing in with Google?** disclosure before the browser starts.
 - [x] Make progress states truthful: reading teams, what failed, a retry, and the fact that no team is checked
       until its switch is on.
 - [x] Reduce what a first-time user must understand before value. Written up in
