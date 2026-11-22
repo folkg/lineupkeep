@@ -175,12 +175,9 @@ export function cloudRunHost(
           ],
         },
       });
-      const workerUrl = Output.map(worker.uri, (uri) => {
-        if (uri === undefined) {
-          throw new Error("Cloud Run did not return a worker URI");
-        }
-        return uri;
-      });
+      const workerUrl = Output.map(worker.urls, (urls) =>
+        deterministicRunUrl(urls, region, "worker"),
+      );
       const alertEmail = yield* Config.option(Config.String("ALERT_EMAIL"));
       const alertChannel = Option.isSome(alertEmail)
         ? yield* GCP.Monitoring.NotificationChannel("LineupRunAlerts", {
@@ -269,12 +266,9 @@ export function cloudRunHost(
           ],
         },
       });
-      const browserUrl = Output.map(browser.uri, (uri) => {
-        if (uri === undefined) {
-          throw new Error("Cloud Run did not return a hosted browser URI");
-        }
-        return uri;
-      });
+      const browserUrl = Output.map(browser.urls, (urls) =>
+        deterministicRunUrl(urls, region, "hosted browser"),
+      );
       yield* GCP.IAM.Member("HostedBrowserInvoker", {
         kind: "run.service",
         name: browser.name,
@@ -310,13 +304,24 @@ export function cloudRunHost(
         (secret) => pruneSecretVersions(secret, service.latestReadyRevision),
         { concurrency: 1 },
       );
+      const webUrl = Output.map(service.urls, (urls) => deterministicRunUrl(urls, region, "web"));
       return {
-        url: service.uri,
-        healthUrl: service.uri,
+        url: webUrl,
+        healthUrl: webUrl,
         artifact: image,
       };
     }),
   );
+}
+
+function deterministicRunUrl(urls: ReadonlyArray<string>, region: string, service: string): string {
+  const url = EffectArray.findFirst(urls, (candidate) =>
+    EffectString.endsWith(candidate, `.${region}.run.app`),
+  );
+  if (Option.isNone(url)) {
+    throw new Error(`Cloud Run did not return a deterministic ${service} URL`);
+  }
+  return url.value;
 }
 
 export function partitionEnvironment(environment: HostEnvironment): {

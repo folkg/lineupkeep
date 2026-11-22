@@ -39,7 +39,7 @@ place.
 
 | Property        | Value                                                                                                                                                             |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Service         | `lineupkeep-hb` — `https://lineupkeep-hb-hcfc7y3kha-ue.a.run.app`                                                                                                 |
+| Service         | `lineupkeep-hb` — `https://lineupkeep-hb-602042678335.us-east1.run.app`                                                                                           |
 | Revision        | `lineupkeep-hb-00010-6db` (address-based egress and popup streaming; image digest `sha256:41c92d69c8d498e6fd00ad0e7ddd4f4dbc574d5868883fc1522d0ad13e77edfe`)      |
 | Runtime account | `<runtime service account>`                                                                                                                                       |
 | Access          | `run.googleapis.com/ingress=all` plus IAM required; only the web runtime account holds `roles/run.invoker`. Unauthenticated callers are refused by Cloud Run IAM. |
