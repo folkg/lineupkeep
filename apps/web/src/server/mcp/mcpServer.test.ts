@@ -626,7 +626,7 @@ it("composes the team snapshot from the reads in one tool call", async () => {
   };
   const plans = {
     ...unavailablePlans,
-    plan: () => Effect.fail(TransactionPlanPersistenceFailed.make({ cause: new Error("plan") })),
+    plan: () => Effect.die(new Error("plan")),
   };
   const offers = {
     readPendingOffers: () =>

@@ -36,7 +36,7 @@ const ToolFailure = Schema.Struct({ code: Schema.String, message: Schema.String 
 export const fantasyQueryTools = Toolkit.make(
   Tool.make("get_lineup_outlook", {
     description:
-      "Forward starter-slot fit for one team over a date window, including scheduled moves, sitting players with games, unknown game days, and opponents. No recommendations; asks to narrow large results.",
+      "Forward starter-slot fit for one team. Date leagues use days/window; weekly leagues return one week. Includes moves, sitting players with games, unknown days, opponents. No recommendations; asks to narrow large results.",
     parameters: GetLineupOutlookInput,
     success: Schema.toCodecJson(LineupOutlookResult),
     failure: ToolFailure,

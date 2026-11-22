@@ -5,7 +5,8 @@ import { fantasyQueryScopes } from "@lineupkeep/backend/connections/QueryScopes"
 import type { PlayerRef } from "@lineupkeep/backend/connections/QueryValues";
 import { TransactionOffers } from "@lineupkeep/backend/connections/TransactionOffers";
 import { TransactionPlanService } from "@lineupkeep/backend/connections/TransactionPlans";
-import { Effect, Schema } from "effect";
+import { EffectString } from "@lineupkeep/collections";
+import { Cause, Effect, Result, Schema } from "effect";
 import type { Layer } from "effect";
 import { Array as EffectArray } from "effect";
 import { Tool, Toolkit } from "effect/ai";
@@ -138,9 +139,18 @@ function capture<A>(
   read: () => Effect.Effect<A, SectionError>,
 ): Effect.Effect<A | undefined, never, never> {
   return read().pipe(
-    Effect.catch((error) =>
+    Effect.catchCause((cause) =>
       Effect.sync(() => {
-        failures.push(snapshotFailure(section, error));
+        const failure = Cause.findFail(cause);
+        if (Result.isSuccess(failure)) {
+          failures.push(snapshotFailure(section, failure.success.error));
+        } else {
+          failures.push({
+            section,
+            code: "defect",
+            message: EffectString.slice(Cause.pretty(cause), 0, 1000),
+          });
+        }
         return undefined;
       }),
     ),
