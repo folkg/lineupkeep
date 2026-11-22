@@ -54,7 +54,7 @@ const StartConnectionInput = Schema.Struct({
   connectionId: Schema.optional(
     ConnectionId.pipe(
       Schema.annotate({
-        description: "Existing connection to reconnect. Omit to connect a new account.",
+        description: "A `reconnect-required` connection. Omit to connect a new account.",
       }),
     ),
   ),
@@ -108,7 +108,7 @@ export const connectionTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("start_connection", {
     description:
-      "Get a Lineupgrade link that starts a provider sign-in. Send it to the person; they sign in, then poll `list_connections` until ready. Use an id from `list_connections` to reconnect.",
+      "Get a Lineupgrade link that starts a provider sign-in. Send it to the person; they sign in, then poll `list_connections` until ready. Use a `reconnect-required` id to reconnect.",
     parameters: StartConnectionInput,
     success: StartConnectionResult,
     failure: ToolFailure,
