@@ -7741,6 +7741,30 @@ it.effect("publishes one weekly lock rather than seven daily lineups", () =>
   }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
+it.effect(
+  "asks a weekly league to omit a requested window instead of claiming its dates are missing",
+  () =>
+    Effect.gen(function* () {
+      const queries = yield* FantasyQueries;
+      const fake = yield* FakeProviderWorld;
+      const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+      yield* fake.setMatchups([
+        {
+          ...matchupFixture({ period: 3 }),
+          home: { ...matchupFixture({ period: 3 }).home, providerTeamKey: "461.l.1000.t.1" },
+        },
+      ]);
+      const result = yield* queries.getLineupOutlook(owner, {
+        team: Array.getUnsafe(seeded, 0).id,
+        days: 7,
+      });
+      assert.strictEqual(result.status, "unsupported");
+      if (result.status === "unsupported") {
+        assert.match(jsonTools.jsonString(result.coverage), /Omit `window` and `days`/u);
+      }
+    }).pipe(layerTools.provide(QueriesTestLayer)),
+);
+
 it.effect("refuses an outlook that cannot fit all periods in its result budget", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;

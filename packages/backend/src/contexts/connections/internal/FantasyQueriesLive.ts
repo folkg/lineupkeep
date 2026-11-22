@@ -4371,17 +4371,17 @@ export const FantasyQueriesLive = Layer.effect(
       if (league === undefined) {
         return unsupported("League settings are not available, so starting places are unknown.");
       }
+      if (weekly && (input.days !== undefined || input.window !== undefined)) {
+        return unsupported(
+          "This league locks its lineup once per scoring week. Omit `window` and `days` to read that week.",
+        );
+      }
       if (weekly && week === undefined) {
         return unsupported("The current scoring week is not published.");
       }
       if (weekly && periodDates === undefined) {
         return unsupported(
           "The scoring week's start and end dates are not published, so its window cannot be verified.",
-        );
-      }
-      if (weekly && (input.days !== undefined || input.window !== undefined)) {
-        return unsupported(
-          "This league locks its lineup once per scoring week. Omit `window` and `days` to read that week.",
         );
       }
       const rosterOutcome = yield* readOutcome(
