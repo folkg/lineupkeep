@@ -72,7 +72,7 @@ Open **Connections** and choose **Connect Yahoo**. A private browser opens insid
 
 Hosted sign-in runs on the Node target when a Playwright Chromium is installed. The Cloudflare target and a Node image without that browser report `hosted_browser.unsupported`; the dedicated production browser service is [planned but not provisioned](docs/fantasy-manager/HOSTED-BROWSER-INFRA-PLAN.md). The hosted browser is the only linking path.
 
-If your Yahoo account signs in with Google, Yahoo will not accept a Gmail address on the hosted sign-in page. Add a phone number to your Yahoo account and sign in with that number instead. The Connections page has the same note beside **Connect Yahoo**.
+If your Yahoo account signs in with Google, Yahoo will not accept a Gmail address on the hosted sign-in page. Add a phone number to your Yahoo account and sign in with that number instead. The Connections page shows this route under **Signing in with Google?** before the private browser starts.
 
 ## Connecting an MCP client
 

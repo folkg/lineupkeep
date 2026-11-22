@@ -34,9 +34,9 @@ it("shows the phone-number workaround when the provider refuses a Gmail address"
   await expect
     .element(page.getByText("Yahoo refuses Gmail addresses in this browser."))
     .toBeVisible();
-  await expect.element(page.getByText(/If the account has a phone number/)).toBeVisible();
-  await expect.element(page.getByText(/add one in Yahoo's account settings/)).toBeVisible();
-  await expect.element(page.getByText(/Yahoo decides which sign-in options/)).toBeVisible();
+  await expect.element(page.getByText(/Choose "Forgot username"/)).toBeVisible();
+  await expect.element(page.getByText(/Use recovery phone number/)).toBeVisible();
+  await expect.element(page.getByText(/"Sign in with Google" does not work/)).toBeVisible();
 });
 
 it("names reading the teams after the provider accepts the sign-in", async () => {
@@ -88,6 +88,18 @@ it("offers the connect action when no connection exists", async () => {
     )
     .toBeVisible();
   await expect.element(page.getByRole("button", { name: "Connect Yahoo" })).toBeVisible();
+});
+
+it("shows the Google-account route before the browser starts", async () => {
+  using _panel = renderPanel({ connected: false, session: false });
+
+  const summary = page.getByText("Signing in with Google?");
+  await expect.element(summary).toBeVisible();
+  await summary.click();
+
+  await expect.element(page.getByText(/Choose "Forgot username"/)).toBeVisible();
+  await expect.element(page.getByText(/Use recovery phone number/)).toBeVisible();
+  await expect.element(page.getByText(/"Sign in with Google" does not work/)).toBeVisible();
 });
 
 function renderPanel(

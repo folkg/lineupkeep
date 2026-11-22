@@ -4,6 +4,7 @@ import { Show } from "solid-js";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { BrowserFrame } from "#browser/shared-ui/BrowserFrame.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
+import { Disclosure } from "#browser/shared-ui/Disclosure.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
@@ -32,9 +33,10 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
                       {provider} refuses Gmail addresses in this browser.
                     </Text>
                     <Text type="meta" tone="muted">
-                      If the account has a phone number, sign in with that number instead. If it
-                      does not, add one in {provider}'s account settings. {provider} decides which
-                      sign-in options it offers.
+                      Choose "Forgot username", then "Use recovery phone number" (or the recovery
+                      email on the account), and follow the code. If {provider} only resets the
+                      password, sign in with the phone number and that password. "Sign in with
+                      Google" does not work in this browser.
                     </Text>
                   </Stack>
                 ) : undefined
@@ -93,6 +95,17 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
         <Text type="body" tone="muted">
           Sign in as you normally would, in a browser that belongs to this sign-in only.
         </Text>
+        <Disclosure summary="Signing in with Google?">
+          <Stack gap="xs">
+            <Text type="body-strong">{provider} refuses Gmail addresses in this browser.</Text>
+            <Text type="meta" tone="muted">
+              Choose "Forgot username", then "Use recovery phone number" (or the recovery email on
+              the account), and follow the code. If {provider} only resets the password, sign in
+              with the phone number and that password. "Sign in with Google" does not work in this
+              browser.
+            </Text>
+          </Stack>
+        </Disclosure>
         <Inline gap="sm">
           <Button
             state={props.controller.starting() ? "working" : "idle"}
