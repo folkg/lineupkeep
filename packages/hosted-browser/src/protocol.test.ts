@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { hostedBrowserViewports, viewportProfileForClientWidth, viewportSize } from "./protocol.ts";
+import {
+  encodeHostedBrowserInput,
+  hostedBrowserViewports,
+  parseHostedBrowserInput,
+  viewportProfileForClientWidth,
+  viewportSize,
+} from "./protocol.ts";
 
 describe("hosted browser viewport profiles", () => {
   it("gives a phone-sized client the phone profile and a wide client the desktop profile", () => {
@@ -14,5 +20,11 @@ describe("hosted browser viewport profiles", () => {
     expect(viewportSize("phone")).toEqual({ width: 390, height: 844 });
     expect(viewportSize("desktop")).toEqual({ width: 1100, height: 720 });
     expect(hostedBrowserViewports.phone.width).toBeLessThan(hostedBrowserViewports.desktop.width);
+  });
+
+  it("round-trips the back control", () => {
+    expect(parseHostedBrowserInput(encodeHostedBrowserInput({ _tag: "Back" }))).toEqual({
+      _tag: "Back",
+    });
   });
 });

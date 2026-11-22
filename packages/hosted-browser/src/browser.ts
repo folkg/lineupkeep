@@ -480,6 +480,11 @@ async function applyInput(
     case "Scroll":
       await page.mouse.wheel(0, input.deltaY);
       return;
+    case "Back":
+      await page
+        .goBack({ waitUntil: "domcontentloaded", timeout: navigationTimeoutMillis })
+        .catch(() => undefined);
+      return;
   }
 }
 

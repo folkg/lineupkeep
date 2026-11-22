@@ -257,6 +257,7 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
     sendText,
     sendKey: (key: HostedBrowserKey) => sendInput({ _tag: "Key", key }),
     scroll: (deltaY) => sendInput({ _tag: "Scroll", deltaY }),
+    back: () => sendInput({ _tag: "Back" }),
   };
 }
 
@@ -330,6 +331,7 @@ export type HostedLinkingController = {
   readonly sendText: (text: string) => void;
   readonly sendKey: (key: HostedBrowserKey) => void;
   readonly scroll: (deltaY: number) => void;
+  readonly back: () => void;
 };
 
 type HostedLinkingOptions = {

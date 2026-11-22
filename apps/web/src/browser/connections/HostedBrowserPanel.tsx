@@ -43,6 +43,7 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
               ready={props.controller.ready()}
               statusLabel={statusMessage(props.controller.status())}
               viewport={viewportSize(props.controller.viewportProfile())}
+              onBack={props.controller.back}
               onCancel={props.controller.cancel}
               onKey={props.controller.sendKey}
               onPointer={props.controller.click}

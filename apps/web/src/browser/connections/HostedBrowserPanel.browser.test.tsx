@@ -148,5 +148,6 @@ function controller(options: {
     sendText: () => undefined,
     sendKey: () => undefined,
     scroll: () => undefined,
+    back: () => undefined,
   };
 }

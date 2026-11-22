@@ -128,7 +128,10 @@ export function BrowserFrame(props: BrowserFrameProps): JSX.Element {
         <Text type="meta" tone="muted">
           Private to this session. Closes when you finish or cancel.
         </Text>
-        <span class="ml-auto shrink-0">
+        <span class="ml-auto flex shrink-0 items-center gap-2">
+          <Button variant="quiet" onClick={props.onBack}>
+            Back
+          </Button>
           <Button variant="quiet" onClick={props.onCancel}>
             Cancel
           </Button>
@@ -216,6 +219,7 @@ type BrowserFrameProps = {
   readonly statusLabel: string;
   readonly ready: boolean;
   readonly viewport: { readonly width: number; readonly height: number };
+  readonly onBack: () => void;
   readonly onCancel: () => void;
   readonly onPointer: (x: number, y: number) => void;
   readonly onText: (text: string) => void;

@@ -7,6 +7,15 @@ import type { HostedBrowserKey } from "#contracts/connections/hostedBrowserProto
 
 import { BrowserFrame } from "./BrowserFrame";
 
+it("offers a back control for the remote page", async () => {
+  const events = recordedEvents();
+  using _frame = renderFrame(events);
+
+  await page.getByRole("button", { name: "Back" }).click();
+
+  expect(events.back).toBe(1);
+});
+
 it("does not forward typing until the first frame is visible", async () => {
   const events = recordedEvents();
   using _frame = renderFrame(events, { width: 1100, height: 720 }, false);
@@ -114,6 +123,7 @@ function renderFrame(
         ready={false}
         statusLabel="Loading the sign-in page…"
         viewport={viewport}
+        onBack={() => (events.back += 1)}
         onCancel={() => undefined}
         onKey={(key) => events.keys.push(key)}
         onPointer={(x, y) => events.pointer.push([x, y])}
@@ -133,10 +143,11 @@ function renderFrame(
 }
 
 function recordedEvents(): RecordedEvents {
-  return { keys: [], pointer: [], text: [] };
+  return { back: 0, keys: [], pointer: [], text: [] };
 }
 
 type RecordedEvents = {
+  back: number;
   readonly keys: Array<HostedBrowserKey>;
   readonly pointer: Array<readonly [number, number]>;
   readonly text: Array<string>;

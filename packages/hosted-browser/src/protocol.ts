@@ -24,7 +24,8 @@ export type HostedBrowserInput =
   | { readonly _tag: "Click"; readonly x: number; readonly y: number }
   | { readonly _tag: "Text"; readonly text: string }
   | { readonly _tag: "Key"; readonly key: HostedBrowserKey }
-  | { readonly _tag: "Scroll"; readonly deltaY: number };
+  | { readonly _tag: "Scroll"; readonly deltaY: number }
+  | { readonly _tag: "Back" };
 export type HostedBrowserKey =
   | "Enter"
   | "Tab"
@@ -108,6 +109,8 @@ export function parseHostedBrowserInput(value: string): HostedBrowserInput | und
         ? { _tag: "Scroll", deltaY }
         : undefined;
     }
+    case "Back":
+      return { _tag: "Back" };
     default:
       return undefined;
   }
