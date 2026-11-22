@@ -54,8 +54,9 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 - **Trusted-device cookies do not replace the session.** Nineteen non-session Yahoo cookies copied into
   a fresh browser left it signed out, and Yahoo issued no session. The test saved no values and is
   disabled.
-- **Session cookie expiry is recorded at capture.** Names and expiry only, never values, so a sign-in
-  that checks Yahoo's Stay signed in box can be compared with the usual two to three weeks.
+- **Session cookie expiry is recorded at capture.** Names and expiry only, never values. The first
+  sign-in with Yahoo's Stay signed in checked set `T` and `Y` to expire on 22 November 2027, about one
+  year, against the usual two to three weeks.
 
 ### 13 November 2026
 
