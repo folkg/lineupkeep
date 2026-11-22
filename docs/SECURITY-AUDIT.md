@@ -760,9 +760,10 @@ Each item below was checked; silence would have been a gap, so each carries its 
 
 These are real and recorded elsewhere; naming them here keeps "checked and found sound" honest.
 
-- The pinned Solid Start server transport carries the reflected-XSS advisory, mitigated by a local backport
-  and a committed built-app regression. That is the publication gate, tracked in
-  [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md) and [release-readiness.md](release-readiness.md).
+- The Solid Start server transport previously carried the reflected-XSS advisory. The 2026-11-22 rc.11
+  upgrade adopts the upstream fix and removes the local backport; the committed built-app regression
+  remains part of publication acceptance. [release-readiness.md](release-readiness.md) owns the current
+  closure and remaining acceptance.
 - Publication requires a coherent fixed dependency closure, installed-source acceptance, and live
   hosted-MCP acceptance; none of that is established by this audit.
 - Every deployment-only claim in this document — the ingress rate limit on `/api/telemetry`, the client-IP

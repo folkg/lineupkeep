@@ -55,28 +55,31 @@ the installed tree, not only against the scan's display.
 
 ## Records and disposition
 
-### `@tanstack/start-server-core@1.169.26` — shipped, reachable (critical)
+### `@tanstack/start-server-core@1.169.26` — shipped, reachable (critical, superseded 2026-11-22)
+
+> **Superseded 2026-11-22.** The framework now uses `@tanstack/solid-start` 2.0.0-rc.11 with `start-server-core` 1.169.45, which carries the upstream #8573 fix. This section remains the 2026-10-29 record; [release readiness](release-readiness.md#publication-blocker-solid-start-rpc-security-fixed-upstream) owns the current closure and acceptance.
 
 Chain: `@lineupkeep/web > @tanstack/solid-start > @tanstack/start-server-core` (shipped server bundle).
 A second chain, `@tanstack/start-plugin-core > @tanstack/start-server-core`, is build tooling that
 resolves to the same installed version.
 
-| Advisory            | CVE             | Severity | Fixed    | Reachable | Action                                              |
-| ------------------- | --------------- | -------- | -------- | --------- | --------------------------------------------------- |
-| GHSA-qx66-fv34-fjm8 | CVE-2026-102989 | critical | 1.169.39 | Yes — E1  | Not taken: framework hold. Covered by the backport. |
+| Advisory            | CVE             | Severity | Fixed    | Reachable | Action                                 |
+| ------------------- | --------------- | -------- | -------- | --------- | -------------------------------------- |
+| GHSA-qx66-fv34-fjm8 | CVE-2026-102989 | critical | 1.169.39 | Yes — E1  | Fixed by the 2026-11-22 rc.11 upgrade. |
 
 **E1.** Unauthenticated reflected XSS in server-function responses. Static reachability through Solid RPC
 was established earlier, and a built-app reproduction executed the attack shape locally before the
 backport; the regression is committed as `e2e/serverFunctionTransport.e2e.ts` and passes on the shipped
-build. The temporary response-validation backport in
-[release-readiness.md](release-readiness.md#temporary-response-validation-backport-applied-2026-10-25)
-closes the reported vector on the pinned closure.
+build. The 2026-10-29 record used a temporary response-validation backport; the 2026-11-22 rc.11 upgrade
+adopts the upstream fix and removes it. [Release
+readiness](release-readiness.md#publication-blocker-solid-start-rpc-security-fixed-upstream) owns the
+current closure.
 
-**Not taken.** 1.169.39 cannot be installed without moving the framework family. The patched
-`start-*-core` set requires `router-core` 1.171.34, which no published version pairs with `solid-router`
-2.0.0-rc.8's imports; the 2026-10-24 attempts and their failures are recorded in
-[release-readiness.md](release-readiness.md#publication-blocker-solid-start-rpc-security). The owner holds
-Solid and TanStack versions, and this audit does not change that.
+**Not taken at audit time.** 1.169.39 could not be installed without moving the framework family. The
+patched `start-*-core` set required `router-core` 1.171.34, which no published version paired with
+`solid-router` 2.0.0-rc.8's imports; the 2026-10-24 attempts and their failures are recorded in
+[release-readiness.md](release-readiness.md#publication-blocker-solid-start-rpc-security-fixed-upstream).
+The 2026-11-22 rc.11 line resolves that conflict.
 
 ### `seroval@1.6.7` — shipped, deserializer reachable (resolved)
 
@@ -320,8 +323,9 @@ three resolutions, their now-deduplicated nested copies, and one stale workspace
 `bun install` recomputed. No Solid or TanStack version changed:
 
 Those framework versions were current when this audit was written. The 2026-11-19 migration moved them
-to Solid 2.0.3 and the TanStack 2.0.0-rc.10 line; see [release readiness](release-readiness.md) for
-the current closure and the three retained core patches.
+to Solid 2.0.3, and the 2026-11-22 upgrade moved them to the TanStack 2.0.0-rc.11 line. See [release
+readiness](release-readiness.md#publication-blocker-solid-start-rpc-security-fixed-upstream) for the
+current closure and the one retained packaging patch.
 
 ## Verification
 
@@ -350,7 +354,7 @@ Shipped-artifact inspection after the upgrade:
 | `lodash`                      | 3       | tooling | Accepted — Prisma schema AST parser, exact pin                |
 | `toml`                        | 3       | tooling | Accepted — `effect-solutions` developer CLI                   |
 | `valibot`                     | 1       | tooling | Accepted — unused drizzle entry and Prisma dev server         |
-| `@tanstack/start-server-core` | 1       | shipped | Critical, tracked separately, mitigated by the backport       |
+| `@tanstack/start-server-core` | 1       | shipped | Critical at audit time; fixed by the 2026-11-22 rc.11 upgrade |
 
 Resolved by this change: `zod` (1 record) and `seroval` (5 records). Difference: 8 packages → 6,
 55 records → 49, high 11 → 7, moderate 40 → 38. The critical record is unchanged and expected to stay
@@ -358,14 +362,11 @@ until a fixed framework parent is adopted.
 
 ## Residual risk in plain terms
 
-The one production-critical dependency problem is still the tracked one: the pinned Solid Start server
-transport contains the reflected-XSS flaw described in GHSA-qx66-fv34-fjm8, and it is mitigated only by a
-local patch against three pinned packages. That patch closes the reported forgery vector and is exercised
-by a committed built-app regression, but it is not an upstream release, must be re-applied and re-verified
-on every install, and proves nothing about server-function input shapes the advisory did not cover.
-Publication remains gated on adopting a published parent that carries the complete upstream fix with the
-same acceptance, or on the owner accepting the patched pin in writing. The Solid/TanStack hold this audit
-respected is the reason the fixed version was not taken.
+The one production-critical dependency problem in this 2026-10-29 record was the pinned Solid Start server
+transport described in GHSA-qx66-fv34-fjm8. It was mitigated at the time by a local patch against three
+pinned packages. The 2026-11-22 rc.11 upgrade adopts the upstream #8573 fix and removes that backport;
+[release readiness](release-readiness.md#publication-blocker-solid-start-rpc-security-fixed-upstream)
+owns the current closure and acceptance. A fresh audit is still required before publication.
 
 The two shipped non-framework weaknesses found in this scan are now fixed in the built application:
 seroval's deserializer, which the server runs on request payloads before authorization, and the

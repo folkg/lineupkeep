@@ -71,7 +71,7 @@
     "@solidjs/vite-plugin": "catalog:",
     "@swc/core": "1.16.18",
     "@tailwindcss/vite": "catalog:",
-    "@tanstack/start-plugin-core": "1.171.34",
+    "@tanstack/start-plugin-core": "1.171.57",
     "@types/node": "24.19.2",
     "@vitest/browser-playwright": "catalog:",
     "dependency-cruiser": "18.7.0",
@@ -125,9 +125,9 @@
     "@tailwindcss/vite": "4.3.3",
     "@xstate/effect": "1.0.0-beta.2",
     "@tanstack/solid-query": "6.0.0-rc.6",
-    "@tanstack/solid-router": "2.0.0-rc.10",
+    "@tanstack/solid-router": "2.0.0-rc.11",
     "@tanstack/solid-router-ssr-query": "2.0.0-rc.9",
-    "@tanstack/solid-start": "2.0.0-rc.10",
+    "@tanstack/solid-start": "2.0.0-rc.11",
     "@vitest/browser-playwright": "5.0.5",
     "better-auth": "1.7.12",
     "drizzle-kit": "1.0.0-rc.6",
@@ -160,8 +160,6 @@
   "patchedDependencies": {
     "@better-auth/oauth-provider@1.7.12": "patches/@better-auth%2Foauth-provider@1.7.12.patch",
     "@better-auth/cimd@1.7.12": "patches/@better-auth%2Fcimd@1.7.12.patch",
-    "@tanstack/router-core@1.171.22": "patches/@tanstack%2Frouter-core@1.171.22.patch",
-    "@tanstack/start-server-core@1.169.26": "patches/@tanstack%2Fstart-server-core@1.169.26.patch",
-    "@tanstack/start-client-core@1.170.22": "patches/@tanstack%2Fstart-client-core@1.170.22.patch"
+    "@tanstack/start-server-core@1.169.45": "patches/@tanstack%2Fstart-server-core@1.169.45.patch"
   }
 }

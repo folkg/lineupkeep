@@ -28,11 +28,11 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 | Connections          | Hosted browser only; local helper and device flow deleted                                         |
 | Interface            | Technical sheet, renamed to Lineupgrade; nav is Teams and Account; actions own their states       |
 | Deployment           | Cloud Run web, worker and hosted browser on GCP; CI on a clean Linux runner, container target     |
-| Publication gate     | Blocked on upstream: a temporary backport of the TanStack advisory is in force                    |
+| Publication gate     | Upstream security fix adopted; clean Linux CI and deployment acceptance remain                    |
 | Restore              | Drill passed 2026-10-29; RPO 15 minutes, RTO 4 hours, owner executes recovery (ruled 10 November) |
 | Dependencies         | Fresh audit and disposition in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md)                         |
 | Security             | Audit and disposition in [SECURITY-AUDIT.md](SECURITY-AUDIT.md); deferred work is group J         |
-| Checks               | 1994 node, 218 browser, 10 chromium; container end to end 59 passed, nothing skipped              |
+| Checks               | 2080 node, 294 browser, 10 chromium; container end to end 61 passed, nothing skipped              |
 
 ---
 

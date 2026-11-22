@@ -17,7 +17,7 @@ Read [START-HERE.md](../START-HERE.md), [AGENTS.md](../AGENTS.md), the product/d
 | Existing resources   | Do not adopt, alter, delete, or migrate AutoCoach/starter resources, credentials, databases, infrastructure state, or sessions. An active CLI project is not a destination approval. Use explicit project selection on cloud commands.                                                                                                |
 | Cloud rollout        | Once destination, billing/budget, origin/email access, protected state, and security gates are satisfied, carry out the bounded Phase 1 rollout under this assignment. Review and record the actual plan yourself; additional owner approval is needed for a material scope/cost change or an unresolved gate, not each routine step. |
 | Yahoo                | The owner signs in through the hosted browser. Browser login is not permission for arbitrary research or lineup writes; obtain designated-team read acceptance and minimal native-write authority. Never execute transactions or premium actions.                                                                                     |
-| Security             | Local work may proceed on the pinned baseline, loopback-only without public tunnels. Publication requires a coherent fixed dependency closure and installed-source/transport/SSR/single-flight acceptance. Ask before departing from the Solid rc.13 hold; do not silently patch around or waive the blocker.                         |
+| Security             | Local work may proceed, loopback-only without public tunnels. The upstream Solid Start RPC fix is adopted. Publication requires the built-app transport regression, container E2E, clean Linux CI and deployment acceptance. Ask before departing from the current dependency line; do not silently waive the remaining acceptance.   |
 | Purchases            | No domain purchase, paid plan upgrade, trademark filing, or unrelated resource work is authorized.                                                                                                                                                                                                                                    |
 
 The cloud budget and billing account are not yet specified. Budget alerts are not hard spending caps. Keep resource/instance/concurrency limits, log/image retention, abuse controls, and an estimated recurring-cost worksheet; do not promise zero cost from free allowances.
@@ -54,7 +54,7 @@ Bootstrap outside Alchemy, because Alchemy has no billing-link provider and stat
 - Provisioning inputs live in `~/.config/lineupkeep/infra.env` (mode 600, outside the repository): `ALCHEMY_STATE_DATABASE_URL`, `NEON_API_KEY`, `GOOGLE_PROJECT_ID`, `GCP_REGION`, `BETTER_AUTH_SECRET`, `CONNECTION_ENCRYPTION_KEY`, `EMAIL_FROM`, `RESEND_API_KEY`, `AUTH_CLIENT_IP_HEADERS`. A key rotation adds `CONNECTION_ENCRYPTION_KEY_VERSION` and `CONNECTION_ENCRYPTION_RETAINED_KEYS` per [the deployment runbook](deployment.md#connection-credential-encryption-rotation). Mint `GOOGLE_ACCESS_TOKEN` per session with `gcloud auth print-access-token`; never echo it.
 - Everything else is Alchemy-managed: the application Neon project (`LineupgradeDatabase`, stage `production`), the project APIs and the CAD 5/month budget (`LineupgradePlatform`, stage `production`), and the Cloud Run web service (`LineupgradeWeb`, stage `cloud-run`).
 - Email currently uses Resend's test sender `onboarding@resend.dev`, which delivers only to the owner's account address. A verified sending domain is a launch gate for open registration; the owner has not purchased a domain.
-- Owner decisions recorded here: budget ceiling 5 CAD/month with alerts at 50/90/100%; temporary backported security patches until a fixed upstream parent exists; live read queries and native `set_lineup` writes on the owner's teams are authorized, transactions and premium actions are not.
+- Owner decisions recorded here: budget ceiling 5 CAD/month with alerts at 50/90/100%; live read queries and native `set_lineup` writes on the owner's teams are authorized, transactions and premium actions are not. The temporary security backport was retired on 2026-11-22 when the fixed rc.11 parent was adopted.
 
 ### Deployed state and remaining gates (2026-10-25)
 
@@ -152,10 +152,10 @@ never treat the active legacy project as the approved destination. Obtain missin
 Neon/email/state access securely, generate application secrets yourself, and
 arrange the owner's local Yahoo login/MFA when needed. Never paste or print secrets.
 
-Keep the vulnerable transport loopback-only until the coherent security fix and
-required regressions pass. Respect the unresolved framework-pin decision and
-scoped live-provider authorization. No AutoCoach migration, transactions, premium
-actions, purchases, or Phase 2 optimizer. Preserve the approved violet/gold brand.
+Keep development loopback-only until the remaining publication acceptance passes.
+Respect the current dependency line and scoped live-provider authorization. No
+AutoCoach migration, transactions, premium actions, purchases, or Phase 2 optimizer.
+Preserve the approved violet/gold brand.
 
 Return a fully deployed, verified Phase 1 product if all gates can be satisfied;
 otherwise finish the tested deployment candidate and identify exact external

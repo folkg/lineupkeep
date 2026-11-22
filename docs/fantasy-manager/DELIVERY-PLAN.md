@@ -22,12 +22,12 @@ Work in vertical red-green slices inside each stage, not all schemas followed by
 
 ## Stage 0 — Close readiness and feasibility gates
 
-**Purpose:** establish the contracts needed by the next slice and explicitly track deferred readiness gates. The owner permits loopback-only local implementation while the coherent security fix is pending; this does not authorize exposing the vulnerable transport.
+**Purpose:** establish the contracts needed by the next slice and explicitly track deferred readiness gates. The owner permits loopback-only local implementation. The upstream security fix is adopted; the remaining publication acceptance does not authorize exposing an unaccepted transport.
 
 Tasks:
 
 - Product name/destination: complete. The owner selected Lineupgrade at `/Users/graemefolk/Documents/Software/lineupkeep`; independent baseline and branding preparation are recorded in [setup provenance](../SETUP.md). No domain purchase or trademark clearance is implied.
-- Keep the validated independent starter baseline for local implementation. Its release tracker forbids publication of the installed vulnerable Solid Start RPC closure. Track adoption of a coherent upstream fix and required security regression proof before Stage 6; do not stop every local slice while waiting or introduce an unauthorized backport/downgrade.
+- Keep the validated independent starter baseline for local implementation. The installed Solid Start rc.11 line carries the upstream RPC fix; one packaging patch adds the `./request-scope` export. Track the built-app transport regression, container E2E, clean Linux CI and deployment acceptance before Stage 6; do not stop every local slice while waiting.
 - Preserve the starter's pinned Effect, machine, auth, runtime, MCP, architecture/test, SSR, and frontend/server constraints. Presence of files is not proof of baseline readiness.
 - Convert the known Yahoo evidence into small maintained contract cases. Do not depend on disappeared `/tmp` reports, copy old implementation code, or include real cookies/account data.
 - Confirm supported NFL/NHL period/lock/roster rules and Yahoo's exact fantasy-day rollover. Verify bench versus total-roster capacity and same-roster reserve eligibility before final solver formulation.

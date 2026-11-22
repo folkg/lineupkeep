@@ -1,56 +1,22 @@
 # v1 release readiness
 
-Status checked **2026-11-19** against official upstream issues, releases and published package source; the temporary backport record below was added **2026-10-25**. The framework was migrated to Solid 2.0.3 on 2026-11-19. These are dated observations, not permanent upstream statuses or release authorization.
+Status checked **2026-11-22** against official upstream issues, releases and published package source. The framework was migrated to Solid 2.0.3 on 2026-11-19 and to the TanStack 2.0.0-rc.11 line on 2026-11-22. These are dated observations, not permanent upstream statuses or release authorization.
 
 ## Local-development decision
 
-The Lineupgrade owner has chosen to continue local implementation on the pinned baseline while awaiting a coherent upstream security fix. This supersedes treating that fix as an entry condition for all local feature work; it does **not** waive the publication blocker below or establish security acceptance. A temporary response-validation backport is checked in below, so the vulnerable transport itself no longer blocks publication; adopting a published fix with the same acceptance still does.
+The Lineupgrade owner chose to continue local implementation while awaiting a coherent upstream security fix. That fix is now adopted. This supersedes treating the fix as an entry condition for all local feature work; it does **not** waive the remaining publication acceptance below or establish security acceptance.
 
-Keep the application loopback-only, with no public tunnel or public deployment of the vulnerable transport. Automated provider tests use synthetic data and behavioral fakes; real provider access remains separately authorized. Track adoption of the coherent fix before publication, including installed-source inspection and real-transport security/SSR/single-flight acceptance. No new upstream-status check or dependency audit is claimed by this decision; a separate audit was run on 2026-10-29 and is recorded in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md).
+Keep the application loopback-only, with no public tunnel or public deployment of an unaccepted transport. Automated provider tests use synthetic data and behavioral fakes; real provider access remains separately authorized. Track the remaining acceptance before publication, including the built-app transport regression, container E2E, clean Linux CI and deployment-target acceptance. No new upstream-status check or dependency audit is claimed by this decision; a separate audit was run on 2026-10-29 and is recorded in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md).
 
-## Publication blocker: Solid Start RPC security
+## Publication blocker: Solid Start RPC security (fixed upstream)
 
-**Do not publish v1 with the current vulnerable transport.** [GHSA-qx66-fv34-fjm8 / CVE-2026-102989](https://github.com/TanStack/router/security/advisories/GHSA-qx66-fv34-fjm8) is critical. [Router #8573](https://github.com/TanStack/router/pull/8573) is merged; the first fixed `start-server-core` is **1.169.39**.
+[GHSA-qx66-fv34-fjm8 / CVE-2026-102989](https://github.com/TanStack/router/security/advisories/GHSA-qx66-fv34-fjm8) is critical. [Router #8573](https://github.com/TanStack/router/pull/8573) is merged; the first fixed `start-server-core` is **1.169.39**.
 
-- Current Start/Router **2.0.0-rc.10** (latest usable; rc.11 is broken, see [TanStack/router #8964](https://github.com/TanStack/router/issues/8964)) resolves to `start-server-core` **1.169.26**, `start-client-core` **1.170.22** and `router-core` **1.171.22**. Prior review established static reachability through Solid RPC; a built-app reproduction on 2026-10-24 executed the attack shape locally (see below).
-- [Start rc.9](https://github.com/TanStack/router/releases/tag/%40tanstack/solid-start%402.0.0-rc.9) was published October 22, but retains the same vulnerable core closure and requires **Solid rc.16+**. Inspected published transport bytes confirm it is not a fixed, rc.13-compatible parent release.
-- **Owner decision (2026-11-19):** adopt the stable Solid 2 line and the latest usable TanStack 2 RCs. The earlier rc.13 hold is superseded; the core-closure security constraint and temporary response-validation backport remain.
-- **Temporary patched-core pin attempted 2026-10-24 and rejected as incoherent.** The patched set (`start-server-core` 1.169.39, `start-client-core` 1.170.34, `start-storage-context` 1.167.36, and their required `router-core` 1.171.34) cannot coexist with rc.8's `solid-router`. A global `router-core` 1.171.34 override fails the build because rc.8 imports `makeSsrSerovalPlugin`, `isPlainArray`, `isPlainObject`, `createRawStreamDeserializePlugin` and `defaultSerovalPlugins` from the router-core main entry, removed upstream in 1.171.30/1.171.31. Keeping `router-core` 1.171.22 fails the other way: the patched cores import `isPromise`, `createRawStreamRPCPlugin`, `defaultSerovalDeserializerPlugins`, `createDefaultSerovalPlugins` and `makeSerovalPlugin`, added in 1.171.31, and the Vite/Nitro bundler resolves the hoisted 1.171.22 copy rather than Bun's nested 1.171.34 copies. No published `router-core` version exports both surfaces. The pin was reverted; `package.json` and `bun.lock` carry no pin override. A temporary compatibility shim (router-core entry re-exports plus a re-added `isPlainArray`) was attempted on 2026-10-24 and rejected as well: `router-core` 1.171.31 deleted `isDehydrated`, `takeBufferedHtml` and `takeBufferedScripts` from `serverSsr`, so rc.8 SSR failed at runtime and reconstructing them would re-implement router-core's buffering pipeline. Both paths remain rejected; the temporary response-validation backport below is the applied measure.
-
-Unblock only when an intended-line parent contains the complete upstream fix across the core packages and response boundaries, supports the current stable Solid line, and passes acceptance. Inspect installed source after a clean install; include real-transport security regression proof and preserve SSR and single-flight behavior through the [README check matrix](../README.md#commands-and-required-checks). Green E2Es alone do not clear the advisory. A built-app regression against the current built app reproduced the advisory (crafted server-function request returned attacker `text/html`); its local evidence is in `.artifacts/verify/b5253754-6c4c-4964-bafc-6c746093e2cc/`. The regression itself is committed as `e2e/serverFunctionTransport.e2e.ts`.
-
-Follow the advisory, #8573 and the [Solid 2 release feed](https://github.com/TanStack/router/releases). No exact intended-line security backport tracker was found; unrelated SSR PRs are not substitutes.
-
-### Temporary response-validation backport (applied 2026-10-25)
-
-The owner authorized a temporary, revertible security change so that the known vulnerable transport does not by itself block publication while a coherent fixed parent is pending. The behavior of merged [Router #8573](https://github.com/TanStack/router/pull/8573) is applied to the installed packages through Bun `patchedDependencies`.
-
-`start-server-core` is **1.169.26**, `start-client-core` is **1.170.22**, and `router-core` is **1.171.22**; `@tanstack/solid-start` is **2.0.0-rc.10**. The three core patches remain; the old solid-start action-URL patch is no longer applied because rc.10 carries the upstream fix.
-
-| package                       | version    | patch file                                             | patched shipped files                                                                                                               |
-| ----------------------------- | ---------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `@tanstack/router-core`       | `1.171.22` | `patches/@tanstack%2Frouter-core@1.171.22.patch`       | `dist/esm/ssr/handlerCallback.js`, `dist/cjs/ssr/handlerCallback.cjs`                                                               |
-| `@tanstack/start-client-core` | `1.170.22` | `patches/@tanstack%2Fstart-client-core@1.170.22.patch` | `dist/esm/createServerFn.js`                                                                                                        |
-| `@tanstack/start-server-core` | `1.169.26` | `patches/@tanstack%2Fstart-server-core@1.169.26.patch` | `dist/esm/request-response.js`, `dist/esm/serializer/ServerFunctionSerializationAdapter.js`, `dist/esm/server-functions-handler.js` |
-
-Only the published ESM entries are patched for the two `start-*-core` packages because those packages ship no CJS build; `router-core` ships both, so both are patched. A clean `bun install --frozen-lockfile` reproduces all six patched files.
-
-**Adaptations to the older built code** (every other line is the upstream fix verbatim):
-
-1. `server-functions-handler`: 1.169.26 assigns inner payload results with `return await action(...)` inside its nested async IIFE, where the post-fix base uses `res = await action(...)`. The port keeps `return await` and otherwise applies the fix's `{ data, context, method }` argument shape unchanged.
-2. `server-functions-handler`: 1.169.26 reads the JSON body into a `jsonPayload` local before parsing, where the post-fix base inlines the `request.json()` call. The port keeps that older structure and changes only the `{}` default to `void 0` and the action argument.
-
-`router-core`'s 1.171.22 `isSsrResponse`/`normalizeSsrResponse` and `start-server-core`'s 1.169.26 `requestHandler` are structurally identical to the post-fix base, so those hunks port without adaptation. The `not-found` header rewrite keeps `Content-Type: application/json` authoritative by setting it after construction, so a caller-supplied `headers` object can no longer replace it.
-
-**Evidence (2026-10-25, Node 24.22.1, Bun 1.4.2, Playwright Chromium, disposable PostgreSQL):**
-
-- Red before the patch: `.artifacts/verify/1d1faf29-65aa-469e-af3d-f27949ba8b05/` — the crafted request returned `200 text/html` with the attacker's marker.
-- Green and acceptance: `.artifacts/verify/3eee71f1-a38e-4c29-93f2-a879c5c1f317/` — criteria C1 (forgery refused), C2 (SSR, hydration), C3 (single-flight writes, redirects) passed and the delivery gate passed; the forged request now returns `200 application/json` with an empty envelope.
-- Check matrix: `.artifacts/verify/6391027c-224a-49d1-b70e-ad8125f3c7fa/` — `bun checks` (769 tests, 65 files, both builds) and 34 passing E2E tests on the node, cloudflare and container targets.
-
-**Residual risk:** this is a maintained local patch against three pinned packages, not an upstream release. It must be re-applied and re-verified against any future install, it carries no upstream support, and a later unrelated change to those dist files would need the patch regenerating. It closes the reported response-forgery vector for the pinned closure; it does not prove every server-function input shape.
-
-**Removal condition:** adopt a published Solid 2 parent whose closure contains the complete #8573 fix across `router-core` and the `start-*-core` response boundaries, with the same acceptance (installed-source inspection after a clean install, the built-app `e2e/serverFunctionTransport.e2e.ts` regression, `bun checks`, all three E2E targets, and SSR/hydration/single-flight/redirect/write behavior). Remove it by deleting the three patch files, deleting the three `patchedDependencies` entries from `package.json` **and** `bun.lock`, reinstalling, and re-running that acceptance; leaving a stale entry or file fails the install.
+- The installed line is `@tanstack/solid-start` **2.0.0-rc.11**, which resolves `start-server-core` **1.169.45**, `start-client-core` **1.170.39**, `router-core` **1.171.39** and `start-storage-context` **1.167.41**. The three response-validation patches are removed; installed-source inspection shows the upstream response handling in `router-core`, `start-client-core` and `start-server-core`.
+- rc.11 has a packaging defect: it imports `@tanstack/start-server-core/request-scope`, but 1.169.45 does not export that subpath ([TanStack/router #8964](https://github.com/TanStack/router/issues/8964)). The single remaining TanStack patch adds that export. It changes no transport behavior. Remove it when a release exports the subpath.
+- **Owner decision (2026-11-19, reaffirmed 2026-11-22):** adopt the stable Solid 2 line and the latest usable TanStack 2 RCs. rc.10 was the previous usable line; its vulnerable core closure and temporary backport are retired.
+- **Acceptance so far:** a clean install reproduces the patched export; `bun checks` passes (2,080 node, 294 browser, 10 chromium; both builds); the container E2E passes 61 tests, including the built-app `e2e/serverFunctionTransport.e2e.ts` regression. Clean Linux CI and deployment-target acceptance remain.
+- **Historical record:** the 2026-10-24 attempts to pair a patched core with rc.8 failed because no published `router-core` exported both the old and new surfaces. Those attempts are superseded by rc.11 and are not a current workaround.
 
 ## Hosted-browser egress widening (2026-10-28)
 
@@ -108,7 +74,7 @@ finish linking; no evasion of Google's browser check is claimed or accepted.
 
 ## Framework version decision and retained limitations
 
-**Owner decision (2026-11-19): adopt Solid 2.0.3 and the latest usable TanStack 2 RCs.** The earlier rc.13 hold is superseded. The temporary response-validation backport remains a security change, not a waiver of the publication gate or the remaining acceptance items below.
+**Owner decision (2026-11-19, reaffirmed 2026-11-22): adopt Solid 2.0.3 and the latest usable TanStack 2 RCs.** The earlier rc.13 hold is superseded. The temporary response-validation backport is retired; the remaining acceptance items below still apply.
 
 ### Query failure/recovery and dialog behavior
 
@@ -122,13 +88,11 @@ Solid 2.0.3 includes the escaping fix for raw string children of server `<Errore
 
 These are **not whole-v1 blockers while the features remain excluded or current integrations retained**. Keep awaiting primary loader data under the [loading policy](loading-and-single-flight.md).
 
-### Independently delayed SSR sections: feature gate
+### Independently delayed SSR sections: available
 
-- [Router #8026](https://github.com/TanStack/router/pull/8026) is **open, non-draft, targeting `main`**: post-`</body>` output is quarantined until completion, preventing progressive paint and failing beyond a **65,536-character tail cap**.
-- [Router #8214](https://github.com/TanStack/router/pull/8214) is **open draft, targeting `solid-router-v2-pre`**: an alternative Solid-owned transport bypasses that transform.
-- Neither fix ships in the inspected rc.10 closure. Require **either** a published, locally verified fix **or an equivalent**, not both PRs.
+[Router #8204](https://github.com/TanStack/router/pull/8204) merged on 2026-09-16 and superseded [#8026](https://github.com/TanStack/router/pull/8026). The first fixed `router-core` is **1.171.31**; the installed **1.171.39** streams post-`</body>` output through `htmlBoundaryScanner` and no longer has the **65,536-character tail cap**. The app does not yet render independently delayed sections.
 
-Before enabling the feature, prove with a real browser that a fast boundary paints before an independently gated slow boundary resolves and before stream completion; **>64 KiB late HTML** completes without response failure; hydration is clean. Preserve initial SSR, authentication, redirects, navigation and one-request writes. A merged PR or preview package alone is insufficient.
+When adding them, prove with a real browser that a fast boundary paints before an independently gated slow boundary resolves and before stream completion; **>64 KiB late HTML** completes without response failure; hydration is clean. Preserve initial SSR, authentication, redirects, navigation and one-request writes.
 
 ### Native Query SSR / single-flight: optional migration
 
@@ -138,13 +102,14 @@ Retain `setupRouterSsrQueryIntegration` until an approved replacement proves use
 
 ### Patch-removal watches
 
-- **Start action URLs:** [Router #8467](https://github.com/TanStack/router/pull/8467) is shipped in rc.10. The solid-start patch is removed; server-function and SSR regressions pass.
+- **Start action URLs:** [Router #8467](https://github.com/TanStack/router/pull/8467) is shipped since rc.10. The solid-start patch is removed; server-function and SSR regressions pass.
+- **Start request-scope export:** the rc.11 patch adds the missing `./request-scope` export for [TanStack/router #8964](https://github.com/TanStack/router/issues/8964). Remove it when a published `start-server-core` exports the subpath and the build passes without the patch.
 - **Better Auth 1.7.12:** retain the cause-chain patch for concurrent CIMD registration. No exact upstream tracker was found; the related resource-seeding fix is not this registration race. Remove only after the unpatched registration regression passes.
 
 Related open Query [#12031](https://github.com/TanStack/query/issues/12031)/[#12034](https://github.com/TanStack/query/pull/12034) (NotReadyError/disposal) and [#11903](https://github.com/TanStack/query/issues/11903)/[#12126](https://github.com/TanStack/query/pull/12126) (cached-key tearing) are watches, not exact #4189 matches or proven current application blockers.
 
 ## Remaining release acceptance
 
-- [x] Refresh the full dependency audit and record disposition of residual infrastructure/tooling advisories. [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md) records the 2026-10-29 scan: **55 advisory/version records, not 55 distinct CVEs**, over 8 packages, each classified shipped or tooling with reachability evidence and a fixed version. `zod` 4.4.3 was upgraded to 4.6.7 and `seroval` 1.6.7 to 1.6.12 inside the shipped bundle; the remaining **49 records over 6 packages** are 48 tooling-only dispositions and the one production-critical record above. This is a triage record, not a security-clean result, and a fresh scan is still required before publication.
+- [x] Refresh the full dependency audit and record disposition of residual infrastructure/tooling advisories. [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md) records the 2026-10-29 scan: **55 advisory/version records, not 55 distinct CVEs**, over 8 packages, each classified shipped or tooling with reachability evidence and a fixed version. `zod` 4.4.3 was upgraded to 4.6.7 and `seroval` 1.6.7 to 1.6.12 inside the shipped bundle; the remaining **49 records over 6 packages** are 48 tooling-only dispositions and the one production-critical record, now fixed by the rc.11 upgrade. This is a triage record, not a security-clean result, and a fresh scan is still required before publication.
 - [ ] Confirm hosted clean Linux CI; this remains unverified. Use the [README check matrix](../README.md#commands-and-required-checks), without treating historical local greens as fresh release acceptance.
 - [ ] Obtain owner authorization and complete real deployment-target acceptance under the [deployment runbook](deployment.md). Local workerd/container results are not cloud proof and authorize no deployment or publication.

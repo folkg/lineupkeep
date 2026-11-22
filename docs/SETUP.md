@@ -50,13 +50,13 @@ The owner selected the custom royal violet and gold direction after comparing it
 - The two scoped browser scenarios passed for light/dark landing, real sign-in, and the standalone specimen at desktop/phone sizes, including actual colours, font loading, no horizontal overflow, keyboard focus, and appearance persistence. Initial checker failures were corrected to inspect the existing focus shadow rather than an outline and to poll the browser's rendered focus state; application focus behavior and timeouts were not changed.
 - All **42 colour roles** agree across runtime CSS, DESIGN frontmatter, the sidecar, and standalone specimen. **50 text/control contrast checks** passed; minimum tested text contrast is **5.04:1** and essential boundaries exceed 3:1. These are targeted checks, not comprehensive accessibility certification.
 - The mechanical design detector reported no runtime findings and four advisory-only, retained specimen typography sizes. The palette change does not alter the approved type hierarchy.
-- [START-HERE.md](../START-HERE.md#implementation-readiness) separates readiness to begin Stage 0 from later feature/deployment acceptance. Installed `start-server-core` remains `1.169.26`; no dependency change or fresh comprehensive security audit is claimed.
+- [START-HERE.md](../START-HERE.md#implementation-readiness) separates readiness to begin Stage 0 from later feature/deployment acceptance. The installed `start-server-core` is `1.169.45`; this record does not claim a fresh comprehensive security audit.
 
 The reviewed browser report is retained in the ignored verification artifacts and shared through the Inbox. No fantasy feature, provider probe/write, infrastructure plan/apply, or deployment was performed.
 
 ## Security and next gates
 
-[Release readiness](release-readiness.md) preserves the inherited critical Solid Start RPC publication blocker and the owner's decision to await a coherent upstream fix. This is an inherited readiness record, not a fresh comprehensive advisory audit. A successful build/test run does not waive it.
+[Release readiness](release-readiness.md) records the adopted upstream Solid Start RPC fix and the remaining publication acceptance. This is an inherited readiness record, not a fresh comprehensive advisory audit. A successful build/test run does not waive it.
 
 No Notes domain removal, provider feature implementation, new live Yahoo probe, cloud plan/apply, or deployment was done. The copied Cloud Run host defaults still require the accepted min-zero/request-billed implementation work; copying configuration is not free-tier acceptance.
 
