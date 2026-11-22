@@ -23,6 +23,9 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
       <Show when={props.controller.session()}>
         {(session) => (
           <Stack gap="sm">
+            <Text type="meta" tone="muted">
+              If {provider} offers "Stay signed in", check it. It may keep this connection longer.
+            </Text>
             <BrowserFrame
               frameUrl={props.controller.frameUrl()}
               notice={
@@ -68,9 +71,6 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
                 browser. Lineupgrade does not store or log them.
               </Text>
             </Show>
-            <Text type="meta" tone="muted">
-              If {provider} offers "Stay signed in", check it. It may keep this connection longer.
-            </Text>
             <Text type="meta" tone="muted">
               This sign-in expires{" "}
               <Time datetime={session().session.expiresAt}>
