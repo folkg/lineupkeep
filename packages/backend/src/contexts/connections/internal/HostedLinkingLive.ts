@@ -6,11 +6,13 @@ import { Digest, SecureRandom } from "effect/crypto";
 import type { UserId } from "#contexts/auth/User.ts";
 import { ConnectionLinkRejected, ConnectionNotFound } from "#contexts/connections/Connection.ts";
 import type { ConnectionError, ConnectionId } from "#contexts/connections/Connection.ts";
+import type { ProviderConnection } from "#contexts/connections/Connection.ts";
 import {
   hostedLinkingStartWindowMillis,
   hostedLinkingStartsPerWindow,
 } from "#contexts/connections/ConnectionLimits.ts";
 import { Connections } from "#contexts/connections/Connections.ts";
+import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
 import {
   HostedLinking,
   HostedLinkingExpired,
@@ -130,16 +132,60 @@ export const HostedLinkingLive = Layer.effect(
       }
 
       const connection = Array.getUnsafe(linked.success, 0);
-      const yielded2 = yield* DateTime.now;
-      const session = yield* repository.markCompleted(userId, claimed.id, connection.id, yielded2);
       const teams = yield* connections
         .discoverTeams(userId, [{ id: connection.id }])
         .pipe(Effect.result);
+      const discovered = teams._tag === "Success" ? teams.success : [];
+      const adopted =
+        teams._tag === "Success"
+          ? yield* adoptExistingConnection(userId, connection, discovered, input)
+          : undefined;
+      const effective = adopted ?? connection;
+      const yielded2 = yield* DateTime.now;
+      const session = yield* repository.markCompleted(userId, claimed.id, effective.id, yielded2);
       return {
         session: toSession(session),
-        connection,
-        teamsDiscovered: teams._tag === "Success" ? teams.success.length : 0,
+        connection: effective,
+        teamsDiscovered: discovered.length,
       };
+    });
+
+    const adoptExistingConnection = Effect.fn("HostedLinking.adoptExistingConnection")(function* (
+      userId: UserId,
+      linked: ProviderConnection,
+      discovered: ReadonlyArray<FantasyTeam>,
+      input: CompleteHostedLinkingInput,
+    ) {
+      const [owned, teams] = yield* Effect.all(
+        [connections.list(userId), connections.listTeams(userId)],
+        { concurrency: "unbounded" },
+      );
+      const active = new Map<ConnectionId, ProviderConnection>();
+      for (const connection of owned) {
+        if (connection.status === "ready" || connection.status === "reconnect-required") {
+          active.set(connection.id, connection);
+        }
+      }
+      const discoveredKeys = new Set(EffectArray.map(discovered, (team) => team.providerTeamKey));
+      const duplicate = EffectOption.getOrUndefined(
+        EffectArray.findFirst(teams, (team) => {
+          const owner = active.get(team.connectionId);
+          return (
+            owner !== undefined &&
+            owner.id !== linked.id &&
+            owner.provider === input.provider &&
+            discoveredKeys.has(team.providerTeamKey)
+          );
+        }),
+      );
+      if (duplicate === undefined) {
+        return undefined;
+      }
+      yield* connections.discardLinked(userId, [{ id: linked.id }]);
+      const reconnected = yield* connections.completeReconnect(userId, [
+        { id: duplicate.connectionId, provider: input.provider, session: input.session },
+      ]);
+      return Array.getUnsafe(reconnected, 0);
     });
 
     const cancel = Effect.fn("HostedLinking.cancel")(function* (

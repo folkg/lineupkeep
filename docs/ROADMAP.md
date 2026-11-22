@@ -32,7 +32,7 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 | Restore              | Drill passed 2026-10-29; RPO 15 minutes, RTO 4 hours, owner executes recovery (ruled 10 November) |
 | Dependencies         | Fresh audit and disposition in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md)                         |
 | Security             | Audit and disposition in [SECURITY-AUDIT.md](SECURITY-AUDIT.md); deferred work is group J         |
-| Checks               | 2101 node, 299 browser, 10 chromium; container end to end 62 passed, nothing skipped              |
+| Checks               | 2103 node, 299 browser, 10 chromium; container end to end 62 passed, nothing skipped              |
 
 ---
 
@@ -61,6 +61,10 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
   teams. Connect, Reconnect and Add a different account open `/connections` with a heading for that
   sign-in only; the old bookmark returns to Account. The two connections to the same Yahoo account were
   merged under the six-team connection: six teams, 3,465 runs, five plans, notes and automation kept.
+- **A second sign-in to the same account repairs the first connection.** When the fresh session finds a
+  team that another active connection already owns, Lineupgrade discards the new connection and reconnects
+  the existing one with the fresh session. A genuinely different account, with different teams, still
+  becomes a second connection.
 
 ### 13 November 2026
 

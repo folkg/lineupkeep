@@ -72,6 +72,11 @@ export const ConnectionsLive = Layer.effect(
     ): Effect.Effect<ReadonlyArray<ProviderConnection>, ConnectionError> =>
       repository.disconnect(userId, inputs).pipe(Effect.tap(annotateOneConnection));
 
+    const discardLinked = (
+      userId: UserId,
+      inputs: ReadonlyArray<ConnectionIdInput>,
+    ): Effect.Effect<void, ConnectionError> => repository.discardLinked(userId, inputs);
+
     const validateSession = (
       id: ConnectionId,
       input: {
@@ -425,6 +430,7 @@ export const ConnectionsLive = Layer.effect(
       link,
       completeReconnect,
       disconnect,
+      discardLinked,
       discoverTeams,
       listTeams,
       readTeamCards,

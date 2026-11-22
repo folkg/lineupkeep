@@ -2354,6 +2354,7 @@ const unavailableConnections: ConnectionsShape = {
   link: () => Effect.succeed([]),
   completeReconnect: () => Effect.succeed([]),
   disconnect: () => Effect.succeed([]),
+  discardLinked: () => Effect.void,
   discoverTeams: () => Effect.succeed([]),
   listTeams: () => Effect.succeed([]),
   readTeamCards: () => Effect.succeed({ cards: [], failures: [] }),
