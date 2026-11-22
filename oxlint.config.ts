@@ -490,17 +490,7 @@ const correctnessRules = {
   "effecttsgo/global-json-in-effect": "error",
   "effecttsgo/prefer-effect-array": "error",
   "effecttsgo/global-json": "error",
-  "effecttsgo/missed-pipeable-opportunity": "off",
-  "effecttsgo/prefer-schema-tagged-error": "off",
-  "effecttsgo/provide-merge-all-to-array": "off",
-  "effecttsgo/type-union-to-schema-union": "off",
-  "effecttsgo/prefer-barrel-import": "off",
-  "effecttsgo/prefer-namespace-import": "off",
   "effecttsgo/prefer-effect-string": "error",
-  "effecttsgo/prefer-effect-record": "off",
-  "effecttsgo/missing-pipeable-signature": "off",
-  "effecttsgo/yield-in-call-argument": "off",
-  "effecttsgo/effect-try-without-catch": "off",
 } satisfies Rules;
 
 const disabledEffectRules = new Set(["effecttsgo/api-stability-leak"]);
@@ -903,7 +893,6 @@ export default defineConfig({
       rules: {
         "effecttsgo/prefer-effect-array": "off",
         "effecttsgo/prefer-effect-string": "off",
-        "effecttsgo/prefer-effect-record": "off",
         "effecttsgo/global-json": "off",
         "typescript/no-unsafe-type-assertion": "off",
       },
