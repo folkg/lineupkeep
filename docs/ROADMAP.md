@@ -25,8 +25,8 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 | Provider boundary    | Every provider request lives in `packages/yahoo-sdk`; the adapter is policy and port mapping only |
 | MCP surface          | 23 tools; four resource scopes plus `notes:write`; descriptions budgeted and tested               |
 | Client feedback      | Round 9 client notes closed on 5 November: structure, copy, local time, action states             |
-| Connections          | Hosted browser only; local helper and device flow deleted                                         |
-| Interface            | Technical sheet, renamed to Lineupgrade; nav is Teams and Account; actions own their states       |
+| Connections          | Hosted browser only; dedicated `/connections` page; local helper and device flow deleted          |
+| Interface            | Technical sheet, renamed to Lineupgrade; nav is Teams and Account; connecting has its own page    |
 | Deployment           | Cloud Run web, worker and hosted browser on GCP; CI on a clean Linux runner, container target     |
 | Publication gate     | Upstream security fix adopted; clean Linux CI and deployment acceptance remain                    |
 | Restore              | Drill passed 2026-10-29; RPO 15 minutes, RTO 4 hours, owner executes recovery (ruled 10 November) |
@@ -37,6 +37,25 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 ---
 
 ## Ship log
+
+### 22 November 2026
+
+- **An agent can start a connection and wait for it.** `start_connection` returns a `/connections` link
+  for a provider or a `reconnect-required` connection. The person signs in; the agent polls
+  `list_connections`. Credentials and cookies never cross MCP.
+- **Reconnect is the first action.** A connection that needs a sign-in gets a primary Reconnect button.
+  Adding a different account is a separate action, so the page does not offer a new connection as the
+  obvious repair. The duplicate five-team connection made by the old layout was removed.
+- **The Gmail route is visible before the browser starts.** Connections shows a **Signing in with
+  Google?** disclosure with Yahoo's actual route: Forgot username, Use recovery phone number, then the
+  phone number and password. The in-frame note remains when Yahoo refuses the address.
+- **The hosted browser has a Back control.** It moves the remote page back without leaving the private
+  browser.
+- **Trusted-device cookies do not replace the session.** Nineteen non-session Yahoo cookies copied into
+  a fresh browser left it signed out, and Yahoo issued no session. The test saved no values and is
+  disabled.
+- **Session cookie expiry is recorded at capture.** Names and expiry only, never values, so a sign-in
+  that checks Yahoo's Stay signed in box can be compared with the usual two to three weeks.
 
 ### 13 November 2026
 
