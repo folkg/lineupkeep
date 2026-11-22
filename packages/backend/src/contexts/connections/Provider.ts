@@ -10,6 +10,7 @@ import type { LeagueFormat } from "./QueryValues.ts";
 const ProviderOperation = Schema.Literals([
   "validate_session",
   "discover_teams",
+  "read_team_cards",
   "read_league",
   "read_standings",
   "read_roster",
@@ -54,6 +55,22 @@ export const ProviderTeam = Schema.Struct({
   providerUrl: Schema.optional(Schema.NonEmptyString),
 });
 export type ProviderTeam = typeof ProviderTeam.Type;
+
+export type ProviderTeamCard = ProviderTeam & {
+  readonly seasonOver: boolean | undefined;
+  readonly format: LeagueFormat | "points";
+  readonly scoringType: string;
+  readonly scoringLabel: string | undefined;
+  readonly teamCount: number | undefined;
+  readonly weeklyDeadline: string | undefined;
+  readonly startDate: string | undefined;
+  readonly endDate: string | undefined;
+  readonly currentWeek: number | undefined;
+  readonly endWeek: number | undefined;
+  readonly maxGamesPlayed: number | undefined;
+  readonly maxInningsPitched: number | undefined;
+  readonly standing: ProviderStanding | undefined;
+};
 
 export const ProviderFantasyDay = Schema.Struct({
   timeZone: Schema.NonEmptyString,
@@ -232,6 +249,10 @@ export type ProviderShape = {
   readonly discoverTeams: (
     input: ProviderSessionMaterial,
   ) => Effect.Effect<ReadonlyArray<ProviderTeam>, ProviderFailure>;
+
+  readonly readTeamCards: (
+    input: ProviderSessionMaterial,
+  ) => Effect.Effect<ReadonlyArray<ProviderTeamCard>, ProviderFailure>;
 
   readonly readLeague: (
     input: ProviderSessionMaterial & {

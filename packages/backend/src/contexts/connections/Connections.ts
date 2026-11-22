@@ -9,7 +9,17 @@ import type {
   LinkInput,
   ProviderConnection,
 } from "./Connection.ts";
+import type { ConnectionId } from "./Connection.ts";
 import type { FantasyTeam } from "./FantasyTeam.ts";
+import type { ProviderTeamCard } from "./Provider.ts";
+
+export type TeamCardRead = {
+  readonly cards: ReadonlyArray<ProviderTeamCard & { readonly connectionId: ConnectionId }>;
+  readonly failures: ReadonlyArray<{
+    readonly connectionId: ConnectionId;
+    readonly reason: string;
+  }>;
+};
 
 export class Connections extends Context.Service<Connections, ConnectionsShape>()(
   "@lineupkeep/backend/contexts/connections/Connections",
@@ -43,4 +53,6 @@ export type ConnectionsShape = {
   readonly listTeams: (
     userId: UserId,
   ) => Effect.Effect<ReadonlyArray<FantasyTeam>, ConnectionError>;
+
+  readonly readTeamCards: (userId: UserId) => Effect.Effect<TeamCardRead, ConnectionError>;
 };

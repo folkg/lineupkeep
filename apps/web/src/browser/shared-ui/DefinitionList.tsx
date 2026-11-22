@@ -1,17 +1,32 @@
 import type { JSX } from "@solidjs/web";
 import type { Element } from "solid-js";
 
+import { cx } from "./cx";
 import { Text } from "./Text";
 
-export function DefinitionList(props: { readonly children: Element }): JSX.Element {
+export function DefinitionList(props: {
+  readonly children: Element;
+  readonly compact?: boolean;
+}): JSX.Element {
   return (
-    <dl class="grid gap-x-8 gap-y-3 border-t border-rule pt-4 sm:grid-cols-2">{props.children}</dl>
+    <dl
+      class={cx(
+        "grid gap-x-8 border-t border-rule sm:grid-cols-2",
+        props.compact === true ? "gap-y-1 pt-3" : "gap-y-3 pt-4",
+      )}
+    >
+      {props.children}
+    </dl>
   );
 }
 
-export function Definition(props: { readonly term: string; readonly value: string }): JSX.Element {
+export function Definition(props: {
+  readonly term: string;
+  readonly value: string;
+  readonly compact?: boolean;
+}): JSX.Element {
   return (
-    <div class="grid gap-1">
+    <div class={props.compact === true ? "grid gap-0" : "grid gap-1"}>
       <dt>
         <Text type="meta" tone="faint">
           {props.term}

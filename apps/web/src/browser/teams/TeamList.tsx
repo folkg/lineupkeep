@@ -14,6 +14,7 @@ import { RefreshIcon } from "#browser/shared-ui/icons.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Notice } from "#browser/shared-ui/Notice.tsx";
 import { RuleList } from "#browser/shared-ui/RuleList.tsx";
+import { SeasonArea } from "#browser/shared-ui/SeasonArea.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { createSettle } from "#browser/shared-ui/settle.ts";
 import { CardSkeletonList } from "#browser/shared-ui/Skeleton.tsx";
@@ -21,7 +22,11 @@ import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
 import { createMinuteClock } from "#browser/timing/minuteClock.ts";
-import type { TeamControlData, TeamSummaryView } from "#contracts/connections/teamContract.ts";
+import type {
+  TeamCardView,
+  TeamControlData,
+  TeamSummaryView,
+} from "#contracts/connections/teamContract.ts";
 import { sportDisplayName } from "#contracts/connections/teamVocabulary.ts";
 
 import { TeamAttention } from "./TeamAttention";
@@ -30,6 +35,7 @@ import { checkTallyLabel, lastCheckLine, teamContextLabel } from "./teamLabels";
 import { teamAutomation, teamLastRun } from "./teamPending";
 import { TeamProviderLink } from "./TeamProviderLink";
 import type { TeamRemote } from "./teamRemote";
+import { TeamSeasonFacts } from "./TeamSeasonFacts";
 import { teamStatusLine } from "./teamStatus";
 
 export function TeamList(props: TeamListProps): JSX.Element {
@@ -74,7 +80,10 @@ export function TeamList(props: TeamListProps): JSX.Element {
           <Text type="meta">Turn on Lineup checks for the teams you want managed.</Text>
         </Notice>
       </Show>
-      <Show fallback={<CardSkeletonList cards={skeletonCards()} />} when={!props.isLoading()}>
+      <Show
+        fallback={<CardSkeletonList cards={skeletonCards()} season />}
+        when={!props.isLoading()}
+      >
         <Show
           fallback={
             <ActionFeedback
@@ -109,6 +118,14 @@ export function TeamList(props: TeamListProps): JSX.Element {
                   <TeamCard
                     now={clock.now}
                     team={team}
+                    facts={
+                      EffectArray.filter(
+                        props.cardFacts() ?? [],
+                        (card) => card.summary.team.id === team.team.id,
+                      )[0]
+                    }
+                    factsFailure={props.cardFactsFailure()}
+                    factsLoading={props.cardFactsLoading()}
                     remote={props.remote}
                     onOptimistic={props.onOptimistic}
                   />
@@ -158,6 +175,13 @@ function TeamCard(props: TeamCardProps): JSX.Element {
       }
     >
       <Stack gap="xs">
+        <SeasonArea>
+          <TeamSeasonFacts
+            facts={props.facts}
+            failed={props.factsFailure}
+            loading={props.factsLoading}
+          />
+        </SeasonArea>
         <Text reserve="two-lines" type="meta" tone="muted">
           {teamStatusLine(props.team, props.now())}
         </Text>
@@ -190,6 +214,9 @@ function TeamCard(props: TeamCardProps): JSX.Element {
 
 type TeamListProps = {
   readonly teams: Accessor<ReadonlyArray<TeamSummaryView>>;
+  readonly cardFacts: Accessor<ReadonlyArray<TeamCardView> | undefined>;
+  readonly cardFactsFailure: Accessor<boolean>;
+  readonly cardFactsLoading: Accessor<boolean>;
   readonly isLoading: Accessor<boolean>;
   readonly loadFailure: Accessor<Error | null>;
   readonly refreshState: Accessor<ActionState>;
@@ -203,6 +230,9 @@ type TeamListProps = {
 
 type TeamCardProps = {
   readonly team: TeamSummaryView;
+  readonly facts: TeamCardView | undefined;
+  readonly factsFailure: boolean;
+  readonly factsLoading: boolean;
   readonly now: Accessor<Date>;
   readonly remote: TeamRemote;
   readonly onOptimistic: (input: TeamControlData) => void;

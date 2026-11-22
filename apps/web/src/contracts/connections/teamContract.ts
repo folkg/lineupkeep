@@ -124,6 +124,46 @@ export type TeamSummaryView = {
   readonly pending?: TeamPendingView;
 };
 
+export type TeamCardView = {
+  readonly summary: TeamSummaryView;
+  readonly season?: {
+    readonly seasonOver: boolean | undefined;
+    readonly format:
+      | "head_to_head_categories"
+      | "head_to_head_points"
+      | "rotisserie"
+      | "points"
+      | "unknown";
+    readonly scoringLabel: string | undefined;
+    readonly teamCount: number | undefined;
+    readonly weeklyDeadline: string | undefined;
+    readonly startDate: string | undefined;
+    readonly endDate: string | undefined;
+    readonly currentWeek: number | undefined;
+    readonly endWeek: number | undefined;
+    readonly maxGamesPlayed: number | undefined;
+    readonly maxInningsPitched: number | undefined;
+    readonly standing:
+      | {
+          readonly rank: number | null;
+          readonly record:
+            | {
+                readonly wins: number;
+                readonly losses: number;
+                readonly ties: number;
+                readonly percentage: number | null;
+              }
+            | undefined;
+          readonly points: number | null;
+          readonly pointsFor: number | null;
+          readonly pointsAgainst: number | null;
+          readonly pointsBack: number | null;
+        }
+      | undefined;
+  };
+  readonly reason?: string;
+};
+
 export type TeamChangeView = {
   readonly changed: ReadonlyArray<TeamSummaryView>;
   readonly teams: ReadonlyArray<TeamSummaryView>;

@@ -24,8 +24,9 @@ import type {
   StartLinkingInput,
 } from "#contexts/connections/Connection.ts";
 import { Connections } from "#contexts/connections/Connections.ts";
+import type { TeamCardRead } from "#contexts/connections/Connections.ts";
 import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
-import type { ProviderFailure } from "#contexts/connections/Provider.ts";
+import type { ProviderFailure, ProviderTeamCard } from "#contexts/connections/Provider.ts";
 import { sessionEvidenceOf } from "#contexts/connections/Provider.ts";
 import type { ProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
@@ -243,6 +244,77 @@ export const ConnectionsLive = Layer.effect(
           Effect.tap((teams) => Effect.annotateCurrentSpan("connections.team_count", teams.length)),
         );
 
+    const readTeamCards = (userId: UserId): Effect.Effect<TeamCardRead, ConnectionError> =>
+      Effect.gen(function* () {
+        const connections = yield* list(userId);
+        const ready = EffectArray.filter(
+          connections,
+          (connection) => connection.status === "ready",
+        );
+        const credentials = yield* repository.loadCredentials(
+          userId,
+          EffectArray.map(ready, (connection) => connection.id),
+        );
+        const byId = new Map(EffectArray.map(ready, (connection) => [connection.id, connection]));
+        const usable = EffectArray.filter(
+          credentials,
+          (credential) =>
+            byId.get(credential.connectionId)?.credentialGeneration === credential.generation,
+        );
+        const usableIds = new Set(EffectArray.map(usable, (credential) => credential.connectionId));
+        const results = yield* Effect.forEach(
+          usable,
+          (credential) => Effect.result(readConnectionCards(userId, credential)),
+          { concurrency: 1 },
+        );
+        return {
+          cards: EffectArray.flatMap(results, (result) =>
+            result._tag === "Success"
+              ? EffectArray.map(result.success.cards, (card) => ({
+                  ...card,
+                  connectionId: result.success.connectionId,
+                }))
+              : [],
+          ),
+          failures: [
+            ...EffectArray.flatMap(results, (result) =>
+              result._tag === "Failure" ? [result.failure] : [],
+            ),
+            ...EffectArray.map(
+              EffectArray.filter(ready, (connection) => !usableIds.has(connection.id)),
+              (connection) => ({
+                connectionId: connection.id,
+                reason: "Season facts could not be loaded from this connection.",
+              }),
+            ),
+          ],
+        };
+      });
+
+    const readConnectionCards = (
+      userId: UserId,
+      credential: ReadyCredential,
+    ): Effect.Effect<
+      { readonly connectionId: ConnectionId; readonly cards: ReadonlyArray<ProviderTeamCard> },
+      { readonly connectionId: ConnectionId; readonly reason: string }
+    > =>
+      Effect.gen(function* () {
+        const session = yield* encryption.open({
+          userId,
+          connectionId: credential.connectionId,
+          provider: credential.provider,
+          envelope: credential.envelope,
+        });
+        const provider = yield* registry.requireProvider(credential.provider);
+        const cards = yield* provider.readTeamCards({ provider: credential.provider, session });
+        return { connectionId: credential.connectionId, cards };
+      }).pipe(
+        Effect.mapError(() => ({
+          connectionId: credential.connectionId,
+          reason: "Season facts could not be loaded from the provider.",
+        })),
+      );
+
     const discoverTeams = (
       userId: UserId,
       inputs: ReadonlyArray<ConnectionIdInput>,
@@ -355,6 +427,7 @@ export const ConnectionsLive = Layer.effect(
       disconnect,
       discoverTeams,
       listTeams,
+      readTeamCards,
     });
   }),
 );

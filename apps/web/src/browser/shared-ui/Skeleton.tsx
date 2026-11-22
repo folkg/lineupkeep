@@ -1,8 +1,9 @@
 import type { JSX } from "@solidjs/web";
-import { For } from "solid-js";
+import { For, Show } from "solid-js";
 
 import { Card } from "./Card";
 import { cx } from "./cx";
+import { SeasonArea } from "./SeasonArea";
 import { SectionTitle } from "./SectionTitle";
 import { Stack } from "./Stack";
 
@@ -19,12 +20,15 @@ export function CardSkeletonList(props: {
   readonly count?: number;
   readonly cards?: ReadonlyArray<SkeletonCard>;
   readonly label?: string;
+  readonly season?: boolean;
 }): JSX.Element {
   const cards = (): ReadonlyArray<SkeletonCard> =>
     props.cards ?? Array.from({ length: props.count ?? 3 }, () => ({}));
   return (
     <ol aria-busy="true" aria-label={props.label ?? "Loading teams"} class="grid w-full gap-6">
-      <For each={cards()}>{(card) => <CardSkeleton title={card.title} meta={card.meta} />}</For>
+      <For each={cards()}>
+        {(card) => <CardSkeleton title={card.title} meta={card.meta} season={props.season} />}
+      </For>
     </ol>
   );
 }
@@ -50,6 +54,9 @@ function CardSkeleton(props: SkeletonCard): JSX.Element {
       }
     >
       <Stack gap="xs">
+        <Show when={props.season === true}>
+          <SeasonArea />
+        </Show>
         <Skeleton class="h-[2.25rem] w-full" />
         <Skeleton class="h-[1.125rem] w-4/5" />
         <Skeleton class="h-[1.125rem] w-3/5" />
@@ -79,4 +86,5 @@ export function TransactionsSkeleton(): JSX.Element {
 type SkeletonCard = {
   readonly title?: string;
   readonly meta?: string;
+  readonly season?: boolean;
 };

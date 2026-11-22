@@ -44,6 +44,7 @@ import type {
   ProviderStatBasis,
   ProviderStatPeriod,
   ProviderTeam,
+  ProviderTeamCard,
   ProviderTradePick,
   ProviderTradeProposalResult,
   ProviderTransaction,
@@ -96,6 +97,7 @@ type FakeProviderState = {
   readonly sessionRejection: FakeSessionRejection;
   readonly rejectedSessions: ReadonlySet<string>;
   readonly teams: ReadonlyArray<ProviderTeam>;
+  readonly teamCards: ReadonlyArray<ProviderTeamCard>;
   readonly requestFailure: FakeRequestFailure | undefined;
   readonly discoveryGate: Option.Option<FakeGate>;
   readonly rosterReadGate: Option.Option<FakeGate>;
@@ -164,6 +166,7 @@ export type FakeProviderWorldShape = {
   readonly rejectSessionFor: (sessions: ReadonlyArray<string>) => Effect.Effect<void>;
   readonly setSessionRejection: (rejection: FakeSessionRejection) => Effect.Effect<void>;
   readonly setTeams: (teams: ReadonlyArray<ProviderTeam>) => Effect.Effect<void>;
+  readonly setTeamCards: (cards: ReadonlyArray<ProviderTeamCard>) => Effect.Effect<void>;
   readonly failRequests: (failure: FakeRequestFailure | undefined) => Effect.Effect<void>;
   readonly blockDiscovery: Effect.Effect<FakeGate>;
   readonly unblockDiscovery: Effect.Effect<void>;
@@ -267,6 +270,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         sessionRejection: {},
         rejectedSessions: new Set<string>(),
         teams: [],
+        teamCards: [],
         requestFailure: undefined,
         discoveryGate: Option.none(),
         rosterReadGate: Option.none(),
@@ -340,6 +344,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         setSessionRejection: (sessionRejection) =>
           modify((current) => ({ ...current, sessionRejection })),
         setTeams: (teams) => modify((current) => ({ ...current, teams })),
+        setTeamCards: (teamCards) => modify((current) => ({ ...current, teamCards })),
         failRequests: (requestFailure) => modify((current) => ({ ...current, requestFailure })),
         blockDiscovery: Effect.gen(function* () {
           const gate: FakeGate = {
@@ -527,6 +532,16 @@ const providerFake = Effect.gen(function* () {
       }
       const latest = yield* Ref.get(world.state);
       return latest.teams;
+    }),
+    readTeamCards: Effect.fn("FakeProvider.readTeamCards")(function* (input) {
+      const current = yield* prepare(input, "read_team_cards").pipe(
+        Effect.mapError((error) =>
+          error._tag === "provider.operation_unsupported"
+            ? ProviderResponseInvalid.make({ operation: "read_team_cards" })
+            : error,
+        ),
+      );
+      return current.teamCards;
     }),
     readLeague: Effect.fn("FakeProvider.readLeague")(function* (input) {
       const current = yield* prepare(input, "read_league");
@@ -1152,6 +1167,7 @@ export const ProviderFakeTest = Layer.effect(ProviderRegistry)(
 ).pipe(Layer.provideMerge(FakeProviderWorld.layer));
 
 const readOperations: ReadonlySet<ProviderOperation> = new Set<ProviderOperation>([
+  "read_team_cards",
   "validate_session",
   "discover_teams",
   "read_league",

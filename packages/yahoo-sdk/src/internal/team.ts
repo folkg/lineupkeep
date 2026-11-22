@@ -17,6 +17,8 @@ import { EffectString } from "#yahoo/stringTools.ts";
 
 import { decodeLeagueSettings } from "./league.ts";
 import type { YahooLeagueSettings } from "./league.ts";
+import { StandingsTeamPayload, standingOf } from "./standings.ts";
+import type { YahooStanding } from "./standings.ts";
 
 export function decodeSession(
   payload: unknown,
@@ -138,14 +140,11 @@ function teamOf(team: typeof TeamPayload.Type): YahooLeagueTeam {
     rosterAdds: team.roster_adds === undefined ? undefined : acquisitionOf(team.roster_adds),
     faabBalance: team.faab_balance,
     standings:
-      team.team_standings === undefined
+      team.team_standings === undefined &&
+      team.team_points === undefined &&
+      team.team_stats === undefined
         ? undefined
-        : {
-            rank: team.team_standings.rank,
-            pointsFor: team.team_standings.points_for,
-            pointsAgainst: team.team_standings.points_against,
-            pointsBack: team.team_standings.points_back,
-          },
+        : standingOf(team),
   };
 }
 
@@ -175,12 +174,7 @@ export type YahooLeagueTeam = {
   readonly standings?: YahooTeamStandings;
 };
 
-export type YahooTeamStandings = {
-  readonly rank?: number;
-  readonly pointsFor?: number;
-  readonly pointsAgainst?: number;
-  readonly pointsBack?: number;
-};
+export type YahooTeamStandings = YahooStanding;
 
 export type YahooGamesPlayed = {
   readonly positionType: string;
@@ -256,6 +250,7 @@ const AcquisitionPayload = Schema.Union([
 ]);
 
 const TeamPayload = Schema.Struct({
+  ...StandingsTeamPayload.fields,
   team_key: Schema.String.pipe(Schema.check(Schema.isPattern(/^[0-9]+\.l\.[0-9]+\.t\.[0-9]+$/u))),
   name: Schema.NonEmptyString,
   url: Schema.optional(Schema.String.pipe(Schema.check(Schema.isPattern(/^https:\/\/[^\s]+$/u)))),
@@ -284,14 +279,6 @@ const TeamPayload = Schema.Struct({
   number_of_moves: Schema.optional(IntFromStringOrNumber),
   roster_adds: Schema.optional(AcquisitionPayload),
   faab_balance: Schema.optional(IntFromStringOrNumber),
-  team_standings: Schema.optional(
-    Schema.Struct({
-      rank: Schema.optional(IntFromStringOrNumber),
-      points_for: Schema.optional(NumberFromStringOrNumber),
-      points_against: Schema.optional(NumberFromStringOrNumber),
-      points_back: Schema.optional(NumberFromStringOrNumber),
-    }),
-  ),
 });
 
 const LeagueTeamsPayload = Schema.Struct({
@@ -379,9 +366,17 @@ export function decodeDiscoveredLeagues(
             name: league.name,
             gameKey: game.code,
             season: game.season,
+            seasonOver: game.is_game_over,
             teamCount: league.num_teams,
             scoringType: optionalNonEmpty(league.scoring_type),
             scoringLabel: optionalNonEmpty(league.scoring_label),
+            currentWeek: settings.currentWeek,
+            endWeek: settings.endWeek,
+            startDate: settings.startDate,
+            endDate: settings.endDate,
+            weeklyDeadline: league.weekly_deadline,
+            maxGamesPlayed: settings.settings.maxGamesPlayed,
+            maxInningsPitched: settings.settings.maxInningsPitched,
             settings,
             tradeDraftPicks: settings.settings.canTradeDraftPicks,
             teams: EffectArray.map(league.teams, (team) => ({
@@ -402,9 +397,17 @@ export type YahooDiscoveredLeague = {
   readonly name: string;
   readonly gameKey: YahooGameKey;
   readonly season: number;
+  readonly seasonOver?: boolean;
   readonly teamCount?: number;
   readonly scoringType?: string;
   readonly scoringLabel?: string;
+  readonly currentWeek?: number;
+  readonly endWeek?: number;
+  readonly startDate?: string;
+  readonly endDate?: string;
+  readonly weeklyDeadline?: string;
+  readonly maxGamesPlayed?: number;
+  readonly maxInningsPitched?: number;
   readonly settings: YahooLeagueSettings;
   readonly tradeDraftPicks?: boolean;
   readonly teams: ReadonlyArray<YahooDiscoveredTeam>;
@@ -417,6 +420,12 @@ const DiscoverLeaguePayload = Schema.Struct({
   num_teams: IntFromStringOrNumber,
   scoring_type: Schema.NonEmptyString,
   scoring_label: Schema.optional(Schema.String),
+  weekly_deadline: Schema.optional(Schema.String),
+  current_week: Schema.optional(IntFromStringOrNumber),
+  start_week: Schema.optional(IntFromStringOrNumber),
+  end_week: Schema.optional(IntFromStringOrNumber),
+  start_date: Schema.optional(YahooDate),
+  end_date: Schema.optional(YahooDate),
   settings: Schema.Unknown,
   teams: Schema.Array(TeamPayload),
 });
@@ -429,6 +438,7 @@ const DiscoverLeagueEntry = Schema.Union([
 const DiscoverGamePayload = Schema.Struct({
   code: YahooGameKey,
   season: Season,
+  is_game_over: Schema.optional(Flag),
   leagues: Schema.Array(DiscoverLeagueEntry),
 });
 

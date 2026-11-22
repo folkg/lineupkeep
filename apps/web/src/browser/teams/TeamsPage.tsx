@@ -34,6 +34,9 @@ export function TeamsPage(props: TeamsPageProps): JSX.Element {
             cachedHeaders={page.cachedHeaders()}
             remote={props.remote}
             teams={page.teams}
+            cardFacts={page.cardFacts}
+            cardFactsFailure={page.cardFactsFailure}
+            cardFactsLoading={page.cardFactsLoading}
             onOptimistic={page.beginControl}
             onRefresh={page.refresh}
             onRefreshTeams={page.refreshTeams}

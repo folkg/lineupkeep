@@ -25,6 +25,7 @@ import type {
   TeamMutationError,
   TeamRefreshView,
   TeamSummaryView,
+  TeamCardView,
 } from "#contracts/connections/teamContract.ts";
 
 import { requireTeamSuccess } from "./teamFailure";
@@ -106,6 +107,338 @@ const baseTeam: TeamSummaryView = {
   lastRun: noOpRun,
   recentRuns: [noOpRun],
 };
+
+const standingFacts: NonNullable<NonNullable<TeamCardView["season"]>["standing"]> = {
+  rank: 3,
+  record: { wins: 7, losses: 3, ties: 0, percentage: 0.7 },
+  points: null,
+  pointsFor: 1234.5,
+  pointsAgainst: 1200,
+  pointsBack: 0,
+};
+
+const seasonFacts: NonNullable<TeamCardView["season"]> = {
+  format: "head_to_head_categories",
+  seasonOver: false,
+  scoringLabel: "H2H categories",
+  teamCount: 12,
+  weeklyDeadline: "weekly",
+  startDate: "2026-09-01",
+  endDate: "2027-01-04",
+  currentWeek: 11,
+  endWeek: 18,
+  maxGamesPlayed: 162,
+  maxInningsPitched: undefined,
+  standing: standingFacts,
+};
+
+const seasonCard: TeamCardView = { summary: baseTeam, season: seasonFacts };
+
+const tallSeasonCard: TeamCardView = {
+  ...seasonCard,
+  season: {
+    ...seasonFacts,
+    format: "rotisserie",
+    scoringLabel: undefined,
+    maxInningsPitched: 1200,
+    standing: { ...standingFacts, record: undefined, pointsAgainst: 0 },
+  },
+};
+
+it("shows batch season facts before local status and preserves zero", async () => {
+  using _app = setupTeamsPage([baseTeam], { cards: () => Promise.resolve([seasonCard]) });
+  await expect.element(page.getByText("3rd of 12")).toBeVisible();
+  await expect.element(page.getByText("7-3-0 (.700)")).toBeVisible();
+  await expect.element(page.getByText("1,234.5 points")).toBeVisible();
+  await expect.element(page.getByText("1,200 points against")).toBeVisible();
+  await expect.element(page.getByText("0 points behind leader")).toBeVisible();
+  await expect.element(page.getByText("H2H categories")).toBeVisible();
+  const text = page.getByRole("listitem").first().element().textContent;
+  expect(text).toMatch(/1,234\.5 points[\s\S]*1,200 points against[\s\S]*0 points behind leader/u);
+  await expect.element(page.getByText("Max games: 162")).toBeVisible();
+  await expect.element(page.getByText("Lineup changes: weekly")).toBeVisible();
+  await expect.element(page.getByText("Week 11 of 18")).toBeVisible();
+  await expect.element(page.getByRole("switch", { name: "Lineup checks for Alpha" })).toBeVisible();
+});
+
+it("shows missing facts without a made-up record, label, cap or weekly lock", async () => {
+  using _app = setupTeamsPage([baseTeam], {
+    cards: () =>
+      Promise.resolve([
+        {
+          ...seasonCard,
+          season: {
+            ...seasonFacts,
+            format: "head_to_head_points",
+            scoringLabel: undefined,
+            weeklyDeadline: "",
+            maxGamesPlayed: 0,
+            currentWeek: undefined,
+            endWeek: undefined,
+            standing: {
+              rank: 1,
+              record: undefined,
+              points: null,
+              pointsFor: 0,
+              pointsAgainst: null,
+              pointsBack: null,
+            },
+          },
+        },
+      ]),
+  });
+  await expect.element(page.getByText("Record not published.")).toBeVisible();
+  await expect.element(page.getByText("0 points")).toBeVisible();
+  await expect.element(page.getByText("Season ends 2027-01-04")).toBeVisible();
+  expect(page.getByText("Lineup changes: weekly").elements()).toHaveLength(0);
+  expect(page.getByText("Max games: 0").elements()).toHaveLength(0);
+  expect(page.getByText("H2H categories").elements()).toHaveLength(0);
+});
+
+it("shows provider labels for unknown formats, and preserves local controls when facts fail", async () => {
+  using _app = setupTeamsPage([baseTeam], {
+    cards: () =>
+      Promise.resolve([
+        {
+          ...seasonCard,
+          season: {
+            ...seasonFacts,
+            format: "unknown",
+            scoringLabel: "Custom league scoring",
+            standing: undefined,
+          },
+        },
+      ]),
+  });
+  await expect.element(page.getByText("Custom league scoring")).toBeVisible();
+  await expect.element(page.getByText("Standings were not published for this team.")).toBeVisible();
+  expect(page.getByText("Record not published.").elements()).toHaveLength(0);
+});
+
+it("keeps rotisserie points without fabricating a season record", async () => {
+  using _app = setupTeamsPage([baseTeam], {
+    cards: () =>
+      Promise.resolve([
+        {
+          ...seasonCard,
+          season: {
+            ...seasonFacts,
+            format: "rotisserie",
+            scoringLabel: "Rotisserie",
+            standing: { ...standingFacts, record: undefined, points: 99, pointsFor: 0 },
+          },
+        },
+      ]),
+  });
+  await expect.element(page.getByText("0 points")).toBeVisible();
+  await expect
+    .element(page.getByText("This format does not publish a win-loss record."))
+    .toBeVisible();
+  expect(page.getByText("0-0-0").elements()).toHaveLength(0);
+});
+
+it("keeps published zero for points for, against and behind without substituting season points", async () => {
+  using _app = setupTeamsPage([baseTeam], {
+    cards: () =>
+      Promise.resolve([
+        {
+          ...seasonCard,
+          season: {
+            ...seasonFacts,
+            standing: {
+              ...standingFacts,
+              points: 99,
+              pointsFor: 0,
+              pointsAgainst: 0,
+              pointsBack: 0,
+            },
+          },
+        },
+      ]),
+  });
+  await expect.element(page.getByText("0 points", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("0 points against")).toBeVisible();
+  await expect.element(page.getByText("0 points behind leader")).toBeVisible();
+  expect(page.getByText("99 points", { exact: true }).elements()).toHaveLength(0);
+});
+
+it.each([
+  "head_to_head_categories",
+  "head_to_head_points",
+  "rotisserie",
+  "points",
+  "unknown",
+] as const)("does not substitute total points for missing $0 points for", async (format) => {
+  using _app = setupTeamsPage([baseTeam], {
+    cards: () =>
+      Promise.resolve([
+        {
+          ...seasonCard,
+          season: {
+            ...seasonFacts,
+            format,
+            standing: { ...standingFacts, points: 99, pointsFor: null },
+          },
+        },
+      ]),
+  });
+  await expect.element(page.getByText("Points were not published for this team.")).toBeVisible();
+  expect(page.getByText("99 points", { exact: true }).elements()).toHaveLength(0);
+});
+
+it.each([
+  { format: "head_to_head_categories", label: "Head to head categories" },
+  { format: "head_to_head_points", label: "Head to head points" },
+  { format: "rotisserie", label: "Rotisserie" },
+  { format: "points", label: "Points" },
+  { format: "unknown", label: "Unknown scoring format" },
+] as const)(
+  "shows a plain $format label when the provider publishes none",
+  async ({ format, label }) => {
+    using _app = setupTeamsPage([baseTeam], {
+      cards: () =>
+        Promise.resolve([
+          {
+            ...seasonCard,
+            season: { ...seasonFacts, format, scoringLabel: undefined },
+          },
+        ]),
+    });
+    await expect.element(page.getByText(label, { exact: true }).last()).toBeVisible();
+  },
+);
+
+it.each(["head_to_head_categories", "head_to_head_points", "points", "unknown"] as const)(
+  "shows published $0 records outside rotisserie",
+  async (format) => {
+    using _app = setupTeamsPage([baseTeam], {
+      cards: () =>
+        Promise.resolve([
+          {
+            ...seasonCard,
+            season: { ...seasonFacts, format },
+          },
+        ]),
+    });
+    await expect.element(page.getByText("7-3-0 (.700)")).toBeVisible();
+    expect(
+      page.getByText("This format does not publish a win-loss record.").elements(),
+    ).toHaveLength(0);
+  },
+);
+
+it.each(["head_to_head_categories", "head_to_head_points", "points", "unknown"] as const)(
+  "explains absent $0 records without inventing a zero record",
+  async (format) => {
+    using _app = setupTeamsPage([baseTeam], {
+      cards: () =>
+        Promise.resolve([
+          {
+            ...seasonCard,
+            season: { ...seasonFacts, format, standing: { ...standingFacts, record: undefined } },
+          },
+        ]),
+    });
+    await expect.element(page.getByText("Record not published.")).toBeVisible();
+    expect(page.getByText("0-0-0").elements()).toHaveLength(0);
+  },
+);
+
+it("keeps the season window instead of naming a current week when the season is over", async () => {
+  using _app = setupTeamsPage([baseTeam], {
+    cards: () =>
+      Promise.resolve([
+        {
+          ...seasonCard,
+          season: { ...seasonFacts, seasonOver: true },
+        },
+      ]),
+  });
+  await expect.element(page.getByText("Season ended 2027-01-04")).toBeVisible();
+  expect(page.getByText("Week 11 of 18").elements()).toHaveLength(0);
+});
+
+it("shows a missing percentage as missing, not as zero", async () => {
+  using _app = setupTeamsPage([baseTeam], {
+    cards: () =>
+      Promise.resolve([
+        {
+          ...seasonCard,
+          season: {
+            ...seasonFacts,
+            standing: {
+              ...standingFacts,
+              record: { wins: 7, losses: 3, ties: 0, percentage: null },
+            },
+          },
+        },
+      ]),
+  });
+  await expect.element(page.getByText("7-3-0 (percentage not published)")).toBeVisible();
+  expect(page.getByText("7-3-0 (.000)").elements()).toHaveLength(0);
+});
+
+it("keeps local team controls when the batch read fails", async () => {
+  using _app = setupTeamsPage(
+    [baseTeam],
+    { cards: () => Promise.reject(new Error("Offline")) },
+    { retryDelay: 0 },
+  );
+  await expect
+    .element(
+      page.getByText(
+        "Season facts could not be loaded. Lineup checks and controls are still available.",
+      ),
+    )
+    .toBeVisible();
+  await expect.element(page.getByRole("switch", { name: "Lineup checks for Alpha" })).toBeVisible();
+});
+
+it("keeps local status in place while season facts arrive", async () => {
+  await page.viewport(390, 844);
+  await document.fonts.ready;
+  const pending = Promise.withResolvers<ReadonlyArray<TeamCardView>>();
+  using _app = setupTeamsPage([baseTeam], { cards: () => pending.promise });
+  const status = page.getByRole("switch", { name: "Lineup checks for Alpha" });
+  await expect.element(page.getByText("Loading season facts.")).toBeVisible();
+  const card = status.element().closest<HTMLElement>("[data-card]");
+  const height = card?.getBoundingClientRect().height;
+  pending.resolve([tallSeasonCard]);
+  await expect.element(page.getByText("3rd of 12")).toBeVisible();
+  await document.fonts.ready;
+  expect(card?.getBoundingClientRect().height).toBe(height);
+});
+
+it("explains when a ready connection has no card facts for a local team", async () => {
+  using _app = setupTeamsPage([baseTeam]);
+  await expect
+    .element(page.getByText("Season facts were not published for this team."))
+    .toBeVisible();
+  await expect.element(page.getByRole("switch", { name: "Lineup checks for Alpha" })).toBeVisible();
+});
+
+it("keeps season facts and controls in a phone viewport", async () => {
+  await page.viewport(390, 844);
+  await document.fonts.ready;
+  using _app = setupTeamsPage([baseTeam], { cards: () => Promise.resolve([tallSeasonCard]) });
+  await expect.element(page.getByText("3rd of 12")).toBeVisible();
+  await document.fonts.ready;
+  const card = page
+    .getByRole("link", { name: "Alpha", exact: true })
+    .element()
+    .closest<HTMLElement>("[data-card]");
+  const facts = card?.querySelector("dl")?.getBoundingClientRect().height ?? 0;
+  const reserved =
+    card
+      ?.querySelector("[data-card-body]")
+      ?.firstElementChild?.firstElementChild?.getBoundingClientRect().height ?? 0;
+  expect(facts).toBeGreaterThan(450);
+  expect(reserved).toBeLessThanOrEqual(facts + 4);
+  expect(card?.getBoundingClientRect().height).toBeLessThanOrEqual(720);
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
+    document.documentElement.clientWidth,
+  );
+});
 
 const enabledTeam: TeamSummaryView = {
   ...baseTeam,
@@ -883,7 +1216,7 @@ function refusal(reason: TeamMutationError): Error {
 
 function setupTeamsPage(
   teams: ReadonlyArray<TeamSummaryView>,
-  overrides: Partial<Pick<TeamRemote, "list" | "refresh" | "control">> = {},
+  overrides: Partial<Pick<TeamRemote, "list" | "refresh" | "control" | "cards">> = {},
   queryOptions: { readonly retryDelay?: number } = {},
 ): { [Symbol.dispose](): void } {
   const queryClient = createQueryClient();
@@ -892,6 +1225,7 @@ function setupTeamsPage(
   }
   const remote: TeamRemote = {
     list: overrides.list ?? (() => Promise.resolve(teams)),
+    cards: overrides.cards ?? (() => Promise.resolve([])),
     refresh: overrides.refresh ?? (() => Promise.resolve({ teams })),
     control: overrides.control ?? (() => Promise.resolve({ changed: [], teams })),
     readRun: () => Promise.reject(new Error("Unexpected run read")),

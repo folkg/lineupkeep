@@ -68,6 +68,52 @@ it.effect("links a captured session into one ready connection", () =>
   }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
+it.effect("reads cards once per ready connection and isolates a failed connection", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const fake = yield* FakeProviderWorld;
+    const linkedFirst = yield* connections.link(owner, [linkInput]);
+    const first = Array.getUnsafe(linkedFirst, 0);
+    const secondSession = Redacted.make("A1=other-session-cookie");
+    const linkedSecond = yield* connections.link(owner, [{ ...linkInput, session: secondSession }]);
+    const second = Array.getUnsafe(linkedSecond, 0);
+    yield* fake.setTeamCards([
+      {
+        provider: decodeProviderKey("yahoo"),
+        providerTeamKey: "470.l.2.t.1",
+        providerLeagueKey: "470.l.2",
+        league: "nfl",
+        sport: "football",
+        season: 2026,
+        seasonOver: undefined,
+        name: "One",
+        format: "unknown",
+        scoringType: "unlisted",
+        scoringLabel: "Custom",
+        teamCount: 12,
+        weeklyDeadline: "",
+        startDate: undefined,
+        endDate: undefined,
+        currentWeek: undefined,
+        endWeek: undefined,
+        maxGamesPlayed: undefined,
+        maxInningsPitched: undefined,
+        standing: undefined,
+      },
+    ]);
+    yield* fake.rejectSessionFor([Redacted.value(secondSession)]);
+    const result = yield* connections.readTeamCards(owner);
+    assert.strictEqual(result.cards.length, 1);
+    assert.strictEqual(result.cards[0]?.connectionId, first.id);
+    assert.strictEqual(result.failures.length, 1);
+    assert.strictEqual(result.failures[0]?.connectionId, second.id);
+    const reads = yield* fake.readCount("read_team_cards");
+    assert.strictEqual(reads, 2);
+    const foreign = yield* connections.readTeamCards(decodeUserId("another-owner"));
+    assert.deepStrictEqual(foreign, { cards: [], failures: [] });
+  }).pipe(layerTools.provide(ConnectionsTestLayer)),
+);
+
 it.effect("leaves no connection when a link's session is rejected", () =>
   Effect.gen(function* () {
     const connections = yield* Connections;

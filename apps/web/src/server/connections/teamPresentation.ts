@@ -1,4 +1,5 @@
 import type { ConnectionError } from "@lineupkeep/backend/connections/Connection";
+import type { TeamCardRead } from "@lineupkeep/backend/connections/Connections";
 import type { LineupRun } from "@lineupkeep/backend/connections/LineupRun";
 import type { LineupError } from "@lineupkeep/backend/connections/LineupRun";
 import type { LineupRunOutcome } from "@lineupkeep/backend/connections/LineupRun";
@@ -17,6 +18,7 @@ import type {
   TeamMutationError,
   TeamNoteSaveResult,
   TeamSummaryView,
+  TeamCardView,
   TeamView,
 } from "#contracts/connections/teamContract.ts";
 import type { ExpectedFailure } from "#server/backendEntry.ts";
@@ -30,6 +32,59 @@ export function toTeamSummaryView(summary: TeamSummary): TeamSummaryView {
     recentRuns: EffectArray.map(summary.recentRuns, toLineupRunView),
   };
 }
+
+export const toTeamCardViews =
+  (read: TeamCardRead): ((summaries: ReadonlyArray<TeamSummary>) => ReadonlyArray<TeamCardView>) =>
+  (summaries: ReadonlyArray<TeamSummary>): ReadonlyArray<TeamCardView> => {
+    const cards = new Map(
+      EffectArray.map(
+        read.cards,
+        (card) => [`${card.connectionId}:${card.providerTeamKey}`, card] as const,
+      ),
+    );
+    const failures = new Map(
+      EffectArray.map(read.failures, (failure) => [failure.connectionId, failure.reason] as const),
+    );
+    return EffectArray.map(summaries, (summary) => {
+      const card = cards.get(`${summary.team.connectionId}:${summary.team.providerTeamKey}`);
+      const reason =
+        failures.get(summary.team.connectionId) ?? "Season facts were not published for this team.";
+      return {
+        summary: toTeamSummaryView(summary),
+        ...(card === undefined
+          ? {
+              reason:
+                summary.connectionStatus === "ready" ? reason : "Reconnect to load season facts.",
+            }
+          : {
+              season: {
+                seasonOver: card.seasonOver,
+                format: card.format,
+                scoringLabel: card.scoringLabel,
+                teamCount: card.teamCount,
+                weeklyDeadline: card.weeklyDeadline,
+                startDate: card.startDate,
+                endDate: card.endDate,
+                currentWeek: card.currentWeek,
+                endWeek: card.endWeek,
+                maxGamesPlayed: card.maxGamesPlayed,
+                maxInningsPitched: card.maxInningsPitched,
+                standing:
+                  card.standing === undefined
+                    ? undefined
+                    : {
+                        rank: card.standing.rank,
+                        record: card.standing.record,
+                        points: card.standing.points,
+                        pointsFor: card.standing.pointsFor,
+                        pointsAgainst: card.standing.pointsAgainst,
+                        pointsBack: card.standing.pointsBack,
+                      },
+              },
+            }),
+      };
+    });
+  };
 
 export function toLineupRunView(run: LineupRun): LineupRunView {
   return {

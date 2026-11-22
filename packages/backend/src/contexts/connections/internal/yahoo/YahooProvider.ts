@@ -54,6 +54,7 @@ import type {
   ProviderSchedulePeriod,
   ProviderSchedulePlayer,
   ProviderTeam,
+  ProviderTeamCard,
   ProviderTeamScore,
   ProviderTransaction,
   ProviderTransactionIncomplete,
@@ -94,6 +95,7 @@ import {
   applyReserveMoveThroughSdk,
   applyTransactionThroughSdk,
   discoverLeaguesThroughSdk,
+  providerStandingsOf,
   proposeTradeThroughSdk,
   readAvailableDraftPicksThroughSdk,
   readDraftResultsThroughSdk,
@@ -222,6 +224,61 @@ export const yahooProvider = Effect.gen(function* () {
     );
     yield* Effect.annotateCurrentSpan("provider.team_count", teams.length);
     return teams;
+  });
+
+  const readTeamCards = Effect.fn("YahooProvider.readTeamCards")(function* (
+    input: ProviderSessionMaterial,
+  ) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "read_team_cards");
+    const cookie = yield* sessionCookie(input, "read_team_cards");
+    const leagues = yield* discoverLeaguesThroughSdk(
+      sdk,
+      "read_team_cards",
+      cookie,
+      supportedLeagues,
+    );
+    return EffectArray.flatMap(leagues, (league) =>
+      EffectArray.map(league.teams, (team): ProviderTeamCard => {
+        const providerUrl = teamProviderUrl(team, league.gameKey);
+        const standing =
+          team.standings === undefined
+            ? undefined
+            : providerStandingsOf({ leagueKey: league.leagueKey, teams: [team.standings] })
+                .teams[0];
+        return {
+          provider: key,
+          providerTeamKey: team.teamKey,
+          providerLeagueKey: league.leagueKey,
+          league: league.gameKey,
+          sport: leagueSport[league.gameKey],
+          season: league.season,
+          seasonOver: league.seasonOver,
+          name: team.name,
+          leagueName: league.name,
+          ...(providerUrl === undefined ? {} : { providerUrl }),
+          format:
+            league.scoringType === "point"
+              ? "points"
+              : league.scoringType === "headpoint"
+                ? "head_to_head_points"
+                : leagueFormat(
+                    league.scoringType ?? "",
+                    league.settings.settings.statModifiers.length,
+                  ),
+          scoringType: league.scoringType ?? "",
+          scoringLabel: league.scoringLabel,
+          teamCount: league.teamCount,
+          weeklyDeadline: league.weeklyDeadline,
+          startDate: league.startDate,
+          endDate: league.endDate,
+          currentWeek: league.currentWeek,
+          endWeek: league.endWeek,
+          maxGamesPlayed: league.maxGamesPlayed,
+          maxInningsPitched: league.maxInningsPitched,
+          standing,
+        };
+      }),
+    );
   });
 
   const readLeague = Effect.fn("YahooProvider.readLeague")(function* (
@@ -866,6 +923,7 @@ export const yahooProvider = Effect.gen(function* () {
     capabilities: yahooCapabilities,
     validateSession,
     discoverTeams,
+    readTeamCards,
     readLeague,
     readStandings,
     readRoster,

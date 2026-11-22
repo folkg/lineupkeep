@@ -73,6 +73,7 @@ test("discovers and authorizes a stateless client through email sign-in, consent
   );
   expect(EffectArray.map(listedTools.result.tools, (tool) => tool.name)).toEqual([
     "list_connections",
+    "get_lineup_outlook",
     "list_teams",
     "get_calendar",
     "get_league",

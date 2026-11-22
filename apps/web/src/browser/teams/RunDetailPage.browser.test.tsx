@@ -203,6 +203,7 @@ function setupRunDetailPage(lineupRun: LineupRunView): { [Symbol.dispose](): voi
   const queryClient = createQueryClient();
   const remote: TeamRemote = {
     list: () => Promise.resolve([team]),
+    cards: () => Promise.resolve([]),
     refresh: () => Promise.resolve({ teams: [team] }),
     control: () => Promise.resolve({ changed: [], teams: [team] }),
     readRun: () => Promise.resolve({ run: lineupRun }),

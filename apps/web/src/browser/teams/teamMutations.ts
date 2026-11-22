@@ -78,6 +78,7 @@ function storeRefreshedTeams(
   context: MutationFunctionContext,
 ): void {
   void context.client.setQueryData(teamQueries.listKey, change.teams);
+  void context.client.invalidateQueries({ queryKey: teamQueries.cardsKey, refetchType: "none" });
 }
 
 export function storeRefreshedTeamList(
@@ -87,4 +88,5 @@ export function storeRefreshedTeamList(
   context: MutationFunctionContext,
 ): void {
   void context.client.setQueryData(teamQueries.listKey, view.teams);
+  void context.client.invalidateQueries({ queryKey: teamQueries.cardsKey, refetchType: "none" });
 }

@@ -16,6 +16,7 @@ import {
   signInSessionsQueries,
 } from "#browser/session/signInSessionsQueries.ts";
 import { signInSessionsRemote } from "#browser/session/signInSessionsRemote.ts";
+import { teamQueries } from "#browser/teams/teamQueries.ts";
 
 export const Route = createFileRoute("/account")({
   ssr: true,
@@ -43,7 +44,11 @@ function AccountRoute(): JSX.Element {
       connections={
         <ConnectionsSection
           connectionsQuery={() => context().connectionsQuery}
-          onRefresh={() => refreshConnectionLists(context().queryClient)}
+          onRefresh={() =>
+            refreshConnectionLists(context().queryClient).then(() =>
+              context().queryClient.invalidateQueries({ queryKey: teamQueries.all() }),
+            )
+          }
           remote={connectionRemote}
         />
       }

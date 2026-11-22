@@ -1,5 +1,6 @@
 import { EffectArray } from "@lineupkeep/collections";
 import { EffectOption } from "@lineupkeep/collections";
+import { isServer } from "@solidjs/web";
 import { useMutation, useQuery } from "@tanstack/solid-query";
 import { createEffect, createOptimisticStore, createSignal, onSettled, untrack } from "solid-js";
 import type { Accessor } from "solid-js";
@@ -10,12 +11,17 @@ import { useSignInRecovery } from "#browser/session/signInRecovery.ts";
 import type { ActionFeedbackState } from "#browser/shared-ui/ActionFeedback.tsx";
 import { actionState } from "#browser/shared-ui/actionState.ts";
 import type { ActionState } from "#browser/shared-ui/actionState.ts";
-import type { TeamControlData, TeamSummaryView } from "#contracts/connections/teamContract.ts";
+import type {
+  TeamCardView,
+  TeamControlData,
+  TeamSummaryView,
+} from "#contracts/connections/teamContract.ts";
 import { sportDisplayName } from "#contracts/connections/teamVocabulary.ts";
 
 import { describeTeamFailure } from "./teamFailure";
 import { storeRefreshedTeamList, teamMutations } from "./teamMutations";
 import { pendingControlAction, pendingValues } from "./teamPending";
+import { teamQueries } from "./teamQueries";
 import type { TeamListQueryOptions } from "./teamQueries";
 import type { TeamRemote } from "./teamRemote";
 
@@ -34,6 +40,10 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
     [],
     { key: null },
   );
+  const facts = useQuery(() => ({
+    ...teamQueries.cards(props.remote()),
+    enabled: !isServer && !query.isPending && teamList.length > 0,
+  }));
 
   createEffect(
     () => (query.isSuccess ? query.data : undefined),
@@ -75,6 +85,9 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
 
   return {
     teams: () => teamList,
+    cardFacts: () => facts.data,
+    cardFactsFailure: () => facts.isError,
+    cardFactsLoading: () => isServer || facts.isFetching,
     cachedHeaders,
     isLoading: () => query.isPending,
     loadFailure: () => query.error,
@@ -106,6 +119,9 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
 
 export type TeamsPageController = {
   readonly teams: Accessor<ReadonlyArray<TeamSummaryView>>;
+  readonly cardFacts: Accessor<ReadonlyArray<TeamCardView> | undefined>;
+  readonly cardFactsFailure: Accessor<boolean>;
+  readonly cardFactsLoading: Accessor<boolean>;
   readonly cachedHeaders: Accessor<ReadonlyArray<CachedTeamHeader>>;
   readonly isLoading: Accessor<boolean>;
   readonly loadFailure: Accessor<Error | null>;

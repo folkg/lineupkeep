@@ -1342,7 +1342,7 @@ function providerAvailabilityOf(
   }
 }
 
-function providerStandingsOf(standings: Yahoo.YahooStandings): ProviderStandings {
+export function providerStandingsOf(standings: Yahoo.YahooStandings): ProviderStandings {
   return {
     providerLeagueKey: standings.leagueKey,
     teams: EffectArray.map(standings.teams, (team): ProviderStanding => ({

@@ -29,6 +29,7 @@ import {
   toLineupRunView,
   toTeamNoteSaveResult,
   toTeamSummaryView,
+  toTeamCardViews,
 } from "#server/connections/teamPresentation.ts";
 
 export const listTeamsServerFn = createServerFn({ method: "GET" }).handler(() =>
@@ -40,6 +41,20 @@ export const listTeamsServerFn = createServerFn({ method: "GET" }).handler(() =>
         Effect.map((rows) => EffectArray.map(rows, toTeamSummaryView)),
       ),
     mapTeamError,
+  ),
+);
+
+export const listTeamCardsServerFn = createServerFn({ method: "GET" }).handler(() =>
+  runUseCase(
+    getRequest(),
+    "teams.card_facts",
+    (userId) =>
+      Effect.gen(function* () {
+        const teams = yield* Teams.use((service) => service.list(userId));
+        const read = yield* Connections.use((service) => service.readTeamCards(userId));
+        return toTeamCardViews(read)(teams);
+      }),
+    mapTeamRefreshError,
   ),
 );
 

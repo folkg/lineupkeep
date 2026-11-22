@@ -22,9 +22,86 @@ it.effect("discovers a recorded live aggregate response whose leagues are not wr
     assert.strictEqual(leagues[0]?.leagueKey, leagueKey);
     assert.strictEqual(leagues[0]?.gameKey, "nfl");
     assert.strictEqual(leagues[0]?.season, 2026);
+    assert.strictEqual(leagues[0]?.seasonOver, false);
     assert.strictEqual(leagues[0]?.teams.length, 1);
     assert.strictEqual(leagues[0]?.teams[0]?.teamKey, "470.l.70271.t.4");
     assert.strictEqual(leagues[0]?.teams[0]?.isOwnedByCurrentLogin, true);
+    assert.strictEqual(leagues[0]?.teams[0]?.standings?.rank, 7);
+    assert.deepStrictEqual(leagues[0]?.teams[0]?.standings?.record, {
+      wins: 4,
+      losses: 4,
+      ties: 0,
+      percentage: 0.5,
+    });
+    assert.strictEqual(leagues[0]?.teams[0]?.standings?.pointsFor, 957.46);
+    assert.strictEqual(leagues[0]?.teams[0]?.standings?.pointsAgainst, 828.06);
+    assert.strictEqual(leagues[0]?.teams[0]?.standings?.acquisitionUsage.weeklyAdds?.used, 4);
+    assert.strictEqual(leagues[0]?.teamCount, 12);
+    assert.strictEqual(leagues[0]?.scoringLabel, "H2H");
+    assert.strictEqual(leagues[0]?.weeklyDeadline, "");
+    assert.strictEqual(leagues[0]?.currentWeek, 9);
+    assert.strictEqual(leagues[0]?.endWeek, 17);
+    assert.strictEqual(leagues[0]?.endDate, "2027-01-04");
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect(
+  "retains zero standings, category points and caps without inventing unpublished values",
+  () => {
+    const fixture = structuredClone(recordedAggregateDiscover);
+    const league = fixture.fantasy_content.users[0]?.games[0]?.leagues[0];
+    const team = league?.teams[0];
+    if (league === undefined || team === undefined) {
+      throw new Error("Recorded discovery fixture has no team");
+    }
+    team.team_standings.points_for = "0";
+    Object.assign(team.team_standings, { points_back: "0" });
+    Object.assign(team, {
+      team_points: { total: "0", stats: [{ stat: { stat_id: 1, value: "0" } }] },
+      team_stats: { stats: [{ stat: { stat_id: 1, value: "2" } }] },
+    });
+    Object.assign(league.settings, { max_games_played: "162", max_innings_pitched: "1200" });
+    const recording = recordingClient(() => jsonResponse(fixture));
+
+    return Effect.gen(function* () {
+      const [found] = yield* Yahoo.leagues.discover({});
+      assert.strictEqual(found?.teams[0]?.standings?.pointsFor, 0);
+      assert.strictEqual(found?.teams[0]?.standings?.pointsBack, 0);
+      assert.strictEqual(found?.teams[0]?.standings?.points, 0);
+      assert.deepStrictEqual(found?.teams[0]?.standings?.categoryPoints, [{ statId: 1, value: 0 }]);
+      assert.deepStrictEqual(found?.teams[0]?.standings?.categoryTotals, [{ statId: 1, value: 2 }]);
+      assert.strictEqual(found?.maxGamesPlayed, 162);
+      assert.strictEqual(found?.maxInningsPitched, 1200);
+    }).pipe(Effect.provide(testLayer(recording.client)));
+  },
+);
+
+it.effect("keeps missing discovery standings absent", () => {
+  const fixture = structuredClone(recordedAggregateDiscover);
+  const team = fixture.fantasy_content.users[0]?.games[0]?.leagues[0]?.teams[0];
+  if (team === undefined) {
+    throw new Error("Recorded discovery fixture has no team");
+  }
+  Object.assign(team, { team_standings: undefined });
+  const recording = recordingClient(() => jsonResponse(fixture));
+  return Effect.gen(function* () {
+    const [found] = yield* Yahoo.leagues.discover({});
+    assert.isUndefined(found?.teams[0]?.standings);
+  }).pipe(Effect.provide(testLayer(recording.client)));
+});
+
+it.effect("keeps published season points when a team has no standings row", () => {
+  const fixture = structuredClone(recordedAggregateDiscover);
+  const team = fixture.fantasy_content.users[0]?.games[0]?.leagues[0]?.teams[0];
+  if (team === undefined) {
+    throw new Error("Recorded discovery fixture has no team");
+  }
+  Object.assign(team, { team_standings: undefined, team_points: { total: "0" } });
+  const recording = recordingClient(() => jsonResponse(fixture));
+  return Effect.gen(function* () {
+    const [found] = yield* Yahoo.leagues.discover({});
+    assert.strictEqual(found?.teams[0]?.standings?.points, 0);
+    assert.isUndefined(found?.teams[0]?.standings?.record);
   }).pipe(Effect.provide(testLayer(recording.client)));
 });
 

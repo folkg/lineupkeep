@@ -2370,6 +2370,21 @@ export const yahooDiscoverWithTwoFootballTeams = yahooDiscoverPayload([
   },
 ]);
 
+export const yahooDiscoverWithHeadpoint = yahooDiscoverPayload([
+  {
+    code: "nfl",
+    leagues: [
+      {
+        settings: yahooNflLeagueSettingsWith({
+          scoring_type: "headpoint",
+          scoring_label: "H2H points",
+        }),
+        teams: [nflTeamEntry],
+      },
+    ],
+  },
+]);
+
 export const yahooNflDiscoverWithoutTeamUrl = yahooDiscoverPayload([
   {
     code: "nfl",

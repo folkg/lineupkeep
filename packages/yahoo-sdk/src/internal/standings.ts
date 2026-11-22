@@ -48,7 +48,7 @@ export function decodeStandings(
   });
 }
 
-function standingOf(team: typeof StandingsTeamPayload.Type): YahooStanding {
+export function standingOf(team: typeof StandingsTeamPayload.Type): YahooStanding {
   const standings = team.team_standings;
   const totals = standings?.outcome_totals;
   return {
@@ -221,7 +221,7 @@ const ScoreboardPointsPayload = Schema.Struct({
   stats: Schema.optional(Schema.Array(StatEntry)),
 });
 
-const StandingsTeamPayload = Schema.Struct({
+export const StandingsTeamPayload = Schema.Struct({
   team_key: Schema.String.pipe(Schema.check(Schema.isPattern(/^[0-9]+\.l\.[0-9]+\.t\.[0-9]+$/u))),
   name: Schema.NonEmptyString,
   number_of_moves: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),

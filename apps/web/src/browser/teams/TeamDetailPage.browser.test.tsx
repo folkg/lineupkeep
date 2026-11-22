@@ -615,6 +615,7 @@ function setupTeamDetailPage(
   const queryClient = createQueryClient();
   const remote: TeamRemote = {
     list: () => Promise.resolve([teamSummary]),
+    cards: () => Promise.resolve([]),
     refresh: () => Promise.resolve({ teams: [teamSummary] }),
     control: () => Promise.resolve({ changed: [], teams: [teamSummary] }),
     readRun: () => Promise.reject(new Error("Unexpected run read")),

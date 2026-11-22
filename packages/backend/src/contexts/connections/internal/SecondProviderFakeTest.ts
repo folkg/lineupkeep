@@ -141,6 +141,7 @@ export const secondProvider: ProviderShape = {
   capabilities: secondProviderCapabilities,
   validateSession: () => Effect.void,
   discoverTeams: () => Effect.succeed([secondProviderTeam]),
+  readTeamCards: () => Effect.succeed([]),
   readLeague: () => Effect.succeed(secondProviderLeague),
   readRoster: ({ period }) =>
     Effect.map(DateTime.now, (now) => ({

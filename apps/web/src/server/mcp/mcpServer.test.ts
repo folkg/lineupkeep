@@ -2289,6 +2289,7 @@ const unavailableConnections: ConnectionsShape = {
   disconnect: () => Effect.succeed([]),
   discoverTeams: () => Effect.succeed([]),
   listTeams: () => Effect.succeed([]),
+  readTeamCards: () => Effect.succeed({ cards: [], failures: [] }),
 };
 
 function handle(
