@@ -11,6 +11,7 @@ import {
   Schema,
 } from "effect";
 import { Array as EffectArray } from "effect";
+import { Aead, Kdf, Mac, SecureRandom } from "effect/crypto";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import {
@@ -22,7 +23,6 @@ import {
   TradeOfferRef,
   queryCursorTtlMillis,
 } from "#contexts/connections/QueryValues.ts";
-import type { QueryCursorInvalidReason } from "#contexts/connections/QueryValues.ts";
 import jsonTools from "#runtime/JsonText.ts";
 
 export type QueryTokensShape = {
@@ -128,6 +128,12 @@ export type QueryTokensShape = {
   }) => Effect.Effect<StatRef>;
 };
 
+const QueryTokenCrypto = Layer.mergeAll(
+  Kdf.layerWebCrypto,
+  Mac.layerWebCrypto,
+  Aead.layerWebCrypto,
+).pipe(Layer.provideMerge(SecureRandom.layerWebCrypto));
+
 export class QueryTokens extends Context.Service<QueryTokens, QueryTokensShape>()(
   "@lineupkeep/backend/contexts/connections/internal/QueryTokens",
 ) {
@@ -147,10 +153,12 @@ export class QueryTokens extends Context.Service<QueryTokens, QueryTokensShape>(
       }
       return yield* makeQueryTokens(secret);
     }),
-  );
+  ).pipe(Layer.provide(QueryTokenCrypto));
 
   static readonly fromSecret = (secret: string): Layer.Layer<QueryTokens> =>
-    Layer.effect(QueryTokens, makeQueryTokens(secret).pipe(Effect.orDie));
+    Layer.effect(QueryTokens, makeQueryTokens(secret).pipe(Effect.orDie)).pipe(
+      Layer.provide(QueryTokenCrypto),
+    );
 }
 
 function traverseEffectUnbounded<A, B>(
@@ -160,344 +168,267 @@ function traverseEffectUnbounded<A, B>(
   return Effect.all(EffectArray.map(items, f), { concurrency: "unbounded" });
 }
 
-function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
-  return Effect.promise(() =>
-    deriveKeys(secret).then((keys) => ({
+function makeQueryTokens(
+  secret: string,
+): Effect.Effect<
+  QueryTokensShape,
+  never,
+  Kdf.Kdf | Mac.Mac | Aead.Aead | SecureRandom.SecureRandom
+> {
+  return Effect.gen(function* () {
+    const kdf = yield* Kdf.Kdf;
+    const mac = yield* Mac.Mac;
+    const aead = yield* Aead.Aead;
+    const random = yield* SecureRandom.SecureRandom;
+    const encoder = new TextEncoder();
+
+    const hmac = yield* kdf
+      .derive(Kdf.hkdfSha256, encoder.encode(secret), {
+        salt: new Uint8Array(),
+        info: encoder.encode("lineupkeep.query-cursor.v1"),
+        length: 32,
+      })
+      .pipe(
+        Effect.flatMap((bytes) => Mac.key(Mac.hmacSha256, bytes)),
+        Effect.orDie,
+      );
+    const aes = yield* kdf
+      .derive(Kdf.hkdfSha256, encoder.encode(secret), {
+        salt: new Uint8Array(),
+        info: encoder.encode("lineupkeep.query-reference.v1"),
+        length: 32,
+      })
+      .pipe(
+        Effect.flatMap((bytes) => Aead.key(Aead.aes256Gcm, bytes)),
+        Effect.orDie,
+      );
+
+    const sign = (data: string): Effect.Effect<Uint8Array> =>
+      mac.sign(hmac, encoder.encode(data)).pipe(Effect.orDie);
+
+    const sealCursor = (input: {
+      readonly userId: UserId;
+      readonly fingerprint: string;
+      readonly offset: number;
+      readonly expiresAt: number;
+    }): Effect.Effect<string> => {
+      const payload = jsonTools.jsonString({
+        v: 1,
+        o: input.offset,
+        e: input.expiresAt,
+        f: input.fingerprint,
+      });
+      return sign(`${input.userId}\u0000${payload}`).pipe(
+        Effect.map(
+          (signature) => `c1.${base64Url(encoder.encode(payload))}.${base64Url(signature)}`,
+        ),
+      );
+    };
+
+    const openCursor = (input: {
+      readonly userId: string;
+      readonly fingerprint: string;
+      readonly cursor: string;
+      readonly nowMillis: number;
+    }): Effect.Effect<number, QueryCursorInvalid> =>
+      Effect.gen(function* () {
+        const [version, payloadPart, signaturePart] = EffectString.split(input.cursor, ".");
+        if (version !== "c1" || payloadPart === undefined || signaturePart === undefined) {
+          return yield* QueryCursorInvalid.make({ reason: "invalid" });
+        }
+        const payloadBytes = fromBase64Url(payloadPart);
+        const signature = fromBase64Url(signaturePart);
+        if (payloadBytes === undefined || signature === undefined) {
+          return yield* QueryCursorInvalid.make({ reason: "invalid" });
+        }
+        const payload = new TextDecoder().decode(payloadBytes);
+        const valid = yield* mac
+          .verify(hmac, signature, encoder.encode(`${input.userId}\u0000${payload}`))
+          .pipe(Effect.orDie);
+        if (!valid) {
+          return yield* QueryCursorInvalid.make({ reason: "invalid" });
+        }
+        const decoded = decodePayload(payload);
+        if (decoded === undefined || !Number.isSafeInteger(decoded.o) || decoded.o < 0) {
+          return yield* QueryCursorInvalid.make({ reason: "invalid" });
+        }
+        if (decoded.f !== input.fingerprint) {
+          return yield* QueryCursorInvalid.make({ reason: "mismatch" });
+        }
+        if (decoded.e <= input.nowMillis) {
+          return yield* QueryCursorInvalid.make({ reason: "expired" });
+        }
+        return decoded.o;
+      });
+
+    const sealReference = (
+      purpose: ReferencePurpose,
+      userId: string,
+      leagueKey: string,
+      value: string,
+    ): Effect.Effect<string> =>
+      Effect.gen(function* () {
+        const nonce = yield* random.randomBytes(referenceNonceBytes);
+        const ciphertext = yield* aead
+          .encrypt(aes, encoder.encode(jsonTools.jsonString({ v: 1, k: value })), {
+            nonce,
+            aad: referenceAad(encoder, purpose, userId, leagueKey),
+          })
+          .pipe(Effect.orDie);
+        return `r1.${base64Url(nonce)}.${base64Url(ciphertext)}`;
+      });
+
+    const openReference = (
+      purpose: ReferencePurpose,
+      userId: string,
+      leagueKey: string,
+      ref: string,
+    ): Effect.Effect<string, QueryReferenceInvalid> =>
+      Effect.gen(function* () {
+        const [version, noncePart, ciphertextPart] = EffectString.split(ref, ".");
+        if (version !== "r1" || noncePart === undefined || ciphertextPart === undefined) {
+          return yield* QueryReferenceInvalid.make({ reason: "invalid" });
+        }
+        const nonce = fromBase64Url(noncePart);
+        const ciphertext = fromBase64Url(ciphertextPart);
+        if (
+          nonce === undefined ||
+          ciphertext === undefined ||
+          nonce.length !== referenceNonceBytes
+        ) {
+          return yield* QueryReferenceInvalid.make({ reason: "invalid" });
+        }
+        const plaintext = yield* aead
+          .decrypt(aes, ciphertext, {
+            nonce,
+            aad: referenceAad(encoder, purpose, userId, leagueKey),
+          })
+          .pipe(Effect.catch(() => QueryReferenceInvalid.make({ reason: "invalid" })));
+        const decoded = decodeReference(new TextDecoder().decode(plaintext));
+        return decoded ?? (yield* QueryReferenceInvalid.make({ reason: "invalid" }));
+      });
+
+    const statRef = (leagueKey: string, statId: number): Effect.Effect<StatRef> =>
+      sign(`stat\u0000${leagueKey}\u0000${String(statId)}`).pipe(
+        Effect.flatMap((signature) =>
+          Schema.decodeEffect(StatRef)(
+            `s1.${base64Url(signature.slice(0, statisticReferenceBytes))}`,
+          ).pipe(Effect.orDie),
+        ),
+      );
+
+    const sealPlayerReference = (
+      userId: UserId,
+      leagueKey: string,
+      playerKey: string,
+    ): Effect.Effect<PlayerRef> =>
+      sealReference("player", userId, leagueKey, playerKey).pipe(
+        Effect.flatMap((value) => Schema.decodeEffect(PlayerRef)(value).pipe(Effect.orDie)),
+      );
+
+    const sealCounterpartyReference = (
+      userId: UserId,
+      leagueKey: string,
+      teamKey: string,
+    ): Effect.Effect<CounterpartyRef> =>
+      sealReference("counterparty", userId, leagueKey, teamKey).pipe(
+        Effect.flatMap((value) => Schema.decodeEffect(CounterpartyRef)(value).pipe(Effect.orDie)),
+      );
+
+    return {
       sealCursor: ({ userId, fingerprint, offset, now }) =>
-        Effect.promise(() =>
-          sealCursor(keys.hmac, {
-            userId,
-            fingerprint,
-            offset,
-            expiresAt: DateTime.toEpochMillis(now) + queryCursorTtlMillis,
-          }),
-        ),
+        sealCursor({
+          userId,
+          fingerprint,
+          offset,
+          expiresAt: DateTime.toEpochMillis(now) + queryCursorTtlMillis,
+        }),
       openCursor: ({ userId, fingerprint, cursor, now }) =>
-        Effect.promise(() =>
-          openCursor(keys.hmac, {
-            userId,
-            fingerprint,
-            cursor,
-            nowMillis: DateTime.toEpochMillis(now),
-          }),
-        ).pipe(
-          Effect.filterOrElse(
-            (result): result is number => typeof result === "number",
-            (result) => QueryCursorInvalid.make({ reason: result }),
-          ),
-        ),
+        openCursor({
+          userId,
+          fingerprint,
+          cursor,
+          nowMillis: DateTime.toEpochMillis(now),
+        }),
       sealPlayerRef: ({ userId, leagueKey, playerKey }) =>
-        Effect.promise(() => sealReference(keys.aes, "player", userId, leagueKey, playerKey)).pipe(
-          Effect.map((value) => Effect.runSync(Schema.decodeEffect(PlayerRef)(value))),
-        ),
+        sealPlayerReference(userId, leagueKey, playerKey),
       sealPlayerRefs: ({ userId, leagueKey, playerKeys }) =>
         traverseEffectUnbounded(playerKeys, (playerKey) =>
-          Effect.promise(() => sealReference(keys.aes, "player", userId, leagueKey, playerKey)),
-        ).pipe(
-          Effect.map((values) =>
-            EffectArray.map(values, (value) =>
-              Effect.runSync(Schema.decodeEffect(PlayerRef)(value)),
-            ),
-          ),
+          sealPlayerReference(userId, leagueKey, playerKey),
         ),
       sealPlayerRefGroups: ({ userId, groups }) =>
         traverseEffectUnbounded(groups, (group) =>
           traverseEffectUnbounded(group.playerKeys, (playerKey) =>
-            Effect.promise(() =>
-              sealReference(keys.aes, "player", userId, group.leagueKey, playerKey),
-            ),
-          ),
-        ).pipe(
-          Effect.map((groupValues) =>
-            EffectArray.map(groupValues, (values) =>
-              EffectArray.map(values, (value) =>
-                Effect.runSync(Schema.decodeEffect(PlayerRef)(value)),
-              ),
-            ),
+            sealPlayerReference(userId, group.leagueKey, playerKey),
           ),
         ),
       openPlayerRef: ({ userId, leagueKey, ref }) =>
-        Effect.tryPromise({
-          try: () => openReference(keys.aes, "player", userId, leagueKey, ref),
-          catch: () => QueryReferenceInvalid.make({ reason: "invalid" }),
-        }),
+        openReference("player", userId, leagueKey, ref),
       openPlayerRefs: ({ userId, leagueKey, refs }) =>
         traverseEffectUnbounded(refs, (ref) =>
-          Effect.promise(() =>
-            openReference(keys.aes, "player", userId, leagueKey, ref).catch(() => undefined),
+          openReference("player", userId, leagueKey, ref).pipe(
+            Effect.catchTag("query.reference_invalid", () => Effect.undefined),
           ),
         ),
       openPlayerRefGroups: ({ userId, groups }) =>
         traverseEffectUnbounded(groups, (group) =>
           traverseEffectUnbounded(group.refs, (ref) =>
-            Effect.promise(() =>
-              openReference(keys.aes, "player", userId, group.leagueKey, ref).catch(
-                () => undefined,
-              ),
+            openReference("player", userId, group.leagueKey, ref).pipe(
+              Effect.catchTag("query.reference_invalid", () => Effect.undefined),
             ),
           ),
         ),
       sealCounterpartyRef: ({ userId, leagueKey, teamKey }) =>
-        Effect.promise(() =>
-          sealReference(keys.aes, "counterparty", userId, leagueKey, teamKey),
-        ).pipe(Effect.map((value) => Effect.runSync(Schema.decodeEffect(CounterpartyRef)(value)))),
+        sealCounterpartyReference(userId, leagueKey, teamKey),
       sealCounterpartyRefs: ({ userId, leagueKey, teamKeys }) =>
         traverseEffectUnbounded(teamKeys, (teamKey) =>
-          Effect.promise(() => sealReference(keys.aes, "counterparty", userId, leagueKey, teamKey)),
-        ).pipe(
-          Effect.map((values) =>
-            EffectArray.map(values, (value) =>
-              Effect.runSync(Schema.decodeEffect(CounterpartyRef)(value)),
-            ),
-          ),
+          sealCounterpartyReference(userId, leagueKey, teamKey),
         ),
       sealCounterpartyRefGroups: ({ userId, groups }) =>
         traverseEffectUnbounded(groups, (group) =>
           traverseEffectUnbounded(group.teamKeys, (teamKey) =>
-            Effect.promise(() =>
-              sealReference(keys.aes, "counterparty", userId, group.leagueKey, teamKey),
-            ),
-          ),
-        ).pipe(
-          Effect.map((groupValues) =>
-            EffectArray.map(groupValues, (values) =>
-              EffectArray.map(values, (value) =>
-                Effect.runSync(Schema.decodeEffect(CounterpartyRef)(value)),
-              ),
-            ),
+            sealCounterpartyReference(userId, group.leagueKey, teamKey),
           ),
         ),
       openCounterpartyRef: ({ userId, leagueKey, ref }) =>
-        Effect.tryPromise({
-          try: () => openReference(keys.aes, "counterparty", userId, leagueKey, ref),
-          catch: () => QueryReferenceInvalid.make({ reason: "invalid" }),
-        }),
+        openReference("counterparty", userId, leagueKey, ref),
       openCounterpartyRefGroups: ({ userId, groups }) =>
         traverseEffectUnbounded(groups, (group) =>
           traverseEffectUnbounded(group.refs, (ref) =>
-            Effect.promise(() =>
-              openReference(keys.aes, "counterparty", userId, group.leagueKey, ref).catch(
-                () => undefined,
-              ),
+            openReference("counterparty", userId, group.leagueKey, ref).pipe(
+              Effect.catchTag("query.reference_invalid", () => Effect.undefined),
             ),
           ),
         ),
       sealTradeOfferRefGroups: ({ userId, groups }) =>
         traverseEffectUnbounded(groups, (group) =>
           traverseEffectUnbounded(group.transactionKeys, (transactionKey) =>
-            Effect.promise(() =>
-              sealReference(keys.aes, "trade_offer", userId, group.leagueKey, transactionKey),
-            ),
-          ),
-        ).pipe(
-          Effect.map((groupValues) =>
-            EffectArray.map(groupValues, (values) =>
-              EffectArray.map(values, (value) =>
-                Effect.runSync(Schema.decodeEffect(TradeOfferRef)(value)),
+            sealReference("trade_offer", userId, group.leagueKey, transactionKey).pipe(
+              Effect.flatMap((value) =>
+                Schema.decodeEffect(TradeOfferRef)(value).pipe(Effect.orDie),
               ),
             ),
           ),
         ),
-      statRef: ({ leagueKey, statId }) =>
-        Effect.promise(() => statRef(keys.hmac, leagueKey, statId)),
-    })),
-  );
-}
-
-type Keys = {
-  readonly hmac: CryptoKey;
-  readonly aes: CryptoKey;
-};
-
-function deriveKeys(secret: string): Promise<Keys> {
-  const encoder = new TextEncoder();
-  return crypto.subtle
-    .importKey("raw", encoder.encode(secret), "HKDF", false, ["deriveKey"])
-    .then((base) =>
-      Promise.all([
-        crypto.subtle.deriveKey(
-          {
-            name: "HKDF",
-            hash: "SHA-256",
-            salt: buffer(new Uint8Array()),
-            info: buffer(encoder.encode("lineupkeep.query-cursor.v1")),
-          },
-          base,
-          { name: "HMAC", hash: "SHA-256" },
-          false,
-          ["sign", "verify"],
-        ),
-        crypto.subtle.deriveKey(
-          {
-            name: "HKDF",
-            hash: "SHA-256",
-            salt: buffer(new Uint8Array()),
-            info: buffer(encoder.encode("lineupkeep.query-reference.v1")),
-          },
-          base,
-          { name: "AES-GCM", length: 256 },
-          false,
-          ["encrypt", "decrypt"],
-        ),
-      ]),
-    )
-    .then(([hmac, aes]) => ({ hmac, aes }));
-}
-
-function sealCursor(
-  key: CryptoKey,
-  input: {
-    readonly userId: string;
-    readonly fingerprint: string;
-    readonly offset: number;
-    readonly expiresAt: number;
-  },
-): Promise<string> {
-  const payload = jsonTools.jsonString({
-    v: 1,
-    o: input.offset,
-    e: input.expiresAt,
-    f: input.fingerprint,
+      statRef: ({ leagueKey, statId }) => statRef(leagueKey, statId),
+    };
   });
-  return crypto.subtle
-    .sign("HMAC", key, buffer(new TextEncoder().encode(`${input.userId}\u0000${payload}`)))
-    .then(
-      (signature) =>
-        `c1.${base64Url(new TextEncoder().encode(payload))}.${base64Url(new Uint8Array(signature))}`,
-    );
 }
 
-function openCursor(
-  key: CryptoKey,
-  input: {
-    readonly userId: string;
-    readonly fingerprint: string;
-    readonly cursor: string;
-    readonly nowMillis: number;
-  },
-): Promise<number | QueryCursorInvalidReason> {
-  const [version, payloadPart, signaturePart] = EffectString.split(input.cursor, ".");
-  if (version !== "c1" || payloadPart === undefined || signaturePart === undefined) {
-    return Promise.resolve("invalid" as const);
-  }
-  const payloadBytes = fromBase64Url(payloadPart);
-  const signature = fromBase64Url(signaturePart);
-  if (payloadBytes === undefined || signature === undefined) {
-    return Promise.resolve("invalid" as const);
-  }
-  const payload = new TextDecoder().decode(payloadBytes);
-  return crypto.subtle
-    .verify(
-      "HMAC",
-      key,
-      buffer(signature),
-      buffer(new TextEncoder().encode(`${input.userId}\u0000${payload}`)),
-    )
-    .then((valid) => {
-      if (!valid) {
-        return "invalid" as const;
-      }
-      const decoded = decodePayload(payload);
-      if (decoded === undefined || !Number.isSafeInteger(decoded.o) || decoded.o < 0) {
-        return "invalid" as const;
-      }
-      if (decoded.f !== input.fingerprint) {
-        return "mismatch" as const;
-      }
-      if (decoded.e <= input.nowMillis) {
-        return "expired" as const;
-      }
-      return decoded.o;
-    });
-}
+type ReferencePurpose = "player" | "counterparty" | "trade_offer";
 
-function sealReference(
-  key: CryptoKey,
-  purpose: "player" | "counterparty" | "trade_offer",
-  userId: string,
-  leagueKey: string,
-  value: string,
-): Promise<string> {
-  const nonce = buffer(crypto.getRandomValues(new Uint8Array(12)));
-  const plaintext = buffer(new TextEncoder().encode(jsonTools.jsonString({ v: 1, k: value })));
-  return crypto.subtle
-    .encrypt(
-      {
-        name: "AES-GCM",
-        iv: nonce,
-        additionalData: buffer(referenceAad(purpose, userId, leagueKey)),
-      },
-      key,
-      plaintext,
-    )
-    .then((ciphertext) => `r1.${base64Url(nonce)}.${base64Url(new Uint8Array(ciphertext))}`);
-}
-
-function openReference(
-  key: CryptoKey,
-  purpose: "player" | "counterparty" | "trade_offer",
-  userId: string,
-  leagueKey: string,
-  ref: string,
-): Promise<string> {
-  const [version, noncePart, ciphertextPart] = EffectString.split(ref, ".");
-  if (version !== "r1" || noncePart === undefined || ciphertextPart === undefined) {
-    return Promise.reject(new Error("invalid reference"));
-  }
-  const nonce = fromBase64Url(noncePart);
-  const ciphertext = fromBase64Url(ciphertextPart);
-  if (nonce === undefined || ciphertext === undefined || nonce.length !== 12) {
-    return Promise.reject(new Error("invalid reference"));
-  }
-  return crypto.subtle
-    .decrypt(
-      {
-        name: "AES-GCM",
-        iv: buffer(nonce),
-        additionalData: buffer(referenceAad(purpose, userId, leagueKey)),
-      },
-      key,
-      buffer(ciphertext),
-    )
-    .then(
-      (plaintext) =>
-        decodeReference(new TextDecoder().decode(plaintext)) ?? yieldInvalidReference(),
-      () => yieldInvalidReference(),
-    );
-}
-
-function statRef(key: CryptoKey, leagueKey: string, statId: number): Promise<StatRef> {
-  return crypto.subtle
-    .sign(
-      "HMAC",
-      key,
-      buffer(new TextEncoder().encode(`stat\u0000${leagueKey}\u0000${String(statId)}`)),
-    )
-    .then((signature) =>
-      Effect.runSync(
-        Schema.decodeEffect(StatRef)(`s1.${base64Url(new Uint8Array(signature).slice(0, 16))}`),
-      ),
-    );
-}
+const referenceNonceBytes = 12;
+const statisticReferenceBytes = 16;
 
 function referenceAad(
-  purpose: "player" | "counterparty" | "trade_offer",
+  encoder: TextEncoder,
+  purpose: ReferencePurpose,
   userId: string,
   leagueKey: string,
 ): Uint8Array {
-  return new TextEncoder().encode(
+  return encoder.encode(
     `lineupkeep.query-reference\u0000${purpose}\u0000${userId}\u0000${leagueKey}`,
   );
-}
-
-function yieldInvalidReference(): never {
-  throw QueryReferenceInvalid.make({ reason: "invalid" });
-}
-
-function buffer(value: Uint8Array): Uint8Array<ArrayBuffer> {
-  const copy = new Uint8Array(value.byteLength);
-  copy.set(value);
-  return copy;
 }
 
 const CursorPayload = Schema.Struct({

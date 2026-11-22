@@ -404,7 +404,6 @@ export class QueryCursorInvalid extends Schema.TaggedError<
 >()("query.cursor_invalid", {
   reason: Schema.Literals(["invalid", "expired", "mismatch"]),
 }) {}
-export type QueryCursorInvalidReason = typeof QueryCursorInvalid.fields.reason.Type;
 
 export class QueryReferenceInvalid extends Schema.TaggedError<
   QueryReferenceInvalid,

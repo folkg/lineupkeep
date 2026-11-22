@@ -5,7 +5,7 @@ import type {
   OutlookResult,
   OutlookWindowPeriod,
 } from "@lineupkeep/lineup-solver";
-import { Array as EffectArray, Effect, Option } from "effect";
+import { Array as EffectArray, DateTime, Effect, Option } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
@@ -15,6 +15,8 @@ import type {
   ProviderRoster,
   ProviderRosterSchedule,
 } from "#contexts/connections/Provider.ts";
+import type { LineupOutlookData } from "#contexts/connections/QueryResults.ts";
+import type { PlayerRef } from "#contexts/connections/QueryValues.ts";
 import { isOpenMove } from "#contexts/connections/TransactionPlans.ts";
 import type { TransactionPlanPersistenceFailed } from "#contexts/connections/TransactionPlans.ts";
 
@@ -187,4 +189,107 @@ export function buildOutlook(input: {
     })),
     moves,
   });
+}
+
+export function outlookData(input: {
+  readonly team: TeamId;
+  readonly basis: "date" | "week";
+  readonly window: LineupOutlookData["window"];
+  readonly generatedAt: DateTime.Utc;
+  readonly projected: OutlookResult;
+  readonly moves: ReadonlyArray<TransactionMoveRecord>;
+  readonly playerRefs: ReadonlyMap<string, PlayerRef>;
+  readonly coverage: LineupOutlookData["coverage"];
+  readonly failures: LineupOutlookData["failures"];
+  readonly budget: LineupOutlookData["budget"];
+}): LineupOutlookData {
+  const moveById = new Map<string, TransactionMoveRecord>(
+    EffectArray.map(input.moves, (move) => [move.id, move] as const),
+  );
+  const storedMoveOf = (id: string): TransactionMoveRecord => {
+    const move = moveById.get(id);
+    if (move === undefined) {
+      throw new Error("An outlook move has no stored record.");
+    }
+    return move;
+  };
+  const refOf = (key: string): PlayerRef => {
+    const ref = input.playerRefs.get(key);
+    if (ref === undefined) {
+      throw new Error("An outlook player has no owner-scoped reference.");
+    }
+    return ref;
+  };
+
+  return {
+    status: "ok",
+    team: input.team,
+    basis: input.basis,
+    window: input.window,
+    generatedAt: input.generatedAt,
+    periods: EffectArray.map(input.projected.periods, (period) => ({
+      ...(period.date === undefined
+        ? { period: { week: period.week ?? 0 } }
+        : { date: period.date }),
+      start: period.start,
+      end: period.end,
+      totals: period.totals,
+      slots: [...period.slots],
+      sittingWithGame: EffectArray.map(period.sittingWithGame, (player) => ({
+        player: refOf(player.key),
+        name: player.name,
+        positions: [...player.positions],
+        slot: player.slot,
+        reason: player.reason,
+      })),
+      unknownGameDays: EffectArray.map(period.unknownGameDays, (player) => ({
+        player: refOf(player.key),
+        name: player.name,
+        ...(player.proTeam === undefined ? {} : { proTeam: player.proTeam }),
+        reason: player.reason,
+      })),
+      games: period.games,
+      moves: EffectArray.map(period.moves, (move) => ({
+        move: storedMoveOf(move.id).id,
+        kind: storedMoveOf(move.id).kind,
+        effectiveDate: move.effectiveDate,
+        adds: EffectArray.map(move.adds, (player) => ({
+          player: refOf(player.key),
+          name: player.name,
+        })),
+        fallbacks: EffectArray.map(move.fallbacks, (player) => ({
+          player: refOf(player.key),
+          name: player.name,
+        })),
+        drops: EffectArray.map(move.drops, (player) => ({
+          player: refOf(player.key),
+          name: player.name,
+        })),
+        validation: move.validation === "illegal" ? ("unchecked" as const) : move.validation,
+        certainty: move.certainty,
+        conditional: move.conditional,
+      })),
+      ...(period.fitDetail === undefined ? {} : { fitDetail: period.fitDetail }),
+    })),
+    players: EffectArray.map(input.projected.players, (player) => ({
+      player: refOf(player.key),
+      name: player.name,
+      ...(player.proTeam === undefined ? {} : { proTeam: player.proTeam }),
+      gamesInWindow: player.gamesInWindow,
+      gamesThatFit: player.gamesThatFit,
+      unknownPeriods: player.unknownPeriods,
+      games: [...player.games],
+    })),
+    windowTotals: input.projected.windowTotals,
+    moves: {
+      applied: EffectArray.map(input.projected.moves.applied, (id) => storedMoveOf(id).id),
+      unapplied: EffectArray.map(input.projected.moves.unapplied, (move) => ({
+        move: storedMoveOf(move.move).id,
+        reason: move.reason,
+      })),
+    },
+    coverage: input.coverage,
+    failures: input.failures,
+    budget: input.budget,
+  };
 }

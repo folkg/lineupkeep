@@ -3,6 +3,7 @@ import { optionalStringValue } from "@lineupkeep/collections";
 import { recordEntries, recordKeys } from "@lineupkeep/collections";
 import { Array as EffectArray, DateTime, Effect, Layer, Option, Ref } from "effect";
 import { Option as EffectOption, Order as EffectOrder } from "effect";
+import { Digest } from "effect/crypto";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import { Connections } from "#contexts/connections/Connections.ts";
@@ -148,7 +149,7 @@ import {
   isLeagueOffNight,
   leagueGamesByDate,
 } from "./LeagueSchedule.ts";
-import { buildOutlook, readOpenOutlookPlan } from "./LineupOutlook.ts";
+import { buildOutlook, outlookData, readOpenOutlookPlan } from "./LineupOutlook.ts";
 import { planReserveMoves } from "./LineupPlanning.ts";
 import type { RosterPlacementPlayer } from "./LineupPlanning.ts";
 import { uniqueProviderTeamKeys } from "./ProfessionalTeamIdentity.ts";
@@ -160,6 +161,13 @@ import { QueryRepository } from "./QueryRepository.ts";
 import type { OwnedTeam } from "./QueryRepository.ts";
 import { QueryTokens } from "./QueryTokens.ts";
 import { ScheduleObservationRepository } from "./ScheduleObservationRepository.ts";
+import {
+  categoryPointsSummary,
+  categoryTotalsSummary,
+  recordSummary,
+  standingSummary,
+  standingsSummary,
+} from "./TeamSummaryRead.ts";
 import { TransactionPlanRepository } from "./TransactionPlanRepository.ts";
 
 function sortWithComparator<A>(
@@ -248,6 +256,10 @@ export const FantasyQueriesLive = Layer.effect(
     const calendar = yield* ProfessionalCalendar;
     const gameSources = yield* GameSourceRegistry;
     const outlookPlans = yield* TransactionPlanRepository;
+    const digest = yield* Digest.Digest;
+    const encoder = new TextEncoder();
+    const queryFingerprint = (value: string): Effect.Effect<string> =>
+      digest.digestHex(Digest.sha256, encoder.encode(value));
 
     const loadContext = (
       userId: UserId,
@@ -3286,95 +3298,37 @@ export const FantasyQueriesLive = Layer.effect(
             : standingsOutcome._tag === "failed"
               ? standingsOutcome.failure.message
               : standingsOutcome.detail;
-      const standingSection: TeamSummaryData["standing"] = !includes("standings")
-        ? undefined
-        : current === undefined
-          ? { status: "unsupported", detail: standingsDetail }
-          : {
-              status: "available",
-              rank: current.rank,
-              ...(current.playoffSeed === undefined ? {} : { playoffSeed: current.playoffSeed }),
-              points: current.points,
-              gamesBack: current.gamesBack,
-              pointsBack: current.pointsBack,
-              pointsFor: current.pointsFor,
-              pointsAgainst: current.pointsAgainst,
-              ...(current.streak === undefined ? {} : { streak: current.streak }),
-            };
-      const recordSection: TeamSummaryData["record"] = !includes("standings")
-        ? undefined
-        : current?.record === undefined
-          ? {
-              status: "unsupported",
-              detail:
-                current === undefined
-                  ? standingsDetail
-                  : "This league format publishes a rank and season points but no win–loss record.",
-            }
-          : { status: "available", ...current.record };
-      const unlabelledDetail =
-        "The league scoring categories could not be read, so standings categories cannot be labelled.";
-      const categoryTotals: TeamSummaryData["categoryTotals"] = !includes("categories")
-        ? undefined
-        : current === undefined || !hasPublishedCategoryValue(current.categories ?? [])
-          ? {
-              status: "unsupported",
-              detail:
-                current === undefined
-                  ? standingsDetail
-                  : league === undefined
-                    ? unlabelledDetail
-                    : "Your league published no season category totals for this league format.",
-            }
-          : {
-              status: "available",
-              values: [...(current.categories ?? [])],
-              omittedCategories: omittedCategories(standingTable.omittedCategoryCount),
-            };
-      const categoryPoints: TeamSummaryData["categoryPoints"] = !includes("categories")
-        ? undefined
-        : current === undefined || !hasPublishedCategoryValue(current.categoryPoints ?? [])
-          ? {
-              status: "unsupported",
-              detail:
-                current === undefined
-                  ? standingsDetail
-                  : league === undefined
-                    ? unlabelledDetail
-                    : league.format === "rotisserie"
-                      ? rotisseriePointsMissing
-                      : "Your league publishes rotisserie category points only for rotisserie leagues.",
-            }
-          : {
-              status: "available",
-              values: [...(current.categoryPoints ?? [])],
-              omittedCategories: omittedCategories(standingTable.omittedCategoryCount),
-            };
-      const standingsSection: TeamSummaryData["standings"] = !includes("standings")
-        ? undefined
-        : standingsOutcome?._tag === "ok"
-          ? {
-              status: "available",
-              format: league === undefined ? "unknown" : league.format,
-              teams: EffectArray.map(rows, (row) => ({
-                team: row.team,
-                name: row.name,
-                current: row.current,
-                rank: row.rank,
-                ...(row.record === undefined
-                  ? {}
-                  : {
-                      wins: row.record.wins,
-                      losses: row.record.losses,
-                      ties: row.record.ties,
-                      percentage: row.record.percentage,
-                    }),
-                points: row.points,
-                ...(row.gamesBack === null ? {} : { gamesBack: row.gamesBack }),
-                ...(row.pointsBack === null ? {} : { pointsBack: row.pointsBack }),
-              })),
-            }
-          : { status: "unsupported", detail: standingsDetail };
+      const standingSection = standingSummary({
+        included: includes("standings"),
+        current,
+        detail: standingsDetail,
+      });
+      const recordSection = recordSummary({
+        included: includes("standings"),
+        current,
+        detail: standingsDetail,
+      });
+      const categoryTotals = categoryTotalsSummary({
+        included: includes("categories"),
+        current,
+        league,
+        detail: standingsDetail,
+        omittedCount: standingTable.omittedCategoryCount,
+      });
+      const categoryPoints = categoryPointsSummary({
+        included: includes("categories"),
+        current,
+        league,
+        detail: standingsDetail,
+        omittedCount: standingTable.omittedCategoryCount,
+      });
+      const standingsSection = standingsSummary({
+        included: includes("standings"),
+        outcome: standingsOutcome?._tag,
+        rows,
+        league,
+        detail: standingsDetail,
+      });
       const hasGamesCap = (league?.maxGamesPlayed ?? 0) > 0 || (league?.maxInningsPitched ?? 0) > 0;
       const gamesOutcome =
         includes("standings") && hasGamesCap
@@ -4523,16 +4477,6 @@ export const FantasyQueriesLive = Layer.effect(
           ? { providerSchedule: providerOutcome.value.schedule }
           : {}),
       });
-      const moveById = new Map<string, (typeof openMoves)[number]>(
-        EffectArray.map(openMoves, (move) => [move.id, move] as const),
-      );
-      const storedMoveOf = (id: string): (typeof openMoves)[number] => {
-        const move = moveById.get(id);
-        if (move === undefined) {
-          throw new Error("An outlook move has no stored record.");
-        }
-        return move;
-      };
       const keys = [
         ...new Set([
           ...EffectArray.map(rosterOutcome.value.players, (player) => player.providerPlayerKey),
@@ -4548,87 +4492,27 @@ export const FantasyQueriesLive = Layer.effect(
         leagueKey: context.owned.team.providerLeagueKey,
         playerKeys: keys,
       });
-      const references = new Map(
-        EffectArray.map(keys, (key, index) => [key, sealed[index]] as const),
+      const references = new Map<string, PlayerRef>(
+        EffectArray.map(keys, (key, index) => {
+          const ref = sealed[index];
+          if (ref === undefined) {
+            throw new Error("An outlook player has no owner-scoped reference.");
+          }
+          return [key, ref] as const;
+        }),
       );
-      const refOf = (key: string): PlayerRef => {
-        const ref = references.get(key);
-        if (ref === undefined) {
-          throw new Error("An outlook player has no owner-scoped reference.");
-        }
-        return ref;
-      };
-      const result: LineupOutlookData = {
-        status: "ok",
+      const result = outlookData({
         team: input.team,
         basis,
         window,
         generatedAt: now,
-        periods: EffectArray.map(projected.periods, (period) => ({
-          ...(period.date === undefined
-            ? { period: { week: period.week ?? 0 } }
-            : { date: period.date }),
-          start: period.start,
-          end: period.end,
-          totals: period.totals,
-          slots: [...period.slots],
-          sittingWithGame: EffectArray.map(period.sittingWithGame, (player) => ({
-            player: refOf(player.key),
-            name: player.name,
-            positions: [...player.positions],
-            slot: player.slot,
-            reason: player.reason,
-          })),
-          unknownGameDays: EffectArray.map(period.unknownGameDays, (player) => ({
-            player: refOf(player.key),
-            name: player.name,
-            ...(player.proTeam === undefined ? {} : { proTeam: player.proTeam }),
-            reason: player.reason,
-          })),
-          games: period.games,
-          moves: EffectArray.map(period.moves, (move) => ({
-            move: storedMoveOf(move.id).id,
-            kind: storedMoveOf(move.id).kind,
-            effectiveDate: move.effectiveDate,
-            adds: EffectArray.map(move.adds, (player) => ({
-              player: refOf(player.key),
-              name: player.name,
-            })),
-            fallbacks: EffectArray.map(move.fallbacks, (player) => ({
-              player: refOf(player.key),
-              name: player.name,
-            })),
-            drops: EffectArray.map(move.drops, (player) => ({
-              player: refOf(player.key),
-              name: player.name,
-            })),
-            validation: move.validation === "illegal" ? ("unchecked" as const) : move.validation,
-            certainty: move.certainty,
-            conditional: move.conditional,
-          })),
-          ...(period.fitDetail === undefined ? {} : { fitDetail: period.fitDetail }),
-        })),
-        players: EffectArray.map(projected.players, (player) => ({
-          player: refOf(player.key),
-          name: player.name,
-          ...(player.proTeam === undefined ? {} : { proTeam: player.proTeam }),
-          gamesInWindow: player.gamesInWindow,
-          gamesThatFit: player.gamesThatFit,
-          unknownPeriods: player.unknownPeriods,
-          games: [...player.games],
-        })),
-        windowTotals: projected.windowTotals,
-        moves: {
-          applied: EffectArray.map(projected.moves.applied, (id) => storedMoveOf(id).id),
-          unapplied: EffectArray.map(projected.moves.unapplied, (move) => ({
-            move: storedMoveOf(move.move).id,
-            reason: move.reason,
-          })),
-        },
+        projected,
+        moves: openMoves,
+        playerRefs: references,
         coverage: coverageEntries,
         failures,
         budget: queryBudget,
-      };
+      });
       const bytes = new TextEncoder().encode(jsonTools.jsonString(result)).length + 1_024;
       return bytes <= queryBudget.hardLimitBytes
         ? result
@@ -4655,7 +4539,7 @@ export const FantasyQueriesLive = Layer.effect(
       getTeamSummary,
     });
   }),
-);
+).pipe(Layer.provide(Digest.layerWebCrypto));
 
 function statRefFor(
   context: TeamContext,
@@ -4785,10 +4669,6 @@ function categoryAvailability(
   )
     ? { status: "available" }
     : { status: "unsupported", detail };
-}
-
-function hasPublishedCategoryValue(values: ReadonlyArray<CategoryValue>): boolean {
-  return EffectArray.some(values, (entry) => entry.value !== null);
 }
 
 function omittedCategories(count: number): { readonly count: number; readonly detail: string } {
@@ -6680,17 +6560,4 @@ function dictionaryEntry(
     group: category?.group ?? null,
     unit: "provider_reported",
   };
-}
-
-function queryFingerprint(value: string): Effect.Effect<string> {
-  return Effect.promise(() =>
-    crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)).then((digest) =>
-      EffectArray.join(
-        EffectArray.map([...new Uint8Array(digest)], (byte) =>
-          EffectString.padStart(byte.toString(16), 2, "0"),
-        ),
-        "",
-      ),
-    ),
-  );
 }
