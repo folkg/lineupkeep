@@ -56,6 +56,9 @@ export function cloudRunHost(
       const project = yield* Config.String("GOOGLE_PROJECT_ID").pipe(
         Config.orElse(() => Config.String("GOOGLE_CLOUD_PROJECT")),
       );
+      const trustedDeviceProbe = yield* Config.Boolean("HOSTED_BROWSER_TRUSTED_DEVICE_PROBE").pipe(
+        Config.withDefault(false),
+      );
       const telemetryEnvironment = [
         { name: "OTEL_TRACES_EXPORTER", value: "otlp" },
         { name: "OTEL_EXPORTER_OTLP_ENDPOINT", value: "https://telemetry.googleapis.com" },
@@ -261,7 +264,11 @@ export function cloudRunHost(
             {
               ...hostedBrowserContainer(),
               image: browserImage,
-              env: [{ name: "NODE_ENV", value: "production" }, descriptorEnv],
+              env: [
+                { name: "NODE_ENV", value: "production" },
+                { name: "HOSTED_BROWSER_TRUSTED_DEVICE_PROBE", value: String(trustedDeviceProbe) },
+                descriptorEnv,
+              ],
             },
           ],
         },

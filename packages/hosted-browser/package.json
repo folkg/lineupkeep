@@ -7,7 +7,8 @@
     "./provider": "./src/provider.ts",
     "./egress": "./src/egress.ts",
     "./descriptor": "./src/descriptor.ts",
-    "./browser": "./src/browser.ts"
+    "./browser": "./src/browser.ts",
+    "./trustedDevice": "./src/trustedDevice.ts"
   },
   "dependencies": {
     "@lineupkeep/collections": "workspace:*",

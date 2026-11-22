@@ -15,6 +15,7 @@ import {
   type HostedBrowserInput,
   type HostedBrowserTransportMessage,
 } from "@lineupkeep/hosted-browser/protocol";
+import type { TrustedDeviceProbeResult } from "@lineupkeep/hosted-browser/trustedDevice";
 import { WebSocketServer, WebSocket } from "ws";
 import type { RawData } from "ws";
 const descriptorTimeoutMillis = 5_000;
@@ -27,6 +28,8 @@ export type HostedBrowserServiceOptions = {
   readonly fixtureOrigin?: string;
   readonly profileRoot?: string;
   readonly chromiumSandbox?: boolean;
+  readonly trustedDeviceProbe?: boolean;
+  readonly onTrustedDeviceProbe?: (result: TrustedDeviceProbeResult) => void;
   readonly log?: (event: HostedBrowserSessionEvent) => void;
 };
 export type HostedBrowserService = {
@@ -48,12 +51,21 @@ export type HostedBrowserSessionEvent = {
   readonly failure?: HostedBrowserFailure;
   readonly refused?: ReadonlyArray<EgressRefusal>;
 };
+type HostedBrowserTrustedDeviceEvent = {
+  readonly event: "hosted_browser.trusted_device_probe";
+  readonly cookieSummaries: TrustedDeviceProbeResult["cookieSummaries"];
+  readonly signedIn: boolean;
+  readonly issuedSession: boolean;
+  readonly error?: TrustedDeviceProbeResult["error"];
+};
+type HostedBrowserLogEvent = HostedBrowserSessionEvent | HostedBrowserTrustedDeviceEvent;
 export function createHostedBrowserService(
   options: HostedBrowserServiceOptions,
 ): HostedBrowserService {
   const browser = createHostedBrowser({
     profileRoot: options.profileRoot,
     chromiumSandbox: options.chromiumSandbox,
+    trustedDeviceProbe: options.trustedDeviceProbe,
   });
   const log = options.log ?? writeLog;
   const seenSessions = new Set<string>();
@@ -234,6 +246,13 @@ export function createHostedBrowserService(
             settle("captured");
             peer.close(1000, "Captured");
           },
+          onTrustedDeviceProbe: (result) => {
+            if (options.onTrustedDeviceProbe === undefined) {
+              writeLog({ event: "hosted_browser.trusted_device_probe", ...result });
+            } else {
+              options.onTrustedDeviceProbe(result);
+            }
+          },
           onFailure: (reason) => {
             send({ _tag: "Failed", reason });
             settle("failed", reason);
@@ -312,7 +331,7 @@ function respond(response: ServerResponse, status: number, body: unknown): void 
   });
   response.end(payload);
 }
-function writeLog(event: HostedBrowserSessionEvent): void {
+function writeLog(event: HostedBrowserLogEvent): void {
   console.log(jsonString(event));
 }
 function textOf(data: RawData): string | undefined {

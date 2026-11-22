@@ -16,6 +16,12 @@ import {
   type HostedBrowserViewportProfile,
 } from "./protocol.ts";
 import { hostedBrowserProvider } from "./provider.ts";
+import {
+  hasSessionCookies,
+  trustedDeviceCookies,
+  trustedDeviceCookieSummaries,
+} from "./trustedDevice.ts";
+import type { TrustedDeviceProbeResult } from "./trustedDevice.ts";
 
 const capturePollMillis = 400;
 const navigationTimeoutMillis = 30_000;
@@ -36,6 +42,7 @@ export type HostedBrowserEvents = {
   readonly onAcceptsInput: () => void;
   readonly onRefused: (refusal: EgressRefusal) => void;
   readonly onCaptured: (cookieHeader: string) => void;
+  readonly onTrustedDeviceProbe?: (result: TrustedDeviceProbeResult) => void;
   readonly onFailure: (reason: HostedBrowserFailure) => void;
   readonly onExpired: () => void;
 };
@@ -57,6 +64,7 @@ export type HostedBrowser = {
 export type HostedBrowserOptions = {
   readonly profileRoot?: string;
   readonly chromiumSandbox?: boolean;
+  readonly trustedDeviceProbe?: boolean;
 };
 
 export function createHostedBrowser(options: HostedBrowserOptions = {}): HostedBrowser {
@@ -216,6 +224,17 @@ async function openBrowser(
       return;
     }
     settled = true;
+    if (options.trustedDeviceProbe === true) {
+      const probe = await probeTrustedDevice(context, session, active).catch(
+        (): TrustedDeviceProbeResult => ({
+          cookieSummaries: [],
+          signedIn: false,
+          issuedSession: false,
+          error: "probe_failed",
+        }),
+      );
+      events.onTrustedDeviceProbe?.(probe);
+    }
     const cookieHeader = `T=${token.value}; Y=${user.value}`;
     await close().catch(() => undefined);
     events.onCaptured(cookieHeader);
@@ -461,6 +480,46 @@ async function applyInput(
     case "Scroll":
       await page.mouse.wheel(0, input.deltaY);
       return;
+  }
+}
+
+async function probeTrustedDevice(
+  context: BrowserContext,
+  session: HostedBrowserSession,
+  active: Page | undefined,
+): Promise<TrustedDeviceProbeResult> {
+  const probeUrl = active?.url();
+  if (probeUrl === undefined || probeUrl === "" || probeUrl === "about:blank") {
+    return { cookieSummaries: [], signedIn: false, issuedSession: false, error: "probe_failed" };
+  }
+  const host = new URL(probeUrl).hostname;
+  const candidates = trustedDeviceCookies(await context.cookies(), host);
+  const cookieSummaries = trustedDeviceCookieSummaries(candidates);
+  const browser = context.browser();
+  if (browser === null || candidates.length === 0) {
+    return { cookieSummaries, signedIn: false, issuedSession: false };
+  }
+  let probe: BrowserContext | undefined;
+  try {
+    probe = await browser.newContext({
+      viewport: viewportSize(session.viewport),
+      deviceScaleFactor: 1,
+      serviceWorkers: "block",
+      locale: "en-US",
+    });
+    await probe.addCookies([...candidates]);
+    const page = await probe.newPage();
+    await page.goto(probeUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: navigationTimeoutMillis,
+    });
+    await page.waitForTimeout(2_000);
+    const issuedSession = hasSessionCookies(await probe.cookies([probeUrl]));
+    return { cookieSummaries, signedIn: issuedSession, issuedSession };
+  } catch {
+    return { cookieSummaries, signedIn: false, issuedSession: false, error: "probe_failed" };
+  } finally {
+    await probe?.close().catch(() => undefined);
   }
 }
 

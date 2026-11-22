@@ -12,6 +12,7 @@ if (!Number.isInteger(port) || port <= 0) {
 const service = createHostedBrowserService({
   descriptorKey,
   chromiumSandbox: false,
+  trustedDeviceProbe: process.env["HOSTED_BROWSER_TRUSTED_DEVICE_PROBE"] === "true",
 });
 const bound = await service.listen(port);
 console.log(jsonString({ event: "hosted_browser.ready", port: bound }));

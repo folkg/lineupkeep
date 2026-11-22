@@ -11,6 +11,7 @@ import {
   parseTransportMessage,
   type HostedBrowserStatus,
 } from "@lineupkeep/hosted-browser/protocol";
+import type { TrustedDeviceProbeResult } from "@lineupkeep/hosted-browser/trustedDevice";
 import { Array as EffectArray, Order as EffectOrder } from "effect";
 import { expect, it } from "vitest";
 import { WebSocket } from "ws";
@@ -33,10 +34,13 @@ it("streams provider sign-in, captures the session, and removes the profile", as
   const provider = await startServer(providerHandler);
   const profileRoot = await mkdtemp(join(tmpdir(), "lineupkeep-service-test-"));
   const events: HostedBrowserSessionEvent[] = [];
+  const probes: TrustedDeviceProbeResult[] = [];
   const service = createHostedBrowserService({
     descriptorKey,
     fixtureOrigin: provider.url.origin,
     profileRoot,
+    trustedDeviceProbe: true,
+    onTrustedDeviceProbe: (result) => probes.push(result),
     log: (event) => events.push(event),
   });
   const port = await service.listen(0);
@@ -91,6 +95,8 @@ it("streams provider sign-in, captures the session, and removes the profile", as
     expect(statuses[0]).toBe("starting");
     expect(await clientClosed).toBe(1000);
     await waitForEmptyDirectory(profileRoot);
+    expect(probes).toHaveLength(1);
+    expect(probes[0]).toMatchObject({ signedIn: false, issuedSession: false });
     expect(events.at(-1)).toMatchObject({ outcome: "captured" });
   } finally {
     await service.close();
