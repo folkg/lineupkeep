@@ -69,6 +69,9 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
               </Text>
             </Show>
             <Text type="meta" tone="muted">
+              If {provider} offers "Stay signed in", check it. It may keep this connection longer.
+            </Text>
+            <Text type="meta" tone="muted">
               This sign-in expires{" "}
               <Time datetime={session().session.expiresAt}>
                 {formatReaderTime(session().session.expiresAt)}

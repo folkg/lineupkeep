@@ -12,6 +12,7 @@ import {
   viewportSize,
   type HostedBrowserFailure,
   type HostedBrowserInput,
+  type HostedBrowserSessionCookie,
   type HostedBrowserStatus,
   type HostedBrowserViewportProfile,
 } from "./protocol.ts";
@@ -42,6 +43,7 @@ export type HostedBrowserEvents = {
   readonly onAcceptsInput: () => void;
   readonly onRefused: (refusal: EgressRefusal) => void;
   readonly onCaptured: (cookieHeader: string) => void;
+  readonly onSessionCookies?: (cookies: ReadonlyArray<HostedBrowserSessionCookie>) => void;
   readonly onTrustedDeviceProbe?: (result: TrustedDeviceProbeResult) => void;
   readonly onFailure: (reason: HostedBrowserFailure) => void;
   readonly onExpired: () => void;
@@ -224,6 +226,14 @@ async function openBrowser(
       return;
     }
     settled = true;
+    events.onSessionCookies?.(
+      EffectArray.map([token, user], (cookie) => ({
+        name: cookie.name,
+        ...(cookie.expires > 0
+          ? { expiresAt: new Date(cookie.expires * 1_000).toISOString() }
+          : {}),
+      })),
+    );
     if (options.trustedDeviceProbe === true) {
       const probe = await probeTrustedDevice(context, session, active).catch(
         (): TrustedDeviceProbeResult => ({

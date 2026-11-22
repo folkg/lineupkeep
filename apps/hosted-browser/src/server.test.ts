@@ -9,6 +9,7 @@ import { signHostedBrowserDescriptor } from "@lineupkeep/hosted-browser/descript
 import {
   encodeHostedBrowserInput,
   parseTransportMessage,
+  type HostedBrowserSessionCookie,
   type HostedBrowserStatus,
 } from "@lineupkeep/hosted-browser/protocol";
 import type { TrustedDeviceProbeResult } from "@lineupkeep/hosted-browser/trustedDevice";
@@ -35,11 +36,13 @@ it("streams provider sign-in, captures the session, and removes the profile", as
   const profileRoot = await mkdtemp(join(tmpdir(), "lineupkeep-service-test-"));
   const events: HostedBrowserSessionEvent[] = [];
   const probes: TrustedDeviceProbeResult[] = [];
+  const sessionCookies: Array<ReadonlyArray<HostedBrowserSessionCookie>> = [];
   const service = createHostedBrowserService({
     descriptorKey,
     fixtureOrigin: provider.url.origin,
     profileRoot,
     trustedDeviceProbe: true,
+    onSessionCookies: (cookies) => sessionCookies.push(cookies),
     onTrustedDeviceProbe: (result) => probes.push(result),
     log: (event) => events.push(event),
   });
@@ -97,6 +100,7 @@ it("streams provider sign-in, captures the session, and removes the profile", as
     await waitForEmptyDirectory(profileRoot);
     expect(probes).toHaveLength(1);
     expect(probes[0]).toMatchObject({ signedIn: false, issuedSession: false });
+    expect(sessionCookies).toEqual([[{ name: "T" }, { name: "Y" }]]);
     expect(events.at(-1)).toMatchObject({ outcome: "captured" });
   } finally {
     await service.close();

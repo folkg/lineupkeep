@@ -56,6 +56,10 @@ export type HostedBrowserRefusal = {
   readonly host: string;
   readonly reason: HostedBrowserRefusalReason;
 };
+export type HostedBrowserSessionCookie = {
+  readonly name: string;
+  readonly expiresAt?: string;
+};
 export type HostedBrowserFailure =
   | "browser_unavailable"
   | "page_unavailable"

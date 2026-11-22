@@ -13,6 +13,7 @@ import {
   parseHostedBrowserInput,
   type HostedBrowserFailure,
   type HostedBrowserInput,
+  type HostedBrowserSessionCookie,
   type HostedBrowserTransportMessage,
 } from "@lineupkeep/hosted-browser/protocol";
 import type { TrustedDeviceProbeResult } from "@lineupkeep/hosted-browser/trustedDevice";
@@ -29,6 +30,7 @@ export type HostedBrowserServiceOptions = {
   readonly profileRoot?: string;
   readonly chromiumSandbox?: boolean;
   readonly trustedDeviceProbe?: boolean;
+  readonly onSessionCookies?: (cookies: ReadonlyArray<HostedBrowserSessionCookie>) => void;
   readonly onTrustedDeviceProbe?: (result: TrustedDeviceProbeResult) => void;
   readonly log?: (event: HostedBrowserSessionEvent) => void;
 };
@@ -51,6 +53,10 @@ export type HostedBrowserSessionEvent = {
   readonly failure?: HostedBrowserFailure;
   readonly refused?: ReadonlyArray<EgressRefusal>;
 };
+type HostedBrowserSessionCookieEvent = {
+  readonly event: "hosted_browser.session_cookies";
+  readonly cookies: ReadonlyArray<HostedBrowserSessionCookie>;
+};
 type HostedBrowserTrustedDeviceEvent = {
   readonly event: "hosted_browser.trusted_device_probe";
   readonly cookieSummaries: TrustedDeviceProbeResult["cookieSummaries"];
@@ -58,7 +64,10 @@ type HostedBrowserTrustedDeviceEvent = {
   readonly issuedSession: boolean;
   readonly error?: TrustedDeviceProbeResult["error"];
 };
-type HostedBrowserLogEvent = HostedBrowserSessionEvent | HostedBrowserTrustedDeviceEvent;
+type HostedBrowserLogEvent =
+  | HostedBrowserSessionEvent
+  | HostedBrowserSessionCookieEvent
+  | HostedBrowserTrustedDeviceEvent;
 export function createHostedBrowserService(
   options: HostedBrowserServiceOptions,
 ): HostedBrowserService {
@@ -245,6 +254,13 @@ export function createHostedBrowserService(
             send({ _tag: "Captured", session: cookieHeader });
             settle("captured");
             peer.close(1000, "Captured");
+          },
+          onSessionCookies: (cookies) => {
+            if (options.onSessionCookies === undefined) {
+              writeLog({ event: "hosted_browser.session_cookies", cookies });
+            } else {
+              options.onSessionCookies(cookies);
+            }
           },
           onTrustedDeviceProbe: (result) => {
             if (options.onTrustedDeviceProbe === undefined) {
