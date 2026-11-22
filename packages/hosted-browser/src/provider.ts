@@ -3,6 +3,9 @@ export type HostedBrowserProvider = {
   readonly refusedIdentifier?: {
     readonly text: string;
   };
+  readonly staySignedIn?: {
+    readonly selector: string;
+  };
 };
 
 export const hostedBrowserProviders: ReadonlyMap<string, HostedBrowserProvider> = new Map([
@@ -11,6 +14,7 @@ export const hostedBrowserProviders: ReadonlyMap<string, HostedBrowserProvider> 
     {
       loginUrl: "https://login.yahoo.com/",
       refusedIdentifier: { text: "To use a Gmail address" },
+      staySignedIn: { selector: "#persistent" },
     },
   ],
 ]);

@@ -23,9 +23,6 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
       <Show when={props.controller.session()}>
         {(session) => (
           <Stack gap="sm">
-            <Text type="meta" tone="muted">
-              If {provider} offers "Stay signed in", check it. It may keep this connection longer.
-            </Text>
             <BrowserFrame
               frameUrl={props.controller.frameUrl()}
               notice={

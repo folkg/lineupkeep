@@ -25,6 +25,7 @@ import {
 import type { TrustedDeviceProbeResult } from "./trustedDevice.ts";
 
 const capturePollMillis = 400;
+const staySignedInChecks = new WeakMap<Page, Promise<void>>();
 const navigationTimeoutMillis = 30_000;
 const maximumFrameBytes = 1_500_000;
 
@@ -192,6 +193,8 @@ async function openBrowser(
       timeout: navigationTimeoutMillis,
     });
     await focusDeclaredField(initial);
+    await queueStaySignedIn(initial, session.provider);
+    await focusDeclaredField(initial);
   } catch {
     await fail("provider_unavailable");
     throw new Error("The provider login page did not load");
@@ -286,6 +289,7 @@ async function openBrowser(
       }
       watchForInput(page);
       watchForIdentifierRefusal(page);
+      void queueStaySignedIn(page, session.provider);
     });
     page.on("close", () => {
       forgetTarget(page);
@@ -431,6 +435,24 @@ async function openBrowser(
     },
     close,
   };
+}
+
+function queueStaySignedIn(page: Page, provider: string): Promise<void> {
+  const previous = staySignedInChecks.get(page) ?? Promise.resolve();
+  const next = previous.then(() => staySignedIn(page, provider)).catch(() => undefined);
+  staySignedInChecks.set(page, next);
+  return next;
+}
+
+async function staySignedIn(page: Page, provider: string): Promise<void> {
+  const selector = hostedBrowserProvider(provider)?.staySignedIn?.selector;
+  if (selector === undefined) {
+    return;
+  }
+  await page
+    .locator(selector)
+    .check({ timeout: 2_000 })
+    .catch(() => undefined);
 }
 
 async function focusDeclaredField(page: Page): Promise<void> {

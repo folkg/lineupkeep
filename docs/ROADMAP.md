@@ -55,8 +55,10 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
   a fresh browser left it signed out, and Yahoo issued no session. The test saved no values and is
   disabled.
 - **Session cookie expiry is recorded at capture.** Names and expiry only, never values. The first
-  sign-in with Yahoo's Stay signed in checked set `T` and `Y` to expire on 22 November 2027, about one
-  year, against the usual two to three weeks.
+  capture set `T` and `Y` to expire on 22 November 2027, about one year. The box is unchecked by
+  default and no earlier expiry was recorded, so that does not prove the box caused it. The private
+  browser now selects the box before the person types; the next capture will show whether the year
+  holds.
 - **Connecting has its own page, and Account owns the list.** Account shows the connections and their
   teams. Connect, Reconnect and Add a different account open `/connections` with a heading for that
   sign-in only; the old bookmark returns to Account. The two connections to the same Yahoo account were

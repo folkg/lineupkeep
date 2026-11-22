@@ -4,7 +4,7 @@ import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { jsonString } from "@lineupkeep/collections";
+import { EffectString, jsonString } from "@lineupkeep/collections";
 import { signHostedBrowserDescriptor } from "@lineupkeep/hosted-browser/descriptor";
 import {
   encodeHostedBrowserInput,
@@ -354,8 +354,18 @@ it("destroys the browser and profile when the service stops", async () => {
     await rm(profileRoot, { recursive: true, force: true });
   }
 }, 60_000);
-function providerHandler(request: IncomingMessage, response: ServerResponse): void {
+async function providerHandler(request: IncomingMessage, response: ServerResponse): Promise<void> {
   if (request.method === "POST") {
+    request.setEncoding("utf8");
+    let body = "";
+    for await (const chunk of request) {
+      body += chunk;
+    }
+    if (!EffectString.includes(body, "persistent=y")) {
+      response.writeHead(400, { "content-type": "text/plain" });
+      response.end("Stay signed in was not selected");
+      return;
+    }
     response.writeHead(200, {
       "content-type": "text/html",
       "set-cookie": [
@@ -372,16 +382,19 @@ function providerHandler(request: IncomingMessage, response: ServerResponse): vo
   <body>
     <form method="POST" action="/signed-in">
       <label>Username <input name="username" autofocus autocomplete="off"></label>
+      <label>Stay signed in <input id="persistent" name="persistent" type="checkbox" value="y"></label>
       <button type="submit">Sign in</button>
     </form>
   </body>
 </html>`);
 }
 function startServer(
-  handler: (request: IncomingMessage, response: ServerResponse) => void,
+  handler: (request: IncomingMessage, response: ServerResponse) => void | Promise<void>,
 ): Promise<{ readonly server: Server; readonly url: URL }> {
   return new Promise((resolve, reject) => {
-    const server = createServer(handler);
+    const server = createServer((request, response) => {
+      void handler(request, response);
+    });
     server.once("error", reject);
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();

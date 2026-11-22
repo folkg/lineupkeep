@@ -2471,7 +2471,10 @@ for the session pair. The test recorded cookie names, domains, and expiry only, 
 values. Copying non-session cookies therefore does not restore the sign-in, and the product will not
 store them.
 
-At 22:55 UTC the owner reconnected with Yahoo's **Stay signed in** checked. Yahoo set both `T` and `Y`
-to expire at 2027-11-22T22:55:26Z, about one year. The earlier sessions expired after two to three
-weeks. This is the first evidence that the checkbox extends the cookie lifetime; the product records
-only the name and expiry of each session cookie, never its value.
+At 22:55 UTC a reconnect captured the first cookie expiry we have: Yahoo set both `T` and `Y` to
+expire at 2027-11-22T22:55:26Z, about one year. The previous connection was used for about three
+weeks, but no expiry was recorded for it, so this does not prove the checkbox caused the year. The
+login page's **Stay signed in** box is unchecked by default, and a fresh browser probe confirmed that.
+The hosted browser now selects it before the person types, so every new session starts from the same
+state. The next capture will show whether the year holds; if it does not, the checkbox is not the
+lever. The product records only the name and expiry of each session cookie, never its value.

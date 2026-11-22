@@ -18,7 +18,6 @@ it("names the private session and frames the phone viewport", async () => {
   await expect
     .element(page.getByText("Private to this session. Closes when you finish or cancel."))
     .toBeVisible();
-  await expect.element(page.getByText(/Stay signed in/)).toBeVisible();
 
   const surface = page.getByRole("textbox", { name: "Yahoo sign-in browser" }).element();
   const frame = surface.parentElement;
