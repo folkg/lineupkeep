@@ -27,7 +27,7 @@ Status: proposed surface and acceptance criteria. Names other than the agreed ge
 | `get_transactions`    | Bounded transaction history with team scope and date filtering, two-sided player movements, trade parties, traded draft picks, and explicit incompleteness; no execution                                                                                                                                                                                                                                                                          |
 | `get_team_summary`    | One bounded per-team snapshot: league with its waiver bid shape, season progress, standing and record, standings, current matchup, places, reserve lists, freeable moves, blockers, and a compact roster carrying draft provenance and starting status                                                                                                                                                                                            |
 | `get_lineup_outlook`  | Forward starter-slot fit for one owned team. Date leagues use an inclusive `days` or `window`; weekly leagues return one scoring-week period and reject those arguments with guidance. Each period uses the lineup solver and applies scheduled moves by date. Shows sitting players with games, unknown days, and opponents. Player games state `fitsStartingSlot` and `gamesThatFit`. Refuses results over the byte budget; no recommendations. |
-| `get_team_snapshot`   | One composed morning read: the summary, league rules, full roster, queue, recent transactions, pending offers, free-agent pool, and roster-player stats; a failed section is named in `failures`                                                                                                                                                                                                                                                  |
+| `get_team_snapshot`   | One composed morning read: summary, league rules, full roster, queue, recent transactions, pending offers, the first 25 free agents, and season stats for up to 25 rostered players. Deeper pools and other stat windows need `search_players` and `get_players`; a failed section is named in `failures`.                                                                                                                                        |
 | `set_lineup`          | The sole roster mutation operation; creates durable team runs and returns verified or pending outcomes                                                                                                                                                                                                                                                                                                                                            |
 | `set_team_automation` | Enable, disable, pause for the rest of the fantasy day, or resume owned team automation; reports resulting state                                                                                                                                                                                                                                                                                                                                  |
 | `get_lineup_runs`     | Owned run status, safe concise explanations, observed changes, and unresolved conditions                                                                                                                                                                                                                                                                                                                                                          |
@@ -377,6 +377,11 @@ eligible positions, and professional team — beside the private player referenc
 moved needs no second `get_players` call. The references and dictionaries remain the canonical form
 for detail.
 
+Every roster, pool, and player-detail row also carries `providerPlayerId`, the provider's durable
+player id, beside the per-read `player` reference. The reference changes between reads; the durable
+id does not. Use it to track a player across runs, and exchange it for a fresh reference only when a
+transaction tool needs one.
+
 A trade also carries `parties`. When the provider publishes the proposing and receiving team keys,
 they appear as `proposer` and `receiver` with `source: "provider"`. When it does not, the parties
 are the teams the movements involve, as `participant` entries with `source: "player_movements"`;
@@ -467,7 +472,8 @@ standings, the owning team's acquisition usage, the current matchup, this week's
 remaining player-games, and, only when the `roster` group is selected, a compact roster. When the
 league rules and the roster are read, the summary also publishes the team's `places`, its `reserve`
 lists, `addsPossible`, `canFree`, `addsWithFixes`, and `illegal`: the same facts the plan read
-carries. The team
+carries. `addsPossible` is open roster places, free active plus free reserve, not the league's weekly
+add allowance; `acquisitionUsage` carries the allowance and how many adds remain. The team
 object also carries the owner's own note as `ownerNote`: `{ status: "provided", text, updatedAt }`
 when one is stored or `{ status: "not_set" }` otherwise. It is owner context, not league or provider
 data, and the field description says so; it is never sent to the provider. A note is limited to
@@ -866,10 +872,11 @@ each states `groupedBy: "runDay"`. A decision reads `undecided`, `saved`, `now`,
 it names, or from the most recent recorded check when the live read failed. `waiverBid` names the
 league's bid shape: `published` with this team's remaining FAAB, or `bidless`. The read reports the
 team's places as used, maximum, and free, and each reserve list by the league's own name with its
-eligibility, capacity, occupancy, and free count. `addsPossible` counts how many adds fit right now:
-the free active places plus the free reserve places. `canFree` names each player who can move to a
-reserve list that accepts them now, with the list and the active place it frees; one entry per move
-the lists have room for. `addsWithFixes` is `addsPossible` plus those freeable moves. `illegal`
+eligibility, capacity, occupancy, and free count. `addsPossible` counts open roster places now:
+the free active places plus the free reserve places, not the league's weekly add allowance. A client
+pacing adds uses `acquisitionUsage` instead. `canFree` names each player who can move to a reserve
+list that accepts them now, with the list and the active place it frees; one entry per move the lists
+have room for. `addsWithFixes` is `addsPossible` plus those freeable moves. `illegal`
 names each blocker that makes the roster illegal, the fact that blocks it, and the plain cure,
 including the drop that clears it; adds and drops wait until every blocker is cured. `nextCheckAt` is
 the exact time of the next hourly check, at the 55 minute mark, so a client never computes it. A move

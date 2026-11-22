@@ -167,7 +167,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_transaction_plan", {
     description:
-      "Read one team's queue by runDay: each move's `runDay` (send day), `effectiveDate` (apply day), `sendsAt`, decision, check, and claim phase. Buckets group by runDay. `addsPossible`, `canFree`, and `illegal` say what fits and blocks it.",
+      "Read one team's queue by runDay: each move's `runDay` (send day), `effectiveDate` (apply day), `sendsAt`, decision, check, and claim phase. Buckets group by runDay. `addsPossible` is open roster places, not weekly adds; `canFree` and `illegal` say what fits and blocks it.",
     parameters: TransactionPlanInput,
     success: Schema.toCodecJson(TransactionPlanRead),
     failure: ToolFailure,

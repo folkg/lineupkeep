@@ -23,6 +23,7 @@ import {
 } from "@lineupkeep/backend/connections/QueryResults";
 import {
   PlayerRef,
+  QueryConnectionNotReady,
   QueryCursorInvalid,
   QuerySelectionInvalid,
   QueryTeam,
@@ -688,6 +689,38 @@ it("composes the team snapshot from the reads in one tool call", async () => {
   ).toEqual(["plan", "offers"]);
 });
 
+it("fails the whole snapshot when the provider session is dead", async () => {
+  const teamId = Effect.runSync(
+    Schema.decodeEffect(TeamId)("00000000-0000-7000-8000-000000000001"),
+  );
+  const queries: FantasyQueriesShape = {
+    ...unavailableQueries,
+    getTeamSummary: () =>
+      Effect.fail(QueryConnectionNotReady.make({ team: teamId, status: "reconnect-required" })),
+  };
+  const services = Layer.mergeAll(
+    authentication,
+    permissiveQuota,
+    Layer.succeed(Connections)(unavailableConnections),
+    Layer.succeed(FantasyQueries)(queries),
+    Layer.succeed(TransactionOffers)(unavailableOffers),
+    Layer.succeed(TransactionPlanService)(unavailablePlans),
+    Layer.succeed(LineupRuns)(unavailableLineups),
+    Layer.succeed(Teams)(unavailableTeams),
+    Layer.succeed(Feedback)(unavailableFeedback),
+  );
+  const response = await handleMcpRequest(
+    request("tools/call", { name: "get_team_snapshot", arguments: { team: teamId } }, "fantasy"),
+    (_request, _operation, program) =>
+      Effect.runPromise(layerTools.provideLayer(program, services)),
+  );
+  const body = await json(response);
+
+  expect(response.status).toBe(200);
+  expect(body).toMatchObject({ result: { isError: true } });
+  expect(jsonTools.jsonString(body)).toContain('\\"code\\":\\"connection_not_ready\\"');
+});
+
 it("rejects unexpected connection arguments as JSON-RPC invalid-params and names the field", async () => {
   const response = await handle(
     request("tools/call", { name: "list_connections", arguments: { limit: 1 } }, "read"),
@@ -1010,6 +1043,7 @@ it("publishes and serves the scoring-period schedule group over MCP", async () =
           players: [
             {
               player: Effect.runSync(Schema.decodeEffect(PlayerRef)("r1.test")),
+              providerPlayerId: "461.p.10001",
               name: "Synthetic Skater",
               proTeam: "SYN",
               status: "scheduled",

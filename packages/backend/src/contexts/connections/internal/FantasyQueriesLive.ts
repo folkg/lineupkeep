@@ -5,7 +5,6 @@ import { Array as EffectArray, DateTime, Effect, Layer, Option, Ref } from "effe
 import { Option as EffectOption, Order as EffectOrder } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
-import { providerSessionReconnectDetail } from "#contexts/connections/Connection.ts";
 import { Connections } from "#contexts/connections/Connections.ts";
 import { fantasyDayLabel } from "#contexts/connections/FantasyDay.ts";
 import { FantasyQueries } from "#contexts/connections/FantasyQueries.ts";
@@ -120,6 +119,7 @@ import {
   type RosterFreeablePlace,
   type StartingStatus,
   type StatWindow,
+  QueryConnectionNotReady,
   QueryPersistenceFailed,
   QuerySelectionInvalid,
   type StatRef,
@@ -259,7 +259,7 @@ export const FantasyQueriesLive = Layer.effect(
       context: TeamContext,
       resource: string,
       error: ProviderReadFailure,
-    ): Effect.Effect<FailureOutcome> => {
+    ): Effect.Effect<FailureOutcome, QueryConnectionNotReady> => {
       switch (error._tag) {
         case "provider.operation_unsupported":
           return Effect.succeed({ _tag: "unsupported", detail: error.reason });
@@ -272,14 +272,12 @@ export const FantasyQueriesLive = Layer.effect(
                 sessionEvidenceOf(error),
               ),
             ),
-            Effect.as<FailureOutcome>({
-              _tag: "failed",
-              failure: {
-                code: "provider_session_rejected",
-                resource,
-                message: providerSessionReconnectDetail,
-              },
-            }),
+            Effect.andThen(
+              QueryConnectionNotReady.make({
+                team: context.owned.team.id,
+                status: "reconnect-required",
+              }),
+            ),
           );
         case "provider.request_failed":
           return Effect.succeed<FailureOutcome>({
@@ -327,7 +325,7 @@ export const FantasyQueriesLive = Layer.effect(
       context: TeamContext,
       resource: string,
       error: ProviderOpponentFactStale,
-    ): Effect.Effect<ReadOutcome<never>> =>
+    ): Effect.Effect<ReadOutcome<never>, QueryConnectionNotReady> =>
       Effect.gen(function* () {
         const providerOutcome = yield* failureOutcome(context, resource, error.cause);
         const reason =
@@ -355,22 +353,20 @@ export const FantasyQueriesLive = Layer.effect(
         A,
         ProviderReadFailure | ProviderOpponentFactStale | QueryPersistenceFailed
       >,
-    ): Effect.Effect<ReadOutcome<A>, QueryPersistenceFailed> =>
+    ): Effect.Effect<ReadOutcome<A>, QueryConnectionNotReady | QueryPersistenceFailed> =>
       Effect.gen(function* () {
         if (yield* Ref.get(context.sessionRejected)) {
-          return {
-            _tag: "failed",
-            failure: {
-              code: "provider_session_rejected",
-              resource,
-              message: providerSessionReconnectDetail,
-            },
-          };
+          return yield* QueryConnectionNotReady.make({
+            team: context.owned.team.id,
+            status: "reconnect-required",
+          });
         }
         return yield* Effect.matchEffect(program, {
           onSuccess: (value) =>
             proveSession(context).pipe(Effect.as<ReadOutcome<A>>({ _tag: "ok", value })),
-          onFailure: (error) => {
+          onFailure: (
+            error,
+          ): Effect.Effect<ReadOutcome<A>, QueryConnectionNotReady | QueryPersistenceFailed> => {
             if (error._tag === "query.persistence_failed") {
               return Effect.fail(error);
             }
@@ -398,7 +394,10 @@ export const FantasyQueriesLive = Layer.effect(
 
     const readLeague = (
       context: TeamContext,
-    ): Effect.Effect<ReadOutcome<ProviderLeagueSettings>, QueryPersistenceFailed> =>
+    ): Effect.Effect<
+      ReadOutcome<ProviderLeagueSettings>,
+      QueryConnectionNotReady | QueryPersistenceFailed
+    > =>
       Effect.gen(function* () {
         const outcome = yield* readOutcome(
           context,
@@ -429,7 +428,10 @@ export const FantasyQueriesLive = Layer.effect(
       playerKeys: ReadonlyArray<string>,
       weekFacts: ReadonlyMap<string, ProviderPlayerWeekFact>,
       weekFactsWeek: number | undefined,
-    ): Effect.Effect<PoolGames, QuerySelectionInvalid | QueryPersistenceFailed> =>
+    ): Effect.Effect<
+      PoolGames,
+      QueryConnectionNotReady | QuerySelectionInvalid | QueryPersistenceFailed
+    > =>
       Effect.gen(function* () {
         const hasGameSource = gameSources.sourceFor(context.owned.team.league) !== undefined;
         if ("kind" in requested) {
@@ -495,7 +497,10 @@ export const FantasyQueriesLive = Layer.effect(
       playerKeys: ReadonlyArray<string>,
       weekFacts: ReadonlyMap<string, ProviderPlayerWeekFact>,
       weekFactsWeek: number | undefined,
-    ): Effect.Effect<PoolGames, QuerySelectionInvalid | QueryPersistenceFailed> =>
+    ): Effect.Effect<
+      PoolGames,
+      QueryConnectionNotReady | QuerySelectionInvalid | QueryPersistenceFailed
+    > =>
       Effect.gen(function* () {
         if (leagueOutcome === undefined || leagueOutcome._tag !== "ok") {
           return {
@@ -579,7 +584,7 @@ export const FantasyQueriesLive = Layer.effect(
     const readPoolGamesOverWindow = (
       context: TeamContext,
       window: SummaryScheduleWindow,
-    ): Effect.Effect<PoolGames, QueryPersistenceFailed> =>
+    ): Effect.Effect<PoolGames, QueryConnectionNotReady | QueryPersistenceFailed> =>
       Effect.gen(function* () {
         const professionalGames = yield* readProfessionalScheduleGames({
           calendar,
@@ -602,7 +607,7 @@ export const FantasyQueriesLive = Layer.effect(
     const readPoolGames = (
       context: TeamContext,
       leagueOutcome: ReadOutcome<ProviderLeagueSettings> | undefined,
-    ): Effect.Effect<PoolGames, QueryPersistenceFailed> =>
+    ): Effect.Effect<PoolGames, QueryConnectionNotReady | QueryPersistenceFailed> =>
       Effect.gen(function* () {
         if (leagueOutcome === undefined || leagueOutcome._tag !== "ok") {
           return {
@@ -682,7 +687,7 @@ export const FantasyQueriesLive = Layer.effect(
       fetchedAt: DateTime.Utc,
       playerKeys: ReadonlyArray<string>,
       resource: string,
-    ): Effect.Effect<DraftProvenanceRead, QueryPersistenceFailed> =>
+    ): Effect.Effect<DraftProvenanceRead, QueryConnectionNotReady | QueryPersistenceFailed> =>
       Effect.gen(function* () {
         if (playerKeys.length === 0) {
           return { lookup: () => notPublishedDraft };
@@ -795,7 +800,10 @@ export const FantasyQueriesLive = Layer.effect(
       fetchedAt: DateTime.Utc,
       coverageEntries: Array<QueryCoverage>,
       unresolvedKeys: ReadonlyArray<string>,
-    ): Effect.Effect<ReadonlyMap<string, TransactionIdentity>, QueryPersistenceFailed> =>
+    ): Effect.Effect<
+      ReadonlyMap<string, TransactionIdentity>,
+      QueryConnectionNotReady | QueryPersistenceFailed
+    > =>
       Effect.gen(function* () {
         const wanted = new Set(unresolvedKeys);
         const identities = new Map<string, TransactionIdentity>();
@@ -863,7 +871,10 @@ export const FantasyQueriesLive = Layer.effect(
       league: ProviderLeagueSettings,
       period: QueryPeriod,
       failures: QueryFailure[],
-    ): Effect.Effect<ProviderSchedulePeriod | undefined, QueryPersistenceFailed> =>
+    ): Effect.Effect<
+      ProviderSchedulePeriod | undefined,
+      QueryConnectionNotReady | QueryPersistenceFailed
+    > =>
       Effect.gen(function* () {
         if (league.rosterCoverage === "week") {
           return { type: "week" as const, week: period.week };
@@ -892,7 +903,10 @@ export const FantasyQueriesLive = Layer.effect(
       league: ProviderLeagueSettings,
       input: GetCalendarInput,
       failures: QueryFailure[],
-    ): Effect.Effect<NonNullable<CalendarData["games"]>, QueryPersistenceFailed> =>
+    ): Effect.Effect<
+      NonNullable<CalendarData["games"]>,
+      QueryConnectionNotReady | QueryPersistenceFailed
+    > =>
       Effect.gen(function* () {
         const period = input.period;
         if (period === undefined) {
@@ -1533,7 +1547,10 @@ export const FantasyQueriesLive = Layer.effect(
       const period = input.period ?? currentPeriod(window);
       const readRoster = (
         requested: { readonly week: number } | undefined,
-      ): Effect.Effect<ReadOutcome<ProviderRoster>, QueryPersistenceFailed> =>
+      ): Effect.Effect<
+        ReadOutcome<ProviderRoster>,
+        QueryConnectionNotReady | QueryPersistenceFailed
+      > =>
         readOutcome(
           context,
           "roster",
@@ -1904,6 +1921,7 @@ export const FantasyQueriesLive = Layer.effect(
         const week = weekFacts.get(player.providerPlayerKey);
         return {
           player: playerRef,
+          providerPlayerId: player.providerPlayerKey,
           name: player.name,
           ...(draft === undefined ? {} : { draft: draft.lookup(player.providerPlayerKey) }),
           primaryPosition: player.primaryPosition,
@@ -2160,7 +2178,10 @@ export const FantasyQueriesLive = Layer.effect(
           : [];
       const readDetails = (
         providerPlayerKeys: ReadonlyArray<string>,
-      ): Effect.Effect<ReadOutcome<ReadonlyArray<ProviderPlayerDetail>>, QueryPersistenceFailed> =>
+      ): Effect.Effect<
+        ReadOutcome<ReadonlyArray<ProviderPlayerDetail>>,
+        QueryConnectionNotReady | QueryPersistenceFailed
+      > =>
         readOutcome(
           context,
           "players",
@@ -2534,6 +2555,7 @@ export const FantasyQueriesLive = Layer.effect(
             }
             return {
               player: row.ref,
+              providerPlayerId: row.providerPlayerKey,
               ...(identity === undefined
                 ? {}
                 : { identity: { ...identity, draft: draft.lookup(row.providerPlayerKey) } }),
@@ -3428,7 +3450,10 @@ export const FantasyQueriesLive = Layer.effect(
         gameSources.sourceFor(context.owned.team.league) !== undefined;
       const readRoster = (
         requested: QueryPeriod | undefined,
-      ): Effect.Effect<ReadOutcome<ProviderRoster>, QueryPersistenceFailed> =>
+      ): Effect.Effect<
+        ReadOutcome<ProviderRoster>,
+        QueryConnectionNotReady | QueryPersistenceFailed
+      > =>
         readOutcome(
           context,
           "roster",
@@ -3539,6 +3564,7 @@ export const FantasyQueriesLive = Layer.effect(
               );
         rosterRowByKey.set(player.providerPlayerKey, {
           player: ref,
+          providerPlayerId: player.providerPlayerKey,
           name: player.name,
           draft: draft.lookup(player.providerPlayerKey),
           slot: player.slot,
@@ -3856,6 +3882,7 @@ export const FantasyQueriesLive = Layer.effect(
           }
           schedulePlayerByKey.set(player.providerPlayerKey, {
             player: rosterRow?.player ?? sealedRef,
+            providerPlayerId: player.providerPlayerKey,
             name: rosterRow?.name ?? player.name,
             proTeam: rosterRow?.proTeam ?? player.proTeamAbbreviation ?? null,
             status: providerGames.length === 0 ? "no_games" : "scheduled",
@@ -5708,6 +5735,7 @@ function professionalScheduleSection(input: {
       }
       players.set(player.providerPlayerKey, {
         player: rosterRow?.player ?? sealedRef,
+        providerPlayerId: player.providerPlayerKey,
         name: rosterRow?.name ?? player.name,
         proTeam: rosterRow?.proTeam ?? player.proTeamAbbreviation ?? null,
         status: row.status,
@@ -6467,6 +6495,7 @@ function rosterRow(
 ): RosterPlayerView {
   return {
     player: ref,
+    providerPlayerId: player.providerPlayerKey,
     name: player.name,
     slot: player.slot,
     primaryPosition: player.primaryPosition,

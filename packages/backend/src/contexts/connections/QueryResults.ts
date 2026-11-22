@@ -827,6 +827,12 @@ export type PlayerDraft = typeof PlayerDraft.Type;
 
 export const RosterPlayer = Schema.Struct({
   player: PlayerRef,
+  providerPlayerId: Schema.NonEmptyString.pipe(
+    Schema.annotate({
+      description:
+        "The provider's durable player id. It stays the same across reads; use it to track a player when the per-read `player` reference changes.",
+    }),
+  ),
   name: Schema.NonEmptyString,
   slot: RosterSlot,
   primaryPosition: Schema.NonEmptyString,
@@ -1080,6 +1086,12 @@ export type PlayerGameWeeks = typeof PlayerGameWeeks.Type;
 
 const SearchPlayer = Schema.Struct({
   player: PlayerRef,
+  providerPlayerId: Schema.NonEmptyString.pipe(
+    Schema.annotate({
+      description:
+        "The provider's durable player id. It stays the same across reads; use it to track a player when the per-read `player` reference changes.",
+    }),
+  ),
   name: Schema.NonEmptyString,
   draft: Schema.optional(PlayerDraft),
   primaryPosition: Schema.NonEmptyString,
@@ -1369,6 +1381,12 @@ const PlayerEligibility = Schema.Struct({
 
 const PlayerDetail = Schema.Struct({
   player: PlayerRef,
+  providerPlayerId: Schema.NonEmptyString.pipe(
+    Schema.annotate({
+      description:
+        "The provider's durable player id. It stays the same across reads; use it to track a player when the per-read `player` reference changes.",
+    }),
+  ),
   identity: Schema.optional(PlayerIdentity),
   availability: Schema.optional(PlayerAvailability),
   eligibility: Schema.optional(PlayerEligibility),
@@ -1981,6 +1999,12 @@ const SummaryScheduledGame = Schema.Struct({
 
 export const SummarySchedulePlayer = Schema.Struct({
   player: PlayerRef,
+  providerPlayerId: Schema.NonEmptyString.pipe(
+    Schema.annotate({
+      description:
+        "The provider's durable player id. It stays the same across reads; use it to track a player when the per-read `player` reference changes.",
+    }),
+  ),
   name: Schema.NonEmptyString,
   proTeam: Schema.NullOr(Schema.NonEmptyString),
   status: Schema.Literals(["scheduled", "no_games", "unknown"]).pipe(
@@ -2138,6 +2162,12 @@ const SummarySchedule = Schema.Union([
 
 const SummaryRosterPlayer = Schema.Struct({
   player: PlayerRef,
+  providerPlayerId: Schema.NonEmptyString.pipe(
+    Schema.annotate({
+      description:
+        "The provider's durable player id. It stays the same across reads; use it to track a player when the per-read `player` reference changes.",
+    }),
+  ),
   name: Schema.NonEmptyString,
   draft: PlayerDraft,
   slot: RosterSlot,
@@ -2221,7 +2251,7 @@ export const TeamSummaryData = Schema.Struct({
   addsPossible: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))).pipe(
     Schema.annotate({
       description:
-        "How many adds fit right now: the free active places plus the free reserve places.",
+        "Open roster places now, not the weekly add allowance: free active plus free reserve places. Use `acquisitionUsage` for adds remaining; zero means a drop or reserve place is needed.",
     }),
   ),
   canFree: Schema.optional(Schema.Array(RosterFreeablePlace)).pipe(

@@ -47,6 +47,10 @@ A provider's stable identifier for a fantasy team within one provider connection
 **Provider league key**:
 A provider's stable identifier for the league that contains a fantasy team.
 
+**Provider player id**:
+A provider's durable identifier for a player, published on roster, pool, and player-detail rows
+beside the per-read player reference. The reference changes between reads; this id does not.
+
 **Team availability**:
 Whether the provider still reports a discovered fantasy team through its connection. An unavailable team keeps its configuration and is not treated as deleted.
 

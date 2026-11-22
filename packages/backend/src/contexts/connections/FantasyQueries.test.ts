@@ -11,7 +11,6 @@ import { Option as EffectOption } from "effect";
 import { Record as EffectRecord } from "effect";
 import { TestClock } from "effect/testing";
 
-import { providerSessionReconnectDetail } from "#contexts/connections/Connection.ts";
 import { GameSourceRegistry, gameSourceRegistryOf } from "#contexts/connections/GameSource.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import jsonTools from "#runtime/JsonText.ts";
@@ -70,6 +69,7 @@ import { StatRef } from "./QueryValues.ts";
 import {
   type PlayerRef,
   type QueryError,
+  QueryConnectionNotReady,
   QuerySelectionInvalid,
   QueryTeamNotFound,
 } from "./QueryValues.ts";
@@ -1062,7 +1062,7 @@ it.effect("reads compact and full rosters for an exact selected week", () =>
     assert.strictEqual(Array.getUnsafe(full.players, 1).injury.code, "O");
     assert.strictEqual(Array.getUnsafe(full.players, 1).injury.reported, true);
     assert.isFalse(includesText(compact, "461.l.1000"));
-    assert.isFalse(includesText(compact, "461.p.10001"));
+    assert.strictEqual(Array.getUnsafe(compact.players, 0).providerPlayerId, "461.p.10001");
     assert.isFalse(includesText(compact, "test-session-cookie"));
 
     const mismatch = yield* queries.getRosters(owner, { team: teamId, period: { week: 4 } });
@@ -1243,7 +1243,10 @@ it.effect("reads every team's roster in the linked league with team identity on 
       true,
     );
     assert.isFalse(includesText(read, "461.l.1000.t.2"));
-    assert.isFalse(includesText(read, "461.p.20001"));
+    assert.strictEqual(
+      Array.getUnsafe(Array.getUnsafe(read.teams, 1).players, 0).providerPlayerId,
+      "461.p.20001",
+    );
   }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
@@ -1822,7 +1825,7 @@ it.effect("resolves a dropped player's identity from transaction history", () =>
         (entry) => entry.resource === "players" && entry.source === "transactions",
       ),
     );
-    assert.isFalse(includesText(hydrated, "461.p.10004"));
+    assert.strictEqual(Array.getUnsafe(hydrated.players, 0).providerPlayerId, "461.p.10004");
   }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
@@ -2003,7 +2006,7 @@ it.effect("searches bounded free agents and preserves zero versus missing stats"
       EffectArray.map(search.players, (player) => player.name),
       ["Free Agent"],
     );
-    assert.isFalse(includesText(search, "461.p.10003"));
+    assert.strictEqual(Array.getUnsafe(search.players, 0).providerPlayerId, "461.p.10003");
 
     const freeAgent = Array.getUnsafe(search.players, 0);
     const hydrated = yield* queries.getPlayers(owner, {
@@ -2599,7 +2602,7 @@ it.effect("does not offer a recent-form ordering a league publishes no rank for"
   }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
-it.effect("stops a summary at its first refused read and names the layer to reconnect", () =>
+it.effect("fails a summary at its first refused read with the connection error", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
     const connections = yield* Connections;
@@ -2624,24 +2627,16 @@ it.effect("stops a summary at its first refused read and names the layer to reco
     yield* fake.rejectSession(true);
 
     const before = yield* fake.providerReads;
-    const summary = yield* queries.getTeamSummary(owner, {
-      team: Array.getUnsafe(seeded, 0).id,
-    });
+    const error = yield* Effect.flip(
+      queries.getTeamSummary(owner, {
+        team: Array.getUnsafe(seeded, 0).id,
+      }),
+    );
 
     assert.strictEqual((yield* fake.providerReads) - before, 1);
-    assert.strictEqual(summary.status, "failed");
-    if (!("failures" in summary)) {
-      assert.fail("expected the summary to report its failures");
-      return;
-    }
-    assert.deepStrictEqual(
-      [...new Set(EffectArray.map(summary.failures, (failure) => failure.code))],
-      ["provider_session_rejected"],
-    );
-    assert.deepStrictEqual(
-      [...new Set(EffectArray.map(summary.failures, (failure) => failure.message))],
-      [providerSessionReconnectDetail],
-    );
+    assert.instanceOf(error, QueryConnectionNotReady);
+    assert.strictEqual(error.team, Array.getUnsafe(seeded, 0).id);
+    assert.strictEqual(error.status, "reconnect-required");
 
     const yielded6 = yield* connections.list(owner);
     const connection = Array.getUnsafe(yielded6, 0);

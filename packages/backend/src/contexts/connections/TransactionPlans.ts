@@ -597,7 +597,7 @@ export const TransactionPlanRead = Schema.Struct({
   addsPossible: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))).pipe(
     Schema.annotate({
       description:
-        "How many adds fit right now: the free active places plus the free reserve places.",
+        "Open roster places now, not the weekly add allowance: free active plus free reserve places. Use `acquisitionUsage` for adds remaining; zero means a drop or reserve place is needed.",
     }),
   ),
   addsWithFixes: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))).pipe(

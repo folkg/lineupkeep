@@ -1,4 +1,5 @@
 import type { AuthenticatedAgent } from "@lineupkeep/backend/auth/Auth";
+import { providerSessionRefusal } from "@lineupkeep/backend/connections/Connection";
 import { FantasyQueries } from "@lineupkeep/backend/connections/FantasyQueries";
 import { TeamId } from "@lineupkeep/backend/connections/FantasyTeam";
 import { fantasyQueryScopes } from "@lineupkeep/backend/connections/QueryScopes";
@@ -46,7 +47,7 @@ const SnapshotResult = Schema.Struct({
 export const snapshotTools = Toolkit.make(
   Tool.make("get_team_snapshot", {
     description:
-      "One read of a team's morning state: summary, league rules, full roster, queue, recent transactions, pending offers, free-agent pool, and roster-player stats. A section that fails appears in `failures`; nothing writes.",
+      "Team read: summary, league, full roster, queue, transactions, offers, 25 free agents, and season stats for 25 rostered players. Deeper data needs `search_players`/`get_players`; failures list failed sections.",
     parameters: SnapshotInput,
     success: Schema.toCodecJson(SnapshotResult),
     failure: ToolFailure,
@@ -73,7 +74,20 @@ export function snapshotToolHandlers(
       const offers = yield* TransactionOffers;
 
       return snapshotTools.of({
-        get_team_snapshot: (input) => readSnapshot(agent.userId, input, queries, plans, offers),
+        get_team_snapshot: (input) =>
+          readSnapshot(agent.userId, input, queries, plans, offers).pipe(
+            Effect.filterOrFail(
+              (snapshot) =>
+                !EffectArray.some(
+                  snapshot.failures,
+                  (failure) => failure.code === "query.connection_not_ready",
+                ),
+              () => ({
+                code: "connection_not_ready",
+                message: providerSessionRefusal("reconnect-required"),
+              }),
+            ),
+          ),
       });
     }),
   );
