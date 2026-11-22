@@ -166,7 +166,6 @@ function setupConnectionList(
         disconnectingId={overrides.disconnectingId ?? (() => undefined)}
         isLoading={() => false}
         loadFailure={() => null}
-        reconnectingId={() => undefined}
         onDisconnect={() => undefined}
         onReconnect={() => undefined}
         onRefresh={() => Promise.resolve()}

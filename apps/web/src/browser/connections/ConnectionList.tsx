@@ -45,7 +45,6 @@ export function ConnectionList(props: ConnectionListProps): JSX.Element {
                   connection={connection}
                   disconnecting={props.disconnectingId() === connection.id}
                   leaving={props.departingId() === connection.id}
-                  reconnecting={props.reconnectingId() === connection.id}
                   onDisconnect={() => props.onDisconnect(connection)}
                   onReconnect={() => props.onReconnect(connection)}
                 />
@@ -64,7 +63,6 @@ type ConnectionListProps = {
   readonly loadFailure: Accessor<Error | null>;
   readonly departingId: Accessor<string | undefined>;
   readonly disconnectingId: Accessor<string | undefined>;
-  readonly reconnectingId: Accessor<string | undefined>;
   readonly onDisconnect: (connection: ConnectionView) => void;
   readonly onReconnect: (connection: ConnectionView) => void;
   readonly onRefresh: () => Promise<void>;

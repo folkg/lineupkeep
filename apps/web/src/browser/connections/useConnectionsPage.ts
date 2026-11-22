@@ -1,5 +1,6 @@
 import { EffectArray } from "@lineupkeep/collections";
 import { useMutation, useQuery } from "@tanstack/solid-query";
+import { useNavigate } from "@tanstack/solid-router";
 import { createSignal } from "solid-js";
 import type { Accessor } from "solid-js";
 
@@ -11,6 +12,7 @@ import type {
   ConnectionChangeView,
   ConnectionView,
 } from "#contracts/connections/connectionContract.ts";
+import { defaultProviderKey } from "#contracts/connections/providerLabels.ts";
 
 import { describeConnectionFailure } from "./connectionFailure";
 import { connectionMutations, storeRefreshedConnections } from "./connectionMutations";
@@ -19,6 +21,7 @@ import type { ConnectionRemote } from "./connectionRemote";
 
 export function useConnectionsPage(props: ConnectionsOptions): ConnectionsController {
   const connections = useQuery(() => props.connectionsQuery());
+  const navigate = useNavigate();
   const signIn = useSignInRecovery();
   const [feedback, setFeedback] = createSignal<ActionFeedbackState>();
   const [departingId, setDepartingId] = createSignal<string>();
@@ -58,6 +61,15 @@ export function useConnectionsPage(props: ConnectionsOptions): ConnectionsContro
       setFeedback(undefined);
       void disconnect.mutate({ id: connection.id });
     },
+    openSignIn: (connection: ConnectionView | undefined) => {
+      void navigate({
+        to: "/connections",
+        search:
+          connection === undefined
+            ? { connect: defaultProviderKey }
+            : { connect: connection.provider, connection: connection.id },
+      });
+    },
   };
 }
 
@@ -70,6 +82,7 @@ export type ConnectionsController = {
   readonly disconnectingId: Accessor<string | undefined>;
   readonly refresh: () => Promise<void>;
   readonly disconnectLinking: (connection: ConnectionView) => void;
+  readonly openSignIn: (connection: ConnectionView | undefined) => void;
 };
 
 type ConnectionsOptions = {

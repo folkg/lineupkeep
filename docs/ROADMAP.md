@@ -23,16 +23,16 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 | Phase 2 (stages 7–8) | Complete, deployed, hourly automation verified                                                    |
 | Lineup algorithm     | Custom solver live for all five owner teams                                                       |
 | Provider boundary    | Every provider request lives in `packages/yahoo-sdk`; the adapter is policy and port mapping only |
-| MCP surface          | 23 tools; four resource scopes plus `notes:write`; descriptions budgeted and tested               |
+| MCP surface          | 24 tools; four resource scopes plus `notes:write`; descriptions budgeted and tested               |
 | Client feedback      | Round 9 client notes closed on 5 November: structure, copy, local time, action states             |
-| Connections          | Hosted browser only; dedicated `/connections` page; local helper and device flow deleted          |
-| Interface            | Technical sheet, renamed to Lineupgrade; nav is Teams and Account; connecting has its own page    |
+| Connections          | Hosted browser only; Account owns the list; `/connections` is the sign-in page; old flows deleted |
+| Interface            | Technical sheet, renamed to Lineupgrade; nav is Teams and Account; sign-in has its own page       |
 | Deployment           | Cloud Run web, worker and hosted browser on GCP; CI on a clean Linux runner, container target     |
 | Publication gate     | Upstream security fix adopted; clean Linux CI and deployment acceptance remain                    |
 | Restore              | Drill passed 2026-10-29; RPO 15 minutes, RTO 4 hours, owner executes recovery (ruled 10 November) |
 | Dependencies         | Fresh audit and disposition in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md)                         |
 | Security             | Audit and disposition in [SECURITY-AUDIT.md](SECURITY-AUDIT.md); deferred work is group J         |
-| Checks               | 2101 node, 297 browser, 10 chromium; container end to end 61 passed, nothing skipped              |
+| Checks               | 2101 node, 299 browser, 10 chromium; container end to end 62 passed, nothing skipped              |
 
 ---
 
@@ -57,6 +57,10 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 - **Session cookie expiry is recorded at capture.** Names and expiry only, never values. The first
   sign-in with Yahoo's Stay signed in checked set `T` and `Y` to expire on 22 November 2027, about one
   year, against the usual two to three weeks.
+- **Connecting has its own page, and Account owns the list.** Account shows the connections and their
+  teams. Connect, Reconnect and Add a different account open `/connections` with a heading for that
+  sign-in only; the old bookmark returns to Account. The two connections to the same Yahoo account were
+  merged under the six-team connection: six teams, 3,465 runs, five plans, notes and automation kept.
 
 ### 13 November 2026
 

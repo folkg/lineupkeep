@@ -40,9 +40,7 @@ export function ConnectionCard(props: ConnectionCardProps): JSX.Element {
       </Stack>
       <Stack gap="md">
         <Show when={props.connection.status === "reconnect-required"}>
-          <Button state={props.reconnecting ? "working" : "idle"} onClick={props.onReconnect}>
-            Reconnect
-          </Button>
+          <Button onClick={props.onReconnect}>Reconnect</Button>
         </Show>
         <Show
           when={
@@ -110,7 +108,6 @@ type ConnectionCardProps = {
   readonly connection: ConnectionView;
   readonly disconnecting: boolean;
   readonly leaving: boolean;
-  readonly reconnecting: boolean;
   readonly onDisconnect: () => void;
   readonly onReconnect: () => void;
 };

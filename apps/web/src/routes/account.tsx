@@ -8,7 +8,6 @@ import {
   refreshConnectionLists,
 } from "#browser/connections/connectionQueries.ts";
 import { connectionRemote } from "#browser/connections/connectionRemote.ts";
-import { parseConnectionSearch } from "#browser/connections/connectionSearch.ts";
 import { ConnectionsSection } from "#browser/connections/ConnectionsSection.tsx";
 import { requireAuthenticatedSession } from "#browser/session/requireAuthenticatedSession.ts";
 import { sessionQueries } from "#browser/session/sessionQueries.ts";
@@ -21,7 +20,6 @@ import { teamQueries } from "#browser/teams/teamQueries.ts";
 
 export const Route = createFileRoute("/account")({
   ssr: true,
-  validateSearch: parseConnectionSearch,
   context: () => ({
     connectionsQuery: connectionQueries.list(connectionRemote),
     signInSessionsQuery: signInSessionsQueries.list(signInSessionsRemote),
@@ -41,13 +39,10 @@ export const Route = createFileRoute("/account")({
 
 function AccountRoute(): JSX.Element {
   const context = Route.useRouteContext();
-  const search = Route.useSearch();
   return (
     <AccountPage
       connections={
         <ConnectionsSection
-          connect={search().connect}
-          connection={search().connection}
           connectionsQuery={() => context().connectionsQuery}
           onRefresh={() =>
             refreshConnectionLists(context().queryClient).then(() =>

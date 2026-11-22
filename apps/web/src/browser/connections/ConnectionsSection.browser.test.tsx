@@ -22,6 +22,7 @@ import type {
 
 import { connectionQueries } from "./connectionQueries";
 import type { ConnectionRemote } from "./connectionRemote";
+import { parseConnectionSearch } from "./connectionSearch";
 import { ConnectionsSection } from "./ConnectionsSection";
 
 const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1_000).toISOString();
@@ -106,7 +107,7 @@ it("keeps the removed connection explanation off the connections section", async
   await expect
     .element(page.getByText("Yahoo is connected. Lineup checks use this connection."))
     .not.toBeInTheDocument();
-  await expect.element(page.getByRole("button", { name: "Add a different account" })).toBeVisible();
+  await expect.element(page.getByRole("link", { name: "Add a different account" })).toBeVisible();
   await expect
     .element(
       page.getByText(
@@ -114,7 +115,7 @@ it("keeps the removed connection explanation off the connections section", async
       ),
     )
     .not.toBeInTheDocument();
-  await expect.element(page.getByRole("button", { name: "Connect Yahoo" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("link", { name: "Connect Yahoo" })).not.toBeInTheDocument();
 });
 
 it("shows the hairline, disables the control, and leaves the row after the server confirms", async () => {
@@ -144,98 +145,65 @@ it("shows the hairline, disables the control, and leaves the row after the serve
     .toBeVisible();
 });
 
-it("starts a hosted sign-in for a connection that needs to reconnect", async () => {
-  await page.viewport(1440, 900);
-  const hostedInputs: Array<Parameters<ConnectionRemote["startHosted"]>[0]> = [];
-  using _section = setupConnectionsSection([connected, reconnectable], {
-    startHosted: (input) => {
-      hostedInputs.push(input);
-      return new Promise(() => undefined);
-    },
+it("sends the primary reconnect to the dedicated sign-in page", async () => {
+  const section = setupConnectionsSection([connected, reconnectable]);
+  using _section = section;
+
+  await page.getByRole("link", { name: "Reconnect Yahoo" }).click();
+
+  await expect.poll(() => section.router.state.location.pathname).toBe("/connections");
+  expect(section.router.state.location.search).toEqual({
+    connect: "yahoo",
+    connection: reconnectable.id,
   });
+});
+
+it("sends the row reconnect to the dedicated sign-in page", async () => {
+  const section = setupConnectionsSection([connected, reconnectable]);
+  using _section = section;
 
   await page.getByRole("button", { name: "Reconnect" }).click();
 
-  await expect
-    .poll(() => hostedInputs)
-    .toEqual([{ provider: "yahoo", connectionId: reconnectable.id, viewport: "desktop" }]);
-  const reconnect = page.getByRole("button", { name: "Reconnect" });
-  await expect.element(reconnect).toHaveAttribute("aria-busy", "true");
-  await expect.element(reconnect).toBeDisabled();
-  await expect.element(page.getByText("Opening sign-in…")).not.toBeInTheDocument();
-});
-
-it("puts the reconnect action before connecting another account", async () => {
-  await page.viewport(1440, 900);
-  const hostedInputs: Array<Parameters<ConnectionRemote["startHosted"]>[0]> = [];
-  using _section = setupConnectionsSection([connected, reconnectable], {
-    startHosted: (input) => {
-      hostedInputs.push(input);
-      return new Promise(() => undefined);
-    },
+  await expect.poll(() => section.router.state.location.pathname).toBe("/connections");
+  expect(section.router.state.location.search).toEqual({
+    connect: "yahoo",
+    connection: reconnectable.id,
   });
-
-  await page.getByRole("button", { name: "Reconnect Yahoo" }).click();
-
-  await expect
-    .poll(() => hostedInputs)
-    .toEqual([{ provider: "yahoo", connectionId: reconnectable.id, viewport: "desktop" }]);
 });
 
-it("starts the sign-in from an agent link", async () => {
-  await page.viewport(1440, 900);
-  const hostedInputs: Array<Parameters<ConnectionRemote["startHosted"]>[0]> = [];
-  using _section = setupConnectionsSection(
-    [],
-    {
-      startHosted: (input) => {
-        hostedInputs.push(input);
-        return new Promise(() => undefined);
-      },
-    },
-    { connect: "yahoo", connection: reconnectable.id },
-  );
+it("sends a new connection to the dedicated sign-in page", async () => {
+  const section = setupConnectionsSection([]);
+  using _section = section;
 
-  await expect
-    .poll(() => hostedInputs)
-    .toEqual([{ provider: "yahoo", connectionId: reconnectable.id, viewport: "desktop" }]);
+  await page.getByRole("link", { name: "Connect Yahoo" }).click();
+
+  await expect.poll(() => section.router.state.location.pathname).toBe("/connections");
+  expect(section.router.state.location.search).toEqual({ connect: "yahoo" });
 });
 
-it("starts a phone viewport profile from a phone-sized client", async () => {
-  await page.viewport(390, 844);
-  const hostedInputs: Array<Parameters<ConnectionRemote["startHosted"]>[0]> = [];
-  using _section = setupConnectionsSection([], {
-    startHosted: (input) => {
-      hostedInputs.push(input);
-      return new Promise(() => undefined);
-    },
-  });
+it("sends adding another account to the dedicated sign-in page", async () => {
+  const section = setupConnectionsSection([connected]);
+  using _section = section;
 
-  await page.getByRole("button", { name: "Connect Yahoo" }).click();
+  await page.getByRole("link", { name: "Add a different account" }).click();
 
-  await expect.poll(() => hostedInputs).toEqual([{ provider: "yahoo", viewport: "phone" }]);
+  await expect.poll(() => section.router.state.location.pathname).toBe("/connections");
+  expect(section.router.state.location.search).toEqual({ connect: "yahoo" });
 });
 
-it("starts a desktop viewport profile from a wide client", async () => {
-  await page.viewport(1440, 900);
-  const hostedInputs: Array<Parameters<ConnectionRemote["startHosted"]>[0]> = [];
-  using _section = setupConnectionsSection([], {
-    startHosted: (input) => {
-      hostedInputs.push(input);
-      return new Promise(() => undefined);
-    },
-  });
-
-  await page.getByRole("button", { name: "Connect Yahoo" }).click();
-
-  await expect.poll(() => hostedInputs).toEqual([{ provider: "yahoo", viewport: "desktop" }]);
-});
+type SectionRouter = {
+  readonly state: {
+    readonly location: {
+      readonly pathname: string;
+      readonly search: unknown;
+    };
+  };
+};
 
 function setupConnectionsSection(
   connections: ReadonlyArray<ConnectionView>,
-  overrides: Partial<Pick<ConnectionRemote, "startHosted" | "disconnect">> = {},
-  props: { readonly connect?: string; readonly connection?: string } = {},
-): { [Symbol.dispose](): void } {
+  overrides: Partial<Pick<ConnectionRemote, "disconnect">> = {},
+): { router: SectionRouter; [Symbol.dispose](): void } {
   const queryClient = createQueryClient();
   const remote: ConnectionRemote = {
     list: () => Promise.resolve(connections),
@@ -246,8 +214,7 @@ function setupConnectionsSection(
           connection: connections[0] ?? connected,
           connections,
         })),
-    startHosted:
-      overrides.startHosted ?? (() => Promise.reject(new Error("Unexpected hosted sign-in start"))),
+    startHosted: () => Promise.reject(new Error("Unexpected hosted sign-in start")),
     cancelHosted: () => Promise.reject(new Error("Unexpected hosted sign-in cancellation")),
   };
   const connectionsQuery = connectionQueries.list(remote);
@@ -267,13 +234,17 @@ function setupConnectionsSection(
     path: "/account",
     component: () => (
       <ConnectionsSection
-        connect={props.connect}
-        connection={props.connection}
         connectionsQuery={() => connectionsQuery}
         onRefresh={() => Promise.resolve()}
         remote={remote}
       />
     ),
+  });
+  const connectionsRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/connections",
+    validateSearch: parseConnectionSearch,
+    component: () => <p>Connect</p>,
   });
   const teamsRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -283,12 +254,13 @@ function setupConnectionsSection(
   const router = createRouter({
     context: { queryClient, sessionRemote },
     history: createMemoryHistory({ initialEntries: ["/account"] }),
-    routeTree: rootRoute.addChildren([accountRoute, teamsRoute]),
+    routeTree: rootRoute.addChildren([accountRoute, connectionsRoute, teamsRoute]),
   });
   const host = document.body.appendChild(document.createElement("div"));
   const dispose = render(() => <RouterProvider router={router} />, host);
 
   return {
+    router,
     [Symbol.dispose](): void {
       dispose();
       queryClient.clear();

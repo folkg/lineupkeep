@@ -11,8 +11,10 @@ test("signs in through the hosted browser or reports why it is unavailable", asy
   page.on("websocket", (socket) => sockets.push(socket.url()));
 
   await signUp(page);
-  await expect(page.getByRole("button", { name: "Connect Yahoo" })).toBeVisible();
-  await page.getByRole("button", { name: "Connect Yahoo" }).click();
+  await expect(page.getByRole("link", { name: "Connect Yahoo" })).toBeVisible();
+  await page.getByRole("link", { name: "Connect Yahoo" }).click();
+  await expect(page).toHaveURL(/\/connections\?connect=yahoo$/u);
+  await expect(page.getByRole("heading", { name: "Connect Yahoo", exact: true })).toBeVisible();
 
   if (!hostedBrowserAvailable) {
     await expect(

@@ -49,15 +49,22 @@ test("returns a signed-in visitor to their teams from the landing page", async (
   await expect(page.getByText("Open development shell")).toHaveCount(0);
 });
 
-test("opens connections on its own page", async ({ page }) => {
+test("sends an old connections bookmark to the account page", async ({ page }) => {
   await signUp(page);
   await page.goto("/connections");
 
-  await expect(page).toHaveURL("/connections");
-  await expect(
-    page.getByRole("heading", { name: "Connect an account", exact: true }),
-  ).toBeVisible();
+  await expect(page).toHaveURL("/account");
+  await expect(page.getByRole("heading", { name: "Account", exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "Connections" })).toBeVisible();
+});
+
+test("opens a focused sign-in page for a connection link", async ({ page }) => {
+  await signUp(page);
+  await page.goto("/connections?connect=yahoo");
+
+  await expect(page).toHaveURL("/connections?connect=yahoo");
+  await expect(page.getByRole("heading", { name: "Connect Yahoo", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Back to account" })).toBeVisible();
 });
 
 test("keeps the signed-in navigation on its own row on a phone", async ({ page }) => {

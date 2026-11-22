@@ -19,7 +19,7 @@ test("shows a linked connection on the account page with its team count", async 
   await expect(
     page.getByText("Yahoo is connected. Lineup checks use this connection."),
   ).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Connect Yahoo" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Add a different account" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Connections" })).toBeVisible();
   await captureCheckpoint(page, info, "connections-identified");
 });
