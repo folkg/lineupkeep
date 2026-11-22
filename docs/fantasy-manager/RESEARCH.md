@@ -2452,3 +2452,21 @@ that does not mention him. That is why this move failed.
 
 This probe did not read the roster back, because the refusal itself establishes that nothing was
 applied. It made no second submission, and no other league or team was touched.
+
+## Live session renewal and the trusted-device test (2026-11-22)
+
+One stored production credential was decrypted locally to inspect Yahoo's own session behaviour. The
+`T` and `Y` cookies were valid. A read with both answered 200 and set `SPTB` with a 30-day expiry; a
+read with `T`, `Y`, and `SPTB` answered 200 and set nothing new; `SPTB` alone answered 401. The
+football page also set `SPT` with roughly an eight-day expiry. Nothing renewed `T` or `Y`, and active
+use did not extend them. Yahoo has no refresh token for this sign-in, so a new sign-in is the only
+renewal.
+
+The hosted browser then ran the owner-approved trusted-device test during a successful sign-in at
+20:35 UTC. It collected the non-session Yahoo cookies for the active host in memory, opened a second
+fresh browser context, added them, and navigated to the same page. The second browser was still signed
+out and Yahoo issued no `T` or `Y` (`signedIn: false`, `issuedSession: false`). The collected set held
+19 cookies, including `A1`, `A3`, `A1S`, `ySID`, `FS`, `PH`, `F`, `OTH`, and `OTHD`; none substituted
+for the session pair. The test recorded cookie names, domains, and expiry only, and saved no cookie
+values. Copying non-session cookies therefore does not restore the sign-in, and the product will not
+store them.
