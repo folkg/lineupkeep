@@ -19,12 +19,22 @@ import { Effect, Layer, Schema, DateTime, Duration, Cause, Exit } from "effect";
 
 import type { ConnectionMutationError } from "#contracts/connections/connectionContract.ts";
 
-import { authenticatedUseCase } from "./backendEntry.ts";
+import { authenticatedUseCase, correlateResponse } from "./backendEntry.ts";
 import {
   ConnectionInputInvalid,
   mapConnectionError,
   toConnectionView,
 } from "./connections/connectionPresentation";
+
+it("keeps rendered documents out of browser caches", () => {
+  const response = correlateResponse(
+    new Response("<p>Teams</p>", { headers: { "content-type": "text/html; charset=utf-8" } }),
+    "request-1",
+  );
+
+  assert.strictEqual(response.headers.get("cache-control"), "no-store");
+  assert.strictEqual(response.headers.get("x-request-id"), "request-1");
+});
 
 it.effect("rejects anonymous invalid input before reporting validation failure", () =>
   Effect.gen(function* () {

@@ -100,6 +100,7 @@ type FakeProviderState = {
   readonly teamCards: ReadonlyArray<ProviderTeamCard>;
   readonly requestFailure: FakeRequestFailure | undefined;
   readonly discoveryGate: Option.Option<FakeGate>;
+  readonly teamCardsGate: Option.Option<FakeGate>;
   readonly rosterReadGate: Option.Option<FakeGate>;
   readonly league: ProviderLeagueSettings | undefined;
   readonly leagueFailure: ProviderResponseInvalid | undefined;
@@ -174,6 +175,8 @@ export type FakeProviderWorldShape = {
   readonly failRequests: (failure: FakeRequestFailure | undefined) => Effect.Effect<void>;
   readonly blockDiscovery: Effect.Effect<FakeGate>;
   readonly unblockDiscovery: Effect.Effect<void>;
+  readonly blockTeamCards: Effect.Effect<FakeGate>;
+  readonly unblockTeamCards: Effect.Effect<void>;
   readonly blockRosterRead: Effect.Effect<FakeGate>;
   readonly unblockRosterRead: Effect.Effect<void>;
   readonly setLeague: (league: ProviderLeagueSettings | undefined) => Effect.Effect<void>;
@@ -283,6 +286,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         teamCards: [],
         requestFailure: undefined,
         discoveryGate: Option.none(),
+        teamCardsGate: Option.none(),
         rosterReadGate: Option.none(),
         league: undefined,
         leagueFailure: undefined,
@@ -367,6 +371,15 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
           return gate;
         }),
         unblockDiscovery: modify((current) => ({ ...current, discoveryGate: Option.none() })),
+        blockTeamCards: Effect.gen(function* () {
+          const gate: FakeGate = {
+            started: yield* Deferred.make<void>(),
+            release: yield* Deferred.make<void>(),
+          };
+          yield* modify((current) => ({ ...current, teamCardsGate: Option.some(gate) }));
+          return gate;
+        }),
+        unblockTeamCards: modify((current) => ({ ...current, teamCardsGate: Option.none() })),
         blockRosterRead: Effect.gen(function* () {
           const gate: FakeGate = {
             started: yield* Deferred.make<void>(),
@@ -557,6 +570,11 @@ const providerFake = Effect.gen(function* () {
             : error,
         ),
       );
+      const gate = Option.getOrUndefined(current.teamCardsGate);
+      if (gate !== undefined) {
+        yield* Deferred.succeed(gate.started, undefined);
+        yield* Deferred.await(gate.release);
+      }
       return current.teamCards;
     }),
     readGamesPlayed: Effect.fn("FakeProvider.readGamesPlayed")(function* (input) {

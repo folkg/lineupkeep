@@ -1,4 +1,4 @@
-import { Array, DateTime, Effect, Layer, Schema } from "effect";
+import { Array, DateTime, Duration, Effect, Layer, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { SecureRandom } from "effect/crypto";
 
@@ -306,7 +306,9 @@ export const ConnectionsLive = Layer.effect(
           envelope: credential.envelope,
         });
         const provider = yield* registry.requireProvider(credential.provider);
-        const cards = yield* provider.readTeamCards({ provider: credential.provider, session });
+        const cards = yield* provider
+          .readTeamCards({ provider: credential.provider, session })
+          .pipe(Effect.timeout(Duration.seconds(8)));
         return { connectionId: credential.connectionId, cards };
       }).pipe(
         Effect.mapError(() => ({

@@ -32,11 +32,20 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 | Restore              | Drill passed 2026-10-29; RPO 15 minutes, RTO 4 hours, owner executes recovery (ruled 10 November) |
 | Dependencies         | Fresh audit and disposition in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md)                         |
 | Security             | Audit and disposition in [SECURITY-AUDIT.md](SECURITY-AUDIT.md); deferred work is group J         |
-| Checks               | 2105 node, 299 browser, 10 chromium; container end to end 62 passed, nothing skipped              |
+| Checks               | 2107 node, 299 browser, 10 chromium; container end to end 62 passed, nothing skipped              |
 
 ---
 
 ## Ship log
+
+### 23 November 2026
+
+- **The Teams page stops waiting on a slow provider.** Season facts are a live provider read on the
+  Teams route. The read now stops after eight seconds and reports that facts could not be loaded, so a
+  stalled provider cannot leave every card in a loading state for the provider SDK's 30 second deadline.
+  Rendered documents are also marked `no-store`, so a tab cannot keep old markup across a deploy. The
+  audit, measurements and what the tests missed are in the
+  [Teams route post mortem](post-mortems/2026-11-23-teams-route.md).
 
 ### 22 November 2026
 

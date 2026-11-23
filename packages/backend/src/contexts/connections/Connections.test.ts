@@ -2,7 +2,17 @@ import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { eq } from "drizzle-orm";
-import { Array, DateTime, Effect, Layer, Redacted, Schema } from "effect";
+import {
+  Array,
+  DateTime,
+  Deferred,
+  Duration,
+  Effect,
+  Fiber,
+  Layer,
+  Redacted,
+  Schema,
+} from "effect";
 import { SecureRandom } from "effect/crypto";
 import { TestClock } from "effect/testing";
 
@@ -146,6 +156,27 @@ it.effect("reads cards once per ready connection and isolates a failed connectio
     assert.strictEqual(reads, 2);
     const foreign = yield* connections.readTeamCards(decodeUserId("another-owner"));
     assert.deepStrictEqual(foreign, { cards: [], failures: [] });
+  }).pipe(layerTools.provide(ConnectionsTestLayer)),
+);
+
+it.effect("stops waiting for season facts after eight seconds", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const fake = yield* FakeProviderWorld;
+    yield* connections.link(owner, [linkInput]);
+    const gate = yield* fake.blockTeamCards;
+    const reading = yield* Effect.forkChild(connections.readTeamCards(owner));
+    yield* Deferred.await(gate.started);
+    yield* TestClock.adjust(Duration.seconds(9));
+    const result = yield* Fiber.join(reading);
+
+    assert.deepStrictEqual(result.cards, []);
+    assert.strictEqual(result.failures.length, 1);
+    assert.strictEqual(
+      result.failures[0]?.reason,
+      "Season facts could not be loaded from the provider.",
+    );
+    yield* fake.unblockTeamCards;
   }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 

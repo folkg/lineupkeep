@@ -6,6 +6,7 @@ import type { SignInSessionId } from "@lineupkeep/backend/auth/SignInSessions";
 import type { UserId } from "@lineupkeep/backend/auth/User";
 import type { BackendOperation, BackendServices } from "@lineupkeep/backend/runtime/BackendRuntime";
 import type { RequestContext } from "@lineupkeep/backend/runtime/RequestContext";
+import { EffectString } from "@lineupkeep/collections";
 import { Effect, Schema } from "effect";
 import { dual } from "effect/Function";
 
@@ -204,6 +205,9 @@ export const correlateResponse: {
 } = dual(2, (response: Response, requestId: string): Response => {
   const headers = new Headers(response.headers);
   headers.set("x-request-id", requestId);
+  if (EffectString.includes(headers.get("content-type") ?? "", "text/html")) {
+    headers.set("cache-control", "no-store");
+  }
 
   return new Response(response.body, {
     headers,
