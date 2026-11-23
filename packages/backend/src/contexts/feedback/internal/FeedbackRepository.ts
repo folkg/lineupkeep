@@ -1,5 +1,5 @@
 import { EffectString } from "@lineupkeep/collections";
-import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lt, lte } from "drizzle-orm";
 import { Array, Context, DateTime, Effect, Layer, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { Order as EffectOrder } from "effect";
@@ -142,6 +142,7 @@ export class FeedbackRepository extends Context.Service<FeedbackRepository>()(
               input.filter.since === undefined
                 ? undefined
                 : gte(feedback.createdAt, DateTime.toDateUtc(input.filter.since)),
+              input.filter.before === undefined ? undefined : lt(feedback.id, input.filter.before),
             ),
           )
           .orderBy(desc(feedback.createdAt), desc(feedback.id))

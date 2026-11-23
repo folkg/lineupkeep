@@ -4,6 +4,7 @@ import {
   Feedback,
   FeedbackContentInvalid,
   FeedbackFilter,
+  FeedbackId,
   FeedbackRateLimited,
   FeedbackReport,
   FeedbackSubmission,
@@ -28,11 +29,16 @@ const ListFeedbackInput = Schema.Struct({
   kinds: FeedbackFilter.fields.kinds,
   since: FeedbackFilter.fields.since,
   limit: FeedbackFilter.fields.limit,
+  before: FeedbackFilter.fields.before,
 });
 
 const ListFeedbackResult = Schema.Struct({
   feedback: Schema.Array(FeedbackReport),
-  page: Schema.Struct({ returned: Schema.Int, limit: Schema.Int }),
+  page: Schema.Struct({
+    returned: Schema.Int,
+    limit: Schema.Int,
+    next: Schema.optional(FeedbackId),
+  }),
 });
 type ListFeedbackResult = typeof ListFeedbackResult.Type;
 
@@ -51,8 +57,7 @@ export const feedbackTools = Toolkit.make(
     .annotate(Tool.Idempotent, false)
     .annotate(Tool.OpenWorld, false),
   Tool.make("list_feedback", {
-    description:
-      "Your account's feedback reports, newest first, with status. Each record carries its full title and body.",
+    description: "Your reports, newest first, with status and body. `page.next` continues.",
     parameters: ListFeedbackInput,
     success: Schema.toCodecJson(ListFeedbackResult),
     failure: ToolFailure,
@@ -87,14 +92,23 @@ export function feedbackToolHandlers(
             }),
             mapFailure,
           ),
-        list_feedback: (filter) =>
-          feedback.list(agent.userId, { ...filter, limit: filter.limit ?? 20 }).pipe(
-            Effect.map((reports): ListFeedbackResult => ({
-              feedback: reports,
-              page: { returned: reports.length, limit: filter.limit ?? 20 },
-            })),
+        list_feedback: (filter) => {
+          const limit = filter.limit ?? 20;
+          return feedback.list(agent.userId, { ...filter, limit }).pipe(
+            Effect.map((reports): ListFeedbackResult => {
+              const last = reports.at(-1);
+              return {
+                feedback: reports,
+                page: {
+                  returned: reports.length,
+                  limit,
+                  ...(reports.length === limit && last !== undefined ? { next: last.id } : {}),
+                },
+              };
+            }),
             mapFailure,
-          ),
+          );
+        },
       });
     }),
   );

@@ -108,6 +108,7 @@ export const FeedbackFilter = Schema.Struct({
   limit: Schema.optional(
     Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(50)),
   ),
+  before: Schema.optional(FeedbackId),
 });
 export type FeedbackFilter = typeof FeedbackFilter.Type;
 

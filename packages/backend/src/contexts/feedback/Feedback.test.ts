@@ -112,6 +112,28 @@ it.effect("returns only the owner's reports, newest first", () =>
   }).pipe(layerTools.provide(FeedbackTestLayer)),
 );
 
+it.effect("pages older reports from a before cursor", () =>
+  Effect.gen(function* () {
+    const feedback = yield* Feedback;
+    for (const title of ["First report", "Second report", "Third report"]) {
+      yield* feedback.submit(user, { kind: "user", reference: "web" }, [submission({ title })]);
+      yield* TestClock.adjust(1_000);
+    }
+
+    const first = yield* feedback.list(user, { limit: 2 });
+    const older = yield* feedback.list(user, { limit: 2, before: first.at(-1)?.id });
+
+    assert.deepStrictEqual(
+      EffectArray.map(first, (report) => report.title),
+      ["Third report", "Second report"],
+    );
+    assert.deepStrictEqual(
+      EffectArray.map(older, (report) => report.title),
+      ["First report"],
+    );
+  }).pipe(layerTools.provide(FeedbackTestLayer)),
+);
+
 it.effect("filters the owner's reports by status, kind, and start time", () =>
   Effect.gen(function* () {
     const feedback = yield* Feedback;

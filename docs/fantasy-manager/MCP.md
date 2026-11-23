@@ -59,7 +59,7 @@ This tool changes only durable Lineupgrade automation state; it never contacts t
 
 ## Feedback behavior
 
-Feedback is one owner-scoped record for a bug, data issue, friction report, or wishlist item. `submit_feedback` records the acting account's report and returns its id and `open` status; `list_feedback` returns that account's reports in newest-first order with optional status, kind, and start-time filters.
+Feedback is one owner-scoped record for a bug, data issue, friction report, or wishlist item. `submit_feedback` records the acting account's report and returns its id and `open` status; `list_feedback` returns that account's reports in newest-first order with optional status, kind, and start-time filters. It pages older reports through `page.next`, passed back as `before`.
 
 Filing a report and reading back what happened to it both need only `fantasy:read`, the scope every client holds; a submitter could otherwise never confirm what happened to what it filed, which is the channel's whole purpose. Ownership is the boundary: every query is filtered to the acting account, so a submitter sees their own items and never anyone else's, and a foreign report id is `not_found`, not a forbidden-with-details response. There is no agent-wide, operator, or support queue.
 
