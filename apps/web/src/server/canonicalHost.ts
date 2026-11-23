@@ -7,7 +7,7 @@ export const canonicalHostRedirect: {
 } = dual(2, (request: Request, canonicalUrl: string): Response | undefined => {
   const url = new URL(request.url);
   const canonical = new URL(canonicalUrl);
-  if (url.origin === canonical.origin) {
+  if (url.host === canonical.host) {
     return undefined;
   }
   if (!EffectString.endsWith(url.hostname, ".run.app") || url.pathname === "/healthz") {

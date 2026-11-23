@@ -23,6 +23,9 @@ it("leaves the current address and local requests alone", () => {
   assert.isUndefined(
     canonicalHostRedirect(new Request("https://lineupgrade.example.test/teams"), canonical),
   );
+  assert.isUndefined(
+    canonicalHostRedirect(new Request("http://lineupgrade.example.test/teams"), canonical),
+  );
   assert.isUndefined(canonicalHostRedirect(new Request("http://127.0.0.1:3000/teams"), canonical));
 });
 
