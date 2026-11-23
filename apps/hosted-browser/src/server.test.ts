@@ -152,7 +152,7 @@ it("reports a refused identifier when the provider page shows its refusal", asyn
     await rm(profileRoot, { recursive: true, force: true });
   }
 }, 60_000);
-it("refuses non-public destinations, names them, and records them in the outcome", async () => {
+it("refuses non-public destinations, records all, and reports only the active page's host", async () => {
   let blockedRequests = 0;
   const blocked = await startServer((_request, response) => {
     blockedRequests++;
@@ -189,7 +189,6 @@ it("refuses non-public destinations, names them, and records them in the outcome
     const client = new WebSocket(`ws://127.0.0.1:${port}/session`);
     const clientClosed = closed(client);
     const waiting = Promise.withResolvers<void>();
-    const refusals = Promise.withResolvers<Array<{ host: string; reason: string }>>();
     const seen: Array<{ host: string; reason: string }> = [];
     client.on("message", (data, isBinary) => {
       if (isBinary) {
@@ -201,9 +200,6 @@ it("refuses non-public destinations, names them, and records them in the outcome
       }
       if (message?._tag === "Refused") {
         seen.push({ host: message.host, reason: message.reason });
-        if (seen.length === 3) {
-          refusals.resolve(seen);
-        }
       }
     });
     await opened(client);
@@ -217,14 +213,8 @@ it("refuses non-public destinations, names them, and records them in the outcome
       }),
     );
     await waiting.promise;
-    const refused = await refusals.promise;
-    expect(refused).toEqual(
-      expect.arrayContaining([
-        { host: "169.254.169.254", reason: "non_public_address" },
-        { host: "127.0.0.1", reason: "non_public_address" },
-        { host: "localhost", reason: "non_public_address" },
-      ]),
-    );
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(seen).toEqual([{ host: "127.0.0.1", reason: "non_public_address" }]);
     expect(blockedRequests).toBe(0);
     client.close(1000, "Test finished");
     expect(await clientClosed).toBe(1000);

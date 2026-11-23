@@ -70,6 +70,9 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 - **The feedback queue is triaged.** The Nov 22 rollup listed 95 open reports mixing fixed, obsolete and
   live items. Triage closed 72 as fixed or superseded, kept 29 live reports as acknowledged backlog, and
   left zero open. `list_feedback` now takes a `before` cursor and returns `page.next`.
+- **Only a refused page that affects the sign-in is shown.** The private browser still records every
+  blocked address, but a refused third-party ad or tracker no longer raises a banner under the browser.
+  A refused top-level provider page still does.
 
 ### 13 November 2026
 

@@ -246,9 +246,11 @@ export function createHostedBrowserService(
           },
           onStatus: (status) => send({ _tag: "Status", status }),
           onAcceptsInput: () => send({ _tag: "AcceptsInput" }),
-          onRefused: (refusal) => {
+          onRefused: (refusal, visible) => {
             refused.push(refusal);
-            send({ _tag: "Refused", host: refusal.host, reason: refusal.reason });
+            if (visible) {
+              send({ _tag: "Refused", host: refusal.host, reason: refusal.reason });
+            }
           },
           onCaptured: (cookieHeader) => {
             send({ _tag: "Captured", session: cookieHeader });

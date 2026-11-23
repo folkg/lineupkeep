@@ -42,7 +42,7 @@ export type HostedBrowserEvents = {
   readonly onFrame: (frame: Uint8Array) => void;
   readonly onStatus: (status: HostedBrowserStatus) => void;
   readonly onAcceptsInput: () => void;
-  readonly onRefused: (refusal: EgressRefusal) => void;
+  readonly onRefused: (refusal: EgressRefusal, visible: boolean) => void;
   readonly onCaptured: (cookieHeader: string) => void;
   readonly onSessionCookies?: (cookies: ReadonlyArray<HostedBrowserSessionCookie>) => void;
   readonly onTrustedDeviceProbe?: (result: TrustedDeviceProbeResult) => void;
@@ -123,7 +123,10 @@ async function openBrowser(
       fixtureOrigins: session.fixtureOrigin === undefined ? [] : [session.fixtureOrigin],
       onRefused: (refusal) => {
         if (!closed) {
-          events.onRefused(refusal);
+          events.onRefused(
+            refusal,
+            refusalAffectsActivePage(active?.url(), refusal.host, session.loginUrl),
+          );
         }
       },
     });
@@ -435,6 +438,28 @@ async function openBrowser(
     },
     close,
   };
+}
+
+function refusalAffectsActivePage(
+  pageUrl: string | undefined,
+  host: string,
+  loginUrl: string,
+): boolean {
+  if (pageUrl === undefined || pageUrl === "" || pageUrl === "about:blank") {
+    try {
+      return new URL(loginUrl).hostname === host;
+    } catch {
+      return true;
+    }
+  }
+  try {
+    const activeHost = new URL(pageUrl).hostname;
+    return (
+      activeHost === host || activeHost.endsWith(`.${host}`) || host.endsWith(`.${activeHost}`)
+    );
+  } catch {
+    return true;
+  }
 }
 
 function queueStaySignedIn(page: Page, provider: string): Promise<void> {
