@@ -9,12 +9,7 @@ export function groupRuns(runs: ReadonlyArray<LineupRunView>): ReadonlyArray<Run
   let quiet: Array<LineupRunView> = [];
 
   const flushQuiet = (): void => {
-    if (quiet.length === 1) {
-      const [run] = quiet;
-      if (run !== undefined) {
-        entries.push({ type: "run", run });
-      }
-    } else if (quiet.length > 1) {
+    if (quiet.length > 0) {
       entries.push({ type: "quiet", runs: quiet });
     }
     quiet = [];
@@ -38,9 +33,9 @@ function madeNoChange(run: LineupRunView): boolean {
   }
   switch (run.outcome.kind) {
     case "no_op":
+      return true;
     case "skipped":
     case "superseded":
-      return true;
     case "changed":
     case "blocked":
     case "failed":

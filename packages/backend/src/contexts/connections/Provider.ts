@@ -57,6 +57,25 @@ export const ProviderTeam = Schema.Struct({
 });
 export type ProviderTeam = typeof ProviderTeam.Type;
 
+export type ProviderTeamCardMatchup = {
+  readonly week: number;
+  readonly opponent: string;
+  readonly points: number | null;
+  readonly opponentPoints: number | null;
+  readonly projectedPoints: number | null;
+  readonly opponentProjectedPoints: number | null;
+  readonly remainingGames: number | undefined;
+  readonly opponentRemainingGames: number | undefined;
+  readonly categories: ReadonlyArray<{
+    readonly statId: number;
+    readonly name: string;
+    readonly own: number | null;
+    readonly opponent: number | null;
+    readonly informational: boolean;
+    readonly result: "win" | "loss" | "tie" | undefined;
+  }>;
+};
+
 export type ProviderTeamCard = ProviderTeam & {
   readonly seasonOver: boolean | undefined;
   readonly format: LeagueFormat | "points";
@@ -71,6 +90,7 @@ export type ProviderTeamCard = ProviderTeam & {
   readonly maxGamesPlayed: number | undefined;
   readonly maxInningsPitched: number | undefined;
   readonly standing: ProviderStanding | undefined;
+  readonly matchup?: ProviderTeamCardMatchup;
 };
 
 export const ProviderFantasyDay = Schema.Struct({

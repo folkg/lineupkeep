@@ -253,13 +253,13 @@ it.effect("publishes one league name for every team that shares the aggregate le
   }).pipe(layerTools.provide(yahooLayer(internet)));
 });
 
-it.effect("reads cards for every discovered team in one upstream request", () => {
+it.effect("reads cards for every discovered team and each league matchup", () => {
   const internet = recordingInternet(() => jsonResponse(yahooDiscoverWithTwoFootballTeams));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
     const cards = yield* provider.readTeamCards(sessionInput);
     assert.strictEqual(cards.length, 3);
-    assert.strictEqual(internet.calls.length, 1);
+    assert.strictEqual(internet.calls.length, 3);
     assert.strictEqual(cards[0]?.providerTeamKey, "466.l.4000.t.1");
     assert.strictEqual(cards[0]?.scoringType, "head");
     assert.strictEqual(cards[0]?.format, "head_to_head_points");
@@ -273,7 +273,7 @@ it.effect("keeps the provider's head-to-head points label", () => {
     const cards = yield* provider.readTeamCards(sessionInput);
     assert.strictEqual(cards[0]?.format, "head_to_head_points");
     assert.strictEqual(cards[0]?.scoringLabel, "H2H points");
-    assert.strictEqual(internet.calls.length, 1);
+    assert.strictEqual(internet.calls.length, 2);
   }).pipe(layerTools.provide(yahooLayer(internet)));
 });
 

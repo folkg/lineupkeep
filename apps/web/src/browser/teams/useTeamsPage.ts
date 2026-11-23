@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "@tanstack/solid-query";
 import { createEffect, createOptimisticStore, createSignal, onSettled, untrack } from "solid-js";
 import type { Accessor } from "solid-js";
 
+import { readCachedTeamCards, storeCachedTeamCards } from "#browser/query/teamCardCache.ts";
 import { readCachedTeamHeaders, storeCachedTeamHeaders } from "#browser/query/teamHeaderCache.ts";
 import type { CachedTeamHeader } from "#browser/query/teamHeaderCache.ts";
 import { useSignInRecovery } from "#browser/session/signInRecovery.ts";
@@ -40,8 +41,9 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
     [],
     { key: null },
   );
+  const cachedCards = viewerId === undefined ? [] : readCachedTeamCards(viewerId);
   const facts = useQuery(() => ({
-    ...teamQueries.cards(props.remote()),
+    ...teamQueries.cards(props.remote(), cachedCards),
     enabled: props.includeCards !== false && !isServer && !query.isPending && teamList.length > 0,
   }));
 
@@ -52,6 +54,15 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
         return;
       }
       storeCachedTeamHeaders(viewerId, EffectArray.map(teams, teamHeader));
+    },
+  );
+  createEffect(
+    () => (facts.isSuccess ? facts.data : undefined),
+    (cards) => {
+      if (viewerId === undefined || cards === undefined) {
+        return;
+      }
+      storeCachedTeamCards(viewerId, cards);
     },
   );
 
@@ -87,7 +98,7 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
     teams: () => teamList,
     cardFacts: () => facts.data,
     cardFactsFailure: () => facts.isError,
-    cardFactsLoading: () => isServer || facts.isFetching,
+    cardFactsLoading: () => isServer || (facts.isFetching && facts.data.length === 0),
     cachedHeaders,
     isLoading: () => query.isPending,
     loadFailure: () => query.error,

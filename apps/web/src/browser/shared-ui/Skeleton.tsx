@@ -83,6 +83,16 @@ export function TransactionsSkeleton(): JSX.Element {
   );
 }
 
+export function SummaryLoadingRows(props: { readonly count: number }): JSX.Element {
+  return (
+    <div aria-hidden="true" class="grid gap-1">
+      <For each={Array.from({ length: props.count })}>
+        {() => <Skeleton class="h-5 w-2/3 max-w-full" />}
+      </For>
+    </div>
+  );
+}
+
 export function OverviewLoadingRows(props: {
   readonly count: number;
   readonly paired?: boolean;
@@ -91,7 +101,7 @@ export function OverviewLoadingRows(props: {
     <div
       aria-hidden="true"
       class={cx(
-        "grid gap-y-1 border-t border-rule pt-3",
+        "grid gap-y-1 pt-3",
         props.paired === true ? "grid-cols-2 gap-x-4" : "gap-x-8 sm:grid-cols-2",
       )}
     >

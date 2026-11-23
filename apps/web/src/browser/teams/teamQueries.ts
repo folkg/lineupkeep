@@ -14,11 +14,11 @@ export const teamQueries = {
       queryKey: ["teams", "list"] as const,
       queryFn: ({ signal }) => remote.list({ signal }),
     }),
-  cards: (remote: Pick<TeamRemote, "cards">) =>
+  cards: (remote: Pick<TeamRemote, "cards">, initialData: ReadonlyArray<TeamCardView> = []) =>
     queryOptions({
       queryKey: ["teams", "card-facts"] as const,
       queryFn: ({ signal }) => remote.cards({ signal }),
-      initialData: [] as ReadonlyArray<TeamCardView>,
+      initialData,
       initialDataUpdatedAt: 0,
     }),
   runKey: (run: string) => ["runs", "detail", run] as const,

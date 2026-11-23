@@ -32,7 +32,7 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 | Restore              | Drill passed 2026-10-29; RPO 15 minutes, RTO 4 hours, owner executes recovery (ruled 10 November) |
 | Dependencies         | Fresh audit and disposition in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md)                         |
 | Security             | Audit and disposition in [SECURITY-AUDIT.md](SECURITY-AUDIT.md); deferred work is group J         |
-| Checks               | 2111 node, 299 browser, 10 chromium; container end to end 62 passed, nothing skipped              |
+| Checks               | 2112 node, 302 browser, 10 chromium; container end to end 62 passed, nothing skipped              |
 
 ---
 
@@ -40,6 +40,21 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 
 ### 23 November 2026
 
+- **Hourly checks resume after the host redirect.** The old-address redirect also caught the worker's
+  internal endpoint, so Cloud Scheduler received a `308` and stopped creating runs. Internal paths now
+  stay on their own host. A manual tick created the expected five runs; the cause and verification are
+  in the [scheduled-check post mortem](post-mortems/2026-11-23-scheduled-checks.md).
+- **Team cards lead with what matters.** Cards no longer use key-value lists. The league format sits in
+  the card header; place and record are read as a sentence; points appear only for formats that use
+  them; a current matchup shows the opponent and score at a glance; categories show category rows in
+  the detail view. Missing fields are omitted rather than reported as "not published".
+- **Quiet checks fold without a disclosure.** Consecutive checks that changed nothing appear as one
+  "N checks changed nothing" line with no run links. A skipped or failed check keeps its own line and
+  its reason. The Teams page paints the last visit's season facts from local storage while fresh facts
+  load, so the layout does not collapse to skeletons on every visit.
+- **Discard moved to the destructive edge.** Transaction cards keep primary and secondary actions
+  together and place discard at the bottom right, styled as the destructive action. Controls are
+  disabled while the card is refreshing.
 - **An old Cloud Run address sends you to the current one.** The service still answers on its
   generated `...a.run.app` alias, but sign-in only trusts the deterministic address. A browser that
   kept the old address saw "could not send the code" because the sign-in request came from the wrong

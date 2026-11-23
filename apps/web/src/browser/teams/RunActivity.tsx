@@ -1,7 +1,6 @@
 import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 
-import { Disclosure } from "#browser/shared-ui/Disclosure.tsx";
 import {
   formatRangeEnd,
   formatRangeStart,
@@ -26,30 +25,13 @@ export function RunActivity(props: RunActivityProps): JSX.Element {
       <For each={groupRuns(props.runs)}>
         {(entry) => (
           <RuleListItem>
-            <Show when={quietRuns(entry)} fallback={<RunEntry entry={entry} />}>
-              {(runs) => <QuietGroup runs={runs()} />}
+            <Show fallback={<RunEntry entry={entry} />} when={quietRuns(entry)}>
+              {(runs) => <QuietGroupSummary runs={runs()} />}
             </Show>
           </RuleListItem>
         )}
       </For>
     </RuleList>
-  );
-}
-
-function QuietGroup(props: { readonly runs: ReadonlyArray<LineupRunView> }): JSX.Element {
-  return (
-    <Disclosure bordered={false} summary={<QuietGroupSummary runs={props.runs} />}>
-      <RuleList>
-        <For each={props.runs}>
-          {(run) => (
-            <RuleListItem>
-              <RunLine run={run} />
-              <RunLink run={run} />
-            </RuleListItem>
-          )}
-        </For>
-      </RuleList>
-    </Disclosure>
   );
 }
 

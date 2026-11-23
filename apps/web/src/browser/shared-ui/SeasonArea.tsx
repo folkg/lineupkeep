@@ -11,8 +11,8 @@ export function SeasonArea(props: {
       class={
         props.loading === true
           ? props.detail === true
-            ? "min-h-[43.5rem] sm:min-h-[39rem]"
-            : "min-h-[16rem] sm:min-h-[14.75rem]"
+            ? "min-h-[23.75rem]"
+            : undefined
           : undefined
       }
     >

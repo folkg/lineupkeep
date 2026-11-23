@@ -356,6 +356,7 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     editingError,
     saving: () => save.isPending,
     isLoading: () => open.isPending,
+    refreshing: () => open.isFetching,
     failure: () => open.error,
     retry: () => open.refetch().then(() => undefined),
     signIn,
@@ -591,6 +592,7 @@ export type TransactionsPageController = {
   readonly editingError: Accessor<string | undefined>;
   readonly saving: () => boolean;
   readonly isLoading: () => boolean;
+  readonly refreshing: () => boolean;
   readonly failure: () => Error | null;
   readonly retry: () => Promise<void>;
   readonly signIn: RecoveryAction;

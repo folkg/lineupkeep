@@ -80,6 +80,31 @@ export const toTeamCardViews =
                         pointsAgainst: card.standing.pointsAgainst,
                         pointsBack: card.standing.pointsBack,
                       },
+                ...(card.matchup === undefined
+                  ? {}
+                  : {
+                      matchup: {
+                        week: card.matchup.week,
+                        opponent: card.matchup.opponent,
+                        points: card.matchup.points,
+                        opponentPoints: card.matchup.opponentPoints,
+                        projectedPoints: card.matchup.projectedPoints,
+                        opponentProjectedPoints: card.matchup.opponentProjectedPoints,
+                        ...(card.matchup.remainingGames === undefined
+                          ? {}
+                          : { remainingGames: card.matchup.remainingGames }),
+                        ...(card.matchup.opponentRemainingGames === undefined
+                          ? {}
+                          : { opponentRemainingGames: card.matchup.opponentRemainingGames }),
+                        categories: EffectArray.map(card.matchup.categories, (row) => ({
+                          name: row.name,
+                          scoring: row.informational ? ("informational" as const) : undefined,
+                          own: row.own,
+                          opponent: row.opponent,
+                          ...(row.result === undefined ? {} : { result: row.result }),
+                        })),
+                      },
+                    }),
               },
             }),
       };

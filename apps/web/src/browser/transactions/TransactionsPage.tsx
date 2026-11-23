@@ -5,6 +5,7 @@ import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 
 import { AppShell } from "#browser/app-shell/AppShell.tsx";
+import { ActionBar } from "#browser/shared-ui/ActionBar.tsx";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Badge } from "#browser/shared-ui/Badge.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
@@ -305,7 +306,9 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
   const action = (): CardAction => cardAction(props.card);
   const headingId = (): string => `transactions-panel-${props.card.lead.team.id}-${props.card.key}`;
   const working = (): boolean => confirmation.pending();
+  const busy = (): boolean => props.page.refreshing();
   const confirmable = (): boolean =>
+    !busy() &&
     EffectArray.every(
       members(),
       (move) => move.validation.status === "current" && move.result === undefined,
@@ -376,7 +379,7 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
     explanation() !== undefined ||
     facts() !== undefined ||
     fallbackMoves().length > 0;
-  const footer = (): JSX.Element | undefined => {
+  const primaryFooter = (): JSX.Element | undefined => {
     const held = action();
     switch (held.kind) {
       case "decide":
@@ -431,21 +434,7 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
           </Button>
         );
       case "discard":
-        return held.moves.length > 1 ||
-          status().kind !== "blocked" ||
-          EffectArray.some(held.moves, (move) => move.result !== undefined) ? (
-          <Button
-            variant="secondary"
-            disabled={props.page.discardingGroup() !== undefined}
-            state={props.page.discardingGroup() === props.card.lead.move ? "working" : "idle"}
-            aria-label={`Discard remaining: ${cardTitle(props.card)}`}
-            onClick={() => props.page.discardGroup(props.card.lead)}
-          >
-            {props.page.discardingGroup() === props.card.lead.move
-              ? "Discarding"
-              : "Discard remaining"}
-          </Button>
-        ) : undefined;
+        return undefined;
       case "dependency":
         return (
           <Inline gap="sm">
@@ -460,24 +449,74 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
             >
               Open
             </Button>
-            <Show when={held.moves.length > 0}>
-              <Button
-                variant="secondary"
-                disabled={props.page.discardingGroup() !== undefined}
-                state={props.page.discardingGroup() === props.card.lead.move ? "working" : "idle"}
-                aria-label={`Discard group: ${cardTitle(props.card)}`}
-                onClick={() => props.page.discardGroup(props.card.lead)}
-              >
-                {props.page.discardingGroup() === props.card.lead.move
-                  ? "Discarding"
-                  : "Discard group"}
-              </Button>
-            </Show>
           </Inline>
         );
       case "none":
         return undefined;
     }
+  };
+  const destructiveFooter = (): JSX.Element | undefined => {
+    const held = action();
+    if (held.kind === "decide") {
+      const moves = members();
+      const only = moves.length === 1 ? moves[0] : undefined;
+      return (
+        <Button
+          variant="quiet"
+          tone="danger"
+          disabled={
+            props.page.discarding() !== undefined || props.page.discardingGroup() !== undefined
+          }
+          state={
+            (only !== undefined && props.page.discarding() === only.move) ||
+            props.page.discardingGroup() === props.card.lead.move
+              ? "working"
+              : "idle"
+          }
+          aria-label={
+            only === undefined
+              ? `Discard group: ${cardTitle(props.card)}`
+              : `Discard: ${cardTitle(props.card)}`
+          }
+          onClick={() => {
+            if (only === undefined) {
+              props.page.discardGroup(props.card.lead);
+            } else {
+              props.page.discardMove(only);
+            }
+          }}
+        >
+          {only === undefined ? "Discard group" : "Discard"}
+        </Button>
+      );
+    }
+    if (held.kind === "discard" || (held.kind === "dependency" && held.moves.length > 0)) {
+      const remaining = held.kind === "discard";
+      return (
+        <Button
+          variant="quiet"
+          tone="danger"
+          disabled={props.page.discardingGroup() !== undefined}
+          state={props.page.discardingGroup() === props.card.lead.move ? "working" : "idle"}
+          aria-label={`${remaining ? "Discard remaining" : "Discard group"}: ${cardTitle(props.card)}`}
+          onClick={() => props.page.discardGroup(props.card.lead)}
+        >
+          {props.page.discardingGroup() === props.card.lead.move
+            ? "Discarding"
+            : remaining
+              ? "Discard remaining"
+              : "Discard group"}
+        </Button>
+      );
+    }
+    return undefined;
+  };
+  const footer = (): JSX.Element | undefined => {
+    const primary = primaryFooter();
+    const destructive = destructiveFooter();
+    return primary === undefined && destructive === undefined ? undefined : (
+      <ActionBar destructive={destructive} disabled={busy()} primary={primary} />
+    );
   };
   return (
     <Card
@@ -606,7 +645,10 @@ function GroupMoveRow(props: GroupMoveRowProps): JSX.Element {
   const actionable = (): boolean =>
     props.move.result === undefined && props.move.decision !== "discarded";
   const actionsDisabled = (): boolean =>
-    props.page.saving() || props.page.discarding() !== undefined || props.working;
+    props.page.refreshing() ||
+    props.page.saving() ||
+    props.page.discarding() !== undefined ||
+    props.working;
   return (
     <QueueListItem
       number={props.number}
@@ -620,18 +662,6 @@ function GroupMoveRow(props: GroupMoveRowProps): JSX.Element {
               onClick={() => props.page.startEdit(props.move)}
             >
               {props.move.runDay === undefined ? "Set date" : "Change date"}
-            </Button>
-          </Show>
-          <Show when={actionable()}>
-            <Button
-              variant="quiet"
-              tone="danger"
-              disabled={actionsDisabled()}
-              state={props.page.discarding() === props.move.move ? "working" : "idle"}
-              aria-label={`Discard: ${moveSummary(props.move)}`}
-              onClick={() => props.page.discardMove(props.move)}
-            >
-              {props.page.discarding() === props.move.move ? "Discarding" : "Discard"}
             </Button>
           </Show>
         </>

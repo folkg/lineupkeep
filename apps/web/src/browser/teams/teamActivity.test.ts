@@ -58,10 +58,10 @@ describe("run activity", () => {
     ]);
   });
 
-  it("keeps a lone quiet run on its own", () => {
+  it("folds a lone quiet run into a summary", () => {
     const entries = groupRuns([quiet("quiet-1", "2026-10-05T12:00:00.000Z")]);
 
-    expect(EffectArray.map(entries, summarize)).toEqual(["quiet-1"]);
+    expect(EffectArray.map(entries, summarize)).toEqual([1]);
   });
 
   it("never folds a blocked, failed, uncertain, or in-progress run", () => {
@@ -73,11 +73,11 @@ describe("run activity", () => {
     ]) {
       expect(
         EffectArray.map(groupRuns([loud, quiet("quiet-1", "2026-10-05T11:00:00.000Z")]), summarize),
-      ).toEqual([loud.run, "quiet-1"]);
+      ).toEqual([loud.run, 1]);
     }
   });
 
-  it("folds a skipped or superseded run that changed nothing", () => {
+  it("keeps a skipped or superseded run on its own", () => {
     expect(
       EffectArray.map(
         groupRuns([
@@ -86,7 +86,7 @@ describe("run activity", () => {
         ]),
         summarize,
       ),
-    ).toEqual([2]);
+    ).toEqual(["skipped-1", "superseded-1"]);
   });
 });
 

@@ -1,5 +1,6 @@
 import { mutationOptions } from "@tanstack/solid-query";
 
+import { clearCachedTeamCards } from "#browser/query/teamCardCache.ts";
 import { clearCachedTeamHeaders } from "#browser/query/teamHeaderCache.ts";
 
 import { sessionQueries } from "./sessionQueries";
@@ -13,6 +14,7 @@ export const sessionMutations = {
 
       onSuccess: (_data, _variables, _onMutateResult, context) => {
         clearCachedTeamHeaders();
+        clearCachedTeamCards();
         context.client.removeQueries({
           predicate: (query) => query.queryKey[0] !== sessionQueries.currentKey[0],
         });

@@ -1,5 +1,5 @@
 import { EffectString } from "@lineupkeep/collections";
-import { DateTime, Effect, Option, Redacted, Schema } from "effect";
+import { DateTime, Duration, Effect, Option, Redacted, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption, Order as EffectOrder } from "effect";
 
@@ -55,6 +55,7 @@ import type {
   ProviderSchedulePlayer,
   ProviderTeam,
   ProviderTeamCard,
+  ProviderTeamCardMatchup,
   ProviderTeamScore,
   ProviderTransaction,
   ProviderTransactionIncomplete,
@@ -237,6 +238,34 @@ export const yahooProvider = Effect.gen(function* () {
       cookie,
       supportedLeagues,
     );
+    const matchupReads = yield* Effect.forEach(
+      leagues,
+      (league) => {
+        if (league.currentWeek === undefined || league.seasonOver === true) {
+          return Effect.succeed(Option.none<ReadonlyArray<YahooMatchup>>());
+        }
+        return readMatchupsThroughSdk(
+          sdk,
+          "read_team_cards",
+          cookie,
+          league.leagueKey,
+          league.currentWeek,
+        ).pipe(
+          Effect.timeout(Duration.seconds(3)),
+          Effect.option,
+          Effect.map((read) => Option.map(read, (matchups) => matchups)),
+        );
+      },
+      { concurrency: 4 },
+    );
+    const matchupsByLeague = new Map(
+      EffectArray.flatMap(leagues, (league, index) => {
+        const read = matchupReads[index];
+        return read === undefined || Option.isNone(read)
+          ? []
+          : [[league.leagueKey, read.value] as const];
+      }),
+    );
     return EffectArray.flatMap(leagues, (league) =>
       EffectArray.map(league.teams, (team): ProviderTeamCard => {
         const providerUrl = teamProviderUrl(team, league.gameKey);
@@ -245,6 +274,11 @@ export const yahooProvider = Effect.gen(function* () {
             ? undefined
             : providerStandingsOf({ leagueKey: league.leagueKey, teams: [team.standings] })
                 .teams[0];
+        const matchup = teamCardMatchupOf(
+          matchupsByLeague.get(league.leagueKey) ?? [],
+          team.teamKey,
+          league.settings.settings.statCategories,
+        );
         return {
           provider: key,
           providerTeamKey: team.teamKey,
@@ -276,6 +310,7 @@ export const yahooProvider = Effect.gen(function* () {
           maxGamesPlayed: league.maxGamesPlayed,
           maxInningsPitched: league.maxInningsPitched,
           standing,
+          ...(matchup === undefined ? {} : { matchup }),
         };
       }),
     );
@@ -1834,6 +1869,75 @@ function historyQuery(
   return sport === "football" && currentWeek !== undefined && period.week < currentWeek
     ? { type: "week", week: period.week }
     : { type: "season" };
+}
+
+function teamCardMatchupOf(
+  matchups: ReadonlyArray<YahooMatchup>,
+  teamKey: string,
+  categories: ReadonlyArray<{
+    readonly statId: number;
+    readonly name: string;
+    readonly enabled: boolean;
+    readonly displayOnly: boolean;
+  }>,
+): ProviderTeamCardMatchup | undefined {
+  const matchup = EffectOption.getOrUndefined(
+    EffectArray.findFirst(
+      matchups,
+      (entry) => entry.home.teamKey === teamKey || entry.away.teamKey === teamKey,
+    ),
+  );
+  if (matchup === undefined) {
+    return undefined;
+  }
+  const own = matchup.home.teamKey === teamKey ? matchup.home : matchup.away;
+  const opponent = matchup.home.teamKey === teamKey ? matchup.away : matchup.home;
+  const ownStats = new Map(
+    EffectArray.map(own.stats, (stat) => [stat.statId, stat.value] as const),
+  );
+  const opponentStats = new Map(
+    EffectArray.map(opponent.stats, (stat) => [stat.statId, stat.value] as const),
+  );
+  const rows = EffectArray.flatMap(categories, (category) => {
+    const ownValue = ownStats.get(category.statId) ?? null;
+    const opponentValue = opponentStats.get(category.statId) ?? null;
+    if (ownValue === null && opponentValue === null) {
+      return [];
+    }
+    const informational = category.displayOnly || !category.enabled;
+    const winner = EffectOption.getOrUndefined(
+      EffectArray.findFirst(matchup.categoryWinners, (entry) => entry.statId === category.statId),
+    );
+    const result: "win" | "loss" | "tie" | undefined =
+      informational || winner === undefined
+        ? undefined
+        : winner.isTied
+          ? "tie"
+          : winner.winnerTeamKey === teamKey
+            ? "win"
+            : "loss";
+    return [
+      {
+        statId: category.statId,
+        name: category.name,
+        own: ownValue,
+        opponent: opponentValue,
+        informational,
+        result,
+      },
+    ];
+  });
+  return {
+    week: matchup.week,
+    opponent: opponent.name,
+    points: own.points,
+    opponentPoints: opponent.points,
+    projectedPoints: own.projectedPoints,
+    opponentProjectedPoints: opponent.projectedPoints,
+    remainingGames: own.remainingGames?.remaining,
+    opponentRemainingGames: opponent.remainingGames?.remaining,
+    categories: rows,
+  };
 }
 
 function providerMatchupsOf(

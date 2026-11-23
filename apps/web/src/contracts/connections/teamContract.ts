@@ -160,6 +160,7 @@ export type TeamCardView = {
           readonly pointsBack: number | null;
         }
       | undefined;
+    readonly matchup?: TeamOverviewView["matchup"];
   };
   readonly reason?: string;
 };
@@ -212,6 +213,7 @@ export type TeamOverviewView = {
       readonly scoring: "informational" | undefined;
       readonly own: number | null;
       readonly opponent: number | null;
+      readonly result?: "win" | "loss" | "tie";
     }>;
   };
   readonly matchupReason?: string;

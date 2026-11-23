@@ -304,9 +304,12 @@ it("schedules a saved move for its day without running it", async () => {
     name: /^Schedule for .+: Claim Amon-Ra St\. Brown/u,
   });
   await expect.element(schedule).toBeVisible();
-  expect(schedule.element().closest("[data-card-footer]")?.textContent).toBe(
+  expect(schedule.element().closest("[data-card-footer]")?.textContent).toContain(
     `Schedule for ${formatCalendarDate("2026-11-13")}`,
   );
+  expect(
+    schedule.element().closest("[data-card-footer]")?.querySelector("[aria-label^='Discard']"),
+  ).not.toBeNull();
   await schedule.click();
 
   await expect
@@ -562,9 +565,16 @@ it("blocks a move that cannot run and leaves its reason beside the discard actio
     )
     .toBeVisible();
   expect(page.getByRole("button", { name: /Run now:/u }).elements()).toHaveLength(0);
-  await expect
-    .element(page.getByRole("button", { name: /Discard: Drop Riley Chen/u }))
-    .toBeEnabled();
+  const staleCard = page
+    .getByText("Riley Chen is no longer on this team's roster, so there is nothing to drop.", {
+      exact: true,
+    })
+    .element()
+    .closest<HTMLElement>("[data-card]");
+  expect(
+    staleCard?.querySelector<HTMLButtonElement>("[data-card-footer] [aria-label^='Discard']")
+      ?.disabled,
+  ).toBe(false);
   await expect
     .element(
       page.getByText("Jordan Lee is on waivers, so a free-agent add cannot bring them in.", {
@@ -575,9 +585,16 @@ it("blocks a move that cannot run and leaves its reason beside the discard actio
   expect(
     page.getByRole("button", { name: /Change date: Add Jordan Lee/u }).elements(),
   ).toHaveLength(0);
-  await expect
-    .element(page.getByRole("button", { name: /Discard: Add Jordan Lee/u }))
-    .toBeEnabled();
+  const savedCard = page
+    .getByText("Jordan Lee is on waivers, so a free-agent add cannot bring them in.", {
+      exact: true,
+    })
+    .element()
+    .closest<HTMLElement>("[data-card]");
+  expect(
+    savedCard?.querySelector<HTMLButtonElement>("[data-card-footer] [aria-label^='Discard']")
+      ?.disabled,
+  ).toBe(false);
 });
 
 it("loads with section lines instead of placeholder cards", async () => {
@@ -718,7 +735,10 @@ it("frames a transaction group with the shared card structure", async () => {
   expect(card.querySelector("[data-card-header] [data-card-badge]")?.textContent).toBe(
     "Needs your decision",
   );
-  expect(card.querySelector("[data-card-footer]")?.textContent).toBe("Run nowSchedule");
+  expect(card.querySelector("[data-card-footer]")?.textContent).toContain("Run nowSchedule");
+  expect(
+    card.querySelector("[data-card-footer]")?.querySelector("[aria-label^='Discard']"),
+  ).not.toBeNull();
 });
 
 it("names today's run now without a separate run note", async () => {
@@ -766,7 +786,7 @@ it("names today's run now without a separate run note", async () => {
       .getByRole("button", { name: "Run now: Weekend moves" })
       .element()
       .closest("[data-card-footer]")?.textContent,
-  ).toBe("Run nowSchedule");
+  ).toContain("Run nowSchedule");
   expect(page.getByText("Runs immediately.").elements()).toHaveLength(0);
 });
 
@@ -1182,9 +1202,14 @@ it("shows one status on a blocked card and the action that clears it", async () 
     .element(page.getByText("This group does not run.", { exact: true }))
     .not.toBeVisible();
   expect(page.getByRole("button", { name: /Run now/u }).elements()).toHaveLength(0);
-  await expect
-    .element(page.getByRole("button", { name: /Discard: Drop Riley Chen/u }))
-    .toBeEnabled();
+  const blockedCard = page
+    .getByText("Check your roster, then choose the move again or discard it.", { exact: true })
+    .element()
+    .closest<HTMLElement>("[data-card]");
+  expect(
+    blockedCard?.querySelector<HTMLButtonElement>("[data-card-footer] [aria-label^='Discard']")
+      ?.disabled,
+  ).toBe(false);
 });
 
 it("never says confirmed in the provenance of a submitted move", async () => {

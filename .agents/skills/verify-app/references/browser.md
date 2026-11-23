@@ -7,3 +7,7 @@ Import `test`, `expect`, and sign-in helpers from `e2e/support.ts`. `signUp(page
 Name actors in assertion steps: `Result: [owner] sees the saved item`. [Service reads](services.md) may corroborate persistence but cannot replace browser actions.
 
 Call `captureCheckpoint(page, info, name)` from `e2e/verify/capture.ts` **after assertions**. It retains a screenshot, ARIA snapshot including dialogs, and persona label; video also holds the screen briefly. An attached PNG alone is not a checkpoint. Follow shared [privacy and evidence rules](harness.md#evidence-privacy).
+
+## Solid diagnostics
+
+The development client loads `@solidjs/diagnostics`. When changing a browser page, run the loopback development shell and inspect the console for reactivity warnings such as `STRICT_READ_UNTRACKED`; fix warnings owned by the changed view/controller and record any framework or router warnings that remain. Do not treat a clean console as behavioral proof; keep the page's assertions and checkpoints authoritative.

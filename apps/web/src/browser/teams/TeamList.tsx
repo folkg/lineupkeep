@@ -7,6 +7,7 @@ import type { Accessor } from "solid-js";
 import type { CachedTeamHeader } from "#browser/query/teamHeaderCache.ts";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import type { ActionState } from "#browser/shared-ui/actionState.ts";
+import { Badge } from "#browser/shared-ui/Badge.tsx";
 import { Card } from "#browser/shared-ui/Card.tsx";
 import { EmptyState } from "#browser/shared-ui/CollectionState.tsx";
 import { IconButton } from "#browser/shared-ui/IconButton.tsx";
@@ -29,6 +30,7 @@ import type {
 } from "#contracts/connections/teamContract.ts";
 import { sportDisplayName } from "#contracts/connections/teamVocabulary.ts";
 
+import { formatLabel, scoringLabel } from "./seasonLabels";
 import { TeamAttention } from "./TeamAttention";
 import { TeamControls } from "./TeamControls";
 import { checkTallyLabel, lastCheckLine, teamContextLabel } from "./teamLabels";
@@ -141,10 +143,15 @@ export function TeamList(props: TeamListProps): JSX.Element {
 
 function TeamCard(props: TeamCardProps): JSX.Element {
   const nameId = (): string => `team-card-${props.team.team.id}`;
+  const format = (): string | undefined =>
+    props.facts?.season === undefined
+      ? undefined
+      : (scoringLabel(props.facts.season.scoringLabel) ?? formatLabel(props.facts.season.format));
 
   return (
     <Card
       as="li"
+      badge={format() === undefined ? undefined : <Badge tone="neutral">{format()}</Badge>}
       footer={
         <TeamControls
           compact
