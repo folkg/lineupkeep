@@ -307,6 +307,7 @@ it("says when the next game is in the reader's local time", async () => {
 
   const sentence = `Nothing to check. Next game is ${formatWeekday(nextGameAt)} at ${formatClockTime(nextGameAt)}.`;
   await expect.element(page.getByText(sentence)).toBeVisible();
+  expect(page.getByRole("link", { name: "View run detail" }).elements()).toHaveLength(0);
   await expect.element(page.getByText(/UTC/u)).not.toBeInTheDocument();
 });
 

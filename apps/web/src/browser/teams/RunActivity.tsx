@@ -61,7 +61,11 @@ function RunEntry(props: { readonly entry: RunActivityEntry }): JSX.Element {
       {(run) => (
         <Stack gap="xs">
           <RunLine run={run()} />
-          <RunLink run={run()} />
+          <Show
+            when={run().outcome?.kind !== "skipped" && run().outcome?.kind !== "superseded"}
+          >
+            <RunLink run={run()} />
+          </Show>
         </Stack>
       )}
     </Show>

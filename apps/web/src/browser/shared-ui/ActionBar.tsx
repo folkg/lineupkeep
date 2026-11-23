@@ -19,7 +19,7 @@ export function ActionBar(props: {
       </div>
       <Show when={props.destructive}>
         {(destructive) => (
-          <div class="ms-auto flex flex-wrap items-center gap-3 max-[559px]:ms-0">
+          <div class="ms-auto flex flex-wrap items-center gap-3">
             {destructive()}
           </div>
         )}
