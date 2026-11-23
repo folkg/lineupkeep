@@ -23,7 +23,7 @@ export function TeamSeasonOverview(props: {
   const facts = (): TeamOverviewView | undefined => props.facts;
   const league = (): TeamOverviewView["league"] => facts()?.league;
   const format = (): string | undefined =>
-    scoringLabel(league()?.scoringLabel) ?? formatLabel(facts()?.format);
+    formatLabel(facts()?.format) ?? scoringLabel(league()?.scoringLabel);
   const data = (): SeasonSummaryData | undefined => {
     const value = facts();
     if (value === undefined || value.reason !== undefined) {

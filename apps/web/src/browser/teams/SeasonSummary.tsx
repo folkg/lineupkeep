@@ -159,6 +159,18 @@ export function SeasonSummary(props: {
                 </Text>
               )}
             </Show>
+            <Show
+              when={
+                props.detail &&
+                format() === "head_to_head_categories" &&
+                categoryRows().length === 0 &&
+                categoryRecord() === undefined
+              }
+            >
+              <Text type="meta" tone="muted">
+                Category results appear after the first game.
+              </Text>
+            </Show>
             <Show when={props.detail && categoryRows().length > 0}>
               <Stack gap="2xs">
                 <For each={categoryRows()}>

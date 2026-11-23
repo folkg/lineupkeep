@@ -801,7 +801,7 @@ it.each([null, 0] as const)(
           standing: { rank: 3, points: 99, pointsFor, pointsAgainst: 120, pointsBack: 0 },
         }),
     });
-    await expect.element(page.getByText("Head to head categories")).toBeVisible();
+    await expect.element(page.getByText("Head to head points")).toBeVisible();
     if (pointsFor === 0) {
       await expect.element(page.getByText("0 points", { exact: true })).toBeVisible();
     } else {

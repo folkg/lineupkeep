@@ -146,7 +146,7 @@ function TeamCard(props: TeamCardProps): JSX.Element {
   const format = (): string | undefined =>
     props.facts?.season === undefined
       ? undefined
-      : (scoringLabel(props.facts.season.scoringLabel) ?? formatLabel(props.facts.season.format));
+      : (formatLabel(props.facts.season.format) ?? scoringLabel(props.facts.season.scoringLabel));
 
   return (
     <Card
