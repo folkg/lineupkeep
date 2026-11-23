@@ -39,6 +39,7 @@ import {
   currentScopeName,
 } from "#contexts/auth/AuthorizationScopes.ts";
 import type { AuthorizationScope } from "#contexts/auth/AuthorizationScopes.ts";
+import { signInCodeOriginAllowed } from "#contexts/auth/SignInCodeQuotaKey.ts";
 import { UserId } from "#contexts/auth/User.ts";
 import { EmailDelivery } from "#email/EmailDelivery.ts";
 import type { EmailDeliveryFailed, EmailMessage } from "#email/EmailDelivery.ts";
@@ -143,6 +144,9 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
           catch: () => "unreadable" as const,
         }).pipe(Effect.flatMap(Schema.decodeUnknownEffect(SignInCodeRequestBody)), Effect.option);
         if (Option.isNone(body)) {
+          return undefined;
+        }
+        if (!signInCodeOriginAllowed(request.headers.get("origin"), new URL(baseUrl).origin)) {
           return undefined;
         }
         const decision = yield* quota.consume(body.value.email, signInCodesPerAddress);

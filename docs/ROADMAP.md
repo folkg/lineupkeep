@@ -32,7 +32,7 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 | Restore              | Drill passed 2026-10-29; RPO 15 minutes, RTO 4 hours, owner executes recovery (ruled 10 November) |
 | Dependencies         | Fresh audit and disposition in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md)                         |
 | Security             | Audit and disposition in [SECURITY-AUDIT.md](SECURITY-AUDIT.md); deferred work is group J         |
-| Checks               | 2107 node, 299 browser, 10 chromium; container end to end 62 passed, nothing skipped              |
+| Checks               | 2111 node, 299 browser, 10 chromium; container end to end 62 passed, nothing skipped              |
 
 ---
 
@@ -40,6 +40,11 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 
 ### 23 November 2026
 
+- **An old Cloud Run address sends you to the current one.** The service still answers on its
+  generated `...a.run.app` alias, but sign-in only trusts the deterministic address. A browser that
+  kept the old address saw "could not send the code" because the sign-in request came from the wrong
+  origin. Every old Cloud Run address now redirects to the current one before auth runs, and an
+  invalid origin no longer spends the address's code limit.
 - **The Teams page stops waiting on a slow provider.** Season facts are a live provider read on the
   Teams route. The read now stops after eight seconds and reports that facts could not be loaded, so a
   stalled provider cannot leave every card in a loading state for the provider SDK's 30 second deadline.

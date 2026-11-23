@@ -6,6 +6,15 @@ import { dual } from "effect/Function";
 
 import type { AuthenticationUnavailable } from "#contexts/auth/Auth.ts";
 
+export const signInCodeOriginAllowed: {
+  (origin: string | null, canonicalOrigin: string): boolean;
+  (canonicalOrigin: string): (origin: string | null) => boolean;
+} = dual(
+  2,
+  (origin: string | null, canonicalOrigin: string): boolean =>
+    origin === null || origin === canonicalOrigin,
+);
+
 export const signInCodeQuotaKeyFor: {
   (
     email: string,
