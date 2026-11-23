@@ -1,3 +1,4 @@
+import { EffectString } from "@lineupkeep/collections";
 import { correlateRequestEffect } from "@lineupkeep/backend/runtime/RequestContext";
 import { createStartHandler, defaultStreamHandler } from "@tanstack/solid-start/server";
 import { createServerEntry } from "@tanstack/solid-start/server-entry";
@@ -17,7 +18,8 @@ installServerTelemetry();
 
 const startHandler = createStartHandler(defaultStreamHandler);
 
-const wakingShellDeadlineMs = 2_000;
+const defaultWakingShellDeadlineMs = 2_000;
+const transactionWakingShellDeadlineMs = 6_000;
 
 export default createServerEntry({
   fetch: (request, startOptions) => {
@@ -31,7 +33,9 @@ export default createServerEntry({
       deploymentTarget.backend
         .runHttpHandler(correlated.request, (request) =>
           renderWakingShell(request, {
-            deadlineMs: wakingShellDeadlineMs,
+            deadlineMs: EffectString.startsWith(new URL(request.url).pathname, "/transactions")
+              ? transactionWakingShellDeadlineMs
+              : defaultWakingShellDeadlineMs,
             render: (request) =>
               verificationRoute(request).then(
                 (response) => response ?? startHandler(request, startOptions),
