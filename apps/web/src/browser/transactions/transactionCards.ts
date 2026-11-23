@@ -194,10 +194,6 @@ function failedLabel(statuses: ReadonlyArray<TransactionMoveView["status"]>): st
   return "Failed";
 }
 
-export function cardNeedsDecision(card: GroupCard): boolean {
-  return cardStatus(card).kind === "needs-decision";
-}
-
 export function cardIsOpenToday(card: GroupCard): boolean {
   const kind = cardStatus(card).kind;
   return kind !== "waiting" && kind !== "ran";
