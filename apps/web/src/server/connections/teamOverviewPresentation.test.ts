@@ -115,9 +115,14 @@ it.effect("reports rotisserie points without inventing a season record or matchu
       league: { ...league, transactionTiming: { weeklyDeadline: "intraday" } },
       standings: { status: "available", format: "rotisserie", teams: [] },
       record: { status: "unsupported", detail: "This format does not publish a win-loss record." },
+      categoryTotals: {
+        status: "available",
+        values: [{ stat: "stat-token", name: "Goals", value: 84 }],
+        omittedCategories: { count: 0, detail: "No categories were omitted." },
+      },
       categoryPoints: {
         status: "available",
-        values: [{ stat: "stat-token", name: "Goals", value: 0 }],
+        values: [{ stat: "stat-token", name: "Goals", value: 0, place: 4 }],
         omittedCategories: { count: 0, detail: "No categories were omitted." },
       },
       matchup: { status: "unsupported", detail: "The season has no current period." },
@@ -130,6 +135,8 @@ it.effect("reports rotisserie points without inventing a season record or matchu
     assert.strictEqual(view.recordReason, "This format does not publish a win-loss record.");
     assert.strictEqual(view.matchupReason, "The season has no current period.");
     assert.strictEqual(view.categoryPoints?.[0]?.value, 0);
+    assert.strictEqual(view.categoryPoints?.[0]?.total, 84);
+    assert.strictEqual(view.categoryPoints?.[0]?.place, 4);
     assert.strictEqual(view.league?.weeklyDeadline, "intraday");
   }),
 );

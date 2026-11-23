@@ -5,7 +5,7 @@ import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import type { LineupRunView } from "#contracts/connections/teamContract.ts";
 
 import { groupRuns } from "./teamActivity";
-import { checkTallyLabel, lastCheckLine, quietGroupSpan } from "./teamLabels";
+import { lastCheckStatus, quietGroupSpan } from "./teamLabels";
 
 const team = "018f79ea-7d86-7c18-9b4a-8b4d0c9165a1";
 const now = new Date("2026-10-05T14:00:00.000Z");
@@ -77,7 +77,7 @@ describe("run activity", () => {
     }
   });
 
-  it("keeps a skipped or superseded run on its own", () => {
+  it("folds a skipped run and keeps a superseded run on its own", () => {
     expect(
       EffectArray.map(
         groupRuns([
@@ -86,7 +86,7 @@ describe("run activity", () => {
         ]),
         summarize,
       ),
-    ).toEqual(["skipped-1", "superseded-1"]);
+    ).toEqual([1, "superseded-1"]);
   });
 });
 
@@ -118,52 +118,31 @@ describe("quiet group spans", () => {
   });
 });
 
-describe("last check lines", () => {
-  it("says what the check did and how long ago it was", () => {
-    expect(lastCheckLine(changed("changed-1", "2026-10-05T12:00:00.000Z"), now)).toBe(
-      `Last check changed 2 players · ${formatReaderTime("2026-10-05T12:00:00.000Z", now)}`,
-    );
-    expect(lastCheckLine(quiet("quiet-1", "2026-10-05T12:00:00.000Z"), now)).toBe(
-      `Last check changed nothing · ${formatReaderTime("2026-10-05T12:00:00.000Z", now)}`,
-    );
+describe("last check status", () => {
+  it("separates the time from what the check did", () => {
+    expect(lastCheckStatus(changed("changed-1", "2026-10-05T12:00:00.000Z"), now)).toEqual({
+      value: formatReaderTime("2026-10-05T12:00:00.000Z", now),
+      note: "Changed 2 players",
+    });
+    expect(lastCheckStatus(quiet("quiet-1", "2026-10-05T12:00:00.000Z"), now)).toEqual({
+      value: formatReaderTime("2026-10-05T12:00:00.000Z", now),
+      note: "Changed nothing",
+    });
+    expect(lastCheckStatus(skipped("skipped-1", "2026-10-05T12:00:00.000Z"), now)).toEqual({
+      value: formatReaderTime("2026-10-05T12:00:00.000Z", now),
+      note: "Had nothing to do",
+    });
   });
 
   it("says when a check is still running", () => {
-    expect(lastCheckLine(inProgress("running-1", "2026-10-05T12:00:00.000Z"), now)).toBe(
-      `Last check is setting the lineup · started ${formatReaderTime(
-        "2026-10-05T12:00:00.000Z",
-        now,
-      )}`,
-    );
-  });
-});
-
-describe("check tallies", () => {
-  it("stays quiet until a recent check changed the lineup", () => {
-    expect(checkTallyLabel([])).toBeUndefined();
-    expect(checkTallyLabel([quiet("quiet-1", "2026-10-05T12:00:00.000Z")])).toBeUndefined();
-    expect(
-      checkTallyLabel([
-        quiet("quiet-1", "2026-10-05T12:00:00.000Z"),
-        quiet("quiet-2", "2026-10-05T11:00:00.000Z"),
-      ]),
-    ).toBeUndefined();
+    expect(lastCheckStatus(inProgress("running-1", "2026-10-05T12:00:00.000Z"), now)).toEqual({
+      value: `Started ${formatReaderTime("2026-10-05T12:00:00.000Z", now)}`,
+      note: "Setting the lineup",
+    });
   });
 
-  it("counts the checks that changed the lineup", () => {
-    expect(
-      checkTallyLabel([
-        changed("changed-1", "2026-10-05T12:00:00.000Z"),
-        quiet("quiet-1", "2026-10-05T11:00:00.000Z"),
-        quiet("quiet-2", "2026-10-05T10:00:00.000Z"),
-      ]),
-    ).toBe("1 of the last 3 checks changed the lineup");
-    expect(
-      checkTallyLabel([
-        changed("changed-1", "2026-10-05T12:00:00.000Z"),
-        changed("changed-2", "2026-10-05T11:00:00.000Z"),
-      ]),
-    ).toBe("The last 2 checks all changed the lineup");
+  it("has no status before the first check", () => {
+    expect(lastCheckStatus(undefined, now)).toBeUndefined();
   });
 });
 

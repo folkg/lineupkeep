@@ -75,7 +75,11 @@ export function number(value: number): string {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
 }
 
-function ordinal(rank: number): string {
+export function statNumber(value: number): string {
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(value);
+}
+
+export function ordinal(rank: number): string {
   const suffix =
     rank % 100 >= 11 && rank % 100 <= 13
       ? "th"

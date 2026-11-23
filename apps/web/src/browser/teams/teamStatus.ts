@@ -15,23 +15,32 @@ export function nextScheduledCheck(at: Date): Date {
   return next;
 }
 
-export function teamStatusLine(team: TeamSummaryView, now: Date): string {
+export type CheckStatus = {
+  readonly value: string;
+  readonly note?: string;
+};
+
+export function nextCheckStatus(team: TeamSummaryView, now: Date): CheckStatus {
   const lastRun = teamLastRun(team);
   if (lastRun?.status === "queued") {
-    return "A check is waiting to start.";
+    return { value: "Waiting to start", note: "Queued for the next check." };
   }
   if (lastRun !== undefined && runIsCheckingNow(lastRun.status)) {
-    return "Checking now. This usually takes under a minute.";
+    return { value: "Checking now", note: "Usually under a minute." };
   }
   const automation = teamAutomation(team);
   switch (automation.status) {
     case "paused-until-fantasy-day-end":
-      return automation.resumesAt === undefined
-        ? "Paused for the rest of the fantasy day."
-        : `Paused for the rest of the fantasy day · resumes at ${formatClockTime(automation.resumesAt)}`;
+      return {
+        value: "Paused today",
+        note:
+          automation.resumesAt === undefined
+            ? "Resumes after the fantasy day."
+            : `Resumes at ${formatClockTime(automation.resumesAt)}`,
+      };
     case "disabled":
-      return "Lineup checks are off. Turn them on to check this team hourly.";
+      return { value: "Checks are off", note: "Turn them on to check hourly." };
     case "enabled":
-      return `Next check at ${formatClockTime(nextScheduledCheck(now))}`;
+      return { value: formatClockTime(nextScheduledCheck(now)), note: "Scheduled hourly." };
   }
 }

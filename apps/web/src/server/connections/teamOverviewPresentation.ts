@@ -29,7 +29,14 @@ export function toTeamOverviewView(summary: TeamSummaryResult): TeamOverviewView
   const record = summary.record;
   const matchup = summary.matchup;
   const categories = summary.categoryPoints;
+  const totals = summary.categoryTotals;
   const usage = summary.acquisitionUsage;
+  const totalsByStat = new Map(
+    EffectArray.map(
+      totals?.status === "available" ? totals.values : [],
+      (entry) => [entry.stat, entry.value] as const,
+    ),
+  );
   return {
     ...(summary.standings?.status === "available" ? { format: summary.standings.format } : {}),
     ...(league?.status === "available"
@@ -123,6 +130,8 @@ export function toTeamOverviewView(summary: TeamSummaryResult): TeamOverviewView
             name: row.name,
             scoring: row.scoring,
             value: row.value,
+            total: totalsByStat.get(row.stat) ?? null,
+            place: row.place ?? null,
           })),
         }
       : { categoryReason: categories?.detail ?? "Season category points were not published." }),

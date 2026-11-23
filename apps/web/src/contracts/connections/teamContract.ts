@@ -221,6 +221,8 @@ export type TeamOverviewView = {
     readonly name: string;
     readonly scoring: "informational" | undefined;
     readonly value: number | null;
+    readonly total: number | null;
+    readonly place: number | null;
   }>;
   readonly categoryReason?: string;
   readonly gamesUsage?:

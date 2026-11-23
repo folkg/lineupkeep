@@ -194,10 +194,13 @@ const team: TeamSummaryView = {
 it("offers a way back to the teams list and shows the run time in the reader's zone", async () => {
   using _app = setupTeamDetailPage(team);
 
-  const back = page.getByRole("link", { name: "Back to teams" });
+  const back = page.getByRole("link", { name: "All teams" });
   await expect.element(back).toHaveAttribute("href", "/teams");
-  expect(back.element().textContent).toBe("");
-  expect(back.element().getAttribute("title")).toBe("Back to teams");
+  expect(back.element().textContent).toContain("All teams");
+  expect(back.element().className).toContain("text-meta");
+  expect(page.getByRole("heading", { level: 1, name: "Alpha" }).element().className).toContain(
+    "text-card-title",
+  );
   const times = [...document.querySelectorAll<HTMLTimeElement>(`time[datetime="${threeDaysAgo}"]`)];
   expect(times.length).toBeGreaterThan(0);
   expect(EffectArray.every(times, (time) => time.textContent.length > 0)).toBe(true);
@@ -442,7 +445,7 @@ it("collapses a silent stretch with one timestamp to a single time", async () =>
   const groupLabel = foldedLabel(quietRuns);
   expect(groupLabel).toContain(" at ");
   await expect.element(page.getByText(groupLabel)).toBeVisible();
-  await expect.element(page.getByText(/changed nothing from .+ to .+/u)).not.toBeInTheDocument();
+  await expect.element(page.getByText(/made no change from .+ to .+/u)).not.toBeInTheDocument();
 });
 
 it("folds three silent stretches between the runs that mattered", async () => {
@@ -625,7 +628,7 @@ it("refuses a note past the stated limit", async () => {
 it("confirms before navigation discards an unsaved note", async () => {
   using _app = setupTeamDetailPage(team);
   await page.getByLabelText("Note for this team").fill("Unsaved keeper note");
-  await page.getByRole("link", { name: "Back to teams" }).click();
+  await page.getByRole("link", { name: "All teams" }).click();
 
   await expect.element(page.getByText("Discard unfinished work?")).toBeVisible();
   await page.getByRole("button", { name: "Keep editing" }).click();
@@ -639,36 +642,80 @@ function foldedLabel(runs: ReadonlyArray<LineupRunView>): string {
   const span = quietGroupSpan(runs);
   const start = formatRangeStart(span.from, span.to);
   const end = formatRangeEnd(span.from, span.to);
+  const checks = span.count === 1 ? "check" : "checks";
   return span.from === span.to
-    ? `${String(span.count)} checks changed nothing at ${start}`
-    : `${String(span.count)} checks changed nothing from ${start} to ${end}`;
+    ? `${String(span.count)} ${checks} made no change at ${start}`
+    : `${String(span.count)} ${checks} made no change from ${start} to ${end}`;
 }
 
 it("shows season facts, both matchup sides, category detail, and cap usage", async () => {
   using _app = setupTeamDetailPage(team, { overview: () => Promise.resolve(overviewFixture) });
 
   await expect.element(page.getByText("Head to head categories")).toBeVisible();
-  await expect.element(page.getByText("Week 11 · vs Beta")).toBeVisible();
+  await expect
+    .element(page.getByText("Week 11 vs Beta · 0-0-0 categories · 0 games left · 2 for them"))
+    .toBeVisible();
   await expect.element(page.getByText("0 played · 150 projected")).toBeVisible();
   await expect.element(page.getByText("10.1 pitched · 1,300.5 projected")).toBeVisible();
   await expect.element(page.getByText("7-3-0 (.700)")).toBeVisible();
-  await expect
-    .element(page.getByRole("heading", { level: 3, name: "Current matchup" }))
-    .toBeVisible();
-  await expect.element(page.getByRole("heading", { level: 3, name: "Season caps" })).toBeVisible();
+  await expect.element(page.getByText("Current matchup", { exact: true })).toBeVisible();
   expect(page.getByText("0 to 42").elements()).toHaveLength(0);
   expect(page.getByText("Projected 63.5 to 55").elements()).toHaveLength(0);
   const prose = page.getByText("Head to head categories").element();
   expect(getComputedStyle(prose).fontVariantNumeric).not.toBe("tabular-nums");
-  await expect.element(page.getByText("0 to 3")).toBeVisible();
-  await expect.element(page.getByText("Shots (info)")).toBeVisible();
-  await expect.element(page.getByText("12 to 8")).toBeVisible();
+  expect(page.getByText("0 to 3").elements()).toHaveLength(0);
+  expect(page.getByText("Shots (info)").elements()).toHaveLength(0);
+  expect(page.getByText("12 to 8").elements()).toHaveLength(0);
   const season = page
     .getByRole("heading", { name: "Season overview" })
     .element()
     .closest<HTMLElement>("[data-card]");
   expect(season).not.toBeNull();
   expect(season?.querySelector("dl")).toBeNull();
+});
+
+it("shows rotisserie categories with the stat, place, and points", async () => {
+  using _app = setupTeamDetailPage(team, {
+    overview: () =>
+      Promise.resolve({
+        ...overviewFixture,
+        format: "rotisserie",
+        record: undefined,
+        matchup: undefined,
+        standing: {
+          rank: 7,
+          points: 70.5,
+          pointsFor: null,
+          pointsAgainst: null,
+          pointsBack: null,
+        },
+        league: {
+          teamCount: 13,
+          scoringType: "roto",
+          scoringLabel: "Rotisserie",
+          gamesCaps: {},
+        },
+        categoryPoints: [
+          { name: "Goals", scoring: undefined, value: 10, total: 84, place: 4 },
+          { name: "Save percentage", scoring: undefined, value: 4, total: 0.918, place: 10 },
+        ],
+      }),
+  });
+
+  const table = page.getByRole("table", { name: "My categories" });
+  await expect.element(table).toBeVisible();
+  const cells = [...table.element().querySelectorAll<HTMLTableCellElement>("td")];
+  expect(EffectArray.map(cells, (cell) => cell.textContent)).toEqual([
+    "Goals",
+    "84",
+    "4th",
+    "10",
+    "Save percentage",
+    "0.918",
+    "10th",
+    "4",
+  ]);
+  await expect.element(page.getByText("70.5 points", { exact: true })).toBeVisible();
 });
 
 it("reads the detail overview without requesting team card facts", async () => {
@@ -804,11 +851,12 @@ it.each([null, 0] as const)(
     });
     await expect.element(page.getByText("Head to head points")).toBeVisible();
     if (pointsFor === 0) {
-      await expect.element(page.getByText("0 points", { exact: true })).toBeVisible();
+      await expect
+        .element(page.getByText("0 points for · 120 against · 0 behind", { exact: true }))
+        .toBeVisible();
     } else {
-      expect(page.getByText("0 points", { exact: true }).elements()).toHaveLength(0);
+      await expect.element(page.getByText("120 against · 0 behind", { exact: true })).toBeVisible();
     }
-    await expect.element(page.getByText("120 against", { exact: true })).toBeVisible();
     expect(page.getByText("99", { exact: true }).elements()).toHaveLength(0);
   },
 );
@@ -872,7 +920,7 @@ it("captures the team overview at desktop and phone sizes in light and dark", as
     await page.viewport(width, height);
     for (const theme of ["light", "dark"] as const) {
       applyTheme(theme);
-      await expect.element(page.getByText("Week 11 · vs Beta")).toBeVisible();
+      await expect.element(page.getByText(/^Week 11 vs Beta/u)).toBeVisible();
       const overview = page.getByRole("region", { name: "Season overview" }).element();
       expect(overview.querySelector("dl")).toBeNull();
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
@@ -880,7 +928,7 @@ it("captures the team overview at desktop and phone sizes in light and dark", as
         path: `../../../../../.artifacts/team-overview-polish/detail-top-${width}x${height}-${theme}.png`,
         save: true,
       });
-      page.getByRole("heading", { name: "Season caps" }).element().scrollIntoView();
+      page.getByText("10.1 pitched · 1,300.5 projected").element().scrollIntoView();
       await expect.element(page.getByText("10.1 pitched · 1,300.5 projected")).toBeVisible();
       await page.screenshot({
         path: `../../../../../.artifacts/team-overview-polish/detail-caps-${width}x${height}-${theme}.png`,

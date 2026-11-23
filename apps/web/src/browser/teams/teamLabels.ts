@@ -1,4 +1,4 @@
-import { EffectArray } from "@lineupkeep/collections";
+import { EffectArray, EffectString } from "@lineupkeep/collections";
 
 import {
   formatClockTime,
@@ -10,83 +10,73 @@ import { providerDisplayName } from "#contracts/connections/providerLabels.ts";
 import type {
   LineupRunView,
   TeamAutomationView,
+  TeamSummaryView,
   TeamView,
 } from "#contracts/connections/teamContract.ts";
 import { leagueDisplayName, sportDisplayName } from "#contracts/connections/teamVocabulary.ts";
 
-export function teamContextLabel(team: TeamView, connectionCount: number): string {
+export function teamContextLabel(team: TeamView, showProvider: boolean): string {
   const sportAndSeason =
     team.leagueName === undefined
       ? `${sportDisplayName(team.sport)} · ${leagueDisplayName(team.league)} ${String(team.season)}`
       : `${team.leagueName} · ${sportDisplayName(team.sport)} · ${String(team.season)}`;
-  return connectionCount > 1
+  return showProvider
     ? `${sportAndSeason} · ${providerDisplayName(team.provider)}`
     : sportAndSeason;
 }
 
-export function lastCheckLine(run: LineupRunView, now?: Date): string {
+export function showsProvider(teams: ReadonlyArray<TeamSummaryView>): boolean {
+  const first = teams[0];
+  return (
+    first !== undefined &&
+    EffectArray.some(teams, (team) => team.team.provider !== first.team.provider)
+  );
+}
+
+export type LastCheckStatus = {
+  readonly value: string;
+  readonly note?: string;
+};
+
+export function lastCheckStatus(
+  run: LineupRunView | undefined,
+  now?: Date,
+): LastCheckStatus | undefined {
+  if (run === undefined) {
+    return undefined;
+  }
   if (run.outcome === undefined) {
-    return `${lastCheckLabel(run)} · started ${formatReaderTime(run.createdAt, now)}`;
-  }
-  return `${lastCheckLabel(run)} · ${formatReaderTime(run.updatedAt, now)}`;
-}
-
-function lastCheckLabel(run: LineupRunView): string {
-  if (run.outcome !== undefined) {
-    switch (run.outcome.kind) {
-      case "changed":
-        return `Last check changed ${playerCount(run.outcome.changes.length)}`;
-      case "no_op":
-        return "Last check changed nothing";
-      case "blocked":
-        return "Last check was blocked";
-      case "failed":
-        return "Last check failed";
-      case "uncertain":
-        return "Last check is not confirmed";
-      case "skipped":
-        return "Last check had nothing to do";
-      case "superseded":
-        return "Last check was replaced by a later run";
+    if (run.status === "queued") {
+      return { value: "Not started", note: formatReaderTime(run.createdAt, now) };
     }
+    return {
+      value: `Started ${formatReaderTime(run.createdAt, now)}`,
+      note: runStatusLabel(run.status),
+    };
   }
-  switch (run.status) {
-    case "queued":
-      return "Last check is waiting to start";
-    case "reading":
-      return "Last check is reading the lineup";
-    case "planning":
-      return "Last check is choosing players";
-    case "validating":
-      return "Last check is checking the lineup";
-    case "applying":
-      return "Last check is setting the lineup";
-    case "verifying":
-      return "Last check is confirming the result";
-    case "retry-wait":
-      return "Last check is waiting to retry";
-    case "completed":
-    case "skipped":
-    case "blocked":
-    case "failed":
-    case "uncertain":
-    case "superseded":
-      return "Last check finished";
-  }
+  return {
+    value: formatReaderTime(run.updatedAt, now),
+    note: lastCheckNote(run.outcome),
+  };
 }
 
-export function checkTallyLabel(runs: ReadonlyArray<LineupRunView>): string | undefined {
-  if (runs.length < 2) {
-    return undefined;
+function lastCheckNote(outcome: NonNullable<LineupRunView["outcome"]>): string {
+  switch (outcome.kind) {
+    case "changed":
+      return `Changed ${playerCount(outcome.changes.length)}`;
+    case "no_op":
+      return "Changed nothing";
+    case "blocked":
+      return "Was blocked";
+    case "failed":
+      return "Failed";
+    case "uncertain":
+      return "Not confirmed";
+    case "skipped":
+      return "Had nothing to do";
+    case "superseded":
+      return "Replaced later";
   }
-  const changed = EffectArray.filter(runs, (run) => (run.outcome?.changes.length ?? 0) > 0).length;
-  if (changed === 0) {
-    return undefined;
-  }
-  if (changed === runs.length) {
-    return `The last ${String(runs.length)} checks all changed the lineup`;
-  }
-  return `${String(changed)} of the last ${String(runs.length)} checks changed the lineup`;
 }
 
 export function quietGroupSpan(runs: ReadonlyArray<LineupRunView>): QuietGroupSpan {
@@ -240,9 +230,13 @@ function skippedExplanation(outcome: NonNullable<LineupRunView["outcome"]>): str
     return undefined;
   }
   if (outcome.nextGameAt === undefined) {
-    return `Nothing to check. The next check is at ${formatClockTime(outcome.nextTickAt)}.`;
+    return `Nothing to check. The next check is at ${sentenceClock(outcome.nextTickAt)}`;
   }
-  return `Nothing to check. Next game is ${formatWeekday(outcome.nextGameAt)} at ${formatClockTime(outcome.nextGameAt)}.`;
+  return `Nothing to check. Next game is ${formatWeekday(outcome.nextGameAt)} at ${sentenceClock(outcome.nextGameAt)}`;
+}
+
+function sentenceClock(value: string): string {
+  return `${EffectString.replace(formatClockTime(value), /\.$/u, "")}.`;
 }
 
 function playerCount(count: number): string {

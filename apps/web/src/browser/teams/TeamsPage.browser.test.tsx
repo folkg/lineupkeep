@@ -198,10 +198,11 @@ it("shows the current matchup at a glance without category rows", async () => {
         },
       ]),
   });
-  await expect.element(page.getByText("Week 9 · vs Beta")).toBeVisible();
+  await expect.element(page.getByText("Week 9 vs Beta")).toBeVisible();
+  await expect.element(page.getByText("0-0-0 categories")).toBeVisible();
   expect(page.getByText("0 to 0").elements()).toHaveLength(0);
   expect(page.getByText("Projected 63.5 to 55").elements()).toHaveLength(0);
-  expect(page.getByText("0 games left · 2 for them").elements()).toHaveLength(0);
+  await expect.element(page.getByText("0 games left · 2 for them")).toBeVisible();
 });
 
 it("shows missing facts without a made-up record, label, cap or weekly lock", async () => {
@@ -230,7 +231,7 @@ it("shows missing facts without a made-up record, label, cap or weekly lock", as
         },
       ]),
   });
-  await expect.element(page.getByText("0 points", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("0 points for", { exact: true })).toBeVisible();
   expect(page.getByText("Record not published.").elements()).toHaveLength(0);
   expect(page.getByText("Season ends 2027-01-04").elements()).toHaveLength(0);
   expect(page.getByText("Weekly", { exact: true }).elements()).toHaveLength(0);
@@ -301,9 +302,9 @@ it("keeps published zero for points for, against and behind without substituting
         },
       ]),
   });
-  await expect.element(page.getByText("0 points", { exact: true })).toBeVisible();
-  await expect.element(page.getByText("0 against", { exact: true })).toBeVisible();
-  await expect.element(page.getByText("0 behind leader", { exact: true })).toBeVisible();
+  await expect
+    .element(page.getByText("0 points for · 0 against · 0 behind", { exact: true }))
+    .toBeVisible();
   expect(page.getByText("99", { exact: true }).elements()).toHaveLength(0);
 });
 
@@ -738,13 +739,12 @@ it("labels a pause as the rest of the fantasy day and resumes through the contro
     },
   });
 
+  await expect.element(page.getByText("Paused today", { exact: true })).toBeVisible();
   await expect
     .element(
-      page.getByText(
-        `Paused for the rest of the fantasy day · resumes at ${formatClockTime(
-          pausedTeam.team.automation.resumesAt ?? "",
-        )}`,
-      ),
+      page.getByText(`Resumes at ${formatClockTime(pausedTeam.team.automation.resumesAt ?? "")}`, {
+        exact: true,
+      }),
     )
     .toBeVisible();
   const toggle = page.getByRole("switch", { name: "Lineup checks for Alpha" });
@@ -761,10 +761,8 @@ it("labels a pause as the rest of the fantasy day and resumes through the contro
   await expect
     .element(page.getByRole("switch", { name: "Lineup checks for Alpha" }))
     .toHaveAttribute("aria-checked", "true");
-  await expect
-    .element(page.getByText(/^Paused for the rest of the fantasy day/u))
-    .not.toBeInTheDocument();
-  await expect.element(page.getByText(/^Next check at /u)).toBeVisible();
+  await expect.element(page.getByText("Paused today", { exact: true })).not.toBeInTheDocument();
+  await expect.element(page.getByText(/^\d{1,2}:\d{2}( [ap]m)?$/u)).toBeVisible();
   expect(changes).toEqual([{ team: teamId, action: "resume" }]);
 });
 
@@ -792,13 +790,12 @@ it("pauses an enabled team for the rest of the fantasy day", async () => {
 
   await pause.click();
 
+  await expect.element(page.getByText("Paused today", { exact: true })).toBeVisible();
   await expect
     .element(
-      page.getByText(
-        `Paused for the rest of the fantasy day · resumes at ${formatClockTime(
-          pausedTeam.team.automation.resumesAt ?? "",
-        )}`,
-      ),
+      page.getByText(`Resumes at ${formatClockTime(pausedTeam.team.automation.resumesAt ?? "")}`, {
+        exact: true,
+      }),
     )
     .toBeVisible();
   await expect.element(page.getByRole("button", { name: "Resume lineup checks" })).toBeVisible();
@@ -811,22 +808,18 @@ it("pauses the icon and the check line together before the server answers", asyn
 
   const row = page.getByRole("listitem").filter({ hasText: "Alpha" });
   const toggle = row.getByRole("switch", { name: "Lineup checks for Alpha" });
-  await expect.element(row.getByText(/^Next check at /u)).toBeVisible();
+  await expect.element(row.getByText(/^\d{1,2}:\d{2}( [ap]m)?$/u)).toBeVisible();
   await row
     .getByRole("button", { name: "Pause lineup checks for the rest of the fantasy day" })
     .click();
 
   await expect.element(row.getByRole("button", { name: "Resume lineup checks" })).toBeVisible();
-  await expect
-    .element(row.getByText("Paused for the rest of the fantasy day.", { exact: true }))
-    .toBeVisible();
-  await expect.element(row.getByText(/^Next check at /u)).not.toBeInTheDocument();
+  await expect.element(row.getByText("Paused today", { exact: true })).toBeVisible();
+  await expect.element(row.getByText(/^\d{1,2}:\d{2}( [ap]m)?$/u)).not.toBeInTheDocument();
   await expect.element(toggle).toHaveAttribute("aria-checked", "true");
 
   answer.resolve({ changed: [pausedTeam], teams: [pausedTeam] });
-  await expect
-    .element(row.getByText(/^Paused for the rest of the fantasy day · resumes at /u))
-    .toBeVisible();
+  await expect.element(row.getByText(/^Resumes at /u)).toBeVisible();
 });
 
 it("restores the icon and the check line when a pause fails", async () => {
@@ -838,9 +831,7 @@ it("restores the icon and the check line when a pause fails", async () => {
     .getByRole("button", { name: "Pause lineup checks for the rest of the fantasy day" })
     .click();
   await expect.element(row.getByRole("button", { name: "Resume lineup checks" })).toBeVisible();
-  await expect
-    .element(row.getByText("Paused for the rest of the fantasy day.", { exact: true }))
-    .toBeVisible();
+  await expect.element(row.getByText("Paused today", { exact: true })).toBeVisible();
 
   answer.reject(new Error("Network"));
 
@@ -849,7 +840,7 @@ it("restores the icon and the check line when a pause fails", async () => {
       row.getByRole("button", { name: "Pause lineup checks for the rest of the fantasy day" }),
     )
     .toBeVisible();
-  await expect.element(row.getByText(/^Next check at /u)).toBeVisible();
+  await expect.element(row.getByText(/^\d{1,2}:\d{2}( [ap]m)?$/u)).toBeVisible();
   await expect
     .element(
       page.getByText(
@@ -976,8 +967,9 @@ it("keeps quiet rows to league context and the last check", async () => {
   await expect.element(context).toBeVisible();
   expect(context.element().textContent).toBe("Football · NFL 2026");
   await expect.element(page.getByText(/^ ·/u)).not.toBeInTheDocument();
+  await expect.element(page.getByText("Changed nothing", { exact: true })).toBeVisible();
   await expect
-    .element(page.getByText(`Last check changed nothing · ${formatReaderTime(twoHoursAgo)}`))
+    .element(page.getByText(formatReaderTime(twoHoursAgo), { exact: true }))
     .toBeVisible();
   await expect.element(page.getByText("Available")).not.toBeInTheDocument();
   await expect.element(page.getByText("Connected")).not.toBeInTheDocument();
@@ -1036,14 +1028,30 @@ it("shows the fantasy league name and a provider jump out for the team", async (
   ).toBeTruthy();
 });
 
-it("names the connection only when the account has more than one", async () => {
-  using _app = setupTeamsPage([{ ...enabledTeam, connectionCount: 2 }]);
+it("names the provider only when the account has more than one provider type", async () => {
+  const secondTeam: TeamSummaryView = {
+    ...baseTeam,
+    team: {
+      ...baseTeam.team,
+      id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165a9",
+      connectionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9165a8",
+      provider: "espn",
+      name: "Beta",
+      providerTeamKey: "461.l.1000.t.2",
+    },
+  };
+  using _app = setupTeamsPage([baseTeam, secondTeam]);
 
-  await expect.element(page.getByText("Football · NFL 2026 · Yahoo")).toBeVisible();
+  await expect.element(page.getByText("Football · NFL 2026 · espn")).toBeVisible();
 });
 
-it("keeps a team row in the order of name, league, status, last check, and tally", async () => {
-  const tally = "1 of the last 3 checks changed the lineup";
+it("keeps the provider out when every team uses the same provider", () => {
+  using _app = setupTeamsPage([{ ...enabledTeam, connectionCount: 2 }]);
+
+  expect(page.getByText(/Yahoo/u).elements()).toHaveLength(0);
+});
+
+it("keeps a team row in the order of name, league, next check, and last check", async () => {
   using _app = setupTeamsPage([
     {
       ...enabledTeam,
@@ -1056,35 +1064,31 @@ it("keeps a team row in the order of name, league, status, last check, and tally
   const row = page.getByRole("listitem").filter({ hasText: "Alpha" });
   const name = row.getByRole("link", { name: "Alpha", exact: true });
   const league = row.getByText("Elite League 25 · Football · 2026");
-  const status = row.getByText(/^Next check at /u);
-  const lastCheck = row.getByText(
-    `Last check changed 2 players · ${formatReaderTime(twoHoursAgo)}`,
-  );
-  const tallyLine = row.getByText(tally);
+  const next = row.getByText("Next check", { exact: true });
+  const last = row.getByText("Last check", { exact: true });
+  const lastTime = row.getByText(formatReaderTime(twoHoursAgo), { exact: true });
+  const lastNote = row.getByText("Changed 2 players", { exact: true });
 
   await expect.element(name).toBeVisible();
+  expect(name.element().className).toContain("text-card-title");
   await expect.element(league).toBeVisible();
-  await expect.element(status).toBeVisible();
-  await expect.element(lastCheck).toBeVisible();
-  await expect.element(tallyLine).toBeVisible();
+  await expect.element(next).toBeVisible();
+  await expect.element(last).toBeVisible();
+  await expect.element(lastTime).toBeVisible();
+  await expect.element(lastNote).toBeVisible();
 
-  for (const later of [league, status, lastCheck, tallyLine]) {
+  for (const later of [league, next, last, lastTime, lastNote]) {
     expect(
       name.element().compareDocumentPosition(later.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   }
-  for (const later of [status, lastCheck, tallyLine]) {
+  for (const later of [next, last, lastTime, lastNote]) {
     expect(
       league.element().compareDocumentPosition(later.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   }
   expect(
-    status.element().compareDocumentPosition(lastCheck.element()) &
-      Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
-  expect(
-    lastCheck.element().compareDocumentPosition(tallyLine.element()) &
-      Node.DOCUMENT_POSITION_FOLLOWING,
+    next.element().compareDocumentPosition(last.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
 });
 
@@ -1105,13 +1109,6 @@ it("keeps the same row height in every check state on a phone and a desktop", as
       try {
         const row = page.getByRole("listitem").filter({ hasText: "Alpha" });
         await expect.element(row).toBeVisible();
-        expect(
-          row
-            .getByText(/^(Next check at|Paused for the rest|Lineup checks are off|Checking now)/u)
-            .element()
-            .getBoundingClientRect().height,
-          "the status line reserves two lines",
-        ).toBe(36);
         heights.push({
           width,
           state: state.name,
@@ -1173,19 +1170,20 @@ it("sorts team cards by sport then name across leagues", async () => {
 it("says the next check, the pause, checks off, or a check in flight", async () => {
   const mounted = setupTeamsPage([enabledTeam]);
   try {
-    await expect.element(page.getByText(/^Next check at \d{1,2}:\d{2}( [ap]m)?$/u)).toBeVisible();
+    await expect.element(page.getByText(/^\d{1,2}:\d{2}( [ap]m)?$/u)).toBeVisible();
+    await expect.element(page.getByText("Scheduled hourly.", { exact: true })).toBeVisible();
   } finally {
     mounted[Symbol.dispose]();
   }
 
   const paused = setupTeamsPage([pausedTeam]);
   try {
+    await expect.element(page.getByText("Paused today", { exact: true })).toBeVisible();
     await expect
       .element(
         page.getByText(
-          `Paused for the rest of the fantasy day · resumes at ${formatClockTime(
-            pausedTeam.team.automation.resumesAt ?? "",
-          )}`,
+          `Resumes at ${formatClockTime(pausedTeam.team.automation.resumesAt ?? "")}`,
+          { exact: true },
         ),
       )
       .toBeVisible();
@@ -1195,12 +1193,9 @@ it("says the next check, the pause, checks off, or a check in flight", async () 
 
   const off = setupTeamsPage([baseTeam]);
   try {
+    await expect.element(page.getByText("Checks are off", { exact: true })).toBeVisible();
     await expect
-      .element(
-        page.getByText("Lineup checks are off. Turn them on to check this team hourly.", {
-          exact: true,
-        }),
-      )
+      .element(page.getByText("Turn them on to check hourly.", { exact: true }))
       .toBeVisible();
   } finally {
     off[Symbol.dispose]();
@@ -1210,32 +1205,33 @@ it("says the next check, the pause, checks off, or a check in flight", async () 
     { ...enabledTeam, lastRun: checkingRun, recentRuns: [checkingRun] },
   ]);
   try {
-    await expect
-      .element(page.getByText("Checking now. This usually takes under a minute.", { exact: true }))
-      .toBeVisible();
+    await expect.element(page.getByText("Checking now", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("Usually under a minute.", { exact: true })).toBeVisible();
   } finally {
     inFlight[Symbol.dispose]();
   }
 
   const waiting = setupTeamsPage([{ ...enabledTeam, lastRun: queuedRun, recentRuns: [queuedRun] }]);
   try {
+    await expect.element(page.getByText("Waiting to start", { exact: true })).toBeVisible();
     await expect
-      .element(page.getByText("A check is waiting to start.", { exact: true }))
+      .element(page.getByText("Queued for the next check.", { exact: true }))
       .toBeVisible();
   } finally {
     waiting[Symbol.dispose]();
   }
 });
 
-it("says what the last check did and tallies the checks that changed the lineup", async () => {
+it("says what the last check did without a tally", async () => {
   using _app = setupTeamsPage([
     { ...enabledTeam, lastRun: changedRun, recentRuns: [changedRun, noOpRun, noOpRun] },
   ]);
 
   await expect
-    .element(page.getByText(`Last check changed 2 players · ${formatReaderTime(twoHoursAgo)}`))
+    .element(page.getByText(formatReaderTime(twoHoursAgo), { exact: true }))
     .toBeVisible();
-  await expect.element(page.getByText("1 of the last 3 checks changed the lineup")).toBeVisible();
+  await expect.element(page.getByText("Changed 2 players", { exact: true })).toBeVisible();
+  expect(page.getByText(/checks changed the lineup/u).elements()).toHaveLength(0);
 });
 
 it("shows an empty state before any teams are discovered", async () => {

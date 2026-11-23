@@ -1,20 +1,22 @@
 import type { JSX } from "@solidjs/web";
-import { createLink } from "@tanstack/solid-router";
+import { useLinkProps } from "@tanstack/solid-router";
+import type { LinkComponentProps } from "@tanstack/solid-router";
 import { omit } from "solid-js";
+import type { Element } from "solid-js";
 
 import { cx } from "./cx";
 import { typeClass } from "./type";
 import type { TextType } from "./type";
 
-export const TextLink = createLink(TextAnchor);
-
-function TextAnchor(props: TextAnchorProps): JSX.Element {
-  const rest = omit(props, "type", "tone", "children");
+export function TextLink(props: TextLinkProps): JSX.Element {
+  const rest = omit(props, "type", "tone", "children", "leadingIcon");
+  const linkProps = useLinkProps(rest);
   return (
     <a
-      {...rest}
+      {...linkProps}
       class={cx(
         "justify-self-start focus-visible:outline-none focus-visible:shadow-focus",
+        props.leadingIcon !== undefined && "inline-flex items-center gap-1.5",
         props.type === "card-title"
           ? cx("break-words text-ink hover:text-action", typeClass["card-title"])
           : cx(
@@ -26,12 +28,15 @@ function TextAnchor(props: TextAnchorProps): JSX.Element {
             ),
       )}
     >
+      {props.leadingIcon}
       {props.children}
     </a>
   );
 }
 
-type TextAnchorProps = Omit<JSX.AnchorHTMLAttributes<HTMLAnchorElement>, "class" | "type"> & {
+type TextLinkProps = Omit<LinkComponentProps<"a">, "class" | "style" | "type" | "children"> & {
   readonly type?: Extract<TextType, "card-title" | "body-strong" | "meta">;
   readonly tone?: "action" | "quiet";
+  readonly leadingIcon?: Element;
+  readonly children: Element;
 };

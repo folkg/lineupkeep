@@ -117,11 +117,77 @@ describe("team summary read models", () => {
     );
   });
 
+  it("adds each rotisserie category's place among the league rows", () => {
+    const goals = Effect.runSync(Schema.decodeEffect(StatRef)("s1"));
+    const current = row({
+      categoryPoints: [{ stat: goals, name: "Goals", value: 8 }],
+    });
+    const leader = row({
+      current: false,
+      name: "Leader",
+      categoryPoints: [{ stat: goals, name: "Goals", value: 10 }],
+    });
+    const tied = row({
+      current: false,
+      name: "Tied",
+      categoryPoints: [{ stat: goals, name: "Goals", value: 8 }],
+    });
+    const trailing = row({
+      current: false,
+      name: "Trailing",
+      categoryPoints: [{ stat: goals, name: "Goals", value: 4 }],
+    });
+
+    expect(
+      categoryPointsSummary({
+        included: true,
+        current,
+        rows: [current, leader, tied, trailing],
+        league: { format: "rotisserie" },
+        detail: "No standings.",
+        omittedCount: 0,
+      }),
+    ).toEqual({
+      status: "available",
+      values: [{ stat: goals, name: "Goals", value: 8, place: 2 }],
+      omittedCategories: {
+        count: 0,
+        detail: "Every category your league published has a league scoring definition.",
+      },
+    });
+  });
+
+  it("leaves a place absent when a league row has no value", () => {
+    const goals = Effect.runSync(Schema.decodeEffect(StatRef)("s1"));
+    const current = row({
+      categoryPoints: [{ stat: goals, name: "Goals", value: 8 }],
+    });
+    const missing = row({
+      current: false,
+      name: "Missing",
+      categoryPoints: [{ stat: goals, name: "Goals", value: null }],
+    });
+
+    expect(
+      categoryPointsSummary({
+        included: true,
+        current,
+        rows: [current, missing],
+        league: { format: "rotisserie" },
+        detail: "No standings.",
+        omittedCount: 0,
+      }),
+    ).toMatchObject({
+      values: [{ stat: goals, name: "Goals", value: 8 }],
+    });
+  });
+
   it("refuses rotisserie points for a category league", () => {
     assert.deepStrictEqual(
       categoryPointsSummary({
         included: true,
         current: row(),
+        rows: [],
         league,
         detail: "No standings.",
         omittedCount: 0,
@@ -138,6 +204,7 @@ describe("team summary read models", () => {
       categoryPointsSummary({
         included: true,
         current: row(),
+        rows: [],
         league: { format: "rotisserie" },
         detail: "No standings.",
         omittedCount: 0,

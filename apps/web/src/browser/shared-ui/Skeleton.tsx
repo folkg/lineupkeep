@@ -57,7 +57,7 @@ function CardSkeleton(props: SkeletonCard): JSX.Element {
         <Show when={props.season === true}>
           <SeasonArea loading />
         </Show>
-        <Skeleton class="h-[2.25rem] w-full" />
+        <Skeleton class="h-[3.125rem] w-full" />
         <Skeleton class="h-[1.125rem] w-4/5" />
         <Skeleton class="h-[1.125rem] w-3/5" />
       </Stack>

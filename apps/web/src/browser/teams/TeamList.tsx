@@ -8,7 +8,7 @@ import type { CachedTeamHeader } from "#browser/query/teamHeaderCache.ts";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import type { ActionState } from "#browser/shared-ui/actionState.ts";
 import { Badge } from "#browser/shared-ui/Badge.tsx";
-import { Card } from "#browser/shared-ui/Card.tsx";
+import { Card, CardNote } from "#browser/shared-ui/Card.tsx";
 import { EmptyState } from "#browser/shared-ui/CollectionState.tsx";
 import { IconButton } from "#browser/shared-ui/IconButton.tsx";
 import { RefreshIcon } from "#browser/shared-ui/icons.tsx";
@@ -33,16 +33,19 @@ import { sportDisplayName } from "#contracts/connections/teamVocabulary.ts";
 import { formatLabel, scoringLabel } from "./seasonLabels";
 import { TeamAttention } from "./TeamAttention";
 import { TeamControls } from "./TeamControls";
-import { checkTallyLabel, lastCheckLine, teamContextLabel } from "./teamLabels";
+import { lastCheckStatus, showsProvider, teamContextLabel } from "./teamLabels";
+import type { LastCheckStatus } from "./teamLabels";
 import { teamAutomation, teamLastRun } from "./teamPending";
 import { TeamProviderLink } from "./TeamProviderLink";
 import type { TeamRemote } from "./teamRemote";
 import { TeamSeasonFacts } from "./TeamSeasonFacts";
-import { teamStatusLine } from "./teamStatus";
+import { nextCheckStatus } from "./teamStatus";
+import type { CheckStatus } from "./teamStatus";
 
 export function TeamList(props: TeamListProps): JSX.Element {
   const clock = createMinuteClock(() => props.dataUpdatedAt());
   const settling = createSettle(() => !props.isLoading() && props.teams().length > 0);
+  const showProvider = (): boolean => showsProvider(props.teams());
   const skeletonCards = (): ReadonlyArray<SkeletonCard> | undefined =>
     props.cachedHeaders.length === 0
       ? undefined
@@ -129,6 +132,7 @@ export function TeamList(props: TeamListProps): JSX.Element {
                     factsFailure={props.cardFactsFailure()}
                     factsLoading={props.cardFactsLoading()}
                     remote={props.remote}
+                    showProvider={showProvider}
                     onOptimistic={props.onOptimistic}
                   />
                 )}
@@ -177,11 +181,11 @@ function TeamCard(props: TeamCardProps): JSX.Element {
       labelledBy={nameId()}
       meta={
         <Text type="meta" tone="muted">
-          {teamContextLabel(props.team.team, props.team.connectionCount)}
+          {teamContextLabel(props.team.team, props.showProvider())}
         </Text>
       }
     >
-      <Stack gap="xs">
+      <Stack gap="sm">
         <SeasonArea loading={props.factsLoading}>
           <TeamSeasonFacts
             facts={props.facts}
@@ -189,33 +193,57 @@ function TeamCard(props: TeamCardProps): JSX.Element {
             loading={props.factsLoading}
           />
         </SeasonArea>
-        <Text reserve="two-lines" type="meta" tone="muted">
-          {teamStatusLine(props.team, props.now())}
-        </Text>
-        <Show
-          fallback={
-            <Text numeric type="meta" tone="muted">
-              No lineup checks have run yet.
-            </Text>
-          }
-          when={teamLastRun(props.team)}
-        >
-          {(run) => (
-            <Text numeric type="meta" tone="muted">
-              {lastCheckLine(run())}
-            </Text>
-          )}
-        </Show>
-        <Show when={checkTallyLabel(props.team.recentRuns)}>
-          {(tally) => (
-            <Text numeric type="meta" tone="faint">
-              {tally()}
-            </Text>
-          )}
-        </Show>
+        <CardNote>
+          <CheckSummary now={props.now} team={props.team} />
+        </CardNote>
         <TeamAttention team={props.team} />
       </Stack>
     </Card>
+  );
+}
+
+function CheckSummary(props: {
+  readonly team: TeamSummaryView;
+  readonly now: Accessor<Date>;
+}): JSX.Element {
+  const next = (): CheckStatus => nextCheckStatus(props.team, props.now());
+  const last = (): LastCheckStatus | undefined =>
+    lastCheckStatus(teamLastRun(props.team), props.now());
+  return (
+    <Inline gap="lg" justify="between" align="start">
+      <Stack gap="2xs">
+        <Text type="label" tone="faint">
+          Next check
+        </Text>
+        <Text type="body-strong">{next().value}</Text>
+        <Show when={next().note}>
+          {(note) => (
+            <Text type="meta" tone="muted">
+              {note()}
+            </Text>
+          )}
+        </Show>
+      </Stack>
+      <Stack gap="2xs">
+        <Text type="label" tone="faint">
+          Last check
+        </Text>
+        <Show fallback={<Text type="body-strong">No checks yet</Text>} when={last()}>
+          {(status) => (
+            <>
+              <Text type="body-strong">{status().value}</Text>
+              <Show when={status().note}>
+                {(note) => (
+                  <Text type="meta" tone="muted">
+                    {note()}
+                  </Text>
+                )}
+              </Show>
+            </>
+          )}
+        </Show>
+      </Stack>
+    </Inline>
   );
 }
 
@@ -242,6 +270,7 @@ type TeamCardProps = {
   readonly factsLoading: boolean;
   readonly now: Accessor<Date>;
   readonly remote: TeamRemote;
+  readonly showProvider: Accessor<boolean>;
   readonly onOptimistic: (input: TeamControlData) => void;
 };
 

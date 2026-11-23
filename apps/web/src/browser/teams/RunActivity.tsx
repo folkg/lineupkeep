@@ -25,7 +25,7 @@ export function RunActivity(props: RunActivityProps): JSX.Element {
       <For each={groupRuns(props.runs)}>
         {(entry) => (
           <RuleListItem>
-            <Show fallback={<RunEntry entry={entry} />} when={quietRuns(entry)}>
+            <Show fallback={<RunEntry run={runForEntry(entry)} />} when={quietRuns(entry)}>
               {(runs) => <QuietGroupSummary runs={runs()} />}
             </Show>
           </RuleListItem>
@@ -38,8 +38,10 @@ export function RunActivity(props: RunActivityProps): JSX.Element {
 function QuietGroupSummary(props: { readonly runs: ReadonlyArray<LineupRunView> }): JSX.Element {
   const span = (): QuietGroupSpan => quietGroupSpan(props.runs);
   return (
-    <>
-      {span().count} checks changed nothing{" "}
+    <Text numeric type="meta" tone="muted">
+      {span().count === 1
+        ? "1 check made no change"
+        : `${String(span().count)} checks made no change`}{" "}
       <Show
         fallback={
           <>
@@ -51,27 +53,40 @@ function QuietGroupSummary(props: { readonly runs: ReadonlyArray<LineupRunView> 
         from <Time datetime={span().from}>{formatRangeStart(span().from, span().to)}</Time> to{" "}
         <Time datetime={span().to}>{formatRangeEnd(span().from, span().to)}</Time>
       </Show>
-    </>
+    </Text>
   );
 }
 
-function RunEntry(props: { readonly entry: RunActivityEntry }): JSX.Element {
+function RunEntry(props: { readonly run: LineupRunView }): JSX.Element {
   return (
-    <Show when={props.entry.type === "run" ? props.entry.run : undefined}>
-      {(run) => (
-        <Stack gap="xs">
-          <RunLine run={run()} />
-          <Show when={run().outcome?.kind !== "skipped" && run().outcome?.kind !== "superseded"}>
-            <RunLink run={run()} />
-          </Show>
-        </Stack>
-      )}
-    </Show>
+    <Stack gap="xs">
+      <RunLine run={props.run} />
+      <Show
+        when={props.run.outcome?.kind !== "skipped" && props.run.outcome?.kind !== "superseded"}
+      >
+        <RunLink run={props.run} />
+      </Show>
+    </Stack>
   );
+}
+
+function runForEntry(entry: RunActivityEntry): LineupRunView {
+  if (entry.type === "run") {
+    return entry.run;
+  }
+  const run = entry.runs[0];
+  if (run === undefined) {
+    throw new Error("A quiet group needs at least one run");
+  }
+  return run;
 }
 
 function quietRuns(entry: RunActivityEntry): ReadonlyArray<LineupRunView> | undefined {
-  return entry.type === "quiet" ? entry.runs : undefined;
+  if (entry.type !== "quiet") {
+    return undefined;
+  }
+  const only = entry.runs[0];
+  return entry.runs.length === 1 && only?.outcome?.kind === "skipped" ? undefined : entry.runs;
 }
 
 function RunLine(props: { readonly run: LineupRunView }): JSX.Element {

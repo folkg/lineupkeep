@@ -33,8 +33,8 @@ function madeNoChange(run: LineupRunView): boolean {
   }
   switch (run.outcome.kind) {
     case "no_op":
-      return true;
     case "skipped":
+      return true;
     case "superseded":
     case "changed":
     case "blocked":

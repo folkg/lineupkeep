@@ -504,6 +504,7 @@ export const CategoryValue = Schema.Struct({
       description: "The published number; null is never zero.",
     }),
   ),
+  place: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
   detail: Schema.optional(Schema.String).pipe(
     Schema.annotate({
       description: "Why `value` is null.",

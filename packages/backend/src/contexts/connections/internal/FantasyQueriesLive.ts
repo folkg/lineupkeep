@@ -3318,6 +3318,7 @@ export const FantasyQueriesLive = Layer.effect(
       const categoryPoints = categoryPointsSummary({
         included: includes("categories"),
         current,
+        rows,
         league,
         detail: standingsDetail,
         omittedCount: standingTable.omittedCategoryCount,

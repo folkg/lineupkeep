@@ -1,4 +1,4 @@
-import { Array as EffectArray } from "effect";
+import { Array as EffectArray, Option as EffectOption } from "effect";
 
 import type { ProviderLeagueSettings } from "#contexts/connections/Provider.ts";
 import type { StandingRow, TeamSummaryData } from "#contexts/connections/QueryResults.ts";
@@ -83,6 +83,7 @@ export function categoryTotalsSummary(input: {
 export function categoryPointsSummary(input: {
   readonly included: boolean;
   readonly current: StandingRow | undefined;
+  readonly rows: ReadonlyArray<StandingRow>;
   readonly league: Pick<ProviderLeagueSettings, "format"> | undefined;
   readonly detail: string;
   readonly omittedCount: number;
@@ -108,9 +109,34 @@ export function categoryPointsSummary(input: {
   }
   return {
     status: "available",
-    values: [...(input.current.categoryPoints ?? [])],
+    values: EffectArray.map(input.current.categoryPoints ?? [], (entry) => {
+      const place = categoryPlace(input.rows, entry);
+      return place === undefined ? entry : { ...entry, place };
+    }),
     omittedCategories: omittedCategories(input.omittedCount),
   };
+}
+
+function categoryPlace(
+  rows: ReadonlyArray<StandingRow>,
+  entry: { readonly stat: string; readonly value: number | null },
+): number | undefined {
+  if (entry.value === null) {
+    return undefined;
+  }
+  let higher = 0;
+  for (const row of rows) {
+    const other = EffectOption.getOrUndefined(
+      EffectArray.findFirst(row.categoryPoints ?? [], (candidate) => candidate.stat === entry.stat),
+    );
+    if (other === undefined || other.value === null) {
+      return undefined;
+    }
+    if (other.value > entry.value) {
+      higher += 1;
+    }
+  }
+  return higher + 1;
 }
 
 export function standingsSummary(input: {

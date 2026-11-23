@@ -11,7 +11,6 @@ import {
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
-import { IconNavLink } from "#browser/shared-ui/IconNavLink.tsx";
 import { ArrowLeftIcon } from "#browser/shared-ui/icons.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
@@ -24,7 +23,7 @@ import type { TeamControlData, TeamSummaryView } from "#contracts/connections/te
 import { RunActivity } from "./RunActivity";
 import { TeamAttention } from "./TeamAttention";
 import { TeamControls } from "./TeamControls";
-import { teamContextLabel } from "./teamLabels";
+import { showsProvider, teamContextLabel } from "./teamLabels";
 import { TeamNote } from "./TeamNote";
 import { teamLastRun } from "./teamPending";
 import { TeamProviderLink } from "./TeamProviderLink";
@@ -53,18 +52,19 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
     const summary = team();
     return summary === undefined ? undefined : <TeamProviderLink team={summary.team} />;
   };
+  const showProvider = (): boolean => showsProvider(page.teams());
 
   return (
     <AppShell footer={<TeamReportFooter team={team} />}>
       <Page
         back={
-          <IconNavLink label="Back to teams" to="/teams">
-            <ArrowLeftIcon size="md" />
-          </IconNavLink>
+          <TextLink leadingIcon={<ArrowLeftIcon size="sm" />} to="/teams" type="meta">
+            All teams
+          </TextLink>
         }
         title={team()?.team.name ?? "Team"}
         titleAside={titleAside()}
-        titleVariant="display"
+        titleVariant="name"
       >
         <UnsavedChangesScope>
           <Stack gap="lg">
@@ -84,6 +84,7 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
                   <TeamDetail
                     team={summary()}
                     remote={props.remote}
+                    showProvider={showProvider()}
                     onOptimistic={page.beginControl}
                   />
                 )}
@@ -109,7 +110,7 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
       <Stack gap="md">
         <Stack gap="xs">
           <Text type="meta" tone="muted">
-            {teamContextLabel(props.team.team, props.team.connectionCount)}
+            {teamContextLabel(props.team.team, props.showProvider)}
           </Text>
           <TeamAttention team={props.team} />
         </Stack>
@@ -190,6 +191,7 @@ type TeamDetailPageProps = {
 type TeamDetailProps = {
   readonly team: TeamSummaryView;
   readonly remote: TeamRemote;
+  readonly showProvider: boolean;
   readonly onOptimistic: (input: TeamControlData) => void;
 };
 
