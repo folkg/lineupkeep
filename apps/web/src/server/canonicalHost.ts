@@ -10,7 +10,11 @@ export const canonicalHostRedirect: {
   if (url.host === canonical.host) {
     return undefined;
   }
-  if (!EffectString.endsWith(url.hostname, ".run.app") || url.pathname === "/healthz") {
+  if (
+    !EffectString.endsWith(url.hostname, ".run.app") ||
+    url.pathname === "/healthz" ||
+    EffectString.startsWith(url.pathname, "/api/internal/")
+  ) {
     return undefined;
   }
   return Response.redirect(new URL(`${url.pathname}${url.search}`, canonical), 308);

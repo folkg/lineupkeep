@@ -34,3 +34,12 @@ it("does not redirect the health check", () => {
     canonicalHostRedirect(new Request("https://old-service-hash-ue.a.run.app/healthz"), canonical),
   );
 });
+
+it("leaves internal worker calls on their own address", () => {
+  assert.isUndefined(
+    canonicalHostRedirect(
+      new Request("https://old-service-hash-ue.a.run.app/api/internal/lineup-worker"),
+      canonical,
+    ),
+  );
+});
