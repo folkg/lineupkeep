@@ -68,7 +68,7 @@ The owner has chosen to proceed with local implementation. The upstream security
 
 ## Link a Yahoo account
 
-Open **Account** and choose **Connect Yahoo** under Connections. A private browser opens on a page for that sign-in only; sign in there once. Lineupgrade never stores your password, and keystrokes are relayed only to that temporary browser. When Yahoo accepts the sign-in, the connection becomes ready, teams are discovered automatically, and the app opens **Teams**. No install, code copy, or second approval is required. The temporary browser profile is destroyed when the session ends. Signing in to the same account again refreshes that connection instead of adding a second one; a different account with different teams becomes a separate connection.
+Open **Account** and choose **Connect Yahoo** under Connections. A private browser opens on a page for that sign-in only; sign in there once. Lineupgrade never stores your password, and keystrokes are relayed only to that temporary browser. When Yahoo accepts the sign-in, the connection becomes ready, teams are discovered automatically, and the app opens **Teams**. No install, code copy, or second approval is required. The temporary browser profile is destroyed when the session ends. Each team stays with the connection that discovered it, so the five-team and one-team connections remain separate.
 
 Hosted sign-in runs on the Node target when a Playwright Chromium is installed. The deployed Cloud Run stage uses the dedicated hosted-browser service; the Cloudflare target and a Node image without that browser report `hosted_browser.unsupported`. The hosted browser is the only linking path.
 

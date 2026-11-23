@@ -61,12 +61,11 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
   holds.
 - **Connecting has its own page, and Account owns the list.** Account shows the connections and their
   teams. Connect, Reconnect and Add a different account open `/connections` with a heading for that
-  sign-in only; the old bookmark returns to Account. The two connections to the same Yahoo account were
-  merged under the six-team connection: six teams, 3,465 runs, five plans, notes and automation kept.
-- **A second sign-in to the same account repairs the first connection.** When the fresh session finds a
-  team that another active connection already owns, Lineupgrade discards the new connection and reconnects
-  the existing one with the fresh session. A genuinely different account, with different teams, still
-  becomes a second connection.
+  sign-in only; the old bookmark returns to Account.
+- **A team stays with the connection that discovered it.** Discovery attaches only a team that no other
+  active connection owns. The accidental six-team merge was reversed on 23 November: the original
+  connection holds the five teams and the second holds Jeff's Agreeable Team, with runs, plans, notes and
+  automation kept.
 - **The feedback queue is triaged.** The Nov 22 rollup listed 95 open reports mixing fixed, obsolete and
   live items. Triage closed 72 as fixed or superseded, kept 29 live reports as acknowledged backlog, and
   left zero open. `list_feedback` now takes a `before` cursor and returns `page.next`.

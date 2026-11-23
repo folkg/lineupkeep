@@ -68,6 +68,41 @@ it.effect("links a captured session into one ready connection", () =>
   }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );
 
+it.effect("keeps a team with the connection that discovered it", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const fake = yield* FakeProviderWorld;
+    yield* fake.setTeams([
+      {
+        provider: decodeProviderKey("yahoo"),
+        providerTeamKey: "nfl.l.1000.t.1",
+        providerLeagueKey: "nfl.l.1000",
+        league: "nfl",
+        sport: "football",
+        season: 2026,
+        name: "First Team",
+      },
+    ]);
+    const firstLinked = yield* connections.link(owner, [linkInput]);
+    const first = Array.getUnsafe(firstLinked, 0);
+    const firstTeams = yield* connections.discoverTeams(owner, [{ id: first.id }]);
+    const secondLinked = yield* connections.link(owner, [linkInput]);
+    const second = Array.getUnsafe(secondLinked, 0);
+    const secondTeams = yield* connections.discoverTeams(owner, [{ id: second.id }]);
+    const teams = yield* connections.listTeams(owner);
+
+    assert.deepStrictEqual(
+      Array.map(firstTeams, (team) => team.name),
+      ["First Team"],
+    );
+    assert.deepStrictEqual(secondTeams, []);
+    assert.deepStrictEqual(
+      Array.map(teams, (team) => team.connectionId),
+      [first.id],
+    );
+  }).pipe(layerTools.provide(ConnectionsTestLayer)),
+);
+
 it.effect("reads cards once per ready connection and isolates a failed connection", () =>
   Effect.gen(function* () {
     const connections = yield* Connections;

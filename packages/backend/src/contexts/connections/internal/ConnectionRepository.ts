@@ -672,40 +672,6 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
           );
       });
 
-      const discardLinked = Effect.fn("ConnectionRepository.discardLinked")(function* (
-        userId: UserId,
-        inputs: ReadonlyArray<ConnectionIdInput>,
-      ) {
-        const ids = [...new Set(EffectArray.map(inputs, (input) => input.id))];
-        if (!Array.isArrayNonEmpty(ids)) {
-          return;
-        }
-        yield* database
-          .transaction((transaction) =>
-            Effect.gen(function* () {
-              yield* transaction
-                .delete(providerCredentials)
-                .where(
-                  and(
-                    eq(providerCredentials.userId, userId),
-                    anyOf(providerCredentials.connectionId, ids),
-                  ),
-                );
-              yield* transaction
-                .delete(providerTeams)
-                .where(
-                  and(eq(providerTeams.userId, userId), anyOf(providerTeams.connectionId, ids)),
-                );
-              yield* transaction
-                .delete(providerConnections)
-                .where(
-                  and(eq(providerConnections.userId, userId), anyOf(providerConnections.id, ids)),
-                );
-            }),
-          )
-          .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
-      });
-
       const markReconnectRequired = Effect.fn("ConnectionRepository.markReconnectRequired")(
         function* (userId: UserId, commands: ReadonlyArray<ReconnectRequiredCommand>) {
           if (commands.length === 0) {
@@ -1095,7 +1061,6 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
         completeLinking,
         reconnect,
         disconnect,
-        discardLinked,
         markReconnectRequired,
         loadCredentials,
         recordDiscoveries,

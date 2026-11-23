@@ -1780,12 +1780,14 @@ it.effect(
       );
       const second = yield* seedConnection(
         fake,
-        [teamFixture("461.l.1000.t.1", "Alpha")],
+        [teamFixture("461.l.1000.t.3", "Gamma")],
         "A1=healthy-session-cookie",
       );
       const firstTeam = first.teams[0];
       const secondTeamOnSameConnection = first.teams[1];
       const healthyTeam = second.teams[0];
+      yield* fake.setRoster({ ...roster, providerTeamKey: "461.l.1000.t.3" });
+      yield* fake.setNativeAfter({ ...nativeAfter, providerTeamKey: "461.l.1000.t.3" });
       if (
         firstTeam === undefined ||
         secondTeamOnSameConnection === undefined ||

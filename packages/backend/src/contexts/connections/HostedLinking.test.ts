@@ -121,54 +121,6 @@ it.effect("completes once, stores the validated connection, and discovers teams"
   }).pipe(layerTools.provide(HostedLinkingTestLayer)),
 );
 
-it.effect("adopts a second sign-in for the same teams into the existing connection", () =>
-  Effect.gen(function* () {
-    const hosted = yield* HostedLinking;
-    const connections = yield* Connections;
-    const fake = yield* FakeProviderWorld;
-    yield* fake.setTeams([
-      {
-        provider: decodeProviderKey("yahoo"),
-        providerTeamKey: "nfl.l.1000.t.1",
-        providerLeagueKey: "nfl.l.1000",
-        league: "nfl",
-        sport: "football",
-        season: 2026,
-        name: "Hosted Team",
-      },
-    ]);
-    const firstStart = yield* hosted.start(owner, startInput);
-    const first = yield* hosted.complete(owner, {
-      id: firstStart.session.id,
-      ticket: Redacted.value(firstStart.ticket),
-      provider: decodeProviderKey("yahoo"),
-      session,
-    });
-
-    const secondStart = yield* hosted.start(owner, startInput);
-    const second = yield* hosted.complete(owner, {
-      id: secondStart.session.id,
-      ticket: Redacted.value(secondStart.ticket),
-      provider: decodeProviderKey("yahoo"),
-      session,
-    });
-
-    assert.strictEqual(second.session.connectionId, first.connection.id);
-    assert.strictEqual(second.connection.id, first.connection.id);
-    assert.strictEqual(second.teamsDiscovered, 1);
-    const owned = yield* connections.list(owner);
-    assert.deepStrictEqual(
-      EffectArray.map(owned, (connection) => connection.id),
-      [first.connection.id],
-    );
-    const teams = yield* connections.listTeams(owner);
-    assert.deepStrictEqual(
-      EffectArray.map(teams, (team) => team.connectionId),
-      [first.connection.id],
-    );
-  }).pipe(layerTools.provide(HostedLinkingTestLayer)),
-);
-
 it.effect("keeps a second sign-in that has different teams as a separate connection", () =>
   Effect.gen(function* () {
     const hosted = yield* HostedLinking;

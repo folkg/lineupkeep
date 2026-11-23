@@ -72,11 +72,6 @@ export const ConnectionsLive = Layer.effect(
     ): Effect.Effect<ReadonlyArray<ProviderConnection>, ConnectionError> =>
       repository.disconnect(userId, inputs).pipe(Effect.tap(annotateOneConnection));
 
-    const discardLinked = (
-      userId: UserId,
-      inputs: ReadonlyArray<ConnectionIdInput>,
-    ): Effect.Effect<void, ConnectionError> => repository.discardLinked(userId, inputs);
-
     const validateSession = (
       id: ConnectionId,
       input: {
@@ -354,9 +349,29 @@ export const ConnectionsLive = Layer.effect(
           }
         }
         const at = yield* DateTime.now;
+        const [active, existing] = yield* Effect.all(
+          [repository.listConnections(userId), repository.listTeams(userId)],
+          { concurrency: "unbounded" },
+        );
+        const activeIds = new Set<ConnectionId>();
+        for (const connection of active) {
+          if (
+            connection.status === "ready" ||
+            connection.status === "reconnect-required" ||
+            connection.status === "linking"
+          ) {
+            activeIds.add(connection.id);
+          }
+        }
+        const teamOwners = new Map<string, ConnectionId>();
+        for (const team of existing) {
+          if (activeIds.has(team.connectionId)) {
+            teamOwners.set(team.providerTeamKey, team.connectionId);
+          }
+        }
         const discoveries = yield* Effect.forEach(
           credentials,
-          (credential) => discoverConnection(userId, credential, at),
+          (credential) => discoverConnection(userId, credential, at, teamOwners),
           { concurrency: 1 },
         );
         yield* repository.recordDiscoveries(userId, discoveries, at);
@@ -369,6 +384,7 @@ export const ConnectionsLive = Layer.effect(
       userId: UserId,
       credential: ReadyCredential,
       at: DateTime.Utc,
+      teamOwners: ReadonlyMap<string, ConnectionId>,
     ): Effect.Effect<TeamDiscovery, ConnectionError> =>
       Effect.gen(function* () {
         const session = yield* encryption
@@ -422,7 +438,13 @@ export const ConnectionsLive = Layer.effect(
           credential.generation,
           at,
         );
-        return { connectionId: credential.connectionId, teams };
+        return {
+          connectionId: credential.connectionId,
+          teams: EffectArray.filter(teams, (team) => {
+            const owner = teamOwners.get(team.providerTeamKey);
+            return owner === undefined || owner === credential.connectionId;
+          }),
+        };
       });
 
     return Connections.of({
@@ -430,7 +452,6 @@ export const ConnectionsLive = Layer.effect(
       link,
       completeReconnect,
       disconnect,
-      discardLinked,
       discoverTeams,
       listTeams,
       readTeamCards,

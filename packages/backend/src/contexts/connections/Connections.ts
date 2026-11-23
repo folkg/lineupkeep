@@ -45,11 +45,6 @@ export type ConnectionsShape = {
     inputs: ReadonlyArray<ConnectionIdInput>,
   ) => Effect.Effect<ReadonlyArray<ProviderConnection>, ConnectionError>;
 
-  readonly discardLinked: (
-    userId: UserId,
-    inputs: ReadonlyArray<ConnectionIdInput>,
-  ) => Effect.Effect<void, ConnectionError>;
-
   readonly discoverTeams: (
     userId: UserId,
     inputs: ReadonlyArray<ConnectionIdInput>,
