@@ -18,10 +18,14 @@ import { Array as EffectArray } from "effect";
 import type {
   TeamChangeView,
   TeamNoteSaveResult,
+  TeamOverviewView,
   TeamRefreshView,
 } from "#contracts/connections/teamContract.ts";
 import { runUseCase } from "#server/backendEntry.ts";
-import { toTeamOverviewView } from "#server/connections/teamOverviewPresentation.ts";
+import {
+  seasonFactsUnavailableReason,
+  toTeamOverviewView,
+} from "#server/connections/teamOverviewPresentation.ts";
 import {
   LineupRunInputInvalid,
   TeamInputInvalid,
@@ -74,13 +78,19 @@ export const readTeamOverviewServerFn = createServerFn({ method: "POST" })
           const input = yield* Effect.fromResult(data).pipe(
             Effect.mapError(() => TeamInputInvalid.make({})),
           );
-          const summary = yield* FantasyQueries.use((queries) =>
+          return yield* FantasyQueries.use((queries) =>
             queries.getTeamSummary(userId, {
               team: input.team,
               groups: ["league", "standings", "categories", "matchup"],
             }),
+          ).pipe(
+            Effect.map(toTeamOverviewView),
+            Effect.catchTag("query.connection_not_ready", (error) =>
+              Effect.succeed({
+                reason: seasonFactsUnavailableReason(error.status),
+              } satisfies TeamOverviewView),
+            ),
           );
-          return toTeamOverviewView(summary);
         }),
       () => ({ type: "team.refresh_failed" as const, outcome: "failure" as const }),
     ),

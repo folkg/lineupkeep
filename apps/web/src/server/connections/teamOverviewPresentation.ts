@@ -3,6 +3,23 @@ import { EffectArray } from "@lineupkeep/collections";
 
 import type { TeamOverviewView } from "#contracts/connections/teamContract.ts";
 
+export function seasonFactsUnavailableReason(
+  status: "linking" | "ready" | "reconnect-required" | "disconnected" | "missing",
+): string {
+  switch (status) {
+    case "reconnect-required":
+      return "Reconnect this league to load season facts.";
+    case "linking":
+      return "Season facts appear after the connection finishes setting up.";
+    case "disconnected":
+      return "Connect this league again to load season facts.";
+    case "missing":
+      return "Season facts are unavailable because the connection is missing.";
+    case "ready":
+      return "Season facts could not be loaded.";
+  }
+}
+
 export function toTeamOverviewView(summary: TeamSummaryResult): TeamOverviewView {
   if (summary.status === "narrowing_required") {
     return { reason: "The season overview is too large to display." };

@@ -3,7 +3,7 @@ import { TeamSummaryData } from "@lineupkeep/backend/connections/QueryResults";
 import { recordHas } from "@lineupkeep/collections";
 import { Effect, Schema } from "effect";
 
-import { toTeamOverviewView } from "./teamOverviewPresentation.ts";
+import { seasonFactsUnavailableReason, toTeamOverviewView } from "./teamOverviewPresentation.ts";
 
 const base = {
   status: "ok",
@@ -35,6 +35,17 @@ const league = {
   },
   transactionTiming: { weeklyDeadline: "weekly" },
 };
+
+it("explains why season facts need a working connection", () => {
+  assert.strictEqual(
+    seasonFactsUnavailableReason("reconnect-required"),
+    "Reconnect this league to load season facts.",
+  );
+  assert.strictEqual(
+    seasonFactsUnavailableReason("linking"),
+    "Season facts appear after the connection finishes setting up.",
+  );
+});
 
 it.effect(
   "keeps zeroes, provider scoring labels, and weekly deadlines without exporting references",

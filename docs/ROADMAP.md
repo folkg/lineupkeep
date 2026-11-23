@@ -32,7 +32,7 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 | Restore              | Drill passed 2026-10-29; RPO 15 minutes, RTO 4 hours, owner executes recovery (ruled 10 November) |
 | Dependencies         | Fresh audit and disposition in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md)                         |
 | Security             | Audit and disposition in [SECURITY-AUDIT.md](SECURITY-AUDIT.md); deferred work is group J         |
-| Checks               | 2104 node, 299 browser, 10 chromium; container end to end 62 passed, nothing skipped              |
+| Checks               | 2105 node, 299 browser, 10 chromium; container end to end 62 passed, nothing skipped              |
 
 ---
 
@@ -66,6 +66,9 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
   active connection owns. The accidental six-team merge was reversed on 23 November: the original
   connection holds the five teams and the second holds Jeff's Agreeable Team, with runs, plans, notes and
   automation kept.
+- **A team page survives an expired connection.** When season facts need a connection that has to be
+  reconnected, the page says so and keeps the team controls and recent activity available instead of
+  failing the whole render.
 - **The feedback queue is triaged.** The Nov 22 rollup listed 95 open reports mixing fixed, obsolete and
   live items. Triage closed 72 as fixed or superseded, kept 29 live reports as acknowledged backlog, and
   left zero open. `list_feedback` now takes a `before` cursor and returns `page.next`.
