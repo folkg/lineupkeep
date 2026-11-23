@@ -40,7 +40,7 @@ import {
   cardAction,
   cardIsSettled,
   cardMembers,
-  cardNeedsDecision,
+  cardIsOpenToday,
   cardNextAction,
   cardStatus,
   cardTitle,
@@ -141,7 +141,7 @@ function SummaryKicker(props: SectionProps): JSX.Element {
             return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
           },
         ),
-        cardNeedsDecision,
+        cardIsOpenToday,
       ),
       cardMembers,
     ).length;
@@ -205,7 +205,7 @@ function DaySection(props: DaySectionProps): JSX.Element {
           const flatMapped3 = entry.cards;
           return arrayValueIsArray(flatMapped3) ? flatMapped3 : [flatMapped3];
         }),
-        cardNeedsDecision,
+        cardIsOpenToday,
       ),
       cardMembers,
     );

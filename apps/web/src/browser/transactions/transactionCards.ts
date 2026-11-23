@@ -198,6 +198,11 @@ export function cardNeedsDecision(card: GroupCard): boolean {
   return cardStatus(card).kind === "needs-decision";
 }
 
+export function cardIsOpenToday(card: GroupCard): boolean {
+  const kind = cardStatus(card).kind;
+  return kind !== "waiting" && kind !== "ran";
+}
+
 export function cardIsSettled(card: GroupCard): boolean {
   const kind = cardStatus(card).kind;
   if (kind === "needs-decision" || kind === "running") {
