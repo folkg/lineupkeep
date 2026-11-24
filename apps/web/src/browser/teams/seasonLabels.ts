@@ -116,12 +116,57 @@ export function periodLabel(
   const regularLastPeriod = playoffStartWeek - 1;
   const playoffWeeks = lastPeriod - regularLastPeriod;
   if (currentPeriod > regularLastPeriod) {
-    const playoffWeek = currentPeriod - regularLastPeriod;
-    return `Playoffs · Week ${String(playoffWeek)} of ${String(playoffWeeks)}`;
+    return `Playoffs · Week ${String(currentPeriod - regularLastPeriod)} of ${String(playoffWeeks)}`;
   }
   const regularWeeksLeft = regularLastPeriod - currentPeriod;
   const remaining = regularWeeksLeft === 0 ? "" : ` · ${String(regularWeeksLeft)} left`;
   return `Week ${String(currentPeriod)} of ${String(regularLastPeriod)} regular${remaining} · ${String(playoffWeeks)} ${playoffWeeks === 1 ? "playoff week" : "playoff weeks"}`;
+}
+
+export function periodParts(
+  currentPeriod: number | undefined,
+  lastPeriod: number | undefined,
+  seasonOver: boolean | undefined,
+  usesPlayoffs: boolean | undefined,
+  playoffStartWeek: number | undefined,
+): PeriodParts | undefined {
+  if (currentPeriod === undefined || seasonOver === true) {
+    return undefined;
+  }
+  if (lastPeriod === undefined) {
+    return { headline: `Week ${String(currentPeriod)}`, details: [] };
+  }
+  if (currentPeriod > lastPeriod) {
+    return undefined;
+  }
+  if (
+    usesPlayoffs !== true ||
+    playoffStartWeek === undefined ||
+    playoffStartWeek <= 1 ||
+    playoffStartWeek > lastPeriod
+  ) {
+    return { headline: `Week ${String(currentPeriod)} of ${String(lastPeriod)}`, details: [] };
+  }
+  const regularLastPeriod = playoffStartWeek - 1;
+  const playoffWeeks = lastPeriod - regularLastPeriod;
+  if (currentPeriod > regularLastPeriod) {
+    return {
+      headline: `Playoffs · Week ${String(currentPeriod - regularLastPeriod)} of ${String(playoffWeeks)}`,
+      details: [],
+    };
+  }
+  const regularWeeksLeft = regularLastPeriod - currentPeriod;
+  return {
+    headline: `Week ${String(currentPeriod)} of ${String(regularLastPeriod)} regular`,
+    details: [
+      ...(regularWeeksLeft === 0
+        ? []
+        : [
+            `${String(regularWeeksLeft)} regular ${regularWeeksLeft === 1 ? "week" : "weeks"} left`,
+          ]),
+      `${String(playoffWeeks)} ${playoffWeeks === 1 ? "playoff week" : "playoff weeks"}`,
+    ],
+  };
 }
 
 export function number(value: number): string {
@@ -156,3 +201,8 @@ export function ordinal(rank: number): string {
             : "th";
   return `${String(rank)}${suffix}`;
 }
+
+export type PeriodParts = {
+  readonly headline: string;
+  readonly details: ReadonlyArray<string>;
+};

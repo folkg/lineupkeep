@@ -40,35 +40,46 @@ export function Table(props: TableProps): JSX.Element {
               <tr class="border-b border-rule last:border-b-0">
                 <For each={row}>
                   {(cell, index) => (
-                    <td
-                      class={
-                        props.columns[index()]?.align === "end"
-                          ? "px-2 py-2 text-right sm:px-3"
-                          : "px-2 py-2 sm:px-3"
-                      }
-                    >
-                      {cell}
-                    </td>
+                    <td class={cellClass(props.columns[index()]?.align)}>{cell}</td>
                   )}
                 </For>
               </tr>
             )}
           </For>
         </tbody>
-        <Show when={props.footer}>
-          {(footer) => (
+        <Show when={props.footerCells}>
+          {(cells) => (
             <tfoot>
               <tr class="border-t border-rule-strong">
-                <td class="px-2 py-2 sm:px-3" colspan={props.columns.length}>
-                  {footer()}
-                </td>
+                <For each={cells()}>
+                  {(cell, index) => (
+                    <td class={cellClass(props.columns[index()]?.align)}>{cell}</td>
+                  )}
+                </For>
               </tr>
             </tfoot>
           )}
         </Show>
+        <Show when={props.footerCells === undefined}>
+          <Show when={props.footer}>
+            {(footer) => (
+              <tfoot>
+                <tr class="border-t border-rule-strong">
+                  <td class="px-2 py-2 sm:px-3" colspan={props.columns.length}>
+                    {footer()}
+                  </td>
+                </tr>
+              </tfoot>
+            )}
+          </Show>
+        </Show>
       </table>
     </div>
   );
+}
+
+function cellClass(align: "end" | undefined): string {
+  return align === "end" ? "px-2 py-2 text-right sm:px-3" : "px-2 py-2 sm:px-3";
 }
 
 export function TableSkeleton(props: {
@@ -104,4 +115,5 @@ type TableProps = {
   readonly columns: ReadonlyArray<TableColumn>;
   readonly rows: ReadonlyArray<ReadonlyArray<Element>>;
   readonly footer?: Element;
+  readonly footerCells?: ReadonlyArray<Element>;
 };

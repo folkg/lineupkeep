@@ -140,11 +140,8 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
       />
 
       <Stack as="section" gap="sm" labelledBy="team-activity-title">
-        <SectionTitle id="team-activity-title">Check history</SectionTitle>
-        <Show
-          fallback={<NoChecksToday team={props.team} />}
-          when={props.team.recentRuns.length > 0}
-        >
+        <SectionTitle id="team-activity-title">Lineup runs</SectionTitle>
+        <Show fallback={<NoRunsToday team={props.team} />} when={props.team.recentRuns.length > 0}>
           <RunActivity runs={props.team.recentRuns} />
         </Show>
       </Stack>
@@ -179,16 +176,16 @@ function TeamReportFooter(props: {
   );
 }
 
-function NoChecksToday(props: NoChecksTodayProps): JSX.Element {
+function NoRunsToday(props: NoRunsTodayProps): JSX.Element {
   return (
-    <EmptyState title="No checks today.">
+    <EmptyState title="No lineup runs today.">
       <Show
-        fallback="Checks will appear here after the first scheduled or manual run."
+        fallback="Lineup runs will appear here after the first scheduled or manual run."
         when={teamLastRun(props.team)}
       >
         {(run) => (
           <>
-            The last check was{" "}
+            The last lineup run was{" "}
             <Time datetime={run().updatedAt}>{formatReaderTime(run().updatedAt)}</Time>.
           </>
         )}
@@ -213,6 +210,6 @@ type TeamDetailProps = {
   readonly onOptimistic: (input: TeamControlData) => void;
 };
 
-type NoChecksTodayProps = {
+type NoRunsTodayProps = {
   readonly team: TeamSummaryView;
 };

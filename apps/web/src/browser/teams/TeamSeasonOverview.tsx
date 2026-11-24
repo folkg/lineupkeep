@@ -73,7 +73,7 @@ export function TeamSeasonOverview(props: {
   const title = (): string => (facts()?.format === "rotisserie" ? "My categories" : "This week");
   const failure = (): string =>
     props.failed
-      ? "Season facts could not be loaded. Checks and activity remain available."
+      ? "Season facts could not be loaded. Lineup runs remain available."
       : (facts()?.reason ?? "Season facts were not published.");
   return (
     <Split
@@ -147,6 +147,7 @@ function SeasonSkeleton(): JSX.Element {
         <Skeleton height="h-3" width="w-32" />
         <Skeleton height="h-3" width="w-24" />
         <Skeleton height="h-3" width="w-40" />
+        <Skeleton height="h-3" width="w-28" />
       </Stack>
       <Stack gap="2xs">
         <Text type="label" tone="faint">

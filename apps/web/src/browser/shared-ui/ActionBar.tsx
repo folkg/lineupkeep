@@ -12,25 +12,19 @@ export function ActionBar(props: {
   return (
     <fieldset
       disabled={props.disabled === true}
-      class="m-0 flex w-full min-w-0 flex-wrap items-center gap-3 border-0 p-0 max-[559px]:flex-col max-[559px]:items-stretch"
+      class="m-0 grid w-full grid-flow-col auto-cols-fr items-stretch gap-2 border-0 p-0 max-[559px]:[&_button]:w-full max-[559px]:[&_button]:min-w-0 max-[559px]:[&_button]:px-2 min-[560px]:flex min-[560px]:flex-wrap min-[560px]:items-center min-[560px]:gap-3"
     >
-      <div class="order-1 flex flex-wrap items-center gap-3 max-[559px]:w-full max-[559px]:flex-col max-[559px]:items-stretch min-[560px]:order-2 min-[560px]:ms-auto">
-        <Show when={props.tertiary}>
-          {(tertiary) => <div class="max-[559px]:self-start">{tertiary()}</div>}
-        </Show>
-        <Show when={props.secondary}>
-          {(secondary) => <div class="max-[559px]:self-start">{secondary()}</div>}
-        </Show>
-        <Show when={props.primary}>
-          {(primary) => <div class="max-[559px]:grid max-[559px]:w-full">{primary()}</div>}
-        </Show>
-      </div>
       <Show when={props.destructive}>
-        {(destructive) => (
-          <div class="order-2 flex w-full flex-wrap items-center gap-3 max-[559px]:order-2 max-[559px]:grid max-[559px]:w-full min-[560px]:order-1 min-[560px]:w-auto min-[560px]:me-auto">
-            {destructive()}
-          </div>
-        )}
+        {(destructive) => <div class="max-[559px]:grid min-[560px]:me-auto">{destructive()}</div>}
+      </Show>
+      <Show when={props.tertiary}>
+        {(tertiary) => <div class="max-[559px]:grid">{tertiary()}</div>}
+      </Show>
+      <Show when={props.secondary}>
+        {(secondary) => <div class="max-[559px]:grid">{secondary()}</div>}
+      </Show>
+      <Show when={props.primary}>
+        {(primary) => <div class="max-[559px]:grid">{primary()}</div>}
       </Show>
     </fieldset>
   );

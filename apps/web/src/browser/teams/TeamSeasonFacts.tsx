@@ -52,7 +52,7 @@ export function TeamSeasonFacts(props: {
         >
           <Text type="meta" tone="muted">
             {props.failed
-              ? "Season facts could not be loaded. Lineup checks and controls are still available."
+              ? "Season facts could not be loaded. Lineup runs and controls are still available."
               : (props.facts?.reason ?? "Season facts were not published for this team.")}
           </Text>
         </Show>

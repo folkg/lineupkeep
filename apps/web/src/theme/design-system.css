@@ -52,6 +52,11 @@
   --text-page-title--letter-spacing: var(--theme-text-page-title-letter-spacing);
   --text-page-title--font-weight: 800;
 
+  --text-name-title: var(--theme-text-name-title);
+  --text-name-title--line-height: var(--theme-text-name-title-line-height);
+  --text-name-title--letter-spacing: var(--theme-text-name-title-letter-spacing);
+  --text-name-title--font-weight: 800;
+
   --text-section-title: var(--theme-text-section-title);
   --text-section-title--line-height: var(--theme-text-section-title-line-height);
   --text-section-title--letter-spacing: var(--theme-tracking-tight);

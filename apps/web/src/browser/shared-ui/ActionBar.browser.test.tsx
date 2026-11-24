@@ -6,29 +6,88 @@ import { page } from "vitest/browser";
 import { ActionBar } from "./ActionBar";
 import { Button } from "./Button";
 
-it("keeps one action order from wide screens down to phones", async () => {
+it("keeps destructive first and the primary last from wide screens down to phones", async () => {
   await page.viewport(900, 800);
   using _app = renderBar();
 
-  const destructive = box("Discard");
-  const tertiary = box("Cancel");
-  const secondary = box("Schedule");
-  const primary = box("Run now");
-  expect(destructive.x).toBeLessThan(tertiary.x);
-  expect(tertiary.x).toBeLessThan(secondary.x);
-  expect(secondary.x).toBeLessThan(primary.x);
+  expect(box("Discard").x).toBeLessThan(box("Schedule").x);
+  expect(box("Schedule").x).toBeLessThan(box("Run now").x);
 
   await page.viewport(390, 844);
-  const phoneTertiary = box("Cancel");
-  const phoneSecondary = box("Schedule");
-  const phonePrimary = box("Run now");
-  const phoneDestructive = box("Discard");
-  const bar = page.getByRole("group").element().getBoundingClientRect();
-  expect(phoneTertiary.y).toBeLessThan(phonePrimary.y);
-  expect(phoneSecondary.y).toBeLessThan(phonePrimary.y);
-  expect(phonePrimary.width).toBeGreaterThanOrEqual(bar.width - 4);
-  expect(phonePrimary.y).toBeLessThan(phoneDestructive.y);
+  const destructive = box("Discard");
+  const secondary = box("Schedule");
+  const primary = box("Run now");
+  expect(destructive.x).toBeLessThan(secondary.x);
+  expect(secondary.x).toBeLessThan(primary.x);
+  expect(destructive.y).toBe(secondary.y);
+  expect(secondary.y).toBe(primary.y);
+  expect(Math.abs(destructive.width - secondary.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(secondary.width - primary.width)).toBeLessThanOrEqual(1);
 });
+
+it("gives a two-action editor one equal row", async () => {
+  await page.viewport(390, 844);
+  using _app = renderEditor();
+
+  const cancel = box("Cancel");
+  const save = box("Save schedule");
+  expect(cancel.y).toBe(save.y);
+  expect(Math.abs(cancel.width - save.width)).toBeLessThanOrEqual(1);
+});
+
+it("wraps longer labels without cutting them off on a narrow phone", async () => {
+  await page.viewport(320, 700);
+  using _app = renderLongLabels();
+
+  for (const name of ["Discard group", "Schedule later", "Save schedule"]) {
+    const button = page.getByRole("button", { name, exact: true }).element();
+    expect(button.textContent).toBe(name);
+    expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth + 1);
+  }
+});
+
+function renderEditor(): { [Symbol.dispose](): void } {
+  const host = document.body.appendChild(document.createElement("div"));
+  const dispose = render(
+    () => (
+      <ActionBar
+        primary={<Button>Save schedule</Button>}
+        tertiary={<Button variant="secondary">Cancel</Button>}
+      />
+    ),
+    host,
+  );
+  return {
+    [Symbol.dispose](): void {
+      dispose();
+      host.remove();
+    },
+  };
+}
+
+function renderLongLabels(): { [Symbol.dispose](): void } {
+  const host = document.body.appendChild(document.createElement("div"));
+  const dispose = render(
+    () => (
+      <ActionBar
+        destructive={
+          <Button tone="danger" variant="quiet">
+            Discard group
+          </Button>
+        }
+        primary={<Button>Save schedule</Button>}
+        secondary={<Button variant="secondary">Schedule later</Button>}
+      />
+    ),
+    host,
+  );
+  return {
+    [Symbol.dispose](): void {
+      dispose();
+      host.remove();
+    },
+  };
+}
 
 function renderBar(): { [Symbol.dispose](): void } {
   const host = document.body.appendChild(document.createElement("div"));
@@ -42,7 +101,6 @@ function renderBar(): { [Symbol.dispose](): void } {
         }
         primary={<Button>Run now</Button>}
         secondary={<Button variant="secondary">Schedule</Button>}
-        tertiary={<Button variant="quiet">Cancel</Button>}
       />
     ),
     host,

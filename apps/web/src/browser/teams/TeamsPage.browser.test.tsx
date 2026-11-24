@@ -493,7 +493,7 @@ it("keeps local team controls when the batch read fails", async () => {
   await expect
     .element(
       page.getByText(
-        "Season facts could not be loaded. Lineup checks and controls are still available.",
+        "Season facts could not be loaded. Lineup runs and controls are still available.",
       ),
     )
     .toBeVisible();

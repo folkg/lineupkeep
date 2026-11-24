@@ -37,6 +37,10 @@
   --theme-text-page-title-line-height: 0.95;
   --theme-text-page-title-letter-spacing: -0.035em;
 
+  --theme-text-name-title: clamp(2rem, 3.2vw, 2.75rem);
+  --theme-text-name-title-line-height: 1.1;
+  --theme-text-name-title-letter-spacing: -0.025em;
+
   --theme-text-section-title: 1.5rem;
   --theme-text-section-title-line-height: 1.2;
   --theme-text-card-title: 1.25rem;

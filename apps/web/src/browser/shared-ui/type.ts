@@ -1,6 +1,7 @@
 export const typeClass = {
   display: "font-display text-display",
   "page-title": "font-display text-page-title",
+  "name-title": "font-display text-name-title",
   "section-title": "font-display text-section-title",
   "card-title": "font-display text-card-title",
   body: "font-sans text-body",

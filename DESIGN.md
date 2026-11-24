@@ -171,7 +171,7 @@ honest state. Light is warm newsprint; dark is the same paper after dark, with v
 
 **Key Characteristics:**
 
-- Archivo Variable for the display, page title, section title, and card title types at weight 800;
+- Archivo Variable for the display, page title, name title, section title, and card title types at weight 800;
   Schibsted Grotesk Variable for body, body strong, meta, label, and badge
 - Square everywhere; 3px ink section rules, 1px row hairlines, and a 2px ink rule around each team
   card
@@ -261,8 +261,8 @@ errors and destructive actions.
 
 **Two faces with separate jobs.** Display type is Archivo Variable, self-hosted through
 Fontsource (`@fontsource-variable/archivo`). Work type is Schibsted Grotesk Variable,
-self-hosted through Fontsource. Archivo carries the display scale: display, page title, section
-title, and card title at weight 800. Schibsted carries the work scale: body, body strong, meta,
+self-hosted through Fontsource. Archivo carries the display scale: display, page title, name
+title, section title, and card title at weight 800. Schibsted carries the work scale: body, body strong, meta,
 label, and badge. No serif, no third face. Google's branded button keeps Google's prescribed G and
 type.
 
@@ -274,8 +274,9 @@ The display scale:
 - **Display** — `clamp(44px, 5vw, 68px)`, weight 800, line height 0.98, `-0.035em`. The landing
   statement only.
 - **Page title** — `clamp(44px, 5.4vw, 70px)`, weight 800, line height 0.95, `-0.035em`,
-  uppercase. One per page. A team name used as a page title takes the card-title type and keeps
-  its case.
+  uppercase. One per page.
+- **Name title** — `clamp(32px, 3.2vw, 44px)`, weight 800, line height 1.1, `-0.025em`. A team
+  name used as a page title. It keeps its case and sits above section titles.
 - **Section title** — 24px, weight 800, line height 1.2, `-0.02em`. Section headings and the
   transaction day headings.
 - **Card title** — 20px, weight 800, line height 1.15, `-0.02em`. Team names, group cards, and
@@ -316,9 +317,16 @@ when present, sits directly under the title; it never pushes the title down.
 
 **Actions.** One `ActionBar` owns the order. On wide screens the destructive action is separated
 at the left, and tertiary, secondary, then primary actions sit together at the right. On phones
-the main actions stack with the primary full width, and the destructive action follows last. A
-cancel that only closes an editor is tertiary and neutral; danger belongs to actions that discard
-or delete.
+every action shares one equal-width row, ordered destructive, tertiary, secondary, primary. A
+lone action fills the row. An action area holds at most three actions; more belong in an overflow
+menu. Labels never truncate. A label may wrap to a second line, and every button in the row takes
+the tallest height. A cancel that only closes an editor is neutral; danger belongs to actions that
+discard or delete.
+
+**Action labels.** Start with a verb and name the outcome: `Run now`, `Save schedule`, `Discard`,
+`Cancel`. Keep labels to one or two words. Do not use `OK`, `Yes`, or a bare `Submit`. Do not
+shorten with an ellipsis or an unstated abbreviation when the full verb fits. A destructive label
+names the action it performs.
 
 **One measure.** The application column is 680px. Lists and tables may extend to 960px when their
 columns genuinely need it; no content runs the viewport width. The masthead, section rules, row
@@ -336,24 +344,31 @@ card puts its provider jump-out beside the card-title team name in the text colu
 carries the checks toggle and the pause control, so every card has the same control shape. The
 pause is a 28px square icon frame showing Pause or Play, so changing state never shifts the
 cluster; its accessible name stays the full pause or resume sentence, and it stays in place and
-is disabled while checks are off. Below 560px a card stacks: full-width text first, then the
-controls on their own line, aligned left. A long team or league name wraps; it never truncates.
-Controls never overlap a name.
+is disabled while checks are off. The card header is a two-column grid: title and meta take the
+remaining width, and the badge keeps the top-right corner at every size. A long team or league
+name wraps inside its column; it never truncates and never pushes the badge below. Below 560px
+the body stacks and the controls take their own line, aligned left. Controls never overlap a
+name.
 
 **Team detail order** is fixed: back link, title with the provider jump-out beside it, one
 metadata line (sport and league), one control row with toggle and pause on the same line, then a
-season and week split, the check history behind its rule, and the owner note. The split is two
+season and week split, the lineup runs behind their rule, and the owner note. The split is two
 rule-led sections, not one card: season facts sit in a narrow side rail and the current week and
-its category table take the main column. On phones the season facts come first. The provider
+its category table take the main column. The week line leads with the week and keeps its regular
+and playoff notes on their own lines. On phones the season facts come first. The provider
 jump-out sits beside the title here and beside the name on the list. Nothing floats to the right
-of the metadata line.
+of the metadata line. Head-to-head category tables end with one wins row aligned under You and
+Them; ties are not named. Rotisserie tables end with total points.
 
 **Team cards.** The team list puts each team in its own card, sorted by sport then name; the
 sport is already in the card's meta line, so there are no league headings or counts. A card has
-a 2px ink rule and the normal `paper` ground. Team names use the card-title type;
+a 2px ink rule and the normal `paper` ground. Team names on the list use the card-title type; a team name used as a page title uses the
+name-title type.
 the meta and status lines use the meta type.
 
-**Activity ranges** omit a repeated date: `Nov 1, 11:44 AM to 1:12 PM`. When the group is a
+**Card badges.** `Card` takes a `badge` element, normally a `Badge`. The caller supplies the
+meaning; `Card` owns the fixed top-right placement. A team list passes the league format, and a
+transaction card passes its status. `Nov 1, 11:44 AM to 1:12 PM`. When the group is a
 single instant, say `at Nov 1, 11:44 AM`; when it crosses the reader's midnight, show both full
 dates.
 

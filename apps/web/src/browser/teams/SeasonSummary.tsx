@@ -14,7 +14,7 @@ import {
   matchupNumber,
   number,
   ordinal,
-  periodLabel,
+  periodParts,
   placeLabel,
   recordLabel,
 } from "./seasonLabels";
@@ -80,8 +80,8 @@ export function SeasonFacts(props: {
   const showAgainst = (): boolean => format() === "head_to_head_points" || format() === "points";
   const place = (): string | undefined => placeLabel(standing()?.rank, props.data.teamCount);
   const record = (): string | undefined => recordLabel(props.data.record);
-  const period = (): string | undefined =>
-    periodLabel(
+  const period = (): ReturnType<typeof periodParts> =>
+    periodParts(
       props.data.currentPeriod,
       props.data.lastPeriod,
       props.data.seasonOver,
@@ -144,9 +144,16 @@ export function SeasonFacts(props: {
         </Show>
         <Show when={period()}>
           {(value) => (
-            <Text type="meta" tone="muted">
-              {value()}
-            </Text>
+            <>
+              <Text type="body">{value().headline}</Text>
+              <For each={value().details}>
+                {(line) => (
+                  <Text type="meta" tone="muted">
+                    {line}
+                  </Text>
+                )}
+              </For>
+            </>
           )}
         </Show>
         <Show when={pointsLine()}>
@@ -270,6 +277,19 @@ export function MatchupSummary(props: {
     const ties = EffectArray.filter(categories, (category) => category.result === "tie").length;
     return `${String(wins)}-${String(losses)}-${String(ties)}`;
   };
+  const categoryWins = (): { readonly wins: number; readonly losses: number } | undefined => {
+    if (format() !== "head_to_head_categories") {
+      return undefined;
+    }
+    const rows = matchupCategories();
+    if (rows.length === 0) {
+      return undefined;
+    }
+    return {
+      wins: EffectArray.filter(rows, (row) => categoryWinner(row, "own")).length,
+      losses: EffectArray.filter(rows, (row) => categoryWinner(row, "opponent")).length,
+    };
+  };
   return (
     <Stack gap="md">
       <Show when={matchup()}>
@@ -343,10 +363,16 @@ export function MatchupSummary(props: {
             { label: "You", align: "end", width: "w-16" },
             { label: "Them", align: "end", width: "w-16" },
           ]}
-          footer={
-            <Show when={categoryRecordLine()}>
-              {(value) => <FooterLine label="Category record" value={value()} />}
-            </Show>
+          footerCells={
+            categoryWins() === undefined
+              ? undefined
+              : [
+                  <Text type="meta" tone="muted">
+                    Wins
+                  </Text>,
+                  <Text type="body-strong">{String(categoryWins()?.wins)}</Text>,
+                  <Text type="body-strong">{String(categoryWins()?.losses)}</Text>,
+                ]
           }
           label="Matchup categories"
           rows={EffectArray.map(matchupCategories(), (row) => [

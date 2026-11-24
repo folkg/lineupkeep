@@ -266,8 +266,11 @@ it("offers a way back to the teams list and shows the run time in the reader's z
   await expect.element(back).toHaveAttribute("href", "/teams");
   expect(back.element().textContent).toContain("All teams");
   expect(back.element().className).toContain("text-meta");
-  expect(page.getByRole("heading", { level: 1, name: "Alpha" }).element().className).toContain(
-    "text-card-title",
+  const title = page.getByRole("heading", { level: 1, name: "Alpha" }).element();
+  const section = page.getByRole("heading", { level: 2, name: "This week" }).element();
+  expect(title.className).toContain("text-name-title");
+  expect(Number.parseFloat(getComputedStyle(title).fontSize)).toBeGreaterThan(
+    Number.parseFloat(getComputedStyle(section).fontSize),
   );
   const times = [...document.querySelectorAll<HTMLTimeElement>(`time[datetime="${threeDaysAgo}"]`)];
   expect(times.length).toBeGreaterThan(0);
@@ -353,10 +356,10 @@ it("keeps the popout beside a long team name on a phone", async () => {
   expect(jumpBox.top).toBeLessThan(headingBox.bottom);
 });
 
-it("puts check history above the owner note and leaves the roster off the page", async () => {
+it("puts lineup runs above the owner note and leaves the roster off the page", async () => {
   using _app = setupTeamDetailPage(team);
 
-  const activity = page.getByRole("heading", { name: "Check history" });
+  const activity = page.getByRole("heading", { name: "Lineup runs" });
   const note = page.getByRole("heading", { name: "Owner note" });
   await expect.element(activity).toBeVisible();
   await expect.element(note).toBeVisible();
@@ -576,18 +579,20 @@ it("folds a lone quiet check into a summary without a link", async () => {
 it("says what the fantasy day holds when no checks ran today", async () => {
   using _app = setupTeamDetailPage({ ...team, lastRun: noOpRun, recentRuns: [] });
 
-  await expect.element(page.getByText("No checks today.")).toBeVisible();
+  await expect.element(page.getByText("No lineup runs today.")).toBeVisible();
   await expect
-    .element(page.getByText(`The last check was ${formatReaderTime(noOpRun.updatedAt)}.`))
+    .element(page.getByText(`The last lineup run was ${formatReaderTime(noOpRun.updatedAt)}.`))
     .toBeVisible();
 });
 
 it("says what will happen when a team has never checked", async () => {
   using _app = setupTeamDetailPage({ ...team, lastRun: undefined, recentRuns: [] });
 
-  await expect.element(page.getByText("No checks today.")).toBeVisible();
+  await expect.element(page.getByText("No lineup runs today.")).toBeVisible();
   await expect
-    .element(page.getByText("Checks will appear here after the first scheduled or manual run."))
+    .element(
+      page.getByText("Lineup runs will appear here after the first scheduled or manual run."),
+    )
     .toBeVisible();
 });
 
@@ -710,10 +715,10 @@ function foldedLabel(runs: ReadonlyArray<LineupRunView>): string {
   const span = quietGroupSpan(runs);
   const start = formatRangeStart(span.from, span.to);
   const end = formatRangeEnd(span.from, span.to);
-  const checks = span.count === 1 ? "check" : "checks";
+  const runWord = span.count === 1 ? "lineup run" : "lineup runs";
   return span.from === span.to
-    ? `${String(span.count)} ${checks} made no change at ${start}`
-    : `${String(span.count)} ${checks} made no change from ${start} to ${end}`;
+    ? `${String(span.count)} ${runWord} made no change at ${start}`
+    : `${String(span.count)} ${runWord} made no change from ${start} to ${end}`;
 }
 
 it("shows season facts, both matchup sides, category detail, and cap usage", async () => {
@@ -728,6 +733,8 @@ it("shows season facts, both matchup sides, category detail, and cap usage", asy
   expect(
     EffectArray.map([...matchupTable.querySelectorAll("th")], (cell) => cell.textContent),
   ).toEqual(["Category", "You", "Them"]);
+  const footerCells = matchupTable.querySelectorAll<HTMLTableCellElement>("tfoot td");
+  expect(EffectArray.map([...footerCells], (cell) => cell.textContent)).toEqual(["Wins", "0", "1"]);
   const matchupCells = matchupTable.querySelectorAll<HTMLTableCellElement>("tbody td");
   const ownValue = matchupCells[1]?.querySelector("p");
   const theirValue = matchupCells[2]?.querySelector("p");
@@ -808,9 +815,9 @@ it("names the regular season and playoff weeks from the league settings", async 
       }),
   });
 
-  await expect
-    .element(page.getByText("Week 11 of 14 regular · 3 left · 4 playoff weeks"))
-    .toBeVisible();
+  await expect.element(page.getByText("Week 11 of 14 regular", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("3 regular weeks left", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("4 playoff weeks", { exact: true })).toBeVisible();
 });
 
 it("shows rotisserie categories with the stat, place, and points", async () => {
@@ -1119,7 +1126,7 @@ it("keeps controls and activity when season facts are unavailable", async () => 
   });
 
   await expect.element(page.getByText("Season facts are unavailable.")).toBeVisible();
-  await expect.element(page.getByRole("heading", { name: "Check history" })).toBeVisible();
+  await expect.element(page.getByRole("heading", { name: "Lineup runs" })).toBeVisible();
   await expect.element(page.getByRole("switch", { name: "Lineup checks for Alpha" })).toBeVisible();
 });
 
@@ -1158,7 +1165,7 @@ it.each([
     () => (
       <>
         <TeamSeasonOverview facts={facts()} loading={facts() === undefined} failed={false} />
-        <h2>Check history</h2>
+        <h2>Lineup runs</h2>
       </>
     ),
     host,
@@ -1170,7 +1177,7 @@ it.each([
     },
   };
   expect(host.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(1);
-  const activity = page.getByRole("heading", { name: "Check history" }).element();
+  const activity = page.getByRole("heading", { name: "Lineup runs" }).element();
   const before = activity.getBoundingClientRect().top;
   await page.screenshot({
     path: `../../../../../.artifacts/team-overview-polish/detail-loading-${width}.png`,

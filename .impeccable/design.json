@@ -131,7 +131,7 @@
       },
       "dark-action": {
         "role": "primary",
-        "displayName": "Royal Violet · Dark",
+        "displayName": "Royal Violet \u00b7 Dark",
         "canonical": "#bda7ff"
       },
       "dark-action-hover": {
@@ -151,17 +151,17 @@
       },
       "dark-accent": {
         "role": "secondary",
-        "displayName": "Brand Gold · Dark",
+        "displayName": "Brand Gold \u00b7 Dark",
         "canonical": "#e0b64a"
       },
       "dark-on-accent": {
         "role": "secondary",
-        "displayName": "On Brand Gold · Dark",
+        "displayName": "On Brand Gold \u00b7 Dark",
         "canonical": "#101014"
       },
       "dark-spot": {
         "role": "tertiary",
-        "displayName": "Spot Ink · Dark",
+        "displayName": "Spot Ink \u00b7 Dark",
         "canonical": "#ff9a76"
       },
       "dark-danger": {
@@ -194,13 +194,17 @@
         "displayName": "Page Title",
         "purpose": "One per page; uppercase Archivo at 800, tight tracking."
       },
+      "name-title": {
+        "displayName": "Name Title",
+        "purpose": "A team name used as a page title; sentence case Archivo at 800."
+      },
       "section-title": {
         "displayName": "Section Title",
         "purpose": "Section headings and day headings; 24px Archivo at 800."
       },
       "card-title": {
         "displayName": "Card Title",
-        "purpose": "Team names, group cards, and dialog titles; 20px Archivo at 800."
+        "purpose": "List team names, group cards, and dialog titles; 20px Archivo at 800."
       },
       "body": {
         "displayName": "Body",
@@ -371,6 +375,13 @@
       "css": ".ds-page-title{margin:0;font:800 clamp(44px,5.4vw,70px)/.95 \"Archivo Variable\",sans-serif;letter-spacing:-.035em;text-transform:uppercase;color:var(--theme-ink,#141217)}"
     },
     {
+      "name": "Name Title",
+      "kind": "typography",
+      "description": "A team name used as a page title: sentence case Archivo, larger than a section title.",
+      "html": "<h1 class=\"ds-name-title\">Bread Roller</h1>",
+      "css": ".ds-name-title{margin:0;font:800 clamp(32px,3.2vw,44px)/1.1 \"Archivo Variable\",sans-serif;letter-spacing:-.025em;color:var(--theme-ink,#141217)}"
+    },
+    {
       "name": "Card Title Link",
       "kind": "link",
       "description": "A 20px Archivo card title that leads a card.",
@@ -404,19 +415,27 @@
       "description": "A square gold mark with ink lu strokes; gold appears nowhere else.",
       "html": "<svg class=\"ds-mark\" viewBox=\"0 0 64 64\" aria-hidden=\"true\"><rect width=\"64\" height=\"64\" fill=\"#e0b64a\"/><path d=\"M14 12v32M14 44h12M34 22v16a6 6 0 0 0 6 6h8V22\" fill=\"none\" stroke=\"#101014\" stroke-width=\"6\"/></svg>",
       "css": ".ds-mark{width:20px;height:20px;flex:none}"
+    },
+    {
+      "name": "Action Bar",
+      "kind": "layout",
+      "description": "One equal-width action row on phones; destructive left, primary right. Labels wrap instead of truncating.",
+      "html": "<fieldset class=\"ds-actions\"><button class=\"ds-action-quiet\" type=\"button\">Discard</button><button class=\"ds-action-secondary\" type=\"button\">Schedule</button><button class=\"ds-action-primary\" type=\"button\">Run now</button></fieldset>",
+      "css": ".ds-actions{display:grid;width:100%;grid-auto-flow:column;grid-auto-columns:1fr;gap:8px;margin:0;padding:0;border:0}.ds-actions button{min-width:0;width:100%;padding-inline:8px}.ds-actions .ds-action-primary{min-height:44px;border:2px solid var(--theme-action,#5b21b6);background:var(--theme-action,#5b21b6);color:var(--theme-on-action,#fffdf7);font:600 11px/1.2 \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:.16em;text-transform:uppercase}.ds-actions .ds-action-secondary{min-height:44px;border:2px solid var(--theme-rule-strong,#141217);background:transparent;color:var(--theme-ink,#141217);font:600 11px/1.2 \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:.16em;text-transform:uppercase}.ds-actions .ds-action-quiet{min-height:44px;border:0;background:transparent;color:var(--theme-danger,#a33432);font:600 11px/1.2 \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:.16em;text-transform:uppercase}@media(min-width:560px){.ds-actions{display:flex;flex-wrap:wrap;align-items:center;gap:12px}.ds-actions .ds-action-quiet{margin-inline-end:auto;width:auto;padding-inline:8px}.ds-actions .ds-action-primary,.ds-actions .ds-action-secondary{width:auto;padding-inline:20px}}"
     }
   ],
   "narrative": {
     "northStar": "Ink and paper",
     "overview": "Lineupgrade reads as a printed sports sheet: warm newsprint, near-black ink, a display face for the page and the teams, and Schibsted for the work in between. Section rules are 3px ink; row hairlines stay 1px. Team cards and queue groups are the same plain 2px-ruled box on paper, set at least 24px apart. Royal violet is spent on interaction, gold exists only in the mark, and one spot ink marks urgency. The product is calm enough to check in the morning and precise enough to trust with a lineup.\n\nThis is an Operate product: information before spectacle, familiar controls, direct labels, and honest state. Light is warm newsprint; dark is a tinted violet sheet. Both are complete palettes.",
     "keyCharacteristics": [
-      "Archivo Variable for the display, page title, section title, and card title types at 800; Schibsted Grotesk Variable for body, body strong, meta, label, and badge",
+      "Archivo Variable for the display, page title, name title, section title, and card title types at 800; Schibsted Grotesk Variable for body, body strong, meta, label, and badge",
       "Square everywhere; 3px ink section rules, 1px row hairlines, and a 2px ink rule around each team card",
       "One 680px measure and one solid action per view",
       "One 2px ink frame for every card, and no shadow beyond the focus ring",
-      "Numbers aligned with tabular figures, never prose tracking",
+      "Decimals stay proportional; tabular figures only for integers compared in a column",
       "Royal violet for interaction; gold only in the mark; spot ink only for urgency",
-      "Light and dark designed together"
+      "Light and dark designed together",
+      "Phones use one equal-width action row; a card badge keeps the top-right corner while a long name wraps"
     ],
     "rules": [
       {
@@ -448,6 +467,16 @@
         "name": "The Wordmark Rule",
         "body": "The wordmark stays continuous lowercase lineupgrade in Schibsted Grotesk at the 11px label weight and tracking, beside the square mark. Archivo never sets the wordmark. Gold appears nowhere else.",
         "section": "typography"
+      },
+      {
+        "name": "The Single Action Row Rule",
+        "body": "On phones every action in a bar shares one equal-width row, ordered destructive, tertiary, secondary, primary. A lone action fills the row. An action area holds at most three actions; more belong in an overflow menu. Labels never truncate: a label may wrap and every button in the row takes the tallest height.",
+        "section": "layout"
+      },
+      {
+        "name": "The Fixed Badge Rule",
+        "body": "A card header is a two-column grid. The title and meta take the remaining width, and the badge keeps the top-right corner at every size. A long name wraps inside its column and never pushes the badge below.",
+        "section": "layout"
       }
     ],
     "dos": [
@@ -455,14 +484,16 @@
       "Do keep controls, inputs, badges, and dialogs square.",
       "Do keep the 680px measure and let tables exceed it only with a reason.",
       "Do use one 3px ink rule under a section title and 1px hairlines between list rows.",
-      "Do set display, page titles, section titles, and card titles in Archivo at weight 800.",
+      "Do set display, page, name, section, and card titles in Archivo at weight 800.",
       "Do choose a named text type and let it own its size, weight, line height, and tracking.",
       "Do spend violet once per view on the primary action.",
       "Do apply tabular numerals to comparable numbers only.",
       "Do keep the wordmark lowercase in Schibsted and the mark gold.",
       "Do frame every card with the same 2px ink rule and at least 24px between cards.",
       "Do reserve spot ink for urgency.",
-      "Do preserve keyboard access, visible focus, selection, zoom, and reduced motion."
+      "Do preserve keyboard access, visible focus, selection, zoom, and reduced motion.",
+      "Do use short verb-led action labels and let a label wrap instead of cutting it off.",
+      "Do keep the card badge in the top-right corner and give the title the remaining width."
     ],
     "donts": [
       "Don't add border radii, a shadow beyond the focus ring, a colour gradient beyond the phone submit sheet fade, or a second accent.",

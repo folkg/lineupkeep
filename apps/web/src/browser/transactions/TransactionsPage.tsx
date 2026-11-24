@@ -687,7 +687,7 @@ function ScheduleEditor(props: {
         </Show>
         <ActionBar
           tertiary={
-            <Button variant="quiet" onClick={props.page.cancelEdit}>
+            <Button variant="secondary" onClick={props.page.cancelEdit}>
               Cancel
             </Button>
           }

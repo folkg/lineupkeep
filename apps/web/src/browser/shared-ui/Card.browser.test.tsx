@@ -2,6 +2,7 @@ import "#web/styles.css";
 import { render } from "@solidjs/web";
 import type { JSX } from "@solidjs/web";
 import { expect, it } from "vitest";
+import { page } from "vitest/browser";
 
 import { Badge } from "./Badge";
 import { Card } from "./Card";
@@ -48,6 +49,39 @@ it("owns the frame, the header rule, and the padding", () => {
   expect(header.compareDocumentPosition(meta) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(meta.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(body.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+it("keeps the badge in the top-right corner when a phone title wraps", async () => {
+  await page.viewport(390, 844);
+  using mounted = mount(() => (
+    <Card
+      badge={<Badge>Needs your decision</Badge>}
+      header={<h2>Time and Tye McGinn and the Extra Long Team Name</h2>}
+      labelledBy="team-card"
+      meta={<p>NHL · Hockey · 2026</p>}
+    >
+      <p>Add Brayden Schenn and drop Juraj Slafkovský.</p>
+    </Card>
+  ));
+
+  const header = mounted.host.querySelector<HTMLElement>("[data-card-header]");
+  const title = page
+    .getByRole("heading", { name: "Time and Tye McGinn and the Extra Long Team Name" })
+    .element();
+  const badge = mounted.host.querySelector<HTMLElement>("[data-card-badge]");
+  expect(header, "the header").not.toBeNull();
+  expect(badge, "the badge").not.toBeNull();
+  if (header === null || badge === null) {
+    return;
+  }
+  const headerBox = header.getBoundingClientRect();
+  const titleBox = title.getBoundingClientRect();
+  const badgeBox = badge.getBoundingClientRect();
+  expect(getComputedStyle(header).display).toBe("grid");
+  expect(badgeBox.top).toBeLessThanOrEqual(titleBox.top + 1);
+  expect(badgeBox.bottom).toBeLessThanOrEqual(headerBox.bottom);
+  expect(badgeBox.left).toBeGreaterThanOrEqual(titleBox.right - 1);
+  expect(titleBox.height).toBeGreaterThan(Number.parseFloat(getComputedStyle(title).lineHeight));
 });
 
 function mount(view: () => JSX.Element): {

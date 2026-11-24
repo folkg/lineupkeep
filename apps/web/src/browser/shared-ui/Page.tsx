@@ -46,7 +46,7 @@ function PageTitle(props: PageTitleProps): JSX.Element {
       level={1}
       type={
         props.variant === "name"
-          ? "card-title"
+          ? "name-title"
           : props.variant === "display"
             ? "display"
             : "page-title"

@@ -40,8 +40,8 @@ function QuietGroupSummary(props: { readonly runs: ReadonlyArray<LineupRunView> 
   return (
     <Text numeric type="meta" tone="muted">
       {span().count === 1
-        ? "1 check made no change"
-        : `${String(span().count)} checks made no change`}{" "}
+        ? "1 lineup run made no change"
+        : `${String(span().count)} lineup runs made no change`}{" "}
       <Show
         fallback={
           <>
