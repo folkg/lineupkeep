@@ -80,6 +80,10 @@ finish linking; no evasion of Google's browser check is claimed or accepted.
 
 The stable Solid 2.0.3 and TanStack Query 6.0.0-rc.6 line is installed. The prefetched-failure/refetch/reset and confirmation-dialog browser suites pass; the dialog now closes before its write settles by deferring the write one microtask.
 
+### Solid Query streamed hydration
+
+The installed Solid Query 6.0.0-rc.6 line can leave a server-rendered skeleton inert when streamed query data reaches the cache before Solid hydrates that subtree. The primary teams read therefore stays awaited in the server loader. [Query #9399](https://github.com/TanStack/query/issues/9399) is the closest open report; it is React-specific and not an exact match. No Solid-specific issue is filed, by owner decision on 2026-11-24. Track the related report and remove the server wait only after a Solid reproduction passes.
+
 ### Server Errored escaping
 
 Solid 2.0.3 includes the escaping fix for raw string children of server `<Errored>` ([Solid #4119](https://github.com/solidjs/solid/pull/4119)). The application still passes JSX rather than raw untrusted text at these boundaries.
