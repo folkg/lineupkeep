@@ -1,7 +1,9 @@
+import { EffectArray } from "@lineupkeep/collections";
 import type { JSX } from "@solidjs/web";
 import { For } from "solid-js";
 import type { Element } from "solid-js";
 
+import { Skeleton } from "./Skeleton";
 import { Text } from "./Text";
 
 export function Table(props: TableProps): JSX.Element {
@@ -9,8 +11,11 @@ export function Table(props: TableProps): JSX.Element {
     <div class="w-full overflow-x-auto">
       <table
         aria-label={props.label}
-        class="w-full min-w-[18rem] border-collapse border border-rule text-left sm:min-w-[26rem]"
+        class="w-full min-w-[18rem] table-fixed border-collapse border border-rule text-left sm:min-w-[26rem]"
       >
+        <colgroup>
+          <For each={props.columns}>{(column) => <col class={column.width} />}</For>
+        </colgroup>
         <thead>
           <tr class="border-b border-rule">
             <For each={props.columns}>
@@ -55,9 +60,32 @@ export function Table(props: TableProps): JSX.Element {
   );
 }
 
+export function TableSkeleton(props: {
+  readonly label: string;
+  readonly columns: ReadonlyArray<TableColumn>;
+  readonly rows?: number;
+}): JSX.Element {
+  return (
+    <Table
+      columns={props.columns}
+      label={props.label}
+      rows={Array.from({ length: props.rows ?? 3 }, () =>
+        EffectArray.map(props.columns, (_, index) => (
+          <Skeleton
+            class={index === 0 ? undefined : "ms-auto"}
+            height="h-3"
+            width={index === 0 ? "w-24" : "w-10"}
+          />
+        )),
+      )}
+    />
+  );
+}
+
 type TableColumn = {
   readonly label: string;
   readonly align?: "end";
+  readonly width?: string;
 };
 
 type TableProps = {

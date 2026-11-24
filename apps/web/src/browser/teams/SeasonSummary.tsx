@@ -3,12 +3,20 @@ import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 
 import { Inline } from "#browser/shared-ui/Inline.tsx";
+import { Skeleton } from "#browser/shared-ui/Skeleton.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Table } from "#browser/shared-ui/Table.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import type { TeamOverviewView } from "#contracts/connections/teamContract.ts";
 
-import { number, placeLabel, recordLabel } from "./seasonLabels";
+import {
+  categoryStat,
+  matchupNumber,
+  number,
+  periodLabel,
+  placeLabel,
+  recordLabel,
+} from "./seasonLabels";
 
 type SeasonFormat =
   | "head_to_head_categories"
@@ -17,9 +25,14 @@ type SeasonFormat =
   | "points"
   | "unknown";
 
+type MatchupCategory = NonNullable<TeamOverviewView["matchup"]>["categories"][number];
+
 export type SeasonSummaryData = {
   readonly format?: SeasonFormat;
   readonly teamCount?: number;
+  readonly seasonOver?: boolean;
+  readonly currentPeriod?: number;
+  readonly lastPeriod?: number;
   readonly standing?: {
     readonly rank: number | null;
     readonly points: number | null;
@@ -40,7 +53,10 @@ export type SeasonSummaryData = {
   };
 };
 
-export function SeasonSummary(props: { readonly data: SeasonSummaryData }): JSX.Element {
+export function SeasonSummary(props: {
+  readonly data: SeasonSummaryData;
+  readonly categoryValuesLoading?: boolean;
+}): JSX.Element {
   const standing = (): SeasonSummaryData["standing"] => props.data.standing;
   const matchup = (): SeasonSummaryData["matchup"] => props.data.matchup;
   const format = (): SeasonFormat | undefined => props.data.format;
@@ -48,6 +64,8 @@ export function SeasonSummary(props: { readonly data: SeasonSummaryData }): JSX.
   const showAgainst = (): boolean => format() === "head_to_head_points" || format() === "points";
   const place = (): string | undefined => placeLabel(standing()?.rank, props.data.teamCount);
   const record = (): string | undefined => recordLabel(props.data.record);
+  const period = (): string | undefined =>
+    periodLabel(props.data.currentPeriod, props.data.lastPeriod, props.data.seasonOver);
   const pointsLine = (): string | undefined => {
     if (!showPoints()) {
       return undefined;
@@ -114,9 +132,7 @@ export function SeasonSummary(props: { readonly data: SeasonSummaryData }): JSX.
         : ` · ${number(current.opponentRemainingGames)} for them`
     }`;
   };
-  const matchupCategories = (): ReadonlyArray<
-    NonNullable<TeamOverviewView["matchup"]>["categories"][number]
-  > =>
+  const matchupCategories = (): ReadonlyArray<MatchupCategory> =>
     format() === "head_to_head_categories"
       ? EffectArray.filter(matchup()?.categories ?? [], (row) => row.scoring !== "informational")
       : [];
@@ -129,7 +145,7 @@ export function SeasonSummary(props: { readonly data: SeasonSummaryData }): JSX.
     const wins = EffectArray.filter(categories, (category) => category.result === "win").length;
     const losses = EffectArray.filter(categories, (category) => category.result === "loss").length;
     const ties = EffectArray.filter(categories, (category) => category.result === "tie").length;
-    return `${String(wins)}-${String(losses)}-${String(ties)} categories`;
+    return `${String(wins)}-${String(losses)}-${String(ties)}`;
   };
   const caps = (): ReadonlyArray<string> => {
     const value = props.data.caps;
@@ -148,6 +164,13 @@ export function SeasonSummary(props: { readonly data: SeasonSummaryData }): JSX.
         </Text>
         <Show when={place()}>{(value) => <Text type="body-strong">{value()}</Text>}</Show>
         <Show when={record()}>{(value) => <Text type="meta">{value()}</Text>}</Show>
+        <Show when={period()}>
+          {(value) => (
+            <Text type="meta" tone="muted">
+              {value()}
+            </Text>
+          )}
+        </Show>
         <Show when={pointsLine()}>
           {(value) => (
             <Text type="meta" tone="muted">
@@ -161,7 +184,7 @@ export function SeasonSummary(props: { readonly data: SeasonSummaryData }): JSX.
           <Text type="label" tone="faint">
             Current matchup
           </Text>
-          <Text type="body-strong">{opponentLine()}</Text>
+          <Text type="body">{opponentLine()}</Text>
           <Show when={scoreLine()}>
             {(value) => (
               <Text numeric type="body-strong">
@@ -176,9 +199,7 @@ export function SeasonSummary(props: { readonly data: SeasonSummaryData }): JSX.
               </Text>
             )}
           </Show>
-          <Show when={categoryRecordLine()}>
-            {(value) => <Text type="body-strong">{value()}</Text>}
-          </Show>
+          <Show when={categoryRecordLine()}>{(value) => <Text type="meta">{value()}</Text>}</Show>
           <Show when={remainingLine()}>
             {(value) => (
               <Text type="meta" tone="muted">
@@ -196,20 +217,24 @@ export function SeasonSummary(props: { readonly data: SeasonSummaryData }): JSX.
           <Table
             columns={[
               { label: "Category" },
-              { label: "You", align: "end" },
-              { label: "Them", align: "end" },
-              { label: "Result", align: "end" },
+              { label: "You", align: "end", width: "w-16" },
+              { label: "Them", align: "end", width: "w-16" },
             ]}
             label="Matchup categories"
             rows={EffectArray.map(matchupCategories(), (row) => [
               <Text type="body">{row.name}</Text>,
-              <Text numeric type="meta">
-                {row.own === null ? "–" : number(row.own)}
-              </Text>,
-              <Text numeric type="meta">
-                {row.opponent === null ? "–" : number(row.opponent)}
-              </Text>,
-              <Text type="meta">{resultLabel(row.result)}</Text>,
+              <MatchupValue
+                loading={props.categoryValuesLoading === true}
+                name={row.name}
+                value={row.own}
+                winner={categoryWinner(row, "own")}
+              />,
+              <MatchupValue
+                loading={props.categoryValuesLoading === true}
+                name={row.name}
+                value={row.opponent}
+                winner={categoryWinner(row, "opponent")}
+              />,
             ])}
           />
         </Stack>
@@ -229,10 +254,37 @@ export function SeasonSummary(props: { readonly data: SeasonSummaryData }): JSX.
   );
 }
 
-function resultLabel(result: "win" | "loss" | "tie" | undefined): string {
-  return result === "win" ? "Win" : result === "loss" ? "Loss" : result === "tie" ? "Tie" : "–";
+function MatchupValue(props: {
+  readonly name: string;
+  readonly value: number | null;
+  readonly winner: boolean;
+  readonly loading: boolean;
+}): JSX.Element {
+  return (
+    <Show
+      fallback={<Skeleton height="h-3" width="w-10" />}
+      when={!props.loading || props.value !== null}
+    >
+      <Text numeric type={props.winner ? "body-strong" : "meta"}>
+        {props.value === null ? "–" : categoryStat(props.name, props.value)}
+      </Text>
+    </Show>
+  );
+}
+
+function categoryWinner(row: MatchupCategory, side: "own" | "opponent"): boolean {
+  if (row.result === "win") {
+    return side === "own";
+  }
+  if (row.result === "loss") {
+    return side === "opponent";
+  }
+  if (row.result === "tie" || row.own === null || row.opponent === null) {
+    return false;
+  }
+  return side === "own" ? row.own > row.opponent : row.opponent > row.own;
 }
 
 function scoreText(value: number | null): string {
-  return value === null ? "–" : number(value);
+  return value === null ? "–" : matchupNumber(value);
 }

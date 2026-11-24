@@ -9,15 +9,16 @@ import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { SeasonArea } from "#browser/shared-ui/SeasonArea.tsx";
 import { Skeleton } from "#browser/shared-ui/Skeleton.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
-import { Table } from "#browser/shared-ui/Table.tsx";
+import { Table, TableSkeleton } from "#browser/shared-ui/Table.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import type { TeamOverviewView } from "#contracts/connections/teamContract.ts";
 
-import { formatLabel, number, ordinal, scoringLabel, statNumber } from "./seasonLabels";
+import { categoryStat, formatLabel, number, ordinal, scoringLabel } from "./seasonLabels";
 import { SeasonSummary } from "./SeasonSummary";
 import type { SeasonSummaryData } from "./SeasonSummary";
 
-function SeasonOverviewSkeleton(): JSX.Element {
+function SeasonOverviewSkeleton(props: { readonly format?: string }): JSX.Element {
+  const rotisserie = (): boolean => props.format === "rotisserie";
   return (
     <Stack gap="lg">
       <Stack gap="2xs">
@@ -26,6 +27,7 @@ function SeasonOverviewSkeleton(): JSX.Element {
         </Text>
         <Skeleton height="h-5" width="w-24" />
         <Skeleton height="h-3" width="w-32" />
+        <Skeleton height="h-3" width="w-24" />
         <Skeleton height="h-3" width="w-40" />
       </Stack>
       <Stack gap="2xs">
@@ -34,15 +36,36 @@ function SeasonOverviewSkeleton(): JSX.Element {
         </Text>
         <Skeleton height="h-5" width="w-48" />
         <Skeleton height="h-5" width="w-24" />
+        <Skeleton height="h-3" width="w-24" />
         <Skeleton height="h-3" width="w-36" />
       </Stack>
       <Stack gap="sm">
-        <Skeleton height="h-3" width="w-32" />
-        <Skeleton height="h-9" width="w-full" />
-        <Skeleton height="h-9" width="w-full" />
+        <Text type="label" tone="faint">
+          {rotisserie() ? "My categories" : "Matchup categories"}
+        </Text>
+        <TableSkeleton
+          columns={
+            rotisserie()
+              ? [
+                  { label: "Category" },
+                  { label: "Stat", align: "end", width: "w-16" },
+                  { label: "Place", align: "end", width: "w-14" },
+                  { label: "Pts", align: "end", width: "w-12" },
+                ]
+              : [
+                  { label: "Category" },
+                  { label: "You", align: "end", width: "w-16" },
+                  { label: "Them", align: "end", width: "w-16" },
+                ]
+          }
+          label={rotisserie() ? "My categories" : "Matchup categories"}
+        />
       </Stack>
       <CardNote>
         <Stack gap="xs">
+          <Text type="label" tone="faint">
+            Cap usage
+          </Text>
           <Skeleton height="h-3" width="w-20" />
           <Skeleton height="h-3" width="w-48" />
         </Stack>
@@ -69,12 +92,20 @@ export function TeamSeasonOverview(props: {
     return {
       ...(value.format === undefined ? {} : { format: value.format }),
       ...(league()?.teamCount === undefined ? {} : { teamCount: league()?.teamCount }),
+      ...(value.seasonOver === undefined ? {} : { seasonOver: value.seasonOver }),
+      ...(value.seasonProgress?.currentPeriod === undefined
+        ? {}
+        : { currentPeriod: value.seasonProgress.currentPeriod }),
+      ...(value.seasonProgress?.lastPeriod === undefined
+        ? {}
+        : { lastPeriod: value.seasonProgress.lastPeriod }),
       ...(value.standing === undefined ? {} : { standing: value.standing }),
       ...(value.record === undefined ? {} : { record: value.record }),
       ...(value.matchup === undefined ? {} : { matchup: value.matchup }),
       ...(league()?.gamesCaps === undefined ? {} : { caps: league()?.gamesCaps }),
     };
   };
+  const title = (): string => (facts()?.format === "rotisserie" ? "Season overview" : "This week");
   const categoryRows = (): ReadonlyArray<NonNullable<TeamOverviewView["categoryPoints"]>[number]> =>
     facts()?.format === "rotisserie"
       ? EffectArray.filter(facts()?.categoryPoints ?? [], (row) => row.scoring !== "informational")
@@ -108,7 +139,7 @@ export function TeamSeasonOverview(props: {
       }
       header={
         <Heading id="team-season-title" level={2} type="card-title">
-          Season overview
+          {title()}
         </Heading>
       }
       labelledBy="team-season-title"
@@ -126,14 +157,14 @@ export function TeamSeasonOverview(props: {
               }
               when={props.loading}
             >
-              <SeasonOverviewSkeleton />
+              <SeasonOverviewSkeleton format={facts()?.format} />
             </Show>
           }
           when={data()}
         >
           {(summary) => (
             <Stack gap="lg">
-              <SeasonSummary data={summary()} />
+              <SeasonSummary categoryValuesLoading={categoryValuesLoading()} data={summary()} />
               <Show when={categoryRows().length > 0}>
                 <Stack gap="sm">
                   <Text type="label" tone="faint">
@@ -142,9 +173,9 @@ export function TeamSeasonOverview(props: {
                   <Table
                     columns={[
                       { label: "Category" },
-                      { label: "Stat", align: "end" },
-                      { label: "Place", align: "end" },
-                      { label: "Pts", align: "end" },
+                      { label: "Stat", align: "end", width: "w-16" },
+                      { label: "Place", align: "end", width: "w-14" },
+                      { label: "Pts", align: "end", width: "w-12" },
                     ]}
                     label="My categories"
                     rows={EffectArray.map(categoryRows(), (row) => [
@@ -154,7 +185,7 @@ export function TeamSeasonOverview(props: {
                       </Text>,
                       <CategoryValue
                         loading={categoryValuesLoading()}
-                        value={row.total === null ? "–" : statNumber(row.total)}
+                        value={row.total === null ? "–" : categoryStat(row.name, row.total)}
                       />,
                       <CategoryValue
                         loading={categoryValuesLoading()}

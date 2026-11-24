@@ -719,9 +719,19 @@ it("shows season facts, both matchup sides, category detail, and cap usage", asy
 
   await expect.element(page.getByText("Head to head categories")).toBeVisible();
   await expect.element(page.getByText("Week 11 vs Beta")).toBeVisible();
-  await expect.element(page.getByText("0-0-0 categories")).toBeVisible();
+  await expect.element(page.getByText("Week 11 of 18")).toBeVisible();
+  await expect.element(page.getByText("0-0-0")).toBeVisible();
   await expect.element(page.getByText("0 games left · 2 for them")).toBeVisible();
-  await expect.element(page.getByRole("table", { name: "Matchup categories" })).toBeVisible();
+  const matchupTable = page.getByRole("table", { name: "Matchup categories" }).element();
+  expect(
+    EffectArray.map([...matchupTable.querySelectorAll("th")], (cell) => cell.textContent),
+  ).toEqual(["Category", "You", "Them"]);
+  const matchupCells = matchupTable.querySelectorAll<HTMLTableCellElement>("tbody td");
+  const ownValue = matchupCells[1]?.querySelector("p");
+  const theirValue = matchupCells[2]?.querySelector("p");
+  expect(Number(getComputedStyle(ownValue ?? document.body).fontWeight)).toBeLessThan(
+    Number(getComputedStyle(theirValue ?? document.body).fontWeight),
+  );
   await expect.element(page.getByText("0 played · 150 projected")).toBeVisible();
   await expect.element(page.getByText("10.1 pitched · 1,300.5 projected")).toBeVisible();
   await expect.element(page.getByText("7-3-0 (.700)")).toBeVisible();
@@ -734,11 +744,36 @@ it("shows season facts, both matchup sides, category detail, and cap usage", asy
   expect(page.getByText("Shots (info)").elements()).toHaveLength(0);
   expect(page.getByText("12 to 8").elements()).toHaveLength(0);
   const season = page
-    .getByRole("heading", { name: "Season overview" })
+    .getByRole("heading", { name: "This week" })
     .element()
     .closest<HTMLElement>("[data-card]");
   expect(season).not.toBeNull();
   expect(season?.querySelector("dl")).toBeNull();
+});
+
+it("gives head-to-head point scores two decimal places", async () => {
+  using _app = setupTeamDetailPage(team, {
+    overview: () =>
+      Promise.resolve({
+        ...overviewFixture,
+        format: "head_to_head_points",
+        standing: { rank: 3, points: 0, pointsFor: 0, pointsAgainst: 120, pointsBack: 0 },
+        matchup: {
+          week: 11,
+          opponent: "Beta",
+          points: 0,
+          opponentPoints: 0,
+          projectedPoints: 63.5,
+          opponentProjectedPoints: 55,
+          remainingGames: 0,
+          opponentRemainingGames: 2,
+          categories: [],
+        },
+      }),
+  });
+
+  await expect.element(page.getByText("0.00 to 0.00")).toBeVisible();
+  await expect.element(page.getByText("Projected 63.50 to 55.00")).toBeVisible();
 });
 
 it("shows rotisserie categories with the stat, place, and points", async () => {
@@ -765,7 +800,14 @@ it("shows rotisserie categories with the stat, place, and points", async () => {
         categoryPoints: [
           { name: "Goals", scoring: undefined, value: 10, total: 84, place: 4 },
           { name: "Goals against", scoring: "informational", value: null, total: 114, place: null },
-          { name: "Save percentage", scoring: undefined, value: 4, total: 0.918, place: 10 },
+          { name: "Save percentage", scoring: undefined, value: 4, total: 0.9, place: 10 },
+          {
+            name: "Goals Against Average",
+            scoring: undefined,
+            value: 3,
+            total: 1.6,
+            place: 11,
+          },
         ],
       }),
   });
@@ -779,9 +821,13 @@ it("shows rotisserie categories with the stat, place, and points", async () => {
     "4th",
     "10",
     "Save percentage",
-    "0.918",
+    "0.900",
     "10th",
     "4",
+    "Goals Against Average",
+    "1.60",
+    "11th",
+    "3",
   ]);
   await expect.element(page.getByText("70.5 points", { exact: true })).toBeVisible();
   expect(page.getByText("Goals against").elements()).toHaveLength(0);
@@ -818,8 +864,62 @@ it("shows the card facts before the detail overview answers", async () => {
       ),
   });
 
-  await expect.element(page.getByText(/2-0-0 categories/u)).toBeVisible();
-  expect(page.getByText(/0-0-0 categories/u).elements()).toHaveLength(0);
+  await expect.element(page.getByText(/2-0-0/u)).toBeVisible();
+  expect(page.getByText(/0-0-0/u).elements()).toHaveLength(0);
+});
+
+it("keeps rotisserie category columns steady while their values load", async () => {
+  const season = cardFixture.season;
+  if (season === undefined) {
+    throw new Error("Expected season facts in the card fixture");
+  }
+  const pending = Promise.withResolvers<TeamOverviewView>();
+  const card: TeamCardView = {
+    ...cardFixture,
+    season: {
+      ...season,
+      format: "rotisserie",
+      scoringType: "roto",
+      scoringLabel: "Rotisserie",
+      categoryPoints: [
+        { name: "Goals", scoring: undefined, value: null, total: null, place: null },
+        { name: "Save percentage", scoring: undefined, value: null, total: null, place: null },
+      ],
+    },
+  };
+  using _app = setupTeamDetailPage(team, {
+    cards: () => Promise.resolve([card]),
+    overview: () => pending.promise,
+  });
+
+  const table = page.getByRole("table", { name: "My categories" });
+  await expect.element(table).toBeVisible();
+  const headers = [...table.element().querySelectorAll<HTMLTableCellElement>("th")];
+  const before = EffectArray.map(headers, (header) => {
+    const rect = header.getBoundingClientRect();
+    return { left: rect.left, width: rect.width };
+  });
+
+  pending.resolve({
+    ...overviewFixture,
+    format: "rotisserie",
+    record: undefined,
+    matchup: undefined,
+    standing: { rank: 7, points: 70.5, pointsFor: null, pointsAgainst: null, pointsBack: null },
+    league: { teamCount: 13, scoringType: "roto", gamesCaps: {} },
+    categoryPoints: [
+      { name: "Goals", scoring: undefined, value: 10, total: 84, place: 4 },
+      { name: "Save percentage", scoring: undefined, value: 4, total: 0.9, place: 10 },
+    ],
+  });
+  await expect.element(page.getByText("0.900")).toBeVisible();
+
+  const settled = [...table.element().querySelectorAll<HTMLTableCellElement>("th")];
+  const after = EffectArray.map(settled, (header) => {
+    const rect = header.getBoundingClientRect();
+    return { left: rect.left, width: rect.width };
+  });
+  expect(after).toEqual(before);
 });
 
 it("shows rotisserie categories from the card without the detail overview", async () => {
@@ -921,7 +1021,7 @@ it("shows an unknown format rather than a league read error when settings are mi
 
   expect(page.getByText("Unknown scoring format").elements()).toHaveLength(0);
   expect(page.getByText("League settings could not be loaded.").elements()).toHaveLength(0);
-  await expect.element(page.getByRole("heading", { name: "Season overview" })).toBeVisible();
+  await expect.element(page.getByRole("heading", { name: "This week" })).toBeVisible();
 });
 
 it("states why partial and unsupported season facts are missing", async () => {
@@ -1062,7 +1162,7 @@ it("captures the team overview at desktop and phone sizes in light and dark", as
     for (const theme of ["light", "dark"] as const) {
       applyTheme(theme);
       await expect.element(page.getByText(/^Week 11 vs Beta/u)).toBeVisible();
-      const overview = page.getByRole("region", { name: "Season overview" }).element();
+      const overview = page.getByRole("region", { name: "This week" }).element();
       expect(overview.querySelector("dl")).toBeNull();
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
       await page.screenshot({

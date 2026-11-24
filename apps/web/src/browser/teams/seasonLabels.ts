@@ -71,12 +71,57 @@ export function recordLabel(
     : `${totals} (${EffectString.replace(record.percentage.toFixed(3), /^0/u, "")})`;
 }
 
+const categoryDecimals = new Map<string, number>([
+  ["save percentage", 3],
+  ["save pct", 3],
+  ["save %", 3],
+  ["goals against average", 2],
+  ["goals against avg", 2],
+  ["gaa", 2],
+]);
+
+export function categoryStat(name: string, value: number): string {
+  const digits = categoryDecimals.get(normalizeCategoryName(name));
+  return digits === undefined ? number(value) : fixedNumber(value, digits);
+}
+
+export function matchupNumber(value: number): string {
+  return fixedNumber(value, 2);
+}
+
+export function periodLabel(
+  currentPeriod: number | undefined,
+  lastPeriod: number | undefined,
+  seasonOver: boolean | undefined,
+): string | undefined {
+  if (currentPeriod === undefined || seasonOver === true) {
+    return undefined;
+  }
+  if (lastPeriod === undefined) {
+    return `Week ${String(currentPeriod)}`;
+  }
+  return currentPeriod <= lastPeriod
+    ? `Week ${String(currentPeriod)} of ${String(lastPeriod)}`
+    : undefined;
+}
+
 export function number(value: number): string {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
 }
 
-export function statNumber(value: number): string {
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(value);
+function fixedNumber(value: number, fractionDigits: number): string {
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(value);
+}
+
+function normalizeCategoryName(name: string): string {
+  return EffectString.replace(
+    EffectString.toLowerCase(EffectString.trim(name)),
+    /[^a-z0-9%]+/gu,
+    " ",
+  );
 }
 
 export function ordinal(rank: number): string {

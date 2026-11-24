@@ -9,7 +9,7 @@ import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import type { TeamCardView } from "#contracts/connections/teamContract.ts";
 
-import { number, placeLabel, recordLabel } from "./seasonLabels";
+import { matchupNumber, number, periodLabel, placeLabel, recordLabel } from "./seasonLabels";
 import type { SeasonSummaryData } from "./SeasonSummary";
 
 export function TeamSeasonFacts(props: {
@@ -27,6 +27,9 @@ export function TeamSeasonFacts(props: {
     return {
       format: season.format,
       teamCount: season.teamCount,
+      seasonOver: season.seasonOver,
+      ...(season.currentWeek === undefined ? {} : { currentPeriod: season.currentWeek }),
+      ...(season.endWeek === undefined ? {} : { lastPeriod: season.endWeek }),
       standing: season.standing,
       record: season.standing?.record,
       ...(season.matchup === undefined ? {} : { matchup: season.matchup }),
@@ -67,6 +70,7 @@ function CardSeasonFactsSkeleton(): JSX.Element {
           <Skeleton height="h-5" width="w-16" />
           <Skeleton height="h-5" width="w-24" />
         </Inline>
+        <Skeleton height="h-3" width="w-24" />
         <Skeleton height="h-3" width="w-40" />
       </Stack>
       <CardNote>
@@ -91,6 +95,8 @@ function CardSeasonFacts(props: { readonly data: SeasonSummaryData }): JSX.Eleme
   const showAgainst = (): boolean => format() === "head_to_head_points" || format() === "points";
   const place = (): string | undefined => placeLabel(standing()?.rank, props.data.teamCount);
   const record = (): string | undefined => recordLabel(props.data.record);
+  const period = (): string | undefined =>
+    periodLabel(props.data.currentPeriod, props.data.lastPeriod, props.data.seasonOver);
   const pointsLine = (): string | undefined => {
     if (!showPoints()) {
       return undefined;
@@ -153,7 +159,7 @@ function CardSeasonFacts(props: { readonly data: SeasonSummaryData }): JSX.Eleme
     const wins = EffectArray.filter(categories, (category) => category.result === "win").length;
     const losses = EffectArray.filter(categories, (category) => category.result === "loss").length;
     const ties = EffectArray.filter(categories, (category) => category.result === "tie").length;
-    return `${String(wins)}-${String(losses)}-${String(ties)} categories`;
+    return `${String(wins)}-${String(losses)}-${String(ties)}`;
   };
   const remainingLine = (): string | undefined => {
     const current = matchup();
@@ -175,8 +181,15 @@ function CardSeasonFacts(props: { readonly data: SeasonSummaryData }): JSX.Eleme
         <Show when={place() ?? record()}>
           <Inline gap="sm" align="baseline">
             <Show when={place()}>{(value) => <Text type="body-strong">{value()}</Text>}</Show>
-            <Show when={record()}>{(value) => <Text type="body-strong">{value()}</Text>}</Show>
+            <Show when={record()}>{(value) => <Text type="meta">{value()}</Text>}</Show>
           </Inline>
+        </Show>
+        <Show when={period()}>
+          {(value) => (
+            <Text type="meta" tone="muted">
+              {value()}
+            </Text>
+          )}
         </Show>
         <Show when={pointsLine()}>
           {(value) => (
@@ -192,7 +205,7 @@ function CardSeasonFacts(props: { readonly data: SeasonSummaryData }): JSX.Eleme
             <Text type="label" tone="faint">
               Current matchup
             </Text>
-            <Text type="body-strong">{matchupLine()}</Text>
+            <Text type="body">{matchupLine()}</Text>
             <Show when={scoreLine()}>
               {(value) => (
                 <Text type="body-strong" numeric>
@@ -207,9 +220,7 @@ function CardSeasonFacts(props: { readonly data: SeasonSummaryData }): JSX.Eleme
                 </Text>
               )}
             </Show>
-            <Show when={categoryRecord()}>
-              {(value) => <Text type="body-strong">{value()}</Text>}
-            </Show>
+            <Show when={categoryRecord()}>{(value) => <Text type="meta">{value()}</Text>}</Show>
             <Show when={remainingLine()}>
               {(value) => (
                 <Text type="meta" tone="muted">
@@ -225,5 +236,5 @@ function CardSeasonFacts(props: { readonly data: SeasonSummaryData }): JSX.Eleme
 }
 
 function scoreText(value: number | null): string {
-  return value === null ? "–" : number(value);
+  return value === null ? "–" : matchupNumber(value);
 }

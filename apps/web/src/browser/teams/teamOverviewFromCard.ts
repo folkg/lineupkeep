@@ -28,6 +28,7 @@ export function toTeamOverviewFromCard(
         };
   return {
     ...(card.reason === undefined ? {} : { reason: card.reason }),
+    seasonOver: season.seasonOver,
     format: season.format,
     ...(league === undefined
       ? { leagueReason: "League settings were not published." }

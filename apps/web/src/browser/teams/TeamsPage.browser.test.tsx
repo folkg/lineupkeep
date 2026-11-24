@@ -191,7 +191,7 @@ it("shows the standing and format without a key-value table", async () => {
   expect(card.textContent).not.toContain("behind leader");
   expect(card.querySelector("dl")).toBeNull();
   expect(card.textContent).not.toContain("Weekly");
-  expect(card.textContent).not.toContain("Week 11 of 18");
+  await expect.element(page.getByText("Week 11 of 18")).toBeVisible();
   await expect.element(page.getByRole("switch", { name: "Lineup checks for Alpha" })).toBeVisible();
 });
 
@@ -219,10 +219,43 @@ it("shows the current matchup at a glance without category rows", async () => {
       ]),
   });
   await expect.element(page.getByText("Week 9 vs Beta")).toBeVisible();
-  await expect.element(page.getByText("0-0-0 categories")).toBeVisible();
+  await expect.element(page.getByText("0-0-0")).toBeVisible();
   expect(page.getByText("0 to 0").elements()).toHaveLength(0);
   expect(page.getByText("Projected 63.5 to 55").elements()).toHaveLength(0);
   await expect.element(page.getByText("0 games left · 2 for them")).toBeVisible();
+});
+
+it("gives head-to-head point scores two decimal places", async () => {
+  using _app = setupTeamsPage([baseTeam], {
+    cards: () =>
+      Promise.resolve([
+        {
+          ...seasonCard,
+          season: {
+            ...seasonFacts,
+            format: "head_to_head_points",
+            matchup: {
+              week: 9,
+              opponent: "Beta",
+              points: 0,
+              opponentPoints: 0,
+              projectedPoints: 63.5,
+              opponentProjectedPoints: 55,
+              remainingGames: 0,
+              opponentRemainingGames: 2,
+              categories: [],
+            },
+          },
+        },
+      ]),
+  });
+  await expect.element(page.getByText("0.00 to 0.00")).toBeVisible();
+  await expect.element(page.getByText("Projected 63.50 to 55.00")).toBeVisible();
+  const matchup = page.getByText("Week 9 vs Beta").element();
+  const score = page.getByText("0.00 to 0.00").element();
+  expect(Number(getComputedStyle(matchup).fontWeight)).toBeLessThan(
+    Number(getComputedStyle(score).fontWeight),
+  );
 });
 
 it("shows missing facts without a made-up record, label, cap or weekly lock", async () => {

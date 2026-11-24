@@ -169,6 +169,7 @@ export type TeamCardView = {
 
 export type TeamOverviewView = {
   readonly reason?: string;
+  readonly seasonOver?: boolean;
   readonly format?:
     | "head_to_head_categories"
     | "head_to_head_points"
