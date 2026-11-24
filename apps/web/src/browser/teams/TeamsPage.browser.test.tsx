@@ -18,6 +18,7 @@ import { page } from "vitest/browser";
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { applyTheme } from "#browser/app-shell/theme.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
+import { clearTeamCardSnapshot } from "#browser/query/teamCardSnapshot.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
 import { formatClockTime, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import type {
@@ -1367,6 +1368,7 @@ function setupTeamsPage(
     readonly seedCards?: ReadonlyArray<TeamCardView>;
   } = {},
 ): { [Symbol.dispose](): void } {
+  clearTeamCardSnapshot();
   const queryClient = createQueryClient();
   if (queryOptions.retryDelay !== undefined) {
     queryClient.setDefaultOptions({ queries: { retryDelay: queryOptions.retryDelay } });
@@ -1426,6 +1428,7 @@ function setupTeamsPage(
   return {
     [Symbol.dispose](): void {
       dispose();
+      clearTeamCardSnapshot();
       queryClient.clear();
       host.remove();
     },

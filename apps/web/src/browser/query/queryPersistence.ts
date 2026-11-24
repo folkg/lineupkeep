@@ -2,6 +2,8 @@ import { persistQueryClientSubscribe } from "@tanstack/query-persist-client-core
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import type { Query, QueryClient } from "@tanstack/solid-query";
 
+import { clearTeamCardSnapshot } from "./teamCardSnapshot.ts";
+
 const storageKey = "lineupkeep.query-cache.v1";
 const buster = "2026-11-24";
 const maxAge = 24 * 60 * 60 * 1_000;
@@ -52,6 +54,7 @@ export function removePersistedTeamQueries(): void {
   if (typeof window === "undefined") {
     return;
   }
+  clearTeamCardSnapshot();
   void createPersister().removeClient();
 }
 

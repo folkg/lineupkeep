@@ -19,6 +19,7 @@ import { page } from "vitest/browser";
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { applyTheme } from "#browser/app-shell/theme.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
+import { clearTeamCardSnapshot } from "#browser/query/teamCardSnapshot.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
 import {
   formatClockTime,
@@ -1084,6 +1085,7 @@ function setupTeamDetailPage(
   teamSummary: TeamSummaryView,
   overrides: Partial<Pick<TeamRemote, "saveNote" | "overview" | "cards">> = {},
 ): { [Symbol.dispose](): void } {
+  clearTeamCardSnapshot();
   const queryClient = createQueryClient();
   const remote: TeamRemote = {
     list: () => Promise.resolve([teamSummary]),
@@ -1164,6 +1166,7 @@ function setupTeamDetailPage(
   return {
     [Symbol.dispose](): void {
       dispose();
+      clearTeamCardSnapshot();
       queryClient.clear();
       host.remove();
     },

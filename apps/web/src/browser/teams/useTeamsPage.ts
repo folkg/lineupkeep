@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "@tanstack/solid-query";
 import { createOptimisticStore, createSignal, untrack } from "solid-js";
 import type { Accessor } from "solid-js";
 
+import { readTeamCardSnapshot, writeTeamCardSnapshot } from "#browser/query/teamCardSnapshot.ts";
 import { useSignInRecovery } from "#browser/session/signInRecovery.ts";
 import type { ActionFeedbackState } from "#browser/shared-ui/ActionFeedback.tsx";
 import { actionState } from "#browser/shared-ui/actionState.ts";
@@ -27,8 +28,9 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
   const signIn = useSignInRecovery();
   const [feedback, setFeedback] = createSignal<ActionFeedbackState>();
   const [refreshFinished, setRefreshFinished] = createSignal(false);
+  const snapshot = typeof window === "undefined" ? [] : readTeamCardSnapshot();
   const [teamList, setTeamList] = createOptimisticStore<TeamData[]>(
-    () => (query.isSuccess ? [...query.data] : []),
+    () => (query.isSuccess ? [...query.data] : EffectArray.map(snapshot, (card) => card.summary)),
     [],
     { key: null },
   );
@@ -43,6 +45,7 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
             const cards = await remote.cards(options);
             setFactsFailed(false);
             setFactsSettled(true);
+            writeTeamCardSnapshot(cards);
             return cards;
           } catch {
             setFactsFailed(true);
@@ -52,7 +55,7 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
         },
       }),
       enabled: props.includeCards !== false && typeof window !== "undefined",
-      placeholderData: [],
+      placeholderData: snapshot,
     };
   });
 
