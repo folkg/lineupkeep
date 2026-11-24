@@ -1,10 +1,10 @@
 import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
 
+import { ButtonLink } from "#browser/shared-ui/ButtonLink.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
-import { TextLink } from "#browser/shared-ui/TextLink.tsx";
 import { providerDisplayName } from "#contracts/connections/providerLabels.ts";
 import type { TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
@@ -19,7 +19,9 @@ export function TeamAttention(props: TeamAttentionProps): JSX.Element {
             <Text as="span" type="meta">
               {provider()} needs a new sign-in before lineup checks can run.
             </Text>
-            <TextLink to="/account">Reconnect {provider()}</TextLink>
+            <ButtonLink to="/account" variant="secondary">
+              Reconnect {provider()}
+            </ButtonLink>
           </Inline>
         </Show>
         <Show when={props.team.connectionStatus === "disconnected"}>
@@ -27,7 +29,9 @@ export function TeamAttention(props: TeamAttentionProps): JSX.Element {
             <Text as="span" type="meta">
               {provider()} is disconnected, so lineup checks cannot run.
             </Text>
-            <TextLink to="/account">Reconnect {provider()}</TextLink>
+            <ButtonLink to="/account" variant="secondary">
+              Reconnect {provider()}
+            </ButtonLink>
           </Inline>
         </Show>
         <Show when={props.team.connectionStatus === "linking"}>

@@ -4,6 +4,7 @@ import { For, Show } from "solid-js";
 
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
+import { Table } from "#browser/shared-ui/Table.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import type { TeamOverviewView } from "#contracts/connections/teamContract.ts";
 
@@ -74,39 +75,51 @@ export function SeasonSummary(props: { readonly data: SeasonSummaryData }): JSX.
     ];
     return parts.length === 0 ? undefined : EffectArray.join(parts, " · ");
   };
-  const matchupLine = (): string | undefined => {
+  const opponentLine = (): string | undefined => {
     const current = matchup();
-    if (current === undefined) {
+    return current === undefined
+      ? undefined
+      : `Week ${String(current.week)} vs ${current.opponent}`;
+  };
+  const scoreLine = (): string | undefined => {
+    const current = matchup();
+    if (
+      current === undefined ||
+      !showPoints() ||
+      (current.points === null && current.opponentPoints === null)
+    ) {
       return undefined;
     }
-    const score =
-      showPoints() && (current.points !== null || current.opponentPoints !== null)
-        ? `${scoreText(current.points)} to ${scoreText(current.opponentPoints)}`
-        : undefined;
-    const projected =
-      showPoints() && (current.projectedPoints !== null || current.opponentProjectedPoints !== null)
-        ? `Projected ${scoreText(current.projectedPoints)} to ${scoreText(current.opponentProjectedPoints)}`
-        : undefined;
-    const categoryRecord = categoryRecordLine();
-    const remaining =
-      current.remainingGames === undefined
-        ? undefined
-        : `${number(current.remainingGames)} games left${
-            current.opponentRemainingGames === undefined
-              ? ""
-              : ` · ${number(current.opponentRemainingGames)} for them`
-          }`;
-    return EffectArray.join(
-      [
-        `Week ${String(current.week)} vs ${current.opponent}`,
-        ...(score === undefined ? [] : [score]),
-        ...(projected === undefined ? [] : [projected]),
-        ...(categoryRecord === undefined ? [] : [categoryRecord]),
-        ...(remaining === undefined ? [] : [remaining]),
-      ],
-      " · ",
-    );
+    return `${scoreText(current.points)} to ${scoreText(current.opponentPoints)}`;
   };
+  const projectedLine = (): string | undefined => {
+    const current = matchup();
+    if (
+      current === undefined ||
+      !showPoints() ||
+      (current.projectedPoints === null && current.opponentProjectedPoints === null)
+    ) {
+      return undefined;
+    }
+    return `Projected ${scoreText(current.projectedPoints)} to ${scoreText(current.opponentProjectedPoints)}`;
+  };
+  const remainingLine = (): string | undefined => {
+    const current = matchup();
+    if (current?.remainingGames === undefined) {
+      return undefined;
+    }
+    return `${number(current.remainingGames)} games left${
+      current.opponentRemainingGames === undefined
+        ? ""
+        : ` · ${number(current.opponentRemainingGames)} for them`
+    }`;
+  };
+  const matchupCategories = (): ReadonlyArray<
+    NonNullable<TeamOverviewView["matchup"]>["categories"][number]
+  > =>
+    format() === "head_to_head_categories"
+      ? EffectArray.filter(matchup()?.categories ?? [], (row) => row.scoring !== "informational")
+      : [];
   const categoryRecordLine = (): string | undefined => {
     const current = matchup();
     if (current === undefined || format() !== "head_to_head_categories") {
@@ -129,14 +142,44 @@ export function SeasonSummary(props: { readonly data: SeasonSummaryData }): JSX.
   };
   return (
     <Stack gap="lg">
-      <Inline gap="lg" justify="between" align="start">
+      <Stack gap="2xs">
+        <Text type="label" tone="faint">
+          Place
+        </Text>
+        <Show when={place()}>{(value) => <Text type="body-strong">{value()}</Text>}</Show>
+        <Show when={record()}>{(value) => <Text type="meta">{value()}</Text>}</Show>
+        <Show when={pointsLine()}>
+          {(value) => (
+            <Text type="meta" tone="muted">
+              {value()}
+            </Text>
+          )}
+        </Show>
+      </Stack>
+      <Show when={matchup()}>
         <Stack gap="2xs">
           <Text type="label" tone="faint">
-            Place
+            Current matchup
           </Text>
-          <Show when={place()}>{(value) => <Text type="body-strong">{value()}</Text>}</Show>
-          <Show when={record()}>{(value) => <Text type="meta">{value()}</Text>}</Show>
-          <Show when={pointsLine()}>
+          <Text type="body-strong">{opponentLine()}</Text>
+          <Show when={scoreLine()}>
+            {(value) => (
+              <Text numeric type="body-strong">
+                {value()}
+              </Text>
+            )}
+          </Show>
+          <Show when={projectedLine()}>
+            {(value) => (
+              <Text type="meta" tone="muted">
+                {value()}
+              </Text>
+            )}
+          </Show>
+          <Show when={categoryRecordLine()}>
+            {(value) => <Text type="body-strong">{value()}</Text>}
+          </Show>
+          <Show when={remainingLine()}>
             {(value) => (
               <Text type="meta" tone="muted">
                 {value()}
@@ -144,17 +187,33 @@ export function SeasonSummary(props: { readonly data: SeasonSummaryData }): JSX.
             )}
           </Show>
         </Stack>
-        <Show when={matchup()}>
-          <Stack gap="2xs">
-            <Text type="label" tone="faint">
-              Current matchup
-            </Text>
-            <Text numeric type="body">
-              {matchupLine()}
-            </Text>
-          </Stack>
-        </Show>
-      </Inline>
+      </Show>
+      <Show when={matchupCategories().length > 0}>
+        <Stack gap="sm">
+          <Text type="label" tone="faint">
+            Matchup categories
+          </Text>
+          <Table
+            columns={[
+              { label: "Category" },
+              { label: "You", align: "end" },
+              { label: "Them", align: "end" },
+              { label: "Result", align: "end" },
+            ]}
+            label="Matchup categories"
+            rows={EffectArray.map(matchupCategories(), (row) => [
+              <Text type="body">{row.name}</Text>,
+              <Text numeric type="meta">
+                {row.own === null ? "–" : number(row.own)}
+              </Text>,
+              <Text numeric type="meta">
+                {row.opponent === null ? "–" : number(row.opponent)}
+              </Text>,
+              <Text type="meta">{resultLabel(row.result)}</Text>,
+            ])}
+          />
+        </Stack>
+      </Show>
       <Show when={caps().length > 0}>
         <Inline gap="sm">
           <For each={caps()}>
@@ -168,6 +227,10 @@ export function SeasonSummary(props: { readonly data: SeasonSummaryData }): JSX.
       </Show>
     </Stack>
   );
+}
+
+function resultLabel(result: "win" | "loss" | "tie" | undefined): string {
+  return result === "win" ? "Win" : result === "loss" ? "Loss" : result === "tie" ? "Tie" : "–";
 }
 
 function scoreText(value: number | null): string {

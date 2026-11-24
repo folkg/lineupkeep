@@ -15,7 +15,7 @@ export const Route = createFileRoute("/runs/$runId")({
       location.href,
     ).then(() => undefined),
   loader: ({ context, params }) => {
-    if (typeof window === "undefined" || context.queryClient.isMutating() > 0) {
+    if (context.queryClient.isMutating() > 0) {
       return Promise.all([
         context.queryClient.ensureQueryData(teamQueries.list(teamRemote)),
         context.queryClient.ensureQueryData(teamQueries.run(teamRemote, params.runId)),

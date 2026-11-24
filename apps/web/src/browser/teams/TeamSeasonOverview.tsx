@@ -20,17 +20,33 @@ import type { SeasonSummaryData } from "./SeasonSummary";
 function SeasonOverviewSkeleton(): JSX.Element {
   return (
     <Stack gap="lg">
-      <Inline gap="lg" justify="between" align="start">
-        <Stack gap="2xs">
-          <Skeleton height="h-3" width="w-12" />
-          <Skeleton height="h-5" width="w-24" />
-          <Skeleton height="h-3" width="w-32" />
+      <Stack gap="2xs">
+        <Text type="label" tone="faint">
+          Place
+        </Text>
+        <Skeleton height="h-5" width="w-24" />
+        <Skeleton height="h-3" width="w-32" />
+        <Skeleton height="h-3" width="w-40" />
+      </Stack>
+      <Stack gap="2xs">
+        <Text type="label" tone="faint">
+          Current matchup
+        </Text>
+        <Skeleton height="h-5" width="w-48" />
+        <Skeleton height="h-5" width="w-24" />
+        <Skeleton height="h-3" width="w-36" />
+      </Stack>
+      <Stack gap="sm">
+        <Skeleton height="h-3" width="w-32" />
+        <Skeleton height="h-9" width="w-full" />
+        <Skeleton height="h-9" width="w-full" />
+      </Stack>
+      <CardNote>
+        <Stack gap="xs">
+          <Skeleton height="h-3" width="w-20" />
+          <Skeleton height="h-3" width="w-48" />
         </Stack>
-        <Stack gap="2xs">
-          <Skeleton height="h-3" width="w-24" />
-          <Skeleton height="h-5" width="w-48" />
-        </Stack>
-      </Inline>
+      </CardNote>
     </Stack>
   );
 }
@@ -38,6 +54,7 @@ function SeasonOverviewSkeleton(): JSX.Element {
 export function TeamSeasonOverview(props: {
   readonly facts: TeamOverviewView | undefined;
   readonly loading: boolean;
+  readonly categoryValuesLoading?: boolean;
   readonly failed: boolean;
 }): JSX.Element {
   const facts = (): TeamOverviewView | undefined => props.facts;
@@ -62,6 +79,10 @@ export function TeamSeasonOverview(props: {
     facts()?.format === "rotisserie"
       ? EffectArray.filter(facts()?.categoryPoints ?? [], (row) => row.scoring !== "informational")
       : [];
+  const categoryValuesLoading = (): boolean =>
+    props.categoryValuesLoading === true &&
+    categoryRows().length > 0 &&
+    EffectArray.every(categoryRows(), (row) => row.value === null);
   const usage = (): ReadonlyArray<{
     readonly position: string;
     readonly played: number;
@@ -131,15 +152,18 @@ export function TeamSeasonOverview(props: {
                         {row.name}
                         {row.scoring === "informational" ? " (info)" : ""}
                       </Text>,
-                      <Text numeric type="meta">
-                        {row.total === null ? "–" : statNumber(row.total)}
-                      </Text>,
-                      <Text numeric type="meta">
-                        {row.place === null ? "–" : ordinal(row.place)}
-                      </Text>,
-                      <Text numeric type="meta">
-                        {row.value === null ? "–" : number(row.value)}
-                      </Text>,
+                      <CategoryValue
+                        loading={categoryValuesLoading()}
+                        value={row.total === null ? "–" : statNumber(row.total)}
+                      />,
+                      <CategoryValue
+                        loading={categoryValuesLoading()}
+                        value={row.place === null ? "–" : ordinal(row.place)}
+                      />,
+                      <CategoryValue
+                        loading={categoryValuesLoading()}
+                        value={row.value === null ? "–" : number(row.value)}
+                      />,
                     ])}
                   />
                 </Stack>
@@ -185,5 +209,20 @@ export function TeamSeasonOverview(props: {
         </Show>
       </SeasonArea>
     </Card>
+  );
+}
+
+function CategoryValue(props: { readonly loading: boolean; readonly value: string }): JSX.Element {
+  return (
+    <Show
+      fallback={
+        <Text numeric type="meta">
+          {props.value}
+        </Text>
+      }
+      when={props.loading}
+    >
+      <Skeleton height="h-3" width="w-10" />
+    </Show>
   );
 }

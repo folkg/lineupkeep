@@ -60,14 +60,21 @@ function CardSeasonFactsSkeleton(): JSX.Element {
   return (
     <Stack gap="sm">
       <Stack gap="2xs">
-        <Skeleton height="h-3" width="w-16" />
-        <Skeleton height="h-5" width="w-28" />
-        <Skeleton height="h-3" width="w-36" />
+        <Text type="label" tone="faint">
+          Season
+        </Text>
+        <Inline gap="sm" align="baseline">
+          <Skeleton height="h-5" width="w-16" />
+          <Skeleton height="h-5" width="w-24" />
+        </Inline>
+        <Skeleton height="h-3" width="w-40" />
       </Stack>
       <CardNote>
         <Stack gap="2xs">
-          <Skeleton height="h-3" width="w-24" />
-          <Skeleton height="h-5" width="w-40" />
+          <Text type="label" tone="faint">
+            Current matchup
+          </Text>
+          <Skeleton height="h-5" width="w-48" />
           <Skeleton height="h-5" width="w-24" />
           <Skeleton height="h-3" width="w-36" />
         </Stack>

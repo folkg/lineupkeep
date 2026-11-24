@@ -20,8 +20,11 @@ export const Route = createFileRoute("/teams/")({
     );
   },
   loader: ({ context }) => {
-    if (typeof window === "undefined" || context.queryClient.isMutating() > 0) {
-      return context.queryClient.ensureQueryData(context.teamsQuery);
+    if (context.queryClient.isMutating() > 0) {
+      return Promise.all([
+        context.queryClient.ensureQueryData(context.teamsQuery),
+        context.queryClient.ensureQueryData(context.cardsQuery),
+      ]);
     }
     void context.queryClient.prefetchQuery(context.teamsQuery);
     void context.queryClient.prefetchQuery(context.cardsQuery);

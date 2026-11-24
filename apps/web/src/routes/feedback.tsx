@@ -22,7 +22,7 @@ export const Route = createFileRoute("/feedback")({
       location.href,
     ).then(() => undefined),
   loader: ({ context }) => {
-    if (typeof window === "undefined" || context.queryClient.isMutating() > 0) {
+    if (context.queryClient.isMutating() > 0) {
       return context.queryClient.ensureQueryData(context.reportsQuery);
     }
     void context.queryClient.prefetchQuery(context.reportsQuery);

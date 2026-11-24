@@ -20,9 +20,6 @@ export const Route = createFileRoute("/consent")({
       location.href,
     ).then(() => undefined),
   loader: ({ context }) => {
-    if (typeof window === "undefined") {
-      return context.queryClient.prefetchQuery(context.requestQuery);
-    }
     void context.queryClient.prefetchQuery(context.requestQuery);
   },
   component: ConsentRoute,

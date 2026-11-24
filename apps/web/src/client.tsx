@@ -25,10 +25,8 @@ hydrateStart()
       throw new Error("The client router did not provide a query client");
     }
     hydrate(() => <StartClient router={router} />, document);
-    window.setTimeout(() => {
-      void restoreTeamQueries(queryClient).then(() => {
-        persistTeamQueries(queryClient);
-      });
-    }, 250);
+    void restoreTeamQueries(queryClient).then(() => {
+      persistTeamQueries(queryClient);
+    });
   })
   .catch(console.error);

@@ -16,7 +16,7 @@ export const Route = createFileRoute("/transactions/")({
     ).then(() => undefined),
   loader: ({ context }) => {
     const query = transactionQueries.timeline(transactionRemote);
-    if (typeof window === "undefined" || context.queryClient.isMutating() > 0) {
+    if (context.queryClient.isMutating() > 0) {
       return context.queryClient.ensureInfiniteQueryData(query);
     }
     void context.queryClient.prefetchInfiniteQuery(query);

@@ -1,8 +1,9 @@
-import { persistQueryClientSubscribe } from "@tanstack/query-persist-client-core";
+import {
+  persistQueryClientRestore,
+  persistQueryClientSubscribe,
+} from "@tanstack/query-persist-client-core";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import type { Query, QueryClient } from "@tanstack/solid-query";
-
-import { clearTeamCardSnapshot } from "./teamCardSnapshot.ts";
 
 const storageKey = "lineupkeep.query-cache.v1";
 const buster = "2026-11-24";
@@ -12,30 +13,12 @@ export async function restoreTeamQueries(queryClient: QueryClient): Promise<void
   if (typeof window === "undefined") {
     return;
   }
-  const persister = createPersister();
-  try {
-    const persisted = await persister.restoreClient();
-    if (
-      persisted === undefined ||
-      persisted.buster !== buster ||
-      Date.now() - persisted.timestamp > maxAge
-    ) {
-      removePersistedTeamQueries();
-      return;
-    }
-    for (const query of persisted.clientState.queries) {
-      if (query.state.data === undefined || query.queryKey[0] !== "teams") {
-        continue;
-      }
-      if (queryClient.getQueryData(query.queryKey) === undefined) {
-        queryClient.setQueryData(query.queryKey, query.state.data, {
-          updatedAt: query.state.dataUpdatedAt,
-        });
-      }
-    }
-  } catch {
-    removePersistedTeamQueries();
-  }
+  await persistQueryClientRestore({
+    queryClient,
+    persister: createPersister(),
+    buster,
+    maxAge,
+  });
 }
 
 export function persistTeamQueries(queryClient: QueryClient): () => void {
@@ -54,7 +37,6 @@ export function removePersistedTeamQueries(): void {
   if (typeof window === "undefined") {
     return;
   }
-  clearTeamCardSnapshot();
   void createPersister().removeClient();
 }
 

@@ -30,7 +30,7 @@ export const Route = createFileRoute("/account")({
       location.href,
     ).then(() => undefined),
   loader: ({ context }) => {
-    if (typeof window === "undefined" || context.queryClient.isMutating() > 0) {
+    if (context.queryClient.isMutating() > 0) {
       return Promise.all([
         context.queryClient.ensureQueryData(context.connectionsQuery),
         context.queryClient.ensureQueryData(context.signInSessionsQuery),

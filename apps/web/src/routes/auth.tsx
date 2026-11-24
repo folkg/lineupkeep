@@ -13,9 +13,6 @@ export const Route = createFileRoute("/auth")({
   context: () => ({ signInMethodsQuery: signInQueries.methods(signInRemote) }),
 
   loader: ({ context }) => {
-    if (typeof window === "undefined") {
-      return context.queryClient.prefetchQuery(context.signInMethodsQuery);
-    }
     void context.queryClient.prefetchQuery(context.signInMethodsQuery);
   },
   component: AuthRoute,

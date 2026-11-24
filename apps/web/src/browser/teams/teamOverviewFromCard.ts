@@ -2,7 +2,7 @@ import type { TeamCardView, TeamOverviewView } from "#contracts/connections/team
 
 export function toTeamOverviewFromCard(
   card: TeamCardView,
-  gamesUsage?: TeamOverviewView["gamesUsage"],
+  overview?: Pick<TeamOverviewView, "categoryPoints" | "gamesUsage">,
 ): TeamOverviewView {
   const season = card.season;
   if (season === undefined) {
@@ -60,9 +60,11 @@ export function toTeamOverviewFromCard(
     ...(season.matchup === undefined
       ? { matchupReason: "Matchup was not published." }
       : { matchup: season.matchup }),
-    ...(season.categoryPoints === undefined
-      ? { categoryReason: "Season category points were not published." }
-      : { categoryPoints: season.categoryPoints }),
-    ...(gamesUsage === undefined ? {} : { gamesUsage }),
+    ...(overview?.categoryPoints !== undefined && overview.categoryPoints.length > 0
+      ? { categoryPoints: overview.categoryPoints }
+      : season.categoryPoints === undefined
+        ? { categoryReason: "Season category points were not published." }
+        : { categoryPoints: season.categoryPoints }),
+    ...(overview?.gamesUsage === undefined ? {} : { gamesUsage: overview.gamesUsage }),
   };
 }

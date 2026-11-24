@@ -8,6 +8,7 @@ import {
   UnsavedNavigationGuard,
 } from "#browser/navigation/UnsavedChanges.tsx";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
+import { ClientOnly } from "#browser/shared-ui/ClientOnly.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import { ArrowLeftIcon } from "#browser/shared-ui/icons.tsx";
@@ -39,6 +40,22 @@ import { useTeamOverview } from "./useTeamOverview";
 import { useTeamsPage } from "./useTeamsPage";
 
 export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
+  return (
+    <ClientOnly
+      fallback={
+        <AppShell>
+          <Page title="Team">
+            <LoadingState label="Loading team">Loading this team…</LoadingState>
+          </Page>
+        </AppShell>
+      }
+    >
+      <TeamDetailContent {...props} />
+    </ClientOnly>
+  );
+}
+
+function TeamDetailContent(props: TeamDetailPageProps): JSX.Element {
   const page = useTeamsPage({
     teamsQuery: () => props.teamsQuery(),
     includeCards: true,
@@ -104,21 +121,22 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
 
 function TeamDetail(props: TeamDetailProps): JSX.Element {
   const note = useTeamNote({ team: () => props.team, remote: () => props.remote });
-  const needsUsage = (): boolean =>
+  const needsOverview = (): boolean =>
     props.card === undefined ||
+    props.card.season?.format === "rotisserie" ||
     props.card.season?.maxGamesPlayed !== undefined ||
     props.card.season?.maxInningsPitched !== undefined;
   const overview = useTeamOverview(
     () => props.team.team.id,
     () => props.remote,
-    needsUsage,
+    needsOverview,
   );
   const facts = (): ReturnType<typeof toTeamOverviewFromCard> | undefined =>
     props.card === undefined
       ? props.cardsLoading || overview.loading()
         ? undefined
         : overview.facts()
-      : toTeamOverviewFromCard(props.card, overview.facts()?.gamesUsage);
+      : toTeamOverviewFromCard(props.card, overview.facts());
   return (
     <Stack gap="2xl">
       <Stack gap="md">
@@ -134,6 +152,7 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
       <TeamSeasonOverview
         facts={facts()}
         loading={props.card === undefined && (props.cardsLoading || overview.loading())}
+        categoryValuesLoading={props.card !== undefined && overview.loading()}
         failed={props.card === undefined && !props.cardsLoading && overview.failed()}
       />
 

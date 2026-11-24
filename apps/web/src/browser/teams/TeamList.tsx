@@ -173,17 +173,21 @@ function TeamCard(props: TeamCardProps): JSX.Element {
       }
     >
       <Stack gap="sm">
-        <SeasonArea loading={props.factsLoading}>
-          <TeamSeasonFacts
-            facts={props.facts}
-            failed={props.factsFailure}
-            loading={props.factsLoading}
-          />
-        </SeasonArea>
+        <Show
+          fallback={<TeamAttention team={props.team} />}
+          when={props.team.connectionStatus === "ready"}
+        >
+          <SeasonArea loading={props.factsLoading}>
+            <TeamSeasonFacts
+              facts={props.facts}
+              failed={props.factsFailure}
+              loading={props.factsLoading}
+            />
+          </SeasonArea>
+        </Show>
         <CardNote>
           <CheckSummary now={props.now} team={props.team} />
         </CardNote>
-        <TeamAttention team={props.team} />
       </Stack>
     </Card>
   );

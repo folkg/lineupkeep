@@ -134,12 +134,13 @@ test("renders the teams surface before client scripts and hydrates its navigatio
   try {
     await page.goto("/teams", { waitUntil: "commit" });
     await expect(page.getByRole("heading", { name: "Teams", exact: true })).toBeVisible();
-    await expect(page.getByText("No teams yet.", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Loading teams")).toBeVisible();
   } finally {
     scripts.resolve();
     await page.unrouteAll({ behavior: "wait" });
   }
 
+  await expect(page.getByText("No teams yet.", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Teams", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Connect an account" }).click();
   await expect(page).toHaveURL("/account");

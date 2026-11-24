@@ -19,7 +19,6 @@ import { page } from "vitest/browser";
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { applyTheme } from "#browser/app-shell/theme.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
-import { clearTeamCardSnapshot } from "#browser/query/teamCardSnapshot.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
 import {
   formatClockTime,
@@ -719,9 +718,10 @@ it("shows season facts, both matchup sides, category detail, and cap usage", asy
   using _app = setupTeamDetailPage(team, { overview: () => Promise.resolve(overviewFixture) });
 
   await expect.element(page.getByText("Head to head categories")).toBeVisible();
-  await expect
-    .element(page.getByText("Week 11 vs Beta · 0-0-0 categories · 0 games left · 2 for them"))
-    .toBeVisible();
+  await expect.element(page.getByText("Week 11 vs Beta")).toBeVisible();
+  await expect.element(page.getByText("0-0-0 categories")).toBeVisible();
+  await expect.element(page.getByText("0 games left · 2 for them")).toBeVisible();
+  await expect.element(page.getByRole("table", { name: "Matchup categories" })).toBeVisible();
   await expect.element(page.getByText("0 played · 150 projected")).toBeVisible();
   await expect.element(page.getByText("10.1 pitched · 1,300.5 projected")).toBeVisible();
   await expect.element(page.getByText("7-3-0 (.700)")).toBeVisible();
@@ -1085,7 +1085,6 @@ function setupTeamDetailPage(
   teamSummary: TeamSummaryView,
   overrides: Partial<Pick<TeamRemote, "saveNote" | "overview" | "cards">> = {},
 ): { [Symbol.dispose](): void } {
-  clearTeamCardSnapshot();
   const queryClient = createQueryClient();
   const remote: TeamRemote = {
     list: () => Promise.resolve([teamSummary]),
@@ -1166,7 +1165,6 @@ function setupTeamDetailPage(
   return {
     [Symbol.dispose](): void {
       dispose();
-      clearTeamCardSnapshot();
       queryClient.clear();
       host.remove();
     },
