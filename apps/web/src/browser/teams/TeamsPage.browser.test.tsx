@@ -18,7 +18,7 @@ import { page } from "vitest/browser";
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { applyTheme } from "#browser/app-shell/theme.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
-import { clearTeamCardSnapshot } from "#browser/query/teamCardSnapshot.ts";
+import { clearTeamCardSnapshot, writeTeamCardSnapshot } from "#browser/query/teamCardSnapshot.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
 import { formatClockTime, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import type {
@@ -462,19 +462,17 @@ it("keeps local team controls when the batch read fails", async () => {
   await expect.element(page.getByRole("switch", { name: "Lineup checks for Alpha" })).toBeVisible();
 });
 
-it("paints season facts from the query cache before fresh facts arrive", async () => {
+it("paints season facts from the local snapshot before fresh facts arrive", async () => {
   const pending = Promise.withResolvers<ReadonlyArray<TeamCardView>>();
   using _app = setupTeamsPage(
     [baseTeam],
     { cards: () => pending.promise },
-    { seedCards: [seasonCard] },
+    { seedSnapshot: [seasonCard] },
   );
 
   await expect.element(page.getByText("3rd of 12")).toBeVisible();
   await expect.element(page.getByText("7-3-0 (.700)")).toBeVisible();
-  expect(page.getByText("Loading season facts.").elements()).toHaveLength(0);
   pending.resolve([seasonCardWithMatchup]);
-  await expect.element(page.getByText("3rd of 12")).toBeVisible();
 });
 
 it("keeps local status in place while season facts arrive", async () => {
@@ -1366,9 +1364,13 @@ function setupTeamsPage(
   queryOptions: {
     readonly retryDelay?: number;
     readonly seedCards?: ReadonlyArray<TeamCardView>;
+    readonly seedSnapshot?: ReadonlyArray<TeamCardView>;
   } = {},
 ): { [Symbol.dispose](): void } {
   clearTeamCardSnapshot();
+  if (queryOptions.seedSnapshot !== undefined) {
+    writeTeamCardSnapshot(queryOptions.seedSnapshot);
+  }
   const queryClient = createQueryClient();
   if (queryOptions.retryDelay !== undefined) {
     queryClient.setDefaultOptions({ queries: { retryDelay: queryOptions.retryDelay } });

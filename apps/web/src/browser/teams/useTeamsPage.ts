@@ -1,7 +1,7 @@
 import { EffectArray } from "@lineupkeep/collections";
 import { EffectOption } from "@lineupkeep/collections";
 import { useMutation, useQuery } from "@tanstack/solid-query";
-import { createOptimisticStore, createSignal, untrack } from "solid-js";
+import { createOptimisticStore, createSignal, onSettled, untrack } from "solid-js";
 import type { Accessor } from "solid-js";
 
 import { readTeamCardSnapshot, writeTeamCardSnapshot } from "#browser/query/teamCardSnapshot.ts";
@@ -28,9 +28,12 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
   const signIn = useSignInRecovery();
   const [feedback, setFeedback] = createSignal<ActionFeedbackState>();
   const [refreshFinished, setRefreshFinished] = createSignal(false);
-  const snapshot = typeof window === "undefined" ? [] : readTeamCardSnapshot();
+  const [snapshot, setSnapshot] = createSignal<ReadonlyArray<TeamCardView>>([]);
+  onSettled(() => {
+    setSnapshot(readTeamCardSnapshot());
+  });
   const [teamList, setTeamList] = createOptimisticStore<TeamData[]>(
-    () => (query.isSuccess ? [...query.data] : EffectArray.map(snapshot, (card) => card.summary)),
+    () => (query.isSuccess ? [...query.data] : EffectArray.map(snapshot(), (card) => card.summary)),
     [],
     { key: null },
   );
@@ -55,7 +58,7 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
         },
       }),
       enabled: props.includeCards !== false && typeof window !== "undefined",
-      placeholderData: snapshot,
+      placeholderData: snapshot(),
     };
   });
 
