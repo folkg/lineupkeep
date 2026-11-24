@@ -41,7 +41,9 @@ export function TeamSeasonOverview(props: {
     };
   };
   const categoryRows = (): ReadonlyArray<NonNullable<TeamOverviewView["categoryPoints"]>[number]> =>
-    facts()?.format === "rotisserie" ? (facts()?.categoryPoints ?? []) : [];
+    facts()?.format === "rotisserie"
+      ? EffectArray.filter(facts()?.categoryPoints ?? [], (row) => row.scoring !== "informational")
+      : [];
   const usage = (): ReadonlyArray<{
     readonly position: string;
     readonly played: number;

@@ -697,6 +697,7 @@ it("shows rotisserie categories with the stat, place, and points", async () => {
         },
         categoryPoints: [
           { name: "Goals", scoring: undefined, value: 10, total: 84, place: 4 },
+          { name: "Goals against", scoring: "informational", value: null, total: 114, place: null },
           { name: "Save percentage", scoring: undefined, value: 4, total: 0.918, place: 10 },
         ],
       }),
@@ -716,6 +717,7 @@ it("shows rotisserie categories with the stat, place, and points", async () => {
     "4",
   ]);
   await expect.element(page.getByText("70.5 points", { exact: true })).toBeVisible();
+  expect(page.getByText("Goals against").elements()).toHaveLength(0);
 
   await page.viewport(390, 844);
   const scroller = table.element().parentElement;
