@@ -1,6 +1,6 @@
 import { EffectArray } from "@lineupkeep/collections";
 import type { JSX } from "@solidjs/web";
-import { For } from "solid-js";
+import { For, Show } from "solid-js";
 import type { Element } from "solid-js";
 
 import { Skeleton } from "./Skeleton";
@@ -55,6 +55,17 @@ export function Table(props: TableProps): JSX.Element {
             )}
           </For>
         </tbody>
+        <Show when={props.footer}>
+          {(footer) => (
+            <tfoot>
+              <tr class="border-t border-rule-strong">
+                <td class="px-2 py-2 sm:px-3" colspan={props.columns.length}>
+                  {footer()}
+                </td>
+              </tr>
+            </tfoot>
+          )}
+        </Show>
       </table>
     </div>
   );
@@ -92,4 +103,5 @@ type TableProps = {
   readonly label: string;
   readonly columns: ReadonlyArray<TableColumn>;
   readonly rows: ReadonlyArray<ReadonlyArray<Element>>;
+  readonly footer?: Element;
 };

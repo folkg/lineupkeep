@@ -130,6 +130,8 @@ const seasonFacts: NonNullable<TeamCardView["season"]> = {
   endDate: "2027-01-04",
   currentWeek: 11,
   endWeek: 18,
+  usesPlayoffs: undefined,
+  playoffStartWeek: undefined,
   maxGamesPlayed: 162,
   maxInningsPitched: undefined,
   standing: standingFacts,
@@ -249,10 +251,13 @@ it("gives head-to-head point scores two decimal places", async () => {
         },
       ]),
   });
-  await expect.element(page.getByText("0.00 to 0.00")).toBeVisible();
-  await expect.element(page.getByText("Projected 63.50 to 55.00")).toBeVisible();
+  await expect.element(page.getByText("0.00").first()).toBeVisible();
+  expect(page.getByText("0.00").elements()).toHaveLength(2);
+  await expect.element(page.getByText("Projected")).toBeVisible();
+  await expect.element(page.getByText("63.50")).toBeVisible();
+  await expect.element(page.getByText("55.00")).toBeVisible();
   const matchup = page.getByText("Week 9 vs Beta").element();
-  const score = page.getByText("0.00 to 0.00").element();
+  const score = page.getByText("0.00").first().element();
   expect(Number(getComputedStyle(matchup).fontWeight)).toBeLessThan(
     Number(getComputedStyle(score).fontWeight),
   );

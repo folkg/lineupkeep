@@ -121,9 +121,9 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
         : overview.facts()
       : toTeamOverviewFromCard(props.card, overview.facts());
   return (
-    <Stack gap="2xl">
+    <Stack gap="xl">
       <Stack gap="md">
-        <Stack gap="xs">
+        <Stack gap="2xs">
           <Text type="meta" tone="muted">
             {teamContextLabel(props.team.team, props.showProvider)}
           </Text>

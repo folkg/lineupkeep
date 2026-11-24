@@ -93,6 +93,8 @@ export function periodLabel(
   currentPeriod: number | undefined,
   lastPeriod: number | undefined,
   seasonOver: boolean | undefined,
+  usesPlayoffs: boolean | undefined,
+  playoffStartWeek: number | undefined,
 ): string | undefined {
   if (currentPeriod === undefined || seasonOver === true) {
     return undefined;
@@ -100,9 +102,26 @@ export function periodLabel(
   if (lastPeriod === undefined) {
     return `Week ${String(currentPeriod)}`;
   }
-  return currentPeriod <= lastPeriod
-    ? `Week ${String(currentPeriod)} of ${String(lastPeriod)}`
-    : undefined;
+  if (currentPeriod > lastPeriod) {
+    return undefined;
+  }
+  if (
+    usesPlayoffs !== true ||
+    playoffStartWeek === undefined ||
+    playoffStartWeek <= 1 ||
+    playoffStartWeek > lastPeriod
+  ) {
+    return `Week ${String(currentPeriod)} of ${String(lastPeriod)}`;
+  }
+  const regularLastPeriod = playoffStartWeek - 1;
+  const playoffWeeks = lastPeriod - regularLastPeriod;
+  if (currentPeriod > regularLastPeriod) {
+    const playoffWeek = currentPeriod - regularLastPeriod;
+    return `Playoffs · Week ${String(playoffWeek)} of ${String(playoffWeeks)}`;
+  }
+  const regularWeeksLeft = regularLastPeriod - currentPeriod;
+  const remaining = regularWeeksLeft === 0 ? "" : ` · ${String(regularWeeksLeft)} left`;
+  return `Week ${String(currentPeriod)} of ${String(regularLastPeriod)} regular${remaining} · ${String(playoffWeeks)} ${playoffWeeks === 1 ? "playoff week" : "playoff weeks"}`;
 }
 
 export function number(value: number): string {

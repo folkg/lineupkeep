@@ -311,6 +311,9 @@ else.
 
 ## Layout
 
+**Page headers.** The page title starts at the same top edge on every route. A route kicker,
+when present, sits directly under the title; it never pushes the title down.
+
 **One measure.** The application column is 680px. Lists and tables may extend to 960px when their
 columns genuinely need it; no content runs the viewport width. The masthead, section rules, row
 rules, and controls share the column's left and right edges.

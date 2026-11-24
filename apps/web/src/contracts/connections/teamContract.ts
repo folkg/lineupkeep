@@ -142,6 +142,8 @@ export type TeamCardView = {
     readonly endDate: string | undefined;
     readonly currentWeek: number | undefined;
     readonly endWeek: number | undefined;
+    readonly usesPlayoffs: boolean | undefined;
+    readonly playoffStartWeek: number | undefined;
     readonly maxGamesPlayed: number | undefined;
     readonly maxInningsPitched: number | undefined;
     readonly standing:
@@ -189,6 +191,8 @@ export type TeamOverviewView = {
   readonly seasonProgress?: {
     readonly currentPeriod?: number;
     readonly lastPeriod?: number;
+    readonly usesPlayoffs?: boolean;
+    readonly playoffStartWeek?: number;
     readonly endDate?: string;
   };
   readonly standing?: {

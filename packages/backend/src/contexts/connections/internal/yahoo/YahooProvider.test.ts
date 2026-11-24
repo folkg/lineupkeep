@@ -264,6 +264,8 @@ it.effect("reads cards for every discovered team and each league matchup", () =>
     assert.strictEqual(cards[0]?.providerTeamKey, "466.l.4000.t.1");
     assert.strictEqual(cards[0]?.scoringType, "head");
     assert.strictEqual(cards[0]?.format, "head_to_head_points");
+    assert.strictEqual(cards[0]?.usesPlayoffs, true);
+    assert.strictEqual(cards[0]?.playoffStartWeek, 15);
   }).pipe(layerTools.provide(yahooLayer(internet)));
 });
 

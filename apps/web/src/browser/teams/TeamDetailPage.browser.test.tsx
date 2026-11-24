@@ -115,6 +115,8 @@ const cardFixture: TeamCardView = {
     endDate: "2027-04-10",
     currentWeek: 11,
     endWeek: 18,
+    usesPlayoffs: undefined,
+    playoffStartWeek: undefined,
     maxGamesPlayed: 162,
     maxInningsPitched: 1400,
     standing: {
@@ -720,7 +722,7 @@ it("shows season facts, both matchup sides, category detail, and cap usage", asy
   await expect.element(page.getByText("Head to head categories")).toBeVisible();
   await expect.element(page.getByText("Week 11 vs Beta")).toBeVisible();
   await expect.element(page.getByText("Week 11 of 18")).toBeVisible();
-  await expect.element(page.getByText("0-0-0")).toBeVisible();
+  await expect.element(page.getByText("0-0-0").first()).toBeVisible();
   await expect.element(page.getByText("0 games left · 2 for them")).toBeVisible();
   const matchupTable = page.getByRole("table", { name: "Matchup categories" }).element();
   expect(
@@ -782,8 +784,31 @@ it("gives head-to-head point scores two decimal places", async () => {
       }),
   });
 
-  await expect.element(page.getByText("0.00 to 0.00")).toBeVisible();
-  await expect.element(page.getByText("Projected 63.50 to 55.00")).toBeVisible();
+  await expect.element(page.getByText("0.00").first()).toBeVisible();
+  expect(page.getByText("0.00").elements()).toHaveLength(2);
+  await expect.element(page.getByText("Projected")).toBeVisible();
+  await expect.element(page.getByText("63.50")).toBeVisible();
+  await expect.element(page.getByText("55.00")).toBeVisible();
+});
+
+it("names the regular season and playoff weeks from the league settings", async () => {
+  using _app = setupTeamDetailPage(team, {
+    overview: () =>
+      Promise.resolve({
+        ...overviewFixture,
+        seasonProgress: {
+          currentPeriod: 11,
+          lastPeriod: 18,
+          usesPlayoffs: true,
+          playoffStartWeek: 15,
+          endDate: "2027-04-10",
+        },
+      }),
+  });
+
+  await expect
+    .element(page.getByText("Week 11 of 14 regular · 3 left · 4 playoff weeks"))
+    .toBeVisible();
 });
 
 it("shows rotisserie categories with the stat, place, and points", async () => {
@@ -824,7 +849,7 @@ it("shows rotisserie categories with the stat, place, and points", async () => {
 
   const table = page.getByRole("table", { name: "My categories" });
   await expect.element(table).toBeVisible();
-  const cells = [...table.element().querySelectorAll<HTMLTableCellElement>("td")];
+  const cells = [...table.element().querySelectorAll<HTMLTableCellElement>("tbody td")];
   expect(EffectArray.map(cells, (cell) => cell.textContent)).toEqual([
     "Goals",
     "84",
@@ -840,6 +865,8 @@ it("shows rotisserie categories with the stat, place, and points", async () => {
     "3",
   ]);
   await expect.element(page.getByText("70.5 points", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Total points", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("17", { exact: true })).toBeVisible();
   expect(page.getByText("Goals against").elements()).toHaveLength(0);
 
   await page.viewport(390, 844);
@@ -874,7 +901,7 @@ it("shows the card facts before the detail overview answers", async () => {
       ),
   });
 
-  await expect.element(page.getByText(/2-0-0/u)).toBeVisible();
+  await expect.element(page.getByText(/2-0-0/u).first()).toBeVisible();
   expect(page.getByText(/0-0-0/u).elements()).toHaveLength(0);
 });
 
@@ -960,7 +987,7 @@ it("shows rotisserie categories from the card without the detail overview", asyn
 
   const table = page.getByRole("table", { name: "My categories" });
   await expect.element(table).toBeVisible();
-  const cells = [...table.element().querySelectorAll<HTMLTableCellElement>("td")];
+  const cells = [...table.element().querySelectorAll<HTMLTableCellElement>("tbody td")];
   expect(EffectArray.map(cells, (cell) => cell.textContent)).toEqual([
     "Goals",
     "84",
@@ -1157,7 +1184,8 @@ it.each([
   applyTheme("light");
   setFacts(overviewFixture);
   await expect.element(page.getByText("Head to head categories")).toBeVisible();
-  expect(Math.abs(activity.getBoundingClientRect().top - before)).toBeLessThanOrEqual(40);
+  const after = activity.getBoundingClientRect().top;
+  expect(Math.abs(after - before), `${String(before)} -> ${String(after)}`).toBeLessThanOrEqual(40);
 });
 
 it("captures the team overview at desktop and phone sizes in light and dark", async () => {

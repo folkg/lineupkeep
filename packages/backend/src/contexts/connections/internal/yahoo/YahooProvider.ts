@@ -312,6 +312,8 @@ export const yahooProvider = Effect.gen(function* () {
           endDate: league.endDate,
           currentWeek: league.currentWeek,
           endWeek: league.endWeek,
+          usesPlayoffs: league.settings.settings.usesPlayoffs,
+          playoffStartWeek: league.settings.settings.playoffStartWeek,
           maxGamesPlayed: league.maxGamesPlayed,
           maxInningsPitched: league.maxInningsPitched,
           categorySettings: EffectArray.map(

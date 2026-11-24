@@ -132,6 +132,8 @@ it.effect("reads league settings into named slots, categories, and modifiers", (
       { statId: 9, value: 6 },
     ]);
     assert.strictEqual(league.settings.usesFaab, false);
+    assert.strictEqual(league.settings.usesPlayoffs, true);
+    assert.strictEqual(league.settings.playoffStartWeek, 15);
     assert.strictEqual(league.settings.tradeRatifyType, "commish");
   }).pipe(Effect.provide(testLayer(recording.client)));
 });

@@ -54,6 +54,8 @@ const card: ProviderTeamCard = {
   endDate: "2027-01-04",
   currentWeek: undefined,
   endWeek: undefined,
+  usesPlayoffs: undefined,
+  playoffStartWeek: undefined,
   maxGamesPlayed: 162,
   maxInningsPitched: undefined,
   categorySettings: [

@@ -75,6 +75,8 @@ export const toTeamCardViews =
                 endDate: card.endDate,
                 currentWeek: card.currentWeek,
                 endWeek: card.endWeek,
+                usesPlayoffs: card.usesPlayoffs,
+                playoffStartWeek: card.playoffStartWeek,
                 maxGamesPlayed: card.maxGamesPlayed,
                 maxInningsPitched: card.maxInningsPitched,
                 standing:

@@ -35,12 +35,18 @@ export function toTeamOverviewFromCard(
       : { league }),
     ...(season.currentWeek === undefined &&
     season.endWeek === undefined &&
-    season.endDate === undefined
+    season.endDate === undefined &&
+    season.usesPlayoffs === undefined &&
+    season.playoffStartWeek === undefined
       ? {}
       : {
           seasonProgress: {
             ...(season.currentWeek === undefined ? {} : { currentPeriod: season.currentWeek }),
             ...(season.endWeek === undefined ? {} : { lastPeriod: season.endWeek }),
+            ...(season.usesPlayoffs === undefined ? {} : { usesPlayoffs: season.usesPlayoffs }),
+            ...(season.playoffStartWeek === undefined
+              ? {}
+              : { playoffStartWeek: season.playoffStartWeek }),
             ...(season.endDate === undefined ? {} : { endDate: season.endDate }),
           },
         }),

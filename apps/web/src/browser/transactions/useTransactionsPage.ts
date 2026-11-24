@@ -39,6 +39,7 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     ...transactionQueries.list(props.remote(), { state: "ended" }),
     enabled: earlierEnabled(),
   }));
+  const earlierLoading = createMemo(() => earlier.isLoading);
   const [feedback, setFeedback] = createSignal<ActionFeedbackState>();
   const [editing, setEditing] = createSignal<string>();
   const [editingDate, setEditingDate] = createSignal("");
@@ -381,7 +382,7 @@ export function useTransactionsPage(props: TransactionsPageOptions): Transaction
     earlierCount: () => counts().ended,
     earlierEnabled,
     toggleEarlier: () => setEarlierChoice(!earlierEnabled()),
-    earlierLoading: () => earlier.isPending,
+    earlierLoading,
     earlierFailure: () => earlier.error,
     retryEarlier: () => earlier.refetch().then(() => undefined),
     hasMoreEarlier: () => earlier.hasNextPage,

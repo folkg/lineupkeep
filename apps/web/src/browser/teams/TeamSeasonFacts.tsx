@@ -10,6 +10,7 @@ import { Text } from "#browser/shared-ui/Text.tsx";
 import type { TeamCardView } from "#contracts/connections/teamContract.ts";
 
 import { matchupNumber, number, periodLabel, placeLabel, recordLabel } from "./seasonLabels";
+import { ScorePair } from "./SeasonSummary";
 import type { SeasonSummaryData } from "./SeasonSummary";
 
 export function TeamSeasonFacts(props: {
@@ -30,6 +31,10 @@ export function TeamSeasonFacts(props: {
       seasonOver: season.seasonOver,
       ...(season.currentWeek === undefined ? {} : { currentPeriod: season.currentWeek }),
       ...(season.endWeek === undefined ? {} : { lastPeriod: season.endWeek }),
+      ...(season.usesPlayoffs === undefined ? {} : { usesPlayoffs: season.usesPlayoffs }),
+      ...(season.playoffStartWeek === undefined
+        ? {}
+        : { playoffStartWeek: season.playoffStartWeek }),
       standing: season.standing,
       record: season.standing?.record,
       ...(season.matchup === undefined ? {} : { matchup: season.matchup }),
@@ -96,7 +101,13 @@ function CardSeasonFacts(props: { readonly data: SeasonSummaryData }): JSX.Eleme
   const place = (): string | undefined => placeLabel(standing()?.rank, props.data.teamCount);
   const record = (): string | undefined => recordLabel(props.data.record);
   const period = (): string | undefined =>
-    periodLabel(props.data.currentPeriod, props.data.lastPeriod, props.data.seasonOver);
+    periodLabel(
+      props.data.currentPeriod,
+      props.data.lastPeriod,
+      props.data.seasonOver,
+      props.data.usesPlayoffs,
+      props.data.playoffStartWeek,
+    );
   const pointsLine = (): string | undefined => {
     if (!showPoints()) {
       return undefined;
@@ -207,20 +218,24 @@ function CardSeasonFacts(props: { readonly data: SeasonSummaryData }): JSX.Eleme
             </Text>
             <Text type="body">{matchupLine()}</Text>
             <Show when={scoreLine()}>
-              {(value) => (
-                <Text type="body-strong" numeric>
-                  {value()}
-                </Text>
-              )}
+              <ScorePair
+                points={matchup()?.points ?? null}
+                opponentPoints={matchup()?.opponentPoints ?? null}
+                type="body-strong"
+              />
             </Show>
             <Show when={projectedLine()}>
-              {(value) => (
-                <Text type="meta" tone="muted">
-                  {value()}
-                </Text>
-              )}
+              <ScorePair
+                prefix="Projected"
+                points={matchup()?.projectedPoints ?? null}
+                opponentPoints={matchup()?.opponentProjectedPoints ?? null}
+                tone="muted"
+                type="meta"
+              />
             </Show>
-            <Show when={categoryRecord()}>{(value) => <Text type="meta">{value()}</Text>}</Show>
+            <Show when={categoryRecord()}>
+              {(value) => <Text type="body-strong">{value()}</Text>}
+            </Show>
             <Show when={remainingLine()}>
               {(value) => (
                 <Text type="meta" tone="muted">

@@ -87,6 +87,8 @@ export type ProviderTeamCard = ProviderTeam & {
   readonly endDate: string | undefined;
   readonly currentWeek: number | undefined;
   readonly endWeek: number | undefined;
+  readonly usesPlayoffs: boolean | undefined;
+  readonly playoffStartWeek: number | undefined;
   readonly maxGamesPlayed: number | undefined;
   readonly maxInningsPitched: number | undefined;
   readonly categorySettings?: ReadonlyArray<{

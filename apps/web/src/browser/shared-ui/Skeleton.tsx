@@ -3,6 +3,7 @@ import { For, Show } from "solid-js";
 
 import { Card } from "./Card";
 import { cx } from "./cx";
+import { RuleList, RuleListItem } from "./RuleList";
 import { SeasonArea } from "./SeasonArea";
 import { SectionTitle } from "./SectionTitle";
 import { Stack } from "./Stack";
@@ -84,10 +85,41 @@ export function TransactionsSkeleton(): JSX.Element {
           <Skeleton class="h-3 w-64 max-w-full" />
         </div>
       </section>
-      <section class="grid gap-4">
-        <SectionTitle action={<Skeleton class="h-6 w-8" />}>Earlier</SectionTitle>
-        <Skeleton class="h-3 w-16" />
-      </section>
+    </div>
+  );
+}
+
+export function ListSkeleton(props: {
+  readonly count: number;
+  readonly label: string;
+  readonly fade?: boolean;
+}): JSX.Element {
+  const rows = (): number => Math.min(props.count, 3);
+  return (
+    <div
+      aria-label={props.label}
+      class={props.fade === true ? "relative" : undefined}
+      role="status"
+    >
+      <RuleList busy>
+        <For each={Array.from({ length: rows() }, () => undefined)}>
+          {() => (
+            <RuleListItem dense>
+              <Stack gap="2xs">
+                <Skeleton height="h-[1.125rem]" width="w-3/4" />
+                <Skeleton height="h-3" width="w-1/2" />
+                <Skeleton height="h-3" width="w-2/3" />
+              </Stack>
+            </RuleListItem>
+          )}
+        </For>
+      </RuleList>
+      <Show when={props.fade === true && rows() > 0}>
+        <div
+          aria-hidden="true"
+          class="fade-to-canvas pointer-events-none absolute inset-x-0 bottom-0 h-16"
+        />
+      </Show>
     </div>
   );
 }

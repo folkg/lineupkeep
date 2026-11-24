@@ -228,6 +228,10 @@
   border-bottom-color: var(--theme-rule-strong);
 }
 
+@utility fade-to-canvas {
+  background-image: linear-gradient(to bottom, transparent, var(--color-canvas));
+}
+
 [data-action-track] {
   container-type: inline-size;
 }

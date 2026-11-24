@@ -607,7 +607,7 @@ it("loads with section lines instead of placeholder cards", async () => {
   const loading = page.getByLabelText("Loading moves");
   await expect.element(loading).toBeVisible();
   await expect.element(page.getByRole("heading", { name: "Today", exact: true })).toBeVisible();
-  await expect.element(page.getByRole("heading", { name: "Earlier", exact: true })).toBeVisible();
+  expect(page.getByRole("heading", { name: "Earlier", exact: true }).elements()).toHaveLength(0);
   expect(loading.getByRole("listitem").elements()).toHaveLength(0);
 
   pending.resolve(listData([], { open: 0, today: 0, saved: 0, ended: 0 }));
@@ -1849,6 +1849,34 @@ it("leaves one submission line and one effect line after a lost claim's fallback
   ).toHaveLength(0);
 });
 
+it("shows counted earlier skeletons until older moves arrive", async () => {
+  await page.viewport(1280, 900);
+  const ran = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165f9",
+    team: alpha,
+    decision: "now",
+    drops: [player("Riley Chen")],
+    result: "executed",
+    runDecidedBy: "system",
+  });
+  const pending = Promise.withResolvers<TransactionMoveListData>();
+  using _app = setupTransactionsPage({
+    open: listData([], { open: 0, today: 0, saved: 0, ended: 4 }),
+    ended: listData([ran], { open: 0, today: 0, saved: 0, ended: 4 }),
+    endedPending: pending.promise,
+  });
+
+  await page.getByRole("button", { name: "Show earlier moves" }).click();
+  const loader = page.getByRole("status", { name: "Loading earlier moves" });
+  await expect.element(loader).toBeVisible();
+  expect(loader.getByRole("listitem").elements()).toHaveLength(3);
+
+  pending.resolve(listData([ran], { open: 0, today: 0, saved: 0, ended: 4 }));
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  expect(loader.elements()).toHaveLength(1);
+  await expect.element(page.getByRole("img", { name: "Ran on schedule" })).toBeVisible();
+});
+
 it("keeps Earlier collapsed until the person opens it", async () => {
   await page.viewport(1280, 900);
   const ran = move({
@@ -1917,6 +1945,7 @@ function setupTransactionsPage(options: {
   readonly retry?: TransactionRemote["retry"];
   readonly ended?: TransactionMoveListData;
   readonly endedPages?: ReadonlyArray<TransactionMoveListData>;
+  readonly endedPending?: Promise<TransactionMoveListData>;
   readonly timeline?: TransactionRemote["timeline"];
 }): { [Symbol.dispose](): void } {
   const queryClient = createQueryClient();
@@ -1935,6 +1964,9 @@ function setupTransactionsPage(options: {
     list: (input) => {
       if (input.state !== "ended") {
         return Promise.resolve(open);
+      }
+      if (options.endedPending !== undefined) {
+        return options.endedPending;
       }
       const page = input.after === undefined ? endedPages[0] : endedPages[1];
       return Promise.resolve(page ?? emptyEnded);
@@ -1965,10 +1997,12 @@ function setupTransactionsPage(options: {
       pages: [open],
       pageParams: [undefined],
     });
-    queryClient.setQueryData(transactionQueries.list(remote, { state: "ended" }).queryKey, {
-      pages: [endedPages[0] ?? emptyEnded],
-      pageParams: [undefined],
-    });
+    if (options.endedPending === undefined) {
+      queryClient.setQueryData(transactionQueries.list(remote, { state: "ended" }).queryKey, {
+        pages: [endedPages[0] ?? emptyEnded],
+        pageParams: [undefined],
+      });
+    }
     queryClient.setQueryData(transactionQueries.openCountKey, open.counts.open);
   }
   const sessionRemote: SessionRemote = {

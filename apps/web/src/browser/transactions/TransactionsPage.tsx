@@ -10,7 +10,7 @@ import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Badge } from "#browser/shared-ui/Badge.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { Card, CardNote } from "#browser/shared-ui/Card.tsx";
-import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
+import { EmptyState } from "#browser/shared-ui/CollectionState.tsx";
 import { Disclosure } from "#browser/shared-ui/Disclosure.tsx";
 import { Form } from "#browser/shared-ui/Form.tsx";
 import { formatCalendarDate, formatDateTime } from "#browser/shared-ui/formatTime.ts";
@@ -22,7 +22,7 @@ import { Page } from "#browser/shared-ui/Page.tsx";
 import { QueueList, QueueListItem, QueueListNote } from "#browser/shared-ui/QueueList.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
-import { TransactionsSkeleton } from "#browser/shared-ui/Skeleton.tsx";
+import { ListSkeleton, TransactionsSkeleton } from "#browser/shared-ui/Skeleton.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextField } from "#browser/shared-ui/TextField.tsx";
@@ -70,6 +70,7 @@ import {
   waiverTimingLine,
 } from "./transactionTimes";
 import { useGroupConfirmation } from "./useGroupConfirmation";
+import { useMinimumLoading } from "./useMinimumLoading";
 import { useTransactionsPage } from "./useTransactionsPage";
 import type { TransactionsPageController } from "./useTransactionsPage";
 
@@ -745,6 +746,7 @@ function MoveCheckNote(props: { readonly move: TransactionMoveView }): JSX.Eleme
 }
 
 function EarlierSection(props: RemoteSectionProps): JSX.Element {
+  const loadingVisible = useMinimumLoading(() => props.page.earlierLoading());
   const settled = (): ReadonlyArray<TeamCardsView> => {
     const today = EffectOption.getOrUndefined(
       EffectArray.findFirst(props.page.days(), (day) => day.today),
@@ -808,53 +810,53 @@ function EarlierSection(props: RemoteSectionProps): JSX.Element {
           fallback={
             <Show
               fallback={
-                <LoadingState label="Loading earlier moves">Loading earlier moves…</LoadingState>
+                <ActionFeedback
+                  feedback={{
+                    type: "attention",
+                    message: "We could not load the earlier moves. Try again.",
+                    recovery: { label: "Try again", onAction: props.page.retryEarlier },
+                  }}
+                />
               }
-              when={!props.page.earlierLoading()}
+              when={!props.page.earlierFailure()}
             >
-              <ActionFeedback
-                feedback={{
-                  type: "attention",
-                  message: "We could not load the earlier moves. Try again.",
-                  recovery: { label: "Try again", onAction: props.page.retryEarlier },
-                }}
-              />
+              <Show
+                fallback={
+                  <Show when={settled().length === 0}>
+                    <EmptyState title="No earlier moves">
+                      Moves that ran, failed, or wait for the league appear here.
+                    </EmptyState>
+                  </Show>
+                }
+                when={props.page.earlier().length > 0}
+              >
+                <RuleList>
+                  <For each={props.page.earlier()}>
+                    {(move) => (
+                      <EarlierRow
+                        move={move}
+                        waiver={props.page.teamFacts().get(move.team.id)?.waiver}
+                      />
+                    )}
+                  </For>
+                </RuleList>
+                <Show when={props.page.hasMoreEarlier()}>
+                  <Inline gap="sm">
+                    <Button
+                      variant="secondary"
+                      state={props.page.fetchingMoreEarlier() ? "working" : "idle"}
+                      onClick={props.page.showMoreEarlier}
+                    >
+                      {props.page.fetchingMoreEarlier() ? "Loading earlier moves" : "Load more"}
+                    </Button>
+                  </Inline>
+                </Show>
+              </Show>
             </Show>
           }
-          when={!props.page.earlierFailure()}
+          when={loadingVisible()}
         >
-          <Show
-            fallback={
-              <Show when={settled().length === 0}>
-                <EmptyState title="No earlier moves">
-                  Moves that ran, failed, or wait for the league appear here.
-                </EmptyState>
-              </Show>
-            }
-            when={props.page.earlier().length > 0}
-          >
-            <RuleList>
-              <For each={props.page.earlier()}>
-                {(move) => (
-                  <EarlierRow
-                    move={move}
-                    waiver={props.page.teamFacts().get(move.team.id)?.waiver}
-                  />
-                )}
-              </For>
-            </RuleList>
-            <Show when={props.page.hasMoreEarlier()}>
-              <Inline gap="sm">
-                <Button
-                  variant="secondary"
-                  state={props.page.fetchingMoreEarlier() ? "working" : "idle"}
-                  onClick={props.page.showMoreEarlier}
-                >
-                  {props.page.fetchingMoreEarlier() ? "Loading earlier moves" : "Load more"}
-                </Button>
-              </Inline>
-            </Show>
-          </Show>
+          <ListSkeleton count={count()} fade={count() > 3} label="Loading earlier moves" />
         </Show>
       </Show>
     </Stack>

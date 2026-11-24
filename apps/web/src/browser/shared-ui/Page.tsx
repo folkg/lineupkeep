@@ -10,12 +10,9 @@ import { typeClass } from "./type";
 export function Page(props: PageProps): JSX.Element {
   const variant = (): TitleVariant => props.titleVariant ?? "page";
   return (
-    <section class="w-full pt-[clamp(32px,4vw,48px)] pb-[max(48px,env(safe-area-inset-bottom))] max-sm:pt-8">
-      <Show when={props.back}>{(back) => <div class="mb-6">{back()}</div>}</Show>
-      <header class="mb-8 grid max-w-[42.5rem] gap-3">
-        <Show when={props.kicker}>
-          {(kicker) => <div class={`${typeClass.label} uppercase text-action`}>{kicker()}</div>}
-        </Show>
+    <section class="w-full pt-8 pb-[max(48px,env(safe-area-inset-bottom))] max-sm:pt-6">
+      <Show when={props.back}>{(back) => <div class="mb-4">{back()}</div>}</Show>
+      <header class="mb-6 grid max-w-[42.5rem] gap-3">
         <Show
           when={props.titleAside}
           fallback={<PageTitle variant={variant()}>{props.title}</PageTitle>}
@@ -26,6 +23,9 @@ export function Page(props: PageProps): JSX.Element {
               {aside()}
             </Inline>
           )}
+        </Show>
+        <Show when={props.kicker}>
+          {(kicker) => <div class={`${typeClass.label} uppercase text-action`}>{kicker()}</div>}
         </Show>
         <Show when={props.lede}>
           {(lede) => (

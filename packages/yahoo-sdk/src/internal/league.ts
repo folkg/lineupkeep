@@ -77,6 +77,8 @@ export function decodeLeagueSettings(
         waiverRule: optionalNonEmpty(settings.waiver_rule),
         waiverTime: settings.waiver_time,
         usesFaab: settings.uses_faab,
+        usesPlayoffs: settings.uses_playoff,
+        playoffStartWeek: settings.playoff_start_week,
         tradeEndDate: optionalNonEmpty(settings.trade_end_date),
         tradeRatifyType: optionalNonEmpty(settings.trade_ratify_type),
         tradeRejectTime: settings.trade_reject_time,
@@ -190,6 +192,8 @@ export type YahooLeagueSettingsValues = {
   readonly waiverRule?: string;
   readonly waiverTime?: number;
   readonly usesFaab?: boolean;
+  readonly usesPlayoffs?: boolean;
+  readonly playoffStartWeek?: number;
   readonly tradeEndDate?: string;
   readonly tradeRatifyType?: string;
   readonly tradeRejectTime?: number;
@@ -296,6 +300,8 @@ const LeagueSettingsAttributes = Schema.Struct({
   waiver_rule: Schema.optional(Schema.String),
   waiver_time: Schema.optional(IntFromStringOrNumber),
   uses_faab: Schema.optional(Flag),
+  uses_playoff: Schema.optional(Flag),
+  playoff_start_week: Schema.optional(IntFromStringOrNumber),
   trade_end_date: Schema.optional(Schema.String),
   trade_ratify_type: Schema.optional(Schema.String),
   trade_reject_time: Schema.optional(IntFromStringOrNumber),

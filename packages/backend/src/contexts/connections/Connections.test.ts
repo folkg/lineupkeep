@@ -141,6 +141,8 @@ it.effect("reads cards once per ready connection and isolates a failed connectio
         endDate: undefined,
         currentWeek: undefined,
         endWeek: undefined,
+        usesPlayoffs: undefined,
+        playoffStartWeek: undefined,
         maxGamesPlayed: undefined,
         maxInningsPitched: undefined,
         standing: undefined,

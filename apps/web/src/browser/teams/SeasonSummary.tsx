@@ -2,7 +2,6 @@ import { EffectArray } from "@lineupkeep/collections";
 import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 
-import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Skeleton } from "#browser/shared-ui/Skeleton.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
@@ -33,6 +32,8 @@ export type SeasonSummaryData = {
   readonly seasonOver?: boolean;
   readonly currentPeriod?: number;
   readonly lastPeriod?: number;
+  readonly usesPlayoffs?: boolean;
+  readonly playoffStartWeek?: number;
   readonly standing?: {
     readonly rank: number | null;
     readonly points: number | null;
@@ -80,7 +81,13 @@ export function SeasonFacts(props: {
   const place = (): string | undefined => placeLabel(standing()?.rank, props.data.teamCount);
   const record = (): string | undefined => recordLabel(props.data.record);
   const period = (): string | undefined =>
-    periodLabel(props.data.currentPeriod, props.data.lastPeriod, props.data.seasonOver);
+    periodLabel(
+      props.data.currentPeriod,
+      props.data.lastPeriod,
+      props.data.seasonOver,
+      props.data.usesPlayoffs,
+      props.data.playoffStartWeek,
+    );
   const pointsLine = (): string | undefined => {
     if (!showPoints()) {
       return undefined;
@@ -123,14 +130,18 @@ export function SeasonFacts(props: {
         <Text type="label" tone="faint">
           Place
         </Text>
-        <Show when={place()}>
-          {(value) => (
-            <Heading level={3} type="section-title">
-              {value()}
-            </Heading>
-          )}
+        <Show when={place() ?? record()}>
+          <Inline gap="sm" align="baseline">
+            <Show when={place()}>{(value) => <Text type="body-strong">{value()}</Text>}</Show>
+            <Show when={record()}>
+              {(value) => (
+                <Text type="body-strong" tone="muted">
+                  {value()}
+                </Text>
+              )}
+            </Show>
+          </Inline>
         </Show>
-        <Show when={record()}>{(value) => <Text type="meta">{value()}</Text>}</Show>
         <Show when={period()}>
           {(value) => (
             <Text type="meta" tone="muted">
@@ -235,6 +246,15 @@ export function MatchupSummary(props: {
         : ` · ${number(current.opponentRemainingGames)} for them`
     }`;
   };
+  const totalPoints = (): number | undefined => {
+    const rows = EffectArray.filter(
+      props.categoryRows,
+      (row) => row.scoring !== "informational" && row.value !== null,
+    );
+    return rows.length === 0
+      ? undefined
+      : EffectArray.reduce(rows, 0, (total, row) => total + (row.value ?? 0));
+  };
   const matchupCategories = (): ReadonlyArray<MatchupCategory> =>
     format() === "head_to_head_categories"
       ? EffectArray.filter(matchup()?.categories ?? [], (row) => row.scoring !== "informational")
@@ -256,20 +276,24 @@ export function MatchupSummary(props: {
         <Stack gap="2xs">
           <Text type="body">{opponentLine()}</Text>
           <Show when={scoreLine()}>
-            {(value) => (
-              <Text numeric type="body-strong">
-                {value()}
-              </Text>
-            )}
+            <ScorePair
+              points={matchup()?.points ?? null}
+              opponentPoints={matchup()?.opponentPoints ?? null}
+              type="body-strong"
+            />
           </Show>
           <Show when={projectedLine()}>
-            {(value) => (
-              <Text type="meta" tone="muted">
-                {value()}
-              </Text>
-            )}
+            <ScorePair
+              prefix="Projected"
+              points={matchup()?.projectedPoints ?? null}
+              opponentPoints={matchup()?.opponentProjectedPoints ?? null}
+              tone="muted"
+              type="meta"
+            />
           </Show>
-          <Show when={categoryRecordLine()}>{(value) => <Text type="meta">{value()}</Text>}</Show>
+          <Show when={categoryRecordLine()}>
+            {(value) => <Text type="body-strong">{value()}</Text>}
+          </Show>
           <Show when={remainingLine()}>
             {(value) => (
               <Text type="meta" tone="muted">
@@ -287,6 +311,13 @@ export function MatchupSummary(props: {
             { label: "Place", align: "end", width: "w-14" },
             { label: "Pts", align: "end", width: "w-12" },
           ]}
+          footer={
+            <FooterLine
+              label="Total points"
+              loading={props.categoryValuesLoading && totalPoints() === undefined}
+              value={totalPoints() === undefined ? "–" : number(totalPoints() ?? 0)}
+            />
+          }
           label="My categories"
           rows={EffectArray.map(props.categoryRows, (row) => [
             <Text type="body">{row.name}</Text>,
@@ -312,6 +343,11 @@ export function MatchupSummary(props: {
             { label: "You", align: "end", width: "w-16" },
             { label: "Them", align: "end", width: "w-16" },
           ]}
+          footer={
+            <Show when={categoryRecordLine()}>
+              {(value) => <FooterLine label="Category record" value={value()} />}
+            </Show>
+          }
           label="Matchup categories"
           rows={EffectArray.map(matchupCategories(), (row) => [
             <Text type="body">{row.name}</Text>,
@@ -338,14 +374,14 @@ function CategoryValue(props: { readonly loading: boolean; readonly value: strin
   return (
     <Show
       fallback={
-        <Text numeric type="meta">
+        <Text numeric type="body">
           {props.value}
         </Text>
       }
       when={props.loading}
     >
       <Inline gap="2xs" justify="end">
-        <Skeleton height="h-3" width="w-10" />
+        <Skeleton height="h-[1.125rem]" width="w-10" />
       </Inline>
     </Show>
   );
@@ -361,12 +397,12 @@ function MatchupValue(props: {
     <Show
       fallback={
         <Inline gap="2xs" justify="end">
-          <Skeleton height="h-3" width="w-10" />
+          <Skeleton height="h-[1.125rem]" width="w-10" />
         </Inline>
       }
       when={!props.loading || props.value !== null}
     >
-      <Text numeric type={props.winner ? "body-strong" : "meta"}>
+      <Text numeric type={props.winner ? "body-strong" : "body"}>
         {props.value === null ? "–" : categoryStat(props.name, props.value)}
       </Text>
     </Show>
@@ -384,6 +420,59 @@ function categoryWinner(row: MatchupCategory, side: "own" | "opponent"): boolean
     return false;
   }
   return side === "own" ? row.own > row.opponent : row.opponent > row.own;
+}
+
+export function ScorePair(props: {
+  readonly points: number | null;
+  readonly opponentPoints: number | null;
+  readonly type: "body-strong" | "meta";
+  readonly tone?: "muted";
+  readonly prefix?: string;
+}): JSX.Element {
+  return (
+    <Inline gap="2xs" align="baseline">
+      <Show when={props.prefix}>
+        {(prefix) => (
+          <Text type={props.type} tone={props.tone}>
+            {prefix()}
+          </Text>
+        )}
+      </Show>
+      <Text numeric type={props.type} tone={props.tone}>
+        {scoreText(props.points)}
+      </Text>
+      <Text type={props.type} tone={props.tone}>
+        to
+      </Text>
+      <Text numeric type={props.type} tone={props.tone}>
+        {scoreText(props.opponentPoints)}
+      </Text>
+    </Inline>
+  );
+}
+
+function FooterLine(props: {
+  readonly label: string;
+  readonly value: string;
+  readonly loading?: boolean;
+}): JSX.Element {
+  return (
+    <Inline gap="sm" justify="between">
+      <Text type="meta" tone="muted">
+        {props.label}
+      </Text>
+      <Show
+        fallback={
+          <Text numeric type="body-strong">
+            {props.value}
+          </Text>
+        }
+        when={props.loading === true}
+      >
+        <Skeleton height="h-[1.125rem]" width="w-8" />
+      </Show>
+    </Inline>
+  );
 }
 
 function scoreText(value: number | null): string {

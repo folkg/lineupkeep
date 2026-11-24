@@ -37,6 +37,8 @@ const leagueSettings = {
   waiver_rule: "continuous",
   waiver_time: "1",
   uses_faab: "0",
+  uses_playoff: "1",
+  playoff_start_week: "15",
   trade_end_date: "2026-11-20",
   trade_ratify_type: "commish",
   trade_reject_time: "2",

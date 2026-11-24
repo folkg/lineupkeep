@@ -40,6 +40,12 @@ export function TeamSeasonOverview(props: {
       ...(value.seasonProgress?.lastPeriod === undefined
         ? {}
         : { lastPeriod: value.seasonProgress.lastPeriod }),
+      ...(value.seasonProgress?.usesPlayoffs === undefined
+        ? {}
+        : { usesPlayoffs: value.seasonProgress.usesPlayoffs }),
+      ...(value.seasonProgress?.playoffStartWeek === undefined
+        ? {}
+        : { playoffStartWeek: value.seasonProgress.playoffStartWeek }),
       ...(value.standing === undefined ? {} : { standing: value.standing }),
       ...(value.record === undefined ? {} : { record: value.record }),
       ...(value.matchup === undefined ? {} : { matchup: value.matchup }),
@@ -178,7 +184,7 @@ function WeekSkeleton(props: { readonly format: string | undefined }): JSX.Eleme
               ]
         }
         label={rotisserie() ? "My categories" : "Matchup categories"}
-        rows={5}
+        rows={3}
       />
     </Stack>
   );
