@@ -2377,19 +2377,7 @@ const nhlRotoTeamEntry = [
   { is_owned_by_current_login: 1 },
   { url: "https://hockey.fantasysports.yahoo.com/hockey/4003/1" },
   [],
-  {
-    team_points: {
-      coverage_type: "season",
-      season: "2026",
-      stats: {
-        "0": { stat: { stat_id: "11", value: "12" } },
-        "1": { stat: { stat_id: "12", value: "8" } },
-        "2": { stat: { stat_id: "31", value: "100" } },
-        count: 3,
-      },
-    },
-  },
-  { team_standings: { rank: "1" } },
+  { team_standings: { rank: "1", points_for: "70.5" } },
   [],
 ];
 

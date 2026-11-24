@@ -286,7 +286,7 @@ it.effect(
       const provider = yield* testProvider;
       const cards = yield* provider.readTeamCards(sessionInput);
       assert.strictEqual(cards[0]?.format, "rotisserie");
-      assert.strictEqual(cards[0]?.standing?.points, 20);
+      assert.strictEqual(cards[0]?.standing?.points, 70.5);
     }).pipe(layerTools.provide(yahooLayer(internet)));
   },
 );

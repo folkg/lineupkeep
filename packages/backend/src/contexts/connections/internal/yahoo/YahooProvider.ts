@@ -52,7 +52,6 @@ import type {
   ProviderRosterPlayer,
   ProviderRosterPosition,
   ProviderSchedulePeriod,
-  ProviderStanding,
   ProviderSchedulePlayer,
   ProviderTeam,
   ProviderTeamCard,
@@ -287,10 +286,7 @@ export const yahooProvider = Effect.gen(function* () {
         const cardStanding =
           standing === undefined || format !== "rotisserie" || standing.points !== null
             ? standing
-            : {
-                ...standing,
-                points: rotisseriePointsOf(standing, league.settings.settings.statCategories),
-              };
+            : { ...standing, points: standing.pointsFor };
         const matchup = teamCardMatchupOf(
           matchupsByLeague.get(league.leagueKey) ?? [],
           team.teamKey,
@@ -1947,28 +1943,6 @@ function teamCardMatchupOf(
     opponentRemainingGames: opponent.remainingGames?.remaining,
     categories: rows,
   };
-}
-
-function rotisseriePointsOf(
-  standing: ProviderStanding,
-  categories: ReadonlyArray<{ readonly statId: number; readonly displayOnly: boolean }>,
-): number | null {
-  const scored = EffectArray.filter(categories, (category) => !category.displayOnly);
-  if (scored.length === 0) {
-    return null;
-  }
-  const pointsByStat = new Map(
-    EffectArray.map(standing.categoryPoints, (entry) => [entry.statId, entry.value] as const),
-  );
-  let total = 0;
-  for (const category of scored) {
-    const value = pointsByStat.get(category.statId);
-    if (value === undefined || value === null) {
-      return null;
-    }
-    total += value;
-  }
-  return total;
 }
 
 function providerMatchupsOf(
