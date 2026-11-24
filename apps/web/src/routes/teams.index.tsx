@@ -20,7 +20,7 @@ export const Route = createFileRoute("/teams/")({
     );
   },
   loader: ({ context }) => {
-    if (context.queryClient.isMutating() > 0) {
+    if (typeof window === "undefined" || context.queryClient.isMutating() > 0) {
       return Promise.all([
         context.queryClient.ensureQueryData(context.teamsQuery),
         context.queryClient.ensureQueryData(context.cardsQuery),

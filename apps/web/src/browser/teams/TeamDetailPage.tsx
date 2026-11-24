@@ -8,7 +8,6 @@ import {
   UnsavedNavigationGuard,
 } from "#browser/navigation/UnsavedChanges.tsx";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
-import { ClientOnly } from "#browser/shared-ui/ClientOnly.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import { ArrowLeftIcon } from "#browser/shared-ui/icons.tsx";
@@ -40,22 +39,6 @@ import { useTeamOverview } from "./useTeamOverview";
 import { useTeamsPage } from "./useTeamsPage";
 
 export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
-  return (
-    <ClientOnly
-      fallback={
-        <AppShell>
-          <Page title="Team">
-            <LoadingState label="Loading team">Loading this team…</LoadingState>
-          </Page>
-        </AppShell>
-      }
-    >
-      <TeamDetailContent {...props} />
-    </ClientOnly>
-  );
-}
-
-function TeamDetailContent(props: TeamDetailPageProps): JSX.Element {
   const page = useTeamsPage({
     teamsQuery: () => props.teamsQuery(),
     includeCards: true,

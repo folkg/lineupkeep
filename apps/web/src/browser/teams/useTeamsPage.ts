@@ -51,7 +51,7 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
           }
         },
       }),
-      enabled: props.includeCards !== false && typeof window !== "undefined",
+      enabled: props.includeCards !== false,
       placeholderData: [],
     };
   });

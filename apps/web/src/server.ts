@@ -19,7 +19,7 @@ installServerTelemetry();
 const startHandler = createStartHandler(defaultStreamHandler);
 
 const defaultWakingShellDeadlineMs = 2_000;
-const teamWakingShellDeadlineMs = 4_000;
+const teamWakingShellDeadlineMs = 6_000;
 const transactionWakingShellDeadlineMs = 6_000;
 
 export default createServerEntry({
