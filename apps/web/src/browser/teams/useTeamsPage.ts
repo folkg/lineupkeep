@@ -33,6 +33,7 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
     { key: null },
   );
   const [factsFailed, setFactsFailed] = createSignal(false);
+  const [factsSettled, setFactsSettled] = createSignal(false);
   const facts = useQuery(() => {
     const remote = props.remote();
     return {
@@ -41,14 +42,16 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
           try {
             const cards = await remote.cards(options);
             setFactsFailed(false);
+            setFactsSettled(true);
             return cards;
           } catch {
             setFactsFailed(true);
+            setFactsSettled(true);
             return [];
           }
         },
       }),
-      enabled: props.includeCards !== false,
+      enabled: props.includeCards !== false && typeof window !== "undefined",
       placeholderData: [],
     };
   });
@@ -109,7 +112,7 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
     team,
     cardFacts: () => facts.data,
     cardFactsFailure: () => factsFailed() || facts.isError,
-    cardFactsLoading: () => facts.isFetching && facts.data.length === 0,
+    cardFactsLoading: () => !factsSettled() && !factsFailed(),
     isLoading: () => query.isFetching && query.data.length === 0,
     loadFailure: () => query.error,
     dataUpdatedAt: () => query.dataUpdatedAt,

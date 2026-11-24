@@ -19,6 +19,7 @@ installServerTelemetry();
 const startHandler = createStartHandler(defaultStreamHandler);
 
 const defaultWakingShellDeadlineMs = 2_000;
+const teamWakingShellDeadlineMs = 4_000;
 const transactionWakingShellDeadlineMs = 6_000;
 
 export default createServerEntry({
@@ -35,7 +36,9 @@ export default createServerEntry({
           renderWakingShell(request, {
             deadlineMs: EffectString.startsWith(new URL(request.url).pathname, "/transactions")
               ? transactionWakingShellDeadlineMs
-              : defaultWakingShellDeadlineMs,
+              : EffectString.startsWith(new URL(request.url).pathname, "/teams")
+                ? teamWakingShellDeadlineMs
+                : defaultWakingShellDeadlineMs,
             render: (request) =>
               verificationRoute(request).then(
                 (response) => response ?? startHandler(request, startOptions),
