@@ -4,7 +4,7 @@ import { Show } from "solid-js";
 
 import { CardNote } from "#browser/shared-ui/Card.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
-import { SummaryLoadingRows } from "#browser/shared-ui/Skeleton.tsx";
+import { Skeleton } from "#browser/shared-ui/Skeleton.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import type { TeamCardView } from "#contracts/connections/teamContract.ts";
@@ -18,7 +18,7 @@ export function TeamSeasonFacts(props: {
   readonly loading: boolean;
 }): JSX.Element {
   const showSkeleton = (): boolean =>
-    props.loading && !props.failed && props.facts?.reason === undefined;
+    props.loading && !props.failed && props.facts?.season === undefined;
   const data = (): SeasonSummaryData | undefined => {
     const season = props.facts?.season;
     if (season === undefined) {
@@ -35,33 +35,44 @@ export function TeamSeasonFacts(props: {
   return (
     <Show
       fallback={
-        <Stack gap="sm">
-          <Show
-            when={
-              props.failed ||
-              props.facts?.reason !== undefined ||
-              props.facts?.season === undefined ||
-              props.loading
-            }
-          >
-            <Text type="meta" tone="muted">
-              {props.failed
-                ? "Season facts could not be loaded. Lineup checks and controls are still available."
-                : (props.facts?.reason ??
-                  (props.loading
-                    ? "Loading season facts."
-                    : "Season facts were not published for this team."))}
-            </Text>
-          </Show>
-          <Show when={showSkeleton()}>
-            <SummaryLoadingRows count={1} />
-          </Show>
-        </Stack>
+        <Show
+          fallback={<CardSeasonFactsSkeleton />}
+          when={
+            !showSkeleton() &&
+            (props.failed || props.facts?.reason !== undefined || props.facts?.season === undefined)
+          }
+        >
+          <Text type="meta" tone="muted">
+            {props.failed
+              ? "Season facts could not be loaded. Lineup checks and controls are still available."
+              : (props.facts?.reason ?? "Season facts were not published for this team.")}
+          </Text>
+        </Show>
       }
       when={data()}
     >
       {(facts) => <CardSeasonFacts data={facts()} />}
     </Show>
+  );
+}
+
+function CardSeasonFactsSkeleton(): JSX.Element {
+  return (
+    <Stack gap="sm">
+      <Stack gap="2xs">
+        <Skeleton height="h-3" width="w-16" />
+        <Skeleton height="h-5" width="w-28" />
+        <Skeleton height="h-3" width="w-36" />
+      </Stack>
+      <CardNote>
+        <Stack gap="2xs">
+          <Skeleton height="h-3" width="w-24" />
+          <Skeleton height="h-5" width="w-40" />
+          <Skeleton height="h-5" width="w-24" />
+          <Skeleton height="h-3" width="w-36" />
+        </Stack>
+      </CardNote>
+    </Stack>
   );
 }
 

@@ -29,11 +29,16 @@ export const Route = createFileRoute("/account")({
       () => context.queryClient.ensureQueryData(sessionQueries.current(context.sessionRemote)),
       location.href,
     ).then(() => undefined),
-  loader: ({ context }) =>
-    Promise.all([
-      context.queryClient.ensureQueryData(context.connectionsQuery),
-      context.queryClient.ensureQueryData(context.signInSessionsQuery),
-    ]),
+  loader: ({ context }) => {
+    if (typeof window === "undefined" || context.queryClient.isMutating() > 0) {
+      return Promise.all([
+        context.queryClient.ensureQueryData(context.connectionsQuery),
+        context.queryClient.ensureQueryData(context.signInSessionsQuery),
+      ]);
+    }
+    void context.queryClient.prefetchQuery(context.connectionsQuery);
+    void context.queryClient.prefetchQuery(context.signInSessionsQuery);
+  },
   component: AccountRoute,
 });
 

@@ -8,6 +8,8 @@ Wait for sign-in checks on the server, then start the page's primary query in th
 
 Less important sections can load separately, with their own loading indicators. Keep usable controls visible if a refresh fails.
 
+Team reads share one key per collection, so the list and team detail reuse the same list, card, and overview data instead of fetching it twice. The browser keeps settled team reads in local storage for a day. A repeat visit paints those values before the network answers, and only a value that is still missing gets a skeleton in the shape it will occupy. A failed card read stays a value-level message; it never replaces the team controls.
+
 ## Saving a change
 
 “Single-flight” means saving a change and receiving refreshed page data in one browser request:

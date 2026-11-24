@@ -7,7 +7,7 @@ import { Card, CardNote } from "#browser/shared-ui/Card.tsx";
 import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { SeasonArea } from "#browser/shared-ui/SeasonArea.tsx";
-import { OverviewLoadingRows } from "#browser/shared-ui/Skeleton.tsx";
+import { Skeleton } from "#browser/shared-ui/Skeleton.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Table } from "#browser/shared-ui/Table.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
@@ -16,6 +16,24 @@ import type { TeamOverviewView } from "#contracts/connections/teamContract.ts";
 import { formatLabel, number, ordinal, scoringLabel, statNumber } from "./seasonLabels";
 import { SeasonSummary } from "./SeasonSummary";
 import type { SeasonSummaryData } from "./SeasonSummary";
+
+function SeasonOverviewSkeleton(): JSX.Element {
+  return (
+    <Stack gap="lg">
+      <Inline gap="lg" justify="between" align="start">
+        <Stack gap="2xs">
+          <Skeleton height="h-3" width="w-12" />
+          <Skeleton height="h-5" width="w-24" />
+          <Skeleton height="h-3" width="w-32" />
+        </Stack>
+        <Stack gap="2xs">
+          <Skeleton height="h-3" width="w-24" />
+          <Skeleton height="h-5" width="w-48" />
+        </Stack>
+      </Inline>
+    </Stack>
+  );
+}
 
 export function TeamSeasonOverview(props: {
   readonly facts: TeamOverviewView | undefined;
@@ -58,7 +76,15 @@ export function TeamSeasonOverview(props: {
   };
   return (
     <Card
-      badge={format() === undefined ? undefined : <Badge tone="neutral">{format()}</Badge>}
+      badge={
+        format() === undefined ? (
+          <Show when={props.loading}>
+            <Skeleton height="h-5" width="w-24" />
+          </Show>
+        ) : (
+          <Badge tone="neutral">{format()}</Badge>
+        )
+      }
       header={
         <Heading id="team-season-title" level={2} type="card-title">
           Season overview
@@ -79,12 +105,7 @@ export function TeamSeasonOverview(props: {
               }
               when={props.loading}
             >
-              <Stack gap="md">
-                <Text type="meta" tone="muted">
-                  Loading season facts.
-                </Text>
-                <OverviewLoadingRows count={5} paired />
-              </Stack>
+              <SeasonOverviewSkeleton />
             </Show>
           }
           when={data()}

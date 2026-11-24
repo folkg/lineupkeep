@@ -3,6 +3,7 @@ import type { TeamCardRead } from "@lineupkeep/backend/connections/Connections";
 import type { LineupRun } from "@lineupkeep/backend/connections/LineupRun";
 import type { LineupError } from "@lineupkeep/backend/connections/LineupRun";
 import type { LineupRunOutcome } from "@lineupkeep/backend/connections/LineupRun";
+import type { ProviderTeamCard } from "@lineupkeep/backend/connections/Provider";
 import { teamNoteLimit } from "@lineupkeep/backend/connections/TeamNote";
 import type { TeamSummary } from "@lineupkeep/backend/connections/Teams";
 import type {
@@ -10,7 +11,7 @@ import type {
   TeamNoteError,
   TeamNoteSaved,
 } from "@lineupkeep/backend/connections/Teams";
-import { DateTime, Schema } from "effect";
+import { DateTime, Option as EffectOption, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 
 import type {
@@ -45,6 +46,12 @@ export const toTeamCardViews =
     const failures = new Map(
       EffectArray.map(read.failures, (failure) => [failure.connectionId, failure.reason] as const),
     );
+    const leagueCards = new Map<string, ReadonlyArray<ProviderTeamCard>>();
+    for (const card of read.cards) {
+      const key = `${card.connectionId}:${card.providerLeagueKey}`;
+      const existing = leagueCards.get(key);
+      leagueCards.set(key, existing === undefined ? [card] : [...existing, card]);
+    }
     return EffectArray.map(summaries, (summary) => {
       const card = cards.get(`${summary.team.connectionId}:${summary.team.providerTeamKey}`);
       const reason =
@@ -61,6 +68,7 @@ export const toTeamCardViews =
                 seasonOver: card.seasonOver,
                 format: card.format,
                 scoringLabel: card.scoringLabel,
+                scoringType: card.scoringType,
                 teamCount: card.teamCount,
                 weeklyDeadline: card.weeklyDeadline,
                 startDate: card.startDate,
@@ -80,6 +88,17 @@ export const toTeamCardViews =
                         pointsAgainst: card.standing.pointsAgainst,
                         pointsBack: card.standing.pointsBack,
                       },
+                ...(categoryPointsOf(
+                  card,
+                  leagueCards.get(`${card.connectionId}:${card.providerLeagueKey}`) ?? [card],
+                ) === undefined
+                  ? {}
+                  : {
+                      categoryPoints: categoryPointsOf(
+                        card,
+                        leagueCards.get(`${card.connectionId}:${card.providerLeagueKey}`) ?? [card],
+                      ),
+                    }),
                 ...(card.matchup === undefined
                   ? {}
                   : {
@@ -110,6 +129,73 @@ export const toTeamCardViews =
       };
     });
   };
+
+type TeamCategoryPoint = {
+  readonly name: string;
+  readonly scoring: "informational" | undefined;
+  readonly value: number | null;
+  readonly total: number | null;
+  readonly place: number | null;
+};
+
+function categoryPointsOf(
+  card: ProviderTeamCard,
+  leagueCards: ReadonlyArray<ProviderTeamCard>,
+): ReadonlyArray<TeamCategoryPoint> | undefined {
+  const settings: ReadonlyArray<NonNullable<ProviderTeamCard["categorySettings"]>[number]> =
+    card.categorySettings ?? [];
+  if (settings.length === 0) {
+    return undefined;
+  }
+  const points = new Map(
+    EffectArray.map(card.standing?.categoryPoints ?? [], (entry) => [entry.statId, entry.value]),
+  );
+  const totals = new Map(
+    EffectArray.map(card.standing?.categoryTotals ?? [], (entry) => [entry.statId, entry.value]),
+  );
+  const scored: ReadonlyArray<NonNullable<ProviderTeamCard["categorySettings"]>[number]> =
+    EffectArray.filter(settings, (setting) => !setting.displayOnly);
+  const rows = EffectArray.flatMap(scored, (setting) => {
+    const value = points.get(setting.statId) ?? null;
+    const place = categoryPlace(leagueCards, setting.statId, value);
+    return [
+      {
+        name: setting.name,
+        scoring: undefined,
+        value,
+        total: totals.get(setting.statId) ?? null,
+        place,
+      },
+    ];
+  });
+  return rows.length === 0 ? undefined : rows;
+}
+
+function categoryPlace(
+  leagueCards: ReadonlyArray<ProviderTeamCard>,
+  statId: number,
+  value: number | null,
+): number | null {
+  if (value === null) {
+    return null;
+  }
+  let higher = 0;
+  for (const card of leagueCards) {
+    const other = EffectOption.getOrUndefined(
+      EffectArray.findFirst(
+        card.standing?.categoryPoints ?? [],
+        (entry) => entry.statId === statId,
+      ),
+    );
+    if (other === undefined || other.value === null) {
+      return null;
+    }
+    if (other.value > value) {
+      higher += 1;
+    }
+  }
+  return higher + 1;
+}
 
 export function toLineupRunView(run: LineupRun): LineupRunView {
   return {

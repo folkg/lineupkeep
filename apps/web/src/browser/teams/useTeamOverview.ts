@@ -8,6 +8,7 @@ import type { TeamRemote } from "./teamRemote.ts";
 export function useTeamOverview(
   teamId: Accessor<string>,
   remote: Accessor<TeamRemote>,
+  enabled: Accessor<boolean> = () => true,
 ): {
   readonly facts: () => TeamOverviewView | undefined;
   readonly loading: () => boolean;
@@ -15,6 +16,8 @@ export function useTeamOverview(
 } {
   const overview = useQuery(() => ({
     queryKey: ["teams", "overview", teamId()],
+    enabled: enabled(),
+    placeholderData: { reason: "" },
     retry: false,
     queryFn: () =>
       remote().overview?.(teamId()) ??
@@ -22,7 +25,7 @@ export function useTeamOverview(
   }));
   return {
     facts: () => overview.data,
-    loading: () => overview.isPending,
+    loading: () => overview.isFetching,
     failed: () => overview.isError,
   };
 }

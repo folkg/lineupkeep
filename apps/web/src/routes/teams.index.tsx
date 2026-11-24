@@ -1,4 +1,3 @@
-import { isServer } from "@solidjs/web";
 import type { JSX } from "@solidjs/web";
 import { createFileRoute } from "@tanstack/solid-router";
 
@@ -10,19 +9,25 @@ import { TeamsPage } from "#browser/teams/TeamsPage.tsx";
 
 export const Route = createFileRoute("/teams/")({
   ssr: true,
-  context: () => ({ teamsQuery: teamQueries.list(teamRemote) }),
+  context: () => ({
+    teamsQuery: teamQueries.list(teamRemote),
+    cardsQuery: teamQueries.cards(teamRemote),
+  }),
   beforeLoad: async ({ context, location }) => {
-    const session = await requireAuthenticatedSession(
+    await requireAuthenticatedSession(
       () => context.queryClient.ensureQueryData(sessionQueries.current(context.sessionRemote)),
       location.href,
     );
-    return { viewerId: session.userId };
   },
   loader: ({ context }) => {
-    if (isServer || context.queryClient.isMutating() > 0) {
-      return context.queryClient.ensureQueryData(context.teamsQuery);
+    if (typeof window === "undefined" || context.queryClient.isMutating() > 0) {
+      return Promise.all([
+        context.queryClient.ensureQueryData(context.teamsQuery),
+        context.queryClient.ensureQueryData(context.cardsQuery),
+      ]);
     }
     void context.queryClient.prefetchQuery(context.teamsQuery);
+    void context.queryClient.prefetchQuery(context.cardsQuery);
   },
   component: TeamsRoute,
 });
@@ -32,7 +37,6 @@ function TeamsRoute(): JSX.Element {
   return (
     <TeamsPage
       teamsQuery={() => context().teamsQuery}
-      viewerId={context().viewerId}
       remote={teamRemote}
       onRefresh={() => refreshTeamLists(context().queryClient)}
     />

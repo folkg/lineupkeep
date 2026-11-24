@@ -314,6 +314,14 @@ export const yahooProvider = Effect.gen(function* () {
           endWeek: league.endWeek,
           maxGamesPlayed: league.maxGamesPlayed,
           maxInningsPitched: league.maxInningsPitched,
+          categorySettings: EffectArray.map(
+            league.settings.settings.statCategories,
+            (category) => ({
+              statId: category.statId,
+              name: category.name,
+              displayOnly: category.displayOnly,
+            }),
+          ),
           standing: cardStanding,
           ...(matchup === undefined ? {} : { matchup }),
         };

@@ -7,6 +7,7 @@ export function createQueryClient(): QueryClient {
     defaultOptions: {
       queries: {
         staleTime: 30_000,
+        throwOnError: false,
         retry: (count, error) =>
           !(error instanceof AuthenticationRequestFailure) && count < (isServer ? 0 : 3),
       },

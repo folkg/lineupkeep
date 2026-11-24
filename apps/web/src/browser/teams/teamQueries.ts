@@ -1,8 +1,6 @@
 import { queryOptions } from "@tanstack/solid-query";
 import type { QueryClient } from "@tanstack/solid-query";
 
-import type { TeamCardView } from "#contracts/connections/teamContract.ts";
-
 import type { TeamRemote } from "./teamRemote";
 
 export const teamQueries = {
@@ -14,12 +12,11 @@ export const teamQueries = {
       queryKey: ["teams", "list"] as const,
       queryFn: ({ signal }) => remote.list({ signal }),
     }),
-  cards: (remote: Pick<TeamRemote, "cards">, initialData: ReadonlyArray<TeamCardView> = []) =>
+  cards: (remote: Pick<TeamRemote, "cards">) =>
     queryOptions({
       queryKey: ["teams", "card-facts"] as const,
       queryFn: ({ signal }) => remote.cards({ signal }),
-      initialData,
-      initialDataUpdatedAt: 0,
+      throwOnError: false,
     }),
   runKey: (run: string) => ["runs", "detail", run] as const,
   run: (remote: Pick<TeamRemote, "readRun">, run: string) =>

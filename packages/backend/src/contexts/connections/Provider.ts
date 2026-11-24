@@ -89,6 +89,11 @@ export type ProviderTeamCard = ProviderTeam & {
   readonly endWeek: number | undefined;
   readonly maxGamesPlayed: number | undefined;
   readonly maxInningsPitched: number | undefined;
+  readonly categorySettings?: ReadonlyArray<{
+    readonly statId: number;
+    readonly name: string;
+    readonly displayOnly: boolean;
+  }>;
   readonly standing: ProviderStanding | undefined;
   readonly matchup?: ProviderTeamCardMatchup;
 };

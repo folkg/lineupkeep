@@ -7,11 +7,20 @@ import { SeasonArea } from "./SeasonArea";
 import { SectionTitle } from "./SectionTitle";
 import { Stack } from "./Stack";
 
-function Skeleton(props: { readonly class?: string }): JSX.Element {
+export function Skeleton(props: {
+  readonly class?: string;
+  readonly width?: string;
+  readonly height?: string;
+}): JSX.Element {
   return (
     <span
       aria-hidden="true"
-      class={cx("block animate-pulse bg-rule motion-reduce:animate-none", props.class)}
+      class={cx(
+        "block animate-pulse bg-rule motion-reduce:animate-none",
+        props.class,
+        props.width,
+        props.height,
+      )}
     />
   );
 }
@@ -79,40 +88,6 @@ export function TransactionsSkeleton(): JSX.Element {
         <SectionTitle action={<Skeleton class="h-6 w-8" />}>Earlier</SectionTitle>
         <Skeleton class="h-3 w-16" />
       </section>
-    </div>
-  );
-}
-
-export function SummaryLoadingRows(props: { readonly count: number }): JSX.Element {
-  return (
-    <div aria-hidden="true" class="grid gap-1">
-      <For each={Array.from({ length: props.count })}>
-        {() => <Skeleton class="h-5 w-2/3 max-w-full" />}
-      </For>
-    </div>
-  );
-}
-
-export function OverviewLoadingRows(props: {
-  readonly count: number;
-  readonly paired?: boolean;
-}): JSX.Element {
-  return (
-    <div
-      aria-hidden="true"
-      class={cx(
-        "grid gap-y-1 pt-3",
-        props.paired === true ? "grid-cols-2 gap-x-4" : "gap-x-8 sm:grid-cols-2",
-      )}
-    >
-      <For each={Array.from({ length: props.count })}>
-        {() => (
-          <div class="grid min-w-0 gap-1 py-[3.5px]">
-            <Skeleton class="h-3 w-20 max-w-full" />
-            <Skeleton class="h-5 w-28 max-w-full" />
-          </div>
-        )}
-      </For>
     </div>
   );
 }

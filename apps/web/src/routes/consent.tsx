@@ -19,7 +19,12 @@ export const Route = createFileRoute("/consent")({
       () => context.queryClient.ensureQueryData(sessionQueries.current(context.sessionRemote)),
       location.href,
     ).then(() => undefined),
-  loader: ({ context }) => context.queryClient.prefetchQuery(context.requestQuery),
+  loader: ({ context }) => {
+    if (typeof window === "undefined") {
+      return context.queryClient.prefetchQuery(context.requestQuery);
+    }
+    void context.queryClient.prefetchQuery(context.requestQuery);
+  },
   component: ConsentRoute,
 });
 

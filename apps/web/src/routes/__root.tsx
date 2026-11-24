@@ -28,8 +28,13 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     scripts: [{ children: themeBootstrapScript }],
   }),
 
-  loader: ({ context }) =>
-    context.queryClient.prefetchQuery(sessionQueries.current(context.sessionRemote)),
+  loader: ({ context }) => {
+    const query = sessionQueries.current(context.sessionRemote);
+    if (typeof window === "undefined") {
+      return context.queryClient.prefetchQuery(query);
+    }
+    void context.queryClient.prefetchQuery(query);
+  },
   component: AppRoot,
   shellComponent: RootDocument,
 });

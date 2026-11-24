@@ -30,6 +30,7 @@ import {
 } from "#browser/shared-ui/formatTime.ts";
 import type {
   LineupRunView,
+  TeamCardView,
   TeamNoteSaveResult,
   TeamOverviewView,
   TeamSummaryView,
@@ -77,6 +78,71 @@ const overviewFixture: TeamOverviewView = {
   },
 };
 const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1_000).toISOString();
+const cardFixture: TeamCardView = {
+  summary: {
+    team: {
+      id: teamId,
+      connectionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9165a2",
+      provider: "yahoo",
+      providerTeamKey: "466.l.4000.t.1",
+      providerLeagueKey: "466.l.4000",
+      league: "nfl",
+      sport: "football",
+      season: 2026,
+      name: "Alpha",
+      leagueName: "League",
+      availability: "available",
+      automation: { status: "enabled", changedAt: threeDaysAgo },
+      ownerNote: null,
+      ownerNoteUpdatedAt: null,
+      ownerNoteLimit: 2000,
+      lastSeenAt: threeDaysAgo,
+      createdAt: threeDaysAgo,
+      updatedAt: threeDaysAgo,
+    },
+    connectionStatus: "ready",
+    connectionCount: 1,
+    recentRuns: [],
+  },
+  season: {
+    format: "head_to_head_categories",
+    seasonOver: false,
+    scoringLabel: "Head to head, categories",
+    scoringType: "head",
+    teamCount: 12,
+    weeklyDeadline: "weekly",
+    startDate: "2026-09-01",
+    endDate: "2027-04-10",
+    currentWeek: 11,
+    endWeek: 18,
+    maxGamesPlayed: 162,
+    maxInningsPitched: 1400,
+    standing: {
+      rank: 3,
+      record: { wins: 7, losses: 3, ties: 0, percentage: 0.7 },
+      points: 0,
+      pointsFor: 0,
+      pointsAgainst: 120,
+      pointsBack: 0,
+    },
+    matchup: {
+      week: 11,
+      opponent: "Beta",
+      points: 0,
+      opponentPoints: 42,
+      projectedPoints: 63.5,
+      opponentProjectedPoints: 55,
+      remainingGames: 0,
+      opponentRemainingGames: 2,
+      statusLabel: "Live",
+      categories: [
+        { name: "Goals", scoring: undefined, own: 5, opponent: 2, result: "win" },
+        { name: "Shots", scoring: "informational", own: 12, opponent: 8, result: "win" },
+      ],
+    },
+  },
+};
+
 const hoursAgo = (hours: number): string => new Date(Date.now() - hours * 3_600_000).toISOString();
 
 const noOpSummary = "The lineup already matched the explicit plan; no provider write was needed.";
@@ -724,7 +790,80 @@ it("shows rotisserie categories with the stat, place, and points", async () => {
   expect(scroller?.scrollWidth).toBeLessThanOrEqual(scroller?.clientWidth ?? 0);
 });
 
-it("reads the detail overview without requesting team card facts", async () => {
+it("shows the card facts before the detail overview answers", async () => {
+  using _app = setupTeamDetailPage(team, {
+    cards: () => Promise.resolve([cardFixture]),
+    overview: () =>
+      new Promise((resolve) =>
+        setTimeout(
+          () =>
+            resolve({
+              ...overviewFixture,
+              matchup: {
+                week: 11,
+                opponent: "Beta",
+                points: 0,
+                opponentPoints: 42,
+                projectedPoints: 63.5,
+                opponentProjectedPoints: 55,
+                remainingGames: 0,
+                opponentRemainingGames: 2,
+                statusLabel: "Live",
+                categories: [{ name: "Goals", scoring: undefined, own: 0, opponent: 3 }],
+              },
+            }),
+          1_000,
+        ),
+      ),
+  });
+
+  await expect.element(page.getByText(/2-0-0 categories/u)).toBeVisible();
+  expect(page.getByText(/0-0-0 categories/u).elements()).toHaveLength(0);
+});
+
+it("shows rotisserie categories from the card without the detail overview", async () => {
+  const season = cardFixture.season;
+  if (season === undefined) {
+    throw new Error("Expected season facts in the card fixture");
+  }
+  const card: TeamCardView = {
+    ...cardFixture,
+    season: {
+      ...season,
+      format: "rotisserie",
+      scoringType: "roto",
+      scoringLabel: "Rotisserie",
+      maxGamesPlayed: undefined,
+      maxInningsPitched: undefined,
+      categoryPoints: [
+        { name: "Goals", scoring: undefined, value: 10, total: 84, place: 4 },
+        { name: "Goals against", scoring: "informational", value: null, total: 114, place: null },
+        { name: "Save percentage", scoring: undefined, value: 4, total: 0.918, place: 10 },
+      ],
+    },
+  };
+  using _app = setupTeamDetailPage(team, {
+    cards: () => Promise.resolve([card]),
+    overview: () => new Promise(() => {}),
+  });
+
+  const table = page.getByRole("table", { name: "My categories" });
+  await expect.element(table).toBeVisible();
+  const cells = [...table.element().querySelectorAll<HTMLTableCellElement>("td")];
+  expect(EffectArray.map(cells, (cell) => cell.textContent)).toEqual([
+    "Goals",
+    "84",
+    "4th",
+    "10",
+    "Save percentage",
+    "0.918",
+    "10th",
+    "4",
+  ]);
+  expect(page.getByText("Goals against").elements()).toHaveLength(0);
+});
+
+it("reads card facts and the detail overview", async () => {
   const reads: string[] = [];
   using _app = setupTeamDetailPage(team, {
     cards: () => {
@@ -738,7 +877,7 @@ it("reads the detail overview without requesting team card facts", async () => {
   });
 
   await expect.element(page.getByText("Head to head categories")).toBeVisible();
-  expect(reads).toEqual(["overview"]);
+  expect(reads).toEqual(["cards", "overview"]);
 });
 
 it.each([
@@ -890,12 +1029,7 @@ it.each([
       host.remove();
     },
   };
-  await expect.element(page.getByText("Loading season facts.")).toBeVisible();
-  const loadingRows = host.querySelectorAll<HTMLElement>('[aria-hidden="true"].grid');
-  expect(loadingRows[0]?.children).toHaveLength(5);
-  expect(
-    EffectString.split(getComputedStyle(loadingRows[0] ?? host).gridTemplateColumns, " "),
-  ).toHaveLength(2);
+  expect(host.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(1);
   const activity = page.getByRole("heading", { name: "Recent activity" }).element();
   const before = activity.getBoundingClientRect().top;
   await page.screenshot({

@@ -9,13 +9,25 @@ import { teamRemote } from "#browser/teams/teamRemote.ts";
 
 export const Route = createFileRoute("/teams/$teamId")({
   ssr: true,
-  context: () => ({ teamsQuery: teamQueries.list(teamRemote) }),
+  context: () => ({
+    teamsQuery: teamQueries.list(teamRemote),
+    cardsQuery: teamQueries.cards(teamRemote),
+  }),
   beforeLoad: ({ context, location }) =>
     requireAuthenticatedSession(
       () => context.queryClient.ensureQueryData(sessionQueries.current(context.sessionRemote)),
       location.href,
     ).then(() => undefined),
-  loader: ({ context }) => context.queryClient.ensureQueryData(context.teamsQuery),
+  loader: ({ context }) => {
+    if (typeof window === "undefined" || context.queryClient.isMutating() > 0) {
+      return Promise.all([
+        context.queryClient.ensureQueryData(context.teamsQuery),
+        context.queryClient.ensureQueryData(context.cardsQuery),
+      ]);
+    }
+    void context.queryClient.prefetchQuery(context.teamsQuery);
+    void context.queryClient.prefetchQuery(context.cardsQuery);
+  },
   component: TeamDetailRoute,
 });
 

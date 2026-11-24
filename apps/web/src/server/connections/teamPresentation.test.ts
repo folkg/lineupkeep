@@ -56,6 +56,10 @@ const card: ProviderTeamCard = {
   endWeek: undefined,
   maxGamesPlayed: 162,
   maxInningsPitched: undefined,
+  categorySettings: [
+    { statId: 1, name: "Goals", displayOnly: false },
+    { statId: 2, name: "Goals against", displayOnly: true },
+  ],
   standing: {
     providerTeamKey: "470.l.2.t.1",
     name: "Provider name",
@@ -69,8 +73,14 @@ const card: ProviderTeamCard = {
     pointsAgainst: null,
     streak: undefined,
     acquisitionUsage: { seasonMoves: undefined, weeklyAdds: undefined },
-    categoryTotals: [],
-    categoryPoints: [],
+    categoryTotals: [
+      { statId: 1, value: 84 },
+      { statId: 2, value: 114 },
+    ],
+    categoryPoints: [
+      { statId: 1, value: 8 },
+      { statId: 2, value: 3 },
+    ],
   },
 };
 
@@ -91,6 +101,9 @@ it("merges by connection and provider team key without replacing local controls 
   assert.strictEqual(present?.season?.standing?.points, 0);
   assert.strictEqual(present?.season?.standing?.pointsBack, 0);
   assert.strictEqual(present?.season?.standing?.record, undefined);
+  assert.deepStrictEqual(present?.season?.categoryPoints, [
+    { name: "Goals", scoring: undefined, value: 8, total: 84, place: 1 },
+  ]);
   assert.strictEqual(present?.summary.team.name, "My team");
   assert.strictEqual(present?.summary.team.ownerNote, "Do not move my quarterback");
   assert.strictEqual(present?.summary.team.automation.status, "enabled");

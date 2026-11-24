@@ -135,6 +135,7 @@ export type TeamCardView = {
       | "points"
       | "unknown";
     readonly scoringLabel: string | undefined;
+    readonly scoringType: string;
     readonly teamCount: number | undefined;
     readonly weeklyDeadline: string | undefined;
     readonly startDate: string | undefined;
@@ -161,13 +162,19 @@ export type TeamCardView = {
         }
       | undefined;
     readonly matchup?: TeamOverviewView["matchup"];
+    readonly categoryPoints?: TeamOverviewView["categoryPoints"];
   };
   readonly reason?: string;
 };
 
 export type TeamOverviewView = {
   readonly reason?: string;
-  readonly format?: "head_to_head_categories" | "head_to_head_points" | "rotisserie" | "unknown";
+  readonly format?:
+    | "head_to_head_categories"
+    | "head_to_head_points"
+    | "rotisserie"
+    | "points"
+    | "unknown";
   readonly league?: {
     readonly teamCount: number;
     readonly scoringLabel?: string;

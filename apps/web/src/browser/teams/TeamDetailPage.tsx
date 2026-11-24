@@ -1,4 +1,3 @@
-import { EffectArray, EffectOption } from "@lineupkeep/collections";
 import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
 import type { Accessor } from "solid-js";
@@ -18,13 +17,18 @@ import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
 import { Time } from "#browser/shared-ui/Time.tsx";
-import type { TeamControlData, TeamSummaryView } from "#contracts/connections/teamContract.ts";
+import type {
+  TeamCardView,
+  TeamControlData,
+  TeamSummaryView,
+} from "#contracts/connections/teamContract.ts";
 
 import { RunActivity } from "./RunActivity";
 import { TeamAttention } from "./TeamAttention";
 import { TeamControls } from "./TeamControls";
 import { showsProvider, teamContextLabel } from "./teamLabels";
 import { TeamNote } from "./TeamNote";
+import { toTeamOverviewFromCard } from "./teamOverviewFromCard";
 import { teamLastRun } from "./teamPending";
 import { TeamProviderLink } from "./TeamProviderLink";
 import type { TeamListQueryOptions } from "./teamQueries";
@@ -37,22 +41,19 @@ import { useTeamsPage } from "./useTeamsPage";
 export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
   const page = useTeamsPage({
     teamsQuery: () => props.teamsQuery(),
-    includeCards: false,
+    includeCards: true,
+    teamId: () => props.teamId,
     remote: () => props.remote,
     onRefresh: () => props.onRefresh(),
   });
-  const team = (): TeamSummaryView | undefined => {
-    const teams = page.teams();
-    const teamId = props.teamId;
-    return EffectOption.getOrUndefined(
-      EffectArray.findFirst(teams, (candidate) => candidate.team.id === teamId),
-    );
-  };
+  const team = (): TeamSummaryView | undefined => page.team();
+  const card = (): TeamCardView | undefined => page.card();
+  const teams = (): ReadonlyArray<TeamSummaryView> => page.teams();
   const titleAside = (): JSX.Element | undefined => {
     const summary = team();
     return summary === undefined ? undefined : <TeamProviderLink team={summary.team} />;
   };
-  const showProvider = (): boolean => showsProvider(page.teams());
+  const showProvider = (): boolean => showsProvider(teams());
 
   return (
     <AppShell footer={<TeamReportFooter team={team} />}>
@@ -69,26 +70,28 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
         <UnsavedChangesScope>
           <Stack gap="lg">
             <Show
-              fallback={<LoadingState label="Loading team">Loading this team…</LoadingState>}
-              when={!page.isLoading()}
-            >
-              <Show
-                fallback={
+              fallback={
+                <Show
+                  fallback={<LoadingState label="Loading team">Loading this team…</LoadingState>}
+                  when={!page.isLoading()}
+                >
                   <EmptyState title="Team not found.">
                     This team is not available to the current account. Return to the team list.
                   </EmptyState>
-                }
-                when={team()}
-              >
-                {(summary) => (
-                  <TeamDetail
-                    team={summary()}
-                    remote={props.remote}
-                    showProvider={showProvider()}
-                    onOptimistic={page.beginControl}
-                  />
-                )}
-              </Show>
+                </Show>
+              }
+              when={team()}
+            >
+              {(summary) => (
+                <TeamDetail
+                  team={summary()}
+                  card={card()}
+                  cardsLoading={page.cardFactsLoading()}
+                  remote={props.remote}
+                  showProvider={showProvider()}
+                  onOptimistic={page.beginControl}
+                />
+              )}
             </Show>
             <ActionFeedback feedback={page.feedback()} />
           </Stack>
@@ -101,10 +104,21 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
 
 function TeamDetail(props: TeamDetailProps): JSX.Element {
   const note = useTeamNote({ team: () => props.team, remote: () => props.remote });
+  const needsUsage = (): boolean =>
+    props.card === undefined ||
+    props.card.season?.maxGamesPlayed !== undefined ||
+    props.card.season?.maxInningsPitched !== undefined;
   const overview = useTeamOverview(
     () => props.team.team.id,
     () => props.remote,
+    needsUsage,
   );
+  const facts = (): ReturnType<typeof toTeamOverviewFromCard> | undefined =>
+    props.card === undefined
+      ? props.cardsLoading || overview.loading()
+        ? undefined
+        : overview.facts()
+      : toTeamOverviewFromCard(props.card, overview.facts()?.gamesUsage);
   return (
     <Stack gap="2xl">
       <Stack gap="md">
@@ -118,9 +132,9 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
       </Stack>
 
       <TeamSeasonOverview
-        facts={overview.facts()}
-        loading={overview.loading()}
-        failed={overview.failed()}
+        facts={facts()}
+        loading={props.card === undefined && (props.cardsLoading || overview.loading())}
+        failed={props.card === undefined && !props.cardsLoading && overview.failed()}
       />
 
       <Stack as="section" gap="sm" labelledBy="team-activity-title">
@@ -190,6 +204,8 @@ type TeamDetailPageProps = {
 
 type TeamDetailProps = {
   readonly team: TeamSummaryView;
+  readonly card: TeamCardView | undefined;
+  readonly cardsLoading: boolean;
   readonly remote: TeamRemote;
   readonly showProvider: boolean;
   readonly onOptimistic: (input: TeamControlData) => void;

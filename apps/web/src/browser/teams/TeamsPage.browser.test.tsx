@@ -1,4 +1,4 @@
-import { EffectArray, EffectString } from "@lineupkeep/collections";
+import { EffectArray } from "@lineupkeep/collections";
 import { render } from "@solidjs/web";
 import { QueryClientProvider } from "@tanstack/solid-query";
 import {
@@ -18,7 +18,6 @@ import { page } from "vitest/browser";
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { applyTheme } from "#browser/app-shell/theme.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
-import { clearCachedTeamCards, storeCachedTeamCards } from "#browser/query/teamCardCache.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
 import { formatClockTime, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import type {
@@ -124,6 +123,7 @@ const seasonFacts: NonNullable<TeamCardView["season"]> = {
   format: "head_to_head_categories",
   seasonOver: false,
   scoringLabel: "H2H Cat",
+  scoringType: "head",
   teamCount: 12,
   weeklyDeadline: "weekly",
   startDate: "2026-09-01",
@@ -136,6 +136,26 @@ const seasonFacts: NonNullable<TeamCardView["season"]> = {
 };
 
 const seasonCard: TeamCardView = { summary: baseTeam, season: seasonFacts };
+const seasonCardWithMatchup: TeamCardView = {
+  ...seasonCard,
+  season: {
+    ...seasonFacts,
+    matchup: {
+      week: 9,
+      opponent: "Beta",
+      points: null,
+      opponentPoints: null,
+      projectedPoints: null,
+      opponentProjectedPoints: null,
+      remainingGames: 0,
+      opponentRemainingGames: 2,
+      categories: [
+        { name: "Goals", scoring: undefined, own: 5, opponent: 2, result: "win" },
+        { name: "Shots", scoring: undefined, own: 3, opponent: 4, result: "loss" },
+      ],
+    },
+  },
+};
 
 const tallSeasonCard: TeamCardView = {
   ...seasonCard,
@@ -441,22 +461,19 @@ it("keeps local team controls when the batch read fails", async () => {
   await expect.element(page.getByRole("switch", { name: "Lineup checks for Alpha" })).toBeVisible();
 });
 
-it("paints season facts from the last visit before fresh facts arrive", async () => {
-  clearCachedTeamCards();
-  storeCachedTeamCards("viewer-a", [seasonCard]);
+it("paints season facts from the query cache before fresh facts arrive", async () => {
   const pending = Promise.withResolvers<ReadonlyArray<TeamCardView>>();
   using _app = setupTeamsPage(
     [baseTeam],
     { cards: () => pending.promise },
-    { viewerId: "viewer-a" },
+    { seedCards: [seasonCard] },
   );
 
   await expect.element(page.getByText("3rd of 12")).toBeVisible();
   await expect.element(page.getByText("7-3-0 (.700)")).toBeVisible();
   expect(page.getByText("Loading season facts.").elements()).toHaveLength(0);
-  pending.resolve([seasonCard]);
+  pending.resolve([seasonCardWithMatchup]);
   await expect.element(page.getByText("3rd of 12")).toBeVisible();
-  clearCachedTeamCards();
 });
 
 it("keeps local status in place while season facts arrive", async () => {
@@ -464,21 +481,16 @@ it("keeps local status in place while season facts arrive", async () => {
   await document.fonts.ready;
   const pending = Promise.withResolvers<ReadonlyArray<TeamCardView>>();
   using _app = setupTeamsPage([baseTeam], { cards: () => pending.promise });
-  await expect.element(page.getByText("Loading season facts.")).toBeVisible();
+  await expect.element(page.getByText("Next check")).toBeVisible();
   const card = document.querySelector<HTMLElement>("[data-card]");
   const height = card?.getBoundingClientRect().height;
-  const rows = card?.querySelector('[aria-hidden="true"].grid');
-  if (rows === null || rows === undefined) {
-    throw new Error(card?.outerHTML ?? "no card");
-  }
-  expect(rows.children).toHaveLength(1);
-  expect(EffectString.split(getComputedStyle(rows).gridTemplateColumns, " ")).toHaveLength(1);
+  expect(card?.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(1);
   await page.screenshot({
     path: "../../../../../.artifacts/team-overview-polish/card-loading-390.png",
     save: true,
     element: card ?? undefined,
   });
-  pending.resolve([seasonCard]);
+  pending.resolve([seasonCardWithMatchup]);
   await expect.element(page.getByText("3rd of 12")).toBeVisible();
   await document.fonts.ready;
   expect(Math.abs((card?.getBoundingClientRect().height ?? 0) - (height ?? 0))).toBeLessThanOrEqual(
@@ -491,16 +503,16 @@ it("keeps the loading card close to settled at desktop width", async () => {
   await document.fonts.ready;
   const pending = Promise.withResolvers<ReadonlyArray<TeamCardView>>();
   using _app = setupTeamsPage([baseTeam], { cards: () => pending.promise });
-  await expect.element(page.getByText("Loading season facts.")).toBeVisible();
+  await expect.element(page.getByText("Next check")).toBeVisible();
   const card = document.querySelector<HTMLElement>("[data-card]");
   const loadingHeight = card?.getBoundingClientRect().height ?? 0;
-  expect(card?.querySelector('[aria-hidden="true"].grid')?.children).toHaveLength(1);
+  expect(card?.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(1);
   await page.screenshot({
     path: "../../../../../.artifacts/team-overview-polish/card-loading-1440.png",
     save: true,
     element: card ?? undefined,
   });
-  pending.resolve([seasonCard]);
+  pending.resolve([seasonCardWithMatchup]);
   await expect.element(page.getByText("Head to head categories")).toBeVisible();
   expect(Math.abs((card?.getBoundingClientRect().height ?? 0) - loadingHeight)).toBeLessThanOrEqual(
     40,
@@ -1250,6 +1262,24 @@ it("shows a recoverable failure instead of an empty team list", async () => {
   await expect.element(page.getByText("We could not load your teams.")).toBeVisible();
 });
 
+it("starts card facts without waiting for the team list", async () => {
+  const pendingList = Promise.withResolvers<ReadonlyArray<TeamSummaryView>>();
+  let cardReads = 0;
+  using _app = setupTeamsPage([], {
+    list: () => pendingList.promise,
+    cards: () => {
+      cardReads += 1;
+      return Promise.resolve([seasonCard]);
+    },
+  });
+
+  await expect.element(page.getByLabelText("Loading teams")).toBeVisible();
+  expect(cardReads).toBe(1);
+  pendingList.resolve([baseTeam]);
+  await expect.element(page.getByText("3rd of 12")).toBeVisible();
+  expect(cardReads).toBe(1);
+});
+
 it("shows a loading state while the team list is pending", async () => {
   const pending = Promise.withResolvers<ReadonlyArray<TeamSummaryView>>();
   using _app = setupTeamsPage([], { list: () => pending.promise });
@@ -1332,11 +1362,17 @@ function refusal(reason: TeamMutationError): Error {
 function setupTeamsPage(
   teams: ReadonlyArray<TeamSummaryView>,
   overrides: Partial<Pick<TeamRemote, "list" | "refresh" | "control" | "cards">> = {},
-  queryOptions: { readonly retryDelay?: number; readonly viewerId?: string } = {},
+  queryOptions: {
+    readonly retryDelay?: number;
+    readonly seedCards?: ReadonlyArray<TeamCardView>;
+  } = {},
 ): { [Symbol.dispose](): void } {
   const queryClient = createQueryClient();
   if (queryOptions.retryDelay !== undefined) {
     queryClient.setDefaultOptions({ queries: { retryDelay: queryOptions.retryDelay } });
+  }
+  if (queryOptions.seedCards !== undefined) {
+    queryClient.setQueryData(teamQueries.cardsKey, queryOptions.seedCards, { updatedAt: 0 });
   }
   const remote: TeamRemote = {
     list: overrides.list ?? (() => Promise.resolve(teams)),
@@ -1364,7 +1400,6 @@ function setupTeamsPage(
     component: () => (
       <TeamsPage
         teamsQuery={() => teamsQuery}
-        viewerId={queryOptions.viewerId}
         remote={remote}
         onRefresh={() => Promise.resolve()}
       />

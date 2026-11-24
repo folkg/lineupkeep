@@ -4,7 +4,6 @@ import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 import type { Accessor } from "solid-js";
 
-import type { CachedTeamHeader } from "#browser/query/teamHeaderCache.ts";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import type { ActionState } from "#browser/shared-ui/actionState.ts";
 import { Badge } from "#browser/shared-ui/Badge.tsx";
@@ -46,16 +45,6 @@ export function TeamList(props: TeamListProps): JSX.Element {
   const clock = createMinuteClock(() => props.dataUpdatedAt());
   const settling = createSettle(() => !props.isLoading() && props.teams().length > 0);
   const showProvider = (): boolean => showsProvider(props.teams());
-  const skeletonCards = (): ReadonlyArray<SkeletonCard> | undefined =>
-    props.cachedHeaders.length === 0
-      ? undefined
-      : EffectArray.map(props.cachedHeaders, (header) => ({
-          title: header.name,
-          meta:
-            header.leagueName === undefined
-              ? header.sportLabel
-              : `${header.sportLabel} · ${header.leagueName}`,
-        }));
 
   return (
     <Stack as="section" gap="md" labelledBy="teams-list-title">
@@ -85,10 +74,7 @@ export function TeamList(props: TeamListProps): JSX.Element {
           <Text type="meta">Turn on Lineup checks for the teams you want managed.</Text>
         </Notice>
       </Show>
-      <Show
-        fallback={<CardSkeletonList cards={skeletonCards()} season />}
-        when={!props.isLoading()}
-      >
+      <Show fallback={<CardSkeletonList season />} when={!props.isLoading()}>
         <Show
           fallback={
             <ActionFeedback
@@ -170,6 +156,7 @@ function TeamCard(props: TeamCardProps): JSX.Element {
           <TextLink
             id={nameId()}
             params={{ teamId: props.team.team.id }}
+            preload="intent"
             type="card-title"
             to="/teams/$teamId"
           >
@@ -256,7 +243,6 @@ type TeamListProps = {
   readonly loadFailure: Accessor<Error | null>;
   readonly refreshState: Accessor<ActionState>;
   readonly dataUpdatedAt: Accessor<number>;
-  readonly cachedHeaders: ReadonlyArray<CachedTeamHeader>;
   readonly onOptimistic: (input: TeamControlData) => void;
   readonly onRefresh: () => Promise<void>;
   readonly onRefreshTeams: () => void;
@@ -296,5 +282,3 @@ function allTeamsIdle(teams: ReadonlyArray<TeamSummaryView>): boolean {
     )
   );
 }
-
-type SkeletonCard = { readonly title: string; readonly meta: string };

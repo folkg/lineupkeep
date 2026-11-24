@@ -14,11 +14,16 @@ export const Route = createFileRoute("/runs/$runId")({
       () => context.queryClient.ensureQueryData(sessionQueries.current(context.sessionRemote)),
       location.href,
     ).then(() => undefined),
-  loader: ({ context, params }) =>
-    Promise.all([
-      context.queryClient.ensureQueryData(teamQueries.list(teamRemote)),
-      context.queryClient.ensureQueryData(teamQueries.run(teamRemote, params.runId)),
-    ]),
+  loader: ({ context, params }) => {
+    if (typeof window === "undefined" || context.queryClient.isMutating() > 0) {
+      return Promise.all([
+        context.queryClient.ensureQueryData(teamQueries.list(teamRemote)),
+        context.queryClient.ensureQueryData(teamQueries.run(teamRemote, params.runId)),
+      ]);
+    }
+    void context.queryClient.prefetchQuery(teamQueries.list(teamRemote));
+    void context.queryClient.prefetchQuery(teamQueries.run(teamRemote, params.runId));
+  },
   component: RunDetailRoute,
 });
 

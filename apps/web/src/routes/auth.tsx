@@ -6,12 +6,18 @@ import { AuthPage } from "#browser/auth/AuthPage.tsx";
 import { isApplicationPath } from "#browser/auth/signInDestination.ts";
 import { signInQueries } from "#browser/auth/signInQueries.ts";
 import { signInRemote } from "#browser/auth/signInRemote.ts";
+import { removePersistedTeamQueries } from "#browser/query/queryPersistence.ts";
 
 export const Route = createFileRoute("/auth")({
   validateSearch: parseAuthSearch,
   context: () => ({ signInMethodsQuery: signInQueries.methods(signInRemote) }),
 
-  loader: ({ context }) => context.queryClient.prefetchQuery(context.signInMethodsQuery),
+  loader: ({ context }) => {
+    if (typeof window === "undefined") {
+      return context.queryClient.prefetchQuery(context.signInMethodsQuery);
+    }
+    void context.queryClient.prefetchQuery(context.signInMethodsQuery);
+  },
   component: AuthRoute,
 });
 
@@ -31,11 +37,12 @@ function AuthRoute(): JSX.Element {
       returnTo={destinations().returnTo}
       googleErrorReturnTo={destinations().errorReturnTo}
       googleError={search().error}
-      onAuthenticated={() =>
-        context()
+      onAuthenticated={() => {
+        removePersistedTeamQueries();
+        return context()
           .queryClient.resetQueries()
-          .then(() => navigate({ href: destinations().returnTo }))
-      }
+          .then(() => navigate({ href: destinations().returnTo }));
+      }}
     />
   );
 }

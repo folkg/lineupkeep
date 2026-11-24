@@ -34,6 +34,8 @@
     "@solidjs/vite-plugin": "catalog:",
     "@solidjs/web": "catalog:",
     "@tailwindcss/vite": "catalog:",
+    "@tanstack/query-persist-client-core": "catalog:",
+    "@tanstack/query-sync-storage-persister": "catalog:",
     "@tanstack/solid-query": "catalog:",
     "@tanstack/solid-router": "catalog:",
     "@tanstack/solid-router-ssr-query": "catalog:",

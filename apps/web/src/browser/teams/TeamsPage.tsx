@@ -14,7 +14,6 @@ import { useTeamsPage } from "./useTeamsPage";
 export function TeamsPage(props: TeamsPageProps): JSX.Element {
   const page = useTeamsPage({
     teamsQuery: () => props.teamsQuery(),
-    viewerId: () => props.viewerId,
     remote: () => props.remote,
     onRefresh: () => props.onRefresh(),
   });
@@ -31,7 +30,6 @@ export function TeamsPage(props: TeamsPageProps): JSX.Element {
             isLoading={page.isLoading}
             loadFailure={page.loadFailure}
             refreshState={page.refreshState}
-            cachedHeaders={page.cachedHeaders()}
             remote={props.remote}
             teams={page.teams}
             cardFacts={page.cardFacts}
@@ -50,7 +48,6 @@ export function TeamsPage(props: TeamsPageProps): JSX.Element {
 
 type TeamsPageProps = {
   readonly teamsQuery: Accessor<TeamListQueryOptions>;
-  readonly viewerId?: string;
   readonly remote: TeamRemote;
   readonly onRefresh: () => Promise<void>;
 };

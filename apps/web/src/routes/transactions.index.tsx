@@ -1,4 +1,3 @@
-import { isServer } from "@solidjs/web";
 import type { JSX } from "@solidjs/web";
 import { createFileRoute } from "@tanstack/solid-router";
 
@@ -17,7 +16,7 @@ export const Route = createFileRoute("/transactions/")({
     ).then(() => undefined),
   loader: ({ context }) => {
     const query = transactionQueries.timeline(transactionRemote);
-    if (isServer || context.queryClient.isMutating() > 0) {
+    if (typeof window === "undefined" || context.queryClient.isMutating() > 0) {
       return context.queryClient.ensureInfiniteQueryData(query);
     }
     void context.queryClient.prefetchInfiniteQuery(query);
