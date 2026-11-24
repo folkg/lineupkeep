@@ -314,6 +314,12 @@ else.
 **Page headers.** The page title starts at the same top edge on every route. A route kicker,
 when present, sits directly under the title; it never pushes the title down.
 
+**Actions.** One `ActionBar` owns the order. On wide screens the destructive action is separated
+at the left, and tertiary, secondary, then primary actions sit together at the right. On phones
+the main actions stack with the primary full width, and the destructive action follows last. A
+cancel that only closes an editor is tertiary and neutral; danger belongs to actions that discard
+or delete.
+
 **One measure.** The application column is 680px. Lists and tables may extend to 960px when their
 columns genuinely need it; no content runs the viewport width. The masthead, section rules, row
 rules, and controls share the column's left and right edges.

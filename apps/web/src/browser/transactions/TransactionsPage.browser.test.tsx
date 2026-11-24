@@ -352,6 +352,38 @@ it("runs a next-day move now and says when it takes effect", async () => {
     .toBeVisible();
 });
 
+it("moves scheduling into the card footer with one primary action", async () => {
+  await page.viewport(1280, 900);
+  const waiting = move({
+    move: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c3",
+    team: alpha,
+    kind: "drop",
+    drops: [player("Anton Frondell")],
+    reason: "Open a bench place for the activate.",
+    runDay: today,
+    effectiveDate: "2026-11-12",
+  });
+  using _app = setupTransactionsPage({
+    open: listData([waiting], { open: 1, today: 1, saved: 0, ended: 0 }),
+  });
+
+  await page.getByRole("button", { name: "Schedule instead: Drop Anton Frondell" }).click();
+  await expect.element(page.getByLabelText("Day to run")).toBeVisible();
+  expect(
+    page.getByRole("button", { name: "Run now: Drop Anton Frondell" }).elements(),
+  ).toHaveLength(0);
+  expect(
+    page.getByRole("button", { name: "Schedule instead: Drop Anton Frondell" }).elements(),
+  ).toHaveLength(0);
+  expect(page.getByRole("button", { name: /Discard:/u }).elements()).toHaveLength(0);
+  const cancel = page.getByRole("button", { name: "Cancel" }).element().getBoundingClientRect();
+  const save = page
+    .getByRole("button", { name: "Save schedule" })
+    .element()
+    .getBoundingClientRect();
+  expect(cancel.x).toBeLessThan(save.x);
+});
+
 it("says needs your decision, scheduled for a day, and ran in plain words", async () => {
   await page.viewport(1280, 900);
   const pending = move({
@@ -494,10 +526,13 @@ it("edits and discards one saved move at a time", async () => {
       ),
     )
     .toBeVisible();
+  expect(page.getByRole("button", { name: "Run now" }).elements()).toHaveLength(0);
+  expect(page.getByRole("button", { name: "Schedule" }).elements()).toHaveLength(0);
+  expect(page.getByRole("button", { name: /Discard:/u }).elements()).toHaveLength(1);
   const date = page.getByLabelText("Day to run");
   await expect.element(date).toHaveValue("2026-11-13");
   await date.fill("2026-11-17");
-  await page.getByRole("button", { name: "Save changes" }).click();
+  await page.getByRole("button", { name: "Save schedule" }).click();
 
   await expect
     .element(

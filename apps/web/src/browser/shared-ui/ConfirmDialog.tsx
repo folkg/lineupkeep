@@ -2,6 +2,7 @@ import * as AlertDialog from "@kobalte/core/alert-dialog";
 import type { JSX } from "@solidjs/web";
 import { Show, createEffect, createSignal, merge } from "solid-js";
 
+import { ActionBar } from "./ActionBar";
 import { Button, buttonClass } from "./Button";
 
 const dialogContentClass =
@@ -104,21 +105,26 @@ export function ConfirmDialog(props: ConfirmDialogProps): JSX.Element {
           <AlertDialog.Description class="mt-2 text-body text-ink-soft">
             {props.description}
           </AlertDialog.Description>
-          <div class="mt-6 flex justify-end gap-2">
-            {}
-            <AlertDialog.CloseButton
-              aria-label={cancelLabel()}
-              class={buttonClass({ variant: "secondary" })}
-              onClick={(event) => {
-                event.preventDefault();
-                cancel();
-              }}
-            >
-              {cancelLabel()}
-            </AlertDialog.CloseButton>
-            <Button tone="danger" variant="primary" onClick={confirm}>
-              {props.confirmLabel}
-            </Button>
+          <div class="mt-6">
+            <ActionBar
+              secondary={
+                <AlertDialog.CloseButton
+                  aria-label={cancelLabel()}
+                  class={buttonClass({ variant: "secondary" })}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    cancel();
+                  }}
+                >
+                  {cancelLabel()}
+                </AlertDialog.CloseButton>
+              }
+              primary={
+                <Button tone="danger" variant="primary" onClick={confirm}>
+                  {props.confirmLabel}
+                </Button>
+              }
+            />
           </div>
         </AlertDialog.Content>
       </AlertDialog.Portal>

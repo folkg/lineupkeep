@@ -303,6 +303,14 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
   });
   const team = (): TransactionMoveView["team"] => props.card.lead.team;
   const members = (): ReadonlyArray<TransactionMoveView> => cardMembers(props.card);
+  const editingMove = (): TransactionMoveView | undefined => {
+    const editing = props.page.editing();
+    return editing === undefined
+      ? undefined
+      : EffectOption.getOrUndefined(
+          EffectArray.findFirst(members(), (move) => move.move === editing),
+        );
+  };
   const status = (): CardStatus => cardStatus(props.card);
   const action = (): CardAction => cardAction(props.card);
   const headingId = (): string => `transactions-panel-${props.card.lead.team.id}-${props.card.key}`;
@@ -513,6 +521,10 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
     return undefined;
   };
   const footer = (): JSX.Element | undefined => {
+    const editing = editingMove();
+    if (editing !== undefined) {
+      return <ScheduleEditor move={editing} page={props.page} />;
+    }
     const primary = primaryFooter();
     const destructive = destructiveFooter();
     return primary === undefined && destructive === undefined ? undefined : (
@@ -640,6 +652,56 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
   );
 }
 
+function ScheduleEditor(props: {
+  readonly move: TransactionMoveView;
+  readonly page: TransactionsPageController;
+}): JSX.Element {
+  const invalid = (): boolean => props.move.validation.status !== "current";
+  return (
+    <Form gap="sm" onSubmit={() => props.page.saveEdit(props.move)}>
+      <Stack gap="sm">
+        <TextField
+          label="Day to run"
+          type="date"
+          value={props.page.editingDate()}
+          onInput={(event) => props.page.setEditingDate(event.currentTarget.value)}
+        />
+        <Text type="meta" tone="muted">
+          Lineupgrade sends the move on this day. Your league applies it by its own rule. Saving
+          clears your decision.
+        </Text>
+        <Show when={props.page.editingError()}>
+          {(error) => (
+            <Text type="meta" tone="danger">
+              {error()}
+            </Text>
+          )}
+        </Show>
+        <ActionBar
+          tertiary={
+            <Button variant="quiet" onClick={props.page.cancelEdit}>
+              Cancel
+            </Button>
+          }
+          primary={
+            <Button
+              type="submit"
+              state={props.page.saving() ? "working" : "idle"}
+              disabled={
+                invalid() ||
+                props.page.discarding() !== undefined ||
+                props.page.discardingGroup() !== undefined
+              }
+            >
+              {props.page.saving() ? "Saving" : "Save schedule"}
+            </Button>
+          }
+        />
+      </Stack>
+    </Form>
+  );
+}
+
 function GroupMoveRow(props: GroupMoveRowProps): JSX.Element {
   const invalid = (): boolean => props.move.validation.status !== "current";
   const editing = (): boolean => props.page.editing() === props.move.move;
@@ -655,7 +717,7 @@ function GroupMoveRow(props: GroupMoveRowProps): JSX.Element {
       number={props.number}
       actions={
         <>
-          <Show when={!props.today && !invalid() && actionable()}>
+          <Show when={!props.today && !invalid() && actionable() && !editing()}>
             <Button
               variant="quiet"
               disabled={actionsDisabled()}
@@ -666,43 +728,6 @@ function GroupMoveRow(props: GroupMoveRowProps): JSX.Element {
             </Button>
           </Show>
         </>
-      }
-      details={
-        <Show when={editing()}>
-          <Form gap="sm" onSubmit={() => props.page.saveEdit(props.move)}>
-            <Stack gap="sm">
-              <TextField
-                label="Day to run"
-                type="date"
-                value={props.page.editingDate()}
-                onInput={(event) => props.page.setEditingDate(event.currentTarget.value)}
-              />
-              <Text type="meta" tone="muted">
-                Lineupgrade sends the move on this day. Your league applies it by its own rule.
-                Saving clears your decision.
-              </Text>
-              <Show when={props.page.editingError()}>
-                {(error) => (
-                  <Text type="meta" tone="danger">
-                    {error()}
-                  </Text>
-                )}
-              </Show>
-              <Inline gap="sm" align="baseline">
-                <Button
-                  type="submit"
-                  state={props.page.saving() ? "working" : "idle"}
-                  disabled={invalid() || props.page.discarding() !== undefined || props.working}
-                >
-                  {props.page.saving() ? "Saving" : "Save changes"}
-                </Button>
-                <Button variant="quiet" onClick={props.page.cancelEdit}>
-                  Cancel
-                </Button>
-              </Inline>
-            </Stack>
-          </Form>
-        </Show>
       }
     >
       <Text type="body-strong">{moveSummary(props.move)}</Text>

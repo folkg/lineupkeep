@@ -8,7 +8,7 @@ const headerClass =
   "flex flex-wrap items-start gap-x-3 gap-y-2 border-b-2 border-rule-strong bg-action-soft px-4 py-3";
 const bodyClass = "grid gap-3 px-4 py-3";
 const footerClass =
-  "flex flex-wrap items-center gap-x-4 gap-y-2 border-t-2 border-rule-strong px-4 py-3 max-[559px]:flex-col max-[559px]:items-stretch";
+  "flex flex-wrap items-center gap-x-4 gap-y-2 border-t-2 border-rule-strong px-4 py-3 max-[559px]:flex-col max-[559px]:items-stretch [&>form]:w-full";
 
 export function Card(props: CardProps): JSX.Element {
   const Tag = dynamic(() => props.as ?? "section");
