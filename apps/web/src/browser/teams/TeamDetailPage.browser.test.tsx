@@ -286,7 +286,7 @@ it("names the league context and keeps quiet states off the page", async () => {
   await expect.element(page.getByText("Available")).not.toBeInTheDocument();
   await expect.element(page.getByText(/lists this team/)).not.toBeInTheDocument();
   await expect
-    .element(page.getByText("Lineup settings and recent activity for this team."))
+    .element(page.getByText("Lineup settings and check history for this team."))
     .not.toBeInTheDocument();
   await expect
     .element(page.getByText("Newest first. Checks that changed nothing are grouped."))
@@ -351,10 +351,10 @@ it("keeps the popout beside a long team name on a phone", async () => {
   expect(jumpBox.top).toBeLessThan(headingBox.bottom);
 });
 
-it("puts recent activity above the owner note and leaves the roster off the page", async () => {
+it("puts check history above the owner note and leaves the roster off the page", async () => {
   using _app = setupTeamDetailPage(team);
 
-  const activity = page.getByRole("heading", { name: "Recent activity" });
+  const activity = page.getByRole("heading", { name: "Check history" });
   const note = page.getByRole("heading", { name: "Owner note" });
   await expect.element(activity).toBeVisible();
   await expect.element(note).toBeVisible();
@@ -735,7 +735,6 @@ it("shows season facts, both matchup sides, category detail, and cap usage", asy
   await expect.element(page.getByText("0 played · 150 projected")).toBeVisible();
   await expect.element(page.getByText("10.1 pitched · 1,300.5 projected")).toBeVisible();
   await expect.element(page.getByText("7-3-0 (.700)")).toBeVisible();
-  await expect.element(page.getByText("Current matchup", { exact: true })).toBeVisible();
   expect(page.getByText("0 to 42").elements()).toHaveLength(0);
   expect(page.getByText("Projected 63.5 to 55").elements()).toHaveLength(0);
   const prose = page.getByText("Head to head categories").element();
@@ -743,12 +742,23 @@ it("shows season facts, both matchup sides, category detail, and cap usage", asy
   expect(page.getByText("0 to 3").elements()).toHaveLength(0);
   expect(page.getByText("Shots (info)").elements()).toHaveLength(0);
   expect(page.getByText("12 to 8").elements()).toHaveLength(0);
-  const season = page
-    .getByRole("heading", { name: "This week" })
-    .element()
-    .closest<HTMLElement>("[data-card]");
-  expect(season).not.toBeNull();
-  expect(season?.querySelector("dl")).toBeNull();
+  const season = page.getByRole("region", { name: "This week" }).element();
+  expect(season.querySelector("dl")).toBeNull();
+});
+
+it("aligns the season and week headings and fits the category table", async () => {
+  await page.viewport(1440, 900);
+  using _app = setupTeamDetailPage(team, { overview: () => Promise.resolve(overviewFixture) });
+
+  await expect.element(page.getByRole("heading", { name: "This week" })).toBeVisible();
+  const week = page.getByRole("heading", { name: "This week" }).element();
+  const season = page.getByRole("heading", { name: "Season" }).element();
+  expect(
+    Math.abs(week.getBoundingClientRect().top - season.getBoundingClientRect().top),
+  ).toBeLessThanOrEqual(1);
+  const table = page.getByRole("table", { name: "Matchup categories" }).element();
+  const scroller = table.parentElement;
+  expect(scroller?.scrollWidth ?? 0).toBeLessThanOrEqual(scroller?.clientWidth ?? 0);
 });
 
 it("gives head-to-head point scores two decimal places", async () => {
@@ -1080,7 +1090,7 @@ it("keeps controls and activity when season facts are unavailable", async () => 
   });
 
   await expect.element(page.getByText("Season facts are unavailable.")).toBeVisible();
-  await expect.element(page.getByRole("heading", { name: "Recent activity" })).toBeVisible();
+  await expect.element(page.getByRole("heading", { name: "Check history" })).toBeVisible();
   await expect.element(page.getByRole("switch", { name: "Lineup checks for Alpha" })).toBeVisible();
 });
 
@@ -1119,7 +1129,7 @@ it.each([
     () => (
       <>
         <TeamSeasonOverview facts={facts()} loading={facts() === undefined} failed={false} />
-        <h2>Recent activity</h2>
+        <h2>Check history</h2>
       </>
     ),
     host,
@@ -1131,7 +1141,7 @@ it.each([
     },
   };
   expect(host.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(1);
-  const activity = page.getByRole("heading", { name: "Recent activity" }).element();
+  const activity = page.getByRole("heading", { name: "Check history" }).element();
   const before = activity.getBoundingClientRect().top;
   await page.screenshot({
     path: `../../../../../.artifacts/team-overview-polish/detail-loading-${width}.png`,

@@ -1,78 +1,19 @@
 import { EffectArray } from "@lineupkeep/collections";
 import type { JSX } from "@solidjs/web";
-import { For, Show } from "solid-js";
+import { Show } from "solid-js";
 
 import { Badge } from "#browser/shared-ui/Badge.tsx";
-import { Card, CardNote } from "#browser/shared-ui/Card.tsx";
-import { Heading } from "#browser/shared-ui/Heading.tsx";
-import { Inline } from "#browser/shared-ui/Inline.tsx";
-import { SeasonArea } from "#browser/shared-ui/SeasonArea.tsx";
+import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Skeleton } from "#browser/shared-ui/Skeleton.tsx";
+import { Split } from "#browser/shared-ui/Split.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
-import { Table, TableSkeleton } from "#browser/shared-ui/Table.tsx";
+import { TableSkeleton } from "#browser/shared-ui/Table.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import type { TeamOverviewView } from "#contracts/connections/teamContract.ts";
 
-import { categoryStat, formatLabel, number, ordinal, scoringLabel } from "./seasonLabels";
-import { SeasonSummary } from "./SeasonSummary";
-import type { SeasonSummaryData } from "./SeasonSummary";
-
-function SeasonOverviewSkeleton(props: { readonly format?: string }): JSX.Element {
-  const rotisserie = (): boolean => props.format === "rotisserie";
-  return (
-    <Stack gap="lg">
-      <Stack gap="2xs">
-        <Text type="label" tone="faint">
-          Place
-        </Text>
-        <Skeleton height="h-5" width="w-24" />
-        <Skeleton height="h-3" width="w-32" />
-        <Skeleton height="h-3" width="w-24" />
-        <Skeleton height="h-3" width="w-40" />
-      </Stack>
-      <Stack gap="2xs">
-        <Text type="label" tone="faint">
-          Current matchup
-        </Text>
-        <Skeleton height="h-5" width="w-48" />
-        <Skeleton height="h-5" width="w-24" />
-        <Skeleton height="h-3" width="w-24" />
-        <Skeleton height="h-3" width="w-36" />
-      </Stack>
-      <Stack gap="sm">
-        <Text type="label" tone="faint">
-          {rotisserie() ? "My categories" : "Matchup categories"}
-        </Text>
-        <TableSkeleton
-          columns={
-            rotisserie()
-              ? [
-                  { label: "Category" },
-                  { label: "Stat", align: "end", width: "w-16" },
-                  { label: "Place", align: "end", width: "w-14" },
-                  { label: "Pts", align: "end", width: "w-12" },
-                ]
-              : [
-                  { label: "Category" },
-                  { label: "You", align: "end", width: "w-16" },
-                  { label: "Them", align: "end", width: "w-16" },
-                ]
-          }
-          label={rotisserie() ? "My categories" : "Matchup categories"}
-        />
-      </Stack>
-      <CardNote>
-        <Stack gap="xs">
-          <Text type="label" tone="faint">
-            Cap usage
-          </Text>
-          <Skeleton height="h-3" width="w-20" />
-          <Skeleton height="h-3" width="w-48" />
-        </Stack>
-      </CardNote>
-    </Stack>
-  );
-}
+import { formatLabel, scoringLabel } from "./seasonLabels";
+import { MatchupSummary, SeasonFacts } from "./SeasonSummary";
+import type { CategoryRow, SeasonSummaryData } from "./SeasonSummary";
 
 export function TeamSeasonOverview(props: {
   readonly facts: TeamOverviewView | undefined;
@@ -105,11 +46,8 @@ export function TeamSeasonOverview(props: {
       ...(league()?.gamesCaps === undefined ? {} : { caps: league()?.gamesCaps }),
     };
   };
-  const title = (): string => (facts()?.format === "rotisserie" ? "Season overview" : "This week");
-  const categoryRows = (): ReadonlyArray<NonNullable<TeamOverviewView["categoryPoints"]>[number]> =>
-    facts()?.format === "rotisserie"
-      ? EffectArray.filter(facts()?.categoryPoints ?? [], (row) => row.scoring !== "informational")
-      : [];
+  const categoryRows = (): ReadonlyArray<CategoryRow> =>
+    effectArrayFilter(facts()?.categoryPoints ?? []);
   const categoryValuesLoading = (): boolean =>
     props.categoryValuesLoading === true &&
     categoryRows().length > 0 &&
@@ -126,134 +64,122 @@ export function TeamSeasonOverview(props: {
     const value = facts()?.gamesUsage;
     return value?.status === "available" ? value.innings : undefined;
   };
+  const title = (): string => (facts()?.format === "rotisserie" ? "My categories" : "This week");
+  const failure = (): string =>
+    props.failed
+      ? "Season facts could not be loaded. Checks and activity remain available."
+      : (facts()?.reason ?? "Season facts were not published.");
   return (
-    <Card
-      badge={
-        format() === undefined ? (
-          <Show when={props.loading}>
-            <Skeleton height="h-5" width="w-24" />
+    <Split
+      aside={
+        <Stack as="section" gap="sm" labelledBy="team-season-title">
+          <SectionTitle id="team-season-title">Season</SectionTitle>
+          <Show when={data()}>
+            {(summary) => <SeasonFacts data={summary()} innings={innings()} usage={usage()} />}
           </Show>
-        ) : (
-          <Badge tone="neutral">{format()}</Badge>
-        )
+          <Show when={data() === undefined && props.loading}>
+            <SeasonSkeleton />
+          </Show>
+        </Stack>
       }
-      header={
-        <Heading id="team-season-title" level={2} type="card-title">
-          {title()}
-        </Heading>
-      }
-      labelledBy="team-season-title"
     >
-      <SeasonArea detail loading={props.loading}>
+      <Stack as="section" gap="md" labelledBy="team-week-title">
+        <SectionTitle
+          action={
+            format() === undefined ? (
+              <Show when={props.loading}>
+                <Skeleton height="h-5" width="w-24" />
+              </Show>
+            ) : (
+              <Badge tone="neutral">{format()}</Badge>
+            )
+          }
+          id="team-week-title"
+        >
+          {title()}
+        </SectionTitle>
         <Show
           fallback={
             <Show
               fallback={
                 <Text type="meta" tone="muted">
-                  {props.failed
-                    ? "Season facts could not be loaded. Controls and activity remain available."
-                    : (facts()?.reason ?? "Season facts were not published.")}
+                  {failure()}
                 </Text>
               }
               when={props.loading}
             >
-              <SeasonOverviewSkeleton format={facts()?.format} />
+              <WeekSkeleton format={facts()?.format} />
             </Show>
           }
           when={data()}
         >
           {(summary) => (
-            <Stack gap="lg">
-              <SeasonSummary categoryValuesLoading={categoryValuesLoading()} data={summary()} />
-              <Show when={categoryRows().length > 0}>
-                <Stack gap="sm">
-                  <Text type="label" tone="faint">
-                    My categories
-                  </Text>
-                  <Table
-                    columns={[
-                      { label: "Category" },
-                      { label: "Stat", align: "end", width: "w-16" },
-                      { label: "Place", align: "end", width: "w-14" },
-                      { label: "Pts", align: "end", width: "w-12" },
-                    ]}
-                    label="My categories"
-                    rows={EffectArray.map(categoryRows(), (row) => [
-                      <Text type="body">
-                        {row.name}
-                        {row.scoring === "informational" ? " (info)" : ""}
-                      </Text>,
-                      <CategoryValue
-                        loading={categoryValuesLoading()}
-                        value={row.total === null ? "–" : categoryStat(row.name, row.total)}
-                      />,
-                      <CategoryValue
-                        loading={categoryValuesLoading()}
-                        value={row.place === null ? "–" : ordinal(row.place)}
-                      />,
-                      <CategoryValue
-                        loading={categoryValuesLoading()}
-                        value={row.value === null ? "–" : number(row.value)}
-                      />,
-                    ])}
-                  />
-                </Stack>
-              </Show>
-              <Show when={usage().length > 0 || innings() !== undefined}>
-                <CardNote>
-                  <Stack gap="xs">
-                    <Text type="label" tone="faint">
-                      Cap usage
-                    </Text>
-                    <Stack gap="2xs">
-                      <For each={usage()}>
-                        {(row) => (
-                          <Inline gap="sm" justify="between">
-                            <Text type="meta" tone="muted">
-                              {row.position} games
-                            </Text>
-                            <Text type="meta" numeric>
-                              {number(row.played)} played · {number(row.projected)} projected
-                            </Text>
-                          </Inline>
-                        )}
-                      </For>
-                      <Show when={innings()}>
-                        {(value) => (
-                          <Inline gap="sm" justify="between">
-                            <Text type="meta" tone="muted">
-                              Innings pitched
-                            </Text>
-                            <Text type="meta" numeric>
-                              {number(value().pitched)} pitched · {number(value().projected)}{" "}
-                              projected
-                            </Text>
-                          </Inline>
-                        )}
-                      </Show>
-                    </Stack>
-                  </Stack>
-                </CardNote>
-              </Show>
-            </Stack>
+            <MatchupSummary
+              categoryRows={categoryRows()}
+              categoryValuesLoading={categoryValuesLoading()}
+              data={summary()}
+            />
           )}
         </Show>
-      </SeasonArea>
-    </Card>
+      </Stack>
+    </Split>
   );
 }
 
-function CategoryValue(props: { readonly loading: boolean; readonly value: string }): JSX.Element {
+function effectArrayFilter(rows: ReadonlyArray<CategoryRow>): ReadonlyArray<CategoryRow> {
+  return EffectArray.filter(rows, (row) => row.scoring !== "informational");
+}
+
+function SeasonSkeleton(): JSX.Element {
   return (
-    <Show
-      fallback={
-        <Text numeric type="meta">
-          {props.value}
+    <Stack gap="md">
+      <Stack gap="2xs">
+        <Text type="label" tone="faint">
+          Place
         </Text>
-      }
-      when={props.loading}
-    >
-      <Skeleton height="h-3" width="w-10" />
-    </Show>
+        <Skeleton height="h-5" width="w-24" />
+        <Skeleton height="h-3" width="w-32" />
+        <Skeleton height="h-3" width="w-24" />
+        <Skeleton height="h-3" width="w-40" />
+      </Stack>
+      <Stack gap="2xs">
+        <Text type="label" tone="faint">
+          Cap usage
+        </Text>
+        <Skeleton height="h-3" width="w-24" />
+        <Skeleton height="h-3" width="w-32" />
+      </Stack>
+    </Stack>
+  );
+}
+
+function WeekSkeleton(props: { readonly format: string | undefined }): JSX.Element {
+  const rotisserie = (): boolean => props.format === "rotisserie";
+  return (
+    <Stack gap="md">
+      <Stack gap="2xs">
+        <Skeleton height="h-5" width="w-48" />
+        <Skeleton height="h-5" width="w-24" />
+        <Skeleton height="h-3" width="w-36" />
+      </Stack>
+      <TableSkeleton
+        columns={
+          rotisserie()
+            ? [
+                { label: "Category" },
+                { label: "Stat", align: "end", width: "w-16" },
+                { label: "Place", align: "end", width: "w-14" },
+                { label: "Pts", align: "end", width: "w-12" },
+              ]
+            : [
+                { label: "Category" },
+                { label: "You", align: "end", width: "w-16" },
+                { label: "Them", align: "end", width: "w-16" },
+              ]
+        }
+        label={rotisserie() ? "My categories" : "Matchup categories"}
+        rows={5}
+      />
+    </Stack>
   );
 }

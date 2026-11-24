@@ -11,7 +11,7 @@ export function Table(props: TableProps): JSX.Element {
     <div class="w-full overflow-x-auto">
       <table
         aria-label={props.label}
-        class="w-full min-w-[18rem] table-fixed border-collapse border border-rule text-left sm:min-w-[26rem]"
+        class="w-full min-w-[18rem] table-fixed border-collapse border border-rule text-left"
       >
         <colgroup>
           <For each={props.columns}>{(column) => <col class={column.width} />}</For>

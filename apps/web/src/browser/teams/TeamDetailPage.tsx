@@ -140,7 +140,7 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
       />
 
       <Stack as="section" gap="sm" labelledBy="team-activity-title">
-        <SectionTitle id="team-activity-title">Recent activity</SectionTitle>
+        <SectionTitle id="team-activity-title">Check history</SectionTitle>
         <Show
           fallback={<NoChecksToday team={props.team} />}
           when={props.team.recentRuns.length > 0}

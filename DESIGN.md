@@ -332,10 +332,12 @@ controls on their own line, aligned left. A long team or league name wraps; it n
 Controls never overlap a name.
 
 **Team detail order** is fixed: back link, title with the provider jump-out beside it, one
-metadata line (sport and league), one control row with toggle and pause on the same line, a quiet
-report link, then the activity section behind its rule, then the owner note. The provider jump-out
-sits beside the title here and beside the name on the list. Nothing floats to the right of the
-metadata line.
+metadata line (sport and league), one control row with toggle and pause on the same line, then a
+season and week split, the check history behind its rule, and the owner note. The split is two
+rule-led sections, not one card: season facts sit in a narrow side rail and the current week and
+its category table take the main column. On phones the season facts come first. The provider
+jump-out sits beside the title here and beside the name on the list. Nothing floats to the right
+of the metadata line.
 
 **Team cards.** The team list puts each team in its own card, sorted by sport then name; the
 sport is already in the card's meta line, so there are no league headings or counts. A card has
