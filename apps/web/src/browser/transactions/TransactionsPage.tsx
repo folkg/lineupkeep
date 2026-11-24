@@ -396,27 +396,15 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
           return undefined;
         }
         return (
-          <Inline gap="sm" align="baseline">
-            <Button
-              variant="primary"
-              disabled={!confirmable() || confirmation.pending()}
-              state={working() ? "working" : "idle"}
-              aria-label={actionLabel()}
-              onClick={() => confirmation.start(members())}
-            >
-              {working() ? workingLabel() : controlLabel()}
-            </Button>
-            <Show when={props.card.today}>
-              <Button
-                variant="quiet"
-                disabled={!confirmable() || confirmation.pending()}
-                aria-label={`Schedule instead: ${cardTitle(props.card)}`}
-                onClick={() => props.page.startEdit(props.card.lead)}
-              >
-                Schedule
-              </Button>
-            </Show>
-          </Inline>
+          <Button
+            variant="primary"
+            disabled={!confirmable() || confirmation.pending()}
+            state={working() ? "working" : "idle"}
+            aria-label={actionLabel()}
+            onClick={() => confirmation.start(members())}
+          >
+            {working() ? workingLabel() : controlLabel()}
+          </Button>
         );
       case "cure":
         return (
@@ -463,6 +451,21 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
       case "none":
         return undefined;
     }
+  };
+  const secondaryFooter = (): JSX.Element | undefined => {
+    if (action().kind !== "decide" || !opened() || !props.card.today) {
+      return undefined;
+    }
+    return (
+      <Button
+        variant="secondary"
+        disabled={!confirmable() || confirmation.pending()}
+        aria-label={`Schedule instead: ${cardTitle(props.card)}`}
+        onClick={() => props.page.startEdit(props.card.lead)}
+      >
+        Schedule
+      </Button>
+    );
   };
   const destructiveFooter = (): JSX.Element | undefined => {
     const held = action();
@@ -528,7 +531,12 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
     const primary = primaryFooter();
     const destructive = destructiveFooter();
     return primary === undefined && destructive === undefined ? undefined : (
-      <ActionBar destructive={destructive} disabled={busy()} primary={primary} />
+      <ActionBar
+        destructive={destructive}
+        disabled={busy()}
+        primary={primary}
+        secondary={secondaryFooter()}
+      />
     );
   };
   return (

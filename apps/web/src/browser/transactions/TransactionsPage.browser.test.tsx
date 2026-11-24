@@ -367,6 +367,22 @@ it("moves scheduling into the card footer with one primary action", async () => 
     open: listData([waiting], { open: 1, today: 1, saved: 0, ended: 0 }),
   });
 
+  await expect
+    .element(page.getByRole("button", { name: "Run now: Drop Anton Frondell" }))
+    .toBeVisible();
+  await expect
+    .element(page.getByRole("button", { name: "Schedule instead: Drop Anton Frondell" }))
+    .toBeVisible();
+  const runNow = page
+    .getByRole("button", { name: "Run now: Drop Anton Frondell" })
+    .element()
+    .getBoundingClientRect();
+  const schedule = page
+    .getByRole("button", { name: "Schedule instead: Drop Anton Frondell" })
+    .element()
+    .getBoundingClientRect();
+  expect(schedule.x).toBeLessThan(runNow.x);
+
   await page.getByRole("button", { name: "Schedule instead: Drop Anton Frondell" }).click();
   await expect.element(page.getByLabelText("Day to run")).toBeVisible();
   expect(
@@ -770,7 +786,9 @@ it("frames a transaction group with the shared card structure", async () => {
   expect(card.querySelector("[data-card-header] [data-card-badge]")?.textContent).toBe(
     "Needs your decision",
   );
-  expect(card.querySelector("[data-card-footer]")?.textContent).toContain("Run nowSchedule");
+  const cardFooter = card.querySelector("[data-card-footer]")?.textContent;
+  expect(cardFooter).toContain("Run now");
+  expect(cardFooter).toContain("Schedule");
   expect(
     card.querySelector("[data-card-footer]")?.querySelector("[aria-label^='Discard']"),
   ).not.toBeNull();
@@ -816,12 +834,12 @@ it("names today's run now without a separate run note", async () => {
   });
 
   await expect.element(page.getByRole("button", { name: "Run now: Weekend moves" })).toBeVisible();
-  expect(
-    page
-      .getByRole("button", { name: "Run now: Weekend moves" })
-      .element()
-      .closest("[data-card-footer]")?.textContent,
-  ).toContain("Run nowSchedule");
+  const footerText = page
+    .getByRole("button", { name: "Run now: Weekend moves" })
+    .element()
+    .closest("[data-card-footer]")?.textContent;
+  expect(footerText).toContain("Run now");
+  expect(footerText).toContain("Schedule");
   expect(page.getByText("Runs immediately.").elements()).toHaveLength(0);
 });
 
