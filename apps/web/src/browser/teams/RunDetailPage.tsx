@@ -119,7 +119,7 @@ function RunDetail(props: {
           <Text type="meta">
             {runStatusLabel(props.run.status)} · {targetLabel(props.run.target)}
           </Text>
-          <Text type="meta" tone="faint">
+          <Text type="meta" tone="muted">
             {triggerLabel(props.run)}
           </Text>
         </Inline>
@@ -187,7 +187,7 @@ function RunDetail(props: {
                         <RuleListItem>
                           <Inline gap="sm" align="baseline">
                             <Text type="body-strong">{player.name}</Text>
-                            <Text type="meta" tone="faint">
+                            <Text type="meta" tone="muted">
                               {player.slot}
                             </Text>
                           </Inline>
@@ -201,7 +201,7 @@ function RunDetail(props: {
                 </Stack>
               )}
             </Show>
-            <Text type="meta" tone="faint">
+            <Text type="meta" tone="muted">
               {outcome().lockedPlayers} locked · {outcome().editablePlayers} editable players
             </Text>
           </Stack>

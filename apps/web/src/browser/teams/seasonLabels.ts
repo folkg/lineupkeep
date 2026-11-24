@@ -1,4 +1,4 @@
-import { EffectString } from "@lineupkeep/collections";
+import { EffectArray, EffectString } from "@lineupkeep/collections";
 
 export function formatLabel(format: string | undefined): string | undefined {
   switch (format) {
@@ -6,6 +6,24 @@ export function formatLabel(format: string | undefined): string | undefined {
       return "Head to head categories";
     case "head_to_head_points":
       return "Head to head points";
+    case "rotisserie":
+      return "Rotisserie";
+    case "points":
+      return "Points";
+    case "unknown":
+    case undefined:
+      return undefined;
+    default:
+      return undefined;
+  }
+}
+
+export function cardFormatLabel(format: string | undefined): string | undefined {
+  switch (format) {
+    case "head_to_head_categories":
+      return "Categories";
+    case "head_to_head_points":
+      return "Points";
     case "rotisserie":
       return "Rotisserie";
     case "points":
@@ -96,31 +114,11 @@ export function periodLabel(
   usesPlayoffs: boolean | undefined,
   playoffStartWeek: number | undefined,
 ): string | undefined {
-  if (currentPeriod === undefined || seasonOver === true) {
+  const parts = periodParts(currentPeriod, lastPeriod, seasonOver, usesPlayoffs, playoffStartWeek);
+  if (parts === undefined) {
     return undefined;
   }
-  if (lastPeriod === undefined) {
-    return `Week ${String(currentPeriod)}`;
-  }
-  if (currentPeriod > lastPeriod) {
-    return undefined;
-  }
-  if (
-    usesPlayoffs !== true ||
-    playoffStartWeek === undefined ||
-    playoffStartWeek <= 1 ||
-    playoffStartWeek > lastPeriod
-  ) {
-    return `Week ${String(currentPeriod)} of ${String(lastPeriod)}`;
-  }
-  const regularLastPeriod = playoffStartWeek - 1;
-  const playoffWeeks = lastPeriod - regularLastPeriod;
-  if (currentPeriod > regularLastPeriod) {
-    return `Playoffs · Week ${String(currentPeriod - regularLastPeriod)} of ${String(playoffWeeks)}`;
-  }
-  const regularWeeksLeft = regularLastPeriod - currentPeriod;
-  const remaining = regularWeeksLeft === 0 ? "" : ` · ${String(regularWeeksLeft)} left`;
-  return `Week ${String(currentPeriod)} of ${String(regularLastPeriod)} regular${remaining} · ${String(playoffWeeks)} ${playoffWeeks === 1 ? "playoff week" : "playoff weeks"}`;
+  return EffectArray.join([parts.headline, ...parts.details], " · ");
 }
 
 export function periodParts(

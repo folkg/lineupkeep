@@ -92,7 +92,7 @@ test("proposes a move into one team queue and runs it from the transactions page
   await page.goto("/transactions");
   await expect(page.getByRole("heading", { name: "Transactions" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
-  await expect(page.getByText("1 open move", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^1 open move · /u)).toBeVisible();
   await expect(page.getByText("1 move for today", { exact: true })).toBeVisible();
   await expect(page.getByText(reason, { exact: true })).toBeHidden();
   await expect(page.getByText("Embedded Browser Team", { exact: true }).first()).toBeVisible();
@@ -254,7 +254,7 @@ test("names a refused move without storing it or returning an identifier", async
   expect(body.refused[0]?.code).toBe("reference_invalid");
 
   await page.goto("/transactions");
-  await expect(page.getByText("0 open moves", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^0 open moves · /u)).toBeVisible();
 });
 
 test("opens the timeline on the first visit from the primary navigation", async ({

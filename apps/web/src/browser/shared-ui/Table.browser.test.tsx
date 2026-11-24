@@ -43,31 +43,6 @@ it("labels the table, its columns, and right-aligns numbers", () => {
   expect(getComputedStyle(cells[2] ?? table).textAlign).toBe("right");
 });
 
-it("right-aligns a footer cell under each column", () => {
-  using mounted = mount(() => (
-    <Table
-      columns={[
-        { label: "Category" },
-        { label: "You", align: "end" },
-        { label: "Them", align: "end" },
-      ]}
-      footerCells={[
-        <Text type="meta">Wins</Text>,
-        <Text type="body-strong">4</Text>,
-        <Text type="body-strong">4</Text>,
-      ]}
-      label="Matchup categories"
-      rows={[]}
-    />
-  ));
-
-  const cells = [...mounted.host.querySelectorAll<HTMLTableCellElement>("tfoot td")];
-  expect(EffectArray.map(cells, (cell) => cell.textContent)).toEqual(["Wins", "4", "4"]);
-  expect(getComputedStyle(cells[0] ?? mounted.host).textAlign).toBe("left");
-  expect(getComputedStyle(cells[1] ?? mounted.host).textAlign).toBe("right");
-  expect(getComputedStyle(cells[2] ?? mounted.host).textAlign).toBe("right");
-});
-
 function mount(view: () => JSX.Element): {
   readonly host: HTMLDivElement;
   [Symbol.dispose](): void;

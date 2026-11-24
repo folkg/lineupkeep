@@ -38,7 +38,7 @@ export function RunActivity(props: RunActivityProps): JSX.Element {
 function QuietGroupSummary(props: { readonly runs: ReadonlyArray<LineupRunView> }): JSX.Element {
   const span = (): QuietGroupSpan => quietGroupSpan(props.runs);
   return (
-    <Text numeric type="meta" tone="muted">
+    <Text type="meta" tone="muted">
       {span().count === 1
         ? "1 lineup run made no change"
         : `${String(span().count)} lineup runs made no change`}{" "}
@@ -93,14 +93,14 @@ function RunLine(props: { readonly run: LineupRunView }): JSX.Element {
   return (
     <>
       <Inline gap="sm" justify="between">
-        <Text numeric type="body">
+        <Text type="body">
           {runStatusLabel(props.run.status)} · {targetLabel(props.run.target)}
         </Text>
-        <Text type="meta" tone="faint">
+        <Text type="meta" tone="muted">
           <Time datetime={props.run.updatedAt}>{formatReaderTime(props.run.updatedAt)}</Time>
         </Text>
       </Inline>
-      <Text type="body" numeric tone="muted">
+      <Text type="body" tone="muted">
         {runExplanation(props.run)}
       </Text>
     </>

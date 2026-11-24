@@ -33,12 +33,11 @@ export function Text(props: TextProps): JSX.Element {
 const toneClass: Record<TextTone, string> = {
   default: "",
   muted: "text-ink-soft",
-  faint: "text-ink-faint",
   danger: "text-danger",
   spot: "text-spot",
 };
 
-type TextTone = "default" | "muted" | "faint" | "danger" | "spot";
+type TextTone = "default" | "muted" | "danger" | "spot";
 
 type TextProps = {
   readonly type?: Extract<TextType, "body" | "body-strong" | "meta" | "label">;

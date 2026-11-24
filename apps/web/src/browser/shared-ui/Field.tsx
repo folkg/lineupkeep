@@ -42,7 +42,7 @@ export function Field(props: FieldProps): JSX.Element {
       when={props.label !== undefined}
     >
       <div class="grid gap-2 text-ink">
-        <label class="text-label uppercase" for={id}>
+        <label class="text-meta text-ink" for={id}>
           {props.label}
         </label>
         {control}
@@ -61,7 +61,7 @@ export function fieldControlClass(options: FieldControlOptions = {}): string {
       : "hover:border-action focus:border-action";
 
   return cx(
-    "w-full select-text border-2 bg-paper px-3 text-body text-ink transition-[border-color,box-shadow] duration-quick ease-out-cubic placeholder:text-ink-faint focus:outline-none focus-visible:shadow-focus",
+    "w-full select-text border-2 bg-paper px-3 text-body text-ink transition-[border-color,box-shadow] duration-quick ease-out-cubic placeholder:text-ink-soft focus:outline-none focus-visible:shadow-focus",
     border,
     interaction,
   );
@@ -71,7 +71,7 @@ function FieldMessages(props: FieldMessageProps): JSX.Element {
   return (
     <>
       <Show when={props.description !== undefined}>
-        <span id={props.descriptionId} class="text-meta text-ink-faint">
+        <span id={props.descriptionId} class="text-meta text-ink-soft">
           {props.description}
         </span>
       </Show>

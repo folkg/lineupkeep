@@ -3,7 +3,7 @@ import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 import type { Element } from "solid-js";
 
-import { Skeleton } from "./Skeleton";
+import { TextSkeleton } from "./Skeleton";
 import { Text } from "./Text";
 
 export function Table(props: TableProps): JSX.Element {
@@ -26,7 +26,7 @@ export function Table(props: TableProps): JSX.Element {
                   }
                   scope="col"
                 >
-                  <Text type="label" tone="faint">
+                  <Text type="label" tone="muted">
                     {column.label}
                   </Text>
                 </th>
@@ -47,31 +47,16 @@ export function Table(props: TableProps): JSX.Element {
             )}
           </For>
         </tbody>
-        <Show when={props.footerCells}>
-          {(cells) => (
+        <Show when={props.footer}>
+          {(footer) => (
             <tfoot>
               <tr class="border-t border-rule-strong">
-                <For each={cells()}>
-                  {(cell, index) => (
-                    <td class={cellClass(props.columns[index()]?.align)}>{cell}</td>
-                  )}
-                </For>
+                <td class="px-2 py-2 sm:px-3" colspan={props.columns.length}>
+                  {footer()}
+                </td>
               </tr>
             </tfoot>
           )}
-        </Show>
-        <Show when={props.footerCells === undefined}>
-          <Show when={props.footer}>
-            {(footer) => (
-              <tfoot>
-                <tr class="border-t border-rule-strong">
-                  <td class="px-2 py-2 sm:px-3" colspan={props.columns.length}>
-                    {footer()}
-                  </td>
-                </tr>
-              </tfoot>
-            )}
-          </Show>
         </Show>
       </table>
     </div>
@@ -93,11 +78,7 @@ export function TableSkeleton(props: {
       label={props.label}
       rows={Array.from({ length: props.rows ?? 3 }, () =>
         EffectArray.map(props.columns, (_, index) => (
-          <Skeleton
-            class={index === 0 ? undefined : "ms-auto"}
-            height="h-3"
-            width={index === 0 ? "w-24" : "w-10"}
-          />
+          <TextSkeleton type="body" width={index === 0 ? "w-24" : "w-10"} />
         )),
       )}
     />
@@ -115,5 +96,4 @@ type TableProps = {
   readonly columns: ReadonlyArray<TableColumn>;
   readonly rows: ReadonlyArray<ReadonlyArray<Element>>;
   readonly footer?: Element;
-  readonly footerCells?: ReadonlyArray<Element>;
 };

@@ -19,7 +19,7 @@ export function StatusIcon(props: StatusIconProps): JSX.Element {
 const toneClass = {
   action: "text-action",
   danger: "text-danger",
-  muted: "text-ink-faint",
+  muted: "text-ink-soft",
 } as const;
 
 type StatusIconProps = {

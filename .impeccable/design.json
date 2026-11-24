@@ -477,6 +477,11 @@
         "name": "The Fixed Badge Rule",
         "body": "A card header is a two-column grid. The title and meta take the remaining width, and the badge keeps the top-right corner at every size. A long name wraps inside its column and never pushes the badge below.",
         "section": "layout"
+      },
+      {
+        "name": "The Typed Skeleton Rule",
+        "body": "A loading shape borrows the line box of the text type it replaces. A text skeleton is named by type, not by a pixel height, and its bar sits inside that line box. Title and table skeletons keep the final header, widths, and row count so the page does not move when data arrives.",
+        "section": "layout"
       }
     ],
     "dos": [
@@ -492,6 +497,8 @@
       "Do frame every card with the same 2px ink rule and at least 24px between cards.",
       "Do reserve spot ink for urgency.",
       "Do preserve keyboard access, visible focus, selection, zoom, and reduced motion.",
+      "Do tie every text skeleton to the type it stands in for.",
+      "Do lead a matchup with its result, then projected points, opponent, and remaining games.",
       "Do use short verb-led action labels and let a label wrap instead of cutting it off.",
       "Do keep the card badge in the top-right corner and give the title the remaining width."
     ],
@@ -507,7 +514,9 @@
       "Don't add letter spacing to body text or apply tabular figures to prose.",
       "Don't repeat a control label on every row of a list.",
       "Don't float controls to the right of a metadata line.",
-      "Don't use colour alone for connection, automation, or risk."
+      "Don't use colour alone for connection, automation, or risk.",
+      "Don't use a pixel height for a text skeleton.",
+      "Don't show a running wins total while a matchup is still live."
     ]
   }
 }

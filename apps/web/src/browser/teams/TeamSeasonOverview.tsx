@@ -4,7 +4,7 @@ import { Show } from "solid-js";
 
 import { Badge } from "#browser/shared-ui/Badge.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
-import { Skeleton } from "#browser/shared-ui/Skeleton.tsx";
+import { Skeleton, TextSkeleton } from "#browser/shared-ui/Skeleton.tsx";
 import { Split } from "#browser/shared-ui/Split.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { TableSkeleton } from "#browser/shared-ui/Table.tsx";
@@ -140,21 +140,11 @@ function SeasonSkeleton(): JSX.Element {
   return (
     <Stack gap="md">
       <Stack gap="2xs">
-        <Text type="label" tone="faint">
-          Place
-        </Text>
-        <Skeleton height="h-5" width="w-24" />
-        <Skeleton height="h-3" width="w-32" />
-        <Skeleton height="h-3" width="w-24" />
-        <Skeleton height="h-3" width="w-40" />
-        <Skeleton height="h-3" width="w-28" />
-      </Stack>
-      <Stack gap="2xs">
-        <Text type="label" tone="faint">
-          Cap usage
-        </Text>
-        <Skeleton height="h-3" width="w-24" />
-        <Skeleton height="h-3" width="w-32" />
+        <TextSkeleton type="meta" width="w-12" />
+        <TextSkeleton type="body-strong" width="w-24" />
+        <TextSkeleton type="meta" width="w-40" />
+        <TextSkeleton type="meta" width="w-32" />
+        <TextSkeleton type="meta" width="w-28" />
       </Stack>
     </Stack>
   );
@@ -165,9 +155,9 @@ function WeekSkeleton(props: { readonly format: string | undefined }): JSX.Eleme
   return (
     <Stack gap="md">
       <Stack gap="2xs">
-        <Skeleton height="h-5" width="w-48" />
-        <Skeleton height="h-5" width="w-24" />
-        <Skeleton height="h-3" width="w-36" />
+        <TextSkeleton type="body-strong" width="w-24" />
+        <TextSkeleton type="meta" width="w-48" />
+        <TextSkeleton type="meta" width="w-36" />
       </Stack>
       <TableSkeleton
         columns={
@@ -185,7 +175,7 @@ function WeekSkeleton(props: { readonly format: string | undefined }): JSX.Eleme
               ]
         }
         label={rotisserie() ? "My categories" : "Matchup categories"}
-        rows={3}
+        rows={10}
       />
     </Stack>
   );

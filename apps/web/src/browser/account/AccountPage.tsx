@@ -105,7 +105,7 @@ function AccountContent(props: AccountPageProps): JSX.Element {
           </Show>
           <Show when={account.exportStatus()}>
             {(status) => (
-              <Text type="meta" tone="faint">
+              <Text type="meta" tone="muted">
                 An export counts for {freshnessWindow(status().freshForMinutes)} after you take it.
               </Text>
             )}
@@ -116,7 +116,7 @@ function AccountContent(props: AccountPageProps): JSX.Element {
           </Text>
           <Show
             fallback={
-              <Text type="meta" tone="faint">
+              <Text type="meta" tone="muted">
                 Checking your export…
               </Text>
             }
@@ -182,7 +182,7 @@ function ExportDetails(props: { readonly latest: LatestExport }): JSX.Element {
         <Definition term="Contains" value={contentsLabel(props.latest)} />
       </DefinitionList>
       <Show when={props.latest.areas.length > 0}>
-        <Text type="meta" tone="faint">
+        <Text type="meta" tone="muted">
           {areasLabel(props.latest.areas)}
         </Text>
       </Show>

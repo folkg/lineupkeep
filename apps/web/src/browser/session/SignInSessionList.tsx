@@ -91,7 +91,7 @@ export function SignInSessionList(props: SignInSessionListProps): JSX.Element {
           </Show>
         </Show>
       </Show>
-      <Text type="meta" tone="faint">
+      <Text type="meta" tone="muted">
         Sessions renew as they are used. Each time shown can lag by up to five minutes.
       </Text>
       <ActionFeedback feedback={props.feedback()} />
@@ -130,7 +130,7 @@ function SessionRow(props: SessionRowProps): JSX.Element {
           </Button>
         </Show>
       </Inline>
-      <Text type="meta" tone="faint">
+      <Text type="meta" tone="muted">
         Started{" "}
         <Time datetime={props.session.startedAt}>{formatReaderTime(props.session.startedAt)}</Time>{" "}
         · Last used{" "}

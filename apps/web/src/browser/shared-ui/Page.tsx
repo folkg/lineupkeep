@@ -25,7 +25,7 @@ export function Page(props: PageProps): JSX.Element {
           )}
         </Show>
         <Show when={props.kicker}>
-          {(kicker) => <div class={`${typeClass.label} uppercase text-action`}>{kicker()}</div>}
+          {(kicker) => <div class={`${typeClass.meta} text-ink-muted`}>{kicker()}</div>}
         </Show>
         <Show when={props.lede}>
           {(lede) => (

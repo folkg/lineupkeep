@@ -287,9 +287,10 @@ The work scale:
 - **Body** — 15px, weight 400, line height 1.55. Prose, rows, links, field values.
 - **Body strong** — 15px, weight 600, line height 1.45. Move titles, connection-row titles, and
   emphasized prose.
-- **Meta** — 12px, weight 400, line height 1.5. League context, timestamps, helper copy, feedback.
-- **Label** — 11px, weight 600, line height 1.2, `0.16em` tracking. Masthead, nav, control labels,
-  field labels, status words, section counts. Use caps when the label is a control or status.
+- **Meta** — 12px, weight 400, line height 1.5. League context, timestamps, helper copy, feedback,
+  field labels, and control labels. These labels are sentence case, never caps.
+- **Label** — 11px, weight 600, line height 1.2, `0.16em` tracking. Nav items, table headers, and
+  the masthead wordmark. These are the only places caps still carry a job.
 - **Badge** — 11px, weight 600, line height 1, `0.16em` tracking. The status word in a badge.
 
 Tracking belongs to display type and labels. Body and meta use normal tracking; display, page
@@ -313,7 +314,8 @@ else.
 ## Layout
 
 **Page headers.** The page title starts at the same top edge on every route. A route kicker,
-when present, sits directly under the title; it never pushes the title down.
+when present, sits directly under the title in the meta type; it never pushes the title down and
+never adds a second accent colour.
 
 **Actions.** One `ActionBar` owns the order. On wide screens the destructive action is separated
 at the left, and tertiary, secondary, then primary actions sit together at the right. On phones
@@ -357,8 +359,15 @@ rule-led sections, not one card: season facts sit in a narrow side rail and the 
 its category table take the main column. The week line leads with the week and keeps its regular
 and playoff notes on their own lines. On phones the season facts come first. The provider
 jump-out sits beside the title here and beside the name on the list. Nothing floats to the right
-of the metadata line. Head-to-head category tables end with one wins row aligned under You and
-Them; ties are not named. Rotisserie tables end with total points.
+of the metadata line. Head-to-head category tables end on their last category; a running win
+total is not shown because nothing has been won while the week is live. Rotisserie tables end
+with total points.
+
+**Current matchup.** The result leads. A head-to-head categories block starts with the
+category record; a points block starts with the score, always at least two decimal places.
+Projected points sit directly under the result in the meta type, followed by the opponent and
+the remaining games. No other line in the block is bold. The week copy uses the same words on the
+card and the detail page: `Week 9 of 23 regular`, `14 regular weeks left`, `3 playoff weeks`.
 
 **Team cards.** The team list puts each team in its own card, sorted by sport then name; the
 sport is already in the card's meta line, so there are no league headings or counts. A card has
@@ -367,8 +376,8 @@ name-title type.
 the meta and status lines use the meta type.
 
 **Card badges.** `Card` takes a `badge` element, normally a `Badge`. The caller supplies the
-meaning; `Card` owns the fixed top-right placement. A team list passes the league format, and a
-transaction card passes its status. `Nov 1, 11:44 AM to 1:12 PM`. When the group is a
+meaning; `Card` owns the fixed top-right placement. A team list passes the short scoring label
+(`Categories`, `Points`, or `Rotisserie`), and a transaction card passes its status. `Nov 1, 11:44 AM to 1:12 PM`. When the group is a
 single instant, say `at Nov 1, 11:44 AM`; when it crosses the reader's midnight, show both full
 dates.
 
@@ -440,8 +449,9 @@ and note save are decided there and are not retimed by a motion pass.
   One per view.
 - **Secondary:** 2px `rule-strong` border, ink text, 44px, square.
 - **Quiet:** 11px caps ink-soft text, no border; used for sign-out and other low-stakes controls.
-- **Link:** 15px action violet with a 2px underline, used for navigation and recovery. Quiet links
-  use ink-soft, not violet.
+- **Link:** action violet with a 2px underline, used for navigation and recovery. An inline
+  recovery action such as `Reconnect` stays a link at the surrounding meta size; it never becomes
+  a bordered button inside a sentence. Quiet links use ink-soft, not violet.
 - **Pause:** an icon control in the 28px square frame inside a 44px hit area, beside the team's
   checks toggle. It shows Pause or Play so the control keeps its place; its accessible name
   remains the full pause or resume sentence.
@@ -456,8 +466,8 @@ ring with 2px separation; it is visible on every ground and does not rely on col
 
 ### Fields
 
-Labels use the label type. Inputs are 44px, 15px body, square, with a 2px `rule-strong` border and
-`paper` ground. Descriptions and errors are 12px; errors are danger and sit beside the field.
+Labels use the meta type in sentence case. Inputs are 44px, 15px body, square, with a 2px
+`rule-strong` border and `paper` ground. Descriptions and errors are 12px; errors are danger and sit beside the field.
 Placeholders are not labels. The caret and selection use action tokens.
 
 ### Toggle
@@ -466,7 +476,7 @@ A 40×22 track with a 2px ink edge, 3px padding, and a 16px square knob. The edg
 inside the track so the outer size never changes. On fills the track with `action` and draws
 the knob in `on-action`; off fills the track with `paper` and draws the knob in `ink`.
 The track carries a 44px hit area. In a list of teams the label is hidden and the card's name
-identifies the toggle; on a single team the `LINEUP CHECKS` label is visible. The pause control
+identifies the toggle; on a single team the `Lineup checks` label is visible. The pause control
 always sits beside the toggle; when checks are off it is disabled with an explanatory title rather
 than removed.
 
@@ -485,8 +495,12 @@ repeats a control label on every row.
 Notices are a 2px leading rule with caps title and 12px detail. Empty states are a top rule with a
 15px title and soft text. Loading uses the same card frame at its settled size: known team names and
 league context stay in the header, while the badge, body, and footer reserve their space as quiet
-rule-coloured shapes. The live status region stays in the accessibility tree when empty (visually
-hidden) and becomes visible when a message arrives.
+rule-coloured shapes. A text skeleton takes the type it stands in for, so its line box and every
+following section stay at the settled height; the bar is 0.62em tall inside that line box. Use a
+named `TextSkeleton` type rather than a pixel height. Table skeletons take the header, column
+widths, and a row count that matches the real table, so the table frame does not resize when the
+rows arrive. The live status region stays in the accessibility tree when empty (visually hidden)
+and becomes visible when a message arrives.
 
 ### Browser and dialogs
 

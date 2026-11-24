@@ -147,14 +147,9 @@ function SummaryKicker(props: SectionProps): JSX.Element {
       cardMembers,
     ).length;
   return (
-    <Inline gap="sm">
-      <Text as="span" numeric type="label">
-        {openMoveCount(props.page.counts().open)}
-      </Text>
-      <Text as="span" numeric type="label">
-        {`· ${String(todayMoves())} today · ${String(props.page.counts().saved)} later`}
-      </Text>
-    </Inline>
+    <Text as="span" type="meta" tone="muted">
+      {`${openMoveCount(props.page.counts().open)} · ${String(todayMoves())} today · ${String(props.page.counts().saved)} later`}
+    </Text>
   );
 }
 
@@ -229,14 +224,14 @@ function DaySection(props: DaySectionProps): JSX.Element {
       <SectionTitle
         id={titleId()}
         action={
-          <Text as="span" numeric type="label" tone="faint">
+          <Text as="span" type="meta" tone="muted">
             {countLabel()}
           </Text>
         }
         aside={
           <Show when={aside()}>
             {(held) => (
-              <Text as="span" numeric type="label" tone="muted">
+              <Text as="span" type="meta" tone="muted">
                 {held()}
               </Text>
             )}
@@ -556,7 +551,7 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
           </Text>
           <Show when={props.card.group?.label}>
             {(label) => (
-              <Text as="span" type="meta" tone="faint">
+              <Text as="span" type="meta" tone="muted">
                 {label()}
               </Text>
             )}
@@ -770,7 +765,7 @@ function MoveCheckNote(props: { readonly move: TransactionMoveView }): JSX.Eleme
   return (
     <Show when={note() ?? checked()}>
       {(held) => (
-        <Text type="meta" tone="faint">
+        <Text type="meta" tone="muted">
           {held()}
         </Text>
       )}
@@ -955,7 +950,7 @@ function EarlierRow(props: EarlierRowProps): JSX.Element {
         </Show>
         <Show when={discarded()}>
           {(line) => (
-            <Text type="meta" tone="faint">
+            <Text type="meta" tone="muted">
               {line()}
             </Text>
           )}
@@ -969,7 +964,7 @@ function EarlierRow(props: EarlierRowProps): JSX.Element {
         </Show>
         <Show when={resultTime()}>
           {(line) => (
-            <Text type="meta" tone="faint">
+            <Text type="meta" tone="muted">
               {line()}
             </Text>
           )}

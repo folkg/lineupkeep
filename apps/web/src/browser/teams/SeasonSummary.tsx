@@ -3,7 +3,7 @@ import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 
 import { Inline } from "#browser/shared-ui/Inline.tsx";
-import { Skeleton } from "#browser/shared-ui/Skeleton.tsx";
+import { TextSkeleton } from "#browser/shared-ui/Skeleton.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Table } from "#browser/shared-ui/Table.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
@@ -127,7 +127,7 @@ export function SeasonFacts(props: {
   return (
     <Stack gap="md">
       <Stack gap="2xs">
-        <Text type="label" tone="faint">
+        <Text type="meta" tone="muted">
           Place
         </Text>
         <Show when={place() ?? record()}>
@@ -135,7 +135,7 @@ export function SeasonFacts(props: {
             <Show when={place()}>{(value) => <Text type="body-strong">{value()}</Text>}</Show>
             <Show when={record()}>
               {(value) => (
-                <Text type="body-strong" tone="muted">
+                <Text type="meta" tone="muted">
                   {value()}
                 </Text>
               )}
@@ -145,7 +145,7 @@ export function SeasonFacts(props: {
         <Show when={period()}>
           {(value) => (
             <>
-              <Text type="body">{value().headline}</Text>
+              <Text type="meta">{value().headline}</Text>
               <For each={value().details}>
                 {(line) => (
                   <Text type="meta" tone="muted">
@@ -166,7 +166,7 @@ export function SeasonFacts(props: {
       </Stack>
       <Show when={caps().length > 0 || (props.usage?.length ?? 0) > 0 || props.innings}>
         <Stack gap="2xs">
-          <Text type="label" tone="faint">
+          <Text type="meta" tone="muted">
             Cap usage
           </Text>
           <For each={caps()}>
@@ -277,30 +277,21 @@ export function MatchupSummary(props: {
     const ties = EffectArray.filter(categories, (category) => category.result === "tie").length;
     return `${String(wins)}-${String(losses)}-${String(ties)}`;
   };
-  const categoryWins = (): { readonly wins: number; readonly losses: number } | undefined => {
-    if (format() !== "head_to_head_categories") {
-      return undefined;
-    }
-    const rows = matchupCategories();
-    if (rows.length === 0) {
-      return undefined;
-    }
-    return {
-      wins: EffectArray.filter(rows, (row) => categoryWinner(row, "own")).length,
-      losses: EffectArray.filter(rows, (row) => categoryWinner(row, "opponent")).length,
-    };
-  };
   return (
     <Stack gap="md">
       <Show when={matchup()}>
         <Stack gap="2xs">
-          <Text type="body">{opponentLine()}</Text>
-          <Show when={scoreLine()}>
-            <ScorePair
-              points={matchup()?.points ?? null}
-              opponentPoints={matchup()?.opponentPoints ?? null}
-              type="body-strong"
-            />
+          <Show when={categoryRecordLine()}>
+            {(value) => <Text type="body-strong">{value()}</Text>}
+          </Show>
+          <Show when={categoryRecordLine() === undefined}>
+            <Show when={scoreLine()}>
+              <ScorePair
+                points={matchup()?.points ?? null}
+                opponentPoints={matchup()?.opponentPoints ?? null}
+                type="body-strong"
+              />
+            </Show>
           </Show>
           <Show when={projectedLine()}>
             <ScorePair
@@ -311,9 +302,9 @@ export function MatchupSummary(props: {
               type="meta"
             />
           </Show>
-          <Show when={categoryRecordLine()}>
-            {(value) => <Text type="body-strong">{value()}</Text>}
-          </Show>
+          <Text type="meta" tone="muted">
+            {opponentLine()}
+          </Text>
           <Show when={remainingLine()}>
             {(value) => (
               <Text type="meta" tone="muted">
@@ -363,17 +354,6 @@ export function MatchupSummary(props: {
             { label: "You", align: "end", width: "w-16" },
             { label: "Them", align: "end", width: "w-16" },
           ]}
-          footerCells={
-            categoryWins() === undefined
-              ? undefined
-              : [
-                  <Text type="meta" tone="muted">
-                    Wins
-                  </Text>,
-                  <Text type="body-strong">{String(categoryWins()?.wins)}</Text>,
-                  <Text type="body-strong">{String(categoryWins()?.losses)}</Text>,
-                ]
-          }
           label="Matchup categories"
           rows={EffectArray.map(matchupCategories(), (row) => [
             <Text type="body">{row.name}</Text>,
@@ -399,9 +379,7 @@ export function MatchupSummary(props: {
 function CategoryValue(props: { readonly loading: boolean; readonly value: string }): JSX.Element {
   return (
     <Show fallback={<Text type="body">{props.value}</Text>} when={props.loading}>
-      <Inline gap="2xs" justify="end">
-        <Skeleton height="h-[1.125rem]" width="w-10" />
-      </Inline>
+      <TextSkeleton type="body" width="w-10" />
     </Show>
   );
 }
@@ -414,11 +392,7 @@ function MatchupValue(props: {
 }): JSX.Element {
   return (
     <Show
-      fallback={
-        <Inline gap="2xs" justify="end">
-          <Skeleton height="h-[1.125rem]" width="w-10" />
-        </Inline>
-      }
+      fallback={<TextSkeleton type="body" width="w-10" />}
       when={!props.loading || props.value !== null}
     >
       <Text type={props.winner ? "body-strong" : "body"}>
@@ -448,25 +422,11 @@ export function ScorePair(props: {
   readonly tone?: "muted";
   readonly prefix?: string;
 }): JSX.Element {
+  const prefix = (): string => (props.prefix === undefined ? "" : `${props.prefix} `);
   return (
-    <Inline gap="2xs" align="baseline">
-      <Show when={props.prefix}>
-        {(prefix) => (
-          <Text type={props.type} tone={props.tone}>
-            {prefix()}
-          </Text>
-        )}
-      </Show>
-      <Text type={props.type} tone={props.tone}>
-        {scoreText(props.points)}
-      </Text>
-      <Text type={props.type} tone={props.tone}>
-        to
-      </Text>
-      <Text type={props.type} tone={props.tone}>
-        {scoreText(props.opponentPoints)}
-      </Text>
-    </Inline>
+    <Text type={props.type} tone={props.tone}>
+      {`${prefix()}${scoreText(props.points)} to ${scoreText(props.opponentPoints)}`}
+    </Text>
   );
 }
 
@@ -481,7 +441,7 @@ function FooterLine(props: {
         {props.label}
       </Text>
       <Show fallback={<Text type="body-strong">{props.value}</Text>} when={props.loading === true}>
-        <Skeleton height="h-[1.125rem]" width="w-8" />
+        <TextSkeleton type="body-strong" width="w-8" />
       </Show>
     </Inline>
   );

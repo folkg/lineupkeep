@@ -103,8 +103,9 @@ it("shows every team's moves today and keeps saved moves on per team planning sh
   });
 
   await expect.element(page.getByRole("heading", { name: "Transactions" })).toBeVisible();
-  await expect.element(page.getByText("4 open moves", { exact: true })).toBeVisible();
-  await expect.element(page.getByText("· 2 today · 2 later", { exact: true })).toBeVisible();
+  await expect
+    .element(page.getByText("4 open moves · 2 today · 2 later", { exact: true }))
+    .toBeVisible();
   await expect.element(page.getByRole("heading", { name: "Today" })).toBeVisible();
   await expect.element(page.getByText("2 moves for today", { exact: true })).toBeVisible();
   await expect.element(page.getByText("Drop Riley Chen", { exact: true })).toBeVisible();
@@ -671,7 +672,7 @@ it("shows clear teams when nothing is open", async () => {
     teamCount: 5,
   });
 
-  await expect.element(page.getByText("0 open moves", { exact: true })).toBeVisible();
+  await expect.element(page.getByText(/0 open moves/u).first()).toBeVisible();
   await expect.element(page.getByText("Nothing for today", { exact: true }).first()).toBeVisible();
   await expect.element(page.getByText("Nothing scheduled", { exact: true })).toBeVisible();
   await expect
@@ -1146,7 +1147,7 @@ it("moves a submitted group with a pending waiver into earlier, not today", asyn
     ),
   });
 
-  await expect.element(page.getByText("· 0 today · 0 later", { exact: true })).toBeVisible();
+  await expect.element(page.getByText(/· 0 today · 0 later/u)).toBeVisible();
   await expect.element(page.getByText("Nothing for today", { exact: true }).first()).toBeVisible();
   expect(
     page
@@ -1201,7 +1202,7 @@ it("keeps a submitted claim with the league and shows no hourly run time", async
     ]),
   });
 
-  await expect.element(page.getByText("0 open moves", { exact: true })).toBeVisible();
+  await expect.element(page.getByText(/0 open moves/u).first()).toBeVisible();
   await page.getByRole("button", { name: "Show earlier moves" }).click();
   await expect.element(page.getByRole("img", { name: "With the league" })).toBeVisible();
   await expect

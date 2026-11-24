@@ -31,7 +31,7 @@ export function ConnectionCard(props: ConnectionCardProps): JSX.Element {
         </Text>
         <Show when={props.connection.linkingExpiresAt}>
           {(expiresAt) => (
-            <Text type="meta" tone="faint">
+            <Text type="meta" tone="muted">
               This sign-in request expires{" "}
               <Time datetime={expiresAt()}>{formatReaderTime(expiresAt())}</Time>.
             </Text>

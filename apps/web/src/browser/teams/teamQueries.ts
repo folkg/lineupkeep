@@ -11,11 +11,13 @@ export const teamQueries = {
     queryOptions({
       queryKey: ["teams", "list"] as const,
       queryFn: ({ signal }) => remote.list({ signal }),
+      gcTime: 24 * 60 * 60 * 1_000,
     }),
   cards: (remote: Pick<TeamRemote, "cards">) =>
     queryOptions({
       queryKey: ["teams", "card-facts"] as const,
       queryFn: ({ signal }) => remote.cards({ signal }),
+      gcTime: 24 * 60 * 60 * 1_000,
       throwOnError: false,
     }),
   runKey: (run: string) => ["runs", "detail", run] as const,

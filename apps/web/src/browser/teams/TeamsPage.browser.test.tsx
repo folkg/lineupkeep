@@ -186,7 +186,7 @@ it("shows the standing and format without a key-value table", async () => {
   using _app = setupTeamsPage([baseTeam], { cards: () => Promise.resolve([seasonCard]) });
   await expect.element(page.getByText("3rd of 12")).toBeVisible();
   await expect.element(page.getByText("7-3-0 (.700)")).toBeVisible();
-  await expect.element(page.getByText("Head to head categories")).toBeVisible();
+  await expect.element(page.getByText("Categories")).toBeVisible();
   const card = page.getByRole("listitem").first().element();
   expect(card.textContent).not.toContain("1,234.5");
   expect(card.textContent).not.toContain("1,200");
@@ -251,13 +251,11 @@ it("gives head-to-head point scores two decimal places", async () => {
         },
       ]),
   });
-  await expect.element(page.getByText("0.00").first()).toBeVisible();
-  expect(page.getByText("0.00").elements()).toHaveLength(2);
-  await expect.element(page.getByText("Projected")).toBeVisible();
-  await expect.element(page.getByText("63.50")).toBeVisible();
-  await expect.element(page.getByText("55.00")).toBeVisible();
+  await expect.element(page.getByText("0.00 to 0.00")).toBeVisible();
+  expect(page.getByText("0.00 to 0.00").elements()).toHaveLength(1);
+  await expect.element(page.getByText("Projected 63.50 to 55.00")).toBeVisible();
   const matchup = page.getByText("Week 9 vs Beta").element();
-  const score = page.getByText("0.00").first().element();
+  const score = page.getByText("0.00 to 0.00").element();
   expect(getComputedStyle(score).fontVariantNumeric).not.toBe("tabular-nums");
   expect(Number(getComputedStyle(matchup).fontWeight)).toBeLessThan(
     Number(getComputedStyle(score).fontWeight),
@@ -295,7 +293,7 @@ it("shows missing facts without a made-up record, label, cap or weekly lock", as
   expect(page.getByText("Season ends 2027-01-04").elements()).toHaveLength(0);
   expect(page.getByText("Weekly", { exact: true }).elements()).toHaveLength(0);
   expect(page.getByText("Games cap").elements()).toHaveLength(0);
-  expect(page.getByText("Head to head categories").elements()).toHaveLength(0);
+  expect(page.getByText("Categories").elements()).toHaveLength(0);
 });
 
 it("shows provider labels for unknown formats, and preserves local controls when facts fail", async () => {
@@ -389,8 +387,8 @@ it.each(["head_to_head_categories", "head_to_head_points", "points", "unknown"] 
 );
 
 it.each([
-  { format: "head_to_head_categories", label: "Head to head categories" },
-  { format: "head_to_head_points", label: "Head to head points" },
+  { format: "head_to_head_categories", label: "Categories" },
+  { format: "head_to_head_points", label: "Points" },
   { format: "rotisserie", label: "Rotisserie" },
   { format: "points", label: "Points" },
   { format: "unknown", label: undefined },
@@ -517,9 +515,10 @@ it("keeps local status in place while season facts arrive", async () => {
   pending.resolve([seasonCardWithMatchup]);
   await expect.element(page.getByText("3rd of 12")).toBeVisible();
   await document.fonts.ready;
-  expect(Math.abs((card?.getBoundingClientRect().height ?? 0) - (height ?? 0))).toBeLessThanOrEqual(
-    40,
-  );
+  expect(
+    Math.abs((card?.getBoundingClientRect().height ?? 0) - (height ?? 0)),
+    `${String(height)} -> ${String(card?.getBoundingClientRect().height)}`,
+  ).toBeLessThanOrEqual(25);
 });
 
 it("keeps the loading card close to settled at desktop width", async () => {
@@ -537,10 +536,11 @@ it("keeps the loading card close to settled at desktop width", async () => {
     element: card ?? undefined,
   });
   pending.resolve([seasonCardWithMatchup]);
-  await expect.element(page.getByText("Head to head categories")).toBeVisible();
-  expect(Math.abs((card?.getBoundingClientRect().height ?? 0) - loadingHeight)).toBeLessThanOrEqual(
-    40,
-  );
+  await expect.element(page.getByText("Categories")).toBeVisible();
+  expect(
+    Math.abs((card?.getBoundingClientRect().height ?? 0) - loadingHeight),
+    `${String(loadingHeight)} -> ${String(card?.getBoundingClientRect().height)}`,
+  ).toBeLessThanOrEqual(25);
 });
 
 it("explains when a ready connection has no card facts for a local team", async () => {
@@ -571,7 +571,7 @@ it("keeps season facts and controls in a phone viewport", async () => {
 
 it("keeps the first card controls in the first phone screen and captures both themes", async () => {
   using _app = setupTeamsPage([baseTeam], { cards: () => Promise.resolve([seasonCard]) });
-  await expect.element(page.getByText("Head to head categories")).toBeVisible();
+  await expect.element(page.getByText("Categories")).toBeVisible();
   await document.fonts.ready;
   for (const [width, height] of [
     [1440, 900],
@@ -987,9 +987,9 @@ it("shows a reconnect action without flattening it into disabled", async () => {
     },
   ]);
 
-  await expect.element(page.getByRole("link", { name: "Reconnect Yahoo" })).toBeVisible();
+  await expect.element(page.getByRole("link", { name: "Reconnect" })).toBeVisible();
   await expect
-    .element(page.getByText("Yahoo needs a new sign-in before lineup checks can run."))
+    .element(page.getByText(/needs a new sign-in before lineup checks can run/u))
     .toBeVisible();
   await expect
     .element(page.getByRole("switch", { name: "Lineup checks for Alpha" }))
@@ -1010,7 +1010,7 @@ it("keeps quiet rows to league context and the last check", async () => {
   await expect.element(page.getByText("Available")).not.toBeInTheDocument();
   await expect.element(page.getByText("Connected")).not.toBeInTheDocument();
   await expect.element(page.getByText("Lineup checks on")).not.toBeInTheDocument();
-  await expect.element(page.getByText("Reconnect Yahoo")).not.toBeInTheDocument();
+  await expect.element(page.getByText("Reconnect")).not.toBeInTheDocument();
   await expect.element(page.getByRole("link", { name: /^Open /u })).not.toBeInTheDocument();
 });
 
@@ -1033,7 +1033,7 @@ it("frames a team card with the shared card structure", async () => {
   for (const part of ["header", "meta", "body", "footer"]) {
     expect(card.querySelector(`[data-card-${part}]`), `the ${part} slot`).not.toBeNull();
   }
-  expect(card.querySelector("[data-card-badge]")).toBeNull();
+  expect(card.querySelector("[data-card-badge]")).not.toBeNull();
 });
 
 it("shows the fantasy league name and a provider jump out for the team", async () => {

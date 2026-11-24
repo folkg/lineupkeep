@@ -20,8 +20,8 @@ export function TeamNote(props: { readonly note: TeamNoteController }): JSX.Elem
       </Text>
       <Form gap="md" onSubmit={props.note.submit}>
         <TextArea
+          ariaLabel="Note for this team"
           error={props.note.error()}
-          label="Note for this team"
           onInput={(event) => props.note.edit(event.currentTarget.value)}
           rows={5}
           value={props.note.draft()}
@@ -30,7 +30,7 @@ export function TeamNote(props: { readonly note: TeamNoteController }): JSX.Elem
           <Button confirmed state={props.note.saveState()} type="submit">
             Save note
           </Button>
-          <Text type="meta" tone="faint">
+          <Text type="meta" tone="muted">
             {props.note.count()} of {props.note.limit()} characters
           </Text>
         </Inline>

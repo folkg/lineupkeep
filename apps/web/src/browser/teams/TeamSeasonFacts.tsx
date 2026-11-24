@@ -4,7 +4,7 @@ import { Show } from "solid-js";
 
 import { CardNote } from "#browser/shared-ui/Card.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
-import { Skeleton } from "#browser/shared-ui/Skeleton.tsx";
+import { TextSkeleton } from "#browser/shared-ui/Skeleton.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import type { TeamCardView } from "#contracts/connections/teamContract.ts";
@@ -68,24 +68,17 @@ function CardSeasonFactsSkeleton(): JSX.Element {
   return (
     <Stack gap="sm">
       <Stack gap="2xs">
-        <Text type="label" tone="faint">
-          Season
-        </Text>
-        <Inline gap="sm" align="baseline">
-          <Skeleton height="h-5" width="w-16" />
-          <Skeleton height="h-5" width="w-24" />
-        </Inline>
-        <Skeleton height="h-3" width="w-24" />
-        <Skeleton height="h-3" width="w-40" />
+        <TextSkeleton type="meta" width="w-16" />
+        <TextSkeleton type="body-strong" width="w-24" />
+        <TextSkeleton type="meta" width="w-40" />
       </Stack>
       <CardNote>
         <Stack gap="2xs">
-          <Text type="label" tone="faint">
-            Current matchup
-          </Text>
-          <Skeleton height="h-5" width="w-48" />
-          <Skeleton height="h-5" width="w-24" />
-          <Skeleton height="h-3" width="w-36" />
+          <TextSkeleton type="meta" width="w-32" />
+          <TextSkeleton type="body-strong" width="w-28" />
+          <TextSkeleton type="meta" width="w-36" />
+          <TextSkeleton type="meta" width="w-48" />
+          <TextSkeleton type="meta" width="w-32" />
         </Stack>
       </CardNote>
     </Stack>
@@ -186,7 +179,7 @@ function CardSeasonFacts(props: { readonly data: SeasonSummaryData }): JSX.Eleme
   return (
     <Stack gap="sm">
       <Stack gap="2xs">
-        <Text type="label" tone="faint">
+        <Text type="meta" tone="muted">
           Season
         </Text>
         <Show when={place() ?? record()}>
@@ -213,16 +206,20 @@ function CardSeasonFacts(props: { readonly data: SeasonSummaryData }): JSX.Eleme
       <Show when={matchup()}>
         <CardNote>
           <Stack gap="2xs">
-            <Text type="label" tone="faint">
+            <Text type="meta" tone="muted">
               Current matchup
             </Text>
-            <Text type="body">{matchupLine()}</Text>
-            <Show when={scoreLine()}>
-              <ScorePair
-                points={matchup()?.points ?? null}
-                opponentPoints={matchup()?.opponentPoints ?? null}
-                type="body-strong"
-              />
+            <Show when={categoryRecord()}>
+              {(value) => <Text type="body-strong">{value()}</Text>}
+            </Show>
+            <Show when={categoryRecord() === undefined}>
+              <Show when={scoreLine()}>
+                <ScorePair
+                  points={matchup()?.points ?? null}
+                  opponentPoints={matchup()?.opponentPoints ?? null}
+                  type="body-strong"
+                />
+              </Show>
             </Show>
             <Show when={projectedLine()}>
               <ScorePair
@@ -233,9 +230,9 @@ function CardSeasonFacts(props: { readonly data: SeasonSummaryData }): JSX.Eleme
                 type="meta"
               />
             </Show>
-            <Show when={categoryRecord()}>
-              {(value) => <Text type="body-strong">{value()}</Text>}
-            </Show>
+            <Text type="meta" tone="muted">
+              {matchupLine()}
+            </Text>
             <Show when={remainingLine()}>
               {(value) => (
                 <Text type="meta" tone="muted">

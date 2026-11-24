@@ -10,7 +10,7 @@ export function Badge(props: BadgeProps): JSX.Element {
       class={cx(
         "inline-flex items-center border-2 border-rule-strong bg-paper px-2 py-1 uppercase",
         typeClass.badge,
-        props.tone === "accent" ? "text-action" : "text-ink-faint",
+        props.tone === "accent" ? "text-action" : "text-ink-soft",
       )}
     >
       {props.children}

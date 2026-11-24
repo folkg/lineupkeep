@@ -44,7 +44,7 @@ export function ConsentPage(props: {
                 )}
               </Show>
               <Stack gap="sm">
-                <Text type="label" tone="faint">
+                <Text type="label" tone="muted">
                   Client identifier
                 </Text>
                 <Text type="body" wrap="words">

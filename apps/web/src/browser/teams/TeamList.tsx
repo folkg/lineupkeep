@@ -17,7 +17,7 @@ import { RuleList } from "#browser/shared-ui/RuleList.tsx";
 import { SeasonArea } from "#browser/shared-ui/SeasonArea.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { createSettle } from "#browser/shared-ui/settle.ts";
-import { CardSkeletonList } from "#browser/shared-ui/Skeleton.tsx";
+import { CardSkeletonList, Skeleton } from "#browser/shared-ui/Skeleton.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
@@ -29,7 +29,7 @@ import type {
 } from "#contracts/connections/teamContract.ts";
 import { sportDisplayName } from "#contracts/connections/teamVocabulary.ts";
 
-import { formatLabel, scoringLabel } from "./seasonLabels";
+import { cardFormatLabel, scoringLabel } from "./seasonLabels";
 import { TeamAttention } from "./TeamAttention";
 import { TeamControls } from "./TeamControls";
 import { lastCheckStatus, showsProvider, teamContextLabel } from "./teamLabels";
@@ -136,12 +136,21 @@ function TeamCard(props: TeamCardProps): JSX.Element {
   const format = (): string | undefined =>
     props.facts?.season === undefined
       ? undefined
-      : (formatLabel(props.facts.season.format) ?? scoringLabel(props.facts.season.scoringLabel));
+      : (cardFormatLabel(props.facts.season.format) ??
+        scoringLabel(props.facts.season.scoringLabel));
 
   return (
     <Card
       as="li"
-      badge={format() === undefined ? undefined : <Badge tone="neutral">{format()}</Badge>}
+      badge={
+        format() === undefined ? (
+          <Show when={props.factsLoading}>
+            <Skeleton height="h-6" width="w-20" />
+          </Show>
+        ) : (
+          <Badge tone="neutral">{format()}</Badge>
+        )
+      }
       footer={
         <TeamControls
           compact
@@ -156,7 +165,7 @@ function TeamCard(props: TeamCardProps): JSX.Element {
           <TextLink
             id={nameId()}
             params={{ teamId: props.team.team.id }}
-            preload="intent"
+            preload="viewport"
             type="card-title"
             to="/teams/$teamId"
           >
@@ -203,7 +212,7 @@ function CheckSummary(props: {
   return (
     <Inline gap="lg" justify="between" align="start">
       <Stack gap="2xs">
-        <Text type="label" tone="faint">
+        <Text type="meta" tone="muted">
           Next check
         </Text>
         <Text type="body-strong">{next().value}</Text>
@@ -216,7 +225,7 @@ function CheckSummary(props: {
         </Show>
       </Stack>
       <Stack gap="2xs">
-        <Text type="label" tone="faint">
+        <Text type="meta" tone="muted">
           Last check
         </Text>
         <Show fallback={<Text type="body-strong">No checks yet</Text>} when={last()}>

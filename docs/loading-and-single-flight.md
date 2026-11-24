@@ -14,6 +14,10 @@ Less important sections can load separately, with their own loading indicators. 
 
 Team reads share one key per collection, so the list and team detail reuse the same list, card, and overview data instead of fetching it twice. The browser keeps settled team reads in local storage for a day. A later client navigation restores that cache before the network answers. Only a value that is still missing gets a skeleton in the shape it will occupy. A failed card read stays a value-level message; it never replaces the team controls.
 
+Skeletons follow the type they stand in for. `TextSkeleton` takes a named text type and draws its bar inside that type's line box; a pixel height is not a substitute. Tables reserve their header, column widths, and row count, so the frame does not resize when rows arrive.
+
+The session query is kept for the life of the tab, and team list and card queries for a day, so returning to Teams or opening one team does not start a cold auth or list read. A team card link preloads its route when it enters the viewport; a tap does not wait for a route chunk.
+
 ## Saving a change
 
 “Single-flight” means saving a change and receiving refreshed page data in one browser request:

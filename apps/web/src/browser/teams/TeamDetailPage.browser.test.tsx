@@ -77,6 +77,43 @@ const overviewFixture: TeamOverviewView = {
     innings: { pitched: 10.1, projected: 1300.5 },
   },
 };
+const tenCategoryOverview: TeamOverviewView = {
+  ...overviewFixture,
+  gamesUsage: undefined,
+  seasonProgress: {
+    currentPeriod: 11,
+    lastPeriod: 18,
+    usesPlayoffs: true,
+    playoffStartWeek: 15,
+    endDate: "2027-04-10",
+  },
+  league: {
+    teamCount: 12,
+    scoringType: "head",
+    scoringLabel: "Head to head, categories",
+    weeklyDeadline: "weekly",
+    endDate: "2027-04-10",
+    gamesCaps: {},
+  },
+  matchup: {
+    week: 11,
+    opponent: "Beta",
+    points: 0,
+    opponentPoints: 42,
+    projectedPoints: 63.5,
+    opponentProjectedPoints: 55,
+    remainingGames: 0,
+    opponentRemainingGames: 2,
+    statusLabel: "Live",
+    categories: Array.from({ length: 10 }, (_, index) => ({
+      name: `Category ${String(index + 1)}`,
+      scoring: undefined,
+      own: index,
+      opponent: index + 1,
+    })),
+  },
+};
+
 const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1_000).toISOString();
 const cardFixture: TeamCardView = {
   summary: {
@@ -733,8 +770,6 @@ it("shows season facts, both matchup sides, category detail, and cap usage", asy
   expect(
     EffectArray.map([...matchupTable.querySelectorAll("th")], (cell) => cell.textContent),
   ).toEqual(["Category", "You", "Them"]);
-  const footerCells = matchupTable.querySelectorAll<HTMLTableCellElement>("tfoot td");
-  expect(EffectArray.map([...footerCells], (cell) => cell.textContent)).toEqual(["Wins", "0", "1"]);
   const matchupCells = matchupTable.querySelectorAll<HTMLTableCellElement>("tbody td");
   const ownValue = matchupCells[1]?.querySelector("p");
   const theirValue = matchupCells[2]?.querySelector("p");
@@ -791,12 +826,9 @@ it("gives head-to-head point scores two decimal places", async () => {
       }),
   });
 
-  await expect.element(page.getByText("0.00").first()).toBeVisible();
-  expect(page.getByText("0.00").elements()).toHaveLength(2);
-  await expect.element(page.getByText("Projected")).toBeVisible();
-  await expect.element(page.getByText("63.50")).toBeVisible();
-  await expect.element(page.getByText("55.00")).toBeVisible();
-  const score = page.getByText("0.00").first().element();
+  await expect.element(page.getByText("0.00 to 0.00")).toBeVisible();
+  await expect.element(page.getByText("Projected 63.50 to 55.00")).toBeVisible();
+  const score = page.getByText("0.00 to 0.00").element();
   expect(getComputedStyle(score).fontVariantNumeric).not.toBe("tabular-nums");
 });
 
@@ -1191,10 +1223,10 @@ it.each([
     element: host,
   });
   applyTheme("light");
-  setFacts(overviewFixture);
+  setFacts(tenCategoryOverview);
   await expect.element(page.getByText("Head to head categories")).toBeVisible();
   const after = activity.getBoundingClientRect().top;
-  expect(Math.abs(after - before), `${String(before)} -> ${String(after)}`).toBeLessThanOrEqual(40);
+  expect(Math.abs(after - before), `${String(before)} -> ${String(after)}`).toBeLessThanOrEqual(10);
 });
 
 it("captures the team overview at desktop and phone sizes in light and dark", async () => {

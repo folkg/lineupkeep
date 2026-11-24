@@ -8,7 +8,7 @@ export function IntroPanel(props: IntroPanelProps): JSX.Element {
         {props.title}
         {props.children}
       </div>
-      <p class="text-meta text-ink-faint">{props.cue}</p>
+      <p class="text-meta text-ink-soft">{props.cue}</p>
     </div>
   );
 }

@@ -66,7 +66,7 @@ export function FeedbackReportList(props: FeedbackReportListProps): JSX.Element 
           </Show>
         </Show>
       </Show>
-      <Text type="meta" tone="faint">
+      <Text type="meta" tone="muted">
         Reports stay listed while they are open. Closed reports are removed 180 days after they
         close.
       </Text>
@@ -91,17 +91,17 @@ function ReportRow(props: { readonly report: FeedbackReportView }): JSX.Element 
         {feedbackStatusDetail(props.report)}
       </Text>
       <Inline gap="sm">
-        <Text as="span" numeric type="meta" tone="faint">
+        <Text as="span" numeric type="meta" tone="muted">
           Reported {formatFeedbackDate(props.report.createdAt)}
         </Text>
         <Show when={about()}>
           {(summary) => (
-            <Text as="span" type="meta" tone="faint">
+            <Text as="span" type="meta" tone="muted">
               {summary()}
             </Text>
           )}
         </Show>
-        <Text as="span" type="meta" tone="faint">
+        <Text as="span" type="meta" tone="muted">
           From {props.report.submitter === "agent" ? "an agent" : "this account"}
         </Text>
       </Inline>

@@ -38,7 +38,7 @@ export function Definition(props: {
       )}
     >
       <dt>
-        <Text type="meta" tone="faint">
+        <Text type="meta" tone="muted">
           {props.term}
         </Text>
       </dt>

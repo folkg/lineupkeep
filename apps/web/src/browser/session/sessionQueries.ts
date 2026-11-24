@@ -12,5 +12,6 @@ export const sessionQueries = {
       queryFn: (): Promise<SessionView> => remote.load(),
 
       staleTime: Number.POSITIVE_INFINITY,
+      gcTime: Number.POSITIVE_INFINITY,
     }),
 };
