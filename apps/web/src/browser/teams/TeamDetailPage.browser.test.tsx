@@ -716,6 +716,10 @@ it("shows rotisserie categories with the stat, place, and points", async () => {
     "4",
   ]);
   await expect.element(page.getByText("70.5 points", { exact: true })).toBeVisible();
+
+  await page.viewport(390, 844);
+  const scroller = table.element().parentElement;
+  expect(scroller?.scrollWidth).toBeLessThanOrEqual(scroller?.clientWidth ?? 0);
 });
 
 it("reads the detail overview without requesting team card facts", async () => {

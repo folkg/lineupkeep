@@ -9,7 +9,7 @@ export function Table(props: TableProps): JSX.Element {
     <div class="w-full overflow-x-auto">
       <table
         aria-label={props.label}
-        class="w-full min-w-[22rem] border-collapse border border-rule text-left sm:min-w-[26rem]"
+        class="w-full min-w-[18rem] border-collapse border border-rule text-left sm:min-w-[26rem]"
       >
         <thead>
           <tr class="border-b border-rule">
