@@ -271,7 +271,7 @@ test("opens the timeline on the first visit from the primary navigation", async 
 
   await page.goto("/teams");
   await page.getByRole("link", { name: "Embedded Browser Team", exact: true }).click();
-  await expect(page.getByRole("link", { name: "Back to teams" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "All teams" })).toBeVisible();
 
   const release = Promise.withResolvers<void>();
   await page.route("**/_serverFn/**", async (route) => {

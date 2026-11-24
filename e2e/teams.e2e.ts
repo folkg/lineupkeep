@@ -48,14 +48,14 @@ test("enables, pauses, resumes, and disables a team through the automation contr
   await row
     .getByRole("button", { name: "Pause lineup checks for the rest of the fantasy day" })
     .click();
-  await expect(
-    row.getByText(/^Paused for the rest of the fantasy day · resumes at /u),
-  ).toBeVisible();
+  await expect(row.getByText("Paused today", { exact: true })).toBeVisible();
+  await expect(row.getByText(/^Resumes at /u)).toBeVisible();
   await expect(row.getByRole("button", { name: "Resume lineup checks" })).toBeVisible();
 
   await row.getByRole("button", { name: "Resume lineup checks" }).click();
-  await expect(row.getByText(/^Paused for the rest of the fantasy day/u)).toHaveCount(0);
-  await expect(row.getByText(/^Next check at /u)).toBeVisible();
+  await expect(row.getByText("Paused today", { exact: true })).toHaveCount(0);
+  await expect(row.getByText(/^Resumes at /u)).toHaveCount(0);
+  await expect(row.getByText("Next check", { exact: true })).toBeVisible();
   await expect(toggle).toHaveAttribute("aria-checked", "true");
 
   await toggle.click();
