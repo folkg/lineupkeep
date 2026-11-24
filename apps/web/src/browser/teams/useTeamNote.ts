@@ -1,6 +1,6 @@
 import { EffectString } from "@lineupkeep/collections";
 import { useMutation } from "@tanstack/solid-query";
-import { createSignal } from "solid-js";
+import { createEffect, createSignal, untrack } from "solid-js";
 import type { Accessor } from "solid-js";
 
 import { useUnsavedChanges } from "#browser/navigation/useUnsavedChanges.ts";
@@ -18,6 +18,16 @@ export function useTeamNote(options: TeamNoteOptions): TeamNoteController {
   const signIn = useSignInRecovery();
   const [draft, setDraft] = createSignal(options.team().team.ownerNote ?? "");
   const [baseline, setBaseline] = createSignal(options.team().team.ownerNote ?? "");
+  createEffect(
+    () => options.team().team.ownerNote,
+    (note) => {
+      if (untrack(dirty)) {
+        return;
+      }
+      setDraft(note ?? "");
+      setBaseline(note ?? "");
+    },
+  );
   const [error, setError] = createSignal<string>();
   const [feedback, setFeedback] = createSignal<ActionFeedbackState>();
   const [saved, setSaved] = createSignal(false);
