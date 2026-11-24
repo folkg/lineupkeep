@@ -13,7 +13,7 @@ if (import.meta.env.DEV) {
 installClientTelemetry(telemetryRemote);
 
 hydrateStart()
-  .then(async (router) => {
+  .then((router) => {
     const options: unknown = Reflect.get(router, "options");
     const context: unknown =
       typeof options === "object" && options !== null ? Reflect.get(options, "context") : undefined;
@@ -24,8 +24,11 @@ hydrateStart()
     if (!(queryClient instanceof QueryClient)) {
       throw new Error("The client router did not provide a query client");
     }
-    await restoreTeamQueries(queryClient);
-    persistTeamQueries(queryClient);
     hydrate(() => <StartClient router={router} />, document);
+    window.setTimeout(() => {
+      void restoreTeamQueries(queryClient).then(() => {
+        persistTeamQueries(queryClient);
+      });
+    }, 250);
   })
   .catch(console.error);
