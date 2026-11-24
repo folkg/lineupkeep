@@ -53,6 +53,7 @@ import {
   yahooDiscoverWithBothLeagues,
   yahooDiscoverWithTwoFootballTeams,
   yahooDiscoverWithHeadpoint,
+  yahooDiscoverWithRotoPoints,
   yahooDiscoverWithUnrequestedGame,
   yahooEmptyRoster,
   yahooNflAggregateFreeAgents,
@@ -276,6 +277,19 @@ it.effect("keeps the provider's head-to-head points label", () => {
     assert.strictEqual(internet.calls.length, 2);
   }).pipe(layerTools.provide(yahooLayer(internet)));
 });
+
+it.effect(
+  "fills a rotisserie card total from scored category points when the total is missing",
+  () => {
+    const internet = recordingInternet(() => jsonResponse(yahooDiscoverWithRotoPoints));
+    return Effect.gen(function* () {
+      const provider = yield* testProvider;
+      const cards = yield* provider.readTeamCards(sessionInput);
+      assert.strictEqual(cards[0]?.format, "rotisserie");
+      assert.strictEqual(cards[0]?.standing?.points, 20);
+    }).pipe(layerTools.provide(yahooLayer(internet)));
+  },
+);
 
 it.effect("rejects discovery when a discovered league publishes malformed settings", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflDiscoverWithMalformedSettings));

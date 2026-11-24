@@ -52,6 +52,7 @@ import type {
   ProviderRosterPlayer,
   ProviderRosterPosition,
   ProviderSchedulePeriod,
+  ProviderStanding,
   ProviderSchedulePlayer,
   ProviderTeam,
   ProviderTeamCard,
@@ -269,11 +270,27 @@ export const yahooProvider = Effect.gen(function* () {
     return EffectArray.flatMap(leagues, (league) =>
       EffectArray.map(league.teams, (team): ProviderTeamCard => {
         const providerUrl = teamProviderUrl(team, league.gameKey);
+        const format =
+          league.scoringType === "point"
+            ? "points"
+            : league.scoringType === "headpoint"
+              ? "head_to_head_points"
+              : leagueFormat(
+                  league.scoringType ?? "",
+                  league.settings.settings.statModifiers.length,
+                );
         const standing =
           team.standings === undefined
             ? undefined
             : providerStandingsOf({ leagueKey: league.leagueKey, teams: [team.standings] })
                 .teams[0];
+        const cardStanding =
+          standing === undefined || format !== "rotisserie" || standing.points !== null
+            ? standing
+            : {
+                ...standing,
+                points: rotisseriePointsOf(standing, league.settings.settings.statCategories),
+              };
         const matchup = teamCardMatchupOf(
           matchupsByLeague.get(league.leagueKey) ?? [],
           team.teamKey,
@@ -290,15 +307,7 @@ export const yahooProvider = Effect.gen(function* () {
           name: team.name,
           leagueName: league.name,
           ...(providerUrl === undefined ? {} : { providerUrl }),
-          format:
-            league.scoringType === "point"
-              ? "points"
-              : league.scoringType === "headpoint"
-                ? "head_to_head_points"
-                : leagueFormat(
-                    league.scoringType ?? "",
-                    league.settings.settings.statModifiers.length,
-                  ),
+          format,
           scoringType: league.scoringType ?? "",
           scoringLabel: league.scoringLabel,
           teamCount: league.teamCount,
@@ -309,7 +318,7 @@ export const yahooProvider = Effect.gen(function* () {
           endWeek: league.endWeek,
           maxGamesPlayed: league.maxGamesPlayed,
           maxInningsPitched: league.maxInningsPitched,
-          standing,
+          standing: cardStanding,
           ...(matchup === undefined ? {} : { matchup }),
         };
       }),
@@ -1938,6 +1947,28 @@ function teamCardMatchupOf(
     opponentRemainingGames: opponent.remainingGames?.remaining,
     categories: rows,
   };
+}
+
+function rotisseriePointsOf(
+  standing: ProviderStanding,
+  categories: ReadonlyArray<{ readonly statId: number; readonly displayOnly: boolean }>,
+): number | null {
+  const scored = EffectArray.filter(categories, (category) => !category.displayOnly);
+  if (scored.length === 0) {
+    return null;
+  }
+  const pointsByStat = new Map(
+    EffectArray.map(standing.categoryPoints, (entry) => [entry.statId, entry.value] as const),
+  );
+  let total = 0;
+  for (const category of scored) {
+    const value = pointsByStat.get(category.statId);
+    if (value === undefined || value === null) {
+      return null;
+    }
+    total += value;
+  }
+  return total;
 }
 
 function providerMatchupsOf(

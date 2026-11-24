@@ -2370,6 +2370,36 @@ export const yahooDiscoverWithTwoFootballTeams = yahooDiscoverPayload([
   },
 ]);
 
+const nhlRotoTeamEntry = [
+  { team_key: "466.l.4003.t.1" },
+  { team_id: "1" },
+  { name: "Synthetic Roto Team" },
+  { is_owned_by_current_login: 1 },
+  { url: "https://hockey.fantasysports.yahoo.com/hockey/4003/1" },
+  [],
+  {
+    team_points: {
+      coverage_type: "season",
+      season: "2026",
+      stats: {
+        "0": { stat: { stat_id: "11", value: "12" } },
+        "1": { stat: { stat_id: "12", value: "8" } },
+        "2": { stat: { stat_id: "31", value: "100" } },
+        count: 3,
+      },
+    },
+  },
+  { team_standings: { rank: "1" } },
+  [],
+];
+
+export const yahooDiscoverWithRotoPoints = yahooDiscoverPayload([
+  {
+    code: "nhl",
+    leagues: [{ settings: yahooNhlRotoLeagueSettings, teams: [nhlRotoTeamEntry] }],
+  },
+]);
+
 export const yahooDiscoverWithHeadpoint = yahooDiscoverPayload([
   {
     code: "nfl",
