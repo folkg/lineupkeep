@@ -258,6 +258,7 @@ it("gives head-to-head point scores two decimal places", async () => {
   await expect.element(page.getByText("55.00")).toBeVisible();
   const matchup = page.getByText("Week 9 vs Beta").element();
   const score = page.getByText("0.00").first().element();
+  expect(getComputedStyle(score).fontVariantNumeric).not.toBe("tabular-nums");
   expect(Number(getComputedStyle(matchup).fontWeight)).toBeLessThan(
     Number(getComputedStyle(score).fontWeight),
   );

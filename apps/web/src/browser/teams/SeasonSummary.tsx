@@ -175,7 +175,7 @@ export function SeasonFacts(props: {
                 <Text type="meta" tone="muted">
                   {row.position} games
                 </Text>
-                <Text numeric type="meta">
+                <Text type="meta">
                   {number(row.played)} played · {number(row.projected)} projected
                 </Text>
               </Inline>
@@ -187,7 +187,7 @@ export function SeasonFacts(props: {
                 <Text type="meta" tone="muted">
                   Innings pitched
                 </Text>
-                <Text numeric type="meta">
+                <Text type="meta">
                   {number(value().pitched)} pitched · {number(value().projected)} projected
                 </Text>
               </Inline>
@@ -372,14 +372,7 @@ export function MatchupSummary(props: {
 
 function CategoryValue(props: { readonly loading: boolean; readonly value: string }): JSX.Element {
   return (
-    <Show
-      fallback={
-        <Text numeric type="body">
-          {props.value}
-        </Text>
-      }
-      when={props.loading}
-    >
+    <Show fallback={<Text type="body">{props.value}</Text>} when={props.loading}>
       <Inline gap="2xs" justify="end">
         <Skeleton height="h-[1.125rem]" width="w-10" />
       </Inline>
@@ -402,7 +395,7 @@ function MatchupValue(props: {
       }
       when={!props.loading || props.value !== null}
     >
-      <Text numeric type={props.winner ? "body-strong" : "body"}>
+      <Text type={props.winner ? "body-strong" : "body"}>
         {props.value === null ? "–" : categoryStat(props.name, props.value)}
       </Text>
     </Show>
@@ -438,13 +431,13 @@ export function ScorePair(props: {
           </Text>
         )}
       </Show>
-      <Text numeric type={props.type} tone={props.tone}>
+      <Text type={props.type} tone={props.tone}>
         {scoreText(props.points)}
       </Text>
       <Text type={props.type} tone={props.tone}>
         to
       </Text>
-      <Text numeric type={props.type} tone={props.tone}>
+      <Text type={props.type} tone={props.tone}>
         {scoreText(props.opponentPoints)}
       </Text>
     </Inline>
@@ -461,14 +454,7 @@ function FooterLine(props: {
       <Text type="meta" tone="muted">
         {props.label}
       </Text>
-      <Show
-        fallback={
-          <Text numeric type="body-strong">
-            {props.value}
-          </Text>
-        }
-        when={props.loading === true}
-      >
+      <Show fallback={<Text type="body-strong">{props.value}</Text>} when={props.loading === true}>
         <Skeleton height="h-[1.125rem]" width="w-8" />
       </Show>
     </Inline>

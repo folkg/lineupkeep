@@ -789,6 +789,8 @@ it("gives head-to-head point scores two decimal places", async () => {
   await expect.element(page.getByText("Projected")).toBeVisible();
   await expect.element(page.getByText("63.50")).toBeVisible();
   await expect.element(page.getByText("55.00")).toBeVisible();
+  const score = page.getByText("0.00").first().element();
+  expect(getComputedStyle(score).fontVariantNumeric).not.toBe("tabular-nums");
 });
 
 it("names the regular season and playoff weeks from the league settings", async () => {

@@ -295,10 +295,10 @@ Tracking belongs to display type and labels. Body and meta use normal tracking; 
 titles, section titles, and card titles use `-0.02em` to `-0.035em`. Never add letter spacing to
 body text.
 
-**Numerals.** Use `font-variant-numeric: tabular-nums` on anything compared to anything else:
-`time`, counts in a row, attempts, ratios, and record tallies. Apply it to the numeric element or
-line, never to prose: in Schibsted Grotesk tabular figures widen punctuation and produce gaps
-before commas and full stops.
+**Numerals.** Use `font-variant-numeric: tabular-nums` for integers compared in a column, such as
+`time`, counts, attempts, and record tallies. Apply it to the numeric element or line, never to
+prose. Decimal figures stay proportional and right-aligned: in Schibsted Grotesk tabular figures
+widen the decimal point and produce gaps inside values such as `0.00` and `2.04`.
 
 **The Wordmark Rule.** The wordmark stays continuous lowercase `lineupgrade` in Schibsted Grotesk at
 the label type's size, weight, and tracking, beside the square mark. Archivo never sets the
