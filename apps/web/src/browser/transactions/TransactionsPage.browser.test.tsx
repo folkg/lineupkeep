@@ -674,7 +674,7 @@ it("shows clear teams when nothing is open", async () => {
   });
 
   await expect.element(page.getByText(/0 open moves/u).first()).toBeVisible();
-  await expect.element(page.getByText("Nothing for today", { exact: true }).first()).toBeVisible();
+  await expect.element(page.getByText("Nothing needs you today", { exact: true })).toBeVisible();
   await expect.element(page.getByText("Nothing scheduled", { exact: true })).toBeVisible();
 });
 
@@ -1142,7 +1142,7 @@ it("moves a submitted group with a pending waiver into earlier, not today", asyn
   });
 
   await expect.element(page.getByText(/· 0 today · 0 later/u)).toBeVisible();
-  await expect.element(page.getByText("Nothing for today", { exact: true }).first()).toBeVisible();
+  expect(page.getByText("Nothing for today", { exact: true }).elements()).toHaveLength(0);
   expect(
     page
       .getByRole("region", { name: "Today" })
@@ -1719,7 +1719,7 @@ it("moves a card with nothing left to do into Earlier without a control", async 
     ),
   });
 
-  await expect.element(page.getByText("Nothing for today", { exact: true }).first()).toBeVisible();
+  expect(page.getByText("Nothing for today", { exact: true }).elements()).toHaveLength(0);
   await page.getByRole("button", { name: "Show earlier moves" }).click();
   await expect.element(page.getByText("Partly ran", { exact: true })).toBeVisible();
   await expect

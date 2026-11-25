@@ -217,20 +217,24 @@ function DaySection(props: DaySectionProps): JSX.Element {
   };
   const aside = (): string | undefined =>
     !props.today || props.day?.day === undefined ? undefined : formatCalendarDate(props.day.day);
-  const countLabel = (): string => {
+  const countLabel = (): string | undefined => {
     if (!props.today) {
-      return moveCount(moves().length);
+      return moves().length === 0 ? undefined : moveCount(moves().length);
     }
-    return moves().length === 0 ? "Nothing for today" : `${moveCount(moves().length)} for today`;
+    return moves().length === 0 ? undefined : `${moveCount(moves().length)} for today`;
   };
   return (
     <Stack as="section" gap="lg" labelledBy={titleId()}>
       <SectionTitle
         id={titleId()}
         action={
-          <Text as="span" type="meta" tone="muted">
-            {countLabel()}
-          </Text>
+          <Show when={countLabel()}>
+            {(label) => (
+              <Text as="span" type="meta" tone="muted">
+                {label()}
+              </Text>
+            )}
+          </Show>
         }
         aside={
           <Show when={aside()}>

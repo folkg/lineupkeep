@@ -121,7 +121,7 @@ test("proposes a move into one team queue and runs it from the transactions page
 
   await expect(page.getByText("Ran 1 move.", { exact: true })).toBeVisible();
   await captureCheckpoint(page, info, "transactions-ran");
-  await expect(page.getByText("Nothing for today", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Nothing needs you today", { exact: true })).toBeVisible();
 
   const earlier = page.getByRole("button", { name: "Show earlier moves" });
   await expect(earlier).toHaveAttribute("aria-expanded", "false");

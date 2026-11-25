@@ -59,7 +59,7 @@ function AccountContent(props: AccountPageProps): JSX.Element {
           <SectionTitle id="appearance-title">Appearance</SectionTitle>
           <Stack gap="sm" measure="control">
             <SelectField
-              description="System follows this device's light or dark setting."
+              description="System follows your device's light or dark setting."
               label="Theme"
               options={themeOptions}
               value={theme.preference()}
