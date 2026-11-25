@@ -2,6 +2,10 @@ import type { AuthenticatedAgent } from "@lineupkeep/backend/auth/Auth";
 import { providerSessionRefusal } from "@lineupkeep/backend/connections/Connection";
 import { FantasyQueries } from "@lineupkeep/backend/connections/FantasyQueries";
 import { TeamId } from "@lineupkeep/backend/connections/FantasyTeam";
+import {
+  ProviderReadCache,
+  makeProviderReadCache,
+} from "@lineupkeep/backend/connections/ProviderReadCache";
 import { fantasyQueryScopes } from "@lineupkeep/backend/connections/QueryScopes";
 import type { PlayerRef } from "@lineupkeep/backend/connections/QueryValues";
 import { TransactionOffers } from "@lineupkeep/backend/connections/TransactionOffers";
@@ -76,6 +80,7 @@ export function snapshotToolHandlers(
       return snapshotTools.of({
         get_team_snapshot: (input) =>
           readSnapshot(agent.userId, input, queries, plans, offers).pipe(
+            Effect.provideService(ProviderReadCache, makeProviderReadCache()),
             Effect.filterOrFail(
               (snapshot) =>
                 !EffectArray.some(

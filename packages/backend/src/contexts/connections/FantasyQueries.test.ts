@@ -5,7 +5,7 @@ import { EffectString } from "@lineupkeep/collections";
 import { optionalStringValue } from "@lineupkeep/collections";
 import { recordHas } from "@lineupkeep/collections";
 import { eq } from "drizzle-orm";
-import { Array, Cause, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
+import { Array, Cause, DateTime, Effect, Layer, Option, Redacted, Ref, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 import { Option as EffectOption } from "effect";
 import { Record as EffectRecord } from "effect";
@@ -58,6 +58,7 @@ import type {
   ProviderTeam,
 } from "./Provider.ts";
 import { ProviderPeriodMismatch, ProviderResponseInvalid } from "./Provider.ts";
+import { ProviderReadCache, makeProviderReadCache } from "./ProviderReadCache.ts";
 import { ProviderRegistry } from "./ProviderRegistry.ts";
 import {
   type PlayerDraft,
@@ -89,6 +90,61 @@ function optionalArrayValue<A extends ReadonlyArray<unknown>, B>(
 function arrayValueIsArray<A>(value: A | ReadonlyArray<A>): value is ReadonlyArray<A> {
   return EffectArray.isArray(value);
 }
+
+it.effect("reuses provider reads across one cached query composition", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const cache = makeProviderReadCache();
+    const summary = (): Effect.Effect<TeamSummaryResult, QueryError> =>
+      queries
+        .getTeamSummary(owner, {
+          team: Array.getUnsafe(seeded, 0).id,
+          groups: ["league", "standings", "matchup", "schedule", "roster"],
+        })
+        .pipe(Effect.provideService(ProviderReadCache, cache));
+
+    const first = yield* summary();
+    assert.strictEqual(first.status, "ok");
+    const countsAfterFirst = yield* Ref.get(fake.state).pipe(
+      Effect.map((current) => current.readCounts),
+    );
+
+    const second = yield* summary();
+    assert.strictEqual(second.status, "ok");
+    const countsAfterSecond = yield* Ref.get(fake.state).pipe(
+      Effect.map((current) => current.readCounts),
+    );
+    assert.deepStrictEqual(countsAfterSecond, countsAfterFirst);
+  }).pipe(layerTools.provide(QueriesTestLayer)),
+);
+
+it.effect("shares league and roster reads across a cached composition", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const cache = makeProviderReadCache();
+    const cached = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+      effect.pipe(Effect.provideService(ProviderReadCache, cache));
+    const teamId = Array.getUnsafe(seeded, 0).id;
+
+    yield* cached(
+      queries.getTeamSummary(owner, {
+        team: teamId,
+        groups: ["league", "standings", "matchup", "roster"],
+      }),
+    );
+    yield* cached(queries.getLeague(owner, { team: teamId }));
+    yield* cached(queries.getRosters(owner, { team: teamId }));
+
+    const leagueReads = yield* fake.readCount("read_league");
+    const rosterReads = yield* fake.readCount("read_roster");
+    assert.strictEqual(leagueReads, 1);
+    assert.strictEqual(rosterReads, 1);
+  }).pipe(layerTools.provide(QueriesTestLayer)),
+);
 
 it.effect("lists owned teams with stable paging and owner-bound continuations", () =>
   Effect.gen(function* () {

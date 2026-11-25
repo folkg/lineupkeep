@@ -27,10 +27,10 @@ upstream requests, not the number of services or query groups a tool uses.
   already one aggregate request each.
 - Player game logs are the one deliberate per-player read. The mobile endpoint
   accepts one player key and publishes no batch form.
-- `get_team_snapshot` composes separate public reads. It can read the same
-  league or roster more than once because each section is independently
-  useful. That is the largest remaining reduction available, but it needs a
-  combined snapshot read rather than a wider Yahoo endpoint.
+- `get_team_snapshot` composes separate public reads. A request-scoped cache
+  now shares the same provider read across its sections and the queued plan.
+  The cache is created for one snapshot call, is scoped to the connection, and
+  does not persist across requests.
 - Time on ice is only available when the league itself scores it as a
   category. See [HIDDEN-FACTS.md](HIDDEN-FACTS.md).
 
@@ -106,11 +106,12 @@ reads. The pool request is not one request per row.
 ### `get_team_snapshot`
 
 The snapshot is deliberately a composition of summary, league, roster,
-transactions, pool, player stats, plan, and offers. Its sections can read the
-same league or roster independently. This does not indicate a missing batch in
-`YahooProvider`; Yahoo has no endpoint for the combined snapshot. A future
-combined snapshot service could share one league read and one roster read
-across sections, but that is a service change, not a wider provider call.
+transactions, pool, player stats, plan, and offers. Its sections ask for the
+same league, roster, standings, draft, matchups, and player weeks. The snapshot
+handler provides a request-scoped `ProviderReadCache`, so the first successful
+or failed read is reused by every later section and by the queued plan. The
+cache is keyed by connection and request shape, never by a session value, and
+it is discarded when that snapshot call ends. There is no cross-request cache.
 
 ## Deliberate exceptions
 
@@ -135,8 +136,12 @@ exists, and it did not pretend a per-day or per-player endpoint was batched.
 - `get_players` now reuses the same-week player-week result for projections
   when the schedule group already read it. This removes one 25-player request
   from the common `schedule` plus `projections` call.
-- Tests pin the 25-player detail read to one request and pin the same-week
-  reuse to one player-week request.
+- `get_team_snapshot` now provides a request-scoped provider read cache. Its
+  summary, league, roster, pool, player-stat, and plan sections share one read
+  per distinct request instead of repeating the same Yahoo call.
+- Tests pin the 25-player detail read to one request, the same-week reuse to
+  one player-week request, and a cached composition to one league read and one
+  roster read.
 
 ## Verification
 
@@ -146,6 +151,15 @@ exists, and it did not pretend a per-day or per-player endpoint was batched.
 - `packages/backend/src/contexts/connections/FantasyQueries.test.ts`,
   "reads one player-week batch when schedule and projections cover the same
   week": asserts one `player_weeks` request.
+- `packages/backend/src/contexts/connections/FantasyQueries.test.ts`,
+  "reuses provider reads across one cached query composition": asserts a
+  repeated composition makes no extra provider reads.
+- `packages/backend/src/contexts/connections/FantasyQueries.test.ts`,
+  "shares league and roster reads across a cached composition": asserts one
+  league read and one roster read across summary, league, and roster queries.
+- `apps/web/src/server/mcp/mcpServer.test.ts`, "composes the team snapshot from
+  the reads in one tool call": asserts the snapshot provides the request-scoped
+  read cache to its query composition.
 - `packages/backend/src/contexts/connections/internal/yahoo/YahooProvider.test.ts`
   contains the existing six-player batched URL and seven-daily-read hockey
   window tests.

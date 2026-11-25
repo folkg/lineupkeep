@@ -13,6 +13,7 @@ import type { LineupSubmitData } from "@lineupkeep/backend/connections/LineupRun
 import type { LineupRunsShape } from "@lineupkeep/backend/connections/LineupRuns";
 import { LineupRuns } from "@lineupkeep/backend/connections/LineupRuns";
 import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
+import { ProviderReadCache } from "@lineupkeep/backend/connections/ProviderReadCache";
 import {
   LeagueData,
   LineupOutlookData,
@@ -577,25 +578,32 @@ it("composes the team snapshot from the reads in one tool call", async () => {
   const queries: FantasyQueriesShape = {
     ...unavailableQueries,
     getTeamSummary: () =>
-      Effect.succeed(
-        Effect.runSync(
-          Schema.decodeEffect(TeamSummaryData)({
-            status: "ok",
-            team: teamView,
-            ownerNote: { status: "not_set" },
-            agentNotes: [],
-            coverage: [
-              {
-                resource: "league",
-                status: "available",
-                source: "test",
-                fetchedAt: DateTime.makeUnsafe("2026-11-22T00:00:00.000Z"),
-              },
-            ],
-            failures: [],
-            page,
-            budget,
+      Effect.serviceOption(ProviderReadCache).pipe(
+        Effect.tap((cache) =>
+          Effect.sync(() => {
+            expect(EffectOption.isSome(cache)).toBe(true);
           }),
+        ),
+        Effect.map(() =>
+          Effect.runSync(
+            Schema.decodeEffect(TeamSummaryData)({
+              status: "ok",
+              team: teamView,
+              ownerNote: { status: "not_set" },
+              agentNotes: [],
+              coverage: [
+                {
+                  resource: "league",
+                  status: "available",
+                  source: "test",
+                  fetchedAt: DateTime.makeUnsafe("2026-11-22T00:00:00.000Z"),
+                },
+              ],
+              failures: [],
+              page,
+              budget,
+            }),
+          ),
         ),
       ),
     getLeague: () =>

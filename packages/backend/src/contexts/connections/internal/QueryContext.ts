@@ -1,10 +1,11 @@
-import { Effect, Ref } from "effect";
+import { Effect, Option, Ref } from "effect";
 import type { Redacted } from "effect";
 import { dual } from "effect/Function";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import type { FantasyTeam, TeamId } from "#contexts/connections/FantasyTeam.ts";
 import type { Provider, ProviderSessionMaterial } from "#contexts/connections/Provider.ts";
+import { ProviderReadCache } from "#contexts/connections/ProviderReadCache.ts";
 import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
 import type { TeamOwnerNote } from "#contexts/connections/QueryValues.ts";
 import { type QueryError, QueryPersistenceFailed } from "#contexts/connections/QueryValues.ts";
@@ -74,14 +75,17 @@ export const loadTeamContext: {
                   ),
                 Ref.make(false),
                 Ref.make(false),
+                Effect.serviceOption(ProviderReadCache),
               ],
               { concurrency: 1 },
             ).pipe(
-              Effect.map(([session, provider, sessionProven, sessionRejected]) => ({
+              Effect.map(([session, provider, sessionProven, sessionRejected, cache]) => ({
                 userId,
                 owned,
                 session,
-                provider,
+                provider: Option.isSome(cache)
+                  ? cache.value.wrap(provider, String(owned.connection.id))
+                  : provider,
                 sessionProven,
                 sessionRejected,
               })),

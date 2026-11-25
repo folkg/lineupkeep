@@ -15,6 +15,9 @@ revisions that carried each change.
 - `get_players` reuses the same-week player-week result for projections when the schedule group
   already read that week. A call with both groups now makes one player-week request instead of
   two.
+- `get_team_snapshot` uses a request-scoped provider read cache. Its summary, league, roster,
+  pool, player-stat, and plan sections share one Yahoo read per distinct request instead of
+  repeating the same call. The cache is scoped to one snapshot call and one connection.
 - [The Yahoo call audit](docs/fantasy-manager/YAHOO-CALL-AUDIT.md) records every provider read and
   write, its request count, and the provider limits that force per-day or per-player reads.
 
