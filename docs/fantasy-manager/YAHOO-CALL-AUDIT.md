@@ -112,6 +112,8 @@ handler provides a request-scoped `ProviderReadCache`, so the first successful
 or failed read is reused by every later section and by the queued plan. The
 cache is keyed by connection and request shape, never by a session value, and
 it is discarded when that snapshot call ends. There is no cross-request cache.
+A roster and a free-agent pool ask about different player sets, so each still
+gets one player-week read of its own.
 
 ## Deliberate exceptions
 
