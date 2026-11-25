@@ -20,6 +20,10 @@
 - Copy across Teams, team detail, transactions, feedback, consent, run detail, and account
   surfaces is shorter and less implementation-shaped. Loading, empty, and error states keep
   their required next action.
+- A league whose scoring format is unknown shows its own published scoring label verbatim; the
+  browser no longer maps provider shorthand such as H2H Cat or Roto into a format.
+- A team card and the team page share one season-facts calculation, so both read the same place,
+  record, week, points, and matchup lines for each scoring format.
 
 ### Fixed
 

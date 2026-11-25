@@ -10,9 +10,9 @@ import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import type { TeamCardView } from "#contracts/connections/teamContract.ts";
 
-import { matchupNumber, number, periodParts, placeLabel, recordLabel } from "./seasonLabels";
-import { ScorePair } from "./SeasonSummary";
-import type { SeasonSummaryData } from "./SeasonSummary";
+import { matchupFacts, matchupLine, seasonFacts } from "./seasonFacts";
+import type { MatchupFactsView, SeasonFactsData, SeasonFactsView } from "./seasonFacts";
+import { MatchupLeadLine, ScorePair } from "./SeasonSummary";
 
 export function TeamSeasonFacts(props: {
   readonly facts: TeamCardView | undefined;
@@ -20,7 +20,7 @@ export function TeamSeasonFacts(props: {
   readonly format: TeamScoringFormat | undefined;
   readonly loading: boolean;
 }): JSX.Element {
-  const data = (): SeasonSummaryData | undefined => {
+  const data = (): SeasonFactsData | undefined => {
     const season = props.facts?.season;
     if (season === undefined) {
       return undefined;
@@ -107,109 +107,24 @@ function CardSeasonFactsSkeleton(props: {
   );
 }
 
-function CardSeasonFacts(props: { readonly data: SeasonSummaryData }): JSX.Element {
-  const standing = (): SeasonSummaryData["standing"] => props.data.standing;
-  const matchup = (): SeasonSummaryData["matchup"] => props.data.matchup;
-  const format = (): SeasonSummaryData["format"] => props.data.format;
-  const showPoints = (): boolean => format() !== "head_to_head_categories";
-  const showAgainst = (): boolean => format() === "head_to_head_points" || format() === "points";
-  const place = (): string | undefined => placeLabel(standing()?.rank, props.data.teamCount);
-  const record = (): string | undefined => recordLabel(props.data.record);
-  const period = (): ReturnType<typeof periodParts> =>
-    periodParts(
-      props.data.currentPeriod,
-      props.data.lastPeriod,
-      props.data.seasonOver,
-      props.data.usesPlayoffs,
-      props.data.playoffStartWeek,
-    );
-  const pointsLine = (): string | undefined => {
-    if (!showPoints()) {
-      return undefined;
-    }
-    const forValue =
-      format() === "rotisserie"
-        ? (standing()?.points ?? undefined)
-        : (standing()?.pointsFor ?? undefined);
-    const parts = [
-      ...(forValue === undefined
-        ? []
-        : [
-            format() === "rotisserie"
-              ? `${number(forValue)} points`
-              : `${number(forValue)} points for`,
-          ]),
-      ...(showAgainst() &&
-      standing()?.pointsAgainst !== null &&
-      standing()?.pointsAgainst !== undefined
-        ? [`${number(standing()?.pointsAgainst ?? 0)} against`]
-        : []),
-      ...(showAgainst() && standing()?.pointsBack !== null && standing()?.pointsBack !== undefined
-        ? [`${number(standing()?.pointsBack ?? 0)} behind`]
-        : []),
-    ];
-    return parts.length === 0 ? undefined : EffectArray.join(parts, " · ");
-  };
-  const matchupLine = (): string | undefined => {
-    const current = matchup();
-    if (current === undefined) {
-      return undefined;
-    }
-    const remaining =
-      current.remainingGames === undefined
-        ? undefined
-        : `${number(current.remainingGames)} games left${
-            current.opponentRemainingGames === undefined
-              ? ""
-              : ` · ${number(current.opponentRemainingGames)} for them`
-          }`;
-    const headline = `Week ${String(current.week)} vs ${current.opponent}`;
-    return remaining === undefined ? headline : `${headline} · ${remaining}`;
-  };
-  const scoreLine = (): string | undefined => {
-    const current = matchup();
-    if (current === undefined || !showPoints()) {
-      return undefined;
-    }
-    if (current.points === null && current.opponentPoints === null) {
-      return undefined;
-    }
-    return `${scoreText(current.points)} to ${scoreText(current.opponentPoints)}`;
-  };
-  const projectedLine = (): string | undefined => {
-    const current = matchup();
-    if (current === undefined || !showPoints()) {
-      return undefined;
-    }
-    if (current.projectedPoints === null && current.opponentProjectedPoints === null) {
-      return undefined;
-    }
-    return `Projected ${scoreText(current.projectedPoints)} to ${scoreText(current.opponentProjectedPoints)}`;
-  };
-  const categoryRecord = (): string | undefined => {
-    const current = matchup();
-    if (current === undefined || format() !== "head_to_head_categories") {
-      return undefined;
-    }
-    const categories = current.categories;
-    const wins = EffectArray.filter(categories, (category) => category.result === "win").length;
-    const losses = EffectArray.filter(categories, (category) => category.result === "loss").length;
-    const ties = EffectArray.filter(categories, (category) => category.result === "tie").length;
-    return `${String(wins)}-${String(losses)}-${String(ties)}`;
-  };
+function CardSeasonFacts(props: { readonly data: SeasonFactsData }): JSX.Element {
+  const season = (): SeasonFactsView => seasonFacts(props.data);
+  const matchup = (): MatchupFactsView | undefined => matchupFacts(props.data);
   return (
     <Stack gap="sm">
       <Stack gap="2xs">
         <Text type="meta" tone="muted">
           Season
         </Text>
-        <Show when={place() ?? record()}>
+        <Show when={season().place ?? season().record}>
           <Inline gap="sm" align="baseline">
-            <Show when={place()}>{(value) => <Text type="body-strong">{value()}</Text>}</Show>
-            <Show when={record()}>{(value) => <Text type="meta">{value()}</Text>}</Show>
+            <Show when={season().place}>
+              {(value) => <Text type="body-strong">{value()}</Text>}
+            </Show>
+            <Show when={season().record}>{(value) => <Text type="meta">{value()}</Text>}</Show>
           </Inline>
         </Show>
-        <Show when={period()}>
+        <Show when={season().period}>
           {(value) => (
             <>
               <Text type="meta">{value().headline}</Text>
@@ -221,7 +136,7 @@ function CardSeasonFacts(props: { readonly data: SeasonSummaryData }): JSX.Eleme
             </>
           )}
         </Show>
-        <Show when={pointsLine()}>
+        <Show when={season().pointsLine}>
           {(value) => (
             <Text type="meta" tone="muted">
               {value()}
@@ -230,42 +145,31 @@ function CardSeasonFacts(props: { readonly data: SeasonSummaryData }): JSX.Eleme
         </Show>
       </Stack>
       <Show when={matchup()}>
-        <CardNote>
-          <Stack gap="2xs">
-            <Text type="meta" tone="muted">
-              Current matchup
-            </Text>
-            <Show when={categoryRecord()}>
-              {(value) => <Text type="body-strong">{value()}</Text>}
-            </Show>
-            <Show when={categoryRecord() === undefined}>
-              <Show when={scoreLine()}>
-                <ScorePair
-                  points={matchup()?.points ?? null}
-                  opponentPoints={matchup()?.opponentPoints ?? null}
-                  type="body-strong"
-                />
+        {(facts) => (
+          <CardNote>
+            <Stack gap="2xs">
+              <Text type="meta" tone="muted">
+                Current matchup
+              </Text>
+              <Show when={facts().lead}>{(lead) => <MatchupLeadLine lead={lead()} />}</Show>
+              <Show when={facts().projected}>
+                {(score) => (
+                  <ScorePair
+                    opponentPoints={score().opponentPoints}
+                    points={score().points}
+                    prefix="Projected"
+                    tone="muted"
+                    type="meta"
+                  />
+                )}
               </Show>
-            </Show>
-            <Show when={projectedLine()}>
-              <ScorePair
-                prefix="Projected"
-                points={matchup()?.projectedPoints ?? null}
-                opponentPoints={matchup()?.opponentProjectedPoints ?? null}
-                tone="muted"
-                type="meta"
-              />
-            </Show>
-            <Text reserve="two-lines" type="meta" tone="muted">
-              {matchupLine()}
-            </Text>
-          </Stack>
-        </CardNote>
+              <Text reserve="two-lines" type="meta" tone="muted">
+                {matchupLine(facts())}
+              </Text>
+            </Stack>
+          </CardNote>
+        )}
       </Show>
     </Stack>
   );
-}
-
-function scoreText(value: number | null): string {
-  return value === null ? "–" : matchupNumber(value);
 }

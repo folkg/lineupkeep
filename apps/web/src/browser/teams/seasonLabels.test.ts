@@ -1,6 +1,13 @@
 import { expect, it } from "vitest";
 
-import { cardFormatLabel, periodParts } from "./seasonLabels";
+import { cardFormatLabel, categoryStat, periodParts } from "./seasonLabels";
+
+it("formats category values without naming a sport", () => {
+  expect(categoryStat(84)).toBe("84");
+  expect(categoryStat(0.9)).toBe("0.90");
+  expect(categoryStat(1.6)).toBe("1.60");
+  expect(categoryStat(0.918)).toBe("0.918");
+});
 
 it("splits the detail week into a headline and its regular and playoff notes", () => {
   expect(periodParts(9, 26, false, true, 23)).toEqual({

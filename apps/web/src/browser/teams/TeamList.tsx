@@ -28,7 +28,7 @@ import type {
 } from "#contracts/connections/teamContract.ts";
 import { sportDisplayName } from "#contracts/connections/teamVocabulary.ts";
 
-import { cardFormatLabel, scoringLabel } from "./seasonLabels";
+import { cardFormatLabel } from "./seasonLabels";
 import { TeamAttention } from "./TeamAttention";
 import { TeamControls } from "./TeamControls";
 import { lastCheckStatus, showsProvider, teamContextLabel } from "./teamLabels";
@@ -139,7 +139,7 @@ function TeamCard(props: TeamCardProps): JSX.Element {
     const season = props.facts?.season;
     return season === undefined
       ? cardFormatLabel(props.team.team.scoringFormat)
-      : (cardFormatLabel(season.format) ?? scoringLabel(season.scoringLabel));
+      : (cardFormatLabel(season.format) ?? season.scoringLabel);
   };
 
   return (

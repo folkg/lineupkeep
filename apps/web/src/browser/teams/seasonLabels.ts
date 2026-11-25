@@ -18,30 +18,6 @@ export function cardFormatLabel(format: string | undefined): string | undefined 
   }
 }
 
-export function scoringLabel(label: string | undefined): string | undefined {
-  if (label === undefined) {
-    return undefined;
-  }
-  switch (EffectString.toLowerCase(EffectString.trim(label))) {
-    case "h2h":
-    case "head to head":
-      return "Head to head";
-    case "h2h cat":
-    case "h2h cats":
-    case "h2h categories":
-    case "head to head, categories":
-      return "Head to head categories";
-    case "h2h points":
-    case "h2h pts":
-    case "head to head, points":
-      return "Head to head points";
-    case "roto":
-      return "Rotisserie";
-    default:
-      return label;
-  }
-}
-
 export function placeLabel(
   rank: number | null | undefined,
   teamCount: number | undefined,
@@ -71,18 +47,14 @@ export function recordLabel(
     : `${totals} (${EffectString.replace(record.percentage.toFixed(3), /^0/u, "")})`;
 }
 
-const categoryDecimals = new Map<string, number>([
-  ["save percentage", 3],
-  ["save pct", 3],
-  ["save %", 3],
-  ["goals against average", 2],
-  ["goals against avg", 2],
-  ["gaa", 2],
-]);
-
-export function categoryStat(name: string, value: number): string {
-  const digits = categoryDecimals.get(normalizeCategoryName(name));
-  return digits === undefined ? number(value) : fixedNumber(value, digits);
+export function categoryStat(value: number): string {
+  if (Number.isInteger(value)) {
+    return number(value);
+  }
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 3,
+  }).format(value);
 }
 
 export function matchupNumber(value: number): string {
@@ -144,14 +116,6 @@ function fixedNumber(value: number, fractionDigits: number): string {
     minimumFractionDigits: fractionDigits,
     maximumFractionDigits: fractionDigits,
   }).format(value);
-}
-
-function normalizeCategoryName(name: string): string {
-  return EffectString.replace(
-    EffectString.toLowerCase(EffectString.trim(name)),
-    /[^a-z0-9%]+/gu,
-    " ",
-  );
 }
 
 export function ordinal(rank: number): string {

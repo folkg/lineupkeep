@@ -9,112 +9,18 @@ import { Table } from "#browser/shared-ui/Table.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import type { TeamOverviewView } from "#contracts/connections/teamContract.ts";
 
-import {
-  categoryStat,
-  matchupNumber,
-  number,
-  ordinal,
-  periodParts,
-  placeLabel,
-  recordLabel,
-} from "./seasonLabels";
+import { matchupFacts, seasonFacts, scoreText, totalCategoryPoints } from "./seasonFacts";
+import type {
+  CategoryRow,
+  MatchupFactsView,
+  MatchupLead,
+  SeasonFactsData,
+  SeasonFactsView,
+} from "./seasonFacts";
+import { categoryStat, number, ordinal } from "./seasonLabels";
 
-type SeasonFormat =
-  | "head_to_head_categories"
-  | "head_to_head_points"
-  | "rotisserie"
-  | "points"
-  | "unknown";
-
-export type SeasonSummaryData = {
-  readonly format?: SeasonFormat;
-  readonly teamCount?: number;
-  readonly seasonOver?: boolean;
-  readonly currentPeriod?: number;
-  readonly lastPeriod?: number;
-  readonly usesPlayoffs?: boolean;
-  readonly playoffStartWeek?: number;
-  readonly standing?: {
-    readonly rank: number | null;
-    readonly points: number | null;
-    readonly pointsFor: number | null;
-    readonly pointsAgainst: number | null;
-    readonly pointsBack: number | null;
-  };
-  readonly record?: {
-    readonly wins: number;
-    readonly losses: number;
-    readonly ties: number;
-    readonly percentage: number | null;
-  };
-  readonly matchup?: TeamOverviewView["matchup"];
-  readonly caps?: {
-    readonly gamesPlayed?: number;
-    readonly inningsPitched?: number;
-  };
-  readonly usage?: ReadonlyArray<{
-    readonly position: string;
-    readonly played: number;
-    readonly projected: number;
-  }>;
-  readonly innings?: {
-    readonly pitched: number;
-    readonly projected: number;
-  };
-};
-
-export type CategoryRow = NonNullable<TeamOverviewView["categoryPoints"]>[number];
-
-export function SeasonFacts(props: {
-  readonly data: SeasonSummaryData;
-  readonly usage?: ReadonlyArray<{
-    readonly position: string;
-    readonly played: number;
-    readonly projected: number;
-  }>;
-  readonly innings?: { readonly pitched: number; readonly projected: number };
-}): JSX.Element {
-  const standing = (): SeasonSummaryData["standing"] => props.data.standing;
-  const format = (): SeasonFormat | undefined => props.data.format;
-  const showPoints = (): boolean => format() !== "head_to_head_categories";
-  const showAgainst = (): boolean => format() === "head_to_head_points" || format() === "points";
-  const place = (): string | undefined => placeLabel(standing()?.rank, props.data.teamCount);
-  const record = (): string | undefined => recordLabel(props.data.record);
-  const period = (): ReturnType<typeof periodParts> =>
-    periodParts(
-      props.data.currentPeriod,
-      props.data.lastPeriod,
-      props.data.seasonOver,
-      props.data.usesPlayoffs,
-      props.data.playoffStartWeek,
-    );
-  const pointsLine = (): string | undefined => {
-    if (!showPoints()) {
-      return undefined;
-    }
-    const forValue =
-      format() === "rotisserie"
-        ? (standing()?.points ?? undefined)
-        : (standing()?.pointsFor ?? undefined);
-    const parts = [
-      ...(forValue === undefined
-        ? []
-        : [
-            format() === "rotisserie"
-              ? `${number(forValue)} points`
-              : `${number(forValue)} points for`,
-          ]),
-      ...(showAgainst() &&
-      standing()?.pointsAgainst !== null &&
-      standing()?.pointsAgainst !== undefined
-        ? [`${number(standing()?.pointsAgainst ?? 0)} against`]
-        : []),
-      ...(showAgainst() && standing()?.pointsBack !== null && standing()?.pointsBack !== undefined
-        ? [`${number(standing()?.pointsBack ?? 0)} behind`]
-        : []),
-    ];
-    return parts.length === 0 ? undefined : EffectArray.join(parts, " · ");
-  };
+export function SeasonFacts(props: SeasonFactsProps): JSX.Element {
+  const season = (): SeasonFactsView => seasonFacts(props.data);
   const caps = (): ReadonlyArray<string> => {
     const value = props.data.caps;
     return [
@@ -130,10 +36,12 @@ export function SeasonFacts(props: {
         <Text type="meta" tone="muted">
           Place
         </Text>
-        <Show when={place() ?? record()}>
+        <Show when={season().place ?? season().record}>
           <Inline gap="sm" align="baseline">
-            <Show when={place()}>{(value) => <Text type="body-strong">{value()}</Text>}</Show>
-            <Show when={record()}>
+            <Show when={season().place}>
+              {(value) => <Text type="body-strong">{value()}</Text>}
+            </Show>
+            <Show when={season().record}>
               {(value) => (
                 <Text type="meta" tone="muted">
                   {value()}
@@ -142,7 +50,7 @@ export function SeasonFacts(props: {
             </Show>
           </Inline>
         </Show>
-        <Show when={period()}>
+        <Show when={season().period}>
           {(value) => (
             <>
               <Text type="meta">{value().headline}</Text>
@@ -156,7 +64,7 @@ export function SeasonFacts(props: {
             </>
           )}
         </Show>
-        <Show when={pointsLine()}>
+        <Show when={season().pointsLine}>
           {(value) => (
             <Text type="meta" tone="muted">
               {value()}
@@ -206,115 +114,47 @@ export function SeasonFacts(props: {
   );
 }
 
-export function MatchupSummary(props: {
-  readonly data: SeasonSummaryData;
-  readonly categoryRows: ReadonlyArray<CategoryRow>;
-  readonly categoryValuesLoading: boolean;
-}): JSX.Element {
-  const matchup = (): SeasonSummaryData["matchup"] => props.data.matchup;
-  const format = (): SeasonFormat | undefined => props.data.format;
-  const showPoints = (): boolean => format() !== "head_to_head_categories";
-  const opponentLine = (): string | undefined => {
-    const current = matchup();
-    return current === undefined
-      ? undefined
-      : `Week ${String(current.week)} vs ${current.opponent}`;
-  };
-  const scoreLine = (): string | undefined => {
-    const current = matchup();
-    if (
-      current === undefined ||
-      !showPoints() ||
-      (current.points === null && current.opponentPoints === null)
-    ) {
-      return undefined;
-    }
-    return `${scoreText(current.points)} to ${scoreText(current.opponentPoints)}`;
-  };
-  const projectedLine = (): string | undefined => {
-    const current = matchup();
-    if (
-      current === undefined ||
-      !showPoints() ||
-      (current.projectedPoints === null && current.opponentProjectedPoints === null)
-    ) {
-      return undefined;
-    }
-    return `Projected ${scoreText(current.projectedPoints)} to ${scoreText(current.opponentProjectedPoints)}`;
-  };
-  const remainingLine = (): string | undefined => {
-    const current = matchup();
-    if (current?.remainingGames === undefined) {
-      return undefined;
-    }
-    return `${number(current.remainingGames)} games left${
-      current.opponentRemainingGames === undefined
-        ? ""
-        : ` · ${number(current.opponentRemainingGames)} for them`
-    }`;
-  };
-  const totalPoints = (): number | undefined => {
-    const rows = EffectArray.filter(
-      props.categoryRows,
-      (row) => row.scoring !== "informational" && row.value !== null,
-    );
-    return rows.length === 0
-      ? undefined
-      : EffectArray.reduce(rows, 0, (total, row) => total + (row.value ?? 0));
-  };
+export function MatchupSummary(props: MatchupSummaryProps): JSX.Element {
+  const facts = (): MatchupFactsView | undefined => matchupFacts(props.data);
+  const totalPoints = (): number | undefined => totalCategoryPoints(props.categoryRows);
   const matchupCategories = (): ReadonlyArray<MatchupCategory> =>
-    format() === "head_to_head_categories"
-      ? EffectArray.filter(matchup()?.categories ?? [], (row) => row.scoring !== "informational")
+    props.data.format === "head_to_head_categories"
+      ? EffectArray.filter(
+          props.data.matchup?.categories ?? [],
+          (row) => row.scoring !== "informational",
+        )
       : [];
-  const categoryRecordLine = (): string | undefined => {
-    const current = matchup();
-    if (current === undefined || format() !== "head_to_head_categories") {
-      return undefined;
-    }
-    const categories = current.categories;
-    const wins = EffectArray.filter(categories, (category) => category.result === "win").length;
-    const losses = EffectArray.filter(categories, (category) => category.result === "loss").length;
-    const ties = EffectArray.filter(categories, (category) => category.result === "tie").length;
-    return `${String(wins)}-${String(losses)}-${String(ties)}`;
-  };
   return (
     <Stack gap="md">
-      <Show when={matchup()}>
-        <Stack gap="2xs">
-          <Show when={categoryRecordLine()}>
-            {(value) => <Text type="body-strong">{value()}</Text>}
-          </Show>
-          <Show when={categoryRecordLine() === undefined}>
-            <Show when={scoreLine()}>
-              <ScorePair
-                points={matchup()?.points ?? null}
-                opponentPoints={matchup()?.opponentPoints ?? null}
-                type="body-strong"
-              />
+      <Show when={facts()}>
+        {(matchup) => (
+          <Stack gap="2xs">
+            <Show when={matchup().lead}>{(lead) => <MatchupLeadLine lead={lead()} />}</Show>
+            <Show when={matchup().projected}>
+              {(score) => (
+                <ScorePair
+                  opponentPoints={score().opponentPoints}
+                  points={score().points}
+                  prefix="Projected"
+                  tone="muted"
+                  type="meta"
+                />
+              )}
             </Show>
-          </Show>
-          <Show when={projectedLine()}>
-            <ScorePair
-              prefix="Projected"
-              points={matchup()?.projectedPoints ?? null}
-              opponentPoints={matchup()?.opponentProjectedPoints ?? null}
-              tone="muted"
-              type="meta"
-            />
-          </Show>
-          <Text type="meta" tone="muted">
-            {opponentLine()}
-          </Text>
-          <Show when={remainingLine()}>
-            {(value) => (
-              <Text type="meta" tone="muted">
-                {value()}
-              </Text>
-            )}
-          </Show>
-        </Stack>
+            <Text type="meta" tone="muted">
+              {matchup().opponent}
+            </Text>
+            <Show when={matchup().remaining}>
+              {(line) => (
+                <Text type="meta" tone="muted">
+                  {line()}
+                </Text>
+              )}
+            </Show>
+          </Stack>
+        )}
       </Show>
-      <Show when={format() === "rotisserie" && props.categoryRows.length > 0}>
+      <Show when={props.data.format === "rotisserie" && props.categoryRows.length > 0}>
         <Table
           columns={[
             { label: "Category" },
@@ -334,7 +174,7 @@ export function MatchupSummary(props: {
             <Text type="body">{row.name}</Text>,
             <CategoryValue
               loading={props.categoryValuesLoading && row.total === null}
-              value={row.total === null ? "–" : categoryStat(row.name, row.total)}
+              value={row.total === null ? "–" : categoryStat(row.total)}
             />,
             <CategoryValue
               loading={props.categoryValuesLoading && row.place === null}
@@ -376,6 +216,46 @@ export function MatchupSummary(props: {
   );
 }
 
+export function MatchupLeadLine(props: { readonly lead: MatchupLead }): JSX.Element {
+  const categories = (): Extract<MatchupLead, { kind: "categories" }> | undefined =>
+    props.lead.kind === "categories" ? props.lead : undefined;
+  const points = (): Extract<MatchupLead, { kind: "points" }> | undefined =>
+    props.lead.kind === "points" ? props.lead : undefined;
+  return (
+    <Show
+      fallback={
+        <Show when={points()}>
+          {(lead) => (
+            <ScorePair
+              opponentPoints={lead().score.opponentPoints}
+              points={lead().score.points}
+              type="body-strong"
+            />
+          )}
+        </Show>
+      }
+      when={categories()}
+    >
+      {(lead) => <Text type="body-strong">{lead().record}</Text>}
+    </Show>
+  );
+}
+
+export function ScorePair(props: {
+  readonly points: number | null;
+  readonly opponentPoints: number | null;
+  readonly type: "body-strong" | "meta";
+  readonly tone?: "muted";
+  readonly prefix?: string;
+}): JSX.Element {
+  const prefix = (): string => (props.prefix === undefined ? "" : `${props.prefix} `);
+  return (
+    <Text type={props.type} tone={props.tone}>
+      {`${prefix()}${scoreText(props.points)} to ${scoreText(props.opponentPoints)}`}
+    </Text>
+  );
+}
+
 function CategoryValue(props: { readonly loading: boolean; readonly value: string }): JSX.Element {
   return (
     <Show fallback={<Text type="body">{props.value}</Text>} when={props.loading}>
@@ -396,7 +276,7 @@ function MatchupValue(props: {
       when={!props.loading || props.value !== null}
     >
       <Text type={props.winner ? "body-strong" : "body"}>
-        {props.value === null ? "–" : categoryStat(props.name, props.value)}
+        {props.value === null ? "–" : categoryStat(props.value)}
       </Text>
     </Show>
   );
@@ -413,21 +293,6 @@ function categoryWinner(row: MatchupCategory, side: "own" | "opponent"): boolean
     return false;
   }
   return side === "own" ? row.own > row.opponent : row.opponent > row.own;
-}
-
-export function ScorePair(props: {
-  readonly points: number | null;
-  readonly opponentPoints: number | null;
-  readonly type: "body-strong" | "meta";
-  readonly tone?: "muted";
-  readonly prefix?: string;
-}): JSX.Element {
-  const prefix = (): string => (props.prefix === undefined ? "" : `${props.prefix} `);
-  return (
-    <Text type={props.type} tone={props.tone}>
-      {`${prefix()}${scoreText(props.points)} to ${scoreText(props.opponentPoints)}`}
-    </Text>
-  );
 }
 
 function FooterLine(props: {
@@ -447,8 +312,20 @@ function FooterLine(props: {
   );
 }
 
-function scoreText(value: number | null): string {
-  return value === null ? "–" : matchupNumber(value);
-}
-
 type MatchupCategory = NonNullable<TeamOverviewView["matchup"]>["categories"][number];
+
+type SeasonFactsProps = {
+  readonly data: SeasonFactsData;
+  readonly usage?: ReadonlyArray<{
+    readonly position: string;
+    readonly played: number;
+    readonly projected: number;
+  }>;
+  readonly innings?: { readonly pitched: number; readonly projected: number };
+};
+
+type MatchupSummaryProps = {
+  readonly data: SeasonFactsData;
+  readonly categoryRows: ReadonlyArray<CategoryRow>;
+  readonly categoryValuesLoading: boolean;
+};

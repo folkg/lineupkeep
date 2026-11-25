@@ -29,7 +29,6 @@ import type {
   TeamCardView,
 } from "#contracts/connections/teamContract.ts";
 
-import { scoringLabel } from "./seasonLabels";
 import { requireTeamSuccess } from "./teamFailure";
 import { teamQueries } from "./teamQueries";
 import type { TeamRemote } from "./teamRemote";
@@ -173,18 +172,6 @@ const tallSeasonCard: TeamCardView = {
   },
 };
 
-it.each([
-  { published: "H2H", label: "Head to head" },
-  { published: "H2H Cat", label: "Head to head categories" },
-  { published: "H2H Categories", label: "Head to head categories" },
-  { published: "H2H Points", label: "Head to head points" },
-  { published: "H2H Pts", label: "Head to head points" },
-  { published: "Roto", label: "Rotisserie" },
-  { published: "Custom league scoring", label: "Custom league scoring" },
-] as const)("expands published $published", ({ published, label }) => {
-  expect(scoringLabel(published)).toBe(label);
-});
-
 it("shows the standing and format without a key-value table", async () => {
   using _app = setupTeamsPage([baseTeam], { cards: () => Promise.resolve([seasonCard]) });
   await expect.element(page.getByText("3rd of 12")).toBeVisible();
@@ -299,7 +286,7 @@ it("shows missing facts without a made-up record, label, cap or weekly lock", as
   expect(page.getByText("Categories").elements()).toHaveLength(0);
 });
 
-it("shows provider labels for unknown formats, and preserves local controls when facts fail", async () => {
+it("shows the league's own scoring label when the format is unknown", async () => {
   using _app = setupTeamsPage([baseTeam], {
     cards: () =>
       Promise.resolve([

@@ -9,9 +9,9 @@ import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import type { TeamOverviewView } from "#contracts/connections/teamContract.ts";
 
-import { cardFormatLabel, scoringLabel } from "./seasonLabels";
+import type { CategoryRow, SeasonFactsData } from "./seasonFacts";
+import { cardFormatLabel } from "./seasonLabels";
 import { MatchupSummary, SeasonFacts } from "./SeasonSummary";
-import type { CategoryRow, SeasonSummaryData } from "./SeasonSummary";
 
 export function TeamSeasonOverview(props: {
   readonly facts: TeamOverviewView | undefined;
@@ -21,8 +21,8 @@ export function TeamSeasonOverview(props: {
   const facts = (): TeamOverviewView | undefined => props.facts;
   const league = (): TeamOverviewView["league"] => facts()?.league;
   const format = (): string | undefined =>
-    cardFormatLabel(facts()?.format) ?? scoringLabel(league()?.scoringLabel);
-  const data = (): SeasonSummaryData | undefined => {
+    cardFormatLabel(facts()?.format) ?? league()?.scoringLabel;
+  const data = (): SeasonFactsData | undefined => {
     const value = facts();
     if (value === undefined || value.reason !== undefined) {
       return undefined;

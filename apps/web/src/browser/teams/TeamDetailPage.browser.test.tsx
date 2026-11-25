@@ -36,8 +36,8 @@ import type {
   TeamSummaryView,
 } from "#contracts/connections/teamContract.ts";
 
+import type { CategoryRow } from "./seasonFacts";
 import { MatchupSummary } from "./SeasonSummary";
-import type { CategoryRow } from "./SeasonSummary";
 import { TeamDetailPage } from "./TeamDetailPage";
 import { quietGroupSpan } from "./teamLabels";
 import { teamQueries } from "./teamQueries";
@@ -896,7 +896,7 @@ it("shows rotisserie categories with the stat, place, and points", async () => {
     "4th",
     "10",
     "Save percentage",
-    "0.900",
+    "0.90",
     "10th",
     "4",
     "Goals Against Average",
@@ -989,7 +989,7 @@ it("keeps rotisserie category columns steady while their values load", async () 
       { name: "Save percentage", scoring: undefined, value: 4, total: 0.9, place: 10 },
     ],
   });
-  await expect.element(page.getByText("0.900")).toBeVisible();
+  await expect.element(page.getByText("0.90")).toBeVisible();
 
   const settled = [...table.element().querySelectorAll<HTMLTableCellElement>("th")];
   const after = EffectArray.map(settled, (header) => {
