@@ -2811,6 +2811,47 @@ it.effect("returns every explicitly requested player reference in one response",
     }
     assert.strictEqual(hydrated.players.length, 25);
     assert.deepStrictEqual(hydrated.page, { returned: 25, complete: true, remaining: 0 });
+    const detailReads = yield* fake.readCount("read_player_details");
+    assert.strictEqual(detailReads, 1);
+  }).pipe(layerTools.provide(QueriesTestLayer)),
+);
+
+it.effect("reads one player-week batch when schedule and projections cover the same week", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    yield* fake.setPlayerWeeks([
+      {
+        providerPlayerKey: "461.p.10001",
+        week: 3,
+        plays: true,
+        opponent: { opponent: "SEA", home: true },
+        projectedRank: 14,
+      },
+    ]);
+    const roster = yield* queries.getRosters(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      period: { week: 3 },
+    });
+    assert.strictEqual(roster.status, "ok");
+    if (roster.status !== "ok" || roster.scope !== "team") {
+      return;
+    }
+    const weekReadsBefore = yield* fake.readCount("read_player_weeks");
+
+    const hydrated = yield* queries.getPlayers(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      players: [Array.getUnsafe(roster.players, 0).player],
+      groups: ["identity", "schedule", "projections"],
+    });
+
+    assert.strictEqual(hydrated.status, "ok");
+    if (hydrated.status !== "ok") {
+      return;
+    }
+    const weekReadsAfter = yield* fake.readCount("read_player_weeks");
+    assert.strictEqual(weekReadsAfter - weekReadsBefore, 1);
   }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 

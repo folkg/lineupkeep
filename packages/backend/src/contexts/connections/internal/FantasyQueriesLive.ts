@@ -2531,24 +2531,30 @@ export const FantasyQueriesLive = Layer.effect(
         projectionWeek !== undefined &&
         validKeys.length > 0
       ) {
-        const weekOutcome = yield* readOutcome(
-          context,
-          "player_weeks",
-          context.provider.readPlayerWeeks({
-            ...providerIdentity(context),
-            providerLeagueKey: leagueKey,
-            providerPlayerKeys: validKeys,
-            week: { week: projectionWeek },
-          }),
-        );
-        if (weekOutcome._tag === "ok") {
-          for (const fact of weekOutcome.value) {
-            weekFacts.set(fact.providerPlayerKey, fact);
+        if (scheduleWeekFactsWeek === projectionWeek) {
+          for (const [key, fact] of scheduleWeekFacts) {
+            weekFacts.set(key, fact);
           }
         } else {
-          projectionUnavailable = true;
-          if (weekOutcome._tag === "failed") {
-            failures.push(weekOutcome.failure);
+          const weekOutcome = yield* readOutcome(
+            context,
+            "player_weeks",
+            context.provider.readPlayerWeeks({
+              ...providerIdentity(context),
+              providerLeagueKey: leagueKey,
+              providerPlayerKeys: validKeys,
+              week: { week: projectionWeek },
+            }),
+          );
+          if (weekOutcome._tag === "ok") {
+            for (const fact of weekOutcome.value) {
+              weekFacts.set(fact.providerPlayerKey, fact);
+            }
+          } else {
+            projectionUnavailable = true;
+            if (weekOutcome._tag === "failed") {
+              failures.push(weekOutcome.failure);
+            }
           }
         }
       }

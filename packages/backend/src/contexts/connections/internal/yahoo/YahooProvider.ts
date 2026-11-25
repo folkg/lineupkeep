@@ -841,13 +841,24 @@ export const yahooProvider = Effect.gen(function* () {
     if (playerKeys.length === 0) {
       return [];
     }
-    const details = yield* readPlayerDetailsRawThroughSdk(sdk, "read_player_details", cookie, {
-      leagueKey,
-      playerKeys,
-      fields: ["percent_started", "percent_owned", "ranks"],
-      ranks: playerRankTypes,
-      percentStartedCutTypes: [communityStartRateCut],
-    });
+    const details: Array<YahooPlayerDetail> = [];
+    for (let index = 0; index < playerKeys.length; index += maximumSelectedPlayers) {
+      const chunkDetails = yield* readPlayerDetailsRawThroughSdk(
+        sdk,
+        "read_player_details",
+        cookie,
+        {
+          leagueKey,
+          playerKeys: playerKeys.slice(index, index + maximumSelectedPlayers),
+          fields: ["percent_started", "percent_owned", "ranks"],
+          ranks: playerRankTypes,
+          percentStartedCutTypes: [communityStartRateCut],
+        },
+      );
+      for (const detail of chunkDetails) {
+        details.push(detail);
+      }
+    }
     const rates = yield* playerFactsOf(details, input.coverage);
     yield* Effect.annotateCurrentSpan("provider.player_fact_count", rates.length);
     return rates;

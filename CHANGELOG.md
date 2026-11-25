@@ -3,6 +3,21 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
+## Unreleased — Yahoo call audit
+
+### Fixed
+
+- A player-facts read now chunks player keys at the provider's 25-key detail limit. A roster
+  read above 25 keys is split into valid batched requests instead of failing the whole read.
+
+### Changed
+
+- `get_players` reuses the same-week player-week result for projections when the schedule group
+  already read that week. A call with both groups now makes one player-week request instead of
+  two.
+- [The Yahoo call audit](docs/fantasy-manager/YAHOO-CALL-AUDIT.md) records every provider read and
+  write, its request count, and the provider limits that force per-day or per-player reads.
+
 ## Unreleased — claim-bound settlement and finishes
 
 ### Fixed

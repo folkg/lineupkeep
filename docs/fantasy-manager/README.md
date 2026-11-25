@@ -16,6 +16,7 @@ Planning workspace for Lineupgrade, the independent provider-neutral rewrite. Th
 - [Connection notification states](CONNECTION-NOTIFICATION-STATES.md): email transitions and persisted row projection.
 - [Connection incident states](CONNECTION-INCIDENT-STATES.md): incident resolution and persisted row projection.
 - [MCP contracts](MCP.md): generic tool families, budgets, paging, and client acceptance.
+- [Yahoo call audit](YAHOO-CALL-AUDIT.md): provider read and write request counts, batching limits, and deliberate per-day or per-player exceptions.
 - [Minimal UX brief](UX-BRIEF.md): functional surfaces and later design work.
 - [Grilling decisions](DECISIONS.md): all recorded rounds and corrections, including hosted browser linking.
 - [Hosting comparison](HOSTING.md): Cloudflare/GCP/AWS limits, illustrative sizing, and the proposed acceptance checks.
