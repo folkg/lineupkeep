@@ -660,6 +660,7 @@ it("loads with one moving mark instead of placeholder cards", async () => {
   await expect.element(loading).toBeVisible();
   expect(page.getByRole("heading", { name: "Today", exact: true }).elements()).toHaveLength(0);
   expect(page.getByRole("heading", { name: "Earlier", exact: true }).elements()).toHaveLength(0);
+  expect(page.getByText(/open moves/u).elements()).toHaveLength(0);
   expect(loading.getByRole("listitem").elements()).toHaveLength(0);
   expect(loading.element().querySelectorAll(".animate-loading-slide")).toHaveLength(1);
 

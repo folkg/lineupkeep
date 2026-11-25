@@ -83,7 +83,10 @@ export function TransactionsPage(props: TransactionsPageProps): JSX.Element {
 
   return (
     <AppShell>
-      <Page kicker={<SummaryKicker page={page} />} title="Transactions">
+      <Page
+        kicker={page.isLoading() ? undefined : <SummaryKicker page={page} />}
+        title="Transactions"
+      >
         <Show
           fallback={<LoadingState label="Loading moves">Loading your moves…</LoadingState>}
           when={!page.isLoading()}

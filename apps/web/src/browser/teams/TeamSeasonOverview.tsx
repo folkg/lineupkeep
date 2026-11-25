@@ -73,41 +73,42 @@ export function TeamSeasonOverview(props: {
       ? "Season facts could not be loaded. Lineup runs remain available."
       : (facts()?.reason ?? "Season facts were not published.");
   return (
-    <Split
-      aside={
+    <Show
+      fallback={
         <Stack as="section" gap="sm" labelledBy="team-season-title">
           <SectionTitle id="team-season-title">Season</SectionTitle>
-          <Show
-            fallback={
-              <Text type="meta" tone="muted">
-                {failure()}
-              </Text>
-            }
-            when={data()}
-          >
-            {(summary) => <SeasonFacts data={summary()} innings={innings()} usage={usage()} />}
-          </Show>
+          <Text type="meta" tone="muted">
+            {failure()}
+          </Text>
         </Stack>
       }
+      when={data()}
     >
-      <Stack as="section" gap="md" labelledBy="team-week-title">
-        <SectionTitle
-          action={format() === undefined ? undefined : <Badge tone="neutral">{format()}</Badge>}
-          id="team-week-title"
+      {(summary) => (
+        <Split
+          aside={
+            <Stack as="section" gap="sm" labelledBy="team-season-title">
+              <SectionTitle id="team-season-title">Season</SectionTitle>
+              <SeasonFacts data={summary()} innings={innings()} usage={usage()} />
+            </Stack>
+          }
         >
-          {title()}
-        </SectionTitle>
-        <Show when={data()}>
-          {(summary) => (
+          <Stack as="section" gap="md" labelledBy="team-week-title">
+            <SectionTitle
+              action={format() === undefined ? undefined : <Badge tone="neutral">{format()}</Badge>}
+              id="team-week-title"
+            >
+              {title()}
+            </SectionTitle>
             <MatchupSummary
               categoryRows={categoryRows()}
               categoryValuesLoading={categoryValuesLoading()}
               data={summary()}
             />
-          )}
-        </Show>
-      </Stack>
-    </Split>
+          </Stack>
+        </Split>
+      )}
+    </Show>
   );
 }
 

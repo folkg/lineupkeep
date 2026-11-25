@@ -35,7 +35,7 @@ export function restoreTeamQueries(queryClient: QueryClient): void {
   if (missing.length === 0) {
     return;
   }
-  hydrate(queryClient, { ...persisted.clientState, queries: missing });
+  hydrate(queryClient, { ...persisted.clientState, mutations: [], queries: missing });
 }
 
 export function persistTeamQueries(queryClient: QueryClient): () => void {

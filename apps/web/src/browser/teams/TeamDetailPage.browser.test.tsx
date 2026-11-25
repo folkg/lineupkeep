@@ -297,12 +297,13 @@ const team: TeamSummaryView = {
 };
 
 it("offers a way back to the teams list and shows the run time in the reader's zone", async () => {
-  using _app = setupTeamDetailPage(team);
+  using _app = setupTeamDetailPage(team, { overview: () => Promise.resolve(overviewFixture) });
 
   const back = page.getByRole("link", { name: "All teams" });
   await expect.element(back).toHaveAttribute("href", "/teams");
   expect(back.element().textContent).toContain("All teams");
   expect(back.element().className).toContain("text-meta");
+  await expect.element(page.getByRole("heading", { level: 2, name: "This week" })).toBeVisible();
   const title = page.getByRole("heading", { level: 1, name: "Alpha" }).element();
   const section = page.getByRole("heading", { level: 2, name: "This week" }).element();
   expect(title.className).toContain("text-name-title");
