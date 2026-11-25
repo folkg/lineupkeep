@@ -223,11 +223,11 @@ it("shows the current matchup at a glance without category rows", async () => {
         },
       ]),
   });
-  await expect.element(page.getByText("Week 9 vs Beta")).toBeVisible();
+  await expect.element(page.getByText(/^Week 9 vs Beta/u)).toBeVisible();
   await expect.element(page.getByText("0-0-0")).toBeVisible();
   expect(page.getByText("0 to 0").elements()).toHaveLength(0);
   expect(page.getByText("Projected 63.5 to 55").elements()).toHaveLength(0);
-  await expect.element(page.getByText("0 games left · 2 for them")).toBeVisible();
+  await expect.element(page.getByText("Week 9 vs Beta · 0 games left · 2 for them")).toBeVisible();
 });
 
 it("gives head-to-head point scores two decimal places", async () => {
@@ -257,7 +257,7 @@ it("gives head-to-head point scores two decimal places", async () => {
   await expect.element(page.getByText("0.00 to 0.00")).toBeVisible();
   expect(page.getByText("0.00 to 0.00").elements()).toHaveLength(1);
   await expect.element(page.getByText("Projected 63.50 to 55.00")).toBeVisible();
-  const matchup = page.getByText("Week 9 vs Beta").element();
+  const matchup = page.getByText(/^Week 9 vs Beta/u).element();
   const score = page.getByText("0.00 to 0.00").element();
   expect(getComputedStyle(score).fontVariantNumeric).not.toBe("tabular-nums");
   expect(Number(getComputedStyle(matchup).fontWeight)).toBeLessThan(
@@ -552,9 +552,29 @@ it.each([
   await page.viewport(390, 844);
   await document.fonts.ready;
   const team = { ...baseTeam, team: { ...baseTeam.team, scoringFormat: format } };
-  const cardView = {
-    ...seasonCardWithMatchup,
-    season: { ...seasonFacts, format, scoringLabel: label },
+  const cardView: TeamCardView = {
+    summary: baseTeam,
+    season: {
+      ...seasonFacts,
+      format,
+      scoringLabel: label,
+      ...(format === "rotisserie" ? {} : { usesPlayoffs: true, playoffStartWeek: 15 }),
+      ...(format === "rotisserie"
+        ? {}
+        : {
+            matchup: {
+              week: 9,
+              opponent: "Beta",
+              points: 0,
+              opponentPoints: 0,
+              projectedPoints: 63.5,
+              opponentProjectedPoints: 55,
+              remainingGames: 0,
+              opponentRemainingGames: 2,
+              categories: [],
+            },
+          }),
+    },
   };
   const pending = Promise.withResolvers<ReadonlyArray<TeamCardView>>();
   using _app = setupTeamsPage([team], { cards: () => pending.promise });
@@ -630,7 +650,7 @@ it("keeps the first card controls in the first phone screen and captures both th
         .element()
         .closest<HTMLElement>("[data-card]");
       const toggle = page.getByRole("switch", { name: "Lineup checks for Alpha" }).element();
-      expect(toggle.getBoundingClientRect().bottom).toBeLessThanOrEqual(846);
+      expect(toggle.getBoundingClientRect().bottom).toBeLessThan(844);
       expect(toggle.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
       await page.screenshot({

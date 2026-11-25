@@ -5,8 +5,6 @@ import { Show } from "solid-js";
 
 import { CardNote } from "#browser/shared-ui/Card.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
-import { SeasonArea } from "#browser/shared-ui/SeasonArea.tsx";
-import type { SeasonAreaHeight } from "#browser/shared-ui/SeasonArea.tsx";
 import { TextSkeleton } from "#browser/shared-ui/Skeleton.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
@@ -43,29 +41,25 @@ export function TeamSeasonFacts(props: {
     };
   };
   return (
-    <SeasonArea
-      height={data() !== undefined || props.loading ? factsFrame(props.format) : undefined}
+    <Show
+      fallback={
+        <Show
+          fallback={
+            <Text type="meta" tone="muted">
+              {props.failed
+                ? "Season facts could not be loaded. Lineup runs and controls are still available."
+                : (props.facts?.reason ?? "Season facts were not published for this team.")}
+            </Text>
+          }
+          when={props.loading}
+        >
+          <CardSeasonFactsSkeleton format={props.format} />
+        </Show>
+      }
+      when={data()}
     >
-      <Show
-        fallback={
-          <Show
-            fallback={
-              <Text type="meta" tone="muted">
-                {props.failed
-                  ? "Season facts could not be loaded. Lineup runs and controls are still available."
-                  : (props.facts?.reason ?? "Season facts were not published for this team.")}
-              </Text>
-            }
-            when={props.loading}
-          >
-            <CardSeasonFactsSkeleton format={props.format} />
-          </Show>
-        }
-        when={data()}
-      >
-        {(facts) => <CardSeasonFacts data={facts()} />}
-      </Show>
-    </SeasonArea>
+      {(facts) => <CardSeasonFacts data={facts()} />}
+    </Show>
   );
 }
 
@@ -76,6 +70,7 @@ function CardSeasonFactsSkeleton(props: {
     props.format === "head_to_head_points" ||
     props.format === "points" ||
     props.format === "rotisserie";
+  const period = (): boolean => props.format !== "rotisserie";
   const matchup = (): boolean =>
     props.format === "head_to_head_categories" ||
     props.format === "head_to_head_points" ||
@@ -85,8 +80,10 @@ function CardSeasonFactsSkeleton(props: {
       <Stack gap="2xs">
         <TextSkeleton type="meta" width="w-12" />
         <TextSkeleton type="body-strong" width="w-24" />
-        <TextSkeleton type="meta" width="w-40" />
-        <TextSkeleton type="meta" width="w-32" />
+        <Show when={period()}>
+          <TextSkeleton type="meta" width="w-40" />
+          <TextSkeleton type="meta" width="w-32" />
+        </Show>
         <Show when={points()}>
           <TextSkeleton type="meta" width="w-36" />
         </Show>
@@ -100,27 +97,11 @@ function CardSeasonFactsSkeleton(props: {
               <TextSkeleton type="meta" width="w-32" />
             </Show>
             <TextSkeleton type="meta" width="w-48" />
-            <TextSkeleton type="meta" width="w-36" />
           </Stack>
         </CardNote>
       </Show>
     </Stack>
   );
-}
-
-function factsFrame(format: TeamScoringFormat | undefined): SeasonAreaHeight {
-  switch (format) {
-    case "rotisserie":
-      return "compact";
-    case "head_to_head_categories":
-      return "standard";
-    case "head_to_head_points":
-    case "points":
-      return "extended";
-    case "unknown":
-    case undefined:
-      return "open";
-  }
 }
 
 function CardSeasonFacts(props: { readonly data: SeasonSummaryData }): JSX.Element {
@@ -168,9 +149,19 @@ function CardSeasonFacts(props: { readonly data: SeasonSummaryData }): JSX.Eleme
   };
   const matchupLine = (): string | undefined => {
     const current = matchup();
-    return current === undefined
-      ? undefined
-      : `Week ${String(current.week)} vs ${current.opponent}`;
+    if (current === undefined) {
+      return undefined;
+    }
+    const remaining =
+      current.remainingGames === undefined
+        ? undefined
+        : `${number(current.remainingGames)} games left${
+            current.opponentRemainingGames === undefined
+              ? ""
+              : ` · ${number(current.opponentRemainingGames)} for them`
+          }`;
+    const headline = `Week ${String(current.week)} vs ${current.opponent}`;
+    return remaining === undefined ? headline : `${headline} · ${remaining}`;
   };
   const scoreLine = (): string | undefined => {
     const current = matchup();
@@ -202,17 +193,6 @@ function CardSeasonFacts(props: { readonly data: SeasonSummaryData }): JSX.Eleme
     const losses = EffectArray.filter(categories, (category) => category.result === "loss").length;
     const ties = EffectArray.filter(categories, (category) => category.result === "tie").length;
     return `${String(wins)}-${String(losses)}-${String(ties)}`;
-  };
-  const remainingLine = (): string | undefined => {
-    const current = matchup();
-    if (current?.remainingGames === undefined) {
-      return undefined;
-    }
-    return `${number(current.remainingGames)} games left${
-      current.opponentRemainingGames === undefined
-        ? ""
-        : ` · ${number(current.opponentRemainingGames)} for them`
-    }`;
   };
   return (
     <Stack gap="sm">
@@ -276,13 +256,6 @@ function CardSeasonFacts(props: { readonly data: SeasonSummaryData }): JSX.Eleme
             <Text type="meta" tone="muted">
               {matchupLine()}
             </Text>
-            <Show when={remainingLine()}>
-              {(value) => (
-                <Text type="meta" tone="muted">
-                  {value()}
-                </Text>
-              )}
-            </Show>
           </Stack>
         </CardNote>
       </Show>

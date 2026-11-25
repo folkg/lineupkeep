@@ -365,8 +365,8 @@ with total points.
 
 **Current matchup.** The result leads. A head-to-head categories block starts with the
 category record; a points block starts with the score, always at least two decimal places.
-Projected points sit directly under the result in the meta type, followed by the opponent and
-the remaining games. No other line in the block is bold. The week copy uses the same words on the
+Projected points sit directly under the result in the meta type, followed by one meta line with
+the opponent and the remaining games. No other line in the block is bold. The week copy uses the same words on the
 card and the detail page: `Week 9 of 23 regular`, `14 regular weeks left`, `3 playoff weeks`.
 
 **Team cards.** The team list puts each team in its own card, sorted by sport then name; the
