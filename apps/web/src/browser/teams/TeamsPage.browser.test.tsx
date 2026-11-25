@@ -544,6 +544,42 @@ it("paints cached cards while fresh facts are still in flight", async () => {
   ).toBeLessThanOrEqual(1);
 });
 
+it("keeps a long matchup line inside the card's reserved height", async () => {
+  await page.viewport(390, 844);
+  await document.fonts.ready;
+  const cardView: TeamCardView = {
+    summary: baseTeam,
+    season: {
+      ...seasonFacts,
+      usesPlayoffs: true,
+      playoffStartWeek: 15,
+      matchup: {
+        week: 9,
+        opponent: "Tony’s Terrible Team",
+        points: 0,
+        opponentPoints: 0,
+        projectedPoints: 63.5,
+        opponentProjectedPoints: 55,
+        remainingGames: 31,
+        opponentRemainingGames: 33,
+        categories: [],
+      },
+    },
+  };
+  const pending = Promise.withResolvers<ReadonlyArray<TeamCardView>>();
+  using _app = setupTeamsPage([baseTeam], { cards: () => pending.promise });
+  await expect.element(page.getByText("Next check")).toBeVisible();
+  const card = document.querySelector<HTMLElement>("[data-card]");
+  const loadingHeight = card?.getBoundingClientRect().height ?? 0;
+  pending.resolve([cardView]);
+  await expect.element(page.getByText(/^Week 9 vs Tony/u)).toBeVisible();
+  await document.fonts.ready;
+  expect(
+    Math.abs((card?.getBoundingClientRect().height ?? 0) - loadingHeight),
+    `${String(loadingHeight)} -> ${String(card?.getBoundingClientRect().height)}`,
+  ).toBeLessThanOrEqual(1);
+});
+
 it.each([
   ["head_to_head_points", "Points"],
   ["points", "Points"],

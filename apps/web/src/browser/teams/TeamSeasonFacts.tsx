@@ -96,7 +96,10 @@ function CardSeasonFactsSkeleton(props: {
             <Show when={props.format === "head_to_head_points" || props.format === "points"}>
               <TextSkeleton type="meta" width="w-32" />
             </Show>
-            <TextSkeleton type="meta" width="w-48" />
+            <Stack gap="none">
+              <TextSkeleton type="meta" width="w-48" />
+              <TextSkeleton type="meta" width="w-40" />
+            </Stack>
           </Stack>
         </CardNote>
       </Show>
@@ -253,7 +256,7 @@ function CardSeasonFacts(props: { readonly data: SeasonSummaryData }): JSX.Eleme
                 type="meta"
               />
             </Show>
-            <Text type="meta" tone="muted">
+            <Text reserve="two-lines" type="meta" tone="muted">
               {matchupLine()}
             </Text>
           </Stack>
