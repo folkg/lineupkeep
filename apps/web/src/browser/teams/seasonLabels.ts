@@ -1,4 +1,4 @@
-import { EffectArray, EffectString } from "@lineupkeep/collections";
+import { EffectString } from "@lineupkeep/collections";
 
 export function cardFormatLabel(format: string | undefined): string | undefined {
   switch (format) {
@@ -87,20 +87,6 @@ export function categoryStat(name: string, value: number): string {
 
 export function matchupNumber(value: number): string {
   return fixedNumber(value, 2);
-}
-
-export function periodLabel(
-  currentPeriod: number | undefined,
-  lastPeriod: number | undefined,
-  seasonOver: boolean | undefined,
-  usesPlayoffs: boolean | undefined,
-  playoffStartWeek: number | undefined,
-): string | undefined {
-  const parts = periodParts(currentPeriod, lastPeriod, seasonOver, usesPlayoffs, playoffStartWeek);
-  if (parts === undefined) {
-    return undefined;
-  }
-  return EffectArray.join([parts.headline, ...parts.details], " · ");
 }
 
 export function periodParts(

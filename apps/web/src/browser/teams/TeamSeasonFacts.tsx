@@ -9,7 +9,7 @@ import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import type { TeamCardView } from "#contracts/connections/teamContract.ts";
 
-import { matchupNumber, number, periodLabel, placeLabel, recordLabel } from "./seasonLabels";
+import { matchupNumber, number, periodParts, placeLabel, recordLabel } from "./seasonLabels";
 import { ScorePair } from "./SeasonSummary";
 import type { SeasonSummaryData } from "./SeasonSummary";
 
@@ -71,6 +71,7 @@ function CardSeasonFactsSkeleton(): JSX.Element {
         <TextSkeleton type="meta" width="w-16" />
         <TextSkeleton type="body-strong" width="w-24" />
         <TextSkeleton type="meta" width="w-40" />
+        <TextSkeleton type="meta" width="w-32" />
       </Stack>
       <CardNote>
         <Stack gap="2xs">
@@ -93,8 +94,8 @@ function CardSeasonFacts(props: { readonly data: SeasonSummaryData }): JSX.Eleme
   const showAgainst = (): boolean => format() === "head_to_head_points" || format() === "points";
   const place = (): string | undefined => placeLabel(standing()?.rank, props.data.teamCount);
   const record = (): string | undefined => recordLabel(props.data.record);
-  const period = (): string | undefined =>
-    periodLabel(
+  const period = (): ReturnType<typeof periodParts> =>
+    periodParts(
       props.data.currentPeriod,
       props.data.lastPeriod,
       props.data.seasonOver,
@@ -190,9 +191,14 @@ function CardSeasonFacts(props: { readonly data: SeasonSummaryData }): JSX.Eleme
         </Show>
         <Show when={period()}>
           {(value) => (
-            <Text type="meta" tone="muted">
-              {value()}
-            </Text>
+            <>
+              <Text type="meta">{value().headline}</Text>
+              <Show when={value().details.length > 0}>
+                <Text type="meta" tone="muted">
+                  {EffectArray.join(value().details, " · ")}
+                </Text>
+              </Show>
+            </>
           )}
         </Show>
         <Show when={pointsLine()}>

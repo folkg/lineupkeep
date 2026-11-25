@@ -142,6 +142,8 @@ const seasonCardWithMatchup: TeamCardView = {
   ...seasonCard,
   season: {
     ...seasonFacts,
+    usesPlayoffs: true,
+    playoffStartWeek: 15,
     matchup: {
       week: 9,
       opponent: "Beta",

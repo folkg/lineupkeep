@@ -1,16 +1,6 @@
 import { expect, it } from "vitest";
 
-import { cardFormatLabel, periodLabel, periodParts } from "./seasonLabels";
-
-it("gives card surfaces the same week wording as the detail page", () => {
-  expect(periodLabel(9, 26, false, true, 23)).toBe(
-    "Week 9 of 22 regular · 13 regular weeks left · 4 playoff weeks",
-  );
-  expect(periodLabel(24, 26, false, true, 23)).toBe("Playoffs · Week 2 of 4");
-  expect(periodLabel(22, 26, false, true, 23)).toBe("Week 22 of 22 regular · 4 playoff weeks");
-  expect(periodLabel(9, 26, false, false, 23)).toBe("Week 9 of 26");
-  expect(periodLabel(9, 26, false, undefined, undefined)).toBe("Week 9 of 26");
-});
+import { cardFormatLabel, periodParts } from "./seasonLabels";
 
 it("splits the detail week into a headline and its regular and playoff notes", () => {
   expect(periodParts(9, 26, false, true, 23)).toEqual({
