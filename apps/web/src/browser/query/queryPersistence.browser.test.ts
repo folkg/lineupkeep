@@ -12,11 +12,30 @@ it("restores team data from local storage", async () => {
   const first = new QueryClient();
   const stop = persistTeamQueries(first);
   first.setQueryData(["teams", "list"], [{ team: { id: "team-1" } }]);
+  first.setQueryData(["teams", "card-facts"], [{ summary: { team: { id: "team-1" } } }]);
   await new Promise((resolve) => setTimeout(resolve, 300));
   stop();
 
   const second = new QueryClient();
-  await restoreTeamQueries(second);
+  restoreTeamQueries(second);
   expect(second.getQueryData(["teams", "list"])).toEqual([{ team: { id: "team-1" } }]);
+  expect(second.getQueryData(["teams", "card-facts"])).toEqual([
+    { summary: { team: { id: "team-1" } } },
+  ]);
+  removePersistedTeamQueries();
+});
+
+it("leaves a query the server already supplied", async () => {
+  removePersistedTeamQueries();
+  const first = new QueryClient();
+  const stop = persistTeamQueries(first);
+  first.setQueryData(["teams", "list"], [{ team: { id: "stored-team" } }]);
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  stop();
+
+  const second = new QueryClient();
+  second.setQueryData(["teams", "list"], [{ team: { id: "server-team" } }]);
+  restoreTeamQueries(second);
+  expect(second.getQueryData(["teams", "list"])).toEqual([{ team: { id: "server-team" } }]);
   removePersistedTeamQueries();
 });

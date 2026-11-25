@@ -649,7 +649,7 @@ it("blocks a move that cannot run and leaves its reason beside the discard actio
   ).toBe(false);
 });
 
-it("loads with section lines instead of placeholder cards", async () => {
+it("loads with one moving mark instead of placeholder cards", async () => {
   const pending = Promise.withResolvers<TransactionMoveListData>();
   using _app = setupTransactionsPage({
     open: listData([], { open: 0, today: 0, saved: 0, ended: 0 }),
@@ -658,9 +658,10 @@ it("loads with section lines instead of placeholder cards", async () => {
 
   const loading = page.getByLabelText("Loading moves");
   await expect.element(loading).toBeVisible();
-  await expect.element(page.getByRole("heading", { name: "Today", exact: true })).toBeVisible();
+  expect(page.getByRole("heading", { name: "Today", exact: true }).elements()).toHaveLength(0);
   expect(page.getByRole("heading", { name: "Earlier", exact: true }).elements()).toHaveLength(0);
   expect(loading.getByRole("listitem").elements()).toHaveLength(0);
+  expect(loading.element().querySelectorAll(".animate-loading-slide")).toHaveLength(1);
 
   pending.resolve(listData([], { open: 0, today: 0, saved: 0, ended: 0 }));
   await expect.element(page.getByText("Nothing needs you today", { exact: true })).toBeVisible();
@@ -1920,6 +1921,10 @@ it("shows counted earlier skeletons until older moves arrive", async () => {
     endedPending: pending.promise,
   });
 
+  await expect.element(page.getByRole("heading", { name: "Transactions" })).toBeVisible();
+  await expect
+    .element(page.getByText("0 open moves · 0 today · 0 later", { exact: true }))
+    .toBeVisible();
   await page.getByRole("button", { name: "Show earlier moves" }).click();
   const loader = page.getByRole("status", { name: "Loading earlier moves" });
   await expect.element(loader).toBeVisible();

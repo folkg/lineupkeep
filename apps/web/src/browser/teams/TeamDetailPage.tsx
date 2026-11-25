@@ -47,6 +47,8 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
     onRefresh: () => props.onRefresh(),
   });
   const team = (): TeamSummaryView | undefined => page.team();
+  const readyTeam = (): TeamSummaryView | undefined =>
+    page.cardFactsLoading() ? undefined : team();
   const card = (): TeamCardView | undefined => page.card();
   const teams = (): ReadonlyArray<TeamSummaryView> => page.teams();
   const titleAside = (): JSX.Element | undefined => {
@@ -72,21 +74,22 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
             <Show
               fallback={
                 <Show
-                  fallback={<LoadingState label="Loading team">Loading this team…</LoadingState>}
-                  when={!page.isLoading()}
+                  fallback={
+                    <EmptyState title="Team not found.">
+                      This team is not available to the current account. Return to the team list.
+                    </EmptyState>
+                  }
+                  when={page.isLoading() || team() !== undefined}
                 >
-                  <EmptyState title="Team not found.">
-                    This team is not available to the current account. Return to the team list.
-                  </EmptyState>
+                  <LoadingState label="Loading team">Loading this team…</LoadingState>
                 </Show>
               }
-              when={team()}
+              when={readyTeam()}
             >
               {(summary) => (
                 <TeamDetail
                   team={summary()}
                   card={card()}
-                  cardsLoading={page.cardFactsLoading()}
                   remote={props.remote}
                   showProvider={showProvider()}
                   onOptimistic={page.beginControl}
@@ -116,7 +119,7 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
   );
   const facts = (): ReturnType<typeof toTeamOverviewFromCard> | undefined =>
     props.card === undefined
-      ? props.cardsLoading || overview.loading()
+      ? overview.loading()
         ? undefined
         : overview.facts()
       : toTeamOverviewFromCard(props.card, overview.facts());
@@ -134,9 +137,8 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
 
       <TeamSeasonOverview
         facts={facts()}
-        loading={props.card === undefined && (props.cardsLoading || overview.loading())}
         categoryValuesLoading={props.card !== undefined && overview.loading()}
-        failed={props.card === undefined && !props.cardsLoading && overview.failed()}
+        failed={props.card === undefined && overview.failed()}
       />
 
       <Stack as="section" gap="sm" labelledBy="team-activity-title">
@@ -204,7 +206,6 @@ type TeamDetailPageProps = {
 type TeamDetailProps = {
   readonly team: TeamSummaryView;
   readonly card: TeamCardView | undefined;
-  readonly cardsLoading: boolean;
   readonly remote: TeamRemote;
   readonly showProvider: boolean;
   readonly onOptimistic: (input: TeamControlData) => void;

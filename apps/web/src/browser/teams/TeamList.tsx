@@ -8,16 +8,14 @@ import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import type { ActionState } from "#browser/shared-ui/actionState.ts";
 import { Badge } from "#browser/shared-ui/Badge.tsx";
 import { Card, CardNote } from "#browser/shared-ui/Card.tsx";
-import { EmptyState } from "#browser/shared-ui/CollectionState.tsx";
+import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { IconButton } from "#browser/shared-ui/IconButton.tsx";
 import { RefreshIcon } from "#browser/shared-ui/icons.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Notice } from "#browser/shared-ui/Notice.tsx";
 import { RuleList } from "#browser/shared-ui/RuleList.tsx";
-import { SeasonArea } from "#browser/shared-ui/SeasonArea.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { createSettle } from "#browser/shared-ui/settle.ts";
-import { CardSkeletonList, Skeleton } from "#browser/shared-ui/Skeleton.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
@@ -74,7 +72,10 @@ export function TeamList(props: TeamListProps): JSX.Element {
           <Text type="meta">Turn on Lineup checks for the teams you want managed.</Text>
         </Notice>
       </Show>
-      <Show fallback={<CardSkeletonList season />} when={!props.isLoading()}>
+      <Show
+        fallback={<LoadingState label="Loading teams">Loading your teams…</LoadingState>}
+        when={!props.isLoading() && (props.loadFailure() !== null || !props.cardFactsLoading())}
+      >
         <Show
           fallback={
             <ActionFeedback
@@ -116,7 +117,6 @@ export function TeamList(props: TeamListProps): JSX.Element {
                       )[0]
                     }
                     factsFailure={props.cardFactsFailure()}
-                    factsLoading={props.cardFactsLoading()}
                     remote={props.remote}
                     showProvider={showProvider}
                     onOptimistic={props.onOptimistic}
@@ -142,13 +142,7 @@ function TeamCard(props: TeamCardProps): JSX.Element {
   return (
     <Card
       as="li"
-      badge={
-        format() !== undefined ? (
-          <Badge tone="neutral">{format()}</Badge>
-        ) : props.team.connectionStatus === "ready" && props.factsLoading && !props.factsFailure ? (
-          <Skeleton height="h-6" width="w-20" />
-        ) : undefined
-      }
+      badge={format() === undefined ? undefined : <Badge tone="neutral">{format()}</Badge>}
       footer={
         <TeamControls
           compact
@@ -163,7 +157,7 @@ function TeamCard(props: TeamCardProps): JSX.Element {
           <TextLink
             id={nameId()}
             params={{ teamId: props.team.team.id }}
-            preload="viewport"
+            preload="intent"
             type="card-title"
             to="/teams/$teamId"
           >
@@ -184,13 +178,7 @@ function TeamCard(props: TeamCardProps): JSX.Element {
           fallback={<TeamAttention team={props.team} />}
           when={props.team.connectionStatus === "ready"}
         >
-          <SeasonArea loading={props.factsLoading}>
-            <TeamSeasonFacts
-              facts={props.facts}
-              failed={props.factsFailure}
-              loading={props.factsLoading}
-            />
-          </SeasonArea>
+          <TeamSeasonFacts facts={props.facts} failed={props.factsFailure} />
         </Show>
         <CardNote>
           <CheckSummary now={props.now} team={props.team} />
@@ -264,7 +252,6 @@ type TeamCardProps = {
   readonly team: TeamSummaryView;
   readonly facts: TeamCardView | undefined;
   readonly factsFailure: boolean;
-  readonly factsLoading: boolean;
   readonly now: Accessor<Date>;
   readonly remote: TeamRemote;
   readonly showProvider: Accessor<boolean>;

@@ -1,9 +1,7 @@
-import { EffectArray } from "@lineupkeep/collections";
 import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 import type { Element } from "solid-js";
 
-import { TextSkeleton } from "./Skeleton";
 import { Text } from "./Text";
 
 export function Table(props: TableProps): JSX.Element {
@@ -65,24 +63,6 @@ export function Table(props: TableProps): JSX.Element {
 
 function cellClass(align: "end" | undefined): string {
   return align === "end" ? "px-2 py-2 text-right sm:px-3" : "px-2 py-2 sm:px-3";
-}
-
-export function TableSkeleton(props: {
-  readonly label: string;
-  readonly columns: ReadonlyArray<TableColumn>;
-  readonly rows?: number;
-}): JSX.Element {
-  return (
-    <Table
-      columns={props.columns}
-      label={props.label}
-      rows={Array.from({ length: props.rows ?? 3 }, () =>
-        EffectArray.map(props.columns, (_, index) => (
-          <TextSkeleton type="body" width={index === 0 ? "w-24" : "w-10"} />
-        )),
-      )}
-    />
-  );
 }
 
 type TableColumn = {

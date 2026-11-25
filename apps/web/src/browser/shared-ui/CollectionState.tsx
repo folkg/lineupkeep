@@ -13,7 +13,9 @@ export function EmptyState(props: EmptyStateProps): JSX.Element {
 export function LoadingState(props: LoadingStateProps): JSX.Element {
   return (
     <div aria-label={props.label} role="status" class={stateClass}>
-      <span class="h-2 w-[120px] animate-pulse bg-rule" />
+      <span aria-hidden="true" class="relative block h-1 w-[120px] overflow-hidden bg-rule">
+        <span class="absolute inset-y-0 w-1/3 animate-loading-slide bg-action" />
+      </span>
       <span>{props.children}</span>
     </div>
   );

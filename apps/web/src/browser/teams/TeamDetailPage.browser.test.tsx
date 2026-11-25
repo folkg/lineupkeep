@@ -1162,6 +1162,20 @@ it("keeps controls and activity when season facts are unavailable", async () => 
   await expect.element(page.getByRole("switch", { name: "Lineup checks for Alpha" })).toBeVisible();
 });
 
+it("keeps the team while its card facts load", async () => {
+  const pending = Promise.withResolvers<ReadonlyArray<TeamCardView>>();
+  using _app = setupTeamDetailPage(team, {
+    cards: () => pending.promise,
+    overview: () => Promise.resolve(overviewFixture),
+  });
+
+  await expect.element(page.getByRole("heading", { name: "Alpha" })).toBeVisible();
+  await expect.element(page.getByLabelText("Loading team")).toBeVisible();
+  expect(page.getByText("Team not found.").elements()).toHaveLength(0);
+  pending.resolve([]);
+  await expect.element(page.getByText("This week", { exact: true })).toBeVisible();
+});
+
 it.each([null, 0] as const)(
   "shows points-for only when it is published (%s)",
   async (pointsFor) => {
@@ -1188,7 +1202,7 @@ it.each([null, 0] as const)(
 it.each([
   [390, 844],
   [1440, 900],
-] as const)("keeps activity in place as season facts arrive at %ipx", async (width, height) => {
+] as const)("shows season facts without a placeholder table at %ipx", async (width, height) => {
   await page.viewport(width, height);
   await document.fonts.ready;
   const [facts, setFacts] = createSignal<TeamOverviewView>();
@@ -1196,7 +1210,7 @@ it.each([
   const dispose = render(
     () => (
       <>
-        <TeamSeasonOverview facts={facts()} loading={facts() === undefined} failed={false} />
+        <TeamSeasonOverview facts={facts()} failed={false} />
         <h2>Lineup runs</h2>
       </>
     ),
@@ -1208,25 +1222,10 @@ it.each([
       host.remove();
     },
   };
-  expect(host.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(1);
-  const activity = page.getByRole("heading", { name: "Lineup runs" }).element();
-  const before = activity.getBoundingClientRect().top;
-  await page.screenshot({
-    path: `../../../../../.artifacts/team-overview-polish/detail-loading-${width}.png`,
-    save: true,
-    element: host,
-  });
-  applyTheme("dark");
-  await page.screenshot({
-    path: `../../../../../.artifacts/team-overview-polish/detail-loading-${width}-dark.png`,
-    save: true,
-    element: host,
-  });
-  applyTheme("light");
+  expect(host.querySelectorAll(".animate-pulse").length).toBe(0);
   setFacts(tenCategoryOverview);
   await expect.element(page.getByText("Categories")).toBeVisible();
-  const after = activity.getBoundingClientRect().top;
-  expect(Math.abs(after - before), `${String(before)} -> ${String(after)}`).toBeLessThanOrEqual(10);
+  expect(host.querySelectorAll(".animate-pulse").length).toBe(0);
 });
 
 it("captures the team overview at desktop and phone sizes in light and dark", async () => {

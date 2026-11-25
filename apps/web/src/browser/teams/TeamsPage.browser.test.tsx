@@ -501,49 +501,52 @@ it("keeps local team controls when the batch read fails", async () => {
   expect(document.querySelector("[data-card-badge]")).toBeNull();
 });
 
-it("keeps local status in place while season facts arrive", async () => {
+it("shows one loading mark until the team cards are ready", async () => {
   await page.viewport(390, 844);
   await document.fonts.ready;
   const pending = Promise.withResolvers<ReadonlyArray<TeamCardView>>();
   using _app = setupTeamsPage([baseTeam], { cards: () => pending.promise });
-  await expect.element(page.getByText("Next check")).toBeVisible();
-  const card = document.querySelector<HTMLElement>("[data-card]");
-  const height = card?.getBoundingClientRect().height;
-  expect(card?.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(1);
-  await page.screenshot({
-    path: "../../../../../.artifacts/team-overview-polish/card-loading-390.png",
-    save: true,
-    element: card ?? undefined,
-  });
+  const loading = page.getByLabelText("Loading teams");
+  await expect.element(loading).toBeVisible();
+  expect(page.getByText("Next check").elements()).toHaveLength(0);
+  expect(document.querySelectorAll<HTMLElement>("[data-card]")).toHaveLength(0);
   pending.resolve([seasonCardWithMatchup]);
-  await expect.element(page.getByText("3rd of 12")).toBeVisible();
-  await document.fonts.ready;
-  expect(
-    Math.abs((card?.getBoundingClientRect().height ?? 0) - (height ?? 0)),
-    `${String(height)} -> ${String(card?.getBoundingClientRect().height)}`,
-  ).toBeLessThanOrEqual(25);
+  await expect.element(page.getByText("Next check")).toBeVisible();
+  expect(loading.elements()).toHaveLength(0);
 });
 
-it("keeps the loading card close to settled at desktop width", async () => {
+it("paints cached cards while fresh facts are still in flight", async () => {
+  await page.viewport(390, 844);
+  await document.fonts.ready;
+  const pending = Promise.withResolvers<ReadonlyArray<TeamCardView>>();
+  using _app = setupTeamsPage(
+    [baseTeam],
+    { cards: () => pending.promise },
+    { seedCards: [seasonCardWithMatchup] },
+  );
+  await expect.element(page.getByText("3rd of 12")).toBeVisible();
+  expect(page.getByLabelText("Loading teams").elements()).toHaveLength(0);
+  const card = document.querySelector<HTMLElement>("[data-card]");
+  const cachedHeight = card?.getBoundingClientRect().height;
+  pending.resolve([seasonCardWithMatchup]);
+  await expect.element(page.getByText("Categories")).toBeVisible();
+  await document.fonts.ready;
+  expect(
+    Math.abs((card?.getBoundingClientRect().height ?? 0) - (cachedHeight ?? 0)),
+    `${String(cachedHeight)} -> ${String(card?.getBoundingClientRect().height)}`,
+  ).toBeLessThanOrEqual(1);
+});
+
+it("waits for the team cards before it paints a card", async () => {
   await page.viewport(1440, 900);
   await document.fonts.ready;
   const pending = Promise.withResolvers<ReadonlyArray<TeamCardView>>();
   using _app = setupTeamsPage([baseTeam], { cards: () => pending.promise });
-  await expect.element(page.getByText("Next check")).toBeVisible();
-  const card = document.querySelector<HTMLElement>("[data-card]");
-  const loadingHeight = card?.getBoundingClientRect().height ?? 0;
-  expect(card?.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(1);
-  await page.screenshot({
-    path: "../../../../../.artifacts/team-overview-polish/card-loading-1440.png",
-    save: true,
-    element: card ?? undefined,
-  });
+  await expect.element(page.getByLabelText("Loading teams")).toBeVisible();
+  expect(document.querySelectorAll<HTMLElement>("[data-card]")).toHaveLength(0);
   pending.resolve([seasonCardWithMatchup]);
   await expect.element(page.getByText("Categories")).toBeVisible();
-  expect(
-    Math.abs((card?.getBoundingClientRect().height ?? 0) - loadingHeight),
-    `${String(loadingHeight)} -> ${String(card?.getBoundingClientRect().height)}`,
-  ).toBeLessThanOrEqual(25);
+  expect(document.querySelectorAll<HTMLElement>("[data-card]")).toHaveLength(1);
 });
 
 it("explains when a ready connection has no card facts for a local team", async () => {
@@ -1307,30 +1310,16 @@ it("starts card facts without waiting for the team list", async () => {
   expect(cardReads).toBe(1);
 });
 
-it("shows a loading state while the team list is pending", async () => {
-  const pending = Promise.withResolvers<ReadonlyArray<TeamSummaryView>>();
-  using _app = setupTeamsPage([], { list: () => pending.promise });
-  await expect.element(page.getByLabelText("Loading teams")).toBeVisible();
-  pending.resolve([]);
-  await expect.element(page.getByText("No teams yet.")).toBeVisible();
-});
-
-it("keeps the loading card the same height as the team card it becomes", async () => {
+it("shows one loading mark while the team list is pending", async () => {
   const pending = Promise.withResolvers<ReadonlyArray<TeamSummaryView>>();
   using _app = setupTeamsPage([], { list: () => pending.promise });
 
-  const skeleton = page.getByLabelText("Loading teams").getByRole("listitem").first();
-  await expect.element(skeleton).toBeVisible();
-  const skeletonElement = skeleton.element();
-  const skeletonHeight = skeletonElement.getBoundingClientRect().height;
+  const loading = page.getByLabelText("Loading teams");
+  await expect.element(loading).toBeVisible();
+  expect(loading.getByRole("listitem").elements()).toHaveLength(0);
   pending.resolve([enabledTeam]);
-  const name = page.getByRole("link", { name: "Alpha", exact: true });
-  await expect.element(name).toBeVisible();
-  const card = name.element().closest<HTMLElement>("[data-card]");
-  expect(card).not.toBeNull();
-  const cardHeight = card?.getBoundingClientRect().height ?? 0;
-
-  expect(skeletonHeight).toBeGreaterThanOrEqual(cardHeight);
+  await expect.element(page.getByRole("link", { name: "Alpha", exact: true })).toBeVisible();
+  expect(loading.elements()).toHaveLength(0);
 });
 
 it("keeps refresh an icon button with a tooltip and no text label", async () => {

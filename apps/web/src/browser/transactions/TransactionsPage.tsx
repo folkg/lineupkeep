@@ -10,7 +10,7 @@ import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Badge } from "#browser/shared-ui/Badge.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { Card, CardNote } from "#browser/shared-ui/Card.tsx";
-import { EmptyState } from "#browser/shared-ui/CollectionState.tsx";
+import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { Disclosure } from "#browser/shared-ui/Disclosure.tsx";
 import { Form } from "#browser/shared-ui/Form.tsx";
 import { formatCalendarDate, formatDateTime } from "#browser/shared-ui/formatTime.ts";
@@ -22,7 +22,7 @@ import { Page } from "#browser/shared-ui/Page.tsx";
 import { QueueList, QueueListItem, QueueListNote } from "#browser/shared-ui/QueueList.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
-import { ListSkeleton, TransactionsSkeleton } from "#browser/shared-ui/Skeleton.tsx";
+import { ListSkeleton } from "#browser/shared-ui/Skeleton.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextField } from "#browser/shared-ui/TextField.tsx";
@@ -84,7 +84,10 @@ export function TransactionsPage(props: TransactionsPageProps): JSX.Element {
   return (
     <AppShell>
       <Page kicker={<SummaryKicker page={page} />} title="Transactions">
-        <Show fallback={<TransactionsSkeleton />} when={!page.isLoading()}>
+        <Show
+          fallback={<LoadingState label="Loading moves">Loading your moves…</LoadingState>}
+          when={!page.isLoading()}
+        >
           <Show
             fallback={
               <ActionFeedback

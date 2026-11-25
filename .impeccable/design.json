@@ -480,7 +480,7 @@
       },
       {
         "name": "The Typed Skeleton Rule",
-        "body": "A loading shape borrows the line box of the text type it replaces. A text skeleton is named by type, not by a pixel height, and its bar sits inside that line box. Title and table skeletons keep the final header, widths, and row count so the page does not move when data arrives.",
+        "body": "A loading shape borrows the line box of the text type it replaces. A text skeleton is named by type, not by a pixel height, and its bar sits inside that line box. A card with local facts paints in full; a list without them waits under one moving mark instead of inventing a card. The only row skeleton is the already-run list, where the real row count is known. Missing values in a real table keep their cells.",
         "section": "layout"
       }
     ],
@@ -516,6 +516,7 @@
       "Don't float controls to the right of a metadata line.",
       "Don't use colour alone for connection, automation, or risk.",
       "Don't use a pixel height for a text skeleton.",
+      "Don't invent a card or table shape for data you do not have.",
       "Don't show a running wins total while a matchup is still live."
     ]
   }

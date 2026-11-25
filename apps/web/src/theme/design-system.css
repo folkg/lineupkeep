@@ -112,6 +112,7 @@
   --animate-overlay-in: overlay-in var(--theme-duration-quick) var(--theme-ease-out) both;
   --animate-dialog-in: dialog-in var(--theme-duration-quick) var(--theme-ease-out) both;
   --animate-navigation-progress: navigation-progress 1.2s linear infinite;
+  --animate-loading-slide: loading-slide 1.1s ease-in-out infinite;
 
   @keyframes overlay-in {
     from {
@@ -130,6 +131,16 @@
 
     to {
       transform: translateX(100%);
+    }
+  }
+
+  @keyframes loading-slide {
+    from {
+      transform: translateX(-100%);
+    }
+
+    to {
+      transform: translateX(300%);
     }
   }
 
@@ -307,7 +318,13 @@
     animation: none;
   }
 
-  .animate-pulse {
+  .animate-pulse,
+  .animate-navigation-progress {
     animation: none;
+  }
+
+  .animate-loading-slide {
+    animation: none;
+    transform: translateX(100%);
   }
 }

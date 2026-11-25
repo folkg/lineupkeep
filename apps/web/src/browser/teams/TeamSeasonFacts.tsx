@@ -4,7 +4,6 @@ import { Show } from "solid-js";
 
 import { CardNote } from "#browser/shared-ui/Card.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
-import { TextSkeleton } from "#browser/shared-ui/Skeleton.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import type { TeamCardView } from "#contracts/connections/teamContract.ts";
@@ -16,10 +15,7 @@ import type { SeasonSummaryData } from "./SeasonSummary";
 export function TeamSeasonFacts(props: {
   readonly facts: TeamCardView | undefined;
   readonly failed: boolean;
-  readonly loading: boolean;
 }): JSX.Element {
-  const showSkeleton = (): boolean =>
-    props.loading && !props.failed && props.facts?.season === undefined;
   const data = (): SeasonSummaryData | undefined => {
     const season = props.facts?.season;
     if (season === undefined) {
@@ -43,46 +39,16 @@ export function TeamSeasonFacts(props: {
   return (
     <Show
       fallback={
-        <Show
-          fallback={<CardSeasonFactsSkeleton />}
-          when={
-            !showSkeleton() &&
-            (props.failed || props.facts?.reason !== undefined || props.facts?.season === undefined)
-          }
-        >
-          <Text type="meta" tone="muted">
-            {props.failed
-              ? "Season facts could not be loaded. Lineup runs and controls are still available."
-              : (props.facts?.reason ?? "Season facts were not published for this team.")}
-          </Text>
-        </Show>
+        <Text type="meta" tone="muted">
+          {props.failed
+            ? "Season facts could not be loaded. Lineup runs and controls are still available."
+            : (props.facts?.reason ?? "Season facts were not published for this team.")}
+        </Text>
       }
       when={data()}
     >
       {(facts) => <CardSeasonFacts data={facts()} />}
     </Show>
-  );
-}
-
-function CardSeasonFactsSkeleton(): JSX.Element {
-  return (
-    <Stack gap="sm">
-      <Stack gap="2xs">
-        <TextSkeleton type="meta" width="w-16" />
-        <TextSkeleton type="body-strong" width="w-24" />
-        <TextSkeleton type="meta" width="w-40" />
-        <TextSkeleton type="meta" width="w-32" />
-      </Stack>
-      <CardNote>
-        <Stack gap="2xs">
-          <TextSkeleton type="meta" width="w-32" />
-          <TextSkeleton type="body-strong" width="w-28" />
-          <TextSkeleton type="meta" width="w-36" />
-          <TextSkeleton type="meta" width="w-48" />
-          <TextSkeleton type="meta" width="w-32" />
-        </Stack>
-      </CardNote>
-    </Stack>
   );
 }
 
