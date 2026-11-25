@@ -2,10 +2,10 @@ import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 
 import { AppShell } from "#browser/app-shell/AppShell.tsx";
+import { ActionBar } from "#browser/shared-ui/ActionBar.tsx";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { Form } from "#browser/shared-ui/Form.tsx";
-import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
@@ -62,37 +62,41 @@ export function ConsentPage(props: {
                   </For>
                 </RuleList>
               </Stack>
-              <Inline gap="sm">
-                <Form
-                  gap="md"
-                  onSubmit={() => {
-                    void consent.approve();
-                  }}
-                >
-                  <Button
-                    type="submit"
-                    state={consent.isApproving() ? "working" : "idle"}
-                    disabled={consent.isPending()}
+              <ActionBar
+                primary={
+                  <Form
+                    gap="md"
+                    onSubmit={() => {
+                      void consent.approve();
+                    }}
                   >
-                    Allow access
-                  </Button>
-                </Form>
-                <Form
-                  gap="md"
-                  onSubmit={() => {
-                    void consent.deny();
-                  }}
-                >
-                  <Button
-                    type="submit"
-                    variant="secondary"
-                    state={consent.isDenying() ? "working" : "idle"}
-                    disabled={consent.isPending()}
+                    <Button
+                      type="submit"
+                      state={consent.isApproving() ? "working" : "idle"}
+                      disabled={consent.isPending()}
+                    >
+                      Allow access
+                    </Button>
+                  </Form>
+                }
+                secondary={
+                  <Form
+                    gap="md"
+                    onSubmit={() => {
+                      void consent.deny();
+                    }}
                   >
-                    Deny access
-                  </Button>
-                </Form>
-              </Inline>
+                    <Button
+                      type="submit"
+                      variant="secondary"
+                      state={consent.isDenying() ? "working" : "idle"}
+                      disabled={consent.isPending()}
+                    >
+                      Deny access
+                    </Button>
+                  </Form>
+                }
+              />
               <ActionFeedback feedback={consent.feedback()} />
             </Stack>
           )}

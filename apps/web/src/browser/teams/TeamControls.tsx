@@ -40,7 +40,7 @@ export function TeamControls(props: TeamControlsProps): JSX.Element {
 
   return (
     <Stack gap="sm">
-      <Inline gap="sm" justify={props.align === "end" ? "end" : undefined}>
+      <Inline gap="sm">
         <Switch
           compact={props.compact}
           checked={enabled()}
@@ -76,7 +76,6 @@ export function TeamControls(props: TeamControlsProps): JSX.Element {
 }
 
 type TeamControlsProps = {
-  readonly align?: "start" | "end";
   readonly compact?: boolean;
   readonly showPauseNote?: boolean;
   readonly team: TeamSummaryView;

@@ -22,6 +22,11 @@
   their required next action.
 - A league whose scoring format is unknown shows its own published scoring label verbatim; the
   browser no longer maps provider shorthand such as H2H Cat or Roto into a format.
+- Placement now follows a control's role: commit actions trail their block through `ActionBar`,
+  state controls trail their row, section actions lead, and navigation leads with the text it
+  describes. A team card and the team page lead with the provider link and trail with the checks
+  toggle and pause; the feedback form, the schedule editor, dialogs, and consent actions pack to
+  the trailing edge, and row actions stay trailing on phones.
 - A team card and the team page share one season-facts calculation, so both read the same place,
   record, week, points, and matchup lines for each scoring format.
 

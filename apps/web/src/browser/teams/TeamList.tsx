@@ -155,7 +155,8 @@ function TeamCard(props: TeamCardProps): JSX.Element {
         )
       }
       footer={
-        <Inline fullWidth growFirst gap="md" justify="between">
+        <Inline gap="md" justify="between" fullWidth>
+          <TeamProviderLink team={props.team.team} showProvider={props.showProvider()} />
           <TeamControls
             compact
             showPauseNote={false}
@@ -163,7 +164,6 @@ function TeamCard(props: TeamCardProps): JSX.Element {
             remote={props.remote}
             onOptimistic={props.onOptimistic}
           />
-          <TeamProviderLink team={props.team.team} showProvider={props.showProvider()} />
         </Inline>
       }
       header={

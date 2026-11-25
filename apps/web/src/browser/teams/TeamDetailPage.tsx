@@ -128,9 +128,9 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
           </Text>
           <TeamAttention team={props.team} />
         </Stack>
-        <Inline fullWidth growFirst gap="md" justify="between">
-          <TeamControls team={props.team} remote={props.remote} onOptimistic={props.onOptimistic} />
+        <Inline gap="md" justify="between" fullWidth>
           <TeamProviderLink team={props.team.team} showProvider={props.showProvider} />
+          <TeamControls team={props.team} remote={props.remote} onOptimistic={props.onOptimistic} />
         </Inline>
       </Stack>
 

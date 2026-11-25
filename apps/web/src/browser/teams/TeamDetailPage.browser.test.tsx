@@ -338,7 +338,7 @@ it("names the league context and keeps quiet states off the page", async () => {
     .not.toBeInTheDocument();
 });
 
-it("puts the provider jump out at the end of the control row", async () => {
+it("leads the control row with the provider link and trails it with the controls", async () => {
   using _app = setupTeamDetailPage({
     ...team,
     team: {
@@ -364,14 +364,14 @@ it("puts the provider jump out at the end of the control row", async () => {
     Math.max(jumpBox.top, toggleBox.top),
     "the jump out shares the control row with the toggle",
   ).toBeLessThan(Math.min(jumpBox.bottom, toggleBox.bottom));
-  expect(jumpBox.left, "the jump out sits after the controls").toBeGreaterThan(toggleBox.right);
+  expect(jumpBox.right, "the link leads the row").toBeLessThan(toggleBox.left);
   expect(
     context.element().parentElement?.contains(jumpOut.element()),
     "the jump out is not in the league context",
   ).toBe(false);
 });
 
-it("keeps the provider jump out on the control row with a long team name on a phone", async () => {
+it("keeps the provider link on the control row with a long team name on a phone", async () => {
   const longName = "Embedded Browser Team With A Long Name";
   using _app = setupTeamDetailPage({
     ...team,

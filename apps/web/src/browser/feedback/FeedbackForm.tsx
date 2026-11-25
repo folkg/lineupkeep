@@ -1,9 +1,9 @@
 import { EffectArray } from "@lineupkeep/collections";
 import type { JSX } from "@solidjs/web";
 
+import { ActionBar } from "#browser/shared-ui/ActionBar.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { Form } from "#browser/shared-ui/Form.tsx";
-import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { SelectField } from "#browser/shared-ui/SelectField.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextArea } from "#browser/shared-ui/TextArea.tsx";
@@ -47,11 +47,13 @@ export function FeedbackForm(props: FeedbackFormProps): JSX.Element {
         Do not include passwords or sign-in details. Reports are stored as plain text, and only this
         account can read them.
       </Text>
-      <Inline gap="sm">
-        <Button state={props.submitting ? "working" : "idle"} type="submit">
-          Send report
-        </Button>
-      </Inline>
+      <ActionBar
+        primary={
+          <Button state={props.submitting ? "working" : "idle"} type="submit">
+            Send report
+          </Button>
+        }
+      />
     </Form>
   );
 }

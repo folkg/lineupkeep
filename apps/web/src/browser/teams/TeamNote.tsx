@@ -1,9 +1,9 @@
 import type { JSX } from "@solidjs/web";
 
+import { ActionBar } from "#browser/shared-ui/ActionBar.tsx";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { Form } from "#browser/shared-ui/Form.tsx";
-import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
@@ -26,14 +26,16 @@ export function TeamNote(props: { readonly note: TeamNoteController }): JSX.Elem
           rows={5}
           value={props.note.draft()}
         />
-        <Inline gap="sm" justify="between">
-          <Button confirmed state={props.note.saveState()} type="submit">
-            Save note
-          </Button>
-          <Text type="meta" tone="muted">
-            {props.note.count()} of {props.note.limit()} characters
-          </Text>
-        </Inline>
+        <Text type="meta" tone="muted">
+          {props.note.count()} of {props.note.limit()} characters
+        </Text>
+        <ActionBar
+          primary={
+            <Button confirmed state={props.note.saveState()} type="submit">
+              Save note
+            </Button>
+          }
+        />
       </Form>
       <Text as="span" role="status" srOnly>
         {props.note.saveState() === "done" ? "Note saved." : ""}

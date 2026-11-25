@@ -317,13 +317,29 @@ else.
 when present, sits directly under the title in the meta type; it never pushes the title down and
 never adds a second accent colour.
 
-**Actions.** One `ActionBar` owns the order. On wide screens the destructive action is separated
-at the left, and tertiary, secondary, then primary actions sit together at the right. On phones
-every action shares one equal-width row, ordered destructive, tertiary, secondary, primary. A
-lone action fills the row. An action area holds at most three actions; more belong in an overflow
-menu. Labels never truncate. A label may wrap to a second line, and every button in the row takes
-the tallest height. A cancel that only closes an editor is neutral; danger belongs to actions that
-discard or delete.
+**Placement.** Where a control sits follows what it does, not which screen it is on. Four roles
+cover every control:
+
+- **Commit.** An action that changes stored state at the end of a block: `Save note`, `Send
+  report`, `Run now`, `Allow access`, `Run all`. Commit actions sit at the trailing edge of the
+  block they commit, and only `ActionBar` renders them.
+- **State.** A control that changes the row it sits in: the checks toggle, the pause control, a
+  session's end icon. State controls sit at the row's trailing edge at every width, so a column of
+  rows has one control edge.
+- **Section.** A lone action that belongs to a whole section rather than a row: `Download your
+  data`, `End all other sessions`, `Connect another account`. Section actions sit at the leading
+  edge under the prose they belong to.
+- **Navigation.** A link that leaves the page or names the context: the provider jump-out, a back
+  link, a run's detail link. Navigation sits at the leading edge with the text it describes, never
+  inside a control cluster.
+
+**Actions.** One `ActionBar` owns the order and the edge. On wide screens every action packs to
+the trailing edge; a destructive action separates to the leading edge and the rest stay trailing.
+On phones every action shares one equal-width row, ordered destructive, tertiary, secondary,
+primary. A lone action fills the row. An action area holds at most three actions; more belong in
+an overflow menu. Labels never truncate. A label may wrap to a second line, and every button in
+the row takes the tallest height. A cancel that only closes an editor is neutral; danger belongs
+to actions that discard or delete.
 
 **Action labels.** Start with a verb and name the outcome: `Run now`, `Save schedule`, `Discard`,
 `Cancel`. Keep labels to one or two words. Do not use `OK`, `Yes`, or a bare `Submit`. Do not
@@ -341,25 +357,25 @@ rule closes it. Navigation labels use the label type in caps; the active item ca
 rule that spans exactly the item, not a short bar or an overhanging block. The links wrap as whole
 items, with no utility action left on a line of its own.
 
-**Rows and cards** use two columns from 560px: text at the left, one control cluster at the right. A team
-card puts its provider jump-out at the far right of the control row; the checks toggle and pause
-sit at the left, so every card has the same control shape and the league line stays calm. The
+**Rows and cards** use two columns from 560px: text at the left, one control cluster at the
+right. A team card puts its provider jump-out at the leading edge of the control row and the
+checks toggle and pause at the trailing edge, so every card has the same control edge. The
 pause is a 28px square icon frame showing Pause or Play, so changing state never shifts the
 cluster; its accessible name stays the full pause or resume sentence, and it stays in place and
 is disabled while checks are off. The card header is a two-column grid: title and meta take the
 remaining width, and the badge keeps the top-right corner at every size. A long team or league
 name wraps inside its column; it never truncates and never pushes the badge below. Below 560px
-the body stacks and the control row keeps the toggle and pause at the left and the provider link
+the body stacks and the control row keeps the provider link at the left and the toggle and pause
 at the right. Controls never overlap a name.
 
 **Team detail order** is fixed: back link, title, one metadata line (sport and league), one
-control row with toggle, pause, and the provider jump-out at the far right, then a season and week
-split, the lineup runs behind their rule, and the owner note. The split is two
+control row with the provider jump-out leading and the toggle and pause trailing, then a season
+and week split, the lineup runs behind their rule, and the owner note. The split is two
 rule-led sections, not one card: season facts sit in a narrow side rail and the current week and
 its category table take the main column. The week line leads with the week and keeps its regular
 and playoff notes on their own lines. On phones the season facts come first. The provider
-jump-out sits at the far right of the control row here and on the list. Nothing floats to the
-right of the metadata line. Head-to-head category tables end on their last category; a running win
+jump-out leads the control row here and on the list. Nothing floats to the right of the metadata
+line. Head-to-head category tables end on their last category; a running win
 total is not shown because nothing has been won while the week is live. Rotisserie tables end
 with total points.
 
@@ -382,9 +398,9 @@ meaning; `Card` owns the fixed top-right placement. A team list passes the short
 single instant, say `at Nov 1, 11:44 AM`; when it crosses the reader's midnight, show both full
 dates.
 
-**Alignment.** Text shares one left edge. Controls share one right edge above 560px and one left
-edge below it. Toggle, pause, and provider controls sit on the text's first-line baseline; the
-toggle and pause share one horizontal line.
+**Alignment.** Text shares one leading edge. Controls share one trailing edge at every width.
+Toggle, pause, and provider controls sit on the text's first-line baseline; the toggle and pause
+share one horizontal line.
 
 ## Elevation and shape
 
@@ -457,9 +473,9 @@ and note save are decided there and are not retimed by a motion pass.
   checks toggle. It shows Pause or Play so the control keeps its place; its accessible name
   remains the full pause or resume sentence.
 - **Icon:** a 28px square frame with a 2px `rule-strong` border inside a 44px hit area. The frame
-  sits flush with the column edge; the hit area may extend into the gutter. The pause control
-  and the refresh control use this control; the provider jump-out is a meta text link at the far
-  right of the row.
+  sits flush with the column edge; the hit area may extend into the gutter by 8px. The pause
+  control and the refresh control use this control; the provider jump-out is a meta text link at
+  the leading edge of the row.
 - **Google:** Google's G and prescribed light/dark fill, square to match the sheet, with its own
   14px type as the one branded exception.
 
@@ -592,7 +608,7 @@ or connection health.
 - Do keep motion to the rare moments named under [Motion](#motion), on the theme's duration and
   easing tokens.
 - Do preserve keyboard access, visible focus, selection, zoom, and reduced motion.
-- Do keep the provider jump-out at the far right of the control row and the pause control in place.
+- Do keep the provider jump-out at the leading edge of the control row and state controls trailing.
 - Do let long names wrap and rows stack below 560px.
 
 ### Don't

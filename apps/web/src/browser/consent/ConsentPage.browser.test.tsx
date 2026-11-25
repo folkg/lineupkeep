@@ -12,6 +12,8 @@ import {
 import { expect, it } from "vitest";
 import { page } from "vitest/browser";
 
+import "#web/styles.css";
+
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 
@@ -30,6 +32,26 @@ it("distinguishes the verified client host from its unverified declared name", a
       }),
     )
     .toBeVisible();
+});
+
+it("puts the decision at the trailing edge with denial ahead of approval", async () => {
+  using _app = setupConsent({ decide: () => Promise.resolve("/returned") });
+  await page.viewport(1280, 900);
+
+  const allow = page.getByRole("button", { name: "Allow access" });
+  const deny = page.getByRole("button", { name: "Deny access" });
+  await expect.element(allow).toBeVisible();
+  await expect.element(deny).toBeVisible();
+
+  const allowBox = allow.element().getBoundingClientRect();
+  const denyBox = deny.element().getBoundingClientRect();
+  const bar = allow.element().closest("form")?.parentElement?.parentElement;
+  expect(denyBox.right, "denial comes before approval").toBeLessThanOrEqual(allowBox.left);
+  expect(allowBox.top, "both decisions share one row").toBe(denyBox.top);
+  expect(
+    Math.abs(allowBox.right - (bar?.getBoundingClientRect().right ?? 0)),
+    "the approval sits at the trailing edge",
+  ).toBeLessThanOrEqual(1);
 });
 
 it("acknowledges consent immediately and returns only after confirmation", async () => {

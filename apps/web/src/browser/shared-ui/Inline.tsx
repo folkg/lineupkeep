@@ -18,7 +18,7 @@ export function Inline(props: InlineProps): JSX.Element {
             ? "items-baseline"
             : "items-center",
         props.justify === "between" && "justify-between",
-        props.justify === "end" && "justify-end max-[559px]:justify-start",
+        props.justify === "end" && "justify-end",
         props.growFirst === true && "[&>*:first-child]:min-w-0 [&>*:first-child]:flex-1",
         props.fullWidth === true && "w-full",
         props.fullWidthOnSmall === true &&

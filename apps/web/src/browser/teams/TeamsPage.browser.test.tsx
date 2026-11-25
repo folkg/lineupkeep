@@ -1116,7 +1116,7 @@ it("frames a team card with the shared card structure", async () => {
   expect(card.querySelector("[data-card-badge]")).not.toBeNull();
 });
 
-it("puts the provider jump out at the end of the card control row", async () => {
+it("leads the card control row with the provider link and trails it with the controls", async () => {
   using _app = setupTeamsPage([
     {
       ...enabledTeam,
@@ -1154,15 +1154,24 @@ it("puts the provider jump out at the end of the card control row", async () => 
   const nameBox = name.element().getBoundingClientRect();
   const jumpBox = jumpOut.element().getBoundingClientRect();
   const pauseBox = pause.element().getBoundingClientRect();
+  const footer = jumpOut.element().closest("[data-card-footer]")?.getBoundingClientRect();
   expect(jumpBox.top, "the jump out sits below the name").toBeGreaterThan(nameBox.bottom);
-  expect(jumpBox.left, "the jump out sits after the pause control").toBeGreaterThan(pauseBox.right);
+  expect(jumpBox.right, "the link leads the row").toBeLessThan(pauseBox.left);
+  expect(
+    Math.abs(jumpBox.left - ((footer?.left ?? 0) + 16)),
+    "the link starts at the card's leading padding",
+  ).toBeLessThanOrEqual(1);
+  expect(
+    (footer?.right ?? 0) - pauseBox.right,
+    "the controls sit inside the card's trailing padding",
+  ).toBeLessThanOrEqual(16);
   expect(
     context.element().compareDocumentPosition(jumpOut.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
     "the jump out follows the context",
   ).toBeTruthy();
 });
 
-it("keeps the provider jump out on the card control row on a phone", async () => {
+it("keeps the provider link leading and the controls trailing on a phone", async () => {
   using _app = setupTeamsPage([
     {
       ...enabledTeam,
@@ -1186,10 +1195,10 @@ it("keeps the provider jump out on the card control row on a phone", async () =>
   const pauseBox = pause.element().getBoundingClientRect();
   expect(
     Math.max(jumpBox.top, pauseBox.top),
-    "the jump out shares the control row with the pause control",
+    "the link shares the control row with the pause control",
   ).toBeLessThan(Math.min(jumpBox.bottom, pauseBox.bottom));
-  expect(jumpBox.left, "the jump out sits after the controls").toBeGreaterThan(pauseBox.right);
-  expect(jumpBox.right, "the jump out stays inside the page").toBeLessThanOrEqual(390);
+  expect(jumpBox.right, "the link leads the row").toBeLessThan(pauseBox.left);
+  expect(pauseBox.right, "the controls stay inside the page").toBeLessThanOrEqual(374);
 });
 
 it("names the provider only when the account has more than one provider type", async () => {

@@ -12,17 +12,24 @@ it("keeps destructive first and the primary last from wide screens down to phone
 
   expect(box("Discard").x).toBeLessThan(box("Schedule").x);
   expect(box("Schedule").x).toBeLessThan(box("Run now").x);
+  const primary = page.getByRole("button", { name: "Run now", exact: true }).element();
+  const bar = primary.closest("fieldset");
+  expect(bar, "the action bar owns the row").not.toBeNull();
+  expect(
+    Math.abs(box("Run now").right - (bar?.getBoundingClientRect().right ?? 0)),
+    "the primary action sits at the trailing edge",
+  ).toBeLessThanOrEqual(1);
 
   await page.viewport(390, 844);
   const destructive = box("Discard");
   const secondary = box("Schedule");
-  const primary = box("Run now");
+  const phonePrimary = box("Run now");
   expect(destructive.x).toBeLessThan(secondary.x);
-  expect(secondary.x).toBeLessThan(primary.x);
+  expect(secondary.x).toBeLessThan(phonePrimary.x);
   expect(destructive.y).toBe(secondary.y);
-  expect(secondary.y).toBe(primary.y);
+  expect(secondary.y).toBe(phonePrimary.y);
   expect(Math.abs(destructive.width - secondary.width)).toBeLessThanOrEqual(1);
-  expect(Math.abs(secondary.width - primary.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(secondary.width - phonePrimary.width)).toBeLessThanOrEqual(1);
 });
 
 it("gives a two-action editor one equal row", async () => {

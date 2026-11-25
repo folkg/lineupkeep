@@ -12,7 +12,7 @@ export function ActionBar(props: {
   return (
     <fieldset
       disabled={props.disabled === true}
-      class="m-0 grid w-full grid-flow-col auto-cols-fr items-stretch gap-2 border-0 p-0 max-[559px]:[&_button]:w-full max-[559px]:[&_button]:min-w-0 max-[559px]:[&_button]:px-2 min-[560px]:flex min-[560px]:flex-wrap min-[560px]:items-center min-[560px]:gap-3"
+      class="m-0 grid w-full grid-flow-col auto-cols-fr items-stretch gap-2 border-0 p-0 max-[559px]:[&_button]:w-full max-[559px]:[&_button]:min-w-0 max-[559px]:[&_button]:px-2 min-[560px]:flex min-[560px]:flex-wrap min-[560px]:items-center min-[560px]:justify-end min-[560px]:gap-3"
     >
       <Show when={props.destructive}>
         {(destructive) => <div class="max-[559px]:grid min-[560px]:me-auto">{destructive()}</div>}
