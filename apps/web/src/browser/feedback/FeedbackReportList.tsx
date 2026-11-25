@@ -54,9 +54,7 @@ export function FeedbackReportList(props: FeedbackReportListProps): JSX.Element 
         >
           <Show
             fallback={
-              <EmptyState title="No reports yet.">
-                Send one above. Reports and their status stay listed here.
-              </EmptyState>
+              <EmptyState title="No reports yet.">Send one above to track it here.</EmptyState>
             }
             when={props.reports().length > 0}
           >
@@ -67,8 +65,7 @@ export function FeedbackReportList(props: FeedbackReportListProps): JSX.Element 
         </Show>
       </Show>
       <Text type="meta" tone="muted">
-        Reports stay listed while they are open. Closed reports are removed 180 days after they
-        close.
+        Closed reports are removed after 180 days.
       </Text>
     </Stack>
   );

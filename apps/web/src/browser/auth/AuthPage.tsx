@@ -26,7 +26,7 @@ export function AuthPage(props: AuthPageProps): JSX.Element {
             }
           >
             <Text type="body" tone="muted">
-              We will email you a six-digit code. There is no password to remember.
+              We will email you a six-digit code, so there is no password to remember.
             </Text>
           </IntroPanel>
         }

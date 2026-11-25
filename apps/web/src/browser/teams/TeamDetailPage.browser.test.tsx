@@ -36,6 +36,8 @@ import type {
   TeamSummaryView,
 } from "#contracts/connections/teamContract.ts";
 
+import { MatchupSummary } from "./SeasonSummary";
+import type { CategoryRow } from "./SeasonSummary";
 import { TeamDetailPage } from "./TeamDetailPage";
 import { quietGroupSpan } from "./teamLabels";
 import { teamQueries } from "./teamQueries";
@@ -336,7 +338,7 @@ it("names the league context and keeps quiet states off the page", async () => {
     .not.toBeInTheDocument();
 });
 
-it("puts the provider jump out beside the team name and above the controls", async () => {
+it("puts the provider jump out with the league context and above the controls", async () => {
   using _app = setupTeamDetailPage({
     ...team,
     team: {
@@ -346,29 +348,28 @@ it("puts the provider jump out beside the team name and above the controls", asy
     },
   });
 
-  await expect.element(page.getByText("Irish Lax · Football · 2026")).toBeVisible();
+  const context = page.getByText("Irish Lax · Football · 2026");
   const name = page.getByRole("heading", { name: "Alpha" });
   const jumpOut = page.getByRole("link", { name: "Open Alpha in Yahoo" });
   const toggle = page.getByRole("switch", { name: "Lineup checks for Alpha" });
-  const context = page.getByText("Irish Lax · Football · 2026");
+  await expect.element(context).toBeVisible();
   await expect.element(jumpOut).toHaveAttribute("href", "https://provider.example/f1/1000/1");
+  expect(jumpOut.element().textContent).toBe("Open");
 
   const nameBox = name.element().getBoundingClientRect();
   const jumpBox = jumpOut.element().getBoundingClientRect();
-  expect(jumpBox.left, "the popout sits to the right of the team name").toBeGreaterThanOrEqual(
-    nameBox.right,
-  );
+  expect(jumpBox.top, "the jump out sits below the name").toBeGreaterThan(nameBox.bottom);
   expect(
     jumpBox.bottom,
-    "the popout sits with the name, not in the control row",
+    "the jump out sits with the league context, not in the control row",
   ).toBeLessThanOrEqual(toggle.element().getBoundingClientRect().top);
   expect(
-    jumpOut.element().compareDocumentPosition(context.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
-    "the popout comes before the metadata line",
+    context.element().compareDocumentPosition(jumpOut.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
+    "the jump out follows the league context",
   ).toBeTruthy();
 });
 
-it("keeps the popout beside a long team name on a phone", async () => {
+it("keeps the provider jump out below a long team name on a phone", async () => {
   const longName = "Embedded Browser Team With A Long Name";
   using _app = setupTeamDetailPage({
     ...team,
@@ -387,11 +388,7 @@ it("keeps the popout beside a long team name on a phone", async () => {
 
   const headingBox = heading.element().getBoundingClientRect();
   const jumpBox = jumpOut.element().getBoundingClientRect();
-  expect(jumpBox.left, "the popout stays to the right of the name").toBeGreaterThanOrEqual(
-    headingBox.right,
-  );
-  expect(jumpBox.bottom, "the popout shares the name's lines").toBeGreaterThan(headingBox.top);
-  expect(jumpBox.top).toBeLessThan(headingBox.bottom);
+  expect(jumpBox.top, "the jump out stays below the name").toBeGreaterThan(headingBox.bottom);
 });
 
 it("puts lineup runs above the owner note and leaves the roster off the page", async () => {
@@ -417,9 +414,9 @@ it("puts lineup runs above the owner note and leaves the roster off the page", a
 it("says when the next game is in the reader's local time", async () => {
   using _app = setupTeamDetailPage({ ...team, lastRun: skippedRun, recentRuns: [skippedRun] });
 
-  const sentence = `Nothing to check. Next game is ${formatWeekday(nextGameAt)} at ${formatClockTime(nextGameAt)}.`;
+  const sentence = `Nothing to check; the next game is ${formatWeekday(nextGameAt)} at ${formatClockTime(nextGameAt)}.`;
   await expect.element(page.getByText(sentence)).toBeVisible();
-  expect(page.getByRole("link", { name: "View run detail" }).elements()).toHaveLength(0);
+  expect(page.getByRole("link", { name: "View run" }).elements()).toHaveLength(0);
   await expect.element(page.getByText(/UTC/u)).not.toBeInTheDocument();
 });
 
@@ -442,7 +439,7 @@ it("names the next check in the reader's local time when no game is scheduled", 
 
   await expect
     .element(
-      page.getByText(`Nothing to check. The next check is at ${formatClockTime(nextTickAt)}.`),
+      page.getByText(`Nothing to check; the next check is at ${formatClockTime(nextTickAt)}.`),
     )
     .toBeVisible();
   await expect.element(page.getByText(/UTC/u)).not.toBeInTheDocument();
@@ -534,7 +531,7 @@ it("folds consecutive checks that changed nothing and keeps the rest on their ow
     page
       .getByRole("listitem")
       .filter({ hasText: groupLabel })
-      .getByRole("link", { name: "View run detail" })
+      .getByRole("link", { name: "View run" })
       .elements(),
   ).toHaveLength(0);
 });
@@ -593,7 +590,7 @@ it("folds three silent stretches between the runs that mattered", async () => {
       page
         .getByRole("listitem")
         .filter({ hasText: "The provider rejected the lineup." })
-        .getByRole("link", { name: "View run detail" }),
+        .getByRole("link", { name: "View run" }),
     )
     .toHaveAttribute("href", `/runs/${failure.run}`);
 
@@ -602,7 +599,7 @@ it("folds three silent stretches between the runs that mattered", async () => {
     const item = page.getByRole("listitem").filter({ hasText: label });
 
     await expect.element(page.getByText(label)).toBeVisible();
-    expect(item.getByRole("link", { name: "View run detail" }).elements()).toHaveLength(0);
+    expect(item.getByRole("link", { name: "View run" }).elements()).toHaveLength(0);
   }
 });
 
@@ -611,7 +608,7 @@ it("folds a lone quiet check into a summary without a link", async () => {
 
   await expect.element(page.getByText(foldedLabel([noOpRun]))).toBeVisible();
   expect(page.getByText(noOpSummary).elements()).toHaveLength(0);
-  expect(page.getByRole("link", { name: "View run detail" }).elements()).toHaveLength(0);
+  expect(page.getByRole("link", { name: "View run" }).elements()).toHaveLength(0);
 });
 
 it("says what the fantasy day holds when no checks ran today", async () => {
@@ -619,7 +616,7 @@ it("says what the fantasy day holds when no checks ran today", async () => {
 
   await expect.element(page.getByText("No lineup runs today.")).toBeVisible();
   await expect
-    .element(page.getByText(`The last lineup run was ${formatReaderTime(noOpRun.updatedAt)}.`))
+    .element(page.getByText(`Last run: ${formatReaderTime(noOpRun.updatedAt)}`))
     .toBeVisible();
 });
 
@@ -628,9 +625,7 @@ it("says what will happen when a team has never checked", async () => {
 
   await expect.element(page.getByText("No lineup runs today.")).toBeVisible();
   await expect
-    .element(
-      page.getByText("Lineup runs will appear here after the first scheduled or manual run."),
-    )
+    .element(page.getByText("Runs appear after the first scheduled or manual check."))
     .toBeVisible();
 });
 
@@ -1227,6 +1222,45 @@ it.each([
   setFacts(tenCategoryOverview);
   await expect.element(page.getByText("Categories")).toBeVisible();
   expect(host.querySelectorAll(".animate-pulse").length).toBe(0);
+});
+
+it("keeps category skeletons inside the table", async () => {
+  await page.viewport(390, 844);
+  const categoryRows: ReadonlyArray<CategoryRow> = Array.from({ length: 3 }, (_, index) => ({
+    name: `Category ${String(index + 1)}`,
+    scoring: undefined,
+    value: null,
+    total: null,
+    place: null,
+  }));
+  const host = document.body.appendChild(document.createElement("main"));
+  const dispose = render(
+    () => (
+      <MatchupSummary
+        categoryRows={categoryRows}
+        categoryValuesLoading
+        data={{ format: "rotisserie" }}
+      />
+    ),
+    host,
+  );
+  using _app = {
+    [Symbol.dispose](): void {
+      dispose();
+      host.remove();
+    },
+  };
+
+  await expect.element(page.getByRole("table", { name: "My categories" })).toBeVisible();
+  const table = host.querySelector("table");
+  const bars = [...host.querySelectorAll<HTMLElement>(".animate-pulse")];
+  expect(table).not.toBeNull();
+  expect(bars.length).toBeGreaterThan(0);
+  for (const bar of bars) {
+    expect(bar.getBoundingClientRect().right).toBeLessThanOrEqual(
+      (table?.getBoundingClientRect().right ?? 0) - 1,
+    );
+  }
 });
 
 it("captures the team overview at desktop and phone sizes in light and dark", async () => {

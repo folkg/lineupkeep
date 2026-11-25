@@ -1,7 +1,7 @@
 import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
 
-import { IconLink } from "#browser/shared-ui/IconLink.tsx";
+import { ExternalTextLink } from "#browser/shared-ui/ExternalTextLink.tsx";
 import { ArrowUpRightIcon } from "#browser/shared-ui/icons.tsx";
 import { providerDisplayName } from "#contracts/connections/providerLabels.ts";
 import type { TeamView } from "#contracts/connections/teamContract.ts";
@@ -13,9 +13,15 @@ export function TeamProviderLink(props: { readonly team: TeamView }): JSX.Elemen
   return (
     <Show when={props.team.providerUrl}>
       {(url) => (
-        <IconLink href={url()} label={label()}>
-          <ArrowUpRightIcon size="md" />
-        </IconLink>
+        <ExternalTextLink
+          href={url()}
+          label={label()}
+          tone="quiet"
+          trailingIcon={<ArrowUpRightIcon size="sm" />}
+          type="meta"
+        >
+          Open
+        </ExternalTextLink>
       )}
     </Show>
   );

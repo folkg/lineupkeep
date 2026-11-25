@@ -43,7 +43,7 @@ export function useConnectionsPage(props: ConnectionsOptions): ConnectionsContro
         storeRefreshedConnections(change, variables, onMutateResult, context);
         setDepartingId(undefined);
       }, departureDurationMs);
-      setFeedback({ type: "success", message: "Disconnected. You can connect again at any time." });
+      setFeedback({ type: "success", message: "Disconnected. You can reconnect at any time." });
     },
     onError: reportFailure,
   }));

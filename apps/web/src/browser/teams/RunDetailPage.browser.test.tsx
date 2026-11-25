@@ -164,7 +164,7 @@ it("says when the next game is in the reader's local time", async () => {
   await expect
     .element(
       page.getByText(
-        `Nothing to check. Next game is ${formatWeekday(nextGameAt)} at ${formatClockTime(nextGameAt)}.`,
+        `Nothing to check; the next game is ${formatWeekday(nextGameAt)} at ${formatClockTime(nextGameAt)}.`,
       ),
     )
     .toBeVisible();

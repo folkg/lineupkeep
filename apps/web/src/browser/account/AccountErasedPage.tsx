@@ -10,15 +10,14 @@ export function AccountErasedPage(): JSX.Element {
   return (
     <AppShell footer={false}>
       <Page
-        lede="Lineupgrade no longer holds your account, connections, teams, runs, proposals, feedback, sign-in sessions, or agent grants. You are signed out."
+        lede="Lineupgrade erased your account and everything tied to it, and signed you out."
         title="Your account is erased"
       >
         <Stack gap="md">
           <Text>
-            The export you downloaded is now the only copy of that data. Keep it somewhere you can
-            find it.
+            The download you took is now the only copy, so keep it somewhere you can find it. You
+            can create a new account with this address whenever you want.
           </Text>
-          <Text>You can create a new account with this address whenever you want.</Text>
           <TextLink to="/auth">Sign in with this address</TextLink>
         </Stack>
       </Page>

@@ -1,4 +1,3 @@
-import { EffectArray } from "@lineupkeep/collections";
 import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
 import type { Accessor, Element } from "solid-js";
@@ -13,18 +12,17 @@ import type { SignInSessionsRemote } from "#browser/session/signInSessionsRemote
 import { useSignInSessions } from "#browser/session/useSignInSessions.ts";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
-import { Definition, DefinitionList } from "#browser/shared-ui/DefinitionList.tsx";
 import { DownloadLink } from "#browser/shared-ui/DownloadLink.tsx";
 import { Form } from "#browser/shared-ui/Form.tsx";
-import { formatDateTime, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
+import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
-import { Notice } from "#browser/shared-ui/Notice.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { SelectField } from "#browser/shared-ui/SelectField.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextField } from "#browser/shared-ui/TextField.tsx";
+import { Time } from "#browser/shared-ui/Time.tsx";
 import { accountExportPath } from "#contracts/account/accountContract.ts";
 import type { AccountExportStatusView } from "#contracts/account/accountContract.ts";
 
@@ -55,10 +53,7 @@ function AccountContent(props: AccountPageProps): JSX.Element {
   });
 
   return (
-    <Page
-      lede="Choose how Lineupgrade looks, manage connections and sign-in sessions, and export your data, sign out, or erase your account."
-      title="Account"
-    >
+    <Page lede="Manage your connections, sign-in sessions, and data." title="Account">
       <Stack gap="xl">
         <Stack as="section" gap="md" labelledBy="appearance-title">
           <SectionTitle id="appearance-title">Appearance</SectionTitle>
@@ -95,29 +90,28 @@ function AccountContent(props: AccountPageProps): JSX.Element {
         <Stack as="section" gap="md" labelledBy="data-title">
           <SectionTitle id="data-title">Your data</SectionTitle>
           <Text>
-            The file includes your account, connections, teams, lineup runs, transaction proposals,
-            feedback, and sign-in records. Sign-in sessions, passwords, and agent tokens are left
-            out, because a copy should not let anyone sign in as you.
+            Download a copy of your account, connections, teams, lineup runs, transaction proposals,
+            feedback, and sign-in records. Passwords, sign-in sessions, and agent tokens stay out,
+            so the file cannot be used to sign in.
           </Text>
-          <DownloadLink href={accountExportPath}>Export my data</DownloadLink>
-          <Show when={account.exportStatus()?.latest}>
-            {(latest) => <ExportDetails latest={latest()} />}
-          </Show>
+          <DownloadLink href={accountExportPath}>Download your data</DownloadLink>
           <Show when={account.exportStatus()}>
             {(status) => (
-              <Text type="meta" tone="muted">
-                An export counts for {freshnessWindow(status().freshForMinutes)} after you take it.
-              </Text>
+              <Show when={status().latest}>
+                {(latest) => (
+                  <ExportSummary freshForMinutes={status().freshForMinutes} latest={latest()} />
+                )}
+              </Show>
             )}
           </Show>
           <Text>
-            This deletes everything listed above, plus every sign-in session and the grants agents
-            hold. It happens as soon as you confirm, and it cannot be undone.
+            Erasing deletes everything in that download, every sign-in session, and every agent
+            grant. It happens immediately and cannot be undone.
           </Text>
           <Show
             fallback={
               <Text type="meta" tone="muted">
-                Checking your export…
+                Checking your download…
               </Text>
             }
             when={!account.statusLoading()}
@@ -127,7 +121,8 @@ function AccountContent(props: AccountPageProps): JSX.Element {
                 <ActionFeedback
                   feedback={{
                     type: "attention",
-                    message: account.statusFailure()?.message ?? "We could not check your export.",
+                    message:
+                      account.statusFailure()?.message ?? "We could not check your download.",
                     recovery: {
                       label: "Check again",
                       onAction: account.refreshExportStatus,
@@ -138,12 +133,15 @@ function AccountContent(props: AccountPageProps): JSX.Element {
               when={account.statusFailure() === undefined}
             >
               <Show
-                fallback={<EraseWithoutExport latest={account.exportStatus()?.latest} />}
+                fallback={
+                  <EraseWithoutExport
+                    freshForMinutes={account.exportStatus()?.freshForMinutes ?? 60}
+                    latest={account.exportStatus()?.latest}
+                  />
+                }
                 when={account.exportStatus()?.usable === true}
               >
-                <Text>
-                  Your export is ready. Keep that file: after the erasure it is the only copy.
-                </Text>
+                <Text>Your download is ready. After erasing, it is the only copy.</Text>
                 <Form gap="md" onSubmit={account.erase}>
                   <TextField
                     autocomplete="off"
@@ -174,69 +172,55 @@ function AccountContent(props: AccountPageProps): JSX.Element {
   );
 }
 
-function ExportDetails(props: { readonly latest: LatestExport }): JSX.Element {
+function ExportSummary(props: {
+  readonly latest: LatestExport;
+  readonly freshForMinutes: number;
+}): JSX.Element {
   return (
-    <Stack gap="2xs">
-      <DefinitionList>
-        <Definition term="Taken" value={formatDateTime(props.latest.takenAt)} />
-        <Definition term="Contains" value={contentsLabel(props.latest)} />
-      </DefinitionList>
-      <Show when={props.latest.areas.length > 0}>
-        <Text type="meta" tone="muted">
-          {areasLabel(props.latest.areas)}
-        </Text>
-      </Show>
-    </Stack>
+    <Text type="meta" tone="muted">
+      Last download{" "}
+      <Time datetime={props.latest.takenAt}>{formatReaderTime(props.latest.takenAt)}</Time> ·{" "}
+      {recordCountLabel(props.latest.records)} · counts for {freshnessPhrase(props.freshForMinutes)}
+      .
+    </Text>
   );
 }
 
-function EraseWithoutExport(props: { readonly latest: LatestExport | undefined }): JSX.Element {
+function EraseWithoutExport(props: {
+  readonly latest: LatestExport | undefined;
+  readonly freshForMinutes: number;
+}): JSX.Element {
   return (
     <Show
       fallback={
-        <Notice tone="neutral" title="Take an export before erasing">
-          <Text type="meta" tone="muted">
-            Erasing needs an export you already hold. Download one first; after the delete there is
-            nothing left to give you.
-          </Text>
-          <DownloadLink href={accountExportPath}>Download an export</DownloadLink>
-        </Notice>
+        <Text type="meta" tone="muted">
+          Download a copy above before erasing; it must be from the last{" "}
+          {freshnessWindow(props.freshForMinutes)}.
+        </Text>
       }
       when={props.latest}
     >
       {(latest) => (
-        <Notice tone="neutral" title="That export no longer counts">
-          <Text type="meta" tone="muted">
-            The export you took {formatReaderTime(latest().takenAt)} is past its window. Download a
-            new one before erasing; after the delete there is nothing left to give you.
-          </Text>
-          <DownloadLink href={accountExportPath}>Download an export</DownloadLink>
-        </Notice>
+        <Text type="meta" tone="muted">
+          Your last download was{" "}
+          <Time datetime={latest().takenAt}>{formatReaderTime(latest().takenAt)}</Time>, and it is
+          too old to use. Download a fresh copy above before erasing.
+        </Text>
       )}
     </Show>
   );
 }
 
 function freshnessWindow(minutes: number): string {
-  if (minutes === 60) {
-    return "an hour";
-  }
-  return `${minutes} minutes`;
+  return minutes === 60 ? "hour" : `${minutes} minutes`;
 }
 
-function contentsLabel(latest: LatestExport): string {
-  const records = latest.records === 1 ? "1 record" : `${latest.records} records`;
-  const areas = latest.areas.length === 1 ? "1 area" : `${latest.areas.length} areas`;
-  return `${records} in ${areas}`;
+function freshnessPhrase(minutes: number): string {
+  return minutes === 60 ? "an hour" : `${minutes} minutes`;
 }
 
-function areasLabel(areas: LatestExport["areas"]): string {
-  const labels = [...areas].sort((left, right) => right.records - left.records);
-  const shown = EffectArray.map(labels.slice(0, 4), (area) => area.label);
-  const hidden = labels.length - shown.length;
-  return hidden === 0
-    ? EffectArray.join(shown, ", ")
-    : `${EffectArray.join(shown, ", ")}, and ${hidden} more`;
+function recordCountLabel(records: number): string {
+  return records === 1 ? "1 record" : `${records} records`;
 }
 
 function isThemePreference(value: string): value is ThemePreference {

@@ -52,13 +52,14 @@ const connectionsSection = (
   </section>
 );
 
-it("lists each session with its device, start, and last use, and marks this device", async () => {
+it("lists each session with its device, start, and last use, and offers sign-out for this device", async () => {
   await page.viewport(1440, 900);
   using _app = setupSessionsPage({ sessions: [thisDevice, phone] });
 
   await expect.element(page.getByText("Chrome on macOS")).toBeVisible();
   await expect.element(page.getByText("Safari on iOS")).toBeVisible();
-  await expect.element(page.getByText("This device")).toBeVisible();
+  await expect.element(page.getByRole("button", { name: "Sign out this device" })).toBeVisible();
+  expect(page.getByText("This device").elements()).toHaveLength(0);
   expect(
     page.getByRole("button", { name: "End the Chrome on macOS session" }).elements(),
   ).toHaveLength(0);
@@ -73,7 +74,8 @@ it("lists each session with its device, start, and last use, and marks this devi
 it("offers no other-session action when this device is the only one signed in", async () => {
   using _app = setupSessionsPage({ sessions: [thisDevice] });
 
-  await expect.element(page.getByText("This device")).toBeVisible();
+  await expect.element(page.getByRole("button", { name: "Sign out this device" })).toBeVisible();
+  expect(page.getByText("This device").elements()).toHaveLength(0);
   expect(page.getByRole("button", { name: "End all other sessions" }).elements()).toHaveLength(0);
   expect(
     page.getByRole("button", { name: "End the Chrome on macOS session" }).elements(),

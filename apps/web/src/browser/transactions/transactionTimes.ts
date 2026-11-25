@@ -187,11 +187,9 @@ export function discardLine(
       : move.decidedBy === "system"
         ? "The scheduled run"
         : "You";
-  const surface =
-    move.decidedBy === "agent" && move.surface !== undefined ? ` over ${move.surface}` : "";
   return move.decidedAt === undefined
-    ? `${actor} discarded this${surface}.`
-    : `${actor} discarded this${surface} on ${formatLocalMoment(move.decidedAt, reader, now)}.`;
+    ? `${actor} discarded this.`
+    : `${actor} discarded this on ${formatLocalMoment(move.decidedAt, reader, now)}.`;
 }
 
 function withPeriod(text: string): string {

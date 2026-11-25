@@ -26,7 +26,7 @@ it("describes what the product does without naming a provider", async () => {
     .element(page.getByRole("heading", { name: "Lineupgrade sets your fantasy lineup." }))
     .toBeVisible();
   await expect
-    .element(page.getByText("It keeps your lineup current, and your agent can help with the rest."))
+    .element(page.getByText("It keeps your lineup current; your agent can help with the rest."))
     .toBeVisible();
   await expect
     .element(page.getByRole("heading", { name: "The lineup writes itself" }))
@@ -36,7 +36,7 @@ it("describes what the product does without naming a provider", async () => {
     .toBeVisible();
   await expect.element(page.getByRole("heading", { name: "You stay in control" })).toBeVisible();
   expect(document.body.textContent).toContain(
-    "You can let a connected agent read your teams, set lineups, and propose players to add or drop, trades, and waiver claims.",
+    "A connected agent can read your teams, set lineups, and propose adds, drops, trades, and waiver claims.",
   );
   expect(document.body.textContent).not.toContain("Yahoo");
 });

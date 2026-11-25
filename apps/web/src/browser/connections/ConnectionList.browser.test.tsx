@@ -44,7 +44,7 @@ it("identifies each connection by team count, connection time, and status", asyn
     )
     .toBeVisible();
   await expect.element(page.getByRole("button", { name: "Reconnect" })).toBeVisible();
-  await expect.element(page.getByText(/Cannot read or set lineups/)).toBeVisible();
+  await expect.element(page.getByText(/Paused until you sign in again/)).toBeVisible();
 });
 
 it("marks the row whose remove is waiting", async () => {
@@ -60,7 +60,7 @@ it("marks the row whose remove is waiting", async () => {
   await expect.element(button).toBeDisabled();
 });
 
-it("keeps a connected row's remove quiet, separate, and unclipped at desktop and phone widths", async () => {
+it("keeps a connected row's remove quiet and clear of the heading at desktop and phone widths", async () => {
   for (const width of [1280, 390]) {
     await page.viewport(width, 844);
     const mounted = setupConnectionList([connected]);
@@ -73,16 +73,14 @@ it("keeps a connected row's remove quiet, separate, and unclipped at desktop and
       expectSeparate(heading.element(), remove.element());
       expectUnclipped(remove.element());
       expectSingleAction(remove.element());
-      if (width === 390) {
-        expectFullRowWidth(remove.element());
-      }
+      expectNotFullRowWidth(remove.element());
     } finally {
       mounted[Symbol.dispose]();
     }
   }
 });
 
-it("puts Reconnect before a separate remove that stays unclipped at desktop and phone widths", async () => {
+it("puts Reconnect beside a separate remove at desktop and phone widths", async () => {
   for (const width of [1280, 390]) {
     await page.viewport(width, 844);
     const mounted = setupConnectionList([reconnectable]);
@@ -103,13 +101,12 @@ it("puts Reconnect before a separate remove that stays unclipped at desktop and 
       expectSeparate(heading.element(), remove.element());
       expectUnclipped(reconnect.element());
       expectUnclipped(remove.element());
-      expect(reconnect.element().getBoundingClientRect().top).toBeLessThan(
-        remove.element().getBoundingClientRect().top,
-      );
-      if (width === 390) {
-        expectFullRowWidth(reconnect.element());
-        expectFullRowWidth(remove.element());
-      }
+      const reconnectBox = reconnect.element().getBoundingClientRect();
+      const removeBox = remove.element().getBoundingClientRect();
+      expect(Math.abs(reconnectBox.top - removeBox.top)).toBeLessThan(2);
+      expect(reconnectBox.right).toBeLessThanOrEqual(removeBox.left);
+      expectNotFullRowWidth(reconnect.element());
+      expectNotFullRowWidth(remove.element());
     } finally {
       mounted[Symbol.dispose]();
     }
@@ -138,17 +135,13 @@ function expectSingleAction(action: Element): void {
   expect(row?.querySelectorAll("button")).toHaveLength(1);
 }
 
-function expectFullRowWidth(action: Element): void {
+function expectNotFullRowWidth(action: Element): void {
   const row = action.closest("li");
   expect(row, "the action belongs to a connection row").not.toBeNull();
   if (row === null) {
     return;
   }
-  const actionBox = action.getBoundingClientRect();
-  const rowBox = row.getBoundingClientRect();
-  expect(actionBox.left).toBeGreaterThanOrEqual(rowBox.left - 1);
-  expect(actionBox.right).toBeLessThanOrEqual(rowBox.right + 1);
-  expect(Math.abs(actionBox.width - rowBox.width)).toBeLessThanOrEqual(1);
+  expect(action.getBoundingClientRect().width).toBeLessThan(row.getBoundingClientRect().width - 24);
 }
 
 function setupConnectionList(

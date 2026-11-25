@@ -48,16 +48,12 @@ it("names reading the teams after the provider accepts the sign-in", async () =>
 it("shows the connected state instead of setup when a connection already exists", async () => {
   using _panel = renderPanel({ connected: true, session: false });
 
-  await expect.element(page.getByRole("button", { name: "Add a different account" })).toBeVisible();
+  await expect.element(page.getByRole("button", { name: "Connect another account" })).toBeVisible();
   await expect
     .element(page.getByText("Yahoo is connected. Lineup checks use this connection."))
     .not.toBeInTheDocument();
   await expect
-    .element(
-      page.getByText(
-        "Sign in as you normally would, in a browser that belongs to this sign-in only.",
-      ),
-    )
+    .element(page.getByText("Sign in as usual in a private browser used only for this sign-in."))
     .not.toBeInTheDocument();
   await expect.element(page.getByRole("button", { name: "Connect Yahoo" })).not.toBeInTheDocument();
 });
@@ -81,11 +77,7 @@ it("offers the connect action when no connection exists", async () => {
   using _panel = renderPanel({ connected: false, session: false });
 
   await expect
-    .element(
-      page.getByText(
-        "Sign in as you normally would, in a browser that belongs to this sign-in only.",
-      ),
-    )
+    .element(page.getByText("Sign in as usual in a private browser used only for this sign-in."))
     .toBeVisible();
   await expect.element(page.getByRole("button", { name: "Connect Yahoo" })).toBeVisible();
 });

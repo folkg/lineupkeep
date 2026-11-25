@@ -87,7 +87,7 @@ it("emails a code and moves focus to the code field", async () => {
   await expect
     .element(
       page.getByText(
-        /^We sent a 6-digit code to reader@example\.test\. It expires in 10 minutes\.$/,
+        /^We sent a 6-digit code to reader@example\.test; it expires in 10 minutes\.$/,
       ),
     )
     .toBeVisible();

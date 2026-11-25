@@ -11,6 +11,7 @@ import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import { ArrowLeftIcon } from "#browser/shared-ui/icons.tsx";
+import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
@@ -51,10 +52,6 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
     page.cardFactsLoading() ? undefined : team();
   const card = (): TeamCardView | undefined => page.card();
   const teams = (): ReadonlyArray<TeamSummaryView> => page.teams();
-  const titleAside = (): JSX.Element | undefined => {
-    const summary = team();
-    return summary === undefined ? undefined : <TeamProviderLink team={summary.team} />;
-  };
   const showProvider = (): boolean => showsProvider(teams());
 
   return (
@@ -66,7 +63,6 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
           </TextLink>
         }
         title={team()?.team.name ?? "Team"}
-        titleAside={titleAside()}
         titleVariant="name"
       >
         <UnsavedChangesScope>
@@ -127,9 +123,12 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
     <Stack gap="xl">
       <Stack gap="md">
         <Stack gap="2xs">
-          <Text type="meta" tone="muted">
-            {teamContextLabel(props.team.team, props.showProvider)}
-          </Text>
+          <Inline align="baseline" gap="xs">
+            <Text type="meta" tone="muted">
+              {teamContextLabel(props.team.team, props.showProvider)}
+            </Text>
+            <TeamProviderLink team={props.team.team} />
+          </Inline>
           <TeamAttention team={props.team} />
         </Stack>
         <TeamControls team={props.team} remote={props.remote} onOptimistic={props.onOptimistic} />
@@ -182,13 +181,12 @@ function NoRunsToday(props: NoRunsTodayProps): JSX.Element {
   return (
     <EmptyState title="No lineup runs today.">
       <Show
-        fallback="Lineup runs will appear here after the first scheduled or manual run."
+        fallback="Runs appear after the first scheduled or manual check."
         when={teamLastRun(props.team)}
       >
         {(run) => (
           <>
-            The last lineup run was{" "}
-            <Time datetime={run().updatedAt}>{formatReaderTime(run().updatedAt)}</Time>.
+            Last run: <Time datetime={run().updatedAt}>{formatReaderTime(run().updatedAt)}</Time>
           </>
         )}
       </Show>

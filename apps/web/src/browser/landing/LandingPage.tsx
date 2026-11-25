@@ -14,17 +14,17 @@ const sections = [
   {
     id: "landing-lineup-title",
     title: "The lineup writes itself",
-    body: "It reads your roster, sets the lineup your league's rules allow for the games ahead, and checks again every hour, so a player who goes cold or is ruled out does not stay in your lineup. When no legal slot fits a player, it leaves him where he is and says so rather than forcing a move.",
+    body: "It reads your roster, sets the lineup your league allows for the games ahead, and checks again every hour, so a player who is ruled out or out of form does not stay in your lineup. If no legal slot fits, it leaves the player in place and tells you why.",
   },
   {
     id: "landing-agent-title",
     title: "Your agent can run your teams",
-    body: "You can let a connected agent read your teams, set lineups, and propose players to add or drop, trades, and waiver claims. The agent does the reading, the comparisons, and the legwork, and you review and submit every transaction.",
+    body: "A connected agent can read your teams, set lineups, and propose adds, drops, trades, and waiver claims. It does the reading and comparisons; you review and submit every transaction.",
   },
   {
     id: "landing-control-title",
     title: "You stay in control",
-    body: "Lineupgrade only sets lineups you could have set yourself, and pausing a team stops its hourly checks until you turn them back on. Disconnecting ends a connection's access at any time.",
+    body: "Lineupgrade only sets lineups you could have set yourself. Pausing a team stops its hourly checks, and disconnecting ends that connection's access at any time.",
   },
 ] as const;
 
@@ -45,7 +45,7 @@ export function LandingPage(): JSX.Element {
                 Lineupgrade sets your fantasy lineup.
               </Heading>
               <Text type="body" tone="muted">
-                It keeps your lineup current, and your agent can help with the rest.
+                It keeps your lineup current; your agent can help with the rest.
               </Text>
             </Stack>
             <Stack align="start" gap="sm">

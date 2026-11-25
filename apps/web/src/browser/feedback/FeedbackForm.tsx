@@ -17,7 +17,7 @@ export function FeedbackForm(props: FeedbackFormProps): JSX.Element {
   return (
     <Form gap="md" onSubmit={props.onSubmit}>
       <SelectField
-        description="Pick the closest match, or choose Other."
+        description="Choose the closest match."
         error={props.errors.kind}
         label="Kind"
         onChange={(event) => props.onKind(event.currentTarget.value)}
@@ -30,26 +30,26 @@ export function FeedbackForm(props: FeedbackFormProps): JSX.Element {
       />
       <TextField
         autocomplete="off"
-        description={`A short summary, up to ${titleLimit} characters.`}
+        description={`Keep it short, up to ${titleLimit} characters.`}
         error={props.errors.title}
         label="Title"
         onInput={(event) => props.onTitle(event.currentTarget.value)}
         value={props.draft.title}
       />
       <TextArea
-        description={`What you did, what happened, and what you expected. Up to ${bodyLimit} characters.`}
+        description={`What you did, what happened, and what you expected, up to ${bodyLimit} characters.`}
         error={props.errors.body}
         label="Details"
         onInput={(event) => props.onBody(event.currentTarget.value)}
         value={props.draft.body}
       />
       <Text type="meta" tone="muted">
-        Never include passwords, sign-in cookies, or account identifiers. Reports are stored as
-        plain text and read back only by this account.
+        Do not include passwords or sign-in details. Reports are stored as plain text, and only this
+        account can read them.
       </Text>
       <Inline gap="sm">
         <Button state={props.submitting ? "working" : "idle"} type="submit">
-          Send feedback
+          Send report
         </Button>
       </Inline>
     </Form>

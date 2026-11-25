@@ -13,7 +13,7 @@ test("submits feedback from the app and keeps it listed with its status", async 
   await page.getByLabel("Kind").selectOption("friction");
   await page.getByLabel("Title").fill("Refresh is slow");
   await page.getByLabel("Details").fill("Refreshing teams took a long time after linking Yahoo.");
-  await page.getByRole("button", { name: "Send feedback" }).click();
+  await page.getByRole("button", { name: "Send report" }).click();
 
   await expect(page.getByText("Thanks, your report is recorded.")).toBeVisible();
   await expect(page.getByText("Refresh is slow")).toBeVisible();
@@ -49,7 +49,7 @@ test("carries a team's context into the feedback form from the team page", async
   await page.getByLabel("Kind").selectOption("data-issue");
   await page.getByLabel("Title").fill("Roster totals look wrong");
   await page.getByLabel("Details").fill("The category totals do not match the provider page.");
-  await page.getByRole("button", { name: "Send feedback" }).click();
+  await page.getByRole("button", { name: "Send report" }).click();
 
   await expect(page.getByText("Thanks, your report is recorded.")).toBeVisible();
   await expect(page.getByText("Wrong data · Open")).toBeVisible();

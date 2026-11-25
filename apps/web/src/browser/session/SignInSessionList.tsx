@@ -5,7 +5,6 @@ import type { Accessor } from "solid-js";
 
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import type { ActionFeedbackState } from "#browser/shared-ui/ActionFeedback.tsx";
-import { Badge } from "#browser/shared-ui/Badge.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { ConfirmDialog } from "#browser/shared-ui/ConfirmDialog.tsx";
@@ -73,7 +72,7 @@ export function SignInSessionList(props: SignInSessionListProps): JSX.Element {
             <Inline gap="sm">
               <ConfirmDialog
                 confirmLabel="End other sessions"
-                description="Every other device is signed out on its next action and must sign in again."
+                description="Other devices will need to sign in again."
                 onConfirm={props.onEndOthers}
                 title="End every other session?"
                 trigger={(trigger) => (
@@ -92,7 +91,7 @@ export function SignInSessionList(props: SignInSessionListProps): JSX.Element {
         </Show>
       </Show>
       <Text type="meta" tone="muted">
-        Sessions renew as they are used. Each time shown can lag by up to five minutes.
+        Times can lag by up to five minutes.
       </Text>
       <ActionFeedback feedback={props.feedback()} />
     </Stack>
@@ -103,14 +102,9 @@ function SessionRow(props: SessionRowProps): JSX.Element {
   return (
     <RuleListItem leaving={props.leaving}>
       <Inline gap="sm" justify="between">
-        <Inline gap="sm">
-          <Text as="span" type="body-strong">
-            {props.session.device}
-          </Text>
-          <Show when={props.session.current}>
-            <Badge>This device</Badge>
-          </Show>
-        </Inline>
+        <Text as="span" type="body-strong">
+          {props.session.device}
+        </Text>
         <Show when={!props.session.current}>
           <IconButton
             label={`End the ${props.session.device} session`}

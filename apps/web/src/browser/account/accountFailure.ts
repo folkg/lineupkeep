@@ -31,7 +31,7 @@ export function describeAccountErasureFailure(error: unknown): AccountFailure {
       case "account.export_required":
         return {
           kind: "rejected",
-          message: "Nothing was deleted. Take a fresh export, then erase.",
+          message: "Nothing was deleted. Take a fresh download, then erase.",
         };
       case "account.persistence_failed":
         break;
@@ -48,12 +48,12 @@ export function describeAccountExportStatusFailure(error: unknown): AccountFailu
   if (error instanceof AuthenticationRequestFailure) {
     return {
       kind: "authentication",
-      message: "Your session has ended. Sign in again to check your export.",
+      message: "Your session has ended. Sign in again to check your download.",
     };
   }
   return {
     kind: "unconfirmed",
-    message: "We could not check whether you have a usable export. Refresh the page to try again.",
+    message: "We could not check your download. Refresh the page to try again.",
   };
 }
 

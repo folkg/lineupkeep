@@ -17,7 +17,7 @@ test("exports the account data, erases it, and leaves the old cookie without acc
   await expect(page.getByRole("heading", { name: "Your data" })).toBeVisible();
 
   const download = page.waitForEvent("download");
-  await page.getByRole("link", { name: "Export my data" }).click();
+  await page.getByRole("link", { name: "Download your data" }).click();
   const path = await (await download).path();
   const body = await readFile(path, "utf8");
   const exported = Effect.runSync(Schema.decodeEffect(Schema.fromJsonString(ExportDocument))(body));
@@ -37,7 +37,7 @@ test("exports the account data, erases it, and leaves the old cookie without acc
     "session.token",
   );
 
-  await expect(page.getByText("Taken")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/Last download/u)).toBeVisible({ timeout: 15_000 });
   await expect(page.getByLabel("Type erase my account to confirm")).toBeVisible({
     timeout: 15_000,
   });
@@ -49,7 +49,7 @@ test("exports the account data, erases it, and leaves the old cookie without acc
   await expect(page.getByRole("heading", { name: "Your account is erased" })).toBeVisible();
   await expect(
     page.getByText(
-      "The export you downloaded is now the only copy of that data. Keep it somewhere you can find it.",
+      "The download you took is now the only copy, so keep it somewhere you can find it. You can create a new account with this address whenever you want.",
     ),
   ).toBeVisible();
 

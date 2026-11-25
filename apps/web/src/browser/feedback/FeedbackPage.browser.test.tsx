@@ -79,7 +79,7 @@ it("sends a report and lists it with its status", async () => {
   await page.getByLabelText("Kind").selectOptions("bug");
   await page.getByLabelText("Title").fill("  Week is wrong  ");
   await page.getByLabelText("Details").fill("The roster view says week 3 but the run used week 4.");
-  await page.getByRole("button", { name: "Send feedback" }).click();
+  await page.getByRole("button", { name: "Send report" }).click();
 
   await expect.element(page.getByText("Thanks, your report is recorded.")).toBeVisible();
   await expect.element(page.getByText("Week is wrong")).toBeVisible();
@@ -108,7 +108,7 @@ it("keeps the draft and explains a rate-limited submission", async () => {
   await page.getByLabelText("Kind").selectOptions("friction");
   await page.getByLabelText("Title").fill("Slow refresh");
   await page.getByLabelText("Details").fill("Refreshing teams takes a long time.");
-  await page.getByRole("button", { name: "Send feedback" }).click();
+  await page.getByRole("button", { name: "Send report" }).click();
 
   await expect.element(page.getByText(/You have sent several reports/)).toBeVisible();
   expect(page.getByLabelText("Title")).toHaveDisplayValue("Slow refresh");
@@ -167,7 +167,7 @@ it("shows the report's context and sends the linked team reference", async () =>
   await page.getByLabelText("Kind").selectOptions("data-issue");
   await page.getByLabelText("Title").fill("Standings are wrong");
   await page.getByLabelText("Details").fill("The category totals do not add up.");
-  await page.getByRole("button", { name: "Send feedback" }).click();
+  await page.getByRole("button", { name: "Send report" }).click();
 
   await expect.element(page.getByText("Thanks, your report is recorded.")).toBeVisible();
   expect(submissions).toEqual([
@@ -189,7 +189,7 @@ it("explains each missing field without sending a request", async () => {
     },
   });
 
-  await page.getByRole("button", { name: "Send feedback" }).click();
+  await page.getByRole("button", { name: "Send report" }).click();
 
   await expect.element(page.getByText("Choose what kind of report this is.")).toBeVisible();
   await expect.element(page.getByText("Add a short title.")).toBeVisible();

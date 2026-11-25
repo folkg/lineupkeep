@@ -342,8 +342,9 @@ rule that spans exactly the item, not a short bar or an overhanging block. The l
 items, with no utility action left on a line of its own.
 
 **Rows and cards** use two columns from 560px: text at the left, one control cluster at the right. A team
-card puts its provider jump-out beside the card-title team name in the text column; the right cluster
-carries the checks toggle and the pause control, so every card has the same control shape. The
+card puts its provider jump-out at the end of the league metadata line, below the team name; the
+right cluster carries the checks toggle and the pause control, so every card has the same control
+shape. The
 pause is a 28px square icon frame showing Pause or Play, so changing state never shifts the
 cluster; its accessible name stays the full pause or resume sentence, and it stays in place and
 is disabled while checks are off. The card header is a two-column grid: title and meta take the
@@ -352,13 +353,13 @@ name wraps inside its column; it never truncates and never pushes the badge belo
 the body stacks and the controls take their own line, aligned left. Controls never overlap a
 name.
 
-**Team detail order** is fixed: back link, title with the provider jump-out beside it, one
-metadata line (sport and league), one control row with toggle and pause on the same line, then a
-season and week split, the lineup runs behind their rule, and the owner note. The split is two
+**Team detail order** is fixed: back link, title, one metadata line (sport, league, and provider
+jump-out), one control row with toggle and pause on the same line, then a season and week split,
+the lineup runs behind their rule, and the owner note. The split is two
 rule-led sections, not one card: season facts sit in a narrow side rail and the current week and
 its category table take the main column. The week line leads with the week and keeps its regular
 and playoff notes on their own lines. On phones the season facts come first. The provider
-jump-out sits beside the title here and beside the name on the list. Nothing floats to the right
+jump-out sits at the end of the metadata line here and on the list. Nothing floats to the right
 of the metadata line. Head-to-head category tables end on their last category; a running win
 total is not shown because nothing has been won while the week is live. Rotisserie tables end
 with total points.
@@ -490,7 +491,8 @@ card is a primary destination. Status is a labelled word in caps, never a colour
 line under the league context in every state — the next check, a pause with its resume time,
 checks off, or a check in progress — then what the last check did, when, and the recent tally. The
 status line reserves two lines so its sentence cannot change the card's height. A provider
-jump-out sits beside the team name; the right cluster is the toggle and pause only. A list never
+jump-out sits at the end of the league context line; the right cluster is the toggle and pause
+only. A list never
 repeats a control label on every row.
 
 Notices are a 2px leading rule with caps title and 12px detail. Empty states are a top rule with a
@@ -500,7 +502,7 @@ slots with typed skeletons; a card whose facts are already in the tab cache pain
 whose teams are still pending waits under one moving violet mark. Transactions uses the same mark
 on first load. The only row skeleton is the already-run list on Transactions, where the real row
 count is known and the fade ends the list. A value that is missing inside a real table keeps its
-cell and uses a typed skeleton. A text
+cell and uses a typed skeleton. A table skeleton stays inside its cell. A text
 skeleton takes the type it stands in for, so its line box and every following section stay at the
 settled height; the bar is 0.62em tall inside that line box. Use a named `TextSkeleton` type rather
 than a pixel height. The live status region stays in the accessibility tree when empty (visually
@@ -553,8 +555,8 @@ The Account page owns appearance, connections, sign-in sessions, data export, si
 erasure. Appearance offers System, Light, and Dark; System follows the device and listens for
 changes. Connect another account is a normal control inside Connections, under the description and
 above the connection rows. A session row ends that session, and the current device carries the one
-Sign out this device action. Your data holds the export first, then the erase action with its warning
-and required export step. Sign out is not in the masthead navigation. The page title and the
+Sign out this device action. Your data holds one download action first, then the erase action with
+its warning and required download step. Sign out is not in the masthead navigation. The page title and the
 navigation label are both Account.
 
 ### Connections
@@ -563,7 +565,8 @@ The connection surface links through the hosted browser only; the web UI has no 
 Each connection row names the provider, the teams it covers, when it was connected, and what its
 current status can do. A connection that needs a new sign-in reopens the same hosted browser
 session in place. The row's action column gives Reconnect the primary action when it is needed and
-keeps Remove quiet on its own line. Below 560px the actions stack full width in that order.
+keeps Remove quiet beside it on the same row. Below 560px the pair stays on one left-aligned row,
+so neither action becomes a full-width second row.
 
 ### Content and states
 
@@ -590,7 +593,7 @@ or connection health.
 - Do keep motion to the rare moments named under [Motion](#motion), on the theme's duration and
   easing tokens.
 - Do preserve keyboard access, visible focus, selection, zoom, and reduced motion.
-- Do keep the provider jump-out with the team name and the pause control in place.
+- Do keep the provider jump-out in the league metadata line and the pause control in place.
 - Do let long names wrap and rows stack below 560px.
 
 ### Don't

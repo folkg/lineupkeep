@@ -21,7 +21,7 @@ export function TeamsPage(props: TeamsPageProps): JSX.Element {
   return (
     <AppShell>
       <Page
-        lede="Lineup checks run once an hour for each team you turn on. Pause a team when you want to take over."
+        lede="Lineup checks run every hour for each team you turn on. Pause a team to take over."
         title="Teams"
       >
         <Stack gap="lg">

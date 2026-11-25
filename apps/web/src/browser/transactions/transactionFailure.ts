@@ -44,7 +44,8 @@ export function describeTransactionActionFailure(error: unknown): TransactionFai
       case "transactions.run_in_progress":
         return {
           kind: "conflict",
-          message: "A run holds this team's plan, so nothing was changed. Try again in a moment.",
+          message:
+            "Lineupgrade is already working on this team, so nothing changed. Try again in a moment.",
         };
       case "transactions.move_not_found":
         return {

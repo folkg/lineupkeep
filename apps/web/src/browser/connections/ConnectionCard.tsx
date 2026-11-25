@@ -32,13 +32,13 @@ export function ConnectionCard(props: ConnectionCardProps): JSX.Element {
         <Show when={props.connection.linkingExpiresAt}>
           {(expiresAt) => (
             <Text type="meta" tone="muted">
-              This sign-in request expires{" "}
+              This sign-in expires{" "}
               <Time datetime={expiresAt()}>{formatReaderTime(expiresAt())}</Time>.
             </Text>
           )}
         </Show>
       </Stack>
-      <Stack gap="md">
+      <Inline gap="sm" justify="end">
         <Show when={props.connection.status === "reconnect-required"}>
           <Button onClick={props.onReconnect}>Reconnect</Button>
         </Show>
@@ -57,7 +57,7 @@ export function ConnectionCard(props: ConnectionCardProps): JSX.Element {
             Remove
           </Button>
         </Show>
-      </Stack>
+      </Inline>
     </RuleListItem>
   );
 }
@@ -81,13 +81,13 @@ function teamCountLabel(teamCount: number): string {
 function capabilityLabel(status: ConnectionView["status"]): string {
   switch (status) {
     case "ready":
-      return "Can read and set lineups for these teams.";
+      return "Reads and sets lineups for these teams.";
     case "reconnect-required":
-      return "Cannot read or set lineups until you sign in again.";
+      return "Paused until you sign in again.";
     case "linking":
-      return "Waiting for the sign-in to finish.";
+      return "Waiting for sign-in to finish.";
     case "disconnected":
-      return "Cannot read or change teams through this connection.";
+      return "This connection is not active.";
   }
 }
 

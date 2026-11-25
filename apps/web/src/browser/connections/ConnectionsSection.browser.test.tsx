@@ -75,7 +75,7 @@ it("shows what each connection covers and when it was connected", async () => {
 it("renders timestamps in the reader's locale with the raw value in datetime", async () => {
   using _section = setupConnectionsSection([connected, linking]);
 
-  await expect.element(page.getByText(/This sign-in request expires/)).toBeVisible();
+  await expect.element(page.getByText(/This sign-in expires/)).toBeVisible();
   const expiry = document.querySelector<HTMLTimeElement>(`time[datetime="${fourMinutesFromNow}"]`);
   expect(expiry?.getAttribute("datetime")).toBe(fourMinutesFromNow);
   expect(expiry?.textContent).toBe(formatReaderTime(fourMinutesFromNow));
@@ -85,20 +85,14 @@ it("explains the encrypted session without naming the provider", async () => {
   using _section = setupConnectionsSection([connected]);
 
   await expect
-    .element(page.getByText("Lineupgrade keeps the encrypted sign-in session, not your password."))
+    .element(page.getByText("Lineupgrade stores the encrypted sign-in session, not your password."))
     .toBeVisible();
 });
 
-it("shows the Google-account route even when another connection exists", async () => {
+it("keeps the Google sign-in note off the account page", () => {
   using _section = setupConnectionsSection([connected]);
 
-  const summary = page.getByText("Signing in with Google?");
-  await expect.element(summary).toBeVisible();
-  await summary.click();
-
-  await expect.element(page.getByText(/Choose "Forgot username"/)).toBeVisible();
-  await expect.element(page.getByText(/Use recovery phone number/)).toBeVisible();
-  await expect.element(page.getByText(/"Sign in with Google" does not work/)).toBeVisible();
+  expect(page.getByText("Signing in with Google?").elements()).toHaveLength(0);
 });
 
 it("keeps the removed connection explanation off the connections section", async () => {
@@ -107,7 +101,7 @@ it("keeps the removed connection explanation off the connections section", async
   await expect
     .element(page.getByText("Yahoo is connected. Lineup checks use this connection."))
     .not.toBeInTheDocument();
-  await expect.element(page.getByRole("link", { name: "Add a different account" })).toBeVisible();
+  await expect.element(page.getByRole("link", { name: "Connect another account" })).toBeVisible();
   await expect
     .element(
       page.getByText(
@@ -141,21 +135,8 @@ it("shows the hairline, disables the control, and leaves the row after the serve
 
   await expect.poll(() => page.getByText("Yahoo connection").elements().length).toBe(0);
   await expect
-    .element(page.getByText("Disconnected. You can connect again at any time."))
+    .element(page.getByText("Disconnected. You can reconnect at any time."))
     .toBeVisible();
-});
-
-it("sends the primary reconnect to the dedicated sign-in page", async () => {
-  const section = setupConnectionsSection([connected, reconnectable]);
-  using _section = section;
-
-  await page.getByRole("link", { name: "Reconnect Yahoo" }).click();
-
-  await expect.poll(() => section.router.state.location.pathname).toBe("/connections");
-  expect(section.router.state.location.search).toEqual({
-    connect: "yahoo",
-    connection: reconnectable.id,
-  });
 });
 
 it("sends the row reconnect to the dedicated sign-in page", async () => {
@@ -169,6 +150,22 @@ it("sends the row reconnect to the dedicated sign-in page", async () => {
     connect: "yahoo",
     connection: reconnectable.id,
   });
+});
+
+it("keeps reconnect and remove on one row on a phone", async () => {
+  await page.viewport(390, 844);
+  using _section = setupConnectionsSection([reconnectable]);
+
+  const reconnect = page.getByRole("button", { name: "Reconnect" });
+  const remove = page.getByRole("button", { name: "Remove the Yahoo connection" });
+  await expect.element(reconnect).toBeVisible();
+  await expect.element(remove).toBeVisible();
+
+  const reconnectBox = reconnect.element().getBoundingClientRect();
+  const removeBox = remove.element().getBoundingClientRect();
+  expect(Math.abs(reconnectBox.top - removeBox.top)).toBeLessThan(2);
+  expect(reconnectBox.width).toBeLessThan(200);
+  expect(removeBox.width).toBeLessThan(200);
 });
 
 it("sends a new connection to the dedicated sign-in page", async () => {
@@ -185,7 +182,7 @@ it("sends adding another account to the dedicated sign-in page", async () => {
   const section = setupConnectionsSection([connected]);
   using _section = section;
 
-  await page.getByRole("link", { name: "Add a different account" }).click();
+  await page.getByRole("link", { name: "Connect another account" }).click();
 
   await expect.poll(() => section.router.state.location.pathname).toBe("/connections");
   expect(section.router.state.location.search).toEqual({ connect: "yahoo" });

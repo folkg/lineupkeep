@@ -11,9 +11,9 @@ test("renders the empty teams surface and links back to provider linking", async
 
   await expect(page.getByRole("heading", { name: "Teams", exact: true })).toBeVisible();
   await expect(
-    page.getByText("Lineup checks run once an hour for each team you turn on."),
+    page.getByText("Lineup checks run every hour for each team you turn on."),
   ).toBeVisible();
-  await expect(page.getByText("Pause a team when you want to take over.")).toBeVisible();
+  await expect(page.getByText("Pause a team to take over.")).toBeVisible();
   await expect(page.getByText("No teams yet.", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Connect an account" })).toHaveAttribute(
     "href",

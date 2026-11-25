@@ -97,7 +97,7 @@ test("proposes a move into one team queue and runs it from the transactions page
   await expect(page.getByText(reason, { exact: true })).toBeHidden();
   await expect(page.getByText("Embedded Browser Team", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Needs your decision", { exact: true })).toBeVisible();
-  await expect(page.getByText("Nothing runs until you decide.", { exact: true })).toBeVisible();
+  await expect(page.getByText(/1 move needs your decision before it can run/u)).toBeVisible();
   await captureCheckpoint(page, info, "transactions-today");
 
   await page.setViewportSize({ width: 390, height: 844 });

@@ -30,8 +30,7 @@ export function ConsentPage(props: {
           when={consent.request()}
           fallback={
             <Text>
-              Return to your client and start connecting again. This request is missing, invalid, or
-              expired.
+              Return to your client and start again; this request is missing, invalid, or expired.
             </Text>
           }
         >
@@ -40,7 +39,7 @@ export function ConsentPage(props: {
               <Text>Connecting to {request().client.host}</Text>
               <Show when={request().client.name}>
                 {(name) => (
-                  <Text tone="muted">Calls itself “{name()}”. Names are not verified.</Text>
+                  <Text tone="muted">It calls itself “{name()}”, but names are not verified.</Text>
                 )}
               </Show>
               <Stack gap="sm">

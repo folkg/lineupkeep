@@ -95,8 +95,8 @@ export function TeamList(props: TeamListProps): JSX.Element {
           <Show
             fallback={
               <EmptyState title="No teams yet.">
-                <TextLink to="/account">Connect an account</TextLink> to import the teams this
-                account can manage. If you join another league, refresh to import it.
+                <TextLink to="/account">Connect an account</TextLink> to import its teams. Refresh
+                after joining another league.
               </EmptyState>
             }
             when={props.teams().length > 0}
@@ -164,24 +164,24 @@ function TeamCard(props: TeamCardProps): JSX.Element {
         />
       }
       header={
-        <Inline gap="sm">
-          <TextLink
-            id={nameId()}
-            params={{ teamId: props.team.team.id }}
-            preload="intent"
-            type="card-title"
-            to="/teams/$teamId"
-          >
-            {props.team.team.name}
-          </TextLink>
-          <TeamProviderLink team={props.team.team} />
-        </Inline>
+        <TextLink
+          id={nameId()}
+          params={{ teamId: props.team.team.id }}
+          preload="intent"
+          type="card-title"
+          to="/teams/$teamId"
+        >
+          {props.team.team.name}
+        </TextLink>
       }
       labelledBy={nameId()}
       meta={
-        <Text type="meta" tone="muted">
-          {teamContextLabel(props.team.team, props.showProvider())}
-        </Text>
+        <Inline align="baseline" gap="xs">
+          <Text type="meta" tone="muted">
+            {teamContextLabel(props.team.team, props.showProvider())}
+          </Text>
+          <TeamProviderLink team={props.team.team} />
+        </Inline>
       }
     >
       <Stack gap="sm">

@@ -284,7 +284,7 @@ export const ConnectionsLive = Layer.effect(
               EffectArray.filter(ready, (connection) => !usableIds.has(connection.id)),
               (connection) => ({
                 connectionId: connection.id,
-                reason: "Season facts could not be loaded from this connection.",
+                reason: "Season facts are unavailable right now.",
               }),
             ),
           ],
@@ -313,7 +313,7 @@ export const ConnectionsLive = Layer.effect(
       }).pipe(
         Effect.mapError(() => ({
           connectionId: credential.connectionId,
-          reason: "Season facts could not be loaded from the provider.",
+          reason: "Season facts are unavailable right now.",
         })),
       );
 

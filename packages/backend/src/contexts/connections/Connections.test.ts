@@ -179,10 +179,7 @@ it.effect("stops waiting for season facts after eight seconds", () =>
 
     assert.deepStrictEqual(result.cards, []);
     assert.strictEqual(result.failures.length, 1);
-    assert.strictEqual(
-      result.failures[0]?.reason,
-      "Season facts could not be loaded from the provider.",
-    );
+    assert.strictEqual(result.failures[0]?.reason, "Season facts are unavailable right now.");
     yield* fake.unblockTeamCards;
   }).pipe(layerTools.provide(ConnectionsTestLayer)),
 );

@@ -70,7 +70,7 @@ export function TeamSeasonOverview(props: {
   const title = (): string => (facts()?.format === "rotisserie" ? "My categories" : "This week");
   const failure = (): string =>
     props.failed
-      ? "Season facts could not be loaded. Lineup runs remain available."
+      ? "Season facts did not load. Lineup runs still work."
       : (facts()?.reason ?? "Season facts were not published.");
   return (
     <Show

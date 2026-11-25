@@ -492,11 +492,7 @@ it("keeps local team controls when the batch read fails", async () => {
     { retryDelay: 0 },
   );
   await expect
-    .element(
-      page.getByText(
-        "Season facts could not be loaded. Lineup runs and controls are still available.",
-      ),
-    )
+    .element(page.getByText("Season facts did not load. Runs and controls still work."))
     .toBeVisible();
   await expect.element(page.getByRole("switch", { name: "Lineup checks for Alpha" })).toBeVisible();
   await expect.element(page.getByText("Categories", { exact: true })).toBeVisible();
@@ -807,9 +803,7 @@ it("flips the switch before the server answers and returns to the server state w
   await expect.element(toggle).not.toHaveAttribute("aria-busy");
   await expect
     .element(
-      page.getByText(
-        "We could not confirm the change, so the control returned to the last known state. Check the latest list before trying again.",
-      ),
+      page.getByText("We could not confirm the change. Check the latest list before trying again."),
     )
     .toBeVisible();
 });
@@ -828,7 +822,7 @@ it("returns the switch to the server state when the server refuses the change", 
   await expect
     .element(
       page.getByText(
-        "This team changed while the request was in flight, so the control returned to the last known state. Refresh the latest status before trying again.",
+        "This team changed before the update was saved. Refresh the latest status before trying again.",
       ),
     )
     .toBeVisible();
@@ -980,9 +974,7 @@ it("restores the icon and the check line when a pause fails", async () => {
   await expect.element(row.getByText(/^\d{1,2}:\d{2}( [ap]m)?$/u)).toBeVisible();
   await expect
     .element(
-      page.getByText(
-        "We could not confirm the change, so the control returned to the last known state. Check the latest list before trying again.",
-      ),
+      page.getByText("We could not confirm the change. Check the latest list before trying again."),
     )
     .toBeVisible();
 });
@@ -1137,7 +1129,7 @@ it("frames a team card with the shared card structure", async () => {
   expect(card.querySelector("[data-card-badge]")).not.toBeNull();
 });
 
-it("shows the fantasy league name and a provider jump out for the team", async () => {
+it("puts the provider jump out with the league context, below the team name", async () => {
   using _app = setupTeamsPage([
     {
       ...enabledTeam,
@@ -1149,17 +1141,23 @@ it("shows the fantasy league name and a provider jump out for the team", async (
     },
   ]);
 
-  await expect.element(page.getByText("Irish Lax · Football · 2026")).toBeVisible();
+  const context = page.getByText("Irish Lax · Football · 2026");
   const jumpOut = page.getByRole("link", { name: "Open Alpha in Yahoo" });
   const name = page.getByRole("link", { name: "Alpha", exact: true });
   const pause = page.getByRole("button", {
     name: "Pause lineup checks for the rest of the fantasy day",
   });
+  await expect.element(context).toBeVisible();
   await expect.element(jumpOut).toHaveAttribute("href", "https://provider.example/f1/1000/1");
   await expect.element(jumpOut).toHaveAttribute("target", "_blank");
+  expect(jumpOut.element().textContent).toBe("Open");
+
   const nameBox = name.element().getBoundingClientRect();
   const jumpBox = jumpOut.element().getBoundingClientRect();
-  expect(jumpBox.left).toBeGreaterThanOrEqual(nameBox.right);
+  expect(jumpBox.top, "the jump out sits below the name").toBeGreaterThan(nameBox.bottom);
+  expect(
+    context.element().compareDocumentPosition(jumpOut.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
   expect(
     jumpOut.element().compareDocumentPosition(pause.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();

@@ -33,7 +33,7 @@ export function ConnectionList(props: ConnectionListProps): JSX.Element {
         <Show
           fallback={
             <EmptyState title="No connections yet.">
-              Connect an account above to see the teams this account can manage.
+              Connect an account above to import its teams.
             </EmptyState>
           }
           when={props.connections().length > 0}

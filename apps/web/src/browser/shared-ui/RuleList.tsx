@@ -42,7 +42,7 @@ export function RuleListItem(props: {
             (props.layout === "columns" || props.layout === "leading") &&
             "md:py-5",
           props.layout === "columns" &&
-            "min-[560px]:grid-cols-[minmax(0,1fr)_9rem] min-[560px]:items-start min-[560px]:gap-x-4",
+            "min-[560px]:grid-cols-[minmax(0,1fr)_auto] min-[560px]:items-start min-[560px]:gap-x-4",
           props.layout === "leading" &&
             "md:grid-cols-[8.5rem_minmax(0,1fr)] md:items-start md:gap-6",
           props.leaving === true && "overflow-hidden",

@@ -154,7 +154,7 @@ function RunDetail(props: {
             </Show>
             <Text type="meta" tone="muted">
               {outcome().verified ? confirmedLine(props.providerName) : "Not yet confirmed."}
-              {outcome().reconciled ? " Checked again after an unconfirmed write." : ""}
+              {outcome().reconciled ? " Checked again after the first result was unclear." : ""}
             </Text>
             <Show
               fallback={
@@ -202,7 +202,7 @@ function RunDetail(props: {
               )}
             </Show>
             <Text type="meta" tone="muted">
-              {outcome().lockedPlayers} locked · {outcome().editablePlayers} editable players
+              {outcome().lockedPlayers} locked · {outcome().editablePlayers} editable
             </Text>
           </Stack>
         )}

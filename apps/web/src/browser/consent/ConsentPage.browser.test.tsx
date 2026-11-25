@@ -25,7 +25,9 @@ it("distinguishes the verified client host from its unverified declared name", a
   await expect.element(page.getByText("Connecting to client.test", { exact: true })).toBeVisible();
   await expect
     .element(
-      page.getByText("Calls itself “A trusted brand”. Names are not verified.", { exact: true }),
+      page.getByText("It calls itself “A trusted brand”, but names are not verified.", {
+        exact: true,
+      }),
     )
     .toBeVisible();
 });
@@ -54,7 +56,7 @@ it("keeps the client and permissions visible when consent is unconfirmed", async
   await expect
     .element(page.getByRole("status"))
     .toHaveTextContent(
-      "We couldn't confirm your decision. Return to your client and start connecting again. No access is confirmed here.",
+      "We couldn't confirm your decision. Return to your client and start again; no access is confirmed here.",
     );
   await expect
     .element(page.getByText("https://client.test/client.json", { exact: true }))

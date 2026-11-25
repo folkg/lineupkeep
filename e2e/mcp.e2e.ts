@@ -957,7 +957,7 @@ test("authorizes a dynamically registered client through consent", async ({ page
   );
   await expect(page.getByRole("heading", { name: "Connect a client?" })).toBeVisible();
   await expect(
-    page.getByText("Calls itself “Muse probe”. Names are not verified.", { exact: true }),
+    page.getByText("It calls itself “Muse probe”, but names are not verified.", { exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Allow access", exact: true }).click();
   await expect(page).toHaveURL(callbackPattern);
@@ -1119,7 +1119,7 @@ async function authorize(
 }> {
   const authorization = await beginAuthorization(page, mcpEndpoint(origin), scope);
   if (email !== undefined) {
-    await expect(page.getByRole("heading", { name: "Sign in or start fresh." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Sign in", exact: true })).toBeVisible();
     await signIn(page, { email });
   }
   await expect(page.getByRole("heading", { name: "Connect a client?" })).toBeVisible();
@@ -1127,7 +1127,7 @@ async function authorize(
     page.getByText("Connecting to connections-client.test", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText("Calls itself “Lineupgrade test client”. Names are not verified.", {
+    page.getByText("It calls itself “Lineupgrade test client”, but names are not verified.", {
       exact: true,
     }),
   ).toBeVisible();
@@ -1187,7 +1187,7 @@ async function authorizeLegacy(
   const authorization = await beginAuthorization(page, mcpEndpoint(origin), scope, fetch, clientId);
   await expect(page.getByRole("heading", { name: "Connect a client?" })).toBeVisible();
   await expect(
-    page.getByText(`Calls itself “${retiredClientName}”. Names are not verified.`, {
+    page.getByText(`It calls itself “${retiredClientName}”, but names are not verified.`, {
       exact: true,
     }),
   ).toBeVisible();

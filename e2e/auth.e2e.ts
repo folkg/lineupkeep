@@ -10,7 +10,7 @@ test("keeps sign-in controls inactive until their handlers are hydrated", async 
   });
   try {
     await page.goto("/auth", { waitUntil: "commit" });
-    await expect(page.getByRole("heading", { name: "Sign in or start fresh." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Sign in", exact: true })).toBeVisible();
 
     await expect(page.getByLabel("Email")).toBeDisabled();
     await expect(page.getByRole("button", { name: "Email me a code" })).toBeDisabled();
@@ -103,7 +103,7 @@ for (const viewport of [
     await page.goto("/auth");
 
     const main = page.getByRole("main");
-    await expect(main.getByRole("heading", { name: "Sign in or start fresh." })).toBeInViewport({
+    await expect(main.getByRole("heading", { name: "Sign in", exact: true })).toBeInViewport({
       ratio: 1,
     });
     await expect(main.getByLabel("Email")).toBeInViewport({ ratio: 1 });

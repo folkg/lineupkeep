@@ -379,7 +379,7 @@ export function MatchupSummary(props: {
 function CategoryValue(props: { readonly loading: boolean; readonly value: string }): JSX.Element {
   return (
     <Show fallback={<Text type="body">{props.value}</Text>} when={props.loading}>
-      <TextSkeleton type="body" width="w-10" />
+      <TextSkeleton type="body" width="w-full" />
     </Show>
   );
 }
@@ -392,7 +392,7 @@ function MatchupValue(props: {
 }): JSX.Element {
   return (
     <Show
-      fallback={<TextSkeleton type="body" width="w-10" />}
+      fallback={<TextSkeleton type="body" width="w-full" />}
       when={!props.loading || props.value !== null}
     >
       <Text type={props.winner ? "body-strong" : "body"}>
@@ -441,7 +441,7 @@ function FooterLine(props: {
         {props.label}
       </Text>
       <Show fallback={<Text type="body-strong">{props.value}</Text>} when={props.loading === true}>
-        <TextSkeleton type="body-strong" width="w-8" />
+        <TextSkeleton type="body-strong" width="w-full" />
       </Show>
     </Inline>
   );

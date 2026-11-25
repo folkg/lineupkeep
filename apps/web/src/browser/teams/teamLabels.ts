@@ -149,22 +149,22 @@ export function runExplanation(run: LineupRunView): string {
   }
   switch (run.status) {
     case "queued":
-      return "This run is waiting to start. The lineup has not been checked yet.";
+      return "This run is waiting to start; the lineup has not been checked yet.";
     case "reading":
     case "planning":
     case "validating":
     case "applying":
     case "verifying":
-      return "The run is in progress. Its result is not confirmed yet.";
+      return "The run is in progress; its result is not confirmed yet.";
     case "uncertain":
-      return "Lineupgrade could not confirm the result. A later run will check it again.";
+      return "Lineupgrade could not confirm the result; a later run will check again.";
     case "superseded":
       return "A later run replaced this one.";
     case "completed":
     case "skipped":
     case "blocked":
     case "failed":
-      return "No outcome explanation is available.";
+      return "No outcome was recorded.";
     case "retry-wait":
       return "Waiting to try again.";
   }
@@ -230,9 +230,9 @@ function skippedExplanation(outcome: NonNullable<LineupRunView["outcome"]>): str
     return undefined;
   }
   if (outcome.nextGameAt === undefined) {
-    return `Nothing to check. The next check is at ${sentenceClock(outcome.nextTickAt)}`;
+    return `Nothing to check; the next check is at ${sentenceClock(outcome.nextTickAt)}`;
   }
-  return `Nothing to check. Next game is ${formatWeekday(outcome.nextGameAt)} at ${sentenceClock(outcome.nextGameAt)}`;
+  return `Nothing to check; the next game is ${formatWeekday(outcome.nextGameAt)} at ${sentenceClock(outcome.nextGameAt)}`;
 }
 
 function sentenceClock(value: string): string {

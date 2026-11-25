@@ -261,9 +261,8 @@ it("runs today's move now and returns the recorded outcome", async () => {
     },
   });
 
-  await expect.element(page.getByText(/2 moves still need your decision/u)).toBeVisible();
   await expect
-    .element(page.getByText("Nothing runs until you decide.", { exact: true }).first())
+    .element(page.getByText(/2 moves need your decision before they can run/u))
     .toBeVisible();
 
   await page.getByRole("button", { name: /Run now: Drop Riley Chen/u }).click();
@@ -538,7 +537,7 @@ it("edits and discards one saved move at a time", async () => {
   await expect
     .element(
       page.getByText(
-        "Lineupgrade sends the move on this day. Your league applies it by its own rule. Saving clears your decision.",
+        "Lineupgrade sends the move on the day you pick, and your league decides when it applies. Saving clears your decision.",
         { exact: true },
       ),
     )
@@ -677,13 +676,6 @@ it("shows clear teams when nothing is open", async () => {
   await expect.element(page.getByText(/0 open moves/u).first()).toBeVisible();
   await expect.element(page.getByText("Nothing for today", { exact: true }).first()).toBeVisible();
   await expect.element(page.getByText("Nothing scheduled", { exact: true })).toBeVisible();
-  await expect
-    .element(
-      page.getByText("A move you set for a later day appears here with that day.", {
-        exact: true,
-      }),
-    )
-    .toBeVisible();
 });
 
 it("offers a retry when the read fails", async () => {
@@ -899,7 +891,7 @@ it("shows the fixes that make room inside the group they run with", async () => 
   await expect.element(page.getByText("Add Jordan Lee", { exact: true })).toBeVisible();
   await expect
     .element(
-      page.getByText("Added by the server so the add fits. You can edit or discard it.", {
+      page.getByText("Added by Lineupgrade to make room for the add.", {
         exact: true,
       }),
     )
@@ -1373,14 +1365,14 @@ it("shows earlier moves newest first and loads the next older page", async () =>
       Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
 
-  await page.getByRole("button", { name: "Load more" }).click();
+  await page.getByRole("button", { name: "Show more moves" }).click();
   const oldestRow = page.getByText("Drop Tyler Boyd", { exact: true });
   await expect.element(oldestRow).toBeVisible();
   expect(
     olderRow.element().compareDocumentPosition(oldestRow.element()) &
       Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
-  expect(page.getByRole("button", { name: "Load more" }).elements()).toHaveLength(0);
+  expect(page.getByRole("button", { name: "Show more moves" }).elements()).toHaveLength(0);
 });
 
 it("runs groups on two teams at the same time with per team progress", async () => {
@@ -1763,8 +1755,7 @@ it("shows the stored fallback chain before it is needed", async () => {
   await expect
     .element(page.getByText("If the claim fails: Tank Bigsby, then Tyler Boyd", { exact: true }))
     .toBeVisible();
-  const body =
-    "Each is stored with this move, and the server tries them in that order if the first fails.";
+  const body = "Lineupgrade tries them in this order if the first fails.";
   await expect.element(page.getByText(body, { exact: true })).not.toBeVisible();
 
   await page.getByText("If the claim fails: Tank Bigsby, then Tyler Boyd", { exact: true }).click();

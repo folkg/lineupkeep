@@ -110,7 +110,7 @@ function RunLine(props: { readonly run: LineupRunView }): JSX.Element {
 function RunLink(props: { readonly run: LineupRunView }): JSX.Element {
   return (
     <TextLink params={{ runId: props.run.run }} to="/runs/$runId">
-      View run detail
+      View run
     </TextLink>
   );
 }

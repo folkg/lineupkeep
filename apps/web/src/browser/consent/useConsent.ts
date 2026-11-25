@@ -28,7 +28,7 @@ export function useConsent(props: {
   title: () => "Connect a client?" | "Invalid authorization request";
   lede: () =>
     | "No access can be granted from this page."
-    | "Only connect a client you trust. Review the permissions before allowing access.";
+    | "Connect only a client you trust, after reviewing the permissions.";
   isPending: () => boolean;
   isApproving: () => boolean;
   isDenying: () => boolean;
@@ -63,7 +63,7 @@ export function useConsent(props: {
     lede: () =>
       details() === undefined
         ? "No access can be granted from this page."
-        : "Only connect a client you trust. Review the permissions before allowing access.",
+        : "Connect only a client you trust, after reviewing the permissions.",
     isPending: () => decision.isPending,
     isApproving: () => decision.isPending && decision.variables?.accept === true,
     isDenying: () => decision.isPending && decision.variables?.accept === false,
@@ -72,7 +72,7 @@ export function useConsent(props: {
         ? {
             type: "attention",
             message:
-              "We couldn't confirm your decision. Return to your client and start connecting again. No access is confirmed here.",
+              "We couldn't confirm your decision. Return to your client and start again; no access is confirmed here.",
           }
         : undefined,
     approve: () => decision.mutate({ query: props.query, accept: true }),

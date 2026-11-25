@@ -99,29 +99,29 @@ it("puts appearance, connections, sessions, and data in order", async () => {
 it("signs out only from the current device with the signed-in sessions", async () => {
   using _app = setupAccountPage();
 
-  const currentDevice = page.getByRole("listitem").filter({ hasText: "This device" });
+  const currentDevice = page.getByRole("listitem").filter({ hasText: "Chrome on macOS" });
   await expect
     .element(currentDevice.getByRole("button", { name: "Sign out this device" }))
     .toBeVisible();
   expect(page.getByRole("heading", { name: "Sign out" }).elements()).toHaveLength(0);
 });
 
-it("offers an export and explains what erasure cannot undo", async () => {
+it("offers a download and explains what erasure cannot undo", async () => {
   using _app = setupAccountPage();
 
   await expect.element(page.getByRole("heading", { name: "Account" })).toBeVisible();
   await expect.element(page.getByRole("heading", { name: "Your data" })).toBeVisible();
   const copy = EffectString.replace(document.body.textContent, /\s+/g, " ");
   expect(copy).toContain(
-    "The file includes your account, connections, teams, lineup runs, transaction proposals, feedback, and sign-in records. Sign-in sessions, passwords, and agent tokens are left out, because a copy should not let anyone sign in as you.",
+    "Download a copy of your account, connections, teams, lineup runs, transaction proposals, feedback, and sign-in records. Passwords, sign-in sessions, and agent tokens stay out, so the file cannot be used to sign in.",
   );
   expect(copy).toContain(
-    "This deletes everything listed above, plus every sign-in session and the grants agents hold. It happens as soon as you confirm, and it cannot be undone.",
+    "Erasing deletes everything in that download, every sign-in session, and every agent grant. It happens immediately and cannot be undone.",
   );
   await expect.element(page.getByLabelText("Type erase my account to confirm")).toBeVisible();
   await expect.element(page.getByRole("button", { name: "Erase my account" })).toBeVisible();
 
-  const exportLink = page.getByRole("link", { name: "Export my data" }).elements()[0];
+  const exportLink = page.getByRole("link", { name: "Download your data" }).elements()[0];
   expect(exportLink?.getAttribute("href")).toBe(accountExportPath);
   expect(exportLink?.hasAttribute("download")).toBe(true);
 
@@ -130,15 +130,16 @@ it("offers an export and explains what erasure cannot undo", async () => {
   expect(EffectString.toLowerCase(text)).not.toContain("purge");
 });
 
-it("explains that erasing needs an export and hides the control", async () => {
+it("explains that erasing needs a download and hides the control", async () => {
   using _app = setupAccountPage({
     status: () => Promise.resolve(noExportStatus),
   });
 
   await expect.element(page.getByRole("heading", { name: "Your data" })).toBeVisible();
-  await expect.element(page.getByText("Take an export before erasing")).toBeVisible();
-  await expect.element(page.getByText(/Erasing needs an export you already hold/u)).toBeVisible();
-  await expect.element(page.getByRole("link", { name: "Download an export" })).toBeVisible();
+  await expect
+    .element(page.getByText(/Download a copy above before erasing; it must be from the last hour/u))
+    .toBeVisible();
+  expect(page.getByRole("link", { name: "Download an export" }).elements()).toHaveLength(0);
   await expect
     .element(page.getByRole("button", { name: "Erase my account" }))
     .not.toBeInTheDocument();
@@ -147,19 +148,20 @@ it("explains that erasing needs an export and hides the control", async () => {
     .not.toBeInTheDocument();
 });
 
-it("explains that a stale export no longer counts and hides the control", async () => {
+it("explains that a stale download no longer counts and hides the control", async () => {
   using _app = setupAccountPage({
     status: () => Promise.resolve(staleExportStatus),
   });
 
-  await expect.element(page.getByText("That export no longer counts")).toBeVisible();
-  await expect.element(page.getByText(/is past its window/u)).toBeVisible();
+  await expect
+    .element(page.getByText(/too old to use. Download a fresh copy above before erasing/u))
+    .toBeVisible();
   await expect
     .element(page.getByRole("button", { name: "Erase my account" }))
     .not.toBeInTheDocument();
 });
 
-it("names the refusal when the export was used before the erasure", async () => {
+it("names the refusal when the download was used before the erasure", async () => {
   using _app = setupAccountPage({
     erase: () =>
       Promise.resolve().then(() =>
@@ -174,7 +176,7 @@ it("names the refusal when the export was used before the erasure", async () => 
   await page.getByRole("button", { name: "Erase my account" }).click();
 
   await expect
-    .element(page.getByText("Nothing was deleted. Take a fresh export, then erase."))
+    .element(page.getByText("Nothing was deleted. Take a fresh download, then erase."))
     .toBeVisible();
 });
 
@@ -251,7 +253,7 @@ it("erases, ends the browser session, and lands on the page that says what happe
   await expect
     .element(
       page.getByText(
-        "Lineupgrade no longer holds your account, connections, teams, runs, proposals, feedback, sign-in sessions, or agent grants. You are signed out.",
+        "Lineupgrade erased your account and everything tied to it, and signed you out.",
       ),
     )
     .toBeVisible();

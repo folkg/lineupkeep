@@ -1,7 +1,32 @@
 # Changelog
 
-MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
-revisions that carried each change.
+## Unreleased — account, connection, and copy refinement
+
+### Changed
+
+- A team card and team detail page put the provider jump-out at the end of the league
+  metadata line, below the name, instead of beside the title. The link keeps the full
+  `Open <team> in <provider>` accessible name and does not change the title's alignment.
+- The Google sign-in note appears only on the hosted-browser sign-in page, not on the account
+  page. A connection that needs a new sign-in exposes Reconnect on its own row; the duplicate
+  top-level Reconnect is gone and the remaining account action is Connect another account.
+- Reconnect and Remove share one row in every connection, including phones, instead of stacking
+  as full-width controls. The current sign-in session no longer carries a redundant This device
+  badge because Sign out this device already identifies it.
+- Your data offers one Download your data action. The download explanation, freshness, and
+  erase prerequisite are combined into the surrounding prose instead of repeating a second
+  download control in the erase state.
+- Copy across Teams, team detail, transactions, feedback, consent, run detail, and account
+  surfaces is shorter and less implementation-shaped. Loading, empty, and error states keep
+  their required next action.
+
+### Fixed
+
+- A category-table skeleton stays inside its cell; the total-points and rotisserie category
+  skeletons no longer reach the table's outer edge.
+
+Product and MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker
+Cloud Run revisions that carried each change.
 
 ## Unreleased — Yahoo call audit
 

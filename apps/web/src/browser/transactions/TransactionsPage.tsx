@@ -171,9 +171,7 @@ function OpenDays(props: RemoteSectionProps): JSX.Element {
         {(day) => <DaySection day={day} page={props.page} remote={props.remote} today={false} />}
       </For>
       <Show when={later().length === 0}>
-        <EmptyState title="Nothing scheduled">
-          A move you set for a later day appears here with that day.
-        </EmptyState>
+        <EmptyState title="Nothing scheduled">{""}</EmptyState>
       </Show>
     </>
   );
@@ -247,21 +245,14 @@ function DaySection(props: DaySectionProps): JSX.Element {
         {title()}
       </SectionTitle>
       <Show when={decisionMoves().length > 0}>
-        <Stack gap="2xs">
-          <Text type="meta" tone="muted">
-            {`${moveCount(decisionMoves().length)} still ${decisionMoves().length === 1 ? "needs" : "need"} your decision.`}
-          </Text>
-          <Text type="meta" tone="muted">
-            Nothing runs until you decide.
-          </Text>
-        </Stack>
+        <Text type="meta" tone="muted">
+          {`${moveCount(decisionMoves().length)} ${decisionMoves().length === 1 ? "needs" : "need"} your decision before ${decisionMoves().length === 1 ? "it" : "they"} can run.`}
+        </Text>
       </Show>
       <Show
         fallback={
           <Show when={props.today}>
-            <EmptyState title="Nothing needs you today">
-              Moves you already submitted appear under Earlier.
-            </EmptyState>
+            <EmptyState title="Nothing needs you today"> </EmptyState>
           </Show>
         }
         when={teams().length > 0}
@@ -594,7 +585,7 @@ function GroupPanel(props: GroupPanelProps): JSX.Element {
         <Show when={props.card.fixes.length > 0}>
           <QueueListNote>
             <Text type="meta" tone="muted">
-              Added by the server so the add fits. You can edit or discard it.
+              Added by Lineupgrade to make room for the add.
             </Text>
           </QueueListNote>
           <For each={props.card.fixes}>
@@ -676,8 +667,8 @@ function ScheduleEditor(props: {
           onInput={(event) => props.page.setEditingDate(event.currentTarget.value)}
         />
         <Text type="meta" tone="muted">
-          Lineupgrade sends the move on this day. Your league applies it by its own rule. Saving
-          clears your decision.
+          Lineupgrade sends the move on the day you pick, and your league decides when it applies.
+          Saving clears your decision.
         </Text>
         <Show when={props.page.editingError()}>
           {(error) => (
@@ -858,7 +849,7 @@ function EarlierSection(props: RemoteSectionProps): JSX.Element {
                 fallback={
                   <Show when={settled().length === 0}>
                     <EmptyState title="No earlier moves">
-                      Moves that ran, failed, or wait for the league appear here.
+                      Submitted moves and their outcomes appear here.
                     </EmptyState>
                   </Show>
                 }
@@ -881,7 +872,9 @@ function EarlierSection(props: RemoteSectionProps): JSX.Element {
                       state={props.page.fetchingMoreEarlier() ? "working" : "idle"}
                       onClick={props.page.showMoreEarlier}
                     >
-                      {props.page.fetchingMoreEarlier() ? "Loading earlier moves" : "Load more"}
+                      {props.page.fetchingMoreEarlier()
+                        ? "Loading earlier moves"
+                        : "Show more moves"}
                     </Button>
                   </Inline>
                 </Show>

@@ -85,11 +85,7 @@ export function fallbackPlanDetail(move: TransactionMoveView): ReadonlyArray<str
     return record;
   }
   const names = fallbackSequence(move);
-  return names === undefined
-    ? []
-    : [
-        `Each is stored with this move, and the server tries them in that order if the first fails.`,
-      ];
+  return names === undefined ? [] : ["Lineupgrade tries them in this order if the first fails."];
 }
 
 function fallbackSequence(move: TransactionMoveView): string | undefined {

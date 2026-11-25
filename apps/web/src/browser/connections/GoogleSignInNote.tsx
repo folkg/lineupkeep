@@ -13,9 +13,9 @@ export function GoogleSignInNote(): JSX.Element {
       <Stack gap="xs">
         <Text type="body-strong">{provider} refuses Gmail addresses in this browser.</Text>
         <Text type="meta" tone="muted">
-          Choose "Forgot username", then "Use recovery phone number" (or the recovery email on the
-          account), and follow the code. If {provider} only resets the password, sign in with the
-          phone number and that password. "Sign in with Google" does not work in this browser.
+          Choose "Forgot username", then "Use recovery phone number" (or the account's recovery
+          email) and follow the code. If {provider} only resets the password, sign in with the phone
+          number and that password.
         </Text>
       </Stack>
     </Disclosure>

@@ -115,7 +115,7 @@ function classifyTeamFailure(error: unknown, surface: "control" | "refresh"): Te
           kind: "rejected",
           message:
             surface === "control"
-              ? "This team is no longer available, so the control returned to the last known state. Refresh the latest list before trying again."
+              ? "This team is no longer available. Refresh the latest list before trying again."
               : "This team is no longer available. Refresh the latest list before retrying.",
         };
       case "team.control_rejected":
@@ -123,7 +123,7 @@ function classifyTeamFailure(error: unknown, surface: "control" | "refresh"): Te
           kind: "rejected",
           message:
             surface === "control"
-              ? "This team changed while the request was in flight, so the control returned to the last known state. Refresh the latest status before trying again."
+              ? "This team changed before the update was saved. Refresh the latest status before trying again."
               : "This team changed. Refresh the latest status before retrying.",
         };
       case "team.persistence_failed":
@@ -139,7 +139,7 @@ function classifyTeamFailure(error: unknown, surface: "control" | "refresh"): Te
     kind: "unconfirmed",
     message:
       surface === "control"
-        ? "We could not confirm the change, so the control returned to the last known state. Check the latest list before trying again."
+        ? "We could not confirm the change. Check the latest list before trying again."
         : "We could not confirm the change. Check the latest list before retrying.",
   };
 }
@@ -157,7 +157,7 @@ export function describeRunFailure(error: unknown): string {
       case "lineup.connection_not_ready":
       case "lineup.selection_invalid":
       case "lineup.request_conflict":
-        return "This run cannot be read from the current account state.";
+        return "This run is not available to this account.";
       case "lineup.persistence_failed":
         break;
     }

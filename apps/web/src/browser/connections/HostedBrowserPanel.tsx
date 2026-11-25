@@ -64,8 +64,8 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
             </Show>
             <Show when={props.controller.frameUrl() !== undefined}>
               <Text type="meta" tone="muted">
-                Tap the page and type. Keystrokes go to {provider}'s page through the private
-                browser. Lineupgrade does not store or log them.
+                Type on the page as usual. Lineupgrade sends your keystrokes to {provider} through
+                the private browser and does not store them.
               </Text>
             </Show>
             <Text type="meta" tone="muted">
@@ -73,7 +73,7 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
               <Time datetime={session().session.expiresAt}>
                 {formatReaderTime(session().session.expiresAt)}
               </Time>
-              . Cancelling closes the private browser and discards its profile.
+              . Cancelling closes the private browser and discards its data.
             </Text>
           </Stack>
         )}
@@ -87,13 +87,13 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
       >
         <Inline gap="sm">
           <Button variant="secondary" onClick={() => void props.controller.start()}>
-            Add a different account
+            Connect another account
           </Button>
         </Inline>
       </Show>
       <Show when={props.controller.session() === undefined && !props.connected}>
         <Text type="body" tone="muted">
-          Sign in as you normally would, in a browser that belongs to this sign-in only.
+          Sign in as usual in a private browser used only for this sign-in.
         </Text>
         <Inline gap="sm">
           <Button
