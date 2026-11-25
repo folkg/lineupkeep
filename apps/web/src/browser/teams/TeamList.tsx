@@ -143,13 +143,11 @@ function TeamCard(props: TeamCardProps): JSX.Element {
     <Card
       as="li"
       badge={
-        format() === undefined ? (
-          <Show when={props.factsLoading}>
-            <Skeleton height="h-6" width="w-20" />
-          </Show>
-        ) : (
+        format() !== undefined ? (
           <Badge tone="neutral">{format()}</Badge>
-        )
+        ) : props.factsLoading && !props.factsFailure ? (
+          <Skeleton height="h-6" width="w-20" />
+        ) : undefined
       }
       footer={
         <TeamControls

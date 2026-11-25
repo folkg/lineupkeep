@@ -11,7 +11,7 @@ import { TableSkeleton } from "#browser/shared-ui/Table.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import type { TeamOverviewView } from "#contracts/connections/teamContract.ts";
 
-import { formatLabel, scoringLabel } from "./seasonLabels";
+import { cardFormatLabel, scoringLabel } from "./seasonLabels";
 import { MatchupSummary, SeasonFacts } from "./SeasonSummary";
 import type { CategoryRow, SeasonSummaryData } from "./SeasonSummary";
 
@@ -24,7 +24,7 @@ export function TeamSeasonOverview(props: {
   const facts = (): TeamOverviewView | undefined => props.facts;
   const league = (): TeamOverviewView["league"] => facts()?.league;
   const format = (): string | undefined =>
-    formatLabel(facts()?.format) ?? scoringLabel(league()?.scoringLabel);
+    cardFormatLabel(facts()?.format) ?? scoringLabel(league()?.scoringLabel);
   const data = (): SeasonSummaryData | undefined => {
     const value = facts();
     if (value === undefined || value.reason !== undefined) {

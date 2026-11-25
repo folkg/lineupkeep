@@ -761,7 +761,7 @@ function foldedLabel(runs: ReadonlyArray<LineupRunView>): string {
 it("shows season facts, both matchup sides, category detail, and cap usage", async () => {
   using _app = setupTeamDetailPage(team, { overview: () => Promise.resolve(overviewFixture) });
 
-  await expect.element(page.getByText("Head to head categories")).toBeVisible();
+  await expect.element(page.getByText("Categories")).toBeVisible();
   await expect.element(page.getByText("Week 11 vs Beta")).toBeVisible();
   await expect.element(page.getByText("Week 11 of 18")).toBeVisible();
   await expect.element(page.getByText("0-0-0").first()).toBeVisible();
@@ -781,7 +781,7 @@ it("shows season facts, both matchup sides, category detail, and cap usage", asy
   await expect.element(page.getByText("7-3-0 (.700)")).toBeVisible();
   expect(page.getByText("0 to 42").elements()).toHaveLength(0);
   expect(page.getByText("Projected 63.5 to 55").elements()).toHaveLength(0);
-  const prose = page.getByText("Head to head categories").element();
+  const prose = page.getByText("Categories").element();
   expect(getComputedStyle(prose).fontVariantNumeric).not.toBe("tabular-nums");
   expect(page.getByText("0 to 3").elements()).toHaveLength(0);
   expect(page.getByText("Shots (info)").elements()).toHaveLength(0);
@@ -1055,13 +1055,13 @@ it("reads card facts and the detail overview", async () => {
     },
   });
 
-  await expect.element(page.getByText("Head to head categories")).toBeVisible();
+  await expect.element(page.getByText("Categories")).toBeVisible();
   expect(reads).toEqual(["cards", "overview"]);
 });
 
 it.each([
-  { format: "head_to_head_categories", label: "Head to head categories" },
-  { format: "head_to_head_points", label: "Head to head points" },
+  { format: "head_to_head_categories", label: "Categories" },
+  { format: "head_to_head_points", label: "Points" },
   { format: "rotisserie", label: "Rotisserie" },
   { format: "unknown", label: undefined },
 ] as const)(
@@ -1173,7 +1173,7 @@ it.each([null, 0] as const)(
           standing: { rank: 3, points: 99, pointsFor, pointsAgainst: 120, pointsBack: 0 },
         }),
     });
-    await expect.element(page.getByText("Head to head points")).toBeVisible();
+    await expect.element(page.getByText("Points")).toBeVisible();
     if (pointsFor === 0) {
       await expect
         .element(page.getByText("0 points for · 120 against · 0 behind", { exact: true }))
@@ -1224,7 +1224,7 @@ it.each([
   });
   applyTheme("light");
   setFacts(tenCategoryOverview);
-  await expect.element(page.getByText("Head to head categories")).toBeVisible();
+  await expect.element(page.getByText("Categories")).toBeVisible();
   const after = activity.getBoundingClientRect().top;
   expect(Math.abs(after - before), `${String(before)} -> ${String(after)}`).toBeLessThanOrEqual(10);
 });

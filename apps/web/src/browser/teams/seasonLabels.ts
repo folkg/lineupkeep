@@ -1,23 +1,5 @@
 import { EffectArray, EffectString } from "@lineupkeep/collections";
 
-export function formatLabel(format: string | undefined): string | undefined {
-  switch (format) {
-    case "head_to_head_categories":
-      return "Head to head categories";
-    case "head_to_head_points":
-      return "Head to head points";
-    case "rotisserie":
-      return "Rotisserie";
-    case "points":
-      return "Points";
-    case "unknown":
-    case undefined:
-      return undefined;
-    default:
-      return undefined;
-  }
-}
-
 export function cardFormatLabel(format: string | undefined): string | undefined {
   switch (format) {
     case "head_to_head_categories":

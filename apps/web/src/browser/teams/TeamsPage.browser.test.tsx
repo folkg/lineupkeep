@@ -496,6 +496,7 @@ it("keeps local team controls when the batch read fails", async () => {
     )
     .toBeVisible();
   await expect.element(page.getByRole("switch", { name: "Lineup checks for Alpha" })).toBeVisible();
+  expect(document.querySelector("[data-card-badge]")).toBeNull();
 });
 
 it("keeps local status in place while season facts arrive", async () => {
@@ -1033,7 +1034,7 @@ it("frames a team card with the shared card structure", async () => {
   for (const part of ["header", "meta", "body", "footer"]) {
     expect(card.querySelector(`[data-card-${part}]`), `the ${part} slot`).not.toBeNull();
   }
-  expect(card.querySelector("[data-card-badge]")).not.toBeNull();
+  expect(card.querySelector("[data-card-badge]")).toBeNull();
 });
 
 it("shows the fantasy league name and a provider jump out for the team", async () => {
