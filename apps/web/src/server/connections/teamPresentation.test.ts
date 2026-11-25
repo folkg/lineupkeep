@@ -23,6 +23,7 @@ const first: TeamSummary = {
     sport: "football",
     season: 2026,
     name: "My team",
+    scoringFormat: "rotisserie",
     availability: "available",
     automation: { status: "enabled", changedAt: at },
     ownerNote: "Do not move my quarterback",
@@ -107,6 +108,7 @@ it("merges by connection and provider team key without replacing local controls 
     { name: "Goals", scoring: undefined, value: 8, total: 84, place: 1 },
   ]);
   assert.strictEqual(present?.summary.team.name, "My team");
+  assert.strictEqual(present?.summary.team.scoringFormat, "rotisserie");
   assert.strictEqual(present?.summary.team.ownerNote, "Do not move my quarterback");
   assert.strictEqual(present?.summary.team.automation.status, "enabled");
   assert.isUndefined(missing?.season);

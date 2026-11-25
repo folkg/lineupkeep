@@ -22,6 +22,16 @@ export type FantasySport = typeof FantasySport.Type;
 export const TeamAvailability = Schema.Literals(["available", "unavailable"]);
 export type TeamAvailability = typeof TeamAvailability.Type;
 
+export const teamScoringFormats = [
+  "head_to_head_categories",
+  "head_to_head_points",
+  "rotisserie",
+  "points",
+  "unknown",
+] as const;
+export const TeamScoringFormat = Schema.Literals(teamScoringFormats);
+export type TeamScoringFormat = typeof TeamScoringFormat.Type;
+
 export const TeamAutomationStatus = Schema.Literals([
   "disabled",
   "enabled",
@@ -52,6 +62,7 @@ export const FantasyTeam = Schema.Struct({
   name: Schema.NonEmptyString,
   leagueName: Schema.optional(Schema.NonEmptyString),
   providerUrl: Schema.optional(Schema.NonEmptyString),
+  scoringFormat: Schema.optional(TeamScoringFormat),
   availability: TeamAvailability,
   automation: TeamAutomation,
   ownerNote: Schema.NullOr(Schema.NonEmptyString),

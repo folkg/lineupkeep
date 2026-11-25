@@ -16,6 +16,7 @@ import { Notice } from "#browser/shared-ui/Notice.tsx";
 import { RuleList } from "#browser/shared-ui/RuleList.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { createSettle } from "#browser/shared-ui/settle.ts";
+import { BadgeSkeleton } from "#browser/shared-ui/Skeleton.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
@@ -74,7 +75,7 @@ export function TeamList(props: TeamListProps): JSX.Element {
       </Show>
       <Show
         fallback={<LoadingState label="Loading teams">Loading your teams…</LoadingState>}
-        when={!props.isLoading() && (props.loadFailure() !== null || !props.cardFactsLoading())}
+        when={!props.isLoading()}
       >
         <Show
           fallback={
@@ -117,6 +118,7 @@ export function TeamList(props: TeamListProps): JSX.Element {
                       )[0]
                     }
                     factsFailure={props.cardFactsFailure()}
+                    factsLoading={props.cardFactsLoading()}
                     remote={props.remote}
                     showProvider={showProvider}
                     onOptimistic={props.onOptimistic}
@@ -133,16 +135,25 @@ export function TeamList(props: TeamListProps): JSX.Element {
 
 function TeamCard(props: TeamCardProps): JSX.Element {
   const nameId = (): string => `team-card-${props.team.team.id}`;
-  const format = (): string | undefined =>
-    props.facts?.season === undefined
-      ? undefined
-      : (cardFormatLabel(props.facts.season.format) ??
-        scoringLabel(props.facts.season.scoringLabel));
+  const format = (): string | undefined => {
+    const season = props.facts?.season;
+    return season === undefined
+      ? cardFormatLabel(props.team.team.scoringFormat)
+      : (cardFormatLabel(season.format) ?? scoringLabel(season.scoringLabel));
+  };
 
   return (
     <Card
       as="li"
-      badge={format() === undefined ? undefined : <Badge tone="neutral">{format()}</Badge>}
+      badge={
+        format() === undefined ? (
+          props.team.connectionStatus === "ready" && props.factsLoading && !props.factsFailure ? (
+            <BadgeSkeleton />
+          ) : undefined
+        ) : (
+          <Badge tone="neutral">{format()}</Badge>
+        )
+      }
       footer={
         <TeamControls
           compact
@@ -178,7 +189,12 @@ function TeamCard(props: TeamCardProps): JSX.Element {
           fallback={<TeamAttention team={props.team} />}
           when={props.team.connectionStatus === "ready"}
         >
-          <TeamSeasonFacts facts={props.facts} failed={props.factsFailure} />
+          <TeamSeasonFacts
+            facts={props.facts}
+            failed={props.factsFailure}
+            format={props.facts?.season?.format ?? props.team.team.scoringFormat}
+            loading={props.factsLoading}
+          />
         </Show>
         <CardNote>
           <CheckSummary now={props.now} team={props.team} />
@@ -252,6 +268,7 @@ type TeamCardProps = {
   readonly team: TeamSummaryView;
   readonly facts: TeamCardView | undefined;
   readonly factsFailure: boolean;
+  readonly factsLoading: boolean;
   readonly now: Accessor<Date>;
   readonly remote: TeamRemote;
   readonly showProvider: Accessor<boolean>;

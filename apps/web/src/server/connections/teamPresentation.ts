@@ -250,6 +250,7 @@ function toTeamView(summary: TeamSummary["team"]): TeamView {
     name: summary.name,
     ...(summary.leagueName === undefined ? {} : { leagueName: summary.leagueName }),
     ...(summary.providerUrl === undefined ? {} : { providerUrl: summary.providerUrl }),
+    ...(summary.scoringFormat === undefined ? {} : { scoringFormat: summary.scoringFormat }),
     availability: summary.availability,
     automation: {
       status: summary.automation.status,

@@ -4,6 +4,7 @@ import type {
   FantasySport,
   TeamAvailability,
   TeamAutomationStatus,
+  TeamScoringFormat,
 } from "@lineupkeep/backend/connections/FantasyTeam";
 import type {
   LineupRunStatus,
@@ -37,6 +38,7 @@ export type TeamView = {
   readonly name: string;
   readonly leagueName?: string;
   readonly providerUrl?: string;
+  readonly scoringFormat?: TeamScoringFormat;
   readonly availability: TeamAvailability;
   readonly automation: TeamAutomationView;
   readonly ownerNote: string | null;
@@ -128,12 +130,7 @@ export type TeamCardView = {
   readonly summary: TeamSummaryView;
   readonly season?: {
     readonly seasonOver: boolean | undefined;
-    readonly format:
-      | "head_to_head_categories"
-      | "head_to_head_points"
-      | "rotisserie"
-      | "points"
-      | "unknown";
+    readonly format: TeamScoringFormat;
     readonly scoringLabel: string | undefined;
     readonly scoringType: string;
     readonly teamCount: number | undefined;

@@ -6,7 +6,6 @@ import { AuthPage } from "#browser/auth/AuthPage.tsx";
 import { isApplicationPath } from "#browser/auth/signInDestination.ts";
 import { signInQueries } from "#browser/auth/signInQueries.ts";
 import { signInRemote } from "#browser/auth/signInRemote.ts";
-import { removePersistedTeamQueries } from "#browser/query/queryPersistence.ts";
 
 export const Route = createFileRoute("/auth")({
   validateSearch: parseAuthSearch,
@@ -35,7 +34,6 @@ function AuthRoute(): JSX.Element {
       googleErrorReturnTo={destinations().errorReturnTo}
       googleError={search().error}
       onAuthenticated={() => {
-        removePersistedTeamQueries();
         return context()
           .queryClient.resetQueries()
           .then(() => navigate({ href: destinations().returnTo }));

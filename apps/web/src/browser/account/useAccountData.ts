@@ -3,7 +3,6 @@ import { useNavigate } from "@tanstack/solid-router";
 import { createSignal } from "solid-js";
 import type { Accessor } from "solid-js";
 
-import { removePersistedTeamQueries } from "#browser/query/queryPersistence.ts";
 import { useSignInRecovery } from "#browser/session/signInRecovery.ts";
 import type { ActionFeedbackState } from "#browser/shared-ui/ActionFeedback.tsx";
 import type {
@@ -49,7 +48,6 @@ export function useAccountData(options: {
         .remote()
         .signOut()
         .catch(() => undefined);
-      removePersistedTeamQueries();
       await options.onErased();
       await navigate({ to: "/erased", replace: true });
     },

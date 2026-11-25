@@ -2,7 +2,7 @@ import { Schema } from "effect";
 import type { Effect } from "effect";
 
 import type { ProviderSessionEvidence } from "./Connection.ts";
-import { FantasyLeague, FantasySport } from "./FantasyTeam.ts";
+import { FantasyLeague, FantasySport, TeamScoringFormat } from "./FantasyTeam.ts";
 import type { LineupTargetPeriod } from "./LineupRun.ts";
 import { ProviderKey } from "./ProviderKey.ts";
 import type { LeagueFormat } from "./QueryValues.ts";
@@ -54,6 +54,7 @@ export const ProviderTeam = Schema.Struct({
   name: Schema.NonEmptyString,
   leagueName: Schema.optional(Schema.NonEmptyString),
   providerUrl: Schema.optional(Schema.NonEmptyString),
+  scoringFormat: Schema.optional(TeamScoringFormat),
 });
 export type ProviderTeam = typeof ProviderTeam.Type;
 
@@ -78,7 +79,7 @@ export type ProviderTeamCardMatchup = {
 
 export type ProviderTeamCard = ProviderTeam & {
   readonly seasonOver: boolean | undefined;
-  readonly format: LeagueFormat | "points";
+  readonly format: TeamScoringFormat;
   readonly scoringType: string;
   readonly scoringLabel: string | undefined;
   readonly teamCount: number | undefined;

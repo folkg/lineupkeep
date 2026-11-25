@@ -2,7 +2,6 @@ import { hydrate } from "@solidjs/web";
 import { QueryClient } from "@tanstack/solid-query";
 import { StartClient, hydrateStart } from "@tanstack/solid-start/client";
 
-import { persistTeamQueries, restoreTeamQueries } from "./browser/query/queryPersistence";
 import { installClientTelemetry } from "./browser/telemetry/telemetry";
 import { telemetryRemote } from "./browser/telemetry/telemetryRemote";
 
@@ -24,8 +23,6 @@ hydrateStart()
     if (!(queryClient instanceof QueryClient)) {
       throw new Error("The client router did not provide a query client");
     }
-    restoreTeamQueries(queryClient);
     hydrate(() => <StartClient router={router} />, document);
-    persistTeamQueries(queryClient);
   })
   .catch(console.error);

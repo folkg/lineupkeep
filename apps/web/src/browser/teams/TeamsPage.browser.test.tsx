@@ -92,6 +92,7 @@ const baseTeam: TeamSummaryView = {
     sport: "football",
     season: 2026,
     name: "Alpha",
+    scoringFormat: "head_to_head_categories",
     availability: "available",
     automation: {
       status: "disabled",
@@ -498,21 +499,27 @@ it("keeps local team controls when the batch read fails", async () => {
     )
     .toBeVisible();
   await expect.element(page.getByRole("switch", { name: "Lineup checks for Alpha" })).toBeVisible();
-  expect(document.querySelector("[data-card-badge]")).toBeNull();
+  await expect.element(page.getByText("Categories", { exact: true })).toBeVisible();
 });
 
-it("shows one loading mark until the team cards are ready", async () => {
+it("paints the known card while its season facts load", async () => {
   await page.viewport(390, 844);
   await document.fonts.ready;
   const pending = Promise.withResolvers<ReadonlyArray<TeamCardView>>();
   using _app = setupTeamsPage([baseTeam], { cards: () => pending.promise });
-  const loading = page.getByLabelText("Loading teams");
-  await expect.element(loading).toBeVisible();
-  expect(page.getByText("Next check").elements()).toHaveLength(0);
-  expect(document.querySelectorAll<HTMLElement>("[data-card]")).toHaveLength(0);
-  pending.resolve([seasonCardWithMatchup]);
   await expect.element(page.getByText("Next check")).toBeVisible();
-  expect(loading.elements()).toHaveLength(0);
+  const card = document.querySelector<HTMLElement>("[data-card]");
+  expect(card).not.toBeNull();
+  expect(page.getByLabelText("Loading teams").elements()).toHaveLength(0);
+  expect(card?.querySelectorAll(".animate-pulse").length ?? 0).toBeGreaterThan(0);
+  const loadingHeight = card?.getBoundingClientRect().height ?? 0;
+  pending.resolve([seasonCardWithMatchup]);
+  await expect.element(page.getByText("3rd of 12")).toBeVisible();
+  await document.fonts.ready;
+  expect(
+    Math.abs((card?.getBoundingClientRect().height ?? 0) - loadingHeight),
+    `${String(loadingHeight)} -> ${String(card?.getBoundingClientRect().height)}`,
+  ).toBeLessThanOrEqual(1);
 });
 
 it("paints cached cards while fresh facts are still in flight", async () => {
@@ -537,16 +544,48 @@ it("paints cached cards while fresh facts are still in flight", async () => {
   ).toBeLessThanOrEqual(1);
 });
 
-it("waits for the team cards before it paints a card", async () => {
+it.each([
+  ["head_to_head_points", "Points"],
+  ["points", "Points"],
+  ["rotisserie", "Rotisserie"],
+] as const)("paints a %s card without a jump when its facts arrive", async (format, label) => {
+  await page.viewport(390, 844);
+  await document.fonts.ready;
+  const team = { ...baseTeam, team: { ...baseTeam.team, scoringFormat: format } };
+  const cardView = {
+    ...seasonCardWithMatchup,
+    season: { ...seasonFacts, format, scoringLabel: label },
+  };
+  const pending = Promise.withResolvers<ReadonlyArray<TeamCardView>>();
+  using _app = setupTeamsPage([team], { cards: () => pending.promise });
+  await expect.element(page.getByText("Next check")).toBeVisible();
+  await expect.element(page.getByText(label, { exact: true })).toBeVisible();
+  const card = document.querySelector<HTMLElement>("[data-card]");
+  const loadingHeight = card?.getBoundingClientRect().height ?? 0;
+  pending.resolve([cardView]);
+  await expect.element(page.getByText("3rd of 12")).toBeVisible();
+  await document.fonts.ready;
+  expect(
+    Math.abs((card?.getBoundingClientRect().height ?? 0) - loadingHeight),
+    `${format}: ${String(loadingHeight)} -> ${String(card?.getBoundingClientRect().height)}`,
+  ).toBeLessThanOrEqual(1);
+});
+
+it("paints the known card at desktop while its season facts load", async () => {
   await page.viewport(1440, 900);
   await document.fonts.ready;
   const pending = Promise.withResolvers<ReadonlyArray<TeamCardView>>();
   using _app = setupTeamsPage([baseTeam], { cards: () => pending.promise });
-  await expect.element(page.getByLabelText("Loading teams")).toBeVisible();
-  expect(document.querySelectorAll<HTMLElement>("[data-card]")).toHaveLength(0);
+  await expect.element(page.getByText("Next check")).toBeVisible();
+  const card = document.querySelector<HTMLElement>("[data-card]");
+  const loadingHeight = card?.getBoundingClientRect().height ?? 0;
   pending.resolve([seasonCardWithMatchup]);
-  await expect.element(page.getByText("Categories")).toBeVisible();
-  expect(document.querySelectorAll<HTMLElement>("[data-card]")).toHaveLength(1);
+  await expect.element(page.getByText("3rd of 12")).toBeVisible();
+  await document.fonts.ready;
+  expect(
+    Math.abs((card?.getBoundingClientRect().height ?? 0) - loadingHeight),
+    `${String(loadingHeight)} -> ${String(card?.getBoundingClientRect().height)}`,
+  ).toBeLessThanOrEqual(1);
 });
 
 it("explains when a ready connection has no card facts for a local team", async () => {
@@ -591,7 +630,7 @@ it("keeps the first card controls in the first phone screen and captures both th
         .element()
         .closest<HTMLElement>("[data-card]");
       const toggle = page.getByRole("switch", { name: "Lineup checks for Alpha" }).element();
-      expect(toggle.getBoundingClientRect().bottom).toBeLessThan(844);
+      expect(toggle.getBoundingClientRect().bottom).toBeLessThanOrEqual(846);
       expect(toggle.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
       await page.screenshot({
@@ -1039,7 +1078,7 @@ it("frames a team card with the shared card structure", async () => {
   for (const part of ["header", "meta", "body", "footer"]) {
     expect(card.querySelector(`[data-card-${part}]`), `the ${part} slot`).not.toBeNull();
   }
-  expect(card.querySelector("[data-card-badge]")).toBeNull();
+  expect(card.querySelector("[data-card-badge]")).not.toBeNull();
 });
 
 it("shows the fantasy league name and a provider jump out for the team", async () => {

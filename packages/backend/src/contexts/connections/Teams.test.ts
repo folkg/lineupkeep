@@ -124,6 +124,7 @@ it.effect("names a stored team's league on the teams list read", () =>
         ...team("nhl.l.1.t.1", "First Skate"),
         leagueName: "Elite League 25",
         providerUrl: "https://provider.example/hockey/1/1",
+        scoringFormat: "rotisserie",
       },
     ]);
 
@@ -132,6 +133,7 @@ it.effect("names a stored team's league on the teams list read", () =>
 
     assert.strictEqual(summary.team.leagueName, "Elite League 25");
     assert.strictEqual(summary.team.providerUrl, "https://provider.example/hockey/1/1");
+    assert.strictEqual(summary.team.scoringFormat, "rotisserie");
     assert.strictEqual(summary.connectionCount, 1);
   }).pipe(layerTools.provide(TeamsTestLayer)),
 );
@@ -147,6 +149,7 @@ it.effect("does not rediscover a team whose league is already named", () =>
         ...team("nhl.l.1.t.1", "First Skate"),
         leagueName: "Elite League 25",
         providerUrl: "https://provider.example/hockey/1/1",
+        scoringFormat: "rotisserie",
       },
     ]);
     yield* connections.discoverTeams(owner, [{ id: ready.id }]);

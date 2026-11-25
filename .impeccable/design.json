@@ -480,7 +480,7 @@
       },
       {
         "name": "The Typed Skeleton Rule",
-        "body": "A loading shape borrows the line box of the text type it replaces. A text skeleton is named by type, not by a pixel height, and its bar sits inside that line box. A card with local facts paints in full; a list without them waits under one moving mark instead of inventing a card. The only row skeleton is the already-run list, where the real row count is known. Missing values in a real table keep their cells.",
+        "body": "A loading shape borrows the line box of the text type it replaces. A text skeleton is named by type, not by a pixel height, and its bar sits inside that line box. The team row stores its scoring format at discovery, so a first load paints the known card frame and fills only its missing value slots with typed skeletons; a card whose facts are already in the tab cache paints in full. A list whose teams are still pending waits under one moving mark. The only row skeleton is the already-run list, where the real row count is known. Missing values in a real table keep their cells.",
         "section": "layout"
       }
     ],

@@ -146,6 +146,37 @@ test("renders the teams surface before client scripts and hydrates its navigatio
   expect(hydrationWarnings).toEqual([]);
 });
 
+test("paints the known team card before provider facts arrive", async ({ page, services }) => {
+  await signUp(page);
+  await services.exercise(
+    page,
+    "link the provider fake and discover teams",
+    "connectYahooAndDiscoverTeams",
+    {},
+  );
+  const scripts = Promise.withResolvers<void>();
+  await page.route("**/*.js", async (route) => {
+    await scripts.promise;
+    await route.continue();
+  });
+
+  try {
+    await page.goto("/teams", { waitUntil: "commit" });
+    const card = page.getByRole("listitem").filter({ hasText: "Embedded Browser Team" });
+    await expect(
+      card.getByRole("link", { name: "Embedded Browser Team", exact: true }),
+    ).toBeVisible();
+    await expect(card.getByText("Categories", { exact: true })).toBeVisible();
+    await expect(card.getByText("Season", { exact: true })).toHaveCount(0);
+  } finally {
+    scripts.resolve();
+    await page.unrouteAll({ behavior: "wait" });
+  }
+
+  const card = page.getByRole("listitem").filter({ hasText: "Embedded Browser Team" });
+  await expect(card.getByText("Season", { exact: true })).toBeVisible();
+});
+
 for (const viewport of [
   { width: 390, height: 844 },
   { width: 375, height: 667 },

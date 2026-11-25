@@ -493,11 +493,13 @@ jump-out sits beside the team name; the right cluster is the toggle and pause on
 repeats a control label on every row.
 
 Notices are a 2px leading rule with caps title and 12px detail. Empty states are a top rule with a
-15px title and soft text. Loading never guesses a card shape. A card whose list and facts are in
-local storage paints in full at once; while a list’s facts are missing, the list waits under one
-moving violet mark. Transactions uses the same mark on first load. The only row skeleton is the
-already-run list on Transactions, where the real row count is known and the fade ends the list.
-A value that is missing inside a real table keeps its cell and uses a typed skeleton. A text
+15px title and soft text. Loading never guesses a card shape. The team row stores its scoring
+format at discovery, so a first load paints the known card frame and fills only its missing value
+slots with typed skeletons; a card whose facts are already in the tab cache paints in full. A list
+whose teams are still pending waits under one moving violet mark. Transactions uses the same mark
+on first load. The only row skeleton is the already-run list on Transactions, where the real row
+count is known and the fade ends the list. A value that is missing inside a real table keeps its
+cell and uses a typed skeleton. A text
 skeleton takes the type it stands in for, so its line box and every following section stay at the
 settled height; the bar is 0.62em tall inside that line box. Use a named `TextSkeleton` type rather
 than a pixel height. The live status region stays in the accessibility tree when empty (visually

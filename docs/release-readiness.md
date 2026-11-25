@@ -15,7 +15,7 @@ Keep the application loopback-only, with no public tunnel or public deployment o
 - The installed line is `@tanstack/solid-start` **2.0.0-rc.11**, which resolves `start-server-core` **1.169.45**, `start-client-core` **1.170.39**, `router-core` **1.171.39** and `start-storage-context` **1.167.41**. The three response-validation patches are removed; installed-source inspection shows the upstream response handling in `router-core`, `start-client-core` and `start-server-core`.
 - rc.11 has a packaging defect: it imports `@tanstack/start-server-core/request-scope`, but 1.169.45 does not export that subpath ([TanStack/router #8964](https://github.com/TanStack/router/issues/8964)). The single remaining TanStack patch adds that export. It changes no transport behavior. Remove it when a release exports the subpath.
 - **Owner decision (2026-11-19, reaffirmed 2026-11-22):** adopt the stable Solid 2 line and the latest usable TanStack 2 RCs. rc.10 was the previous usable line; its vulnerable core closure and temporary backport are retired.
-- **Acceptance so far:** a clean install reproduces the patched export; `bun checks` passes (2,116 node, 319 browser, 10 chromium; both builds); the container E2E passes 62 tests, including the built-app `e2e/serverFunctionTransport.e2e.ts` regression. Clean Linux CI and deployment-target acceptance remain.
+- **Acceptance so far:** a clean install reproduces the patched export; `bun checks` passes (2,116 node, 320 browser, 10 chromium; both builds); the container E2E passes 63 tests, including the built-app `e2e/serverFunctionTransport.e2e.ts` regression. Clean Linux CI and deployment-target acceptance remain.
 - **Historical record:** the 2026-10-24 attempts to pair a patched core with rc.8 failed because no published `router-core` exported both the old and new surfaces. Those attempts are superseded by rc.11 and are not a current workaround.
 
 ## Hosted-browser egress widening (2026-10-28)
@@ -82,7 +82,7 @@ The stable Solid 2.0.3 and TanStack Query 6.0.0-rc.6 line is installed. The pref
 
 ### Solid Query streamed hydration
 
-The installed Solid Query 6.0.0-rc.6 line can leave a server-rendered skeleton inert when streamed query data reaches the cache before Solid hydrates that subtree. The primary teams read therefore stays awaited in the server loader. [Query #9399](https://github.com/TanStack/query/issues/9399) is the closest open report; it is React-specific and not an exact match. No Solid-specific issue is filed, by owner decision on 2026-11-24. Track the related report and remove the server wait only after a Solid reproduction passes.
+The installed Solid Query 6.0.0-rc.6 line can leave a server-rendered skeleton inert when streamed query data reaches the cache before Solid hydrates that subtree. The teams loader now awaits only the team list; cards start on the client and fill their value slots after hydration. Browser tests prove the stored-format card, its typed value skeletons, and the settled facts in the same first paint. [Query #9399](https://github.com/TanStack/query/issues/9399) remains the closest open report; it is React-specific and not an exact match. No Solid-specific issue is filed, by owner decision on 2026-11-24.
 
 ### Server Errored escaping
 

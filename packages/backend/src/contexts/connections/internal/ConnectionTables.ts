@@ -25,6 +25,8 @@ import {
   TeamAutomationStatus,
   TeamAvailability,
   TeamId,
+  TeamScoringFormat,
+  teamScoringFormats,
 } from "#contexts/connections/FantasyTeam.ts";
 
 import { ConnectionLifecycleState } from "./ConnectionLifecycleWorkflow.ts";
@@ -86,6 +88,7 @@ export const providerTeams = pgTable(
     name: text("name").notNull(),
     leagueName: text("league_name"),
     providerUrl: text("provider_url"),
+    scoringFormat: text("scoring_format", { enum: teamScoringFormats }),
     availability: text("availability", { enum: ["available", "unavailable"] })
       .notNull()
       .default("available"),
@@ -146,6 +149,7 @@ const FantasyTeamSelect = createSelectSchema(providerTeams, {
   name: Schema.NonEmptyString,
   leagueName: Schema.NullOr(Schema.NonEmptyString),
   providerUrl: Schema.NullOr(Schema.NonEmptyString),
+  scoringFormat: Schema.optional(Schema.NullOr(TeamScoringFormat)),
   availability: TeamAvailability,
   automationState: Schema.Unknown,
   automationStatus: TeamAutomationStatus,
@@ -171,6 +175,7 @@ export const FantasyTeamRow = FantasyTeamSelect.pipe(
       name: Schema.NonEmptyString,
       leagueName: Schema.optional(Schema.NonEmptyString),
       providerUrl: Schema.optional(Schema.NonEmptyString),
+      scoringFormat: Schema.optional(TeamScoringFormat),
       availability: TeamAvailability,
       automation: TeamAutomation,
       ownerNote: Schema.NullOr(Schema.NonEmptyString),
@@ -203,6 +208,9 @@ export const FantasyTeamRow = FantasyTeamSelect.pipe(
             name: row.name,
             ...(row.leagueName === null ? {} : { leagueName: row.leagueName }),
             ...(row.providerUrl === null ? {} : { providerUrl: row.providerUrl }),
+            ...(row.scoringFormat === null || row.scoringFormat === undefined
+              ? {}
+              : { scoringFormat: row.scoringFormat }),
             availability: row.availability,
             automation: automationView(state),
             ownerNote: row.ownerNote,
@@ -222,6 +230,7 @@ export const FantasyTeamRow = FantasyTeamSelect.pipe(
             ...team,
             leagueName: team.leagueName ?? null,
             providerUrl: team.providerUrl ?? null,
+            scoringFormat: team.scoringFormat ?? null,
             automationState,
             automationStatus: teamAutomationStateStatus(state),
           };

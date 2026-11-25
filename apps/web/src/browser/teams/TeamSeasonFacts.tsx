@@ -1,9 +1,13 @@
+import type { TeamScoringFormat } from "@lineupkeep/backend/connections/FantasyTeam";
 import { EffectArray } from "@lineupkeep/collections";
 import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
 
 import { CardNote } from "#browser/shared-ui/Card.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
+import { SeasonArea } from "#browser/shared-ui/SeasonArea.tsx";
+import type { SeasonAreaHeight } from "#browser/shared-ui/SeasonArea.tsx";
+import { TextSkeleton } from "#browser/shared-ui/Skeleton.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import type { TeamCardView } from "#contracts/connections/teamContract.ts";
@@ -15,6 +19,8 @@ import type { SeasonSummaryData } from "./SeasonSummary";
 export function TeamSeasonFacts(props: {
   readonly facts: TeamCardView | undefined;
   readonly failed: boolean;
+  readonly format: TeamScoringFormat | undefined;
+  readonly loading: boolean;
 }): JSX.Element {
   const data = (): SeasonSummaryData | undefined => {
     const season = props.facts?.season;
@@ -37,19 +43,84 @@ export function TeamSeasonFacts(props: {
     };
   };
   return (
-    <Show
-      fallback={
-        <Text type="meta" tone="muted">
-          {props.failed
-            ? "Season facts could not be loaded. Lineup runs and controls are still available."
-            : (props.facts?.reason ?? "Season facts were not published for this team.")}
-        </Text>
-      }
-      when={data()}
+    <SeasonArea
+      height={data() !== undefined || props.loading ? factsFrame(props.format) : undefined}
     >
-      {(facts) => <CardSeasonFacts data={facts()} />}
-    </Show>
+      <Show
+        fallback={
+          <Show
+            fallback={
+              <Text type="meta" tone="muted">
+                {props.failed
+                  ? "Season facts could not be loaded. Lineup runs and controls are still available."
+                  : (props.facts?.reason ?? "Season facts were not published for this team.")}
+              </Text>
+            }
+            when={props.loading}
+          >
+            <CardSeasonFactsSkeleton format={props.format} />
+          </Show>
+        }
+        when={data()}
+      >
+        {(facts) => <CardSeasonFacts data={facts()} />}
+      </Show>
+    </SeasonArea>
   );
+}
+
+function CardSeasonFactsSkeleton(props: {
+  readonly format: TeamScoringFormat | undefined;
+}): JSX.Element {
+  const points = (): boolean =>
+    props.format === "head_to_head_points" ||
+    props.format === "points" ||
+    props.format === "rotisserie";
+  const matchup = (): boolean =>
+    props.format === "head_to_head_categories" ||
+    props.format === "head_to_head_points" ||
+    props.format === "points";
+  return (
+    <Stack gap="sm">
+      <Stack gap="2xs">
+        <TextSkeleton type="meta" width="w-12" />
+        <TextSkeleton type="body-strong" width="w-24" />
+        <TextSkeleton type="meta" width="w-40" />
+        <TextSkeleton type="meta" width="w-32" />
+        <Show when={points()}>
+          <TextSkeleton type="meta" width="w-36" />
+        </Show>
+      </Stack>
+      <Show when={matchup()}>
+        <CardNote>
+          <Stack gap="2xs">
+            <TextSkeleton type="meta" width="w-28" />
+            <TextSkeleton type="body-strong" width="w-16" />
+            <Show when={props.format === "head_to_head_points" || props.format === "points"}>
+              <TextSkeleton type="meta" width="w-32" />
+            </Show>
+            <TextSkeleton type="meta" width="w-48" />
+            <TextSkeleton type="meta" width="w-36" />
+          </Stack>
+        </CardNote>
+      </Show>
+    </Stack>
+  );
+}
+
+function factsFrame(format: TeamScoringFormat | undefined): SeasonAreaHeight {
+  switch (format) {
+    case "rotisserie":
+      return "compact";
+    case "head_to_head_categories":
+      return "standard";
+    case "head_to_head_points":
+    case "points":
+      return "extended";
+    case "unknown":
+    case undefined:
+      return "open";
+  }
 }
 
 function CardSeasonFacts(props: { readonly data: SeasonSummaryData }): JSX.Element {

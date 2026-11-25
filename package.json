@@ -96,7 +96,6 @@
     "@solidjs/compiler": "2.0.2",
     "@solidjs/signals": "2.0.3",
     "@solidjs/web": "2.0.3",
-    "@tanstack/query-core": "5.107.1",
     "@tanstack/solid-query": "6.0.0-rc.6",
     "seroval": "1.6.12",
     "seroval-plugins": "1.6.12",
@@ -156,9 +155,7 @@
     "@alchemy.run/cloudflare-runtime": "2.0.0-beta.87",
     "alchemy": "2.0.0-beta.87",
     "ws": "8.23.0",
-    "@types/ws": "8.18.2",
-    "@tanstack/query-persist-client-core": "5.107.1",
-    "@tanstack/query-sync-storage-persister": "5.107.1"
+    "@types/ws": "8.18.2"
   },
   "patchedDependencies": {
     "@tanstack/start-server-core@1.169.45": "patches/@tanstack%2Fstart-server-core@1.169.45.patch",

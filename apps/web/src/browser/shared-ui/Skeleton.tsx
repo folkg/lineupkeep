@@ -66,3 +66,12 @@ export function ListSkeleton(props: {
     </div>
   );
 }
+
+export function BadgeSkeleton(): JSX.Element {
+  return (
+    <span
+      aria-hidden="true"
+      class="block h-6 w-20 animate-pulse bg-rule motion-reduce:animate-none"
+    />
+  );
+}

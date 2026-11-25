@@ -91,6 +91,7 @@ it.effect("keeps a team with the connection that discovered it", () =>
         sport: "football",
         season: 2026,
         name: "First Team",
+        scoringFormat: "head_to_head_categories",
       },
     ]);
     const firstLinked = yield* connections.link(owner, [linkInput]);
@@ -102,8 +103,12 @@ it.effect("keeps a team with the connection that discovered it", () =>
     const teams = yield* connections.listTeams(owner);
 
     assert.deepStrictEqual(
-      Array.map(firstTeams, (team) => team.name),
-      ["First Team"],
+      Array.map(firstTeams, (team) => [team.name, team.scoringFormat]),
+      [["First Team", "head_to_head_categories"]],
+    );
+    assert.deepStrictEqual(
+      Array.map(teams, (team) => team.scoringFormat),
+      ["head_to_head_categories"],
     );
     assert.deepStrictEqual(secondTeams, []);
     assert.deepStrictEqual(

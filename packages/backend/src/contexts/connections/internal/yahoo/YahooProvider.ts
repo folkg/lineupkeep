@@ -4,7 +4,7 @@ import { Array as EffectArray } from "effect";
 import { Option as EffectOption, Order as EffectOrder } from "effect";
 
 import { fantasyDayLabel } from "#contexts/connections/FantasyDay.ts";
-import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
+import type { FantasySport, TeamScoringFormat } from "#contexts/connections/FantasyTeam.ts";
 import type {
   PlayerRank,
   RankType,
@@ -218,6 +218,10 @@ export const yahooProvider = Effect.gen(function* () {
             name: team.name,
             leagueName: league.name,
             ...(providerUrl === undefined ? {} : { providerUrl }),
+            scoringFormat: cardScoringFormat(
+              league.scoringType ?? "",
+              league.settings.settings.statModifiers.length,
+            ),
           };
         });
         return arrayValueIsArray(flatMapped1) ? flatMapped1 : [flatMapped1];
@@ -269,15 +273,10 @@ export const yahooProvider = Effect.gen(function* () {
     return EffectArray.flatMap(leagues, (league) =>
       EffectArray.map(league.teams, (team): ProviderTeamCard => {
         const providerUrl = teamProviderUrl(team, league.gameKey);
-        const format =
-          league.scoringType === "point"
-            ? "points"
-            : league.scoringType === "headpoint"
-              ? "head_to_head_points"
-              : leagueFormat(
-                  league.scoringType ?? "",
-                  league.settings.settings.statModifiers.length,
-                );
+        const format = cardScoringFormat(
+          league.scoringType ?? "",
+          league.settings.settings.statModifiers.length,
+        );
         const standing =
           team.standings === undefined
             ? undefined
@@ -1359,6 +1358,16 @@ const weeklyDeadlineCoverage: Readonly<Record<string, ProviderCoverageKind>> = {
   "6": "week",
   "7": "week",
 };
+
+function cardScoringFormat(scoringType: string, modifierCount: number): TeamScoringFormat {
+  if (scoringType === "point") {
+    return "points";
+  }
+  if (scoringType === "headpoint") {
+    return "head_to_head_points";
+  }
+  return leagueFormat(scoringType, modifierCount);
+}
 
 function leagueFormat(
   scoringType: string,

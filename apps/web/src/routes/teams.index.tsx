@@ -11,7 +11,6 @@ export const Route = createFileRoute("/teams/")({
   ssr: true,
   context: () => ({
     teamsQuery: teamQueries.list(teamRemote),
-    cardsQuery: teamQueries.cards(teamRemote),
   }),
   beforeLoad: async ({ context, location }) => {
     await requireAuthenticatedSession(
@@ -20,14 +19,11 @@ export const Route = createFileRoute("/teams/")({
     );
   },
   loader: ({ context }) => {
-    if (typeof window === "undefined" || context.queryClient.isMutating() > 0) {
-      return Promise.all([
-        context.queryClient.ensureQueryData(context.teamsQuery),
-        context.queryClient.ensureQueryData(context.cardsQuery),
-      ]);
+    if (typeof window === "undefined") {
+      return context.queryClient.ensureQueryData(context.teamsQuery);
     }
     void context.queryClient.prefetchQuery(context.teamsQuery);
-    void context.queryClient.prefetchQuery(context.cardsQuery);
+    void context.queryClient.prefetchQuery(teamQueries.cards(teamRemote));
   },
   component: TeamsRoute,
 });
