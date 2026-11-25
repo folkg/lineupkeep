@@ -145,7 +145,7 @@ function TeamCard(props: TeamCardProps): JSX.Element {
       badge={
         format() !== undefined ? (
           <Badge tone="neutral">{format()}</Badge>
-        ) : props.factsLoading && !props.factsFailure ? (
+        ) : props.team.connectionStatus === "ready" && props.factsLoading && !props.factsFailure ? (
           <Skeleton height="h-6" width="w-20" />
         ) : undefined
       }
