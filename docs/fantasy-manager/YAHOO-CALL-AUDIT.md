@@ -139,6 +139,10 @@ exists, and it did not pretend a per-day or per-player endpoint was batched.
 - `get_team_snapshot` now provides a request-scoped provider read cache. Its
   summary, league, roster, pool, player-stat, and plan sections share one read
   per distinct request instead of repeating the same Yahoo call.
+- `get_players` now asks for the current scoring-week roster when the league
+  publishes one, and falls back to the provider's default roster for a
+  date-scoped or unavailable period. This lets the snapshot's player hydration
+  reuse the summary and roster read instead of making a third roster request.
 - Tests pin the 25-player detail read to one request, the same-week reuse to
   one player-week request, and a cached composition to one league read and one
   roster read.
@@ -156,7 +160,8 @@ exists, and it did not pretend a per-day or per-player endpoint was batched.
   repeated composition makes no extra provider reads.
 - `packages/backend/src/contexts/connections/FantasyQueries.test.ts`,
   "shares league and roster reads across a cached composition": asserts one
-  league read and one roster read across summary, league, and roster queries.
+  league read and one roster read across summary, league, roster, and player
+  hydration queries.
 - `apps/web/src/server/mcp/mcpServer.test.ts`, "composes the team snapshot from
   the reads in one tool call": asserts the snapshot provides the request-scoped
   read cache to its query composition.

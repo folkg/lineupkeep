@@ -137,7 +137,18 @@ it.effect("shares league and roster reads across a cached composition", () =>
       }),
     );
     yield* cached(queries.getLeague(owner, { team: teamId }));
-    yield* cached(queries.getRosters(owner, { team: teamId }));
+    const roster = yield* cached(queries.getRosters(owner, { team: teamId }));
+    assert.strictEqual(roster.status, "ok");
+    if (roster.status !== "ok" || roster.scope !== "team") {
+      return;
+    }
+    yield* cached(
+      queries.getPlayers(owner, {
+        team: teamId,
+        players: EffectArray.map(roster.players, (player) => player.player),
+        groups: ["identity", "actual_stats"],
+      }),
+    );
 
     const leagueReads = yield* fake.readCount("read_league");
     const rosterReads = yield* fake.readCount("read_roster");

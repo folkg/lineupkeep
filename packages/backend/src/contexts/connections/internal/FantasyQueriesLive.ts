@@ -2169,15 +2169,32 @@ export const FantasyQueriesLive = Layer.effect(
           }
         }
       }
-      const rosterOutcome = yield* readOutcome(
+      const rosterPeriod =
+        league?.rosterCoverage === "week" ? currentPeriod(league.periodWindow) : undefined;
+      let rosterOutcome = yield* readOutcome(
         context,
         "roster",
         context.provider.readRoster({
           ...providerIdentity(context),
           providerTeamKey: context.owned.team.providerTeamKey,
-          period: undefined,
+          period: providerRosterPeriod(rosterPeriod),
         }),
       );
+      if (
+        rosterOutcome._tag === "failed" &&
+        rosterOutcome.failure.code === "period_unavailable" &&
+        rosterPeriod !== undefined
+      ) {
+        rosterOutcome = yield* readOutcome(
+          context,
+          "roster",
+          context.provider.readRoster({
+            ...providerIdentity(context),
+            providerTeamKey: context.owned.team.providerTeamKey,
+            period: undefined,
+          }),
+        );
+      }
       let roster: ProviderRoster | undefined;
       if (rosterOutcome._tag === "ok") {
         roster = rosterOutcome.value;

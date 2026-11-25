@@ -18,6 +18,9 @@ revisions that carried each change.
 - `get_team_snapshot` uses a request-scoped provider read cache. Its summary, league, roster,
   pool, player-stat, and plan sections share one Yahoo read per distinct request instead of
   repeating the same call. The cache is scoped to one snapshot call and one connection.
+- `get_players` asks for the current scoring-week roster when the league publishes one, then
+  falls back to the provider's default roster for date-scoped or unavailable periods. The
+  snapshot's player hydration reuses the summary roster instead of reading it again.
 - [The Yahoo call audit](docs/fantasy-manager/YAHOO-CALL-AUDIT.md) records every provider read and
   write, its request count, and the provider limits that force per-day or per-player reads.
 
