@@ -1,0 +1,138 @@
+{
+  "context": {
+    "a": ["idle", "active", "finished"],
+    "b": ["idle", "active", "finished"],
+    "owner": ["none", "A", "B"],
+    "aSent": "bool",
+    "bSent": "bool",
+    "duplicate": "bool",
+    "stale": "bool",
+    "lost": "bool",
+    "expired": "bool"
+  },
+  "init": {
+    "a": "idle",
+    "b": "idle",
+    "owner": "none",
+    "aSent": false,
+    "bSent": false,
+    "duplicate": false,
+    "stale": false,
+    "lost": false,
+    "expired": false
+  },
+  "guards": {
+    "aActive": "a == 'active'",
+    "bActive": "b == 'active'",
+    "aSent": "aSent == true",
+    "bSent": "bSent == true",
+    "staleDeadline": "expired",
+    "canReleaseA": "a == 'active' && !aSent && owner == 'A'",
+    "canReleaseB": "b == 'active' && !bSent && owner == 'B'",
+    "canFinishA": "aSent && owner == 'A'",
+    "canFinishB": "bSent && owner == 'B'"
+  },
+  "actions": {
+    "claimA": {
+      "a": "'active'",
+      "owner": "'A'",
+      "expired": "false"
+    },
+    "claimB": {
+      "b": "'active'",
+      "owner": "'B'",
+      "expired": "false"
+    },
+    "sendA": {
+      "aSent": "true",
+      "duplicate": "bSent"
+    },
+    "sendB": {
+      "bSent": "true",
+      "duplicate": "aSent"
+    },
+    "finishA": {
+      "stale": "owner != 'A'",
+      "a": "'finished'"
+    },
+    "finishB": {
+      "stale": "owner != 'B'",
+      "b": "'finished'"
+    },
+    "releaseA": {
+      "lost": "owner != 'A'",
+      "a": "'finished'",
+      "owner": "'none'"
+    },
+    "releaseB": {
+      "lost": "owner != 'B'",
+      "b": "'finished'",
+      "owner": "'none'"
+    },
+    "reclaim": {
+      "owner": "'none'"
+    },
+    "expire": {
+      "expired": "true"
+    }
+  },
+  "citations": {
+    "claimA": "packages/backend/src/contexts/connections/internal/NotificationsRepository.ts:130",
+    "claimB": "packages/backend/src/contexts/connections/internal/NotificationsRepository.ts:130",
+    "finishA": "packages/backend/src/contexts/connections/internal/NotificationsRepository.ts:212",
+    "finishB": "packages/backend/src/contexts/connections/internal/NotificationsRepository.ts:212",
+    "releaseA": "packages/backend/src/contexts/connections/internal/NotificationsRepository.ts:212",
+    "releaseB": "packages/backend/src/contexts/connections/internal/NotificationsRepository.ts:212",
+    "reclaim": "packages/backend/src/contexts/connections/internal/NotificationsRepository.ts:76",
+    "expire": "packages/backend/src/contexts/connections/internal/NotificationsRepository.ts:76",
+    "staleDeadline": "packages/backend/src/contexts/connections/internal/NotificationsRepository.ts:76",
+    "canReleaseA": "packages/backend/src/contexts/connections/internal/NotificationsRepository.ts:212",
+    "canReleaseB": "packages/backend/src/contexts/connections/internal/NotificationsRepository.ts:212",
+    "aActive": "packages/backend/src/contexts/connections/internal/ConnectionNotificationWorkflow.ts:69",
+    "bActive": "packages/backend/src/contexts/connections/internal/ConnectionNotificationWorkflow.ts:69",
+    "sendA": "packages/backend/src/contexts/connections/internal/NotificationsRepository.ts:176",
+    "sendB": "packages/backend/src/contexts/connections/internal/NotificationsRepository.ts:176",
+    "aSent": "packages/backend/src/contexts/connections/internal/NotificationsRepository.ts:212",
+    "bSent": "packages/backend/src/contexts/connections/internal/NotificationsRepository.ts:212",
+    "canFinishA": "packages/backend/src/contexts/connections/internal/NotificationsRepository.ts:36-68",
+    "canFinishB": "packages/backend/src/contexts/connections/internal/NotificationsRepository.ts:36-68"
+  },
+  "rules": [
+    {
+      "id": "DoubleExternalSend",
+      "kind": "never",
+      "when": "duplicate"
+    },
+    {
+      "id": "StaleCompletion",
+      "kind": "never",
+      "when": "stale"
+    },
+    {
+      "id": "LostNewClaim",
+      "kind": "never",
+      "when": "lost"
+    },
+    {
+      "id": "CanSettle",
+      "kind": "reachable",
+      "then": "in('sent')"
+    },
+    {
+      "id": "EventuallySettles",
+      "kind": "eventually",
+      "then": "in('sent')"
+    }
+  ],
+  "bounds": {
+    "maxStates": 50000,
+    "timeoutMs": 30000
+  },
+  "fairness": "weak",
+  "assumptions": [
+    "Two actor slots represent overlapping attempts, not an attempt cap: either actor may be claimed again. Boolean effect flags collapse subsequent sends; a second distinct send is still observable.",
+    "Reclaim abstracts elapsed stale deadline; no clock or external-email/provider reliability guarantee.",
+    "External send and persisted finish are separate steps. Failure/cancellation variants are omitted; no fairness of successful dispatch or retry scheduling is assumed.",
+    "A late send result is applied only when the notification is still at the claim timestamp it observed. Two send attempts can still occur; the existing per-incident idempotency key is the provider-level deduplication guard, which the model does not prove."
+  ]
+}

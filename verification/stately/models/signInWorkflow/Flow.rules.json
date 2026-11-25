@@ -1,0 +1,88 @@
+{
+  "guards": {
+    "validEmail": "valid == true",
+    "completeCode": "complete == true"
+  },
+  "actions": {
+    "setEmail": {
+      "valid": "event.ok"
+    },
+    "setCode": {
+      "complete": "event.ok"
+    },
+    "clearCode": {
+      "complete": "false"
+    }
+  },
+  "context": {
+    "valid": "bool",
+    "complete": "bool"
+  },
+  "init": {
+    "valid": false,
+    "complete": false
+  },
+  "events": {
+    "emailChanged": {
+      "payloads": [
+        {
+          "ok": false
+        },
+        {
+          "ok": true
+        }
+      ]
+    },
+    "codeChanged": {
+      "payloads": [
+        {
+          "ok": false
+        },
+        {
+          "ok": true
+        }
+      ]
+    }
+  },
+  "citations": {
+    "setEmail": "apps/web/src/browser/auth/signInWorkflow.ts:63",
+    "validEmail": "apps/web/src/browser/auth/signInWorkflow.ts:64",
+    "clearCode": "apps/web/src/browser/auth/signInWorkflow.ts:111",
+    "setCode": "apps/web/src/browser/auth/signInWorkflow.ts:6",
+    "completeCode": "apps/web/src/browser/auth/signInWorkflow.ts:100"
+  },
+  "rules": [
+    {
+      "id": "StartsEmail",
+      "kind": "initially",
+      "then": "in('email') && !valid"
+    },
+    {
+      "id": "CannotSendInvalid",
+      "kind": "never",
+      "when": "in('sendingCode') && !valid"
+    },
+    {
+      "id": "CannotVerifyIncomplete",
+      "kind": "never",
+      "when": "in('verifying') && !complete"
+    },
+    {
+      "id": "SignedInReachable",
+      "kind": "reachable",
+      "then": "in('signedIn')"
+    },
+    {
+      "id": "GoogleCanStall",
+      "kind": "eventually",
+      "then": "in('signedIn') || in('email')"
+    }
+  ],
+  "bounds": {
+    "maxStates": 12000,
+    "timeoutMs": 30000
+  },
+  "assumptions": [
+    "Boolean validity abstracts input shape and codeDigits; context from an earlier code entry may remain across email switch, while the codeSent transition resets actual code. No network callbacks modeled. Tabs own independent FSMs and share server session, omitted here."
+  ]
+}

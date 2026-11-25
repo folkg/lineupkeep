@@ -45,6 +45,7 @@ export const LineupDispatcherLive = Layer.effect(
           yield* repository.finishDeliveries(
             EffectArray.map(held, (record) => ({
               deliveryId: record.id,
+              attempts: record.attempts,
               at: now,
               outcome: "pending" as const,
             })),
@@ -62,6 +63,7 @@ export const LineupDispatcherLive = Layer.effect(
           yield* repository.finishDeliveries(
             EffectArray.map(runnable, (record) => ({
               deliveryId: record.id,
+              attempts: record.attempts,
               at: now,
               outcome: "dispatched",
             })),
@@ -71,6 +73,7 @@ export const LineupDispatcherLive = Layer.effect(
         yield* repository.finishDeliveries(
           EffectArray.map(runnable, (record) => ({
             deliveryId: record.id,
+            attempts: record.attempts,
             at: now,
             outcome: "pending" as const,
             error: result.failure._tag,
@@ -119,11 +122,12 @@ export const LineupDispatcherLive = Layer.effect(
       if (target === undefined) {
         return "queued" as const;
       }
-      return yield* deliverClaimed(target.id, target.runIds);
+      return yield* deliverClaimed(target.id, target.attempts, target.runIds);
     });
 
     const deliverClaimed = Effect.fnUntraced(function* (
       deliveryId: string,
+      attempts: number,
       runIds: ReadonlyArray<LineupRunId>,
     ) {
       const result = yield* Effect.result(
@@ -131,11 +135,11 @@ export const LineupDispatcherLive = Layer.effect(
       );
       const at = yield* DateTime.now;
       if (result._tag === "Success") {
-        yield* repository.finishDeliveries([{ deliveryId, at, outcome: "dispatched" }]);
+        yield* repository.finishDeliveries([{ deliveryId, attempts, at, outcome: "dispatched" }]);
         return "queued" as const;
       }
       yield* repository.finishDeliveries([
-        { deliveryId, at, outcome: "pending", error: result.failure._tag },
+        { deliveryId, attempts, at, outcome: "pending", error: result.failure._tag },
       ]);
       yield* Effect.annotateCurrentSpan({
         "lineup.delivery": deliveryId,

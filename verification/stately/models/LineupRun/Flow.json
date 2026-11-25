@@ -1,0 +1,236 @@
+{
+  "id": "LineupRun",
+  "initial": "Queued",
+  "states": {
+    "Queued": {
+      "on": {
+        "Claimed": [
+          {
+            "target": "Reading"
+          }
+        ],
+        "Skipped": [
+          {
+            "target": "Skipped"
+          }
+        ],
+        "Superseded": [
+          {
+            "target": "Superseded"
+          }
+        ]
+      }
+    },
+    "Reading": {
+      "on": {
+        "ObservationRecorded": [
+          {
+            "target": "Planning"
+          }
+        ],
+        "Reclaimed": [
+          {
+            "target": "Reading"
+          }
+        ],
+        "RetryScheduled": [
+          {
+            "target": "RetryWait"
+          }
+        ],
+        "Skipped": [
+          {
+            "target": "Skipped"
+          }
+        ],
+        "Blocked": [
+          {
+            "target": "Blocked"
+          }
+        ],
+        "Failed": [
+          {
+            "target": "Failed"
+          }
+        ]
+      }
+    },
+    "Planning": {
+      "on": {
+        "PlanPrepared": [
+          {
+            "target": "Validating"
+          }
+        ],
+        "Reclaimed": [
+          {
+            "target": "Reading"
+          }
+        ],
+        "RetryScheduled": [
+          {
+            "target": "RetryWait"
+          }
+        ],
+        "Blocked": [
+          {
+            "target": "Blocked"
+          }
+        ],
+        "Failed": [
+          {
+            "target": "Failed"
+          }
+        ]
+      }
+    },
+    "Validating": {
+      "on": {
+        "ApplyStarted": [
+          {
+            "target": "Applying",
+            "actions": "setIntent"
+          }
+        ],
+        "Reclaimed": [
+          {
+            "target": "Reading"
+          }
+        ],
+        "RetryScheduled": [
+          {
+            "target": "RetryWait"
+          }
+        ],
+        "Blocked": [
+          {
+            "target": "Blocked"
+          }
+        ],
+        "Failed": [
+          {
+            "target": "Failed"
+          }
+        ]
+      }
+    },
+    "Applying": {
+      "on": {
+        "ApplyResponded": [
+          {
+            "target": "Verifying"
+          }
+        ],
+        "Verified": [
+          {
+            "target": "Completed"
+          }
+        ],
+        "VerificationResumed": [
+          {
+            "target": "Verifying"
+          }
+        ],
+        "RetryScheduled": [
+          {
+            "target": "RetryWait"
+          }
+        ],
+        "Failed": [
+          {
+            "target": "Failed"
+          }
+        ]
+      }
+    },
+    "Verifying": {
+      "on": {
+        "Verified": [
+          {
+            "target": "Completed"
+          }
+        ],
+        "Uncertain": [
+          {
+            "target": "Uncertain"
+          }
+        ],
+        "VerificationResumed": [
+          {
+            "target": "Verifying"
+          }
+        ],
+        "RetryScheduled": [
+          {
+            "target": "RetryWait"
+          }
+        ],
+        "Failed": [
+          {
+            "target": "Failed"
+          }
+        ]
+      }
+    },
+    "Completed": {
+      "type": "final"
+    },
+    "Skipped": {
+      "type": "final"
+    },
+    "Blocked": {
+      "type": "final"
+    },
+    "RetryWait": {
+      "on": {
+        "RetryClaimed": [
+          {
+            "target": "Reading"
+          }
+        ],
+        "VerificationClaimed": [
+          {
+            "target": "Verifying",
+            "guard": "hasIntent"
+          }
+        ],
+        "Skipped": [
+          {
+            "target": "Skipped"
+          }
+        ],
+        "Superseded": [
+          {
+            "target": "Superseded"
+          }
+        ],
+        "Blocked": [
+          {
+            "target": "Blocked"
+          }
+        ]
+      }
+    },
+    "Failed": {
+      "type": "final"
+    },
+    "Uncertain": {
+      "on": {
+        "ReconciliationStarted": [
+          {
+            "target": "Verifying",
+            "guard": "hasIntent"
+          }
+        ],
+        "Superseded": [
+          {
+            "target": "Superseded"
+          }
+        ]
+      }
+    },
+    "Superseded": {
+      "type": "final"
+    }
+  }
+}

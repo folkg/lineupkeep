@@ -3,6 +3,26 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
+## Unreleased — claim-bound settlement and finishes
+
+### Fixed
+
+- A transaction settlement now requires the plan run claim that started the run. A stale worker
+  cannot settle after its claim was released or replaced, so a second worker's plan changes are
+  not overwritten and the old worker's result cannot be recorded.
+- A lineup delivery finish or release now requires the delivery attempt it observed. A late
+  dispatcher cannot finish or release a newer claim. A repeated stale claim can still enqueue the
+  same delivery twice; the downstream run lease is the execution guard.
+- A connection notification result now applies only while the notification is still at the claim
+  timestamp it observed. A late send result cannot finish a newer send. The per-incident email
+  idempotency key remains the provider-level duplicate-send guard.
+
+### Added
+
+- The reviewed Stately models and their checker runner live in
+  [`verification/stately`](verification/stately/README.md). `bun run verify:stately` runs the native
+  model checker over the single-record and two-caller models.
+
 ## Unreleased — round-60 MCP data (free-agent schedules and game logs)
 
 ### Added

@@ -1,0 +1,18 @@
+{
+  "id": "ConnectionIncident",
+  "initial": "open",
+  "states": {
+    "open": {
+      "on": {
+        "Resolved": [
+          {
+            "target": "resolved"
+          }
+        ]
+      }
+    },
+    "resolved": {
+      "type": "final"
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "id": "TeamAutomation",
+  "initial": "Disabled",
+  "states": {
+    "Disabled": {
+      "on": {
+        "Enabled": [
+          {
+            "target": "Enabled"
+          }
+        ]
+      }
+    },
+    "Enabled": {
+      "on": {
+        "Disabled": [
+          {
+            "target": "Disabled"
+          }
+        ],
+        "Paused": [
+          {
+            "target": "PausedUntilFantasyDayEnd"
+          }
+        ]
+      }
+    },
+    "PausedUntilFantasyDayEnd": {
+      "on": {
+        "Disabled": [
+          {
+            "target": "Disabled"
+          }
+        ],
+        "Resumed": [
+          {
+            "target": "Enabled"
+          }
+        ],
+        "PauseExpired": [
+          {
+            "target": "Enabled",
+            "guard": "pastResume"
+          }
+        ]
+      }
+    }
+  }
+}

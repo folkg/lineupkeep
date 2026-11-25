@@ -618,6 +618,7 @@ it.effect("recovers a queued run whose delivery was dispatched but never claimed
     yield* repository.finishDeliveries(
       EffectArray.map(deliveries, (record) => ({
         deliveryId: record.id,
+        attempts: record.attempts,
         at,
         outcome: "dispatched" as const,
       })),
@@ -660,7 +661,9 @@ it.effect("rejects illegal delivery finishes without changing the stored deliver
     const pending = yield* repository.loadDelivery(owner, requestId);
     assert.isDefined(pending);
     const result = yield* Effect.result(
-      repository.finishDeliveries([{ deliveryId: pending.id, at, outcome: "dispatched" }]),
+      repository.finishDeliveries([
+        { deliveryId: pending.id, attempts: pending.attempts, at, outcome: "dispatched" },
+      ]),
     );
     assert.strictEqual(result._tag, "Failure");
     if (result._tag === "Failure") {
@@ -672,17 +675,74 @@ it.effect("rejects illegal delivery finishes without changing the stored deliver
 
     const [claimed] = yield* repository.claimDeliveries(at, 10);
     assert.strictEqual(claimed?.attempts, 1);
-    yield* repository.finishDeliveries([{ deliveryId: pending.id, at, outcome: "dispatched" }]);
+    yield* repository.finishDeliveries([
+      { deliveryId: pending.id, attempts: claimed?.attempts ?? 0, at, outcome: "dispatched" },
+    ]);
     const finished = yield* repository.loadDelivery(owner, requestId);
     assert.strictEqual(finished?.status, "dispatched");
     assert.isNotNull(finished?.dispatchedAt);
     const repeated = yield* Effect.result(
-      repository.finishDeliveries([{ deliveryId: pending.id, at, outcome: "pending" }]),
+      repository.finishDeliveries([
+        { deliveryId: pending.id, attempts: claimed?.attempts ?? 0, at, outcome: "pending" },
+      ]),
     );
     assert.strictEqual(repeated._tag, "Failure");
     if (repeated._tag === "Failure") {
       assert.strictEqual(repeated.failure._tag, "lineup.persistence_failed");
     }
+    assert.strictEqual((yield* repository.loadDelivery(owner, requestId))?.status, "dispatched");
+  }).pipe(layerTools.provide(AutomationTestLayer)),
+);
+
+it.effect("ignores a delivery finish from a claim that was replaced", () =>
+  Effect.gen(function* () {
+    const repository = yield* LineupRunRepository;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
+    const teams = yield* Teams;
+    const at = yield* DateTime.now;
+    const requestId = yield* Schema.decodeEffect(LineupRequestId)(
+      "018f79ea-7d86-7c18-9b4a-8b4d0c9164fe",
+    );
+    yield* repository.createRequest({
+      userId: owner,
+      requestId,
+      intent: '{"trigger":"manual"}',
+      runs: [
+        {
+          team,
+          connectionId: (yield* teams.get(owner, team)).team.connectionId,
+          target: { coverage: "current" },
+          trigger: "manual",
+        },
+      ],
+    });
+    const [first] = yield* repository.claimDeliveries(at, 10);
+    assert.strictEqual(first?.attempts, 1);
+    const later = DateTime.addDuration(at, { minutes: 15 });
+    const [second] = yield* repository.claimDeliveries(later, 10);
+    assert.strictEqual(second?.attempts, 2);
+
+    yield* repository.finishDeliveries([
+      {
+        deliveryId: second?.id ?? "",
+        attempts: first?.attempts ?? 0,
+        at: later,
+        outcome: "dispatched",
+      },
+    ]);
+    const stillDispatching = yield* repository.loadDelivery(owner, requestId);
+    assert.strictEqual(stillDispatching?.status, "dispatching");
+    assert.strictEqual(stillDispatching?.attempts, 2);
+
+    yield* repository.finishDeliveries([
+      {
+        deliveryId: second?.id ?? "",
+        attempts: second?.attempts ?? 0,
+        at: later,
+        outcome: "dispatched",
+      },
+    ]);
     assert.strictEqual((yield* repository.loadDelivery(owner, requestId))?.status, "dispatched");
   }).pipe(layerTools.provide(AutomationTestLayer)),
 );

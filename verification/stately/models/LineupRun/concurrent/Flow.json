@@ -1,0 +1,158 @@
+{
+  "id": "LineupRunTwoCallers",
+  "initial": "Queued",
+  "states": {
+    "Queued": {
+      "on": {
+        "A_Claim": {
+          "target": "Reading",
+          "actions": "claimA"
+        },
+        "B_Claim": {
+          "target": "Reading",
+          "actions": "claimB"
+        }
+      }
+    },
+    "Reading": {
+      "on": {
+        "Expire": {
+          "actions": "expire"
+        },
+        "A_Claim": {
+          "target": "Reading",
+          "guard": "expired",
+          "actions": "claimA"
+        },
+        "B_Claim": {
+          "target": "Reading",
+          "guard": "expired",
+          "actions": "claimB"
+        },
+        "A_Begin": {
+          "target": "Applying",
+          "guard": "ownedA",
+          "actions": "beginA"
+        },
+        "B_Begin": {
+          "target": "Applying",
+          "guard": "ownedB",
+          "actions": "beginB"
+        },
+        "A_Retry": {
+          "target": "RetryWait",
+          "guard": "ownedA",
+          "actions": "clearLease"
+        },
+        "B_Retry": {
+          "target": "RetryWait",
+          "guard": "ownedB",
+          "actions": "clearLease"
+        }
+      }
+    },
+    "Applying": {
+      "on": {
+        "Expire": {
+          "actions": "expire"
+        },
+        "A_Send": {
+          "guard": "aApplying",
+          "actions": "sendA"
+        },
+        "B_Send": {
+          "guard": "bApplying",
+          "actions": "sendB"
+        },
+        "A_Claim": {
+          "target": "Verifying",
+          "guard": "expired",
+          "actions": "claimA"
+        },
+        "B_Claim": {
+          "target": "Verifying",
+          "guard": "expired",
+          "actions": "claimB"
+        },
+        "A_Complete": {
+          "target": "Completed",
+          "guard": "ownedA",
+          "actions": "finishA"
+        },
+        "B_Complete": {
+          "target": "Completed",
+          "guard": "ownedB",
+          "actions": "finishB"
+        }
+      }
+    },
+    "Verifying": {
+      "on": {
+        "Expire": {
+          "actions": "expire"
+        },
+        "A_Claim": {
+          "target": "Verifying",
+          "guard": "expired",
+          "actions": "claimA"
+        },
+        "B_Claim": {
+          "target": "Verifying",
+          "guard": "expired",
+          "actions": "claimB"
+        },
+        "A_Complete": {
+          "target": "Completed",
+          "guard": "ownedA",
+          "actions": "finishA"
+        },
+        "B_Complete": {
+          "target": "Completed",
+          "guard": "ownedB",
+          "actions": "finishB"
+        },
+        "A_Retry": {
+          "target": "RetryWait",
+          "guard": "ownedA",
+          "actions": "clearLease"
+        },
+        "B_Retry": {
+          "target": "RetryWait",
+          "guard": "ownedB",
+          "actions": "clearLease"
+        }
+      }
+    },
+    "RetryWait": {
+      "on": {
+        "A_Claim": [
+          {
+            "target": "Verifying",
+            "guard": "hasIntent",
+            "actions": "claimA"
+          },
+          {
+            "target": "Reading",
+            "guard": "noIntent",
+            "actions": "claimA"
+          }
+        ],
+        "B_Claim": [
+          {
+            "target": "Verifying",
+            "guard": "hasIntent",
+            "actions": "claimB"
+          },
+          {
+            "target": "Reading",
+            "guard": "noIntent",
+            "actions": "claimB"
+          }
+        ]
+      }
+    },
+    "Completed": {
+      "on": {}
+    }
+  }
+}

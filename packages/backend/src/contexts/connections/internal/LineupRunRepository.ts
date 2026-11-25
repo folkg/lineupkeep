@@ -1164,6 +1164,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
       const finishDeliveries = (
         inputs: ReadonlyArray<{
           readonly deliveryId: string;
+          readonly attempts: number;
           readonly at: DateTime.Utc;
           readonly outcome: "dispatched" | "pending";
           readonly error?: string;
@@ -1195,6 +1196,9 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                       const record = locked.get(id);
                       if (record === undefined) {
                         return [];
+                      }
+                      if (record.attempts !== input.attempts) {
+                        return [{ ...record }];
                       }
                       const event: LineupDeliveryEvent =
                         input.outcome === "dispatched"

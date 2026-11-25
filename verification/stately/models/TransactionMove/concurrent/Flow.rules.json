@@ -1,0 +1,107 @@
+{
+  "context": {
+    "owner": ["none", "A", "B"],
+    "a": "bool",
+    "b": "bool",
+    "last": ["none", "A", "B"],
+    "stale": "bool",
+    "overwritten": "bool"
+  },
+  "init": {
+    "owner": "none",
+    "a": false,
+    "b": false,
+    "last": "none",
+    "stale": false,
+    "overwritten": false
+  },
+  "guards": {
+    "unclaimed": "owner == 'none'",
+    "claimed": "owner != 'none'",
+    "aActive": "a",
+    "bActive": "b",
+    "ownedA": "owner == 'A'",
+    "ownedB": "owner == 'B'",
+    "canSettleA": "a && owner == 'A'",
+    "canSettleB": "b && owner == 'B'"
+  },
+  "actions": {
+    "claimA": {
+      "owner": "'A'",
+      "a": "true"
+    },
+    "claimB": {
+      "owner": "'B'",
+      "b": "true"
+    },
+    "expire": {
+      "owner": "'none'"
+    },
+    "settleA": {
+      "stale": "owner != 'A'",
+      "overwritten": "last == 'B'",
+      "last": "'A'"
+    },
+    "settleB": {
+      "stale": "owner != 'B'",
+      "overwritten": "last == 'A'",
+      "last": "'B'"
+    },
+    "releaseA": {
+      "owner": "'none'",
+      "a": "false"
+    },
+    "releaseB": {
+      "owner": "'none'",
+      "b": "false"
+    }
+  },
+  "citations": {
+    "unclaimed": "packages/backend/src/contexts/connections/internal/TransactionPlanRepository.ts:611",
+    "claimed": "packages/backend/src/contexts/connections/internal/TransactionPlanRepository.ts:844",
+    "ownedA": "packages/backend/src/contexts/connections/internal/TransactionPlanRepository.ts:644",
+    "ownedB": "packages/backend/src/contexts/connections/internal/TransactionPlanRepository.ts:644",
+    "aActive": "packages/backend/src/contexts/connections/internal/TransactionPlanRepository.ts:720",
+    "bActive": "packages/backend/src/contexts/connections/internal/TransactionPlanRepository.ts:720",
+    "claimA": "packages/backend/src/contexts/connections/internal/TransactionPlanRepository.ts:606",
+    "claimB": "packages/backend/src/contexts/connections/internal/TransactionPlanRepository.ts:606",
+    "expire": "packages/backend/src/contexts/connections/internal/TransactionPlanRepository.ts:841",
+    "settleA": "packages/backend/src/contexts/connections/internal/TransactionPlanRepository.ts:810",
+    "settleB": "packages/backend/src/contexts/connections/internal/TransactionPlanRepository.ts:810",
+    "releaseA": "packages/backend/src/contexts/connections/internal/TransactionPlanRepository.ts:644",
+    "releaseB": "packages/backend/src/contexts/connections/internal/TransactionPlanRepository.ts:644",
+    "canSettleA": "packages/backend/src/contexts/connections/internal/TransactionPlanRepository.ts:744-760",
+    "canSettleB": "packages/backend/src/contexts/connections/internal/TransactionPlanRepository.ts:744-760"
+  },
+  "rules": [
+    {
+      "id": "StaleSettlement",
+      "kind": "never",
+      "when": "stale"
+    },
+    {
+      "id": "LostUpdate",
+      "kind": "never",
+      "when": "overwritten"
+    },
+    {
+      "id": "CanSettle",
+      "kind": "reachable",
+      "then": "in('settled')"
+    },
+    {
+      "id": "EventuallySettles",
+      "kind": "eventually",
+      "then": "in('settled')"
+    }
+  ],
+  "bounds": {
+    "maxStates": 50000,
+    "timeoutMs": 30000
+  },
+  "fairness": "weak",
+  "assumptions": [
+    "One plan and one move; A and B represent independent run-claim tokens. Expire is the stale-run recovery predicate becoming true.",
+    "Settlement now checks the plan's current runClaim before writing, so a released claim cannot settle. Distinct outcomes abstracted to last writer; no bound on reclaim/claim cycles or successful settlement fairness."
+  ]
+}

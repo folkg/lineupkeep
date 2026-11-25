@@ -1,0 +1,61 @@
+{
+  "id": "HostedLinking",
+  "initial": "Active",
+  "states": {
+    "Active": {
+      "on": {
+        "CompletionStarted": [
+          {
+            "target": "Completing"
+          }
+        ],
+        "Cancelled": [
+          {
+            "target": "Cancelled"
+          }
+        ],
+        "Expired": [
+          {
+            "target": "Expired"
+          }
+        ],
+        "CompletionFailed": [
+          {
+            "target": "Failed"
+          }
+        ]
+      }
+    },
+    "Completing": {
+      "on": {
+        "CompletionSucceeded": [
+          {
+            "target": "Completed"
+          }
+        ],
+        "CompletionFailed": [
+          {
+            "target": "Failed"
+          }
+        ],
+        "Expired": [
+          {
+            "target": "Expired"
+          }
+        ]
+      }
+    },
+    "Completed": {
+      "type": "final"
+    },
+    "Cancelled": {
+      "type": "final"
+    },
+    "Expired": {
+      "type": "final"
+    },
+    "Failed": {
+      "type": "final"
+    }
+  }
+}

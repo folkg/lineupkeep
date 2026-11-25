@@ -1,0 +1,52 @@
+{
+  "id": "TransactionMoveTwoCallers",
+  "initial": "open",
+  "states": {
+    "open": {
+      "on": {
+        "A_Claim": {
+          "guard": "unclaimed",
+          "actions": "claimA"
+        },
+        "B_Claim": {
+          "guard": "unclaimed",
+          "actions": "claimB"
+        },
+        "Expire": {
+          "guard": "claimed",
+          "actions": "expire"
+        },
+        "A_Settle": {
+          "target": "settled",
+          "guard": "canSettleA",
+          "actions": "settleA"
+        },
+        "B_Settle": {
+          "target": "settled",
+          "guard": "canSettleB",
+          "actions": "settleB"
+        },
+        "A_Release": {
+          "guard": "ownedA",
+          "actions": "releaseA"
+        },
+        "B_Release": {
+          "guard": "ownedB",
+          "actions": "releaseB"
+        }
+      }
+    },
+    "settled": {
+      "on": {
+        "A_Settle": {
+          "guard": "canSettleA",
+          "actions": "settleA"
+        },
+        "B_Settle": {
+          "guard": "canSettleB",
+          "actions": "settleB"
+        }
+      }
+    }
+  }
+}

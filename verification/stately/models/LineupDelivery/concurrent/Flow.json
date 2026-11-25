@@ -1,0 +1,71 @@
+{
+  "id": "LineupDeliveryTwoCallers",
+  "initial": "pending",
+  "states": {
+    "pending": {
+      "on": {
+        "A_Claim": {
+          "target": "dispatching",
+          "actions": "claimA"
+        },
+        "B_Claim": {
+          "target": "dispatching",
+          "actions": "claimB"
+        }
+      }
+    },
+    "dispatching": {
+      "on": {
+        "Expire": {
+          "actions": "expire"
+        },
+        "Reclaim": {
+          "target": "pending",
+          "guard": "staleDeadline",
+          "actions": "reclaim"
+        },
+        "A_Send": {
+          "guard": "aActive",
+          "actions": "sendA"
+        },
+        "B_Send": {
+          "guard": "bActive",
+          "actions": "sendB"
+        },
+        "A_Finish": {
+          "target": "dispatched",
+          "guard": "canFinishA",
+          "actions": "finishA"
+        },
+        "B_Finish": {
+          "target": "dispatched",
+          "guard": "canFinishB",
+          "actions": "finishB"
+        },
+        "A_Release": {
+          "target": "pending",
+          "guard": "canReleaseA",
+          "actions": "releaseA"
+        },
+        "B_Release": {
+          "target": "pending",
+          "guard": "canReleaseB",
+          "actions": "releaseB"
+        },
+        "A_Reclaim": {
+          "target": "dispatching",
+          "guard": "staleDeadline",
+          "actions": "claimA"
+        },
+        "B_Reclaim": {
+          "target": "dispatching",
+          "guard": "staleDeadline",
+          "actions": "claimB"
+        }
+      }
+    },
+    "dispatched": {
+      "on": {}
+    }
+  }
+}

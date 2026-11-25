@@ -1382,6 +1382,7 @@ export const TransactionPlanServiceLive = Layer.effect(
       readonly mode: RunMode;
       readonly only?: ReadonlySet<TransactionMoveId>;
       readonly decision: TransactionDecision;
+      readonly runClaim: string;
       readonly runId: TransactionRunId;
     }) {
       const submitted: Array<TransactionMoveRowRecord> = [
@@ -1440,12 +1441,19 @@ export const TransactionPlanServiceLive = Layer.effect(
           }
           yield* verifySettlement({ move, settlement });
         }
-        yield* repository.settleMoves({
+        const settledByClaim = yield* repository.settleMoves({
           userId: input.userId,
           team: input.team,
+          runClaim: input.runClaim,
           at: input.at,
           settlements,
         });
+        if (!settledByClaim) {
+          return yield* TransactionPlanRunInProgress.make({
+            team: input.team,
+            detail: "Another run took this team's plan before the result could be stored.",
+          });
+        }
         for (const settlement of settlements) {
           outcomes.set(settlement.move, settlement.result);
           settled.add(settlement.move);
@@ -1463,7 +1471,7 @@ export const TransactionPlanServiceLive = Layer.effect(
         moves: ReadonlyArray<TransactionMoveRowRecord>,
         entries: ReadonlyMap<TransactionMoveId, TransactionPlanMoveEvaluation>,
         detail: string,
-      ): Effect.Effect<void, TransactionPlanPersistenceFailed> =>
+      ): Effect.Effect<void, TransactionPlanPersistenceFailed | TransactionPlanRunInProgress> =>
         settle(
           EffectArray.map(moves, (move) =>
             settlementOf({
@@ -1482,7 +1490,7 @@ export const TransactionPlanServiceLive = Layer.effect(
 
       const runMember = (
         state: RunState,
-      ): Effect.Effect<RunStop, TransactionPlanPersistenceFailed> =>
+      ): Effect.Effect<RunStop, TransactionPlanPersistenceFailed | TransactionPlanRunInProgress> =>
         Effect.gen(function* () {
           const move = state.members[state.index];
           if (move === undefined) {
@@ -1809,6 +1817,7 @@ export const TransactionPlanServiceLive = Layer.effect(
           mode: input.mode,
           ...(input.only === undefined ? {} : { only: input.only }),
           decision: input.decision,
+          runClaim,
           runId,
         });
         const counts = { ...run.counts, plans: 1, claimed: 1 };
@@ -2128,12 +2137,19 @@ export const TransactionPlanServiceLive = Layer.effect(
               refusals: [],
               at: input.at,
             });
-            yield* repository.settleMoves({
+            const settledByClaim = yield* repository.settleMoves({
               userId: entry.plan.userId,
               team: entry.plan.team,
+              runClaim,
               at: input.at,
               settlements: nonEmpty(settlements, "A reconciled claim produced no settlement"),
             });
+            if (!settledByClaim) {
+              return yield* TransactionPlanRunInProgress.make({
+                team: entry.plan.team,
+                detail: "Another run took this team's plan before the result could be stored.",
+              });
+            }
             yield* repository.finishRun({
               run: runId,
               counts: local,
@@ -2314,6 +2330,7 @@ export const TransactionPlanServiceLive = Layer.effect(
               open: planMoves,
               mode: "due",
               decision: transactionPlanTickDecision,
+              runClaim: entry.runClaim,
               runId,
             });
             yield* repository.finishRun({

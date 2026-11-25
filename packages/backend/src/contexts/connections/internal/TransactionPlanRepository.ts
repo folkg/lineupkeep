@@ -720,6 +720,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
       const settleMoves = Effect.fn("TransactionPlanRepository.settleMoves")(function* (input: {
         readonly userId: UserId;
         readonly team: TeamId;
+        readonly runClaim: string;
         readonly at: DateTime.Utc;
         readonly settlements: Array.NonEmptyReadonlyArray<TransactionMoveSettlement>;
       }) {
@@ -755,6 +756,20 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                 return yield* Effect.die(
                   new Error("A run settled moves on a plan that no longer exists"),
                 );
+              }
+              const claimHeld = yield* tx
+                .select({ teamId: transactionPlans.teamId })
+                .from(transactionPlans)
+                .where(
+                  and(
+                    eq(transactionPlans.userId, input.userId),
+                    eq(transactionPlans.teamId, input.team),
+                    eq(transactionPlans.runClaim, input.runClaim),
+                  ),
+                )
+                .limit(1);
+              if (claimHeld.length === 0) {
+                return false;
               }
               const ids = EffectArray.map(input.settlements, (settlement) =>
                 String(settlement.move),
@@ -829,6 +844,7 @@ export class TransactionPlanRepository extends Context.Service<TransactionPlanRe
                     eq(transactionPlans.teamId, input.team),
                   ),
                 );
+              return true;
             }),
           )
           .pipe(Effect.mapError(persistenceFailure));

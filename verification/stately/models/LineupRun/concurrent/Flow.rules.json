@@ -1,0 +1,127 @@
+{
+  "context": {
+    "owner": ["none", "A", "B"],
+    "expired": "bool",
+    "intent": "bool",
+    "a": ["idle", "reading", "applying", "sent"],
+    "b": ["idle", "reading", "applying", "sent"],
+    "aSent": "bool",
+    "bSent": "bool",
+    "doubleSend": "bool",
+    "staleCommit": "bool"
+  },
+  "init": {
+    "owner": "none",
+    "expired": false,
+    "intent": false,
+    "a": "idle",
+    "b": "idle",
+    "aSent": false,
+    "bSent": false,
+    "doubleSend": false,
+    "staleCommit": false
+  },
+  "guards": {
+    "expired": "expired",
+    "ownedA": "owner == 'A'",
+    "ownedB": "owner == 'B'",
+    "hasIntent": "intent",
+    "noIntent": "!intent",
+    "aApplying": "a == 'applying'",
+    "bApplying": "b == 'applying'"
+  },
+  "actions": {
+    "claimA": {
+      "owner": "'A'",
+      "expired": "false",
+      "a": "'reading'"
+    },
+    "claimB": {
+      "owner": "'B'",
+      "expired": "false",
+      "b": "'reading'"
+    },
+    "expire": {
+      "expired": "true"
+    },
+    "clearLease": {
+      "owner": "'none'"
+    },
+    "beginA": {
+      "a": "'applying'",
+      "intent": "true"
+    },
+    "beginB": {
+      "b": "'applying'",
+      "intent": "true"
+    },
+    "sendA": {
+      "a": "'sent'",
+      "aSent": "true",
+      "doubleSend": "bSent"
+    },
+    "sendB": {
+      "b": "'sent'",
+      "bSent": "true",
+      "doubleSend": "aSent"
+    },
+    "finishA": {
+      "staleCommit": "owner != 'A'"
+    },
+    "finishB": {
+      "staleCommit": "owner != 'B'"
+    }
+  },
+  "citations": {
+    "expired": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:626",
+    "ownedA": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:1388",
+    "ownedB": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:1388",
+    "hasIntent": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:1514",
+    "noIntent": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:1514",
+    "claimA": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:633",
+    "claimB": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:633",
+    "expire": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:626",
+    "clearLease": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:1413",
+    "beginA": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:857",
+    "beginB": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:857",
+    "finishA": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:1388",
+    "finishB": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:1388",
+    "aApplying": "packages/backend/src/contexts/connections/internal/LineupWorkerLive.ts:279-300",
+    "bApplying": "packages/backend/src/contexts/connections/internal/LineupWorkerLive.ts:279-300",
+    "sendA": "packages/backend/src/contexts/connections/internal/LineupWorkerLive.ts:480-545",
+    "sendB": "packages/backend/src/contexts/connections/internal/LineupWorkerLive.ts:480-545"
+  },
+  "rules": [
+    {
+      "id": "NoDoubleProviderWrite",
+      "kind": "never",
+      "when": "doubleSend"
+    },
+    {
+      "id": "NoStaleCommit",
+      "kind": "never",
+      "when": "staleCommit"
+    },
+    {
+      "id": "CanSettle",
+      "kind": "reachable",
+      "then": "in('Completed')"
+    },
+    {
+      "id": "RetryEventuallySettles",
+      "kind": "leads-to",
+      "when": "in('RetryWait')",
+      "then": "in('Completed')"
+    }
+  ],
+  "bounds": {
+    "maxStates": 50000,
+    "timeoutMs": 30000
+  },
+  "fairness": "weak",
+  "assumptions": [
+    "One run/team lease, two worker slots with distinct attempt states; actual lease token+generation abstracted to ownership and expiry; only selected reading/apply/verify/retry paths represented.",
+    "RetryWait becomes due by external time progression; the model enables claim nondeterministically. No successful-provider or scheduler fairness; no attempt cap. Provider effect may finish after lease expiry, but durable writes are gated on current token and generation.",
+    "Repeated writes by the same actor across distinct runs and cross-run team contention omitted."
+  ]
+}

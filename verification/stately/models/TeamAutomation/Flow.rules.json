@@ -1,0 +1,58 @@
+{
+  "guards": {
+    "pastResume": "event.at >= resumeAt"
+  },
+  "actions": {},
+  "context": {
+    "resumeAt": {
+      "min": 1,
+      "max": 2
+    }
+  },
+  "init": {
+    "resumeAt": 2
+  },
+  "events": {
+    "PauseExpired": {
+      "payloads": [
+        {
+          "at": 1
+        },
+        {
+          "at": 2
+        }
+      ]
+    }
+  },
+  "citations": {
+    "pastResume": "packages/backend/src/contexts/connections/internal/TeamAutomationWorkflow.ts:84"
+  },
+  "rules": [
+    {
+      "id": "StartsDisabled",
+      "kind": "initially",
+      "then": "in('Disabled')"
+    },
+    {
+      "id": "PauseReachable",
+      "kind": "reachable",
+      "then": "in('PausedUntilFantasyDayEnd')"
+    },
+    {
+      "id": "CanReturnEnabled",
+      "kind": "reachable",
+      "then": "in('Enabled')"
+    },
+    {
+      "id": "NoDeadEnds",
+      "kind": "no-dead-ends"
+    }
+  ],
+  "bounds": {
+    "maxStates": 12000,
+    "timeoutMs": 30000
+  },
+  "assumptions": [
+    "Logical 1/2 timestamp abstraction; Paused event fixes resumeAt=2, representing a specific stored day; no wall-clock scheduler modeled."
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "id": "ConnectionNotification",
+  "initial": "pending",
+  "states": {
+    "pending": {
+      "on": {
+        "Claimed": [
+          {
+            "target": "sending"
+          }
+        ],
+        "Cancelled": [
+          {
+            "target": "cancelled"
+          }
+        ]
+      }
+    },
+    "sending": {
+      "on": {
+        "Reclaimed": [
+          {
+            "target": "pending"
+          }
+        ],
+        "Sent": [
+          {
+            "target": "sent",
+            "actions": "increment"
+          }
+        ],
+        "Cancelled": [
+          {
+            "target": "cancelled"
+          }
+        ],
+        "Undeliverable": [
+          {
+            "target": "failed"
+          }
+        ],
+        "Rejected": [
+          {
+            "target": "failed",
+            "actions": "increment"
+          }
+        ],
+        "Retried": [
+          {
+            "target": "pending",
+            "actions": "increment"
+          }
+        ]
+      }
+    },
+    "sent": {
+      "type": "final"
+    },
+    "cancelled": {
+      "type": "final"
+    },
+    "failed": {
+      "type": "final"
+    }
+  }
+}

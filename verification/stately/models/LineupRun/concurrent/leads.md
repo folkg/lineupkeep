@@ -1,0 +1,6 @@
+# LineupRun two-caller lead disposition
+
+- Claim ownership: source-blocked stale durable write in modeled path by row/team locks and matching token+generation (`LineupRunRepository.ts:590-685,1363-1395,1713-1737`); checker `NoStaleCommit` holds. Expiry alone is not a guard on mutation; generation replacement is.
+- Overlapping attempts/duplicate provider write: model shows no second write for the _same run_ once `beginApply` persists intent (`LineupRunRepository.ts:740-861`); reclaim Applying/Verifying and retry with intent resumes verification (`:1503-1535`); checker `NoDoubleProviderWrite` holds in this scope. Actual provider-side idempotence, other run IDs on same team, and failures during network write remain questions.
+- Retry/event order: checker `RetryEventuallySettles` broken; this run's lasso traverses RetryWait, unlike the first-pass trace. `LineupWorkerLive.ts:1151-1177` schedules retries without an attempt cap; no external completion fairness. The single-record checker witness is invalid (see `../../reproducer/check-merge`).
+- Optional Uncertain intent and rehydration: `LineupRunRepository.ts:613-619` rejects claim of Uncertain without writeIntent; the absence of an alternate recovery path remains an unresolved operational question, not a checked bug here.

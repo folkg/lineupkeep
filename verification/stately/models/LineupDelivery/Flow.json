@@ -1,0 +1,39 @@
+{
+  "id": "LineupDelivery",
+  "initial": "pending",
+  "states": {
+    "pending": {
+      "on": {
+        "Claimed": [
+          {
+            "target": "dispatching",
+            "actions": "claim"
+          }
+        ]
+      }
+    },
+    "dispatching": {
+      "on": {
+        "Claimed": [
+          {
+            "target": "dispatching",
+            "actions": "claim"
+          }
+        ],
+        "Released": [
+          {
+            "target": "pending"
+          }
+        ],
+        "Dispatched": [
+          {
+            "target": "dispatched"
+          }
+        ]
+      }
+    },
+    "dispatched": {
+      "type": "final"
+    }
+  }
+}

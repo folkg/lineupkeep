@@ -132,6 +132,78 @@ it.effect("proposes into an empty team and leaves a move for today undecided", (
   ),
 );
 
+it.effect("refuses a settlement from a run claim that was replaced", () =>
+  Effect.gen(function* () {
+    const service = yield* TransactionPlanService;
+    const repository = yield* TransactionPlanRepository;
+    const database = yield* ConnectionsDatabase;
+    yield* TestClock.setTime(DateTime.toEpochMillis(at));
+    yield* seedTeam(database, owner, team);
+
+    const proposed = yield* service.propose(owner, {
+      team,
+      proposedBy: proposer,
+      moves: [add("fa1", "Free Agent One")],
+    });
+    const moveId = proposed.plan.moves[0]?.move;
+    if (moveId === undefined) {
+      throw new Error("The proposal returned no move");
+    }
+
+    const stale = yield* repository.claimRun({ userId: owner, team, runClaim: "stale", at });
+    assert.strictEqual(stale.status, "claimed");
+    yield* repository.releaseRun({ userId: owner, team, runClaim: "stale", at });
+    const current = yield* repository.claimRun({ userId: owner, team, runClaim: "current", at });
+    assert.strictEqual(current.status, "claimed");
+
+    const stored = yield* repository.readPlanMoves({ userId: owner, team });
+    const move = EffectOption.getOrUndefined(
+      EffectArray.findFirst(stored, (entry) => entry.id === moveId),
+    );
+    if (move === undefined) {
+      throw new Error("The proposed move was not stored");
+    }
+    const settlement = {
+      move: move.id,
+      result: "executed" as const,
+      detail: "Settled by a stale claim",
+      validation: move.validation,
+      runDay: today,
+      effectiveDate: today,
+      runPosition: move.runPosition,
+      phase: undefined,
+      attempts: [],
+      content: undefined,
+      run: undefined,
+      steps: [],
+    };
+
+    const refused = yield* repository.settleMoves({
+      userId: owner,
+      team,
+      runClaim: "stale",
+      at,
+      settlements: [settlement],
+    });
+    assert.isFalse(refused);
+    const afterRefusal = yield* repository.readPlanMoves({ userId: owner, team });
+    assert.isUndefined(afterRefusal[0]?.result);
+
+    const settled = yield* repository.settleMoves({
+      userId: owner,
+      team,
+      runClaim: "current",
+      at,
+      settlements: [settlement],
+    });
+    assert.isTrue(settled);
+    const afterSettlement = yield* repository.readPlanMoves({ userId: owner, team });
+    assert.strictEqual(afterSettlement[0]?.result, "executed");
+  }).pipe(
+    layerTools.provide(serviceLayer([league([], [freeAgent("fa1", "Free Agent One", ["RB"])])])),
+  ),
+);
+
 it.effect("proposes into an existing queue and keeps one plan", () =>
   Effect.gen(function* () {
     const service = yield* TransactionPlanService;

@@ -1,0 +1,157 @@
+{
+  "id": "signInWorkflow",
+  "initial": "email",
+  "states": {
+    "email": {
+      "on": {
+        "returnedFromGoogle": [
+          {
+            "target": "email"
+          }
+        ],
+        "emailChanged": [
+          {
+            "target": "email",
+            "actions": "setEmail"
+          }
+        ],
+        "sendCode": [
+          {
+            "target": "sendingCode",
+            "guard": "validEmail"
+          }
+        ],
+        "continueWithGoogle": [
+          {
+            "target": "startingGoogle"
+          }
+        ]
+      }
+    },
+    "sendingCode": {
+      "on": {
+        "codeSent": [
+          {
+            "target": "code",
+            "actions": "clearCode"
+          }
+        ],
+        "sendFailed": [
+          {
+            "target": "email"
+          }
+        ]
+      }
+    },
+    "startingGoogle": {
+      "on": {
+        "googleFailed": [
+          {
+            "target": "email"
+          }
+        ]
+      }
+    },
+    "code": {
+      "on": {
+        "codeChanged": [
+          {
+            "target": "code",
+            "actions": "setCode"
+          }
+        ],
+        "signIn": [
+          {
+            "target": "verifying",
+            "guard": "completeCode"
+          }
+        ],
+        "resendCode": [
+          {
+            "target": "resendingCode"
+          }
+        ],
+        "checkSession": [
+          {
+            "target": "checkingSession"
+          }
+        ],
+        "useDifferentEmail": [
+          {
+            "target": "email"
+          }
+        ]
+      }
+    },
+    "resendingCode": {
+      "on": {
+        "codeSent": [
+          {
+            "target": "code",
+            "actions": "clearCode"
+          }
+        ],
+        "sendFailed": [
+          {
+            "target": "code"
+          }
+        ]
+      }
+    },
+    "verifying": {
+      "on": {
+        "rejected": [
+          {
+            "target": "code"
+          }
+        ],
+        "unconfirmed": [
+          {
+            "target": "code"
+          }
+        ],
+        "accepted": [
+          {
+            "target": "finishing"
+          }
+        ]
+      }
+    },
+    "checkingSession": {
+      "on": {
+        "unconfirmed": [
+          {
+            "target": "code"
+          }
+        ],
+        "notSignedIn": [
+          {
+            "target": "code"
+          }
+        ],
+        "accepted": [
+          {
+            "target": "finishing"
+          }
+        ]
+      }
+    },
+    "finishing": {
+      "on": {
+        "unconfirmed": [
+          {
+            "target": "code"
+          }
+        ],
+        "signedIn": [
+          {
+            "target": "signedIn"
+          }
+        ]
+      }
+    },
+    "signedIn": {
+      "type": "final"
+    }
+  }
+}

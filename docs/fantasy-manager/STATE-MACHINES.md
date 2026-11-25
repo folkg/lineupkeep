@@ -90,3 +90,13 @@ property tests, rehydration and codec tests, the state table, and the full check
 
 The rollout uses serial sub-agents. Different machines may be independent, but they share the test
 helper and the docs, so they are not converted in parallel.
+
+## Model-checking evidence
+
+The bounded Stately models live in [`verification/stately`](../../verification/stately/README.md)
+next to the code, not in an artifact directory. `bun run verify:stately` runs the optional
+native checker over the single-record and two-caller models. These are reviewed estimates of
+lease, claim, queue, and email behavior, not substitutes for the generated `machine-test`
+suite. A broken model rule is a lead to inspect, not an application test result. The two-caller
+models for transaction moves, lineup delivery, connection notifications, and lineup runs are
+the ones to consult when a change crosses a claim and an external effect.

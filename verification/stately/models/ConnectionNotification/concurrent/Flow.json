@@ -1,0 +1,61 @@
+{
+  "id": "ConnectionNotificationTwoCallers",
+  "initial": "pending",
+  "states": {
+    "pending": {
+      "on": {
+        "A_Claim": {
+          "target": "sending",
+          "actions": "claimA"
+        },
+        "B_Claim": {
+          "target": "sending",
+          "actions": "claimB"
+        }
+      }
+    },
+    "sending": {
+      "on": {
+        "Expire": {
+          "actions": "expire"
+        },
+        "Reclaim": {
+          "target": "pending",
+          "guard": "staleDeadline",
+          "actions": "reclaim"
+        },
+        "A_Send": {
+          "guard": "aActive",
+          "actions": "sendA"
+        },
+        "B_Send": {
+          "guard": "bActive",
+          "actions": "sendB"
+        },
+        "A_Finish": {
+          "target": "sent",
+          "guard": "canFinishA",
+          "actions": "finishA"
+        },
+        "B_Finish": {
+          "target": "sent",
+          "guard": "canFinishB",
+          "actions": "finishB"
+        },
+        "A_Release": {
+          "target": "pending",
+          "guard": "canReleaseA",
+          "actions": "releaseA"
+        },
+        "B_Release": {
+          "target": "pending",
+          "guard": "canReleaseB",
+          "actions": "releaseB"
+        }
+      }
+    },
+    "sent": {
+      "on": {}
+    }
+  }
+}

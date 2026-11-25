@@ -1,0 +1,249 @@
+{
+  "id": "TransactionMove",
+  "initial": "open_undecided",
+  "states": {
+    "open_undecided": {
+      "on": {
+        "Write": [
+          {
+            "target": "ran_on_schedule",
+            "guard": "systemExecuted"
+          },
+          {
+            "target": "ran_immediately",
+            "guard": "ownerExecuted"
+          },
+          {
+            "target": "claim_waiting",
+            "guard": "waiverPending"
+          },
+          {
+            "target": "offer_sent",
+            "guard": "tradePending"
+          },
+          {
+            "target": "failed",
+            "guard": "writeFailed"
+          },
+          {
+            "target": "skipped",
+            "guard": "writeSkipped"
+          },
+          {
+            "target": "unknown",
+            "guard": "writeUnknown"
+          }
+        ]
+      }
+    },
+    "open_saved": {
+      "on": {
+        "Write": [
+          {
+            "target": "ran_on_schedule",
+            "guard": "systemExecuted"
+          },
+          {
+            "target": "ran_immediately",
+            "guard": "ownerExecuted"
+          },
+          {
+            "target": "claim_waiting",
+            "guard": "waiverPending"
+          },
+          {
+            "target": "offer_sent",
+            "guard": "tradePending"
+          },
+          {
+            "target": "failed",
+            "guard": "writeFailed"
+          },
+          {
+            "target": "skipped",
+            "guard": "writeSkipped"
+          },
+          {
+            "target": "unknown",
+            "guard": "writeUnknown"
+          }
+        ]
+      }
+    },
+    "open_now": {
+      "on": {
+        "Write": [
+          {
+            "target": "ran_on_schedule",
+            "guard": "systemExecuted"
+          },
+          {
+            "target": "ran_immediately",
+            "guard": "ownerExecuted"
+          },
+          {
+            "target": "claim_waiting",
+            "guard": "waiverPending"
+          },
+          {
+            "target": "offer_sent",
+            "guard": "tradePending"
+          },
+          {
+            "target": "failed",
+            "guard": "writeFailed"
+          },
+          {
+            "target": "skipped",
+            "guard": "writeSkipped"
+          },
+          {
+            "target": "unknown",
+            "guard": "writeUnknown"
+          }
+        ]
+      }
+    },
+    "open_confirmed": {
+      "on": {
+        "Write": [
+          {
+            "target": "ran_on_schedule",
+            "guard": "systemExecuted"
+          },
+          {
+            "target": "ran_immediately",
+            "guard": "ownerExecuted"
+          },
+          {
+            "target": "claim_waiting",
+            "guard": "waiverPending"
+          },
+          {
+            "target": "offer_sent",
+            "guard": "tradePending"
+          },
+          {
+            "target": "failed",
+            "guard": "writeFailed"
+          },
+          {
+            "target": "skipped",
+            "guard": "writeSkipped"
+          },
+          {
+            "target": "unknown",
+            "guard": "writeUnknown"
+          }
+        ]
+      }
+    },
+    "discarded": {
+      "type": "final"
+    },
+    "ran_immediately": {
+      "type": "final"
+    },
+    "ran_on_schedule": {
+      "type": "final"
+    },
+    "claim_waiting": {
+      "on": {
+        "ClaimWon": [
+          {
+            "target": "claim_won"
+          }
+        ],
+        "ClaimLost": [
+          {
+            "target": "claim_lost_fallback_ran",
+            "guard": "lostExecuted"
+          },
+          {
+            "target": "claim_lost_retrying",
+            "guard": "lostPending"
+          },
+          {
+            "target": "all_choices_failed",
+            "guard": "lostAllFailed"
+          },
+          {
+            "target": "claim_lost",
+            "guard": "lostWithoutFallback"
+          },
+          {
+            "target": "fallback_unknown",
+            "guard": "lostUnknown"
+          }
+        ]
+      }
+    },
+    "claim_won": {
+      "type": "final"
+    },
+    "claim_lost": {
+      "type": "final"
+    },
+    "claim_lost_fallback_ran": {
+      "type": "final"
+    },
+    "claim_lost_retrying": {
+      "on": {
+        "FallbackOutcome": [
+          {
+            "target": "claim_lost_fallback_ran",
+            "guard": "fallbackExecuted"
+          },
+          {
+            "target": "claim_lost_retrying",
+            "guard": "fallbackPending"
+          },
+          {
+            "target": "all_choices_failed",
+            "guard": "fallbackFailed"
+          },
+          {
+            "target": "fallback_unknown",
+            "guard": "fallbackUnknown"
+          }
+        ]
+      }
+    },
+    "all_choices_failed": {
+      "type": "final"
+    },
+    "fallback_unknown": {
+      "type": "final"
+    },
+    "offer_sent": {
+      "type": "final"
+    },
+    "failed": {
+      "on": {
+        "Discard": [
+          {
+            "target": "discarded"
+          }
+        ]
+      }
+    },
+    "skipped": {
+      "on": {
+        "Discard": [
+          {
+            "target": "discarded"
+          }
+        ]
+      }
+    },
+    "unknown": {
+      "on": {
+        "Discard": [
+          {
+            "target": "discarded"
+          }
+        ]
+      }
+    }
+  }
+}

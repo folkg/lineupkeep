@@ -1,0 +1,10 @@
+{
+  "id": "LeadsToWitness",
+  "initial": "Start",
+  "states": {
+    "Start": { "on": { "Claim": "Loop" } },
+    "Loop": { "on": { "Retry": "Wait", "Reclaim": "Loop", "Done": "Done" } },
+    "Wait": { "on": { "Claim": "Loop", "Done": "Done" } },
+    "Done": { "type": "final" }
+  }
+}

@@ -38,6 +38,7 @@ export const NotificationsLive = Layer.effect(
     const applyEvents = (
       events: ReadonlyMap<string, ConnectionNotificationEvent>,
       where?: SQL,
+      expectedUpdatedAt?: ReadonlyMap<string, DateTime.Utc>,
     ): Effect.Effect<ReadonlyArray<typeof NotificationsRow.Type>, NotificationsFailed> => {
       const ids = [...events.keys()];
       if (!Array.isArrayNonEmpty(ids)) {
@@ -56,6 +57,13 @@ export const NotificationsLive = Layer.effect(
                   const event = events.get(row.id);
                   if (event === undefined) {
                     throw new Error("A locked notification has no event");
+                  }
+                  const expected = expectedUpdatedAt?.get(row.id);
+                  if (
+                    expected !== undefined &&
+                    DateTime.toEpochMillis(row.state.updatedAt) !== DateTime.toEpochMillis(expected)
+                  ) {
+                    return Effect.succeed({ ...row });
                   }
                   return Effect.map(
                     Effect.flatMap(
@@ -149,6 +157,9 @@ export const NotificationsLive = Layer.effect(
         }),
       );
       const claimedIds = new Set(EffectArray.map(claimed, (row) => row.id));
+      const claimedAt = new Map(
+        EffectArray.map(claimed, (row) => [row.id, row.state.updatedAt] as const),
+      );
       const claimedRows = EffectArray.filter(rows, (row) => claimedIds.has(row.notificationId));
 
       const cancelledIds: string[] = [];
@@ -213,7 +224,7 @@ export const NotificationsLive = Layer.effect(
           retried++;
         }
       }
-      yield* applyEvents(events);
+      yield* applyEvents(events, undefined, claimedAt);
 
       const summary = {
         sent,

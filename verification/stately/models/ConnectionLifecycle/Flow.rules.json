@@ -1,0 +1,34 @@
+{
+  "guards": {},
+  "actions": {},
+  "context": {},
+  "init": {},
+  "events": {},
+  "citations": {},
+  "rules": [
+    {
+      "id": "StartsLinking",
+      "kind": "initially",
+      "then": "in('Linking')"
+    },
+    {
+      "id": "CanReconnect",
+      "kind": "reachable",
+      "then": "in('ReconnectRequired')"
+    },
+    {
+      "id": "CanDisconnect",
+      "kind": "reachable",
+      "then": "in('Disconnected')"
+    },
+    {
+      "id": "NoDeadEndsBeforeDisconnect",
+      "kind": "no-dead-ends"
+    }
+  ],
+  "bounds": {
+    "maxStates": 12000,
+    "timeoutMs": 30000
+  },
+  "assumptions": []
+}

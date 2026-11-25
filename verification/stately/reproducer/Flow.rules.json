@@ -1,0 +1,8 @@
+{
+  "rules": [
+    { "id": "WaitEventuallyDone", "kind": "leads-to", "when": "in('Wait')", "then": "in('Done')" },
+    { "id": "WaitReachable", "kind": "reachable", "then": "in('Wait')" }
+  ],
+  "fairness": "weak",
+  "bounds": { "maxStates": 1000, "timeoutMs": 30000 }
+}

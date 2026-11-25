@@ -1,0 +1,55 @@
+{
+  "guards": {},
+  "actions": {
+    "increment": {
+      "attempts": "attempts + 1"
+    }
+  },
+  "context": {
+    "attempts": {
+      "min": 0,
+      "max": 3
+    }
+  },
+  "init": {
+    "attempts": 0
+  },
+  "events": {},
+  "citations": {
+    "increment": "packages/backend/src/contexts/connections/internal/ConnectionNotificationWorkflow.ts:100"
+  },
+  "rules": [
+    {
+      "id": "StartsPending",
+      "kind": "initially",
+      "then": "in('pending') && attempts == 0"
+    },
+    {
+      "id": "CanSend",
+      "kind": "reachable",
+      "then": "in('sent')"
+    },
+    {
+      "id": "CanFail",
+      "kind": "reachable",
+      "then": "in('failed')"
+    },
+    {
+      "id": "NoInfiniteRetries",
+      "kind": "eventually",
+      "then": "in('sent') || in('cancelled') || in('failed')"
+    },
+    {
+      "id": "NoSentBeforeAttempt",
+      "kind": "never",
+      "when": "in('sent') && attempts == 0"
+    }
+  ],
+  "bounds": {
+    "maxStates": 12000,
+    "timeoutMs": 30000
+  },
+  "assumptions": [
+    "Attempt bound 0..3 is a checker cutoff; source does not cap retries. Worker identity and persistence atomicity excluded."
+  ]
+}

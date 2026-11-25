@@ -1,0 +1,138 @@
+{
+  "context": {
+    "a": ["idle", "active", "finished"],
+    "b": ["idle", "active", "finished"],
+    "owner": ["none", "A", "B"],
+    "aSent": "bool",
+    "bSent": "bool",
+    "duplicate": "bool",
+    "stale": "bool",
+    "lost": "bool",
+    "expired": "bool"
+  },
+  "init": {
+    "a": "idle",
+    "b": "idle",
+    "owner": "none",
+    "aSent": false,
+    "bSent": false,
+    "duplicate": false,
+    "stale": false,
+    "lost": false,
+    "expired": false
+  },
+  "guards": {
+    "aActive": "a == 'active'",
+    "bActive": "b == 'active'",
+    "aSent": "aSent == true",
+    "bSent": "bSent == true",
+    "staleDeadline": "expired",
+    "canReleaseA": "a == 'active' && !aSent && owner == 'A'",
+    "canReleaseB": "b == 'active' && !bSent && owner == 'B'",
+    "canFinishA": "aSent && owner == 'A'",
+    "canFinishB": "bSent && owner == 'B'"
+  },
+  "actions": {
+    "claimA": {
+      "a": "'active'",
+      "owner": "'A'",
+      "expired": "false"
+    },
+    "claimB": {
+      "b": "'active'",
+      "owner": "'B'",
+      "expired": "false"
+    },
+    "sendA": {
+      "aSent": "true",
+      "duplicate": "bSent"
+    },
+    "sendB": {
+      "bSent": "true",
+      "duplicate": "aSent"
+    },
+    "finishA": {
+      "stale": "owner != 'A'",
+      "a": "'finished'"
+    },
+    "finishB": {
+      "stale": "owner != 'B'",
+      "b": "'finished'"
+    },
+    "releaseA": {
+      "lost": "owner != 'A'",
+      "a": "'finished'",
+      "owner": "'none'"
+    },
+    "releaseB": {
+      "lost": "owner != 'B'",
+      "b": "'finished'",
+      "owner": "'none'"
+    },
+    "reclaim": {
+      "owner": "'none'"
+    },
+    "expire": {
+      "expired": "true"
+    }
+  },
+  "citations": {
+    "claimA": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:1109",
+    "claimB": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:1109",
+    "finishA": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:1164",
+    "finishB": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:1164",
+    "releaseA": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:1164",
+    "releaseB": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:1164",
+    "reclaim": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:1111",
+    "expire": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:1112",
+    "staleDeadline": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:1112",
+    "canReleaseA": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:1164",
+    "canReleaseB": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:1164",
+    "aActive": "packages/backend/src/contexts/connections/internal/LineupDeliveryWorkflow.ts:63",
+    "bActive": "packages/backend/src/contexts/connections/internal/LineupDeliveryWorkflow.ts:63",
+    "sendA": "packages/backend/src/contexts/connections/internal/LineupDispatcherLive.ts:56-68",
+    "sendB": "packages/backend/src/contexts/connections/internal/LineupDispatcherLive.ts:56-68",
+    "aSent": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:1164",
+    "bSent": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:1164",
+    "canFinishA": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:1164-1216",
+    "canFinishB": "packages/backend/src/contexts/connections/internal/LineupRunRepository.ts:1164-1216"
+  },
+  "rules": [
+    {
+      "id": "DoubleExternalSend",
+      "kind": "never",
+      "when": "duplicate"
+    },
+    {
+      "id": "StaleCompletion",
+      "kind": "never",
+      "when": "stale"
+    },
+    {
+      "id": "LostNewClaim",
+      "kind": "never",
+      "when": "lost"
+    },
+    {
+      "id": "CanSettle",
+      "kind": "reachable",
+      "then": "in('dispatched')"
+    },
+    {
+      "id": "EventuallySettles",
+      "kind": "eventually",
+      "then": "in('dispatched')"
+    }
+  ],
+  "bounds": {
+    "maxStates": 50000,
+    "timeoutMs": 30000
+  },
+  "fairness": "weak",
+  "assumptions": [
+    "Two actor slots represent overlapping attempts, not an attempt cap: either actor may be claimed again. Boolean effect flags collapse subsequent sends; a second distinct send is still observable.",
+    "Reclaim abstracts elapsed stale deadline; no clock or external-email/provider reliability guarantee.",
+    "External send and persisted finish are separate steps. Failure/cancellation variants are omitted; no fairness of successful dispatch or retry scheduling is assumed.",
+    "Finish and release now require the delivery's current claim attempt; duplicate enqueue attempts remain possible, so DoubleExternalSend is still expected while the downstream run lease is the duplicate-execution guard."
+  ]
+}

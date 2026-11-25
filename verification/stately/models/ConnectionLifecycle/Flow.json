@@ -1,0 +1,56 @@
+{
+  "id": "ConnectionLifecycle",
+  "initial": "Linking",
+  "states": {
+    "Linking": {
+      "on": {
+        "LinkCompleted": [
+          {
+            "target": "Ready"
+          }
+        ],
+        "Disconnected": [
+          {
+            "target": "Disconnected"
+          }
+        ]
+      }
+    },
+    "Ready": {
+      "on": {
+        "ReconnectRequired": [
+          {
+            "target": "ReconnectRequired"
+          }
+        ],
+        "Reconnected": [
+          {
+            "target": "Ready"
+          }
+        ],
+        "Disconnected": [
+          {
+            "target": "Disconnected"
+          }
+        ]
+      }
+    },
+    "ReconnectRequired": {
+      "on": {
+        "Reconnected": [
+          {
+            "target": "Ready"
+          }
+        ],
+        "Disconnected": [
+          {
+            "target": "Disconnected"
+          }
+        ]
+      }
+    },
+    "Disconnected": {
+      "type": "final"
+    }
+  }
+}

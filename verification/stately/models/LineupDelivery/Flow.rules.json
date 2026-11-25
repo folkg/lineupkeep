@@ -1,0 +1,50 @@
+{
+  "guards": {},
+  "actions": {
+    "claim": {
+      "attempts": "attempts + 1"
+    }
+  },
+  "context": {
+    "attempts": {
+      "min": 0,
+      "max": 3
+    }
+  },
+  "init": {
+    "attempts": 0
+  },
+  "events": {},
+  "citations": {
+    "claim": "packages/backend/src/contexts/connections/internal/LineupDeliveryWorkflow.ts:54"
+  },
+  "rules": [
+    {
+      "id": "StartsPending",
+      "kind": "initially",
+      "then": "in('pending') && attempts == 0"
+    },
+    {
+      "id": "DispatchReachable",
+      "kind": "reachable",
+      "then": "in('dispatched')"
+    },
+    {
+      "id": "NoDispatchBeforeClaim",
+      "kind": "never",
+      "when": "in('dispatched') && attempts == 0"
+    },
+    {
+      "id": "EventuallyDispatched",
+      "kind": "eventually",
+      "then": "in('dispatched')"
+    }
+  ],
+  "bounds": {
+    "maxStates": 12000,
+    "timeoutMs": 30000
+  },
+  "assumptions": [
+    "Attempt domain 0..3; the source has no attempt cap. Transitions past bound are checked but not expanded. Two independent workers can claim; atomic persistence is outside this module."
+  ]
+}

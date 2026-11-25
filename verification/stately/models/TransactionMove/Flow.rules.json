@@ -1,0 +1,154 @@
+{
+  "guards": {
+    "systemExecuted": "event.bySystem == true && event.result == 'executed'",
+    "ownerExecuted": "event.bySystem == false && event.result == 'executed'",
+    "waiverPending": "event.result == 'pending' && event.kind == 'waiver_claim'",
+    "tradePending": "event.result == 'pending' && event.kind == 'trade'",
+    "writeFailed": "event.result == 'failed'",
+    "writeSkipped": "event.result == 'skipped'",
+    "writeUnknown": "event.result == 'unknown'",
+    "lostExecuted": "event.result == 'executed'",
+    "lostPending": "event.result == 'pending'",
+    "lostAllFailed": "event.result == 'failed' && event.attemptedFallback == true",
+    "lostWithoutFallback": "event.result == 'failed' && event.attemptedFallback == false",
+    "lostUnknown": "event.result == 'unknown'",
+    "fallbackExecuted": "event.result == 'executed'",
+    "fallbackPending": "event.result == 'pending'",
+    "fallbackFailed": "event.result == 'failed'",
+    "fallbackUnknown": "event.result == 'unknown'"
+  },
+  "actions": {},
+  "context": {},
+  "init": {},
+  "events": {
+    "Write": {
+      "payloads": [
+        {
+          "result": "executed",
+          "kind": "free_agent_add",
+          "bySystem": false
+        },
+        {
+          "result": "executed",
+          "kind": "free_agent_add",
+          "bySystem": true
+        },
+        {
+          "result": "pending",
+          "kind": "waiver_claim",
+          "bySystem": false
+        },
+        {
+          "result": "pending",
+          "kind": "trade",
+          "bySystem": false
+        },
+        {
+          "result": "failed",
+          "kind": "free_agent_add",
+          "bySystem": false
+        },
+        {
+          "result": "skipped",
+          "kind": "free_agent_add",
+          "bySystem": false
+        },
+        {
+          "result": "unknown",
+          "kind": "free_agent_add",
+          "bySystem": false
+        }
+      ]
+    },
+    "ClaimLost": {
+      "payloads": [
+        {
+          "result": "executed",
+          "attemptedFallback": false
+        },
+        {
+          "result": "pending",
+          "attemptedFallback": true
+        },
+        {
+          "result": "failed",
+          "attemptedFallback": true
+        },
+        {
+          "result": "failed",
+          "attemptedFallback": false
+        },
+        {
+          "result": "unknown",
+          "attemptedFallback": true
+        }
+      ]
+    },
+    "FallbackOutcome": {
+      "payloads": [
+        {
+          "result": "executed"
+        },
+        {
+          "result": "pending"
+        },
+        {
+          "result": "failed"
+        },
+        {
+          "result": "unknown"
+        }
+      ]
+    }
+  },
+  "citations": {
+    "systemExecuted": "packages/backend/src/contexts/connections/internal/TransactionMoveWorkflow.ts:95",
+    "ownerExecuted": "packages/backend/src/contexts/connections/internal/TransactionMoveWorkflow.ts:100",
+    "waiverPending": "packages/backend/src/contexts/connections/internal/TransactionMoveWorkflow.ts:106",
+    "tradePending": "packages/backend/src/contexts/connections/internal/TransactionMoveWorkflow.ts:112",
+    "writeFailed": "packages/backend/src/contexts/connections/internal/TransactionMoveWorkflow.ts:118",
+    "writeSkipped": "packages/backend/src/contexts/connections/internal/TransactionMoveWorkflow.ts:123",
+    "writeUnknown": "packages/backend/src/contexts/connections/internal/TransactionMoveWorkflow.ts:128",
+    "lostExecuted": "packages/backend/src/contexts/connections/internal/TransactionMoveWorkflow.ts:138",
+    "lostPending": "packages/backend/src/contexts/connections/internal/TransactionMoveWorkflow.ts:143",
+    "lostAllFailed": "packages/backend/src/contexts/connections/internal/TransactionMoveWorkflow.ts:149",
+    "lostWithoutFallback": "packages/backend/src/contexts/connections/internal/TransactionMoveWorkflow.ts:155",
+    "lostUnknown": "packages/backend/src/contexts/connections/internal/TransactionMoveWorkflow.ts:160",
+    "fallbackExecuted": "packages/backend/src/contexts/connections/internal/TransactionMoveWorkflow.ts:170",
+    "fallbackPending": "packages/backend/src/contexts/connections/internal/TransactionMoveWorkflow.ts:175",
+    "fallbackFailed": "packages/backend/src/contexts/connections/internal/TransactionMoveWorkflow.ts:180",
+    "fallbackUnknown": "packages/backend/src/contexts/connections/internal/TransactionMoveWorkflow.ts:185"
+  },
+  "rules": [
+    {
+      "id": "InitiallyUndecided",
+      "kind": "initially",
+      "then": "in('open_undecided')"
+    },
+    {
+      "id": "CanReachWaiver",
+      "kind": "reachable",
+      "then": "in('claim_waiting')"
+    },
+    {
+      "id": "CanRecoverFromFailed",
+      "kind": "reachable",
+      "then": "in('failed')"
+    },
+    {
+      "id": "FallbackCanFinish",
+      "kind": "reachable",
+      "then": "in('claim_lost_fallback_ran')"
+    },
+    {
+      "id": "PendingClaimMayRemain",
+      "kind": "eventually",
+      "then": "in('claim_won') || in('claim_lost') || in('claim_lost_fallback_ran') || in('all_choices_failed') || in('fallback_unknown') || in('discarded') || in('ran_immediately') || in('ran_on_schedule') || in('offer_sent')"
+    }
+  ],
+  "bounds": {
+    "maxStates": 12000,
+    "timeoutMs": 30000
+  },
+  "assumptions": []
+}

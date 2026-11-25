@@ -1,0 +1,56 @@
+{
+  "guards": {
+    "hasIntent": "intent == true"
+  },
+  "actions": {
+    "setIntent": {
+      "intent": "true"
+    }
+  },
+  "context": {
+    "intent": "bool"
+  },
+  "init": {
+    "intent": false
+  },
+  "events": {},
+  "citations": {
+    "setIntent": "packages/backend/src/contexts/connections/internal/LineupRunWorkflow.ts:363",
+    "hasIntent": "packages/backend/src/contexts/connections/internal/LineupRunWorkflow.ts:491"
+  },
+  "rules": [
+    {
+      "id": "StartsQueued",
+      "kind": "initially",
+      "then": "in('Queued') && !intent"
+    },
+    {
+      "id": "CanApply",
+      "kind": "reachable",
+      "then": "in('Applying')"
+    },
+    {
+      "id": "CanComplete",
+      "kind": "reachable",
+      "then": "in('Completed')"
+    },
+    {
+      "id": "NoVerifyWithoutIntent",
+      "kind": "never",
+      "when": "in('Verifying') && !intent"
+    },
+    {
+      "id": "RetryEventuallySettles",
+      "kind": "leads-to",
+      "when": "in('RetryWait')",
+      "then": "in('Completed') || in('Skipped') || in('Blocked') || in('Failed') || in('Superseded')"
+    }
+  ],
+  "bounds": {
+    "maxStates": 12000,
+    "timeoutMs": 30000
+  },
+  "assumptions": [
+    "Intent abstraction only; event payloads, lease generation and atomically persisted write intents omitted. Retrying workers overlap in reality, not represented by this single-record chart."
+  ]
+}
