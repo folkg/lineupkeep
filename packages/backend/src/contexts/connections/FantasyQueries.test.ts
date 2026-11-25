@@ -180,6 +180,54 @@ it.effect("resolves calendar periods from league settings without guessing locks
   }).pipe(layerTools.provide(QueriesTestLayer)),
 );
 
+it.effect("answers free-agent games from the league's professional schedule", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    yield* fake.setLeagueGames([
+      {
+        id: "461.l.1000.g.1",
+        date: "2026-09-20",
+        week: 3,
+        home: { abbreviation: "SEA", name: "Seattle" },
+        away: { abbreviation: "PIT", name: "Pittsburgh" },
+      },
+    ]);
+
+    const calendar = yield* queries.getCalendar(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      period: { week: 3 },
+      proTeams: ["SEA", "PIT", "BUF"],
+    });
+
+    assert.strictEqual(calendar.status, "ok");
+    if (calendar.status !== "ok") {
+      return;
+    }
+    const games = calendar.games;
+    assert.strictEqual(games?.status, "available");
+    if (games?.status !== "available") {
+      return;
+    }
+    assert.deepStrictEqual(games.period, { week: 3 });
+    assert.isTrue(DateTime.isDateTime(games.observedAt));
+    assert.deepStrictEqual(games.teams, [
+      {
+        proTeam: "SEA",
+        plays: true,
+        games: [{ date: "2026-09-20", opponent: "PIT", home: true }],
+      },
+      {
+        proTeam: "PIT",
+        plays: true,
+        games: [{ date: "2026-09-20", opponent: "SEA", home: false }],
+      },
+      { proTeam: "BUF", plays: false, games: [] },
+    ]);
+  }).pipe(layerTools.provide(QueriesTestLayer)),
+);
+
 it.effect("answers which professional teams play in a requested period", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
@@ -4509,6 +4557,66 @@ it.effect("states that draft history was unreadable instead of calling players u
     }
     assert.deepStrictEqual(Array.getUnsafe(players.players, 0).identity?.draft, {
       status: "not_published",
+    });
+  }).pipe(layerTools.provide(QueriesTestLayer)),
+);
+
+it.effect("adds a provider game log when the game_log group is requested", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const roster = yield* queries.getRosters(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      period: { week: 3 },
+    });
+    assert.strictEqual(roster.status, "ok");
+    if (roster.status !== "ok" || roster.scope !== "team") {
+      return;
+    }
+    const first = Array.getUnsafe(roster.players, 0);
+    yield* fake.setPlayerGameLog(first.providerPlayerId, {
+      headers: [
+        { value: "Wk", format: undefined },
+        { value: "Fan Pts", format: undefined },
+      ],
+      games: [
+        {
+          date: "2026-11-01",
+          opponent: "LV",
+          cells: [
+            { value: "9", format: undefined },
+            { value: "17.7", format: undefined },
+          ],
+        },
+      ],
+    });
+
+    const hydrated = yield* queries.getPlayers(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      players: [first.player],
+      groups: ["game_log"],
+    });
+    assert.strictEqual(hydrated.status, "ok");
+    if (hydrated.status !== "ok") {
+      return;
+    }
+    const row = Array.getUnsafe(hydrated.players, 0);
+    assert.deepStrictEqual(row.gameLog, {
+      headers: [
+        { value: "Wk", format: undefined },
+        { value: "Fan Pts", format: undefined },
+      ],
+      games: [
+        {
+          date: "2026-11-01",
+          opponent: "LV",
+          cells: [
+            { value: "9", format: undefined },
+            { value: "17.7", format: undefined },
+          ],
+        },
+      ],
     });
   }).pipe(layerTools.provide(QueriesTestLayer)),
 );

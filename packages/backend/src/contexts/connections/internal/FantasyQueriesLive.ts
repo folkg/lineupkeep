@@ -17,6 +17,7 @@ import type { ProfessionalGame } from "#contexts/connections/ProfessionalGame.ts
 import type {
   ProviderAcquisitionUsage,
   ProviderDraftPick,
+  ProviderLeagueGame,
   ProviderLeagueSettings,
   ProviderLeagueTeam,
   ProviderPeriodWindow,
@@ -923,6 +924,28 @@ export const FantasyQueriesLive = Layer.effect(
         const period = input.period;
         if (period === undefined) {
           throw new Error("Calendar games are read only for a requested period");
+        }
+        if (context.provider.readLeagueGames !== undefined) {
+          const leagueGames = yield* readOutcome(
+            context,
+            "league_games",
+            context.provider.readLeagueGames({
+              ...providerIdentity(context),
+              providerLeagueKey: context.owned.team.providerLeagueKey,
+              week: { week: period.week },
+            }),
+          );
+          if (leagueGames._tag === "ok" && leagueGames.value.length > 0) {
+            return {
+              status: "available" as const,
+              period,
+              observedAt: yield* DateTime.now,
+              ...calendarTeamsFromLeagueGames(leagueGames.value, input.proTeams),
+            };
+          }
+          if (leagueGames._tag === "failed") {
+            failures.push(leagueGames.failure);
+          }
         }
         const schedulePeriod = yield* calendarSchedulePeriod(context, league, period, failures);
         if (schedulePeriod === undefined) {
@@ -2295,6 +2318,48 @@ export const FantasyQueriesLive = Layer.effect(
       const detailsByKey = new Map(
         EffectArray.map(details, (player) => [player.providerPlayerKey, player]),
       );
+      const gameLogs = new Map<string, NonNullable<PlayersData["players"][number]["gameLog"]>>();
+      if (groups.includes("game_log") && valid.length > 0) {
+        const readGameLog = context.provider.readPlayerGameLog;
+        if (readGameLog === undefined) {
+          failures.push({
+            code: "player_game_log_unavailable",
+            resource: "players",
+            message: "This provider does not publish player game logs.",
+          });
+        } else {
+          const referenceByKey = new Map(
+            EffectArray.map(valid, (row) => [row.providerPlayerKey, row.ref] as const),
+          );
+          for (const row of valid) {
+            const outcome = yield* readOutcome(
+              context,
+              "player_game_log",
+              readGameLog({
+                ...providerIdentity(context),
+                providerLeagueKey: leagueKey,
+                providerPlayerKey: row.providerPlayerKey,
+              }),
+            );
+            if (outcome._tag === "ok") {
+              gameLogs.set(row.providerPlayerKey, outcome.value);
+            } else {
+              failures.push(
+                outcome._tag === "failed"
+                  ? outcome.failure
+                  : {
+                      code: "player_game_log_unavailable",
+                      resource: referenceByKey.get(row.providerPlayerKey) ?? "players",
+                      message: outcome.detail,
+                    },
+              );
+            }
+          }
+          if (gameLogs.size > 0) {
+            coverageEntries.push(coverage("players", "player_game_log", fetchedAt));
+          }
+        }
+      }
       const currentWeek =
         league?.rosterCoverage === "week" ? currentPeriod(league.periodWindow) : undefined;
       const scheduleWeekFacts = new Map<string, ProviderPlayerWeekFact>();
@@ -2576,6 +2641,9 @@ export const FantasyQueriesLive = Layer.effect(
               ...(actualStats === undefined ? {} : { actualStats }),
               ...(projections === undefined ? {} : { projections }),
               ...(scoringContext === undefined ? {} : { scoringContext }),
+              ...(gameLogs.get(row.providerPlayerKey) === undefined
+                ? {}
+                : { gameLog: gameLogs.get(row.providerPlayerKey) }),
               ...(poolGames?.status !== "available"
                 ? {}
                 : poolGames.basis === "date"
@@ -2598,7 +2666,8 @@ export const FantasyQueriesLive = Layer.effect(
           (row) =>
             row.identity !== undefined ||
             row.actualStats?.status === "available" ||
-            row.scoringContext?.status === "available",
+            row.scoringContext?.status === "available" ||
+            row.gameLog !== undefined,
         );
       if (unverifiedPlayers.size > 0 && !hasData) {
         return yield* QuerySelectionInvalid.make({
@@ -5158,6 +5227,42 @@ function leagueWeek(league: ProviderLeagueSettings): NonNullable<LeagueData["wee
         start: league.periodWindow.start,
         end: league.periodWindow.end,
       };
+}
+
+function calendarTeamsFromLeagueGames(
+  games: ReadonlyArray<ProviderLeagueGame>,
+  requested: ReadonlyArray<string> | undefined,
+): {
+  readonly teams: ReadonlyArray<CalendarTeamGames>;
+  readonly notCovered?: ReadonlyArray<string>;
+} {
+  const gamesByTeam = new Map<string, Map<string, ProviderLeagueGame>>();
+  for (const game of games) {
+    for (const team of [game.home.abbreviation, game.away.abbreviation]) {
+      const teamGames = gamesByTeam.get(team) ?? new Map<string, ProviderLeagueGame>();
+      teamGames.set(game.id, game);
+      gamesByTeam.set(team, teamGames);
+    }
+  }
+  const wanted = requested === undefined ? undefined : [...new Set(requested)];
+  const covered = wanted ?? [...gamesByTeam.keys()].sort();
+  const teams = EffectArray.map(covered, (proTeam) => {
+    const teamGames = gamesByTeam.get(proTeam);
+    const teamGamesList = teamGames === undefined ? [] : [...teamGames.values()];
+    return {
+      proTeam,
+      plays: teamGamesList.length > 0,
+      games: EffectArray.map(teamGamesList, (game) => {
+        const home = game.home.abbreviation === proTeam;
+        return {
+          date: game.date,
+          opponent: home ? game.away.abbreviation : game.home.abbreviation,
+          home,
+        };
+      }),
+    };
+  });
+  return { teams };
 }
 
 function calendarTeams(

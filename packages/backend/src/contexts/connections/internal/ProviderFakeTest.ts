@@ -20,6 +20,7 @@ import type {
   ProviderCapabilities,
   ProviderDraftPick,
   ProviderGamesPlayed,
+  ProviderLeagueGame,
   ProviderLeagueSettings,
   ProviderLeagueRoster,
   ProviderLeagueTeam,
@@ -31,6 +32,7 @@ import type {
   ProviderNativeTarget,
   ProviderOperation,
   ProviderPlayerDetail,
+  ProviderPlayerGameLog,
   ProviderPlayerScore,
   ProviderPendingTrade,
   ProviderPlayerSearchResult,
@@ -114,7 +116,9 @@ type FakeProviderState = {
   readonly teamSchedules: Readonly<Record<string, ProviderRosterSchedule>>;
   readonly scheduleFailure: FakeRequestFailure | undefined;
   readonly schedulePeriods: ReadonlyArray<ProviderSchedulePeriod>;
+  readonly leagueGames: ReadonlyArray<ProviderLeagueGame>;
   readonly playerDetails: ReadonlyArray<ProviderPlayerDetail>;
+  readonly playerGameLogs: Readonly<Record<string, ProviderPlayerGameLog>>;
   readonly playerWeeks: ReadonlyArray<ProviderPlayerWeekFact>;
   readonly searchPlayers: ReadonlyArray<ProviderPlayerSearchResult["players"][number]> | undefined;
   readonly playerScores: ReadonlyArray<FakePlayerScore>;
@@ -194,7 +198,9 @@ export type FakeProviderWorldShape = {
   ) => Effect.Effect<void>;
   readonly failSchedule: (failure: FakeRequestFailure | undefined) => Effect.Effect<void>;
   readonly schedulePeriods: Effect.Effect<ReadonlyArray<ProviderSchedulePeriod>>;
+  readonly setLeagueGames: (games: ReadonlyArray<ProviderLeagueGame>) => Effect.Effect<void>;
   readonly setPlayerDetails: (details: ReadonlyArray<ProviderPlayerDetail>) => Effect.Effect<void>;
+  readonly setPlayerGameLog: (key: string, log: ProviderPlayerGameLog) => Effect.Effect<void>;
   readonly setPlayerWeeks: (weeks: ReadonlyArray<ProviderPlayerWeekFact>) => Effect.Effect<void>;
   readonly setSearchPlayers: (
     players: ReadonlyArray<ProviderPlayerSearchResult["players"][number]>,
@@ -300,7 +306,9 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         teamSchedules: {},
         scheduleFailure: undefined,
         schedulePeriods: [],
+        leagueGames: [],
         playerDetails: [],
+        playerGameLogs: {},
         playerWeeks: [],
         searchPlayers: undefined,
         playerScores: [],
@@ -411,7 +419,13 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
           })),
         failSchedule: (scheduleFailure) => modify((current) => ({ ...current, scheduleFailure })),
         schedulePeriods: Effect.map(Ref.get(state), (current) => current.schedulePeriods),
+        setLeagueGames: (leagueGames) => modify((current) => ({ ...current, leagueGames })),
         setPlayerDetails: (playerDetails) => modify((current) => ({ ...current, playerDetails })),
+        setPlayerGameLog: (key, log) =>
+          modify((current) => ({
+            ...current,
+            playerGameLogs: { ...current.playerGameLogs, [key]: log },
+          })),
         setPlayerWeeks: (playerWeeks) => modify((current) => ({ ...current, playerWeeks })),
         setSearchPlayers: (players) =>
           modify((current) => ({ ...current, searchPlayers: players })),
@@ -703,6 +717,21 @@ const providerFake = Effect.gen(function* () {
         return yield* ProviderResponseInvalid.make({ operation: "read_roster_schedule" });
       }
       return scheduleForPeriod(configured, input.period);
+    }),
+    readPlayerGameLog: Effect.fn("FakeProvider.readPlayerGameLog")(function* (input) {
+      const current = yield* prepare(input, "read_player_game_log");
+      const log = current.playerGameLogs[input.providerPlayerKey];
+      if (log === undefined) {
+        return yield* ProviderOperationUnsupported.make({
+          operation: "read_player_game_log",
+          reason: "No game log is configured for the fake provider.",
+        });
+      }
+      return log;
+    }),
+    readLeagueGames: Effect.fn("FakeProvider.readLeagueGames")(function* (input) {
+      const current = yield* prepare(input, "read_league_games");
+      return EffectArray.filter(current.leagueGames, (game) => game.week === input.week.week);
     }),
     applyNativeAction: Effect.fn("FakeProvider.applyNativeAction")(function* (input) {
       const current = yield* prepare(input, "apply_native_action").pipe(

@@ -3,6 +3,24 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
+## Unreleased — round-60 MCP data (free-agent schedules and game logs)
+
+### Added
+
+- `get_calendar` reads every professional team's games for a published week, including teams with
+  no rostered player, so a free agent's opponent or bye can be checked before a claim.
+- `get_players` accepts the `game_log` group and returns the provider's per-game table with its own
+  header cells and one row per game. The game log makes a recent absence visible inside a
+  last-N-days or last-N-weeks window.
+- Future player-week reads fall back to the league's professional game list when the player
+  endpoint publishes no opponent, which restores next-week waiver checks.
+
+### Changed
+
+- `start_connection` is documented in the tool surface and in
+  [MCP.md](docs/fantasy-manager/MCP.md#discovery-documents); it returns a connection link that
+  begins provider sign-in.
+
 ## Unreleased — a move is sent on its run day, and every move action runs independently
 
 - A move now has a send day (`runDay`) and an effective date, and only the send day gates sending. A

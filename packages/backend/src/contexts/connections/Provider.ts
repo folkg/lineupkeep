@@ -17,8 +17,10 @@ const ProviderOperation = Schema.Literals([
   "read_roster",
   "read_league_rosters",
   "read_roster_schedule",
+  "read_league_games",
   "read_player_details",
   "read_player_history",
+  "read_player_game_log",
   "read_player_weeks",
   "read_player_week_opponents",
   "search_players",
@@ -316,6 +318,13 @@ export type ProviderShape = {
     },
   ) => Effect.Effect<ProviderRosterSchedule, ProviderReadFailure>;
 
+  readonly readLeagueGames?: (
+    input: ProviderSessionMaterial & {
+      readonly providerLeagueKey: string;
+      readonly week: ProviderScoringWeek;
+    },
+  ) => Effect.Effect<ReadonlyArray<ProviderLeagueGame>, ProviderReadFailure>;
+
   readonly applyNativeAction: (
     input: ProviderSessionMaterial & {
       readonly providerTeamKey: string;
@@ -395,6 +404,13 @@ export type ProviderShape = {
       readonly currentPeriod: number | undefined;
     },
   ) => Effect.Effect<ReadonlyArray<ProviderPlayerPeriod>, ProviderReadFailure>;
+
+  readonly readPlayerGameLog?: (
+    input: ProviderSessionMaterial & {
+      readonly providerLeagueKey: string;
+      readonly providerPlayerKey: string;
+    },
+  ) => Effect.Effect<ProviderPlayerGameLog, ProviderReadFailure>;
 
   readonly searchPlayers: (
     input: ProviderPlayerSearchInput,
@@ -707,6 +723,19 @@ export type ProviderRosterSchedule = {
   readonly players: ReadonlyArray<ProviderSchedulePlayer>;
 };
 
+type ProviderLeagueGameTeam = {
+  readonly abbreviation: string;
+  readonly name: string;
+};
+
+export type ProviderLeagueGame = {
+  readonly id: string;
+  readonly date: string;
+  readonly week: number;
+  readonly home: ProviderLeagueGameTeam;
+  readonly away: ProviderLeagueGameTeam;
+};
+
 export type ProviderStatValue = {
   readonly statId: number;
   readonly value: number | null;
@@ -762,6 +791,18 @@ export type ProviderPlayerDetail = {
 export type ProviderPlayerPeriod = {
   readonly period: ProviderScoringWeek;
   readonly details: ReadonlyArray<ProviderPlayerDetail>;
+};
+
+export type ProviderPlayerGameLog = {
+  readonly headers: ReadonlyArray<{
+    readonly value: string;
+    readonly format: string | undefined;
+  }>;
+  readonly games: ReadonlyArray<{
+    readonly date: string | undefined;
+    readonly opponent: string | undefined;
+    readonly cells: ReadonlyArray<{ readonly value: string; readonly format: string | undefined }>;
+  }>;
 };
 
 export type ProviderPlayerSearchSort =

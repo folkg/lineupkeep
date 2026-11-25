@@ -62,7 +62,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_calendar", {
     description:
-      "One linked team's calendar for a published week window: current week, periods, and pro-team games for one `period`. A dated league returns week `unsupported`; use the player `schedule` group.",
+      "One linked team's calendar: periods and every pro team's games for one `period`, including teams off the roster. A dated league returns week `unsupported`; use player `schedule`.",
     parameters: GetCalendarInput,
     success: Schema.toCodecJson(CalendarResult),
     failure: ToolFailure,
@@ -88,7 +88,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_rosters", {
     description:
-      "One linked team's roster for an exact league week, or all league rosters with `scope: league`. Places and reserves use league names. Pages are byte-budgeted; `limit` is a cap.",
+      "One linked team's roster for an exact league week, or all league rosters with `scope: league`. Places and reserves use league names.",
     parameters: GetRostersInput,
     success: Schema.toCodecJson(RosterResult),
     failure: ToolFailure,
@@ -101,7 +101,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("search_players", {
     description:
-      "Search one league's pool; rows are compact discovery. Use `get_players` for stats and full detail. Add `gamesWindow` for games. Pages are byte-budgeted; `limit` is a cap.",
+      "Search one league's pool; rows are compact discovery. Use `get_players` for stats and full detail. Add `gamesWindow` for games. Pages are byte-budgeted.",
     parameters: SearchPlayersInput,
     success: Schema.toCodecJson(SearchPlayersResult),
     failure: ToolFailure,
@@ -114,7 +114,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_players", {
     description:
-      "Hydrate up to 25 player references from `search_players` or `get_rosters`. Each returns in `players` or `failures`; group `schedule` adds games. Pages are byte-budgeted; `limit` is a cap.",
+      "Hydrate up to 25 player references from `search_players` or `get_rosters`. Each returns in `players` or `failures`; `schedule` adds games, `game_log` per-game lines. Pages are byte-budgeted.",
     parameters: GetPlayersInput,
     success: Schema.toCodecJson(PlayersResult),
     failure: ToolFailure,

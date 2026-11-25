@@ -3889,6 +3889,119 @@ it.effect("declares each period kind's support as the capability table says", ()
   });
 });
 
+it.effect("reads a player's game log through the mobile player view", () => {
+  const internet = recordingInternet(() =>
+    jsonResponse({
+      data: {
+        fantasyPlayerGameLog: {
+          content: {
+            headers: [
+              { value: "Wk", format: null },
+              { value: "Fan Pts", format: null },
+            ],
+            games: [
+              {
+                id: "1",
+                date: "2026-11-01",
+                opponentAbbr: "LV",
+                cells: [
+                  { value: "9", format: null },
+                  { value: "17.7", format: null },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    }),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+    const readPlayerGameLog = provider.readPlayerGameLog;
+    if (readPlayerGameLog === undefined) {
+      return yield* Effect.die("expected a player game log read");
+    }
+    const log = yield* readPlayerGameLog({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      providerPlayerKey: "466.p.20001",
+    });
+    assert.deepStrictEqual(log, {
+      headers: [
+        { value: "Wk", format: undefined },
+        { value: "Fan Pts", format: undefined },
+      ],
+      games: [
+        {
+          date: "2026-11-01",
+          opponent: "LV",
+          cells: [
+            { value: "9", format: undefined },
+            { value: "17.7", format: undefined },
+          ],
+        },
+      ],
+    });
+    assert.strictEqual(
+      internet.calls[0]?.url.href,
+      "https://api-fantasy-mobile.sports.yahoo.com/v2/fantasy-android/getFantasyPlayerGameLog?format=json&leagueKey=466.l.4000&playerKey=466.p.20001",
+    );
+  }).pipe(layerTools.provide(yahooLayer(internet)));
+});
+
+it.effect("reads a league week's professional games through the mobile schedule", () => {
+  const internet = recordingInternet(() =>
+    jsonResponse({
+      data: {
+        sportsGames: {
+          sportsLeagues: [
+            {
+              sportsNflGames: [
+                {
+                  gameId: "461.l.9000.g.1",
+                  week: 13,
+                  startTime: "2026-12-03T01:15:00Z",
+                  startDate: "2026-12-03",
+                  displayName: "Baltimore at Kansas City",
+                  status: "PREGAME",
+                  isFinal: false,
+                  awayTeam: { teamId: "1", displayName: "Baltimore", abbreviation: "BAL" },
+                  homeTeam: { teamId: "2", displayName: "Kansas City", abbreviation: "KC" },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    }),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+    const readLeagueGames = provider.readLeagueGames;
+    if (readLeagueGames === undefined) {
+      return yield* Effect.die("expected a league games read");
+    }
+    const games = yield* readLeagueGames({
+      ...sessionInput,
+      providerLeagueKey: "461.l.9000",
+      week: { week: 13 },
+    });
+    assert.deepStrictEqual(games, [
+      {
+        id: "461.l.9000.g.1",
+        date: "2026-12-03",
+        week: 13,
+        home: { abbreviation: "KC", name: "Kansas City" },
+        away: { abbreviation: "BAL", name: "Baltimore" },
+      },
+    ]);
+    assert.strictEqual(
+      internet.calls[0]?.url.href,
+      "https://api-fantasy-mobile.sports.yahoo.com/v2/fantasy-android/getGames?format=json&league=461.l.9000&week=13",
+    );
+  }).pipe(layerTools.provide(yahooLayer(internet)));
+});
+
 it.effect("reads one team's published games and innings usage through the SDK", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflGamesPlayed));
   return Effect.gen(function* () {

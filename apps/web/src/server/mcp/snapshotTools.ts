@@ -47,7 +47,7 @@ const SnapshotResult = Schema.Struct({
 export const snapshotTools = Toolkit.make(
   Tool.make("get_team_snapshot", {
     description:
-      "Team read: summary, league, full roster, queue, transactions, offers, 25 free agents, and season stats for 25 rostered players. Deeper data needs `search_players`/`get_players`; failures list failed sections.",
+      "Team read: summary, league, roster, queue, transactions, offers, 25 free agents, and season stats for 25 rostered players. Deeper data needs `search_players`/`get_players`; failures list failed sections.",
     parameters: SnapshotInput,
     success: Schema.toCodecJson(SnapshotResult),
     failure: ToolFailure,

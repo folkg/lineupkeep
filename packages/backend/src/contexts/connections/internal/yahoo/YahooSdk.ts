@@ -19,7 +19,9 @@ import {
 import type {
   PlayerWeekOpponent,
   ProviderFailure,
+  ProviderLeagueGame,
   ProviderLeaguePlayerSearch,
+  ProviderPlayerGameLog,
   ProviderLeagueRoster,
   ProviderLeagueTeam,
   ProviderOperation,
@@ -475,6 +477,54 @@ export const readRosterThroughSdk: {
     }),
 );
 
+export const readLeagueGamesThroughSdk: {
+  (
+    operation: ProviderOperation,
+    cookie: string,
+    leagueKey: string,
+    week: number,
+  ): (
+    context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  ) => Effect.Effect<ReadonlyArray<ProviderLeagueGame>, ProviderReadFailure>;
+  (
+    context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+    operation: ProviderOperation,
+    cookie: string,
+    leagueKey: string,
+    week: number,
+  ): Effect.Effect<ReadonlyArray<ProviderLeagueGame>, ProviderReadFailure>;
+} = dual(
+  5,
+  (
+    context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+    operation: ProviderOperation,
+    cookie: string,
+    leagueKey: string,
+    week: number,
+  ): Effect.Effect<ReadonlyArray<ProviderLeagueGame>, ProviderReadFailure> =>
+    Effect.gen(function* () {
+      const session = yield* Yahoo.makeSession(cookie).pipe(
+        Effect.mapError(() => ProviderSessionRejected.make({ operation })),
+      );
+      const games = yield* Yahoo.mobile.games({ league: leagueKey, week }).pipe(
+        Yahoo.Retry.none,
+        Effect.provideContext(Context.add(context, Yahoo.Credentials, Effect.succeed(session))),
+        Effect.provideService(Tracer.DisablePropagation, true),
+        Effect.mapError((error) => providerReadFailureOf(operation, error)),
+      );
+      return EffectArray.map(
+        EffectArray.filter(games, (game) => game.week === week),
+        (game) => ({
+          id: game.gameId,
+          date: game.startDate ?? EffectString.slice(game.startTime, 0, 10),
+          week: game.week,
+          home: { abbreviation: game.homeTeam.abbreviation, name: game.homeTeam.displayName },
+          away: { abbreviation: game.awayTeam.abbreviation, name: game.awayTeam.displayName },
+        }),
+      );
+    }),
+);
+
 export const readRosterScheduleThroughSdk: {
   (
     operation: ProviderOperation,
@@ -572,6 +622,58 @@ export const readLeagueRostersThroughSdk: {
         coverage: rosters.coverage,
         players: EffectArray.map(team.players, providerRosterPlayerOf),
       }));
+    }),
+);
+
+export const readPlayerGameLogThroughSdk: {
+  (
+    operation: ProviderOperation,
+    cookie: string,
+    leagueKey: string,
+    playerKey: string,
+  ): (
+    context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  ) => Effect.Effect<ProviderPlayerGameLog, ProviderReadFailure>;
+  (
+    context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+    operation: ProviderOperation,
+    cookie: string,
+    leagueKey: string,
+    playerKey: string,
+  ): Effect.Effect<ProviderPlayerGameLog, ProviderReadFailure>;
+} = dual(
+  5,
+  (
+    context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+    operation: ProviderOperation,
+    cookie: string,
+    leagueKey: string,
+    playerKey: string,
+  ): Effect.Effect<ProviderPlayerGameLog, ProviderReadFailure> =>
+    Effect.gen(function* () {
+      const session = yield* Yahoo.makeSession(cookie).pipe(
+        Effect.mapError(() => ProviderSessionRejected.make({ operation })),
+      );
+      const log = yield* Yahoo.mobile.playerGameLog({ leagueKey, playerKey }).pipe(
+        Yahoo.Retry.none,
+        Effect.provideContext(Context.add(context, Yahoo.Credentials, Effect.succeed(session))),
+        Effect.provideService(Tracer.DisablePropagation, true),
+        Effect.mapError((error) => providerReadFailureOf(operation, error)),
+      );
+      return {
+        headers: EffectArray.map(log.headers, (header) => ({
+          value: header.value,
+          format: header.format,
+        })),
+        games: EffectArray.map(log.games, (game) => ({
+          date: game.date,
+          opponent: game.opponentAbbr,
+          cells: EffectArray.map(game.cells, (cell) => ({
+            value: cell.value,
+            format: cell.format,
+          })),
+        })),
+      };
     }),
 );
 

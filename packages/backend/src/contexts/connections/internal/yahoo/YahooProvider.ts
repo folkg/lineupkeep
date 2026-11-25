@@ -23,6 +23,7 @@ import type {
   ProviderDraftPick,
   ProviderFantasyDay,
   ProviderGamesPlayed,
+  ProviderLeagueGame,
   ProviderLeagueSettings,
   ProviderLineupAssignment,
   ProviderPeriodSupport,
@@ -42,6 +43,7 @@ import type {
   ProviderPlayerDetail,
   ProviderPlayerPeriod,
   ProviderPlayerSearchInput,
+  PlayerWeekOpponent,
   ProviderPlayerWeekFact,
   ProviderPlayerWeekOpponent,
   ProviderReadFailure,
@@ -107,6 +109,8 @@ import {
   readPendingTradesThroughSdk,
   readPlayerDetailsRawThroughSdk,
   readPlayerDetailsThroughSdk,
+  readLeagueGamesThroughSdk,
+  readPlayerGameLogThroughSdk,
   readRosterScheduleThroughSdk,
   readRosterThroughSdk,
   readStandingsThroughSdk,
@@ -399,6 +403,27 @@ export const yahooProvider = Effect.gen(function* () {
     return rosters;
   });
 
+  const readLeagueGames = Effect.fn("YahooProvider.readLeagueGames")(function* (input: {
+    readonly provider: ProviderKey;
+    readonly session: Redacted.Redacted<string>;
+    readonly providerLeagueKey: string;
+    readonly week: ProviderScoringWeek;
+  }) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "read_league_games");
+    const cookie = yield* sessionCookie(input, "read_league_games");
+    const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_league_games");
+    const week = yield* ValidWeek(input.week.week);
+    const games = yield* readLeagueGamesThroughSdk(
+      sdk,
+      "read_league_games",
+      cookie,
+      leagueKey,
+      week,
+    );
+    yield* Effect.annotateCurrentSpan("provider.game_count", games.length);
+    return games;
+  });
+
   const readRosterSchedule = Effect.fn("YahooProvider.readRosterSchedule")(function* (
     input: ProviderSessionMaterial & {
       readonly providerTeamKey: string;
@@ -642,6 +667,7 @@ export const yahooProvider = Effect.gen(function* () {
     const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_player_weeks");
     const playerKeys = yield* ValidBatchPlayerKeys(input.providerPlayerKeys, "read_player_weeks");
     const weeks: Array<ProviderPlayerWeekFact> = [];
+    let leagueGames: ReadonlyArray<ProviderLeagueGame> | undefined;
     for (let index = 0; index < playerKeys.length; index += maximumSelectedPlayers) {
       const chunk = playerKeys.slice(index, index + maximumSelectedPlayers);
       const details = yield* readPlayerDetailsRawThroughSdk(sdk, "read_player_weeks", cookie, {
@@ -650,8 +676,21 @@ export const yahooProvider = Effect.gen(function* () {
         fields: ["ranks", "opponent"],
         ranks: ["projected_week"],
       });
+      if (
+        leagueGames === undefined &&
+        EffectArray.some(details, (player) => scheduledOpponent(player.opponent) === undefined)
+      ) {
+        leagueGames = yield* readLeagueGames({
+          provider: input.provider,
+          session: input.session,
+          providerLeagueKey: input.providerLeagueKey,
+          week: input.week,
+        }).pipe(Effect.orElseSucceed(() => []));
+      }
       for (const player of details) {
-        weeks.push(playerWeekOf(player, input.week.week));
+        weeks.push(
+          playerWeekOf(player, input.week.week, opponentFromGames(player, leagueGames ?? [])),
+        );
       }
     }
     yield* Effect.annotateCurrentSpan("provider.player_week_count", weeks.length);
@@ -677,6 +716,7 @@ export const yahooProvider = Effect.gen(function* () {
         "read_player_week_opponents",
       );
       const weeks: Array<ProviderPlayerWeekOpponent> = [];
+      let leagueGames: ReadonlyArray<ProviderLeagueGame> | undefined;
       for (let index = 0; index < playerKeys.length; index += maximumSelectedPlayers) {
         const chunk = playerKeys.slice(index, index + maximumSelectedPlayers);
         const details = yield* readPlayerDetailsRawThroughSdk(
@@ -690,8 +730,20 @@ export const yahooProvider = Effect.gen(function* () {
             week: input.week.week,
           },
         );
+        if (
+          leagueGames === undefined &&
+          EffectArray.some(details, (player) => scheduledOpponent(player.opponent) === undefined)
+        ) {
+          leagueGames = yield* readLeagueGames({
+            provider: input.provider,
+            session: input.session,
+            providerLeagueKey: input.providerLeagueKey,
+            week: input.week,
+          }).pipe(Effect.orElseSucceed(() => []));
+        }
         for (const player of details) {
-          const opponent = scheduledOpponent(player.opponent);
+          const opponent =
+            scheduledOpponent(player.opponent) ?? opponentFromGames(player, leagueGames ?? []);
           weeks.push({
             providerPlayerKey: player.playerKey,
             week: input.week.week,
@@ -704,6 +756,35 @@ export const yahooProvider = Effect.gen(function* () {
       return weeks;
     },
   );
+
+  const readPlayerGameLog = Effect.fn("YahooProvider.readPlayerGameLog")(function* (input: {
+    readonly provider: ProviderKey;
+    readonly session: Redacted.Redacted<string>;
+    readonly providerLeagueKey: string;
+    readonly providerPlayerKey: string;
+  }) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "read_player_game_log");
+    const cookie = yield* sessionCookie(input, "read_player_game_log");
+    const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_player_game_log");
+    const playerKeys = yield* ValidBatchPlayerKeys(
+      [input.providerPlayerKey],
+      "read_player_game_log",
+    );
+    const playerKey = playerKeys[0];
+    if (playerKey === undefined) {
+      return yield* ProviderResponseInvalid.make({
+        operation: "read_player_game_log",
+        field: "players",
+      });
+    }
+    return yield* readPlayerGameLogThroughSdk(
+      sdk,
+      "read_player_game_log",
+      cookie,
+      leagueKey,
+      playerKey,
+    );
+  });
 
   const readPlayerHistory = Effect.fn("YahooProvider.readPlayerHistory")(function* (
     input: ProviderSessionMaterial & {
@@ -992,6 +1073,7 @@ export const yahooProvider = Effect.gen(function* () {
     readRoster,
     readLeagueRosters,
     readRosterSchedule,
+    readLeagueGames,
     applyNativeAction,
     applyExplicitAssignments,
     applyTransaction,
@@ -1000,6 +1082,7 @@ export const yahooProvider = Effect.gen(function* () {
     applyReserveMove,
     readPlayerDetails,
     readPlayerHistory,
+    readPlayerGameLog,
     readPlayerWeeks,
     readPlayerWeekOpponents,
     searchPlayers,
@@ -1830,8 +1913,36 @@ function playerFactsOf(
   });
 }
 
-function playerWeekOf(player: YahooPlayerDetail, week: number): ProviderPlayerWeekFact {
-  const opponent = scheduledOpponent(player.opponent);
+function opponentFromGames(
+  player: YahooPlayerDetail,
+  games: ReadonlyArray<ProviderLeagueGame>,
+): PlayerWeekOpponent | undefined {
+  const team = player.proTeamAbbreviation;
+  if (team === undefined) {
+    return undefined;
+  }
+  const game = EffectOption.getOrUndefined(
+    EffectArray.findFirst(
+      games,
+      (entry) => entry.home.abbreviation === team || entry.away.abbreviation === team,
+    ),
+  );
+  if (game === undefined) {
+    return undefined;
+  }
+  const home = game.home.abbreviation === team;
+  return {
+    opponent: home ? game.away.abbreviation : game.home.abbreviation,
+    home,
+  };
+}
+
+function playerWeekOf(
+  player: YahooPlayerDetail,
+  week: number,
+  fallbackOpponent: PlayerWeekOpponent | undefined,
+): ProviderPlayerWeekFact {
+  const opponent = scheduledOpponent(player.opponent) ?? fallbackOpponent;
   const projected = EffectOption.getOrUndefined(
     EffectArray.findFirst(playerRanksOf(player.ranks), (entry) => entry.type === "PW"),
   );

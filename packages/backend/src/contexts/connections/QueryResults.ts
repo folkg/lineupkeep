@@ -938,6 +938,7 @@ export const PlayerGroup = Schema.Literals([
   "projections",
   "scoring_context",
   "schedule",
+  "game_log",
 ]);
 export type PlayerGroup = typeof PlayerGroup.Type;
 
@@ -1354,6 +1355,27 @@ const ScoringContext = Schema.Union([
   }),
 ]);
 
+const PlayerGameLog = Schema.Struct({
+  headers: Schema.Array(
+    Schema.Struct({
+      value: Schema.NonEmptyString,
+      format: Schema.optional(Schema.String),
+    }),
+  ),
+  games: Schema.Array(
+    Schema.Struct({
+      date: Schema.optional(Schema.String),
+      opponent: Schema.optional(Schema.String),
+      cells: Schema.Array(
+        Schema.Struct({
+          value: Schema.String,
+          format: Schema.optional(Schema.String),
+        }),
+      ),
+    }),
+  ),
+});
+
 const PlayerAvailability = Schema.Struct({
   rosterStatus: Schema.Literals(["rostered", "free_agent", "waiver", "unknown"]),
   injury: Schema.Struct({
@@ -1394,6 +1416,7 @@ const PlayerDetail = Schema.Struct({
   actualStats: Schema.optional(StatGroup),
   projections: Schema.optional(ProjectionGroup),
   scoringContext: Schema.optional(ScoringContext),
+  gameLog: Schema.optional(PlayerGameLog),
   gameDays: Schema.optional(PlayerGameDays),
   gameWeeks: Schema.optional(PlayerGameWeeks),
 });
