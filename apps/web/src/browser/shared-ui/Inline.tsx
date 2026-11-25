@@ -20,6 +20,7 @@ export function Inline(props: InlineProps): JSX.Element {
         props.justify === "between" && "justify-between",
         props.justify === "end" && "justify-end max-[559px]:justify-start",
         props.growFirst === true && "[&>*:first-child]:min-w-0 [&>*:first-child]:flex-1",
+        props.fullWidth === true && "w-full",
         props.fullWidthOnSmall === true &&
           "max-[559px]:col-span-2 max-[559px]:w-full max-[559px]:justify-start",
         props.collapse === true && "max-sm:grid max-sm:[&>*]:w-full",
@@ -34,6 +35,7 @@ type InlineProps = {
   readonly gap: Space;
   readonly align?: "start" | "baseline";
   readonly justify?: "between" | "end";
+  readonly fullWidth?: boolean;
   readonly fullWidthOnSmall?: boolean;
   readonly nowrap?: boolean;
   readonly growFirst?: boolean;

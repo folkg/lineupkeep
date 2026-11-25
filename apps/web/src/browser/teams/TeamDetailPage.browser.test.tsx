@@ -338,7 +338,7 @@ it("names the league context and keeps quiet states off the page", async () => {
     .not.toBeInTheDocument();
 });
 
-it("puts the provider jump out with the league context and above the controls", async () => {
+it("puts the provider jump out at the end of the control row", async () => {
   using _app = setupTeamDetailPage({
     ...team,
     team: {
@@ -354,22 +354,24 @@ it("puts the provider jump out with the league context and above the controls", 
   const toggle = page.getByRole("switch", { name: "Lineup checks for Alpha" });
   await expect.element(context).toBeVisible();
   await expect.element(jumpOut).toHaveAttribute("href", "https://provider.example/f1/1000/1");
-  expect(jumpOut.element().textContent).toBe("Open");
+  expect(jumpOut.element().textContent).toBe("Open in Yahoo");
 
   const nameBox = name.element().getBoundingClientRect();
   const jumpBox = jumpOut.element().getBoundingClientRect();
+  const toggleBox = toggle.element().getBoundingClientRect();
   expect(jumpBox.top, "the jump out sits below the name").toBeGreaterThan(nameBox.bottom);
   expect(
-    jumpBox.bottom,
-    "the jump out sits with the league context, not in the control row",
-  ).toBeLessThanOrEqual(toggle.element().getBoundingClientRect().top);
+    Math.max(jumpBox.top, toggleBox.top),
+    "the jump out shares the control row with the toggle",
+  ).toBeLessThan(Math.min(jumpBox.bottom, toggleBox.bottom));
+  expect(jumpBox.left, "the jump out sits after the controls").toBeGreaterThan(toggleBox.right);
   expect(
-    context.element().compareDocumentPosition(jumpOut.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
-    "the jump out follows the league context",
-  ).toBeTruthy();
+    context.element().parentElement?.contains(jumpOut.element()),
+    "the jump out is not in the league context",
+  ).toBe(false);
 });
 
-it("keeps the provider jump out below a long team name on a phone", async () => {
+it("keeps the provider jump out on the control row with a long team name on a phone", async () => {
   const longName = "Embedded Browser Team With A Long Name";
   using _app = setupTeamDetailPage({
     ...team,
@@ -389,6 +391,7 @@ it("keeps the provider jump out below a long team name on a phone", async () => 
   const headingBox = heading.element().getBoundingClientRect();
   const jumpBox = jumpOut.element().getBoundingClientRect();
   expect(jumpBox.top, "the jump out stays below the name").toBeGreaterThan(headingBox.bottom);
+  expect(jumpBox.right, "the jump out stays inside the page").toBeLessThanOrEqual(390);
 });
 
 it("puts lineup runs above the owner note and leaves the roster off the page", async () => {

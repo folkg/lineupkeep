@@ -123,15 +123,15 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
     <Stack gap="xl">
       <Stack gap="md">
         <Stack gap="2xs">
-          <Inline align="baseline" gap="xs">
-            <Text type="meta" tone="muted">
-              {teamContextLabel(props.team.team, props.showProvider)}
-            </Text>
-            <TeamProviderLink team={props.team.team} />
-          </Inline>
+          <Text type="meta" tone="muted">
+            {teamContextLabel(props.team.team, props.showProvider)}
+          </Text>
           <TeamAttention team={props.team} />
         </Stack>
-        <TeamControls team={props.team} remote={props.remote} onOptimistic={props.onOptimistic} />
+        <Inline fullWidth growFirst gap="md" justify="between">
+          <TeamControls team={props.team} remote={props.remote} onOptimistic={props.onOptimistic} />
+          <TeamProviderLink team={props.team.team} showProvider={props.showProvider} />
+        </Inline>
       </Stack>
 
       <TeamSeasonOverview

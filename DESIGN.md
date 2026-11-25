@@ -342,25 +342,24 @@ rule that spans exactly the item, not a short bar or an overhanging block. The l
 items, with no utility action left on a line of its own.
 
 **Rows and cards** use two columns from 560px: text at the left, one control cluster at the right. A team
-card puts its provider jump-out at the end of the league metadata line, below the team name; the
-right cluster carries the checks toggle and the pause control, so every card has the same control
-shape. The
+card puts its provider jump-out at the far right of the control row; the checks toggle and pause
+sit at the left, so every card has the same control shape and the league line stays calm. The
 pause is a 28px square icon frame showing Pause or Play, so changing state never shifts the
 cluster; its accessible name stays the full pause or resume sentence, and it stays in place and
 is disabled while checks are off. The card header is a two-column grid: title and meta take the
 remaining width, and the badge keeps the top-right corner at every size. A long team or league
 name wraps inside its column; it never truncates and never pushes the badge below. Below 560px
-the body stacks and the controls take their own line, aligned left. Controls never overlap a
-name.
+the body stacks and the control row keeps the toggle and pause at the left and the provider link
+at the right. Controls never overlap a name.
 
-**Team detail order** is fixed: back link, title, one metadata line (sport, league, and provider
-jump-out), one control row with toggle and pause on the same line, then a season and week split,
-the lineup runs behind their rule, and the owner note. The split is two
+**Team detail order** is fixed: back link, title, one metadata line (sport and league), one
+control row with toggle, pause, and the provider jump-out at the far right, then a season and week
+split, the lineup runs behind their rule, and the owner note. The split is two
 rule-led sections, not one card: season facts sit in a narrow side rail and the current week and
 its category table take the main column. The week line leads with the week and keeps its regular
 and playoff notes on their own lines. On phones the season facts come first. The provider
-jump-out sits at the end of the metadata line here and on the list. Nothing floats to the right
-of the metadata line. Head-to-head category tables end on their last category; a running win
+jump-out sits at the far right of the control row here and on the list. Nothing floats to the
+right of the metadata line. Head-to-head category tables end on their last category; a running win
 total is not shown because nothing has been won while the week is live. Rotisserie tables end
 with total points.
 
@@ -458,8 +457,9 @@ and note save are decided there and are not retimed by a motion pass.
   checks toggle. It shows Pause or Play so the control keeps its place; its accessible name
   remains the full pause or resume sentence.
 - **Icon:** a 28px square frame with a 2px `rule-strong` border inside a 44px hit area. The frame
-  sits flush with the column edge; the hit area may extend into the gutter. Provider jump-outs,
-  the pause control, and the refresh control use this control.
+  sits flush with the column edge; the hit area may extend into the gutter. The pause control
+  and the refresh control use this control; the provider jump-out is a meta text link at the far
+  right of the row.
 - **Google:** Google's G and prescribed light/dark fill, square to match the sheet, with its own
   14px type as the one branded exception.
 
@@ -491,9 +491,8 @@ card is a primary destination. Status is a labelled word in caps, never a colour
 line under the league context in every state — the next check, a pause with its resume time,
 checks off, or a check in progress — then what the last check did, when, and the recent tally. The
 status line reserves two lines so its sentence cannot change the card's height. A provider
-jump-out sits at the end of the league context line; the right cluster is the toggle and pause
-only. A list never
-repeats a control label on every row.
+jump-out sits at the far right of the control row; the left cluster is the toggle and pause
+only. A list never repeats a control label on every row.
 
 Notices are a 2px leading rule with caps title and 12px detail. Empty states are a top rule with a
 15px title and soft text. Loading never guesses a card shape. The team row stores its scoring
@@ -593,7 +592,7 @@ or connection health.
 - Do keep motion to the rare moments named under [Motion](#motion), on the theme's duration and
   easing tokens.
 - Do preserve keyboard access, visible focus, selection, zoom, and reduced motion.
-- Do keep the provider jump-out in the league metadata line and the pause control in place.
+- Do keep the provider jump-out at the far right of the control row and the pause control in place.
 - Do let long names wrap and rows stack below 560px.
 
 ### Don't

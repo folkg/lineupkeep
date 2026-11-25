@@ -4,9 +4,10 @@
 
 ### Changed
 
-- A team card and team detail page put the provider jump-out at the end of the league
-  metadata line, below the name, instead of beside the title. The link keeps the full
-  `Open <team> in <provider>` accessible name and does not change the title's alignment.
+- A team card and team detail page put the provider jump-out at the far right of the
+  control row, below the name, instead of beside the title. The link shows `Open in <provider>`
+  when the context does not already name the provider, keeps the full
+  `Open <team> in <provider>` accessible name, and does not change the title's alignment.
 - The Google sign-in note appears only on the hosted-browser sign-in page, not on the account
   page. A connection that needs a new sign-in exposes Reconnect on its own row; the duplicate
   top-level Reconnect is gone and the remaining account action is Connect another account.

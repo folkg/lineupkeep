@@ -1129,7 +1129,7 @@ it("frames a team card with the shared card structure", async () => {
   expect(card.querySelector("[data-card-badge]")).not.toBeNull();
 });
 
-it("puts the provider jump out with the league context, below the team name", async () => {
+it("puts the provider jump out at the end of the card control row", async () => {
   using _app = setupTeamsPage([
     {
       ...enabledTeam,
@@ -1150,17 +1150,59 @@ it("puts the provider jump out with the league context, below the team name", as
   await expect.element(context).toBeVisible();
   await expect.element(jumpOut).toHaveAttribute("href", "https://provider.example/f1/1000/1");
   await expect.element(jumpOut).toHaveAttribute("target", "_blank");
-  expect(jumpOut.element().textContent).toBe("Open");
+  expect(jumpOut.element().textContent).toBe("Open in Yahoo");
+  expect(
+    jumpOut.element().closest("[data-card-footer]"),
+    "the jump out is in the card footer",
+  ).not.toBeNull();
+  expect(
+    jumpOut.element().closest("[data-card-meta]"),
+    "the jump out is not in the meta line",
+  ).toBeNull();
+  expect(
+    context.element().closest("[data-card-meta]"),
+    "the context stays in the meta line",
+  ).not.toBeNull();
 
   const nameBox = name.element().getBoundingClientRect();
   const jumpBox = jumpOut.element().getBoundingClientRect();
+  const pauseBox = pause.element().getBoundingClientRect();
   expect(jumpBox.top, "the jump out sits below the name").toBeGreaterThan(nameBox.bottom);
+  expect(jumpBox.left, "the jump out sits after the pause control").toBeGreaterThan(pauseBox.right);
   expect(
     context.element().compareDocumentPosition(jumpOut.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
+    "the jump out follows the context",
   ).toBeTruthy();
+});
+
+it("keeps the provider jump out on the card control row on a phone", async () => {
+  using _app = setupTeamsPage([
+    {
+      ...enabledTeam,
+      team: {
+        ...enabledTeam.team,
+        leagueName: "Irish Lax",
+        providerUrl: "https://provider.example/f1/1000/1",
+      },
+    },
+  ]);
+  await page.viewport(390, 844);
+
+  const jumpOut = page.getByRole("link", { name: "Open Alpha in Yahoo" });
+  const pause = page.getByRole("button", {
+    name: "Pause lineup checks for the rest of the fantasy day",
+  });
+  await expect.element(jumpOut).toBeVisible();
+  expect(jumpOut.element().closest("[data-card-footer]")).not.toBeNull();
+
+  const jumpBox = jumpOut.element().getBoundingClientRect();
+  const pauseBox = pause.element().getBoundingClientRect();
   expect(
-    jumpOut.element().compareDocumentPosition(pause.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
+    Math.max(jumpBox.top, pauseBox.top),
+    "the jump out shares the control row with the pause control",
+  ).toBeLessThan(Math.min(jumpBox.bottom, pauseBox.bottom));
+  expect(jumpBox.left, "the jump out sits after the controls").toBeGreaterThan(pauseBox.right);
+  expect(jumpBox.right, "the jump out stays inside the page").toBeLessThanOrEqual(390);
 });
 
 it("names the provider only when the account has more than one provider type", async () => {
@@ -1175,15 +1217,38 @@ it("names the provider only when the account has more than one provider type", a
       providerTeamKey: "461.l.1000.t.2",
     },
   };
-  using _app = setupTeamsPage([baseTeam, secondTeam]);
+  using _app = setupTeamsPage([
+    {
+      ...baseTeam,
+      team: { ...baseTeam.team, providerUrl: "https://provider.example/f1/1000/1" },
+    },
+    secondTeam,
+  ]);
 
   await expect.element(page.getByText("Football · NFL 2026 · espn")).toBeVisible();
+  expect(
+    page.getByRole("link", { name: "Open Alpha in Yahoo" }).element().textContent,
+    "the context already names the provider",
+  ).toBe("Open");
 });
 
-it("keeps the provider out when every team uses the same provider", () => {
-  using _app = setupTeamsPage([{ ...enabledTeam, connectionCount: 2 }]);
+it("names the provider once when every team uses the same provider", async () => {
+  using _app = setupTeamsPage([
+    {
+      ...enabledTeam,
+      connectionCount: 2,
+      team: {
+        ...enabledTeam.team,
+        providerUrl: "https://provider.example/f1/1000/1",
+      },
+    },
+  ]);
 
-  expect(page.getByText(/Yahoo/u).elements()).toHaveLength(0);
+  await expect.element(page.getByText("Football · NFL 2026")).toBeVisible();
+  const jumpOut = page.getByRole("link", { name: "Open Alpha in Yahoo" });
+  await expect.element(jumpOut).toBeVisible();
+  expect(jumpOut.element().textContent).toBe("Open in Yahoo");
+  expect(page.getByText(/Yahoo/u).elements()).toHaveLength(1);
 });
 
 it("keeps a team row in the order of name, league, next check, and last check", async () => {

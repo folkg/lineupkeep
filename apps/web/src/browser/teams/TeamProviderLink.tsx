@@ -6,9 +6,10 @@ import { ArrowUpRightIcon } from "#browser/shared-ui/icons.tsx";
 import { providerDisplayName } from "#contracts/connections/providerLabels.ts";
 import type { TeamView } from "#contracts/connections/teamContract.ts";
 
-export function TeamProviderLink(props: { readonly team: TeamView }): JSX.Element {
-  const label = (): string =>
-    `Open ${props.team.name} in ${providerDisplayName(props.team.provider)}`;
+export function TeamProviderLink(props: TeamProviderLinkProps): JSX.Element {
+  const provider = (): string => providerDisplayName(props.team.provider);
+  const label = (): string => `Open ${props.team.name} in ${provider()}`;
+  const visible = (): string => (props.showProvider ? "Open" : `Open in ${provider()}`);
 
   return (
     <Show when={props.team.providerUrl}>
@@ -20,9 +21,14 @@ export function TeamProviderLink(props: { readonly team: TeamView }): JSX.Elemen
           trailingIcon={<ArrowUpRightIcon size="sm" />}
           type="meta"
         >
-          Open
+          {visible()}
         </ExternalTextLink>
       )}
     </Show>
   );
 }
+
+type TeamProviderLinkProps = {
+  readonly team: TeamView;
+  readonly showProvider: boolean;
+};
