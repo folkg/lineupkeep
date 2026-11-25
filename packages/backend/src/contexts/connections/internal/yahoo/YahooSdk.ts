@@ -512,16 +512,21 @@ export const readLeagueGamesThroughSdk: {
         Effect.provideService(Tracer.DisablePropagation, true),
         Effect.mapError((error) => providerReadFailureOf(operation, error)),
       );
-      return EffectArray.map(
-        EffectArray.filter(games, (game) => game.week === week),
-        (game) => ({
-          id: game.gameId,
-          date: game.startDate ?? EffectString.slice(game.startTime, 0, 10),
-          week: game.week,
-          home: { abbreviation: game.homeTeam.abbreviation, name: game.homeTeam.displayName },
-          away: { abbreviation: game.awayTeam.abbreviation, name: game.awayTeam.displayName },
-        }),
-      );
+      return EffectArray.flatMap(games, (game) => {
+        const date = game.startDate;
+        if (game.week !== week || date === undefined || !/^\d{4}-\d{2}-\d{2}$/u.test(date)) {
+          return [];
+        }
+        return [
+          {
+            id: game.gameId,
+            date,
+            week: game.week,
+            home: { abbreviation: game.homeTeam.abbreviation, name: game.homeTeam.displayName },
+            away: { abbreviation: game.awayTeam.abbreviation, name: game.awayTeam.displayName },
+          },
+        ];
+      });
     }),
 );
 

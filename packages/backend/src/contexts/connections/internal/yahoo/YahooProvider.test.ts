@@ -3958,6 +3958,17 @@ it.effect("reads a league week's professional games through the mobile schedule"
             {
               sportsNflGames: [
                 {
+                  gameId: "470.l.70271.g.9990000001",
+                  week: 13,
+                  startTime: "2026-11-24T17:00:00-07:00",
+                  startDate: "2026-11-24-07:00",
+                  displayName: "Mock Away at Mock Home",
+                  status: "PREGAME",
+                  isFinal: false,
+                  awayTeam: { teamId: "99901", displayName: "Mock Away", abbreviation: "MCA" },
+                  homeTeam: { teamId: "99902", displayName: "Mock Home", abbreviation: "MCH" },
+                },
+                {
                   gameId: "461.l.9000.g.1",
                   week: 13,
                   startTime: "2026-12-03T01:15:00Z",
